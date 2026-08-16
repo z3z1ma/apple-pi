@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "extensions/**/*.ts",
+    "components/advisor/**/*.ts",
+    "components/ask-user-question/**/*.ts",
+    "components/vcc/src/**/*.ts",
+    "components/memory/src/**/*.ts",
+    "components/subagents/src/**/*.ts",
+    "components/ralph/src/**/*.ts",
+    "components/review/src/**/*.ts"
+  ]
+}

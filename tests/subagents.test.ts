@@ -1,0 +1,225 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../components/subagents/src/conversation.js";
+import { DEFAULT_AGENTS } from "../components/subagents/src/default-agents.js";
+import { resolveAgentInvocationConfig } from "../components/subagents/src/invocation-config.js";
+import { createNestedSubagentTools } from "../components/subagents/src/nested-tools.js";
+import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
+import { applySettings, loadSettings, saveSettings } from "../components/subagents/src/settings.js";
+import type { AgentConfig } from "../components/subagents/src/types.js";
+
+const roots: string[] = [];
+const temporaryRoot = (): string => {
+	const root = mkdtempSync(join(tmpdir(), "apple-pi-subagents-"));
+	roots.push(root);
+	return root;
+};
+
+afterEach(() => {
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe("owned subagent surface", () => {
+	it("uses Spark for the built-in read-only explorer", () => {
+		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({
+			model: "openai-codex/gpt-5.3-codex-spark",
+			thinking: "high",
+		});
+	});
+
+	it("fails closed on removed memory, transcript, scheduling, and worktree fields", () => {
+		const root = temporaryRoot();
+		const directory = join(root, ".pi", "agents");
+		mkdirSync(directory, { recursive: true });
+		writeFileSync(join(directory, "reviewer.md"), `---
+name: reviewer
+description: Reviews a change
+tools: read, grep
+allowed_subagents: scout
+memory: project
+isolation: worktree
+output_transcript: true
+---
+Review carefully.
+`);
+
+		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const agents = loadCustomAgents(root);
+		expect(agents.has("reviewer")).toBe(false);
+		expect(warning).toHaveBeenCalledWith(expect.stringContaining("removed apple-pi fields isolation, memory, output_transcript"));
+		warning.mockRestore();
+	});
+
+	it("does not carry worktree isolation through invocation resolution", () => {
+		const config = {
+			name: "reviewer",
+			description: "review",
+			extensions: true,
+			skills: true,
+			systemPrompt: "review",
+			promptMode: "replace",
+		} satisfies AgentConfig;
+		const resolved = resolveAgentInvocationConfig(config, {
+			model: "anthropic/test",
+			run_in_background: true,
+		});
+		expect(resolved).toMatchObject({ modelInput: "anthropic/test", runInBackground: true });
+		expect(resolved).not.toHaveProperty("isolation");
+	});
+
+	it("sanitizes settings to the retained orchestration controls", () => {
+		const root = temporaryRoot();
+		mkdirSync(join(root, ".pi"), { recursive: true });
+		writeFileSync(join(root, ".pi", "subagents.json"), JSON.stringify({
+			maxConcurrent: 7,
+			persistAgentSessions: false,
+			widgetMode: "all",
+			schedulingEnabled: true,
+			agentMentions: "model",
+			outputTranscript: true,
+		}));
+		const settings = loadSettings(root) as Record<string, unknown>;
+		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false, widgetMode: "all" });
+		expect(settings).not.toHaveProperty("schedulingEnabled");
+		expect(settings).not.toHaveProperty("agentMentions");
+		expect(settings).not.toHaveProperty("outputTranscript");
+	});
+
+	it("bounds recent transcript snapshots while preserving their newest content", () => {
+		const output = getAgentConversation({
+			messages: [{
+				role: "assistant",
+				content: [{ type: "text", text: `OLDEST-${"x".repeat(TRANSCRIPT_TAIL_MAX_CHARS * 2)}-NEWEST` }],
+			}],
+			state: {},
+		} as any, 1);
+		expect(output.length).toBeLessThanOrEqual(TRANSCRIPT_TAIL_MAX_CHARS);
+		expect(output).toContain("Earlier transcript content clipped");
+		expect(output).toContain("[Assistant]: …");
+		expect(output).toContain("-NEWEST");
+		expect(output).not.toContain("OLDEST-");
+	});
+
+	it("lets a nested orchestrator inspect a running child's recent transcript without waiting", async () => {
+		const record = {
+			id: "child-1",
+			type: "Explore",
+			description: "inspect",
+			status: "running",
+			toolUses: 0,
+			startedAt: Date.now(),
+			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+			compactionCount: 0,
+			parentAgentId: "parent-1",
+			session: {
+				messages: [
+					{ role: "user", content: "old direction" },
+					{ role: "assistant", content: [{ type: "text", text: "old progress" }] },
+					{ role: "user", content: "latest direction" },
+				],
+				state: {
+					streamingMessage: { role: "assistant", content: [{ type: "text", text: "live partial progress" }] },
+				},
+			},
+		};
+		const manager = { getRecord: vi.fn(() => record) };
+		const tools = createNestedSubagentTools({
+			manager: manager as any,
+			pi: {} as any,
+			parentAgentId: "parent-1",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: process.cwd(),
+		});
+		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
+		const result = await resultTool.execute("check-child", {
+			agent_id: "child-1",
+			transcript_tail: 2,
+		}, undefined);
+		const output = result.content[0].text as string;
+		expect(output).toContain("Agent child-1 is running.");
+		expect(output).toContain("latest direction");
+		expect(output).toContain("live partial progress");
+		expect(output).not.toContain("old direction");
+		expect(output).not.toContain("old progress");
+
+		(record as any).status = "completed";
+		(record as any).result = "FULL-FINAL-RESULT-MUST-NOT-LEAK-INTO-A-TAIL-CHECK";
+		const settledResult = await resultTool.execute("check-settled-child", {
+			agent_id: "child-1",
+			transcript_tail: 2,
+		}, undefined);
+		const settledOutput = settledResult.content[0].text as string;
+		expect(settledOutput).toContain("Agent child-1 is completed.");
+		expect(settledOutput).not.toContain("FULL-FINAL-RESULT-MUST-NOT-LEAK-INTO-A-TAIL-CHECK");
+	});
+
+	it("lets a nested orchestrator stop only a running child it owns", async () => {
+		const owned = {
+			id: "owned-child",
+			parentAgentId: "parent-1",
+			status: "running",
+		};
+		const foreign = {
+			id: "foreign-child",
+			parentAgentId: "parent-2",
+			status: "running",
+		};
+		const records = new Map([[owned.id, owned], [foreign.id, foreign]]);
+		const manager = {
+			getRecord: vi.fn((id: string) => records.get(id)),
+			abort: vi.fn((id: string) => {
+				const record = records.get(id);
+				if (!record || (record.status !== "running" && record.status !== "queued")) return false;
+				record.status = "stopped";
+				return true;
+			}),
+		};
+		const tools = createNestedSubagentTools({
+			manager: manager as any,
+			pi: {} as any,
+			parentAgentId: "parent-1",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: process.cwd(),
+		});
+		const stopTool = tools.find((tool) => tool.name === "stop_subagent") as any;
+
+		const stopped = await stopTool.execute("stop-owned", { agent_id: owned.id });
+		expect(stopped.isError).toBe(false);
+		expect(stopped.content[0].text).toBe(`Stopped nested agent ${owned.id}.`);
+		expect(owned.status).toBe("stopped");
+
+		const stoppedAgain = await stopTool.execute("stop-settled", { agent_id: owned.id });
+		expect(stoppedAgain.isError).toBe(true);
+		const foreignStop = await stopTool.execute("stop-foreign", { agent_id: foreign.id });
+		expect(foreignStop.isError).toBe(true);
+		expect(manager.abort).toHaveBeenCalledTimes(2);
+		expect(manager.abort).not.toHaveBeenCalledWith(foreign.id);
+	});
+
+	it("applies and persists the child-session authority setting", () => {
+		const root = temporaryRoot();
+		let persistent = true;
+		const settings = { persistAgentSessions: false, maxConcurrent: 5 };
+		expect(saveSettings(settings, root)).toBe(true);
+		applySettings(loadSettings(root), {
+			setMaxConcurrent: () => {},
+			setDefaultMaxTurns: () => {},
+			setGraceTurns: () => {},
+			setDefaultJoinMode: () => {},
+			setStrictAgentFiles: () => {},
+			setDisableDefaultAgents: () => {},
+			setFleetView: () => {},
+			setPersistAgentSessions: (value) => { persistent = value; },
+			setWidgetMode: () => {},
+			setMaxSubagentDepth: () => {},
+			setFallbackSubagent: () => {},
+		});
+		expect(persistent).toBe(false);
+	});
+});

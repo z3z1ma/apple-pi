@@ -1,0 +1,87 @@
+{
+  "name": "apple-pi",
+  "version": "0.1.0",
+  "description": "Alex's integrated Pi system: advice, context, execution, subagents, first-class review, and bounded ledger-backed Ralph work loops.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "questionnaire",
+    "advisor",
+    "compaction",
+    "memory",
+    "mcp",
+    "subagents",
+    "ralph",
+    "review",
+    "work-graph"
+  ],
+  "files": [
+    "components/advisor/index.ts",
+    "components/advisor/lib/",
+    "components/ask-user-question/",
+    "components/vcc/package.json",
+    "components/vcc/src/",
+    "components/memory/src/",
+    "components/subagents/src/",
+    "components/subagents/LICENSE",
+    "components/ralph/src/",
+    "components/review/src/",
+    "extensions/",
+    "skills/",
+    "docs/",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/pi-advisor.ts",
+      "./extensions/ask-user-question.ts",
+      "./extensions/context.ts",
+      "./extensions/runtime.ts",
+      "./extensions/mcp.ts",
+      "./extensions/subagents.ts",
+      "./extensions/review.ts",
+      "./extensions/ralph.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:unit && npm run test:vcc && npm run test:advisor && npm run test:loader",
+    "test:unit": "vitest run",
+    "test:vcc": "bun test components/vcc/tests components/vcc/__tests__",
+    "test:advisor": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/advisor/advisor.test.mjs",
+    "test:loader": "node tests/package-load.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "0.84.2",
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^24.0.0",
+    "typebox": "^1.1.38",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "pi-mcp-adapter": "2.26.0"
+  }
+}
