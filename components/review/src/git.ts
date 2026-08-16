@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdtempSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, unlinkSync } from "node:fs";
+import {
+	lstatSync,
+	mkdtempSync,
+	mkdirSync,
+	readFileSync,
+	readlinkSync,
+	realpathSync,
+	rmSync,
+	unlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ReviewInput, ReviewItem, ReviewItemStatus, ReviewPreview, ReviewSource } from "./types.js";
@@ -8,7 +17,10 @@ import type { ReviewInput, ReviewItem, ReviewItemStatus, ReviewPreview, ReviewSo
 const MAX_GIT_OUTPUT = 64 * 1024 * 1024;
 
 export class ReviewInputError extends Error {
-	constructor(message: string, readonly code: string) {
+	constructor(
+		message: string,
+		readonly code: string,
+	) {
 		super(message);
 		this.name = "ReviewInputError";
 	}
@@ -90,7 +102,9 @@ function assertRef(ref: string, label: string): void {
 
 function resolveCommit(root: string, ref: string, label: string): string {
 	assertRef(ref, label);
-	const resolved = tryGit(root, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])?.toString("utf8").trim();
+	const resolved = tryGit(root, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])
+		?.toString("utf8")
+		.trim();
 	if (!resolved) throw new ReviewInputError(`${label} is not a valid commit ref: ${ref}`, "invalid_ref");
 	return resolved;
 }
@@ -103,11 +117,16 @@ interface NameStatus {
 
 function mapStatus(raw: string): ReviewItemStatus {
 	switch (raw[0]) {
-		case "A": return "added";
-		case "D": return "deleted";
-		case "R": return "renamed";
-		case "C": return "copied";
-		default: return "modified";
+		case "A":
+			return "added";
+		case "D":
+			return "deleted";
+		case "R":
+			return "renamed";
+		case "C":
+			return "copied";
+		default:
+			return "modified";
 	}
 }
 
@@ -115,14 +134,15 @@ function parseNameStatus(output: Buffer): NameStatus[] {
 	const tokens = output.toString("utf8").split("\0");
 	if (tokens[tokens.length - 1] === "") tokens.pop();
 	const entries: NameStatus[] = [];
-	for (let index = 0; index < tokens.length;) {
+	for (let index = 0; index < tokens.length; ) {
 		const raw = tokens[index++];
 		if (!raw) continue;
 		const status = mapStatus(raw);
 		if (status === "renamed" || status === "copied") {
 			const oldPath = tokens[index++];
 			const path = tokens[index++];
-			if (oldPath === undefined || path === undefined) throw new ReviewInputError("Malformed Git rename status", "git_output");
+			if (oldPath === undefined || path === undefined)
+				throw new ReviewInputError("Malformed Git rename status", "git_output");
 			entries.push({ status, oldPath, path });
 		} else {
 			const path = tokens[index++];
@@ -143,11 +163,22 @@ function lineCounts(diff: string): { insertions: number; deletions: number } {
 	return { insertions, deletions };
 }
 
-function logicalItemId(source: ReviewSource, status: ReviewItemStatus, oldPath: string | undefined, path: string): string {
+function logicalItemId(
+	source: ReviewSource,
+	status: ReviewItemStatus,
+	oldPath: string | undefined,
+	path: string,
+): string {
 	return sha256([source.mode, status, oldPath ?? "", path].join("\0"));
 }
 
-function item(source: ReviewSource, entry: NameStatus, diff: string, binary = false, fingerprintMaterial?: Buffer): ReviewItem {
+function item(
+	source: ReviewSource,
+	entry: NameStatus,
+	diff: string,
+	binary = false,
+	fingerprintMaterial?: Buffer,
+): ReviewItem {
 	const counts = lineCounts(diff);
 	return {
 		id: logicalItemId(source, entry.status, entry.oldPath, entry.path),
@@ -157,7 +188,9 @@ function item(source: ReviewSource, entry: NameStatus, diff: string, binary = fa
 		diff,
 		insertions: counts.insertions,
 		deletions: counts.deletions,
-		fingerprint: fingerprintMaterial ? sha256(Buffer.concat([Buffer.from(diff), Buffer.from([0]), fingerprintMaterial])) : sha256(diff),
+		fingerprint: fingerprintMaterial
+			? sha256(Buffer.concat([Buffer.from(diff), Buffer.from([0]), fingerprintMaterial]))
+			: sha256(diff),
 		binary: binary || /(?:GIT binary patch|Binary files .* differ)/.test(diff),
 	};
 }
@@ -193,17 +226,29 @@ function untrackedItem(root: string, source: ReviewSource, path: string): Review
 		gitMode = stat.mode & 0o111 ? "100755" : "100644";
 	} else {
 		const metadata = Buffer.from(`${stat.mode}:${stat.size}`);
-		return item(source, { path, status: "untracked" }, `diff --git a/${quoteDiffPath(path)} b/${quoteDiffPath(path)}\nUnsupported non-file workspace entry\n`, true, metadata);
+		return item(
+			source,
+			{ path, status: "untracked" },
+			`diff --git a/${quoteDiffPath(path)} b/${quoteDiffPath(path)}\nUnsupported non-file workspace entry\n`,
+			true,
+			metadata,
+		);
 	}
 	const utf8 = content.toString("utf8");
 	if (content.includes(0) || !Buffer.from(utf8, "utf8").equals(content)) {
 		const digest = sha256(content);
-		return item(source, { path, status: "untracked" }, [
-			`diff --git a/${quoteDiffPath(path)} b/${quoteDiffPath(path)}`,
-			`new file mode ${gitMode}`,
-			`Binary file SHA-256: ${digest}`,
-			"",
-		].join("\n"), true, content);
+		return item(
+			source,
+			{ path, status: "untracked" },
+			[
+				`diff --git a/${quoteDiffPath(path)} b/${quoteDiffPath(path)}`,
+				`new file mode ${gitMode}`,
+				`Binary file SHA-256: ${digest}`,
+				"",
+			].join("\n"),
+			true,
+			content,
+		);
 	}
 	const text = utf8;
 	const lines = text.split("\n");
@@ -223,20 +268,37 @@ function untrackedItem(root: string, source: ReviewSource, path: string): Review
 }
 
 function untrackedPaths(root: string): string[] {
-	return runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"]).toString("utf8").split("\0").filter(Boolean);
+	return runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"])
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean);
 }
 
 function diffForPaths(root: string, base: string, head: string | undefined, entry: NameStatus): string {
 	const range = head ? [base, head] : [base];
 	const paths = entry.oldPath && entry.oldPath !== entry.path ? [entry.oldPath, entry.path] : [entry.path];
-	return runGit(root, ["diff", "--no-ext-diff", "--no-textconv", "--binary", "--unified=20", ...range, "--", ...paths]).toString("utf8");
+	return runGit(root, [
+		"diff",
+		"--no-ext-diff",
+		"--no-textconv",
+		"--binary",
+		"--unified=20",
+		...range,
+		"--",
+		...paths,
+	]).toString("utf8");
 }
 
 function emptyTree(root: string): string {
 	return runGit(root, ["hash-object", "-t", "tree", "--stdin"], Buffer.alloc(0)).toString("utf8").trim();
 }
 
-function inputHash(source: ReviewSource, base: string | undefined, head: string | undefined, items: ReviewItem[]): string {
+function inputHash(
+	source: ReviewSource,
+	base: string | undefined,
+	head: string | undefined,
+	items: ReviewItem[],
+): string {
 	const identities = [...items]
 		.sort((left, right) => left.id.localeCompare(right.id))
 		.map((entry) => [entry.id, entry.fingerprint]);
@@ -258,10 +320,14 @@ export function resolveReviewInput(projectRootInput: string, source: ReviewSourc
 		if (resolvedHead) {
 			resolvedBase = resolvedHead;
 			diffBase = resolvedHead;
-			entries = parseNameStatus(runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedHead, "--", "."]));
+			entries = parseNameStatus(
+				runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedHead, "--", "."]),
+			);
 		} else {
 			const paths = runGit(projectRoot, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
-				.toString("utf8").split("\0").filter(Boolean);
+				.toString("utf8")
+				.split("\0")
+				.filter(Boolean);
 			const items = paths.map((path) => untrackedItem(projectRoot, source, path));
 			return { projectRoot, source, items, inputHash: inputHash(source, undefined, undefined, items) };
 		}
@@ -272,18 +338,26 @@ export function resolveReviewInput(projectRootInput: string, source: ReviewSourc
 		if (!resolvedBase) throw new ReviewInputError("Range refs have no merge base", "no_merge_base");
 		diffBase = resolvedBase;
 		diffHead = resolvedHead;
-		entries = parseNameStatus(runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedBase, resolvedHead, "--", "."]));
+		entries = parseNameStatus(
+			runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedBase, resolvedHead, "--", "."]),
+		);
 	} else {
 		resolvedHead = resolveCommit(projectRoot, source.commit, "commit");
-		const parentLine = runGit(projectRoot, ["rev-list", "--parents", "-n", "1", resolvedHead]).toString("utf8").trim().split(/\s+/);
+		const parentLine = runGit(projectRoot, ["rev-list", "--parents", "-n", "1", resolvedHead])
+			.toString("utf8")
+			.trim()
+			.split(/\s+/);
 		resolvedBase = parentLine[1] ?? emptyTree(projectRoot);
 		diffBase = resolvedBase;
 		diffHead = resolvedHead;
-		entries = parseNameStatus(runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedBase, resolvedHead, "--", "."]));
+		entries = parseNameStatus(
+			runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedBase, resolvedHead, "--", "."]),
+		);
 	}
 
 	const items = entries.map((entry) => item(source, entry, diffForPaths(projectRoot, diffBase!, diffHead, entry)));
-	if (includeUntracked) items.push(...untrackedPaths(projectRoot).map((path) => untrackedItem(projectRoot, source, path)));
+	if (includeUntracked)
+		items.push(...untrackedPaths(projectRoot).map((path) => untrackedItem(projectRoot, source, path)));
 	return {
 		projectRoot,
 		source,
@@ -297,7 +371,9 @@ export function resolveReviewInput(projectRootInput: string, source: ReviewSourc
 export function previewReviewInput(projectRoot: string, source: ReviewSource): ReviewPreview {
 	const input = resolveReviewInput(projectRoot, source);
 	const reviewable = input.items.filter((entry) => !entry.binary);
-	const waived = input.items.filter((entry) => entry.binary).map((entry) => ({ item: entry, reason: "binary or non-text change" }));
+	const waived = input.items
+		.filter((entry) => entry.binary)
+		.map((entry) => ({ item: entry, reason: "binary or non-text change" }));
 	return { ...input, reviewable, waived };
 }
 
@@ -308,14 +384,19 @@ export interface MaterializedReviewTree {
 
 export function materializeReviewTree(input: ReviewInput): MaterializedReviewTree {
 	if (input.source.mode === "workspace") return { root: input.projectRoot, cleanup: () => {} };
-	if (!input.resolvedHead) throw new ReviewInputError("Commit-backed review input has no resolved head", "invalid_input");
+	if (!input.resolvedHead)
+		throw new ReviewInputError("Commit-backed review input has no resolved head", "invalid_input");
 	const directory = mkdtempSync(join(tmpdir(), "review-tree-"));
 	const checkout = join(directory, "checkout");
 	const archive = join(directory, "tree.tar");
 	mkdirSync(checkout, { mode: 0o700 });
 	try {
 		runGit(input.projectRoot, ["archive", "--format=tar", `--output=${archive}`, input.resolvedHead]);
-		execFileSync("tar", ["-xf", archive, "-C", checkout], { encoding: "buffer", maxBuffer: MAX_GIT_OUTPUT, stdio: ["ignore", "pipe", "pipe"] });
+		execFileSync("tar", ["-xf", archive, "-C", checkout], {
+			encoding: "buffer",
+			maxBuffer: MAX_GIT_OUTPUT,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 		unlinkSync(archive);
 		return { root: checkout, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
 	} catch (error) {

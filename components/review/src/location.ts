@@ -83,7 +83,11 @@ function changedNewLines(diff: string): Set<number> {
 	return lines;
 }
 
-function findInCurrentFile(projectRoot: string, item: ReviewItem, anchor: string[]): Array<{ start: number; end: number }> {
+function findInCurrentFile(
+	projectRoot: string,
+	item: ReviewItem,
+	anchor: string[],
+): Array<{ start: number; end: number }> {
 	const path = safeCurrentFile(projectRoot, item.path);
 	if (!path || anchor.length === 0) return [];
 	const content = readFileSync(path);

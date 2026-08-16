@@ -33,7 +33,10 @@ function isNonEmptyArray(value: unknown): value is unknown[] {
 	return Array.isArray(value) && value.length > 0;
 }
 
-function isValidCoverageEntry(entry: Entry, customType: V3MemoryCustomType): entry is Entry & { data: { coversUpToId: string } } {
+function isValidCoverageEntry(
+	entry: Entry,
+	customType: V3MemoryCustomType,
+): entry is Entry & { data: { coversUpToId: string } } {
 	if (entry.type !== "custom" || entry.customType !== customType) return false;
 	if (!isObject(entry.data) || typeof entry.data.coversUpToId !== "string") return false;
 
@@ -74,7 +77,11 @@ export function latestCoverageMarkerId(entries: Entry[], customType: V3MemoryCus
 	return latestMarkerId;
 }
 
-export function earlierCoverageMarkerId(entries: Entry[], firstId: string | undefined, secondId: string | undefined): string | undefined {
+export function earlierCoverageMarkerId(
+	entries: Entry[],
+	firstId: string | undefined,
+	secondId: string | undefined,
+): string | undefined {
 	if (!firstId) return secondId;
 	if (!secondId) return firstId;
 
@@ -134,7 +141,10 @@ type UsageLike = {
 export function contextTokensFromUsage(usage: unknown): number | undefined {
 	if (!usage || typeof usage !== "object") return undefined;
 	const u = usage as UsageLike;
-	const total = typeof u.totalTokens === "number" && Number.isFinite(u.totalTokens) && u.totalTokens > 0 ? u.totalTokens : undefined;
+	const total =
+		typeof u.totalTokens === "number" && Number.isFinite(u.totalTokens) && u.totalTokens > 0
+			? u.totalTokens
+			: undefined;
 	if (total !== undefined) return total;
 	const parts = [u.input, u.output, u.cacheRead, u.cacheWrite];
 	if (parts.every((p) => typeof p === "number" && Number.isFinite(p))) {

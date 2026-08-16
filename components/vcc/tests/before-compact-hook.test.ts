@@ -152,10 +152,7 @@ describe("registerBeforeCompactHook: cancel paths", () => {
     registerBeforeCompactHook(pi);
 
     // Use too_few_live_messages cancel path to test content leakage
-    const entries = [
-      msg("m1", "user", "SECRET_TOKEN_abc123"),
-      msg("m2", "assistant", "sensitive response"),
-    ];
+    const entries = [msg("m1", "user", "SECRET_TOKEN_abc123"), msg("m2", "assistant", "sensitive response")];
     expect(invoke(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION))).toEqual({ cancel: true });
 
     expect(existsSync(DEBUG_PATH)).toBe(true);
@@ -202,10 +199,14 @@ describe("registerBeforeCompactHook: Codex recovery", () => {
     ];
 
     expect(invoke(makeEvent(entries, CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION)).compaction).toBeDefined();
-    emit("session_compact", { reason: "threshold", willRetry: false }, {
-      isIdle: () => true,
-      sessionManager: { getEntries: () => entries },
-    });
+    emit(
+      "session_compact",
+      { reason: "threshold", willRetry: false },
+      {
+        isIdle: () => true,
+        sessionManager: { getEntries: () => entries },
+      },
+    );
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0].message.customType).toBe(VCC_RESUME_CUSTOM_TYPE);
@@ -232,10 +233,14 @@ describe("registerBeforeCompactHook: Codex recovery", () => {
 
     expect(invoke(makeEvent(entries)).compaction).toBeDefined();
     expect(isCodexContextOverflowPending()).toBe(false);
-    emit("session_compact", { reason: "overflow", willRetry: false }, {
-      isIdle: () => true,
-      sessionManager: { getEntries: () => entries },
-    });
+    emit(
+      "session_compact",
+      { reason: "overflow", willRetry: false },
+      {
+        isIdle: () => true,
+        sessionManager: { getEntries: () => entries },
+      },
+    );
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0].message.customType).toBe(VCC_RESUME_CUSTOM_TYPE);

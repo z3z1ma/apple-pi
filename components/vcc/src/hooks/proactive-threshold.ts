@@ -35,7 +35,9 @@ const COOLDOWN_MS = 3000;
 // cancelling a compaction that we ourselves initiated.
 let proactiveTriggerActive = false;
 
-const setCooldown = () => { lastCompactTime = Date.now(); };
+const setCooldown = () => {
+  lastCompactTime = Date.now();
+};
 const isCoolingDown = () => Date.now() - lastCompactTime < COOLDOWN_MS;
 
 /** Check if a proactive trigger is currently in flight. */
@@ -100,10 +102,7 @@ const triggerCodexOutputLimitCompaction = (ctx: ProactiveContext) => {
   if (isCoolingDown()) return;
 
   try {
-    ctx?.ui?.notify?.(
-      "pi-vcc: Codex reached its maximum output token limit. Compacting...",
-      "info",
-    );
+    ctx?.ui?.notify?.("pi-vcc: Codex reached its maximum output token limit. Compacting...", "info");
   } catch {}
 
   setCooldown();
@@ -116,10 +115,7 @@ const triggerCodexContextOverflowCompaction = (ctx: ProactiveContext) => {
   if (isCoolingDown()) return;
 
   try {
-    ctx?.ui?.notify?.(
-      "pi-vcc: Codex input exceeded the context window. Compacting...",
-      "info",
-    );
+    ctx?.ui?.notify?.("pi-vcc: Codex input exceeded the context window. Compacting...", "info");
   } catch {}
 
   setCooldown();
@@ -191,8 +187,7 @@ export const registerProactiveThresholdHook = (pi: ExtensionAPI) => {
       // summary. When pi-core will handle it, defer to avoid a racing second
       // compaction that would abort pi-core's own retry.
       const piCoreWillHandle =
-        hasCurrentModelIdentity(lastMessage, ctx.model) &&
-        isPiCoreCompactionEnabled(ctx.sessionManager?.getCwd?.());
+        hasCurrentModelIdentity(lastMessage, ctx.model) && isPiCoreCompactionEnabled(ctx.sessionManager?.getCwd?.());
       if (!piCoreWillHandle) {
         triggerCodexContextOverflowCompaction(ctx);
       }

@@ -247,19 +247,34 @@ describe("V3 config", () => {
 		});
 
 		it("scales by context window in ratio mode", () => {
-			const config = { ...DEFAULTS, compactAfterTokensMode: "ratio", compactAfterTokensRatio: 0.5, compactAfterTokens: 81000 } as any;
+			const config = {
+				...DEFAULTS,
+				compactAfterTokensMode: "ratio",
+				compactAfterTokensRatio: 0.5,
+				compactAfterTokens: 81000,
+			} as any;
 			expect(resolveCompactAfterTokens(config, 1_000_000)).toBe(500_000);
 			expect(resolveCompactAfterTokens(config, 200_000)).toBe(100_000);
 		});
 
 		it("floors fractional results to an integer >= 1", () => {
-			const config = { ...DEFAULTS, compactAfterTokensMode: "ratio", compactAfterTokensRatio: 0.5, compactAfterTokens: 81000 } as any;
+			const config = {
+				...DEFAULTS,
+				compactAfterTokensMode: "ratio",
+				compactAfterTokensRatio: 0.5,
+				compactAfterTokens: 81000,
+			} as any;
 			expect(resolveCompactAfterTokens(config, 3)).toBe(1);
 			expect(resolveCompactAfterTokens(config, 1)).toBe(1);
 		});
 
 		it("falls back to calibrated value when context window is unavailable in ratio mode", () => {
-			const config = { ...DEFAULTS, compactAfterTokensMode: "ratio", compactAfterTokensRatio: 0.5, compactAfterTokens: 81000 } as any;
+			const config = {
+				...DEFAULTS,
+				compactAfterTokensMode: "ratio",
+				compactAfterTokensRatio: 0.5,
+				compactAfterTokens: 81000,
+			} as any;
 			expect(resolveCompactAfterTokens(config, undefined)).toBe(81000);
 			expect(resolveCompactAfterTokens(config, 0)).toBe(81000);
 			expect(resolveCompactAfterTokens(config, -1)).toBe(81000);

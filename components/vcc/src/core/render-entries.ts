@@ -34,19 +34,20 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
   if (msg.role === "toolResult") {
     const prefix = msg.isError ? "ERROR " : "";
     const text = full ? textOf(msg.content) : clip(textOf(msg.content), 200);
-    const nested = msg.toolName === "fabric_exec" || msg.toolName === "pi_exec"
-      ? executionOperationsOf((msg as any).details)
-      : [];
+    const nested =
+      msg.toolName === "fabric_exec" || msg.toolName === "pi_exec" ? executionOperationsOf((msg as any).details) : [];
     const nestedSummary = nested
       .slice(-20)
       .map((operation) => `${operation.name}(${summarizeToolArgs(operation.args)})`)
       .join(", ");
-    const files = [...new Set(nested
-      .map((operation) => extractPath(operation.args))
-      .filter((path): path is string => path !== null))]
-      .slice(0, 50);
+    const files = [
+      ...new Set(
+        nested.map((operation) => extractPath(operation.args)).filter((path): path is string => path !== null),
+      ),
+    ].slice(0, 50);
     return {
-      index, role: "tool_result",
+      index,
+      role: "tool_result",
       summary: `${prefix}[${msg.toolName}] ${text}${nestedSummary ? `\n${nestedSummary}` : ""}`,
       ...(files.length > 0 && { files }),
     };

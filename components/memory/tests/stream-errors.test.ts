@@ -107,15 +107,17 @@ describe("agent stream error logging", () => {
 		})) as any;
 
 		await withDebugLogContext({ enabled: true, sessionId: "session-stream-4" }, async () => {
-			await expect(runObserver({
-				model: {} as any,
-				apiKey: "test",
-				priorReflections: [],
-				priorObservations: [],
-				chunk: "[Source entry id: entry-a]\nSome content.",
-				allowedSourceEntryIds: ["entry-a"],
-				agentLoop: failingLoop,
-			})).rejects.toBeInstanceOf(ObserverStreamError);
+			await expect(
+				runObserver({
+					model: {} as any,
+					apiKey: "test",
+					priorReflections: [],
+					priorObservations: [],
+					chunk: "[Source entry id: entry-a]\nSome content.",
+					allowedSourceEntryIds: ["entry-a"],
+					agentLoop: failingLoop,
+				}),
+			).rejects.toBeInstanceOf(ObserverStreamError);
 		});
 
 		const events = readLoggedEvents("session-stream-4");

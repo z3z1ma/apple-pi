@@ -17,11 +17,13 @@ export function validTaskId(value: string): boolean {
 	if (!match) return false;
 	const [, year, month, day, hour, minute] = match;
 	const timestamp = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
-	return timestamp.getUTCFullYear() === Number(year)
-		&& timestamp.getUTCMonth() + 1 === Number(month)
-		&& timestamp.getUTCDate() === Number(day)
-		&& timestamp.getUTCHours() === Number(hour)
-		&& timestamp.getUTCMinutes() === Number(minute);
+	return (
+		timestamp.getUTCFullYear() === Number(year) &&
+		timestamp.getUTCMonth() + 1 === Number(month) &&
+		timestamp.getUTCDate() === Number(day) &&
+		timestamp.getUTCHours() === Number(hour) &&
+		timestamp.getUTCMinutes() === Number(minute)
+	);
 }
 
 export function taskLocation(path: string): TaskLocation | undefined {

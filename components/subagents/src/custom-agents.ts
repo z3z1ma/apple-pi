@@ -26,71 +26,76 @@ const RESERVED_IN_TYPE = ":";
  * claim the same name; the later load wins.
  */
 export function loadCustomAgents(cwd: string, strict = false): Map<string, AgentConfig> {
-  const globalDir = join(getAgentDir(), "agents");
-  const workspaceProjectDir = join(cwd, ".agents", "agents");
-  const projectDir = join(cwd, ".pi", "agents");
+	const globalDir = join(getAgentDir(), "agents");
+	const workspaceProjectDir = join(cwd, ".agents", "agents");
+	const projectDir = join(cwd, ".pi", "agents");
 
-  const agents = new Map<string, AgentConfig>();
-  loadFromDir(globalDir, agents, "global", strict);            // lowest priority
-  loadFromDir(workspaceProjectDir, agents, "project", strict); // shared workspace
-  loadFromDir(projectDir, agents, "project", strict);          // highest priority (overwrites)
+	const agents = new Map<string, AgentConfig>();
+	loadFromDir(globalDir, agents, "global", strict); // lowest priority
+	loadFromDir(workspaceProjectDir, agents, "project", strict); // shared workspace
+	loadFromDir(projectDir, agents, "project", strict); // highest priority (overwrites)
 
-  warnedLastLoad = warnedThisLoad;
-  warnedThisLoad = new Set();
-  return agents;
+	warnedLastLoad = warnedThisLoad;
+	warnedThisLoad = new Set();
+	return agents;
 }
 
 /** Load agent configs from a directory into the map. */
-function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "project" | "global", strict: boolean): void {
-  if (!existsSync(dir)) return;
+function loadFromDir(
+	dir: string,
+	agents: Map<string, AgentConfig>,
+	source: "project" | "global",
+	strict: boolean,
+): void {
+	if (!existsSync(dir)) return;
 
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter(f => f.endsWith(".md"));
-  } catch {
-    return;
-  }
+	let files: string[];
+	try {
+		files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+	} catch {
+		return;
+	}
 
-  for (const file of files) {
-    const path = join(dir, file);
+	for (const file of files) {
+		const path = join(dir, file);
 
-    const parsed = readAgentFile(path, strict);
-    if (!parsed) continue;
-    const { frontmatter: fm, body } = parsed;
+		const parsed = readAgentFile(path, strict);
+		if (!parsed) continue;
+		const { frontmatter: fm, body } = parsed;
 
-    const name = str(fm.name)?.trim();
-    if (!name || name.includes(RESERVED_IN_TYPE)) {
-      warnIfNew(`Skipping agent file ${path}: name must be a non-empty string without "${RESERVED_IN_TYPE}".`);
-      continue;
-    }
+		const name = str(fm.name)?.trim();
+		if (!name || name.includes(RESERVED_IN_TYPE)) {
+			warnIfNew(`Skipping agent file ${path}: name must be a non-empty string without "${RESERVED_IN_TYPE}".`);
+			continue;
+		}
 
-    const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
+		const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
 
-    agents.set(name, {
-      name,
-      // `name` is the type; `display_name` is only the optional UI label.
-      displayName: str(fm.display_name),
-      color: str(fm.color),
-      description: str(fm.description) ?? name,
-      builtinToolNames,
-      extSelectors,
-      disallowedTools: csvListOptional(fm.disallowed_tools),
-      extensions: inheritField(fm.extensions),
-      excludeExtensions: csvListOptional(fm.exclude_extensions),
-      skills: inheritField(fm.skills),
-      model: str(fm.model),
-      thinking: str(fm.thinking) as ThinkingLevel | undefined,
-      maxTurns: nonNegativeInt(fm.max_turns),
-      persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
-      sessionDir: str(fm.session_dir),
-      allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
-      systemPrompt: body.trim(),
-      promptMode: fm.prompt_mode === "append" ? "append" : "replace",
-      enabled: fm.enabled !== false,  // default true; explicitly false disables
-      source,
-      sourcePath: path,
-    });
-  }
+		agents.set(name, {
+			name,
+			// `name` is the type; `display_name` is only the optional UI label.
+			displayName: str(fm.display_name),
+			color: str(fm.color),
+			description: str(fm.description) ?? name,
+			builtinToolNames,
+			extSelectors,
+			disallowedTools: csvListOptional(fm.disallowed_tools),
+			extensions: inheritField(fm.extensions),
+			excludeExtensions: csvListOptional(fm.exclude_extensions),
+			skills: inheritField(fm.skills),
+			model: str(fm.model),
+			thinking: str(fm.thinking) as ThinkingLevel | undefined,
+			maxTurns: nonNegativeInt(fm.max_turns),
+			persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
+			sessionDir: str(fm.session_dir),
+			allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
+			systemPrompt: body.trim(),
+			promptMode: fm.prompt_mode === "append" ? "append" : "replace",
+			enabled: fm.enabled !== false, // default true; explicitly false disables
+			source,
+			sourcePath: path,
+		});
+	}
 }
 
 /**
@@ -105,15 +110,18 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
  * Under `strict` the same failure rethrows, still naming the path, so callers
  * that opted into failing closed stop rather than run a substituted agent.
  */
-function readAgentFile(path: string, strict: boolean): { frontmatter: Record<string, unknown>; body: string } | undefined {
-  try {
-    return parseFrontmatter<Record<string, unknown>>(readFileSync(path, "utf-8"));
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    if (strict) throw new Error(`${path}: ${reason}`);
-    warnIfNew(`Skipping agent file ${path}: ${reason}`);
-    return undefined;
-  }
+function readAgentFile(
+	path: string,
+	strict: boolean,
+): { frontmatter: Record<string, unknown>; body: string } | undefined {
+	try {
+		return parseFrontmatter<Record<string, unknown>>(readFileSync(path, "utf-8"));
+	} catch (err) {
+		const reason = err instanceof Error ? err.message : String(err);
+		if (strict) throw new Error(`${path}: ${reason}`);
+		warnIfNew(`Skipping agent file ${path}: ${reason}`);
+		return undefined;
+	}
 }
 
 let warnedLastLoad = new Set<string>();
@@ -126,32 +134,35 @@ let warnedThisLoad = new Set<string>();
  * load ever, so a file that is fixed and then broken again still reports.
  */
 function warnIfNew(message: string): void {
-  warnedThisLoad.add(message);
-  if (warnedLastLoad.has(message)) return;
-  console.warn(`[pi-subagents] ${message}`);
+	warnedThisLoad.add(message);
+	if (warnedLastLoad.has(message)) return;
+	console.warn(`[pi-subagents] ${message}`);
 }
 
 // ---- Field parsers ----
 
 /** Extract a string or undefined. */
 function str(val: unknown): string | undefined {
-  return typeof val === "string" ? val : undefined;
+	return typeof val === "string" ? val : undefined;
 }
 
 /** Extract a non-negative integer or undefined. 0 means unlimited for max_turns. */
 function nonNegativeInt(val: unknown): number | undefined {
-  return typeof val === "number" && val >= 0 ? val : undefined;
+	return typeof val === "number" && val >= 0 ? val : undefined;
 }
 
 /**
  * Parse a raw CSV field value into items, or undefined if absent or empty.
  */
 function parseCsvField(val: unknown): string[] | undefined {
-  if (typeof val !== "string") return undefined;
-  const s = val.trim();
-  if (!s) return undefined;
-  const items = s.split(",").map(t => t.trim()).filter(Boolean);
-  return items.length > 0 ? items : undefined;
+	if (typeof val !== "string") return undefined;
+	const s = val.trim();
+	if (!s) return undefined;
+	const items = s
+		.split(",")
+		.map((t) => t.trim())
+		.filter(Boolean);
+	return items.length > 0 ? items : undefined;
 }
 
 /**
@@ -160,9 +171,9 @@ function parseCsvField(val: unknown): string[] | undefined {
  * names permit those types only.
  */
 function parseAllowedSubagents(val: unknown): "all" | string[] | undefined {
-  const items = parseCsvField(val);
-  if (!items) return undefined;
-  return items.length === 1 && items[0] === "all" ? "all" : items;
+	const items = parseCsvField(val);
+	if (!items) return undefined;
+	return items.length === 1 && items[0] === "all" ? "all" : items;
 }
 
 /**
@@ -170,8 +181,8 @@ function parseAllowedSubagents(val: unknown): "all" | string[] | undefined {
  * omitted → defaults; empty → []; CSV → listed items.
  */
 function csvList(val: unknown, defaults: string[]): string[] {
-  if (val === undefined) return defaults;
-  return parseCsvField(val) ?? [];
+	if (val === undefined) return defaults;
+	return parseCsvField(val) ?? [];
 }
 
 /**
@@ -181,15 +192,15 @@ function csvList(val: unknown, defaults: string[]): string[] {
  * `tools:` present with only `ext:` entries → zero built-ins (use `*`).
  */
 function parseToolsField(val: unknown): { builtinToolNames: string[]; extSelectors: string[] | undefined } {
-  const entries = csvList(val, BUILTIN_TOOL_NAMES);
-  const isWildcard = (e: string) => e === "*";
-  const hasWildcard = entries.some(isWildcard);
-  const plain = entries.filter(e => !isWildcard(e) && !e.startsWith("ext:"));
-  const extEntries = entries.filter(e => e.startsWith("ext:"));
-  return {
-    builtinToolNames: hasWildcard ? [...new Set([...BUILTIN_TOOL_NAMES, ...plain])] : plain,
-    extSelectors: extEntries.length > 0 ? extEntries : undefined,
-  };
+	const entries = csvList(val, BUILTIN_TOOL_NAMES);
+	const isWildcard = (e: string) => e === "*";
+	const hasWildcard = entries.some(isWildcard);
+	const plain = entries.filter((e) => !isWildcard(e) && !e.startsWith("ext:"));
+	const extEntries = entries.filter((e) => e.startsWith("ext:"));
+	return {
+		builtinToolNames: hasWildcard ? [...new Set([...BUILTIN_TOOL_NAMES, ...plain])] : plain,
+		extSelectors: extEntries.length > 0 ? extEntries : undefined,
+	};
 }
 
 /**
@@ -197,7 +208,7 @@ function parseToolsField(val: unknown): { builtinToolNames: string[]; extSelecto
  * omitted or empty → undefined; CSV → listed items.
  */
 function csvListOptional(val: unknown): string[] | undefined {
-  return parseCsvField(val);
+	return parseCsvField(val);
 }
 
 /**
@@ -205,8 +216,8 @@ function csvListOptional(val: unknown): string[] | undefined {
  * omitted/true → true (inherit all); false or empty → false; CSV → listed names.
  */
 function inheritField(val: unknown): true | string[] | false {
-  if (val === undefined || val === true) return true;
-  if (val === false) return false;
-  const items = csvList(val, []);
-  return items.length > 0 ? items : false;
+	if (val === undefined || val === true) return true;
+	if (val === false) return false;
+	const items = csvList(val, []);
+	return items.length > 0 ? items : false;
 }

@@ -1,7 +1,7 @@
 import type { Observation, Reflection } from "../../session-ledger/index.js";
 
 export const REFLECTION_COVERAGE_TIERS = ["none", "partial", "strong"] as const;
-export type ReflectionCoverageTier = typeof REFLECTION_COVERAGE_TIERS[number];
+export type ReflectionCoverageTier = (typeof REFLECTION_COVERAGE_TIERS)[number];
 
 type Relevance = Observation["relevance"];
 
@@ -35,10 +35,12 @@ export function reflectionCoverageMap(
 	reflections: readonly Reflection[],
 ): Map<string, ReflectionCoverageTier> {
 	const counts = reflectionSupportCounts(reflections);
-	return new Map(observations.map((observation) => [
-		observation.id,
-		reflectionCoverageTierForCount(counts.get(observation.id) ?? 0),
-	]));
+	return new Map(
+		observations.map((observation) => [
+			observation.id,
+			reflectionCoverageTierForCount(counts.get(observation.id) ?? 0),
+		]),
+	);
 }
 
 function emptyCoverageBucket(): CoverageBucket {
@@ -113,10 +115,7 @@ export function summarizeCoverageTransitionsByRelevance(
 	return summary;
 }
 
-export function observationToDropperLine(
-	observation: Observation,
-	coverage: ReflectionCoverageTier,
-): string {
+export function observationToDropperLine(observation: Observation, coverage: ReflectionCoverageTier): string {
 	return `[${observation.id}] ${observation.timestamp} [${observation.relevance}] [coverage: ${coverage}] ${observation.content}`;
 }
 

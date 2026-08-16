@@ -21,9 +21,13 @@ function requireString(value: unknown, name: string): string {
 
 function summariesText(summaries: RunSummary[]): string {
 	if (summaries.length === 0) return "No Ralph runs for this project.";
-	return summaries.slice(0, 20).map((run) =>
-		`${run.runId}  ${run.state}  iteration ${run.iteration}  ${run.taskPath}\n  ledger: ${run.ledgerRoot}${run.lastOutcome ? `\n  ${run.lastOutcome}` : ""}`,
-	).join("\n");
+	return summaries
+		.slice(0, 20)
+		.map(
+			(run) =>
+				`${run.runId}  ${run.state}  iteration ${run.iteration}  ${run.taskPath}\n  ledger: ${run.ledgerRoot}${run.lastOutcome ? `\n  ${run.lastOutcome}` : ""}`,
+		)
+		.join("\n");
 }
 
 export function inspectionText(graph: ReturnType<typeof compileWorkGraph>): string {
@@ -57,12 +61,18 @@ function inspectText(cwd: string, task: string, root?: string, ledgerRoot?: stri
 function optionsFromParams(params: Record<string, unknown>): StartRunOptions {
 	return {
 		...(typeof params.root === "string" && params.root.trim() && { root: params.root.trim() }),
-		...(typeof params.ledger_root === "string" && params.ledger_root.trim() && { ledgerRoot: params.ledger_root.trim() }),
+		...(typeof params.ledger_root === "string" &&
+			params.ledger_root.trim() && { ledgerRoot: params.ledger_root.trim() }),
 	};
 }
 
-function parseCommandArgs(input: string): { action: string; positional: string[]; options: Record<string, number | string> } {
-	const tokens = input.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => token.replace(/^(?:"(.*)"|'(.*)')$/, "$1$2")) ?? [];
+function parseCommandArgs(input: string): {
+	action: string;
+	positional: string[];
+	options: Record<string, number | string>;
+} {
+	const tokens =
+		input.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => token.replace(/^(?:"(.*)"|'(.*)')$/, "$1$2")) ?? [];
 	const action = tokens.shift() ?? "status";
 	const positional: string[] = [];
 	const options: Record<string, number | string> = {};
@@ -76,7 +86,8 @@ function parseCommandArgs(input: string): { action: string; positional: string[]
 		}
 		const [rawName, inline] = token.slice(2).split("=", 2);
 		const normalizedName = rawName.replace(/-/g, "_");
-		if (!numericOptions.has(normalizedName) && !stringOptions.has(normalizedName)) throw new Error(`Unknown Ralph option: --${rawName}`);
+		if (!numericOptions.has(normalizedName) && !stringOptions.has(normalizedName))
+			throw new Error(`Unknown Ralph option: --${rawName}`);
 		const rawValue = inline ?? tokens[++index];
 		if (!rawValue) throw new Error(`--${rawName} requires a value`);
 		if (numericOptions.has(normalizedName)) {
@@ -105,8 +116,17 @@ const RALPH_RUN_OPTIONS: Array<{ name: string; description: string }> = [
 ];
 
 const RALPH_TERMINAL_STATES = new Set([
-	"done", "blocked", "evidence_failed", "review_failed", "workspace_conflict", "authority_required",
-	"budget_exhausted", "compacted", "interrupted", "stopped", "error",
+	"done",
+	"blocked",
+	"evidence_failed",
+	"review_failed",
+	"workspace_conflict",
+	"authority_required",
+	"budget_exhausted",
+	"compacted",
+	"interrupted",
+	"stopped",
+	"error",
 ]);
 
 function matchingCompletions(prefix: string, items: AutocompleteItem[]): AutocompleteItem[] | null {
@@ -121,8 +141,13 @@ export function ralphArgumentCompletions(prefix: string, runs: RunSummary[] = []
 	if (action === "status" || action === "step" || action === "stop") {
 		const idPrefix = input.slice(action.length + 1);
 		const candidates = runs
-			.filter((run) => action === "status"
-				|| (action === "step" ? run.state === "ready" || run.state === "iterating" : !RALPH_TERMINAL_STATES.has(run.state)))
+			.filter(
+				(run) =>
+					action === "status" ||
+					(action === "step"
+						? run.state === "ready" || run.state === "iterating"
+						: !RALPH_TERMINAL_STATES.has(run.state)),
+			)
 			.map((run) => ({
 				value: `${action} ${run.runId}`,
 				label: run.runId,
@@ -137,11 +162,13 @@ export function ralphArgumentCompletions(prefix: string, runs: RunSummary[] = []
 	if (!rest || (!rest.includes(" ") && !rest.startsWith("--"))) return null;
 	const tokens = input.trim().split(/\s+/);
 	if (RALPH_RUN_OPTIONS.some(({ name }) => name === tokens.at(-1))) return null;
-	const partial = input.endsWith(" ") ? "" : tokens.at(-1) ?? "";
+	const partial = input.endsWith(" ") ? "" : (tokens.at(-1) ?? "");
 	const base = partial ? input.slice(0, -partial.length) : input;
-	const options = RALPH_RUN_OPTIONS
-		.filter(({ name }) => !tokens.includes(name))
-		.map(({ name, description }) => ({ value: `${base}${name} `, label: name, description }));
+	const options = RALPH_RUN_OPTIONS.filter(({ name }) => !tokens.includes(name)).map(({ name, description }) => ({
+		value: `${base}${name} `,
+		label: name,
+		description,
+	}));
 	return matchingCompletions(input, options);
 }
 
@@ -151,10 +178,14 @@ function setRunWidget(ctx: ExtensionCommandContext, run: RalphRun | undefined): 
 		ctx.ui.setWidget(WIDGET_ID, undefined);
 		return;
 	}
-	ctx.ui.setWidget(WIDGET_ID, [
-		`Ralph ${run.state} · iteration ${run.iteration} · ${run.taskPath}`,
-		...(run.nextObjective ? [`Next: ${run.nextObjective}`] : []),
-	], { placement: "aboveEditor" });
+	ctx.ui.setWidget(
+		WIDGET_ID,
+		[
+			`Ralph ${run.state} · iteration ${run.iteration} · ${run.taskPath}`,
+			...(run.nextObjective ? [`Next: ${run.nextObjective}`] : []),
+		],
+		{ placement: "aboveEditor" },
+	);
 }
 
 export default function installRalph(pi: ExtensionAPI): void {
@@ -164,22 +195,38 @@ export default function installRalph(pi: ExtensionAPI): void {
 	const tool = defineTool({
 		name: "ralph",
 		label: "Ralph",
-		description: "Orchestrate deterministic ledger task loops with fresh executors, independent review, and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs are bounded and never push, deploy, commit, reset, or resume an agent.",
+		description:
+			"Orchestrate deterministic ledger task loops with fresh executors, independent review, and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs are bounded and never push, deploy, commit, reset, or resume an agent.",
 		parameters: Type.Object({
 			action: Type.Union([
-				Type.Literal("inspect"), Type.Literal("start"), Type.Literal("step"),
-				Type.Literal("run"), Type.Literal("status"), Type.Literal("stop"),
+				Type.Literal("inspect"),
+				Type.Literal("start"),
+				Type.Literal("step"),
+				Type.Literal("run"),
+				Type.Literal("status"),
+				Type.Literal("stop"),
 			]),
-			task: Type.Optional(Type.String({ description: "Path relative to ledger_root, normally .ledger/<task-id>/task.md." })),
+			task: Type.Optional(
+				Type.String({ description: "Path relative to ledger_root, normally .ledger/<task-id>/task.md." }),
+			),
 			run_id: Type.Optional(Type.String()),
-			root: Type.Optional(Type.String({ description: "Implementation worktree root, absolute or relative to the session repository. Defaults to the session worktree." })),
-			ledger_root: Type.Optional(Type.String({ description: "Linked checkout root containing the authoritative .ledger. Defaults to root." })),
+			root: Type.Optional(
+				Type.String({
+					description:
+						"Implementation worktree root, absolute or relative to the session repository. Defaults to the session worktree.",
+				}),
+			),
+			ledger_root: Type.Optional(
+				Type.String({ description: "Linked checkout root containing the authoritative .ledger. Defaults to root." }),
+			),
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			try {
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
-				if (params.ledger_root && !["inspect", "start", "run"].includes(params.action)) throw new Error("ledger_root is valid only for inspect, start, and run");
-				if (params.action === "inspect") return textResult(inspectText(ctx.cwd, requireString(params.task, "task"), params.root, params.ledger_root));
+				if (params.ledger_root && !["inspect", "start", "run"].includes(params.action))
+					throw new Error("ledger_root is valid only for inspect, start, and run");
+				if (params.action === "inspect")
+					return textResult(inspectText(ctx.cwd, requireString(params.task, "task"), params.root, params.ledger_root));
 				const workspaceRoot = resolveRalphRoots(ctx.cwd, params.root).workspaceRoot;
 				if (params.action === "status") {
 					const status = controller.status(workspaceRoot, params.run_id);
@@ -204,7 +251,11 @@ export default function installRalph(pi: ExtensionAPI): void {
 			}
 		},
 		renderCall(args, theme) {
-			return new Text(`${theme.fg("toolTitle", theme.bold("Ralph "))}${theme.fg("accent", args.action)} ${theme.fg("dim", args.task ?? args.run_id ?? "")}`, 0, 0);
+			return new Text(
+				`${theme.fg("toolTitle", theme.bold("Ralph "))}${theme.fg("accent", args.action)} ${theme.fg("dim", args.task ?? args.run_id ?? "")}`,
+				0,
+				0,
+			);
 		},
 		renderResult(result, _options, theme) {
 			const content = result.content[0]?.type === "text" ? result.content[0].text : "No output";
@@ -231,13 +282,31 @@ export default function installRalph(pi: ExtensionAPI): void {
 			try {
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
 				const parsed = parseCommandArgs(input);
-				const expectedPositionals = parsed.action === "status" ? [0, 1] : ["inspect", "start", "step", "run", "stop"].includes(parsed.action) ? [1] : [];
-				if (!expectedPositionals.includes(parsed.positional.length)) throw new Error(`Unexpected arguments for /ralph ${parsed.action}`);
-				if (!["inspect", "start", "run"].includes(parsed.action) && parsed.options.ledger_root) throw new Error("--ledger-root is valid only for inspect, start, and run");
+				const expectedPositionals =
+					parsed.action === "status"
+						? [0, 1]
+						: ["inspect", "start", "step", "run", "stop"].includes(parsed.action)
+							? [1]
+							: [];
+				if (!expectedPositionals.includes(parsed.positional.length))
+					throw new Error(`Unexpected arguments for /ralph ${parsed.action}`);
+				if (!["inspect", "start", "run"].includes(parsed.action) && parsed.options.ledger_root)
+					throw new Error("--ledger-root is valid only for inspect, start, and run");
 				const params = parsed.options as Record<string, unknown>;
-				const workspaceRoot = resolveRalphRoots(ctx.cwd, typeof params.root === "string" ? params.root : undefined).workspaceRoot;
+				const workspaceRoot = resolveRalphRoots(
+					ctx.cwd,
+					typeof params.root === "string" ? params.root : undefined,
+				).workspaceRoot;
 				if (parsed.action === "inspect") {
-					ctx.ui.notify(inspectText(ctx.cwd, requireString(parsed.positional[0], "task"), typeof params.root === "string" ? params.root : undefined, typeof params.ledger_root === "string" ? params.ledger_root : undefined), "info");
+					ctx.ui.notify(
+						inspectText(
+							ctx.cwd,
+							requireString(parsed.positional[0], "task"),
+							typeof params.root === "string" ? params.root : undefined,
+							typeof params.ledger_root === "string" ? params.ledger_root : undefined,
+						),
+						"info",
+					);
 					return;
 				}
 				if (parsed.action === "status") {
@@ -252,25 +321,35 @@ export default function installRalph(pi: ExtensionAPI): void {
 					return;
 				}
 				if (parsed.action === "start") {
-					const run = await controller.start(ctx, requireString(parsed.positional[0], "task"), optionsFromParams(params));
+					const run = await controller.start(
+						ctx,
+						requireString(parsed.positional[0], "task"),
+						optionsFromParams(params),
+					);
 					setRunWidget(ctx, run);
 					ctx.ui.notify(summarizeRun(run), "info");
 					return;
 				}
 				if (parsed.action !== "step" && parsed.action !== "run") {
-					throw new Error("Usage: /ralph inspect <task.md> | start <task.md> | step <run-id> | run <task.md> [--root PATH] [--ledger-root PATH] | status [run-id] | stop <run-id>");
+					throw new Error(
+						"Usage: /ralph inspect <task.md> | start <task.md> | step <run-id> | run <task.md> [--root PATH] [--ledger-root PATH] | status [run-id] | stop <run-id>",
+					);
 				}
-				const operation = parsed.action === "step"
-					? controller.step(ctx, requireString(parsed.positional[0], "run-id"), undefined, workspaceRoot)
-					: controller.run(ctx, requireString(parsed.positional[0], "task"), optionsFromParams(params));
+				const operation =
+					parsed.action === "step"
+						? controller.step(ctx, requireString(parsed.positional[0], "run-id"), undefined, workspaceRoot)
+						: controller.run(ctx, requireString(parsed.positional[0], "task"), optionsFromParams(params));
 				ctx.ui.notify(`Ralph ${parsed.action} started. Do not mutate this checkout until it finishes.`, "info");
-				void operation.then((run) => {
-					setRunWidget(ctx, run);
-					ctx.ui.notify(summarizeRun(run), run.state === "done" ? "info" : "warning");
-				}, (error) => {
-					setRunWidget(ctx, undefined);
-					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-				});
+				void operation.then(
+					(run) => {
+						setRunWidget(ctx, run);
+						ctx.ui.notify(summarizeRun(run), run.state === "done" ? "info" : "warning");
+					},
+					(error) => {
+						setRunWidget(ctx, undefined);
+						ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+					},
+				);
 			} catch (error) {
 				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 			}

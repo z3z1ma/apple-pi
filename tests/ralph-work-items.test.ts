@@ -64,17 +64,24 @@ describe("parseTaskDocument", () => {
 	});
 
 	it("parses canonical open, complete, and cancelled work items", () => {
-		const document = parseTaskDocument(task(`## Work Items
+		const document = parseTaskDocument(
+			task(`## Work Items
 
 - [ ] WI-001: Implement the canonical parser.
 - [x] WI-002: Preserve no-work-item compatibility.
 - [-] WI-003: Remove speculative scope — Cancelled: No longer required because the active specification excludes it.
 
-`));
+`),
+		);
 		expect(document.workItems).toEqual([
 			{ id: "WI-001", state: "open", description: "Implement the canonical parser." },
 			{ id: "WI-002", state: "complete", description: "Preserve no-work-item compatibility." },
-			{ id: "WI-003", state: "cancelled", description: "Remove speculative scope", cancellationReason: "No longer required because the active specification excludes it." },
+			{
+				id: "WI-003",
+				state: "cancelled",
+				description: "Remove speculative scope",
+				cancellationReason: "No longer required because the active specification excludes it.",
+			},
 		]);
 		expect(document.workItemIssues).toEqual([]);
 	});
@@ -92,7 +99,8 @@ describe("parseTaskDocument", () => {
 	});
 
 	it("reports malformed, duplicate, non-substantive, and misplaced work items", () => {
-		const malformed = parseTaskDocument(task(`## Work Items
+		const malformed = parseTaskDocument(
+			task(`## Work Items
 
 - [ ] WI-001: Do it.
 - [x] WI-001: Duplicate identifier with substantive detail.
@@ -104,7 +112,8 @@ This note would otherwise be erased by a mutation.
 - [ ] WI-004: TODO: describe this later.
 - [-] WI-005: Cancel this scope — Cancelled: Pending implementation detail.
 
-`));
+`),
+		);
 		expect(malformed.workItemIssues.map((issue) => issue.code)).toEqual([
 			"non_substantive_work_item",
 			"duplicate_work_item",
@@ -117,10 +126,21 @@ This note would otherwise be erased by a mutation.
 			"non_substantive_cancellation",
 		]);
 
-		const misplaced = parseTaskDocument(task().replace("# Implement bounded behavior", "- [ ] wi-001: This appears before the first section.\n\n# Implement bounded behavior").replace("## References", "- [ ] WI-002: This appears outside the work item section.\n\n## References"));
+		const misplaced = parseTaskDocument(
+			task()
+				.replace(
+					"# Implement bounded behavior",
+					"- [ ] wi-001: This appears before the first section.\n\n# Implement bounded behavior",
+				)
+				.replace("## References", "- [ ] WI-002: This appears outside the work item section.\n\n## References"),
+		);
 		expect(misplaced.workItemIssues.filter((issue) => issue.code === "misplaced_work_item")).toHaveLength(2);
 
-		const proseReference = parseTaskDocument(task().replace("- Opened.", "- Ralph iteration considered WI-001 but left it open.").replace("## Review\n\nPending.", "## Review\n\n- WI-001: **confirmed** — reviewed evidence."));
+		const proseReference = parseTaskDocument(
+			task()
+				.replace("- Opened.", "- Ralph iteration considered WI-001 but left it open.")
+				.replace("## Review\n\nPending.", "## Review\n\n- WI-001: **confirmed** — reviewed evidence."),
+		);
 		expect(proseReference.workItemIssues).toEqual([]);
 	});
 });

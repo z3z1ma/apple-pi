@@ -75,11 +75,7 @@ describe("buildOwnCut", () => {
   });
 
   it("mid-cycle cut when only one user message (3+ live messages)", () => {
-    const entries = [
-      makeUserEntry("u1"),
-      makeAssistantEntry("a1", "stop"),
-      makeAssistantEntry("a1b", "stop"),
-    ];
+    const entries = [makeUserEntry("u1"), makeAssistantEntry("a1", "stop"), makeAssistantEntry("a1b", "stop")];
     const result = buildOwnCut(entries);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -117,11 +113,7 @@ describe("RC1: post-compaction context last message", () => {
    * If continue() is called at this point, it throws.
    */
   it("kept tail ending with assistant message makes continue() impossible", () => {
-    const context = makeContextMessages(
-      compactionSummaryMsg("summary"),
-      userMsg("u2"),
-      assistantMsg("a2", "stop"),
-    );
+    const context = makeContextMessages(compactionSummaryMsg("summary"), userMsg("u2"), assistantMsg("a2", "stop"));
 
     const lastMsg = context[context.length - 1];
     expect(lastMsg.role).toBe("assistant");
@@ -135,11 +127,7 @@ describe("RC1: post-compaction context last message", () => {
    * If tail ends with assistant, same problem.
    */
   it("kept tail with toolUse assistant as last message is also blocked", () => {
-    const context = makeContextMessages(
-      compactionSummaryMsg("summary"),
-      userMsg("u2"),
-      assistantMsg("a2", "toolUse"),
-    );
+    const context = makeContextMessages(compactionSummaryMsg("summary"), userMsg("u2"), assistantMsg("a2", "toolUse"));
 
     const lastMsg = context[context.length - 1];
     expect(lastMsg.role).toBe("assistant");
@@ -151,10 +139,7 @@ describe("RC1: post-compaction context last message", () => {
    * kept tail ends with a user or toolResult message.
    */
   it("kept tail ending with user message allows continue()", () => {
-    const context = makeContextMessages(
-      compactionSummaryMsg("summary"),
-      userMsg("u2"),
-    );
+    const context = makeContextMessages(compactionSummaryMsg("summary"), userMsg("u2"));
 
     const lastMsg = context[context.length - 1];
     expect(lastMsg.role).toBe("user");
@@ -177,9 +162,7 @@ describe("RC1: post-compaction context last message", () => {
    * compactionSummary — which is role "user". continue() works.
    */
   it("compact-all produces user-only context", () => {
-    const context = makeContextMessages(
-      compactionSummaryMsg("summary"),
-    );
+    const context = makeContextMessages(compactionSummaryMsg("summary"));
 
     const lastMsg = context[context.length - 1];
     expect(lastMsg.role).toBe("user");
@@ -217,22 +200,16 @@ describe("RC2: overflow compaction error removal", () => {
     );
 
     const lastMsg = context[context.length - 1];
-    const wouldRemove =
-      lastMsg.role === "assistant" && lastMsg.stopReason === "error";
+    const wouldRemove = lastMsg.role === "assistant" && lastMsg.stopReason === "error";
     expect(wouldRemove).toBe(false); // Removal doesn't fire!
     // continue() would throw "Cannot continue from message role: assistant"
   });
 
   it("error removal works when error IS the last message", () => {
-    const context = makeContextMessages(
-      compactionSummaryMsg("summary"),
-      userMsg("u2"),
-      assistantMsg("a2", "error"),
-    );
+    const context = makeContextMessages(compactionSummaryMsg("summary"), userMsg("u2"), assistantMsg("a2", "error"));
 
     const lastMsg = context[context.length - 1];
-    const wouldRemove =
-      lastMsg.role === "assistant" && lastMsg.stopReason === "error";
+    const wouldRemove = lastMsg.role === "assistant" && lastMsg.stopReason === "error";
     expect(wouldRemove).toBe(true); // Removal fires → after removal, last is user
   });
 });
@@ -309,69 +286,23 @@ describe("RC5: stopReason string values", () => {
 
 describe("RC6: manual compact should not auto-continue", () => {
   it("rejects manual compaction and queues a marker for core-owned retries", () => {
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "manual", willRetry: false },
-        true,
-        false,
-        false,
-      ),
-    ).toBe(false);
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "overflow", willRetry: true },
-        false,
-        false,
-        false,
-      ),
-    ).toBe(true);
+    expect(shouldTriggerResumeForCompaction({ reason: "manual", willRetry: false }, true, false, false)).toBe(false);
+    expect(shouldTriggerResumeForCompaction({ reason: "overflow", willRetry: true }, false, false, false)).toBe(true);
   });
 
   it("rejects pre-prompt threshold compaction but resumes an active threshold run", () => {
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "threshold", willRetry: false },
-        true,
-        false,
-        false,
-      ),
-    ).toBe(false);
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "threshold", willRetry: false },
-        false,
-        false,
-        false,
-      ),
-    ).toBe(true);
+    expect(shouldTriggerResumeForCompaction({ reason: "threshold", willRetry: false }, true, false, false)).toBe(false);
+    expect(shouldTriggerResumeForCompaction({ reason: "threshold", willRetry: false }, false, false, false)).toBe(true);
   });
 
   it("uses active state conservatively when legacy Pi omits metadata", () => {
-    expect(
-      shouldTriggerResumeForCompaction({}, false, false, false),
-    ).toBe(true);
-    expect(
-      shouldTriggerResumeForCompaction({}, true, false, false),
-    ).toBe(false);
+    expect(shouldTriggerResumeForCompaction({}, false, false, false)).toBe(true);
+    expect(shouldTriggerResumeForCompaction({}, true, false, false)).toBe(false);
   });
 
   it("allows extension-owned proactive and Codex recovery compactions", () => {
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "manual", willRetry: false },
-        true,
-        true,
-        false,
-      ),
-    ).toBe(true);
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "manual", willRetry: false },
-        true,
-        false,
-        true,
-      ),
-    ).toBe(true);
+    expect(shouldTriggerResumeForCompaction({ reason: "manual", willRetry: false }, true, true, false)).toBe(true);
+    expect(shouldTriggerResumeForCompaction({ reason: "manual", willRetry: false }, true, false, true)).toBe(true);
   });
 
   /**
@@ -384,8 +315,7 @@ describe("RC6: manual compact should not auto-continue", () => {
    */
   it("after user-initiated /compact, last stopReason is typically 'stop'", () => {
     const lastAssistant = assistantMsg("done", "stop");
-    const shouldContinue = lastAssistant.stopReason !== "stop"
-      && lastAssistant.stopReason !== "aborted";
+    const shouldContinue = lastAssistant.stopReason !== "stop" && lastAssistant.stopReason !== "aborted";
     expect(shouldContinue).toBe(false);
   });
 });
@@ -421,13 +351,6 @@ describe("native queued resume", () => {
   });
 
   it("queues a marker for willRetry so native continue can drain it", () => {
-    expect(
-      shouldTriggerResumeForCompaction(
-        { reason: "overflow", willRetry: true },
-        false,
-        false,
-        false,
-      ),
-    ).toBe(true);
+    expect(shouldTriggerResumeForCompaction({ reason: "overflow", willRetry: true }, false, false, false)).toBe(true);
   });
 });

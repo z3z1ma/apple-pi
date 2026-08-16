@@ -56,11 +56,13 @@ export class Runtime {
 	lastReflectorError: string | undefined;
 	lastDropperError: string | undefined;
 	/** Deliberate-empty backoff (#23): skip observer re-fires over the same span until enough new tokens arrive. */
-	observerEmptyBackoff: {
-		sessionIdentity: string | undefined;
-		coverageId: string | undefined;
-		tokensAtEmpty: number;
-	} | undefined;
+	observerEmptyBackoff:
+		| {
+				sessionIdentity: string | undefined;
+				coverageId: string | undefined;
+				tokensAtEmpty: number;
+		  }
+		| undefined;
 
 	ensureConfig(cwd: string): void {
 		if (this.configLoaded) return;
@@ -82,7 +84,11 @@ export class Runtime {
 				);
 			}
 		}
-		if (!model) return { ok: false, reason: "no model available (session has no model and no observational-memory mode configured)" };
+		if (!model)
+			return {
+				ok: false,
+				reason: "no model available (session has no model and no observational-memory mode configured)",
+			};
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		const provider = (model as { provider?: string }).provider ?? "unknown";
 		if (!auth.ok || !hasUsableAuth(auth)) {

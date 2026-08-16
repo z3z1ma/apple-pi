@@ -107,15 +107,34 @@ function stageDue(
 }
 
 function anyStageDue(entries: Entry[], runtime: Runtime, currentTokens: number | undefined): boolean {
-	return stageDue(entries, runtime, currentTokens, OM_OBSERVATIONS_RECORDED, rawTokensSinceObservationCoverage, runtime.config.observeAfterTokens)
-		|| stageDue(entries, runtime, currentTokens, OM_REFLECTIONS_RECORDED, rawTokensSinceReflectionCoverage, runtime.config.reflectAfterTokens);
+	return (
+		stageDue(
+			entries,
+			runtime,
+			currentTokens,
+			OM_OBSERVATIONS_RECORDED,
+			rawTokensSinceObservationCoverage,
+			runtime.config.observeAfterTokens,
+		) ||
+		stageDue(
+			entries,
+			runtime,
+			currentTokens,
+			OM_REFLECTIONS_RECORDED,
+			rawTokensSinceReflectionCoverage,
+			runtime.config.reflectAfterTokens,
+		)
+	);
 }
 
 function shouldNotifyWorker(runtime: Runtime, ctx: ConsolidationCtx): boolean {
 	return runtime.config.showWorkerNotifications && ctx.hasUI;
 }
 
-function makeModelResolver(runtime: Runtime, ctx: ConsolidationCtx): (stage: "observer" | "reflector" | "dropper") => Promise<ResolvedModel | undefined> {
+function makeModelResolver(
+	runtime: Runtime,
+	ctx: ConsolidationCtx,
+): (stage: "observer" | "reflector" | "dropper") => Promise<ResolvedModel | undefined> {
 	let cached: ResolveResult | undefined;
 	return async (stage) => {
 		cached ??= await runtime.resolveModel({
@@ -179,14 +198,19 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 	};
 
 	const sessionMetadata = debugSessionMetadata(ctx);
-	void runtime.launchConsolidationTask(ctx, async () => withDebugLogContext({
-		enabled: runtime.config.debugLog === true,
-		cwd: ctx.cwd,
-		...sessionMetadata,
-		runId,
-	}, async () => {
-		await runConsolidationPipeline(pi, runtime, consolidationCtx);
-	}));
+	void runtime.launchConsolidationTask(ctx, async () =>
+		withDebugLogContext(
+			{
+				enabled: runtime.config.debugLog === true,
+				cwd: ctx.cwd,
+				...sessionMetadata,
+				runId,
+			},
+			async () => {
+				await runConsolidationPipeline(pi, runtime, consolidationCtx);
+			},
+		),
+	);
 }
 
 export async function runConsolidationPipeline(
@@ -217,7 +241,14 @@ export async function runConsolidationPipeline(
 
 	runtime.consolidationPhase = "dropper";
 	try {
-		await runDropperStage(pi, runtime, ctx, resolveModel, reflectorResult.sameRunReflections, reflectorResult.effectiveReflectionCoverageId);
+		await runDropperStage(
+			pi,
+			runtime,
+			ctx,
+			resolveModel,
+			reflectorResult.sameRunReflections,
+			reflectorResult.effectiveReflectionCoverageId,
+		);
 	} catch (error) {
 		debugLog("dropper.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "dropper", error) });
 	}
@@ -231,7 +262,8 @@ async function runObserverStage(
 ): Promise<StageOutcome> {
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const currentTokens = realContextTokens(ctx);
-	const real = currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_OBSERVATIONS_RECORDED, currentTokens) : undefined;
+	const real =
+		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_OBSERVATIONS_RECORDED, currentTokens) : undefined;
 	const tokens = real !== undefined ? real : rawTokensSinceObservationCoverage(entries); // fallback: no usage baseline / basis change
 	if (tokens < runtime.config.observeAfterTokens) return "continue";
 
@@ -246,13 +278,16 @@ async function runObserverStage(
 	const backoff = runtime.observerEmptyBackoff;
 	if (backoff) {
 		if (
-			sessionIdentity !== backoff.sessionIdentity
-			|| coverageId !== backoff.coverageId
-			|| tokens >= backoff.tokensAtEmpty + runtime.config.observeAfterTokens
+			sessionIdentity !== backoff.sessionIdentity ||
+			coverageId !== backoff.coverageId ||
+			tokens >= backoff.tokensAtEmpty + runtime.config.observeAfterTokens
 		) {
 			runtime.observerEmptyBackoff = undefined;
 		} else {
-			debugLog("observer.empty_backoff", { tokens, resumeAtTokens: backoff.tokensAtEmpty + runtime.config.observeAfterTokens });
+			debugLog("observer.empty_backoff", {
+				tokens,
+				resumeAtTokens: backoff.tokensAtEmpty + runtime.config.observeAfterTokens,
+			});
 			return "continue";
 		}
 	}
@@ -296,10 +331,8 @@ async function runObserverStage(
 	const priorReflections = memory.reflections.map(reflectionToSummaryLine);
 	const priorObservations = memory.observations.map(observationToSummaryLine);
 
-	if (shouldNotifyWorker(runtime, ctx)) ctx.ui?.notify(
-		`Observational memory: observer running on ~${chunkTokens.toLocaleString()}-token chunk`,
-		"info",
-	);
+	if (shouldNotifyWorker(runtime, ctx))
+		ctx.ui?.notify(`Observational memory: observer running on ~${chunkTokens.toLocaleString()}-token chunk`, "info");
 	debugLog("observer.start", {
 		tokens,
 		chunkTokens,
@@ -337,10 +370,11 @@ async function runObserverStage(
 		// over the same span (#23).
 		debugLog("observer.empty", { coversUpToId });
 		runtime.observerEmptyBackoff = { sessionIdentity, coverageId, tokensAtEmpty: tokens };
-		if (shouldNotifyWorker(runtime, ctx)) ctx.ui?.notify(
-			"Observational memory: observer found nothing new in this chunk (coverage unchanged; will retry later)",
-			"info",
-		);
+		if (shouldNotifyWorker(runtime, ctx))
+			ctx.ui?.notify(
+				"Observational memory: observer found nothing new in this chunk (coverage unchanged; will retry later)",
+				"info",
+			);
 		return "continue";
 	}
 	runtime.observerEmptyBackoff = undefined;
@@ -354,10 +388,11 @@ async function runObserverStage(
 	});
 	appendEntry(pi, OM_OBSERVATIONS_RECORDED, data);
 	debugLog("observer.appended", { count: observations.length, coversUpToId });
-	if (shouldNotifyWorker(runtime, ctx)) ctx.ui?.notify(
-		`Observational memory: ${observations.length} observation${observations.length === 1 ? "" : "s"} recorded`,
-		"info",
-	);
+	if (shouldNotifyWorker(runtime, ctx))
+		ctx.ui?.notify(
+			`Observational memory: ${observations.length} observation${observations.length === 1 ? "" : "s"} recorded`,
+			"info",
+		);
 	return "continue";
 }
 
@@ -369,17 +404,16 @@ async function runReflectorStage(
 ): Promise<ReflectorStageResult> {
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const currentTokens = realContextTokens(ctx);
-	const real = currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_REFLECTIONS_RECORDED, currentTokens) : undefined;
+	const real =
+		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_REFLECTIONS_RECORDED, currentTokens) : undefined;
 	const reflectionTokens = real !== undefined ? real : rawTokensSinceReflectionCoverage(entries); // fallback: no usage baseline / basis change
 	if (reflectionTokens < runtime.config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
 
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
 	if (!observationCoverageId) return { outcome: "continue", sameRunReflections: [] };
 
-	if (shouldNotifyWorker(runtime, ctx)) ctx.ui?.notify(
-		`Observational memory: reflector running (~${reflectionTokens.toLocaleString()} tokens)`,
-		"info",
-	);
+	if (shouldNotifyWorker(runtime, ctx))
+		ctx.ui?.notify(`Observational memory: reflector running (~${reflectionTokens.toLocaleString()} tokens)`, "info");
 	const resolved = await resolveModel("reflector");
 	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
 
@@ -448,10 +482,11 @@ async function runDropperStage(
 		maxDropsAllowed: metrics.maxDropsAllowed,
 	});
 
-	if (shouldNotifyWorker(runtime, ctx)) ctx.ui?.notify(
-		`Observational memory: dropper running after reflection — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
-		"info",
-	);
+	if (shouldNotifyWorker(runtime, ctx))
+		ctx.ui?.notify(
+			`Observational memory: dropper running after reflection — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
+			"info",
+		);
 	const resolved = await resolveModel("dropper");
 	if (!resolved) return "abort";
 

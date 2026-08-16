@@ -1,8 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import {
-  isCodexContextOverflowError,
-  isCodexOutputLimitError,
-} from "../src/core/codex-output-limit";
+import { isCodexContextOverflowError, isCodexOutputLimitError } from "../src/core/codex-output-limit";
 import { shouldResumeAfterCompaction } from "../src/hooks/before-compact";
 
 const codexOutputLimitError = {
@@ -18,7 +15,8 @@ const codexContextOverflowError = {
   api: "openai-codex-responses",
   provider: "openai-codex",
   stopReason: "error",
-  errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+  errorMessage:
+    "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
 };
 
 describe("Codex maximum output limit handling", () => {
@@ -31,16 +29,20 @@ describe("Codex maximum output limit handling", () => {
   });
 
   test("does not classify an unrelated provider error", () => {
-    expect(isCodexOutputLimitError({
-      ...codexOutputLimitError,
-      provider: "openai",
-      api: "openai-responses",
-    })).toBe(false);
-    expect(isCodexContextOverflowError({
-      ...codexContextOverflowError,
-      provider: "openai",
-      api: "openai-responses",
-    })).toBe(false);
+    expect(
+      isCodexOutputLimitError({
+        ...codexOutputLimitError,
+        provider: "openai",
+        api: "openai-responses",
+      }),
+    ).toBe(false);
+    expect(
+      isCodexContextOverflowError({
+        ...codexContextOverflowError,
+        provider: "openai",
+        api: "openai-responses",
+      }),
+    ).toBe(false);
   });
 
   test("resumes after compaction for the Codex output-limit error", () => {
@@ -60,9 +62,14 @@ describe("Codex maximum output limit handling", () => {
   });
 
   test("does not resume after compaction for ordinary errors", () => {
-    expect(shouldResumeAfterCompaction({
-      ...codexOutputLimitError,
-      errorMessage: "Codex request failed",
-    }, true)).toBe(false);
+    expect(
+      shouldResumeAfterCompaction(
+        {
+          ...codexOutputLimitError,
+          errorMessage: "Codex request failed",
+        },
+        true,
+      ),
+    ).toBe(false);
   });
 });

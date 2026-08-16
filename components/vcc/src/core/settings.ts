@@ -2,8 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 
-const settingsPath = (): string =>
-  process.env.PI_VCC_CONFIG_PATH ?? join(getAgentDir(), "pi-vcc-config.json");
+const settingsPath = (): string => process.env.PI_VCC_CONFIG_PATH ?? join(getAgentDir(), "pi-vcc-config.json");
 /** Backwards-compat export. Resolves at access time, not import time. */
 const SETTINGS_PATH = settingsPath();
 
@@ -133,10 +132,7 @@ export function getModelThreshold(
  * threshold is not usable (no reserveTokens, no compactPercent,
  * or compactPercent out of range).
  */
-export function resolveReserveTokens(
-  threshold: ModelThreshold,
-  contextWindow: number,
-): number | undefined {
+export function resolveReserveTokens(threshold: ModelThreshold, contextWindow: number): number | undefined {
   if (threshold.reserveTokens != null) return threshold.reserveTokens;
   if (threshold.compactPercent != null && contextWindow > 0) {
     const pct = threshold.compactPercent;
@@ -152,10 +148,7 @@ export function resolveReserveTokens(
  * Precedence: reserveTokens > compactAtTokens > compactPercent.
  * Returns undefined when the threshold cannot produce a usable trigger.
  */
-export function resolveTriggerTokens(
-  threshold: ModelThreshold,
-  contextWindow: number,
-): number | undefined {
+export function resolveTriggerTokens(threshold: ModelThreshold, contextWindow: number): number | undefined {
   if (contextWindow <= 0) return undefined;
 
   if (threshold.reserveTokens != null) {

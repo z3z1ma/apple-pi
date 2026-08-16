@@ -22,7 +22,12 @@ export function observationLineTokenCount(observation: {
 	);
 }
 
-export function estimateEntryTokens(entry: { type: string; message?: unknown; content?: unknown; summary?: unknown }): number {
+export function estimateEntryTokens(entry: {
+	type: string;
+	message?: unknown;
+	content?: unknown;
+	summary?: unknown;
+}): number {
 	if (entry.type === "message" && entry.message) {
 		return estimateMessageTokens(entry.message as Parameters<typeof estimateMessageTokens>[0]);
 	}

@@ -30,10 +30,7 @@ function toolResultEntry(id: string, text: string) {
 
 describe("source-addressed serialization budget", () => {
 	it("preserves all source blocks when they fit", () => {
-		const entries = [
-			customEntry("raw-1", "first"),
-			customEntry("raw-2", "second"),
-		];
+		const entries = [customEntry("raw-1", "first"), customEntry("raw-2", "second")];
 		const result = serializeSourceAddressedBranchEntries(entries, {
 			maxTokens: 1_000,
 		});
@@ -59,10 +56,7 @@ describe("source-addressed serialization budget", () => {
 	});
 
 	it("returns no source instead of truncating the source label under an unusably small budget", () => {
-		const result = serializeSourceAddressedBranchEntries(
-			[customEntry("raw-1", "content")],
-			{ maxTokens: 1 },
-		);
+		const result = serializeSourceAddressedBranchEntries([customEntry("raw-1", "content")], { maxTokens: 1 });
 
 		expect(result).toEqual({
 			text: "",
@@ -75,10 +69,9 @@ describe("source-addressed serialization budget", () => {
 	it("uses a marked head/tail excerpt when one tool result exceeds the budget", () => {
 		const source = `HEAD:${"m".repeat(2_000)}:TAIL`;
 		const hugeEntry = toolResultEntry("raw-huge", source);
-		const result = serializeSourceAddressedBranchEntries(
-			[hugeEntry, customEntry("raw-next", "later")],
-			{ maxTokens: 100 },
-		);
+		const result = serializeSourceAddressedBranchEntries([hugeEntry, customEntry("raw-next", "later")], {
+			maxTokens: 100,
+		});
 
 		expect(result.sourceEntryIds).toEqual(["raw-huge"]);
 		expect(result.truncatedSourceEntryIds).toEqual(["raw-huge"]);
@@ -87,12 +80,8 @@ describe("source-addressed serialization budget", () => {
 		expect(result.text).toContain("[Tool result for bash");
 		expect(result.text).toContain("HEAD:");
 		expect(result.text).toContain(":TAIL");
-		expect(result.text).toContain(
-			"middle omitted: source exceeds observer input budget",
-		);
-		expect(result.text).toContain(
-			"original source remains in the session ledger",
-		);
+		expect(result.text).toContain("middle omitted: source exceeds observer input budget");
+		expect(result.text).toContain("original source remains in the session ledger");
 		expect(result.text).not.toContain("raw-next");
 
 		// Budgeting changes only the observer projection. Recall still renders

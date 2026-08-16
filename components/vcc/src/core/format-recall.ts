@@ -51,8 +51,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
         if (assumeAllMatched || slice[j].snippet) matched.add(j);
       }
       segments.push({
-        range: `#${slice[0].index}` +
-          (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
+        range: `#${slice[0].index}` + (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
         entries: slice,
         matchedIndices: matched,
       });
@@ -68,8 +67,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
       if (assumeAllMatched || slice[j].snippet) matched.add(j);
     }
     segments.push({
-      range: `#${slice[0].index}` +
-        (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
+      range: `#${slice[0].index}` + (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
       entries: slice,
       matchedIndices: matched,
     });
@@ -87,9 +85,7 @@ const shortPath = (path: string): string => {
 };
 
 const formatFileMatch = (match: FileMatch, index: number, query: boolean): string => {
-  const unit = query
-    ? match.lineCount === 1 ? "match" : "matches"
-    : match.lineCount === 1 ? "line" : "lines";
+  const unit = query ? (match.lineCount === 1 ? "match" : "matches") : match.lineCount === 1 ? "line" : "lines";
   const snippet = match.snippet ? `\n    | ${match.snippet}` : "";
   return `  [${match.toolName}] ${shortPath(match.path)} — ${match.lineCount} ${unit}    use #${index}:${match.path}${snippet}`;
 };
@@ -100,13 +96,13 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
   const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
   const body = matched && e.snippet ? e.snippet : e.summary;
   const fileMatches = e.fileMatches?.slice(0, 3) ?? [];
-  const indicators = fileMatches
-    .map((match) => formatFileMatch(match, e.index, matched))
-    .join("\n");
+  const indicators = fileMatches.map((match) => formatFileMatch(match, e.index, matched)).join("\n");
   const omitted = (e.fileMatches?.length ?? 0) - fileMatches.length;
-  return `${prefix} #${e.index} [${e.role}]${fileSuffix} ${body}` +
+  return (
+    `${prefix} #${e.index} [${e.role}]${fileSuffix} ${body}` +
     (indicators ? `\n${indicators}` : "") +
-    (omitted > 0 ? `\n  ...(${omitted} more file matches)` : "");
+    (omitted > 0 ? `\n  ...(${omitted} more file matches)` : "")
+  );
 };
 
 /** Format a segment with its entries. */
@@ -140,36 +136,27 @@ const countMatches = (segments: RecallSegment[]): number => {
   return total;
 };
 
-export const formatTouchedOutput = (
-  touched: TouchedFile[],
-  page = 1,
-  pageSize = 5,
-): string => {
+export const formatTouchedOutput = (touched: TouchedFile[], page = 1, pageSize = 5): string => {
   if (touched.length === 0) return "No file operations found in session history.";
   const currentPage = Math.max(1, page);
   const totalPages = Math.ceil(touched.length / pageSize);
   const files = touched.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const header = totalPages > 1
-    ? `Page ${currentPage}/${totalPages} (${touched.length} total files)`
-    : `${touched.length} files touched`;
-  const rows = files.map((file) =>
-    `  ${shortPath(file.path)}    ${file.entries.map((entry) => `#${entry.index} (${entry.toolName})`).join(", ")}`
+  const header =
+    totalPages > 1
+      ? `Page ${currentPage}/${totalPages} (${touched.length} total files)`
+      : `${touched.length} files touched`;
+  const rows = files.map(
+    (file) =>
+      `  ${shortPath(file.path)}    ${file.entries.map((entry) => `#${entry.index} (${entry.toolName})`).join(", ")}`,
   );
-  const next = currentPage < totalPages
-    ? `\n\n--- Use mode:'touched', page:${currentPage + 1} for more results ---`
-    : "";
+  const next =
+    currentPage < totalPages ? `\n\n--- Use mode:'touched', page:${currentPage + 1} for more results ---` : "";
   return `${header}:\n\n${rows.join("\n")}${next}`;
 };
 
-export const formatRecallOutput = (
-  entries: SearchHit[],
-  query?: string,
-  headerOverride?: string,
-): string => {
+export const formatRecallOutput = (entries: SearchHit[], query?: string, headerOverride?: string): string => {
   if (entries.length === 0) {
-    return query
-      ? `No matches for "${query}" in session history.`
-      : "No entries in session history.";
+    return query ? `No matches for "${query}" in session history.` : "No entries in session history.";
   }
 
   // Browse mode (no query): keep flat format, no structure needed
@@ -187,13 +174,12 @@ export const formatRecallOutput = (
   const segments = groupSegments(entries, true);
   const matchedCount = countMatches(segments);
 
-  const prefix = segments.length > 1
-    ? `${matchedCount} matches across ${segments.length} segments`
-    : `${matchedCount} matches in 1 segment`;
+  const prefix =
+    segments.length > 1
+      ? `${matchedCount} matches across ${segments.length} segments`
+      : `${matchedCount} matches in 1 segment`;
 
-  const formatted = segments
-    .filter((seg) => seg.matchedIndices.size > 0)
-    .map(formatSegment);
+  const formatted = segments.filter((seg) => seg.matchedIndices.size > 0).map(formatSegment);
 
   // Add adjacent non-matching segments as context around the first
   // matched segment (so the agent sees the conversation flow).

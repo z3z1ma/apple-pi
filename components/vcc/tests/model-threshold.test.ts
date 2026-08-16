@@ -2,7 +2,14 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { getModelThreshold, isPiCoreCompactionEnabled, resolveReserveTokens, resolveTriggerTokens, type PiVccSettings, type ModelThreshold } from "../src/core/settings";
+import {
+  getModelThreshold,
+  isPiCoreCompactionEnabled,
+  resolveReserveTokens,
+  resolveTriggerTokens,
+  type PiVccSettings,
+  type ModelThreshold,
+} from "../src/core/settings";
 
 const t = (reserveTokens: number, keepRecentTokens?: number): ModelThreshold => ({
   reserveTokens,
@@ -241,7 +248,7 @@ describe("resolveReserveTokens", () => {
   });
 
   test("reserveTokens still works when contextWindow is 0", () => {
-       expect(resolveReserveTokens({ reserveTokens: 32768 }, 0)).toBe(32768);
+    expect(resolveReserveTokens({ reserveTokens: 32768 }, 0)).toBe(32768);
   });
 
   test("compactPercent = 1 → reserve is 99% of contextWindow", () => {

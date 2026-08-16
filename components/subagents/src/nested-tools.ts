@@ -25,8 +25,12 @@ import { addUsage } from "./usage.js";
 
 let maxSubagentDepth = 2;
 
-export function getMaxSubagentDepth(): number { return maxSubagentDepth; }
-export function setMaxSubagentDepth(n: number): void { maxSubagentDepth = Math.max(0, Math.floor(n)); }
+export function getMaxSubagentDepth(): number {
+	return maxSubagentDepth;
+}
+export function setMaxSubagentDepth(n: number): void {
+	maxSubagentDepth = Math.max(0, Math.floor(n));
+}
 
 export const SUBAGENT_TOOL_NAMES = {
 	AGENT: "Agent",
@@ -91,7 +95,8 @@ function ownsRecord(record: AgentRecord | undefined, parentAgentId: string): rec
 }
 
 function formatRecord(record: AgentRecord, inline: boolean): string {
-	if (record.status === "error") return `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}${continuationSuffix(record)}`;
+	if (record.status === "error")
+		return `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}${continuationSuffix(record)}`;
 	if (record.status === "queued" || record.status === "running") return `Agent ${record.id} is ${record.status}.`;
 	const text = record.result?.trim() || record.error?.trim() || "No output.";
 	const note = inline ? getForegroundOutcomeNote(record.status) : getStatusNote(record.status);
@@ -117,17 +122,36 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		parameters: Type.Object({
 			prompt: Type.String({ description: "Self-contained task for the nested agent." }),
 			description: Type.String({ description: "Short task description." }),
-			subagent_type: Type.String({ description: `Allowed type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.` }),
+			subagent_type: Type.String({
+				description: `Allowed type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.`,
+			}),
 			model: Type.Optional(Type.String()),
-			thinking: Type.Optional(Type.Union([
-				Type.Literal("off"), Type.Literal("minimal"), Type.Literal("low"), Type.Literal("medium"),
-				Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"),
-			])),
+			thinking: Type.Optional(
+				Type.Union([
+					Type.Literal("off"),
+					Type.Literal("minimal"),
+					Type.Literal("low"),
+					Type.Literal("medium"),
+					Type.Literal("high"),
+					Type.Literal("xhigh"),
+					Type.Literal("max"),
+				]),
+			),
 			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
 			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
-			isolated: Type.Boolean({ default: false, description: "Disable extension and skill inheritance for a new agent session." }),
-			inherit_context: Type.Boolean({ default: false, description: "Include the full parent conversation before the initial task prompt." }),
-			advisor: Type.Boolean({ default: false, description: "Keep false for exploration, search, planning, and routine work. Set true only for correctness-critical implementation where continuous second-model review justifies substantial cost and latency." }),
+			isolated: Type.Boolean({
+				default: false,
+				description: "Disable extension and skill inheritance for a new agent session.",
+			}),
+			inherit_context: Type.Boolean({
+				default: false,
+				description: "Include the full parent conversation before the initial task prompt.",
+			}),
+			advisor: Type.Boolean({
+				default: false,
+				description:
+					"Keep false for exploration, search, planning, and routine work. Set true only for correctness-critical implementation where continuous second-model review justifies substantial cost and latency.",
+			}),
 		}),
 		execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
 			if (params.resume) {
@@ -139,11 +163,14 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				const requestedAdvisor = params.advisor === true;
 				const requestedIsolation = params.isolated === true;
 				if (
-					requestedInheritance !== (existing.invocation?.inheritContext === true)
-					|| requestedAdvisor !== (existing.invocation?.advisor === true)
-					|| requestedIsolation !== (existing.invocation?.isolated === true)
+					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
+					requestedAdvisor !== (existing.invocation?.advisor === true) ||
+					requestedIsolation !== (existing.invocation?.isolated === true)
 				) {
-					return textResult("inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.", true);
+					return textResult(
+						"inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						true,
+					);
 				}
 				const resumed = await context.manager.resume(params.resume, params.prompt, signal);
 				return resumed
@@ -152,7 +179,10 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			}
 
 			if (context.depth >= context.maxSubagentDepth) {
-				return textResult(`Nested subagent call blocked at depth ${context.depth} (max ${context.maxSubagentDepth}).`, true);
+				return textResult(
+					`Nested subagent call blocked at depth ${context.depth} (max ${context.maxSubagentDepth}).`,
+					true,
+				);
 			}
 
 			const registry = loadRegistry();
@@ -201,7 +231,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 					runInBackground: invocation.runInBackground,
 				},
 				onAssistantUsage: (usage) => {
-					for (let id: string | undefined = context.parentAgentId; id !== undefined;) {
+					for (let id: string | undefined = context.parentAgentId; id !== undefined; ) {
 						const ancestor = context.manager.getRecord(id);
 						if (!ancestor) break;
 						addUsage(ancestor.lifetimeUsage, usage);
@@ -216,10 +246,16 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 
 			try {
 				if (invocation.runInBackground) {
-					const id = context.manager.spawn(context.pi, ctx, resolvedType, params.prompt, { ...options, isBackground: true });
+					const id = context.manager.spawn(context.pi, ctx, resolvedType, params.prompt, {
+						...options,
+						isBackground: true,
+					});
 					return textResult(`Nested agent started in background. Agent ID: ${id}`);
 				}
-				const { record } = await context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, { ...options, signal });
+				const { record } = await context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, {
+					...options,
+					signal,
+				});
 				return textResult(formatRecord(record, true), record.status === "error");
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), true);
@@ -233,8 +269,20 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		description: `Check an owned child without blocking by default. wait_seconds chooses how long to wait (0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s) before returning control while the child continues. Use transcript_tail for a bounded recent conversation slice; it cannot be combined with a positive wait.`,
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait_seconds: Type.Integer({ minimum: 0, maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS, default: 0, description: `Seconds to wait before yielding control; 0 checks immediately and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.` }),
-			transcript_tail: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Append up to 12,000 characters from the most recent N conversation messages, including current streaming output." })),
+			wait_seconds: Type.Integer({
+				minimum: 0,
+				maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS,
+				default: 0,
+				description: `Seconds to wait before yielding control; 0 checks immediately and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.`,
+			}),
+			transcript_tail: Type.Optional(
+				Type.Number({
+					minimum: 1,
+					maximum: 20,
+					description:
+						"Append up to 12,000 characters from the most recent N conversation messages, including current streaming output.",
+				}),
+			),
 		}),
 		execute: async (_toolCallId, params, signal) => {
 			const waitSeconds = normalizeWaitSeconds(params.wait_seconds);
@@ -242,13 +290,14 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				return textResult("transcript_tail cannot be combined with a positive wait_seconds value.", true);
 			}
 			const record = context.manager.getRecord(params.agent_id);
-			if (!ownsRecord(record, context.parentAgentId)) return textResult("Nested agent not found or not owned by this parent.", true);
-			const waitExpired = waitSeconds > 0 && (record.status === "queued" || record.status === "running")
-				? !await waitForAgentSettlement(record, waitSeconds * 1_000, signal)
-				: false;
-			let output = params.transcript_tail === undefined
-				? formatRecord(record, false)
-				: `Agent ${record.id} is ${record.status}.`;
+			if (!ownsRecord(record, context.parentAgentId))
+				return textResult("Nested agent not found or not owned by this parent.", true);
+			const waitExpired =
+				waitSeconds > 0 && (record.status === "queued" || record.status === "running")
+					? !(await waitForAgentSettlement(record, waitSeconds * 1_000, signal))
+					: false;
+			let output =
+				params.transcript_tail === undefined ? formatRecord(record, false) : `Agent ${record.id} is ${record.status}.`;
 			if (waitExpired && (record.status === "queued" || record.status === "running")) {
 				output += `\n\nWait limit (${waitSeconds}s) reached; it continues in the background.`;
 			}

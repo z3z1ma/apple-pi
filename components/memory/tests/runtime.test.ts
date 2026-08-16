@@ -29,29 +29,54 @@ describe("Runtime V3 behavior", () => {
 	});
 
 	it("uses the observational-memory mode when present", async () => {
-		writeFileSync(join(agentDir, "modes.json"), JSON.stringify({
-			modes: { "observational-memory": { provider: "anthropic", modelId: "configured", thinkingLevel: "max" } },
-		}));
+		writeFileSync(
+			join(agentDir, "modes.json"),
+			JSON.stringify({
+				modes: { "observational-memory": { provider: "anthropic", modelId: "configured", thinkingLevel: "max" } },
+			}),
+		);
 		const runtime = new Runtime();
 		const configured = { provider: "anthropic", id: "configured" };
 		const registry = modelRegistry({ found: configured });
 
-		const result = await runtime.resolveModel({ cwd: agentDir, projectTrusted: false, model: { provider: "openai" }, modelRegistry: registry, hasUI: false });
+		const result = await runtime.resolveModel({
+			cwd: agentDir,
+			projectTrusted: false,
+			model: { provider: "openai" },
+			modelRegistry: registry,
+			hasUI: false,
+		});
 
 		expect(registry.find).toHaveBeenCalledWith("anthropic", "configured");
-		expect(result).toEqual({ ok: true, model: configured, apiKey: "key", headers: { test: "yes" }, thinkingLevel: "max" });
+		expect(result).toEqual({
+			ok: true,
+			model: configured,
+			apiKey: "key",
+			headers: { test: "yes" },
+			thinkingLevel: "max",
+		});
 	});
 
 	it("falls back to the session model and notifies when the configured mode model is missing", async () => {
-		writeFileSync(join(agentDir, "modes.json"), JSON.stringify({
-			modes: { "observational-memory": { provider: "anthropic", modelId: "missing" } },
-		}));
+		writeFileSync(
+			join(agentDir, "modes.json"),
+			JSON.stringify({
+				modes: { "observational-memory": { provider: "anthropic", modelId: "missing" } },
+			}),
+		);
 		const runtime = new Runtime();
 		const notify = vi.fn();
 		const sessionModel = { provider: "openai" };
 		const registry = modelRegistry();
 
-		const result = await runtime.resolveModel({ cwd: agentDir, projectTrusted: false, model: sessionModel, modelRegistry: registry, hasUI: true, ui: { notify } });
+		const result = await runtime.resolveModel({
+			cwd: agentDir,
+			projectTrusted: false,
+			model: sessionModel,
+			modelRegistry: registry,
+			hasUI: true,
+			ui: { notify },
+		});
 
 		expect(result).toMatchObject({ ok: true, model: sessionModel });
 		expect(notify).toHaveBeenCalledWith(
@@ -62,13 +87,17 @@ describe("Runtime V3 behavior", () => {
 
 	it("returns model resolution failures", async () => {
 		const runtime = new Runtime();
-		await expect(runtime.resolveModel({ model: undefined, modelRegistry: modelRegistry(), hasUI: false })).resolves.toEqual({
+		await expect(
+			runtime.resolveModel({ model: undefined, modelRegistry: modelRegistry(), hasUI: false }),
+		).resolves.toEqual({
 			ok: false,
 			reason: "no model available (session has no model and no observational-memory mode configured)",
 		});
 
 		const registry = modelRegistry({ auth: { ok: false } });
-		await expect(runtime.resolveModel({ model: { provider: "anthropic" }, modelRegistry: registry, hasUI: false })).resolves.toEqual({
+		await expect(
+			runtime.resolveModel({ model: { provider: "anthropic" }, modelRegistry: registry, hasUI: false }),
+		).resolves.toEqual({
 			ok: false,
 			reason: 'no API key or auth headers for provider "anthropic"',
 		});
@@ -132,7 +161,8 @@ describe("Runtime V3 behavior", () => {
 		expect(registry.isUsingOAuth).toHaveBeenCalledWith(model);
 		expect(result).toEqual({
 			ok: false,
-			reason: 'authentication failed for provider "openai-codex" — OAuth credentials may have expired; run \'/login openai-codex\' to re-authenticate',
+			reason:
+				"authentication failed for provider \"openai-codex\" — OAuth credentials may have expired; run '/login openai-codex' to re-authenticate",
 		});
 	});
 
@@ -162,9 +192,15 @@ describe("Runtime V3 behavior", () => {
 		const runtime = new Runtime();
 		const notify = vi.fn();
 
-		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "observer", new Error("observe failed"))).toBe("observe failed");
-		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "reflector", new Error("reflect failed"))).toBe("reflect failed");
-		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "dropper", "drop failed")).toBe("drop failed");
+		expect(
+			runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "observer", new Error("observe failed")),
+		).toBe("observe failed");
+		expect(
+			runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "reflector", new Error("reflect failed")),
+		).toBe("reflect failed");
+		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "dropper", "drop failed")).toBe(
+			"drop failed",
+		);
 
 		expect(runtime.lastObserverError).toBe("observe failed");
 		expect(runtime.lastReflectorError).toBe("reflect failed");

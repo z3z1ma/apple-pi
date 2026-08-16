@@ -40,11 +40,7 @@ const makeAssistantMsg = (text: string): Message => ({
   stopReason: "stop",
 });
 
-const makeToolCall = (
-  name: string,
-  id: string,
-  args: Record<string, unknown>,
-): Message => ({
+const makeToolCall = (name: string, id: string, args: Record<string, unknown>): Message => ({
   role: "assistant",
   content: [
     { type: "text", text: "" },
@@ -54,27 +50,23 @@ const makeToolCall = (
   stopReason: "toolUse",
 });
 
-const makeToolResult = (
-  toolCallId: string,
-  toolName: string,
-  content: string,
-  isError = false,
-): Message => ({
-  role: "toolResult",
-  toolCallId,
-  toolName,
-  content: [{ type: "text", text: content }],
-  isError,
-  timestamp: ts,
-} as any);
+const makeToolResult = (toolCallId: string, toolName: string, content: string, isError = false): Message =>
+  ({
+    role: "toolResult",
+    toolCallId,
+    toolName,
+    content: [{ type: "text", text: content }],
+    isError,
+    timestamp: ts,
+  }) as any;
 
 // ── Realistic conversation rounds ──
 // Each round simulates a full debug/implement cycle with causal chains.
 
 interface RoundSpec {
   goal: string;
-  cause: string;       // what's wrong / why the work is needed
-  resolution: string;  // what was done to fix it
+  cause: string; // what's wrong / why the work is needed
+  resolution: string; // what was done to fix it
   file1: string;
   file2: string;
   hasCommit: boolean;
@@ -84,84 +76,204 @@ interface RoundSpec {
 
 const ROUNDS: RoundSpec[] = [
   {
-    goal: "Fix login bug", cause: "refreshToken() returns early on empty sessions", resolution: "added session check in refreshToken",
-    file1: "src/auth.ts", file2: "src/session.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Fix login bug",
+    cause: "refreshToken() returns early on empty sessions",
+    resolution: "added session check in refreshToken",
+    file1: "src/auth.ts",
+    file2: "src/session.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix signup validation", cause: "email validator rejects valid addresses with + signs", resolution: "switched to RFC 5322 regex",
-    file1: "src/validators.ts", file2: "src/users.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Fix signup validation",
+    cause: "email validator rejects valid addresses with + signs",
+    resolution: "switched to RFC 5322 regex",
+    file1: "src/validators.ts",
+    file2: "src/users.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Add password reset", cause: "users can't recover accounts without admin help", resolution: "added reset flow with rate limiter",
-    file1: "src/reset.ts", file2: "src/middleware.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Add password reset",
+    cause: "users can't recover accounts without admin help",
+    resolution: "added reset flow with rate limiter",
+    file1: "src/reset.ts",
+    file2: "src/middleware.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix race condition in token refresh", cause: "concurrent requests double-refresh the token", resolution: "added mutex lock around refresh path",
-    file1: "src/auth.ts", file2: "src/token.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Fix race condition in token refresh",
+    cause: "concurrent requests double-refresh the token",
+    resolution: "added mutex lock around refresh path",
+    file1: "src/auth.ts",
+    file2: "src/token.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Add rate limiter to API", cause: "unauthenticated endpoints are being scraped", resolution: "added sliding window rate limiter middleware",
-    file1: "src/middleware.ts", file2: "src/config.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Add rate limiter to API",
+    cause: "unauthenticated endpoints are being scraped",
+    resolution: "added sliding window rate limiter middleware",
+    file1: "src/middleware.ts",
+    file2: "src/config.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Migrate to PostgreSQL", cause: "SQLite can't handle concurrent writes", resolution: "swapped driver to pg, updated connection pool",
-    file1: "src/db.ts", file2: "src/config.ts", hasCommit: true, testPasses: false, errorInOutput: true,
+    goal: "Migrate to PostgreSQL",
+    cause: "SQLite can't handle concurrent writes",
+    resolution: "swapped driver to pg, updated connection pool",
+    file1: "src/db.ts",
+    file2: "src/config.ts",
+    hasCommit: true,
+    testPasses: false,
+    errorInOutput: true,
   },
   {
-    goal: "Fix flaky integration tests", cause: "tests share state via global singleton", resolution: "isolated test fixtures per suite",
-    file1: "tests/auth.test.ts", file2: "tests/setup.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Fix flaky integration tests",
+    cause: "tests share state via global singleton",
+    resolution: "isolated test fixtures per suite",
+    file1: "tests/auth.test.ts",
+    file2: "tests/setup.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Refactor auth middleware", cause: "middleware has 300-line function doing auth + routing + logging", resolution: "split into auth, routing, logging layers",
-    file1: "src/middleware.ts", file2: "src/logger.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Refactor auth middleware",
+    cause: "middleware has 300-line function doing auth + routing + logging",
+    resolution: "split into auth, routing, logging layers",
+    file1: "src/middleware.ts",
+    file2: "src/logger.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Extract session handler", cause: "session logic mixed into route handlers", resolution: "extracted SessionHandler class",
-    file1: "src/session.ts", file2: "src/routes.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Extract session handler",
+    cause: "session logic mixed into route handlers",
+    resolution: "extracted SessionHandler class",
+    file1: "src/session.ts",
+    file2: "src/routes.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Add OAuth2 integration", cause: "users want Google SSO login", resolution: "added OAuth2 strategy with PKCE flow",
-    file1: "src/oauth.ts", file2: "src/auth.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Add OAuth2 integration",
+    cause: "users want Google SSO login",
+    resolution: "added OAuth2 strategy with PKCE flow",
+    file1: "src/oauth.ts",
+    file2: "src/auth.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix token expiry on slow connections", cause: "token expires during long API calls", resolution: "added client-side token refresh with 30s buffer",
-    file1: "src/token.ts", file2: "src/api.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Fix token expiry on slow connections",
+    cause: "token expires during long API calls",
+    resolution: "added client-side token refresh with 30s buffer",
+    file1: "src/token.ts",
+    file2: "src/api.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Add crypto utilities", cause: "password hashing uses outdated bcrypt rounds", resolution: "migrated to argon2id with adaptive cost",
-    file1: "src/crypto.ts", file2: "src/validators.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Add crypto utilities",
+    cause: "password hashing uses outdated bcrypt rounds",
+    resolution: "migrated to argon2id with adaptive cost",
+    file1: "src/crypto.ts",
+    file2: "src/validators.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Set up structured logging", cause: "console.log calls scattered everywhere, no correlation IDs", resolution: "added pino logger with request ID middleware",
-    file1: "src/logger.ts", file2: "src/middleware.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Set up structured logging",
+    cause: "console.log calls scattered everywhere, no correlation IDs",
+    resolution: "added pino logger with request ID middleware",
+    file1: "src/logger.ts",
+    file2: "src/middleware.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix memory leak in connection pool", cause: "connections not returned to pool on error paths", resolution: "added try/finally release in all query paths",
-    file1: "src/db.ts", file2: "src/services.ts", hasCommit: true, testPasses: false, errorInOutput: true,
+    goal: "Fix memory leak in connection pool",
+    cause: "connections not returned to pool on error paths",
+    resolution: "added try/finally release in all query paths",
+    file1: "src/db.ts",
+    file2: "src/services.ts",
+    hasCommit: true,
+    testPasses: false,
+    errorInOutput: true,
   },
   {
-    goal: "Add input validators for API", cause: "API accepts malformed payloads causing 500s downstream", resolution: "added zod schemas for all endpoints",
-    file1: "src/validators.ts", file2: "src/routes.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Add input validators for API",
+    cause: "API accepts malformed payloads causing 500s downstream",
+    resolution: "added zod schemas for all endpoints",
+    file1: "src/validators.ts",
+    file2: "src/routes.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Implement caching layer", cause: "repeated DB queries for user profile on every request", resolution: "added Redis cache with TTL-based invalidation",
-    file1: "src/cache.ts", file2: "src/services.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Implement caching layer",
+    cause: "repeated DB queries for user profile on every request",
+    resolution: "added Redis cache with TTL-based invalidation",
+    file1: "src/cache.ts",
+    file2: "src/services.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Add type definitions", cause: "any-casts causing runtime errors in production", resolution: "added strict interfaces for all service boundaries",
-    file1: "src/types.ts", file2: "src/models.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Add type definitions",
+    cause: "any-casts causing runtime errors in production",
+    resolution: "added strict interfaces for all service boundaries",
+    file1: "src/types.ts",
+    file2: "src/models.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix error handling utilities", cause: "errors swallowed silently, no stack traces in logs", resolution: "added AppError class with cause chain",
-    file1: "src/errors.ts", file2: "src/logger.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Fix error handling utilities",
+    cause: "errors swallowed silently, no stack traces in logs",
+    resolution: "added AppError class with cause chain",
+    file1: "src/errors.ts",
+    file2: "src/logger.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Build request handlers", cause: "route handlers directly call DB, no abstraction", resolution: "extracted handler layer with dependency injection",
-    file1: "src/handlers.ts", file2: "src/services.ts", hasCommit: false, testPasses: true, errorInOutput: false,
+    goal: "Build request handlers",
+    cause: "route handlers directly call DB, no abstraction",
+    resolution: "extracted handler layer with dependency injection",
+    file1: "src/handlers.ts",
+    file2: "src/services.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
   },
   {
-    goal: "Fix CSRF protection", cause: "CSRF token not validated on mutation requests", resolution: "added double-submit cookie pattern",
-    file1: "src/middleware.ts", file2: "src/routes.ts", hasCommit: true, testPasses: true, errorInOutput: false,
+    goal: "Fix CSRF protection",
+    cause: "CSRF token not validated on mutation requests",
+    resolution: "added double-submit cookie pattern",
+    file1: "src/middleware.ts",
+    file2: "src/routes.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
   },
 ];
 
@@ -209,14 +321,16 @@ const makeRound = (roundIdx: number): Message[] => {
   if (spec.hasCommit) {
     msgs.push(
       makeToolCall("bash", `r${roundIdx}-6`, { command: `git commit -m "feat: ${spec.goal.toLowerCase()}" ` }),
-      makeToolResult(`r${roundIdx}-6`, "bash", `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`),
+      makeToolResult(
+        `r${roundIdx}-6`,
+        "bash",
+        `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`,
+      ),
     );
   }
 
   if (spec.testPasses) {
-    msgs.push(
-      makeAssistantMsg(`All tests pass. ${spec.resolution} is working correctly.`),
-    );
+    msgs.push(makeAssistantMsg(`All tests pass. ${spec.resolution} is working correctly.`));
   }
 
   return msgs;
@@ -248,9 +362,7 @@ const extractFilePaths = (text: string): Set<string> => {
   for (const line of text.split("\n")) {
     const match = line.match(/^-\s*(?:Modified|Created|Read):\s*(.*)/);
     if (!match) continue;
-    const rest = match[1]
-      .replace(/\+recall:\s*/g, "")
-      .replace(/\s*\([^)]*\)/g, "");
+    const rest = match[1].replace(/\+recall:\s*/g, "").replace(/\s*\([^)]*\)/g, "");
     for (const p of rest.split(",")) {
       const trimmed = p.trim();
       if (trimmed && !trimmed.startsWith("+")) paths.add(trimmed);
@@ -265,14 +377,12 @@ const extractExplicitGoals = (text: string): string[] => {
   const after = text.slice(section);
   const nextSection = after.indexOf("\n[", 1);
   const nextSep = after.indexOf("\n\n---\n\n", 1);
-  const end = Math.min(
-    nextSection > 0 ? nextSection : Infinity,
-    nextSep > 0 ? nextSep : Infinity,
-  );
+  const end = Math.min(nextSection > 0 ? nextSection : Infinity, nextSep > 0 ? nextSep : Infinity);
   const block = after.slice(0, end);
-  return block.split("\n")
-    .filter(l => l.startsWith("- ") && !l.startsWith("- ...recall:"))
-    .map(l => l.slice(2));
+  return block
+    .split("\n")
+    .filter((l) => l.startsWith("- ") && !l.startsWith("- ...recall:"))
+    .map((l) => l.slice(2));
 };
 
 const countBreadcrumbs = (text: string): number => {
@@ -293,10 +403,13 @@ const countSections = (text: string): number => {
 /** Can we recover a specific goal from the summary (directly or via breadcrumb)? */
 const isGoalRecoverable = (text: string, goal: string): boolean => {
   if (text.includes(goal)) return true;
-  const keywords = goal.split(/\s+/).filter(w => w.length > 3).slice(0, 3);
+  const keywords = goal
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 3);
   for (const line of text.split("\n")) {
     if (line.startsWith("- ...recall:")) {
-      if (keywords.every(kw => line.toLowerCase().includes(kw.toLowerCase()))) return true;
+      if (keywords.every((kw) => line.toLowerCase().includes(kw.toLowerCase()))) return true;
     }
   }
   return false;
@@ -329,8 +442,11 @@ const isGoalFileLinked = (text: string, goal: string, file: string): boolean => 
     const block = after.slice(0, Math.min(end > 0 ? end : Infinity, nextSection > 0 ? nextSection : Infinity));
     for (const line of block.split("\n")) {
       if (line.startsWith("- ...recall:")) continue;
-      const goalKeywords = goal.split(/\s+/).filter(w => w.length > 3).slice(0, 2);
-      const hasGoal = goalKeywords.some(kw => line.toLowerCase().includes(kw.toLowerCase()));
+      const goalKeywords = goal
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+        .slice(0, 2);
+      const hasGoal = goalKeywords.some((kw) => line.toLowerCase().includes(kw.toLowerCase()));
       const shortName = file.split("/").pop() ?? file;
       const hasFile = line.includes(file) || line.includes(shortName);
       if (hasGoal && hasFile) return true;
@@ -343,12 +459,15 @@ const isGoalFileLinked = (text: string, goal: string, file: string): boolean => 
   const brief = text.slice(briefIdx + 6);
   const lines = brief.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const goalKeywords = goal.split(/\s+/).filter(w => w.length > 3).slice(0, 2);
-    const lineHasGoal = goalKeywords.some(kw => lines[i].toLowerCase().includes(kw.toLowerCase()));
+    const goalKeywords = goal
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+      .slice(0, 2);
+    const lineHasGoal = goalKeywords.some((kw) => lines[i].toLowerCase().includes(kw.toLowerCase()));
     if (lineHasGoal) {
       const nearby = lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 5));
       const shortName = file.split("/").pop() ?? file;
-      if (nearby.some(l => l.includes(file) || l.includes(shortName))) return true;
+      if (nearby.some((l) => l.includes(file) || l.includes(shortName))) return true;
     }
   }
   return false;
@@ -368,16 +487,28 @@ const isCausalChainPresent = (text: string, spec: RoundSpec): boolean => {
   const causeWords = spec.cause
     .replace(/[()]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w));
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    );
 
   const resolutionWords = spec.resolution
     .replace(/[()]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w));
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    );
 
   // Direct text presence
-  const hasCauseDirect = causeWords.some(w => text.toLowerCase().includes(w.toLowerCase()));
-  const hasResolutionDirect = resolutionWords.some(w => text.toLowerCase().includes(w.toLowerCase()));
+  const hasCauseDirect = causeWords.some((w) => text.toLowerCase().includes(w.toLowerCase()));
+  const hasResolutionDirect = resolutionWords.some((w) => text.toLowerCase().includes(w.toLowerCase()));
 
   if (hasCauseDirect && hasResolutionDirect) return true;
 
@@ -385,12 +516,18 @@ const isCausalChainPresent = (text: string, spec: RoundSpec): boolean => {
   // Check if the resolution key appears in a breadcrumb
   const resolutionKeyWords = spec.resolution
     .split(/\s+/)
-    .filter(w => w.length > 3)
+    .filter((w) => w.length > 3)
     .slice(0, 2);
 
   const causeKeyWords = spec.cause
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w))
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    )
     .slice(0, 2);
 
   // Check ...recall: breadcrumbs for the file with a causal key
@@ -408,8 +545,8 @@ const isCausalChainPresent = (text: string, spec: RoundSpec): boolean => {
       if (bcPart.includes("|")) {
         const [, key] = bcPart.split("|");
         const keyWords = key.split("-");
-        const hasResKey = resolutionKeyWords.some(rw => keyWords.some(kw => kw.toLowerCase() === rw.toLowerCase()));
-        const hasCauKey = causeKeyWords.some(cw => keyWords.some(kw => kw.toLowerCase() === cw.toLowerCase()));
+        const hasResKey = resolutionKeyWords.some((rw) => keyWords.some((kw) => kw.toLowerCase() === rw.toLowerCase()));
+        const hasCauKey = causeKeyWords.some((cw) => keyWords.some((kw) => kw.toLowerCase() === cw.toLowerCase()));
         if ((hasResKey || hasCauKey) && (hasFile || !hasCauseDirect)) return true;
       }
     }
@@ -514,12 +651,24 @@ describe("baseline vs v2 comparison", () => {
     const final = metrics[metrics.length - 1];
 
     // Print comparison table
-    console.log("\n╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗");
-    console.log("║  BASELINE — 20 COMPACTIONS (current pi-vcc)                                                                                     ║");
-    console.log("╠═══════╦═════════╦════════╦═══════════╦═══════════╦═══════════╦═══════════╦════════════╦════════════╦════════════╣");
-    console.log("║ Round ║ Chars   ║ Lines  ║ Sections  ║ Breadcrumbs║ Goals    ║ Files     ║ Goal Rec  ║ Linkage   ║ Causal    ║");
-    console.log("║       ║         ║        ║           ║           ║ Direct   ║ Known     ║ Rate      ║ Rate      ║ Rate      ║");
-    console.log("╠═══════╬═════════╬════════╬═══════════╬═══════════╬═══════════╬═══════════╬════════════╬════════════╬════════════╣");
+    console.log(
+      "\n╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗",
+    );
+    console.log(
+      "║  BASELINE — 20 COMPACTIONS (current pi-vcc)                                                                                     ║",
+    );
+    console.log(
+      "╠═══════╦═════════╦════════╦═══════════╦═══════════╦═══════════╦═══════════╦════════════╦════════════╦════════════╣",
+    );
+    console.log(
+      "║ Round ║ Chars   ║ Lines  ║ Sections  ║ Breadcrumbs║ Goals    ║ Files     ║ Goal Rec  ║ Linkage   ║ Causal    ║",
+    );
+    console.log(
+      "║       ║         ║        ║           ║           ║ Direct   ║ Known     ║ Rate      ║ Rate      ║ Rate      ║",
+    );
+    console.log(
+      "╠═══════╬═════════╬════════╬═══════════╬═══════════╬═══════════╬═══════════╬════════════╬════════════╬════════════╣",
+    );
 
     const sampleRounds = [1, 2, 5, 10, 15, 20];
     for (const r of sampleRounds) {
@@ -530,14 +679,18 @@ describe("baseline vs v2 comparison", () => {
       );
     }
 
-    console.log("╚═══════╩═════════╩════════╩═══════════╩═══════════╩═══════════╩═══════════╩════════════╩════════════╩════════════╝");
+    console.log(
+      "╚═══════╩═════════╩════════╩═══════════╩═══════════╩═══════════╩═══════════╩════════════╩════════════╩════════════╝",
+    );
 
     // Print full degradation curve
     console.log("\nFULL DEGRADATION CURVE (all 20 rounds):");
     console.log("Round | GoalRec | FileRec | Linkage | Causal | Chars");
     for (const m of metrics) {
       const pct = (n: number) => `${(n * 100).toFixed(0).padStart(3)}%`;
-      console.log(`  ${String(m.round).padStart(2)}   | ${pct(m.goalRecoveryRate)} | ${pct(m.fileRecoveryRate)} | ${pct(m.linkageRate)} | ${pct(m.causalChainRate)} | ${String(m.outputChars).padStart(5)}`);
+      console.log(
+        `  ${String(m.round).padStart(2)}   | ${pct(m.goalRecoveryRate)} | ${pct(m.fileRecoveryRate)} | ${pct(m.linkageRate)} | ${pct(m.causalChainRate)} | ${String(m.outputChars).padStart(5)}`,
+      );
     }
 
     // Re-run just the last round to get the summary
@@ -553,7 +706,10 @@ describe("baseline vs v2 comparison", () => {
     // Extract and print key sections
     for (const sectionName of ["Session Goal", "Earlier Turns", "Files And Changes"]) {
       const idx = prevSummary.indexOf(`[${sectionName}]`);
-      if (idx < 0) { console.log(`\n[${sectionName}] — NOT PRESENT`); continue; }
+      if (idx < 0) {
+        console.log(`\n[${sectionName}] — NOT PRESENT`);
+        continue;
+      }
       const after = prevSummary.slice(idx);
       const end = after.indexOf("\n\n[", 1);
       const end2 = after.indexOf("\n\n---\n\n", 1);
@@ -565,8 +721,14 @@ describe("baseline vs v2 comparison", () => {
     // Causal chain analysis: what's preserved vs what's lost
     console.log("\n=== CAUSAL CHAIN ANALYSIS (round 20) ===");
     for (const spec of ROUNDS) {
-      const hasCause = spec.cause.split(/\s+/).filter(w => w.length > 3).some(w => prevSummary.toLowerCase().includes(w.toLowerCase()));
-      const hasResolution = spec.resolution.split(/\s+/).filter(w => w.length > 3).some(w => prevSummary.toLowerCase().includes(w.toLowerCase()));
+      const hasCause = spec.cause
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+        .some((w) => prevSummary.toLowerCase().includes(w.toLowerCase()));
+      const hasResolution = spec.resolution
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+        .some((w) => prevSummary.toLowerCase().includes(w.toLowerCase()));
       const chain = hasCause && hasResolution;
       console.log(`  ${chain ? "✓" : "✗"} ${spec.goal}`);
       if (!chain) {

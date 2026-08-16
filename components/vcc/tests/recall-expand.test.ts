@@ -19,7 +19,11 @@ describe("invalidExpandIndices", () => {
 
 const register = () => {
   let tool: any;
-  (registerRecallTool as any)({ registerTool: (t: any) => { tool = t; } });
+  (registerRecallTool as any)({
+    registerTool: (t: any) => {
+      tool = t;
+    },
+  });
   return tool;
 };
 

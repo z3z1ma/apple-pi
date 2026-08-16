@@ -34,7 +34,10 @@ export function resolveRalphRoots(sessionRootInput: string, workspaceInput?: str
 	const workspaceRoot = gitWorktreeRoot(inputPath(sessionRoot, workspaceInput));
 	const ledgerRoot = gitWorktreeRoot(inputPath(sessionRoot, ledgerInput ?? workspaceInput));
 	const expectedCommonDirectory = gitCommonDirectory(sessionRoot);
-	for (const [label, root] of [["workspace", workspaceRoot], ["ledger", ledgerRoot]] as const) {
+	for (const [label, root] of [
+		["workspace", workspaceRoot],
+		["ledger", ledgerRoot],
+	] as const) {
 		if (gitCommonDirectory(root) !== expectedCommonDirectory) {
 			throw new Error(`Ralph ${label} root is not a linked worktree of the trusted session repository: ${root}`);
 		}

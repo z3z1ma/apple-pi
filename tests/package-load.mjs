@@ -34,57 +34,148 @@ try {
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
-	for (const command of ["advisor", "pi-vcc", "pi-vcc-recall", "om:status", "om:view", "mcp", "mcp-auth", "agents", "review", "ralph"]) {
+	for (const command of [
+		"advisor",
+		"pi-vcc",
+		"pi-vcc-recall",
+		"om:status",
+		"om:view",
+		"mcp",
+		"mcp-auth",
+		"agents",
+		"review",
+		"ralph",
+	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
-	for (const tool of ["ask_user_question", "vcc_recall", "recall", "pi_exec", "mcp", "Agent", "get_subagent_result", "steer_subagent", "review", "ralph"]) {
+	for (const tool of [
+		"ask_user_question",
+		"vcc_recall",
+		"recall",
+		"pi_exec",
+		"mcp",
+		"Agent",
+		"get_subagent_result",
+		"steer_subagent",
+		"review",
+		"ralph",
+	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
 	assert(!tools.has("mcpScript"), "mcpScript duplicates pi_exec and must stay disabled");
-	const piExecTool = result.extensions.flatMap((extension) => [...extension.tools.values()]).find((tool) => tool.definition.name === "pi_exec");
-	for (const leaked of ["callBudget", "concurrency", "memoryMb", "agentBudget", "timeoutSeconds"]) assert(!(leaked in piExecTool.definition.parameters.properties), `pi_exec caller budget leaked: ${leaked}`);
+	const piExecTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "pi_exec");
+	for (const leaked of ["callBudget", "concurrency", "memoryMb", "agentBudget", "timeoutSeconds"])
+		assert(!(leaked in piExecTool.definition.parameters.properties), `pi_exec caller budget leaked: ${leaked}`);
 	let managedService;
-	eventBus.emit("apple-pi:managed-subagent-service:request", (service) => { managedService ??= service; });
+	eventBus.emit("apple-pi:managed-subagent-service:request", (service) => {
+		managedService ??= service;
+	});
 	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
-	const reviewTool = result.extensions.flatMap((extension) => [...extension.tools.values()]).find((tool) => tool.definition.name === "review");
+	const reviewTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "review");
 	assert(reviewTool?.definition.parameters.properties.root, "review tool is missing the agent-selected root parameter");
-	for (const leaked of ["max_tokens", "timeout_seconds", "concurrency", "max_groups", "planner_max_turns", "reviewer_max_turns", "verifier_max_turns", "max_prompt_kb"]) assert(!(leaked in reviewTool.definition.parameters.properties), `review caller budget leaked: ${leaked}`);
-	const reviewCommand = result.extensions.flatMap((extension) => [...extension.commands.values()]).find((command) => command.name === "review");
+	for (const leaked of [
+		"max_tokens",
+		"timeout_seconds",
+		"concurrency",
+		"max_groups",
+		"planner_max_turns",
+		"reviewer_max_turns",
+		"verifier_max_turns",
+		"max_prompt_kb",
+	])
+		assert(!(leaked in reviewTool.definition.parameters.properties), `review caller budget leaked: ${leaked}`);
+	const reviewCommand = result.extensions
+		.flatMap((extension) => [...extension.commands.values()])
+		.find((command) => command.name === "review");
 	assert(reviewCommand?.getArgumentCompletions, "review command is missing argument completions");
 	const reviewActions = await reviewCommand.getArgumentCompletions("");
-	assert.deepEqual(reviewActions.map(({ label }) => label), ["run", "preview", "status", "stop"]);
+	assert.deepEqual(
+		reviewActions.map(({ label }) => label),
+		["run", "preview", "status", "stop"],
+	);
 	const reviewSources = await reviewCommand.getArgumentCompletions("run ");
-	assert(reviewSources.some(({ label, description }) => label === "workspace" && description), "review source hints are missing");
+	assert(
+		reviewSources.some(({ label, description }) => label === "workspace" && description),
+		"review source hints are missing",
+	);
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	for (const skill of [
-		"ledger-shape-task", "ledger-research-task", "ledger-specify-task", "ledger-plan-task", "ledger-execute-task", "ledger-distill-close-task",
-		"ralph-executor", "ralph-judge", "review-planner", "reviewer", "review-verifier",
+		"ledger-shape-task",
+		"ledger-research-task",
+		"ledger-specify-task",
+		"ledger-plan-task",
+		"ledger-execute-task",
+		"ledger-distill-close-task",
+		"ralph-executor",
+		"ralph-judge",
+		"review-planner",
+		"reviewer",
+		"review-verifier",
 	]) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
 	}
-	for (const obsolete of ["10x-shape-work", "ralph-reviewer", "apple-pi-review-planner", "apple-pi-reviewer", "apple-pi-review-verifier"]) assert(!existsSync(`skills/${obsolete}`), `obsolete skill remains: ${obsolete}`);
-	const askUserTool = result.extensions.flatMap((extension) => [...extension.tools.values()]).find((tool) => tool.definition.name === "ask_user_question");
+	for (const obsolete of [
+		"10x-shape-work",
+		"ralph-reviewer",
+		"apple-pi-review-planner",
+		"apple-pi-reviewer",
+		"apple-pi-review-verifier",
+	])
+		assert(!existsSync(`skills/${obsolete}`), `obsolete skill remains: ${obsolete}`);
+	const askUserTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "ask_user_question");
 	assert(askUserTool, "missing ask_user_question tool definition");
 	const questionSchema = askUserTool.definition.parameters.properties.questions.items;
 	const optionSchema = questionSchema.properties.options.items;
 	assert(!("preview" in optionSchema.properties), "deferred preview field leaked into ask_user_question schema");
 	assert(!("notes" in questionSchema.properties), "deferred notes field leaked into ask_user_question schema");
-	const ralphTool = result.extensions.flatMap((extension) => [...extension.tools.values()]).find((tool) => tool.definition.name === "ralph");
+	const ralphTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "ralph");
 	assert(ralphTool.definition.parameters.properties.task, "ralph task parameter missing");
 	assert(ralphTool.definition.parameters.properties.root, "ralph worktree root parameter missing");
 	assert(ralphTool.definition.parameters.properties.ledger_root, "ralph ledger root parameter missing");
 	assert(!ralphTool.definition.parameters.properties.ticket, "legacy ralph ticket parameter remains");
-	for (const leaked of ["max_iterations", "max_tokens", "timeout_seconds", "executor_max_turns", "reviewer_max_turns", "judge_max_turns"]) assert(!(leaked in ralphTool.definition.parameters.properties), `ralph caller budget leaked: ${leaked}`);
-	const ralphCommand = result.extensions.flatMap((extension) => [...extension.commands.values()]).find((command) => command.name === "ralph");
+	for (const leaked of [
+		"max_iterations",
+		"max_tokens",
+		"timeout_seconds",
+		"executor_max_turns",
+		"reviewer_max_turns",
+		"judge_max_turns",
+	])
+		assert(!(leaked in ralphTool.definition.parameters.properties), `ralph caller budget leaked: ${leaked}`);
+	const ralphCommand = result.extensions
+		.flatMap((extension) => [...extension.commands.values()])
+		.find((command) => command.name === "ralph");
 	assert(ralphCommand?.getArgumentCompletions, "ralph command is missing argument completions");
 	const ralphActions = await ralphCommand.getArgumentCompletions("");
-	assert.deepEqual(ralphActions.map(({ label }) => label), ["inspect", "start", "step", "run", "status", "stop"]);
+	assert.deepEqual(
+		ralphActions.map(({ label }) => label),
+		["inspect", "start", "step", "run", "status", "stop"],
+	);
 	const ralphOptions = await ralphCommand.getArgumentCompletions("run .ledger/tasks/example/task.md ");
-	assert(!ralphOptions.some(({ label }) => label === "--max-iterations"), "ralph caller budget hint leaked into normal command UX");
-	assert(ralphOptions.some(({ label, description }) => label === "--root" && description), "ralph worktree hints are missing");
-	assert(ralphOptions.some(({ label, description }) => label === "--ledger-root" && description), "ralph ledger hints are missing");
-	const agentTool = result.extensions.flatMap((extension) => [...extension.tools.values()]).find((tool) => tool.definition.name === "Agent");
+	assert(
+		!ralphOptions.some(({ label }) => label === "--max-iterations"),
+		"ralph caller budget hint leaked into normal command UX",
+	);
+	assert(
+		ralphOptions.some(({ label, description }) => label === "--root" && description),
+		"ralph worktree hints are missing",
+	);
+	assert(
+		ralphOptions.some(({ label, description }) => label === "--ledger-root" && description),
+		"ralph ledger hints are missing",
+	);
+	const agentTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "Agent");
 	assert(agentTool, "missing Agent tool definition");
 	const agentProperties = agentTool.definition.parameters.properties;
 	for (const removed of ["isolation", "schedule", "name", "max_turns"]) {

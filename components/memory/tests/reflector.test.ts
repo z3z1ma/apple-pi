@@ -48,7 +48,9 @@ describe("V3 reflector agent", () => {
 		expect(systemPrompt).toContain("Over-reflection is also memory distortion");
 		expect(systemPrompt).toContain("makes transient details look durable");
 		expect(systemPrompt).toContain("Decision procedure:");
-		expect(systemPrompt).toContain("First reject observations that are transient, low-level, partial, routine, or only useful as current working state");
+		expect(systemPrompt).toContain(
+			"First reject observations that are transient, low-level, partial, routine, or only useful as current working state",
+		);
 		expect(systemPrompt).toContain("future-agent utility test");
 		expect(systemPrompt).toContain("avoid a wrong decision, repeated work, or user-preference violation");
 		expect(systemPrompt).toContain("If the candidate fails that future-agent utility test, leave it as an observation");
@@ -57,15 +59,21 @@ describe("V3 reflector agent", () => {
 		expect(systemPrompt).toContain("Do not turn each observation into a reflection");
 		expect(systemPrompt).toContain("Observations are evidence; reflections are compressed durable conclusions");
 		expect(systemPrompt).toContain("Single-observation reflections are allowed");
-		expect(systemPrompt).toContain("durable user preference, constraint, correction, decision, invariant, completed outcome, or long-lived blocker");
+		expect(systemPrompt).toContain(
+			"durable user preference, constraint, correction, decision, invariant, completed outcome, or long-lived blocker",
+		);
 		expect(systemPrompt).toContain("Do not copy or lightly paraphrase observation lines");
 		expect(systemPrompt).toContain("Prefer fewer, higher-value reflections");
 		expect(systemPrompt).toContain("zero reflections than to create one reflection per observation");
 		expect(systemPrompt).toContain("Most transient task-log observations");
-		expect(systemPrompt).toContain("files inspected, commands run, failed attempts, partial implementation, and current working state");
+		expect(systemPrompt).toContain(
+			"files inspected, commands run, failed attempts, partial implementation, and current working state",
+		);
 		expect(systemPrompt).toContain("[coverage: none|partial|strong]");
 		expect(systemPrompt).toContain("Coverage tiers are review context");
-		expect(systemPrompt).toContain("Coverage is not a quota, target, priority score, or instruction to emit reflections");
+		expect(systemPrompt).toContain(
+			"Coverage is not a quota, target, priority score, or instruction to emit reflections",
+		);
 		expect(systemPrompt).toContain("Support ids and coverage stewardship");
 		expect(systemPrompt).toContain("First decide whether the reflection content passes the durable-value bar");
 		expect(systemPrompt).toContain("include all current observation ids whose durable meaning is preserved");
@@ -77,7 +85,9 @@ describe("V3 reflector agent", () => {
 		expect(systemPrompt).toContain("GOOD: completed: V3 reflect/drop coverage now uses raw progress watermarks");
 		expect(systemPrompt).toContain("BAD: npm test passed");
 		expect(systemPrompt).toContain("GOOD: completed: V3 package namespace migration passed full tests and typecheck");
-		expect(systemPrompt).toContain("ZERO REFLECTIONS: The only new observations are files inspected, commands run, failed attempts, partial implementation, transient debugging, or current working state with no durable conclusion yet");
+		expect(systemPrompt).toContain(
+			"ZERO REFLECTIONS: The only new observations are files inspected, commands run, failed attempts, partial implementation, transient debugging, or current working state with no durable conclusion yet",
+		);
 		expect(systemPrompt).toContain("Focus on:");
 		expect(systemPrompt).toContain("User identity, role, preferences, constraints");
 		expect(systemPrompt).toContain("Project goals, architecture, technical decisions");
@@ -141,10 +151,12 @@ describe("V3 reflector agent", () => {
 			averageSupportIds: 0,
 			histogram: {},
 		});
-		expect(summarizeSupportIdCounts([
-			reflection("rrrrrrrrrrr1", ["aaaaaaaaaaaa"]),
-			reflection("rrrrrrrrrrr2", ["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"]),
-		])).toEqual({
+		expect(
+			summarizeSupportIdCounts([
+				reflection("rrrrrrrrrrr1", ["aaaaaaaaaaaa"]),
+				reflection("rrrrrrrrrrr2", ["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"]),
+			]),
+		).toEqual({
 			reflectionCount: 2,
 			totalSupportIds: 4,
 			minSupportIds: 1,
@@ -155,7 +167,12 @@ describe("V3 reflector agent", () => {
 	});
 
 	it("normalizes supporting observation ids by active observation order", () => {
-		expect(normalizeSupportingObservationIds(["bbbbbbbbbbbb", "aaaaaaaaaaaa", "aaaaaaaaaaaa"], ["aaaaaaaaaaaa", "bbbbbbbbbbbb"])).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
+		expect(
+			normalizeSupportingObservationIds(
+				["bbbbbbbbbbbb", "aaaaaaaaaaaa", "aaaaaaaaaaaa"],
+				["aaaaaaaaaaaa", "bbbbbbbbbbbb"],
+			),
+		).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
 		expect(normalizeSupportingObservationIds(["aaaaaaaaaaaa", "missing"], ["aaaaaaaaaaaa"])).toBeUndefined();
 		expect(normalizeSupportingObservationIds([], ["aaaaaaaaaaaa"])).toBeUndefined();
 	});
@@ -170,7 +187,14 @@ describe("V3 reflector agent", () => {
 
 		const result = await runReflector({ ...baseArgs, agentLoop: loop });
 
-		expect(result).toEqual([{ id: hashId(content), content, supportingObservationIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"], tokenCount: estimateStringTokens(content) }]);
+		expect(result).toEqual([
+			{
+				id: hashId(content),
+				content,
+				supportingObservationIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"],
+				tokenCount: estimateStringTokens(content),
+			},
+		]);
 	});
 
 	it("rejects invented support ids and multiline content", async () => {

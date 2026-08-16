@@ -27,14 +27,17 @@ describe("MCP through pi_exec", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-mcp-exec-"));
 		directories.push(cwd);
 		process.env.PI_CODING_AGENT_DIR = join(cwd, "agent");
-		writeFileSync(join(cwd, ".mcp.json"), JSON.stringify({
-			mcpServers: {
-				test: {
-					command: process.execPath,
-					args: [join(process.cwd(), "tests", "fixtures", "mcp-echo-server.mjs")],
+		writeFileSync(
+			join(cwd, ".mcp.json"),
+			JSON.stringify({
+				mcpServers: {
+					test: {
+						command: process.execPath,
+						args: [join(process.cwd(), "tests", "fixtures", "mcp-echo-server.mjs")],
+					},
 				},
-			},
-		}));
+			}),
+		);
 
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "mcp-exec", contextWindow: 200_000 }] });
 		providers.push(faux);
@@ -72,20 +75,25 @@ describe("MCP through pi_exec", () => {
 		session.setActiveToolsByName(["pi_exec"]);
 		const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
 		expect(exec).toBeDefined();
-		const result = await exec!.execute("mcp-exec-test", {
-			code: `
+		const result = await exec!.execute(
+			"mcp-exec-test",
+			{
+				code: `
 const found = await tools.search("mcp gateway");
 if (!found.some((tool) => tool.name === "mcp")) throw new Error("mcp gateway not captured");
 const response = await extensions.mcp({ tool: "test_echo", args: { value: "APPLE" } });
 return response.text;
 `,
-			deadlineMs: 30_000,
-		}, undefined, () => {});
+				deadlineMs: 30_000,
+			},
+			undefined,
+			() => {},
+		);
 		const text = result.content.find((part) => part.type === "text")?.text ?? "";
 		expect(text).toContain("echo:APPLE");
-		expect((result.details as any).trace.operations).toEqual(expect.arrayContaining([
-			expect.objectContaining({ ref: "extensions.mcp", outcome: "succeeded" }),
-		]));
+		expect((result.details as any).trace.operations).toEqual(
+			expect.arrayContaining([expect.objectContaining({ ref: "extensions.mcp", outcome: "succeeded" })]),
+		);
 
 		session.dispose();
 	}, 30_000);

@@ -291,9 +291,7 @@ export class QuestionnaireDialog implements Component, Focusable {
 		if (this.inputMode) return "Enter submit answer • Shift+Enter newline • Esc go back";
 		if (this.currentTab === this.questions.length) return "Enter submit • Tab/←→ review • Esc cancel";
 		const question = this.questions[this.currentTab];
-		const choose = question.multiSelect
-			? "↑↓ navigate • Space/Enter toggle or finish"
-			: "↑↓ navigate • Enter select";
+		const choose = question.multiSelect ? "↑↓ navigate • Space/Enter toggle or finish" : "↑↓ navigate • Enter select";
 		return this.questions.length > 1 ? `${choose} • Tab/←→ questions • Esc cancel` : `${choose} • Esc cancel`;
 	}
 

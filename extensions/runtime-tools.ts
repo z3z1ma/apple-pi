@@ -1,8 +1,4 @@
-import {
-	ExtensionRunner,
-	type RegisteredTool,
-	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import { ExtensionRunner, type RegisteredTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { inChildSessionContext } from "../components/subagents/src/child-context.js";
 
 interface ToolCaptureHub {

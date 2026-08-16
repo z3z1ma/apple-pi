@@ -68,20 +68,26 @@ describe("nested execution operations", () => {
   });
 
   it("reads legacy audit details", () => {
-    expect(executionOperationsOf({
-      audits: [{
+    expect(
+      executionOperationsOf({
+        audits: [
+          {
+            ref: "pi.write",
+            args: { path: "new.ts", content: "hello" },
+            success: true,
+            result: { output: "wrote file" },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
         ref: "pi.write",
+        name: "write",
         args: { path: "new.ts", content: "hello" },
-        success: true,
+        outcome: "succeeded",
         result: { output: "wrote file" },
-      }],
-    })).toEqual([{
-      ref: "pi.write",
-      name: "write",
-      args: { path: "new.ts", content: "hello" },
-      outcome: "succeeded",
-      result: { output: "wrote file" },
-    }]);
+      },
+    ]);
   });
 
   it("expands nested calls and results during compaction normalization", () => {
@@ -134,10 +140,7 @@ describe("nested execution operations", () => {
   it("feeds nested file operations into summaries and recall search", () => {
     const message = fabricResult(traceDetails) as any;
     const summary = compile({
-      messages: [
-        { role: "user", content: [{ type: "text", text: "inspect the source" }] } as any,
-        message,
-      ],
+      messages: [{ role: "user", content: [{ type: "text", text: "inspect the source" }] } as any, message],
     });
     expect(summary).toContain("Modified: src/index.ts");
     expect(summary).toContain("Read: src/index.ts");
@@ -148,12 +151,14 @@ describe("nested execution operations", () => {
   });
 
   it("ignores malformed traces atomically", () => {
-    expect(executionOperationsOf({
-      trace: {
-        kind: "pi-fabric.execution",
-        version: 1,
-        operations: [{ ref: "pi.read", args: {}, outcome: "unknown" }],
-      },
-    })).toEqual([]);
+    expect(
+      executionOperationsOf({
+        trace: {
+          kind: "pi-fabric.execution",
+          version: 1,
+          operations: [{ ref: "pi.read", args: {}, outcome: "unknown" }],
+        },
+      }),
+    ).toEqual([]);
   });
 });

@@ -31,10 +31,14 @@ describe("session-ledger V3 progress helpers", () => {
 	it("detects only raw/source entries as source entries", () => {
 		expect(isSourceEntry(textCustomMessage("raw-1", "abcd"))).toBe(true);
 		expect(isSourceEntry(branchSummary("sum-1", "abcd"))).toBe(true);
-		expect(isSourceEntry(observationsRecordedEntry("om-1", {
-			observations: [observation("aaaaaaaaaaaa")],
-			coversUpToId: "raw-1",
-		}))).toBe(false);
+		expect(
+			isSourceEntry(
+				observationsRecordedEntry("om-1", {
+					observations: [observation("aaaaaaaaaaaa")],
+					coversUpToId: "raw-1",
+				}),
+			),
+		).toBe(false);
 		expect(isSourceEntry(compactionEntry("cmp-1"))).toBe(false);
 	});
 
@@ -61,9 +65,15 @@ describe("session-ledger V3 progress helpers", () => {
 	it("uses independent coverage clocks for observations, reflections, and drops", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "raw-1" }),
+			observationsRecordedEntry("om-aaaaaaaaaaaa", {
+				observations: [observation("aaaaaaaaaaaa")],
+				coversUpToId: "raw-1",
+			}),
 			textCustomMessage("raw-2", "bbbbbbbb"),
-			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])], coversUpToId: "raw-2" }),
+			reflectionsRecordedEntry("om-eeeeeeeeeeee", {
+				reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+				coversUpToId: "raw-2",
+			}),
 			textCustomMessage("raw-3", "cccccccccccc"),
 			observationsDroppedEntry("om-drop-1", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "om-eeeeeeeeeeee" }),
 			textCustomMessage("raw-4", "dddddddddddddddd"),
@@ -77,7 +87,10 @@ describe("session-ledger V3 progress helpers", () => {
 	it("lets coversUpToId point to a memory ledger entry", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-eeeeeeeeeeee", {
+				reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+				coversUpToId: "raw-1",
+			}),
 			observationsDroppedEntry("om-drop-1", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "om-eeeeeeeeeeee" }),
 			textCustomMessage("raw-2", "bbbbbbbb"),
 		];
@@ -90,8 +103,14 @@ describe("session-ledger V3 progress helpers", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
 			textCustomMessage("raw-2", "bbbbbbbb"),
-			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "raw-2" }),
-			observationsRecordedEntry("om-bbbbbbbbbbbb", { observations: [observation("bbbbbbbbbbbb")], coversUpToId: "raw-1" }),
+			observationsRecordedEntry("om-aaaaaaaaaaaa", {
+				observations: [observation("aaaaaaaaaaaa")],
+				coversUpToId: "raw-2",
+			}),
+			observationsRecordedEntry("om-bbbbbbbbbbbb", {
+				observations: [observation("bbbbbbbbbbbb")],
+				coversUpToId: "raw-1",
+			}),
 			textCustomMessage("raw-3", "cccccccccccc"),
 		];
 
@@ -106,7 +125,10 @@ describe("session-ledger V3 progress helpers", () => {
 			textCustomMessage("raw-2", "bbbbbbbb"),
 			textCustomMessage("raw-3", "cccccccccccc"),
 			observationsRecordedEntry("om-obs", { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "raw-3" }),
-			reflectionsRecordedEntry("om-ref", { reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])], coversUpToId: "raw-2" }),
+			reflectionsRecordedEntry("om-ref", {
+				reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+				coversUpToId: "raw-2",
+			}),
 		];
 
 		expect(latestCoverageMarkerId(entries, V3_OBSERVATIONS_RECORDED)).toBe("raw-3");
@@ -121,7 +143,10 @@ describe("session-ledger V3 progress helpers", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
 			oldV2ObservationEntry("v2-obs"),
-			observationsRecordedEntry("om-obs-invalid", { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "missing" }),
+			observationsRecordedEntry("om-obs-invalid", {
+				observations: [observation("aaaaaaaaaaaa")],
+				coversUpToId: "missing",
+			}),
 			textCustomMessage("raw-2", "bbbbbbbb"),
 		];
 

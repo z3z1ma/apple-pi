@@ -50,11 +50,7 @@ describe("buildOwnCut", () => {
   });
 
   test("cancels with too_few_live_messages when liveMessages <= 2", () => {
-    const r = buildOwnCut([
-      comp("c1", "m1"),
-      msg("m1", "user", "x"),
-      msg("m2", "assistant", "y"),
-    ]);
+    const r = buildOwnCut([comp("c1", "m1"), msg("m1", "user", "x"), msg("m2", "assistant", "y")]);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe("too_few_live_messages");
@@ -121,11 +117,7 @@ describe("buildOwnCut", () => {
     // When there are enough live messages but none are from the user
     // (e.g., long assistant/tool chain), compact all rather than
     // cancelling and leaving the session unrecoverable.
-    const r = buildOwnCut([
-      msg("m1", "assistant", "a"),
-      msg("m2", "assistant", "b"),
-      msg("m3", "assistant", "c"),
-    ]);
+    const r = buildOwnCut([msg("m1", "assistant", "a"), msg("m2", "assistant", "b"), msg("m3", "assistant", "c")]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.compactAll).toBe(true);
@@ -180,8 +172,21 @@ describe("buildOwnCut", () => {
     // "unmatched" and pushing the cut back one user turn.
     const r = buildOwnCut([
       msg("u1", "user", "first prompt"),
-      msg("a1", "assistant", [{ type: "text", text: "let me check" }, { type: "toolCall", id: "tc_1", name: "read", arguments: { path: "foo.ts" } }]),
-      { id: "t1", type: "message", message: { role: "toolResult", toolCallId: "tc_1", toolName: "read", content: [{ type: "text", text: "file contents" }], isError: false } },
+      msg("a1", "assistant", [
+        { type: "text", text: "let me check" },
+        { type: "toolCall", id: "tc_1", name: "read", arguments: { path: "foo.ts" } },
+      ]),
+      {
+        id: "t1",
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "tc_1",
+          toolName: "read",
+          content: [{ type: "text", text: "file contents" }],
+          isError: false,
+        },
+      },
       msg("u2", "user", "second prompt"),
       msg("a2", "assistant", [{ type: "text", text: "done" }]),
     ]);
@@ -202,7 +207,10 @@ describe("buildOwnCut", () => {
       msg("u2", "user", "second prompt"),
       msg("a2", "assistant", "response 2"),
       msg("u3", "user", "third prompt"),
-      msg("a3", "assistant", [{ type: "text", text: "checking" }, { type: "toolCall", id: "tc_unmatched", name: "bash", arguments: { command: "ls" } }]),
+      msg("a3", "assistant", [
+        { type: "text", text: "checking" },
+        { type: "toolCall", id: "tc_unmatched", name: "bash", arguments: { command: "ls" } },
+      ]),
     ]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -215,25 +223,55 @@ describe("buildOwnCut", () => {
     // Simulates the real Anthropic pattern: 2 user messages with many matched
     // toolCall/toolResult pairs between them. The bug caused all toolCalls to
     // appear "unmatched" → cut pushed back to first user → compact-all.
-    const entries: any[] = [
-      msg("u1", "user", "help me find bugs"),
-    ];
+    const entries: any[] = [msg("u1", "user", "help me find bugs")];
     // Add 5 matched tool cycles (assistant with toolCall + toolResult)
     for (let i = 1; i <= 5; i++) {
-      entries.push({ id: `a${i}`, type: "message", message: { role: "assistant", content: [
-        { type: "thinking", thinking: `thinking ${i}` },
-        { type: "toolCall", id: `tc_${i}`, name: "read", arguments: { path: `file${i}.ts` } },
-      ] } });
-      entries.push({ id: `t${i}`, type: "message", message: { role: "toolResult", toolCallId: `tc_${i}`, toolName: "read", content: [{ type: "text", text: `file ${i} contents` }], isError: false } });
+      entries.push({
+        id: `a${i}`,
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: `thinking ${i}` },
+            { type: "toolCall", id: `tc_${i}`, name: "read", arguments: { path: `file${i}.ts` } },
+          ],
+        },
+      });
+      entries.push({
+        id: `t${i}`,
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: `tc_${i}`,
+          toolName: "read",
+          content: [{ type: "text", text: `file ${i} contents` }],
+          isError: false,
+        },
+      });
     }
     // Second user message
     entries.push(msg("u2", "user", "now fix the bug"));
     // More matched tool cycles after second user
     for (let i = 6; i <= 8; i++) {
-      entries.push({ id: `a${i}`, type: "message", message: { role: "assistant", content: [
-        { type: "toolCall", id: `tc_${i}`, name: "edit", arguments: { path: `file${i}.ts` } },
-      ] } });
-      entries.push({ id: `t${i}`, type: "message", message: { role: "toolResult", toolCallId: `tc_${i}`, toolName: "edit", content: [{ type: "text", text: `edited file ${i}` }], isError: false } });
+      entries.push({
+        id: `a${i}`,
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", id: `tc_${i}`, name: "edit", arguments: { path: `file${i}.ts` } }],
+        },
+      });
+      entries.push({
+        id: `t${i}`,
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: `tc_${i}`,
+          toolName: "edit",
+          content: [{ type: "text", text: `edited file ${i}` }],
+          isError: false,
+        },
+      });
     }
     entries.push(msg("a9", "assistant", "all done"));
 
@@ -269,11 +307,7 @@ describe("buildOwnCut oversized-turn guard (maxKeptTokens)", () => {
     // Kept tail starts after the giant's cycle; the giant is summarized.
     expect(r.firstKeptEntryId).toBe("a3");
     expect(r.messages).toHaveLength(5); // u1, a1, u2, a2, t1(giant)
-    expect(
-      (r.messages as any[]).some(
-        (m) => m.role === "toolResult" && m.content?.[0]?.text === giant,
-      ),
-    ).toBe(true);
+    expect((r.messages as any[]).some((m) => m.role === "toolResult" && m.content?.[0]?.text === giant)).toBe(true);
   });
 
   test("oversized kept turn with giant in last cycle keeps only the final assistant", () => {
@@ -294,11 +328,7 @@ describe("buildOwnCut oversized-turn guard (maxKeptTokens)", () => {
     // Only a4 fits after the giant cycle is summarized.
     expect(r.firstKeptEntryId).toBe("a4");
     expect(r.messages).toHaveLength(7); // everything before a4, incl. giant t2
-    expect(
-      (r.messages as any[]).some(
-        (m) => m.role === "toolResult" && m.content?.[0]?.text === giant,
-      ),
-    ).toBe(true);
+    expect((r.messages as any[]).some((m) => m.role === "toolResult" && m.content?.[0]?.text === giant)).toBe(true);
   });
 
   test("kept turn that is a single oversized cycle with no trailing message falls back to compact-all", () => {

@@ -4,10 +4,7 @@ import { registerPiVccCommand } from "../components/vcc/src/commands/pi-vcc.js";
 import { registerVccRecallCommand } from "../components/vcc/src/commands/vcc-recall.js";
 import { registerInvisibleContinue } from "../components/vcc/src/core/invisible-continue.js";
 import { scaffoldSettings } from "../components/vcc/src/core/settings.js";
-import {
-	registerBeforeCompactHook,
-	type VccCompactionAugmenter,
-} from "../components/vcc/src/hooks/before-compact.js";
+import { registerBeforeCompactHook, type VccCompactionAugmenter } from "../components/vcc/src/hooks/before-compact.js";
 import { registerProactiveThresholdHook } from "../components/vcc/src/hooks/proactive-threshold.js";
 import { registerRecallTool as registerVccRecallTool } from "../components/vcc/src/tools/recall.js";
 
@@ -16,11 +13,7 @@ import { registerViewCommand } from "../components/memory/src/commands/view.js";
 import { registerCompactionTrigger } from "../components/memory/src/hooks/compaction-trigger.js";
 import { registerConsolidationTrigger } from "../components/memory/src/hooks/consolidation-trigger.js";
 import { Runtime } from "../components/memory/src/runtime.js";
-import {
-	buildCompactionProjection,
-	renderSummary,
-	type Entry,
-} from "../components/memory/src/session-ledger/index.js";
+import { buildCompactionProjection, renderSummary, type Entry } from "../components/memory/src/session-ledger/index.js";
 import { registerRecallTool as registerMemoryRecallTool } from "../components/memory/src/tools/recall-observation.js";
 
 /**
@@ -33,11 +26,9 @@ export function createMemoryCompactionAugmenter(memory: Runtime): VccCompactionA
 	return ({ branchEntries, firstKeptEntryId, cwd }) => {
 		memory.ensureConfig(cwd);
 		const boundaryId = firstKeptEntryId || branchEntries.at(-1)?.id || "";
-		const projection = buildCompactionProjection(
-			branchEntries as Entry[],
-			boundaryId,
-			{ observationsPoolMaxTokens: memory.config.observationsPoolMaxTokens },
-		);
+		const projection = buildCompactionProjection(branchEntries as Entry[], boundaryId, {
+			observationsPoolMaxTokens: memory.config.observationsPoolMaxTokens,
+		});
 		return {
 			summary: renderSummary(projection.reflections, projection.observations),
 			// Keep both VCC's `compactor` and OM's `type` at the top level. Their

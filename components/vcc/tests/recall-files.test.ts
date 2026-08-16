@@ -9,15 +9,17 @@ import { registerRecallTool } from "../src/tools/recall";
 
 const writeMessage = {
   role: "assistant",
-  content: [{
-    type: "toolCall",
-    id: "write-1",
-    name: "write",
-    arguments: {
-      path: "src/auth.ts",
-      content: Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join("\n"),
+  content: [
+    {
+      type: "toolCall",
+      id: "write-1",
+      name: "write",
+      arguments: {
+        path: "src/auth.ts",
+        content: Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join("\n"),
+      },
     },
-  }],
+  ],
 } as any;
 
 describe("VCC file recall", () => {
@@ -48,16 +50,20 @@ describe("VCC file recall", () => {
         trace: {
           kind: "apple-pi.execution",
           version: 1,
-          operations: [{
-            ref: "agents.run",
-            args: { task: "update auth" },
-            outcome: "succeeded",
-            children: [{
-              ref: "pi.edit",
-              args: { path: "src/auth.ts", oldText: "old", newText: "new" },
+          operations: [
+            {
+              ref: "agents.run",
+              args: { task: "update auth" },
               outcome: "succeeded",
-            }],
-          }],
+              children: [
+                {
+                  ref: "pi.edit",
+                  args: { path: "src/auth.ts", oldText: "old", newText: "new" },
+                  outcome: "succeeded",
+                },
+              ],
+            },
+          ],
         },
       },
     } as any;
@@ -65,18 +71,16 @@ describe("VCC file recall", () => {
       { index: 4, role: "assistant", summary: "write" },
       { index: 9, role: "tool_result", summary: "exec" },
     ];
-    expect(getTouchedFiles([writeMessage, nested], rendered)).toEqual([{
-      path: "src/auth.ts",
-      entries: [
-        { index: 4, toolName: "write" },
-        { index: 9, toolName: "edit" },
-      ],
-    }]);
-    const nestedPayload = expandEntryFile(
-      rendered,
-      [writeMessage, nested],
-      parseDrillDown("#9:auth.ts")!,
-    );
+    expect(getTouchedFiles([writeMessage, nested], rendered)).toEqual([
+      {
+        path: "src/auth.ts",
+        entries: [
+          { index: 4, toolName: "write" },
+          { index: 9, toolName: "edit" },
+        ],
+      },
+    ]);
+    const nestedPayload = expandEntryFile(rendered, [writeMessage, nested], parseDrillDown("#9:auth.ts")!);
     expect(nestedPayload).toContain("old");
     expect(nestedPayload).toContain("new");
   });
@@ -87,7 +91,11 @@ describe("VCC file recall", () => {
     try {
       writeFileSync(file, JSON.stringify({ type: "message", id: "m1", message: writeMessage }) + "\n", "utf8");
       let tool: any;
-      registerRecallTool({ registerTool(value: any) { tool = value; } } as any);
+      registerRecallTool({
+        registerTool(value: any) {
+          tool = value;
+        },
+      } as any);
       const ctx = {
         sessionManager: {
           getSessionFile: () => file,

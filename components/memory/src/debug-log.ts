@@ -35,9 +35,7 @@ export function safeDebugLogSessionId(sessionId: string | undefined): string | u
 
 export function debugLogRelativePath(context: Pick<DebugLogContext, "sessionId">): string {
 	const safeSessionId = safeDebugLogSessionId(context.sessionId);
-	return safeSessionId
-		? join(DEBUG_LOG_SESSION_DIR_RELATIVE_PATH, `${safeSessionId}.ndjson`)
-		: DEBUG_LOG_RELATIVE_PATH;
+	return safeSessionId ? join(DEBUG_LOG_SESSION_DIR_RELATIVE_PATH, `${safeSessionId}.ndjson`) : DEBUG_LOG_RELATIVE_PATH;
 }
 
 export function debugLog(event: string, data: Record<string, unknown> = {}): void {

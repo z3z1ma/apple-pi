@@ -38,11 +38,7 @@ export const V2_DETAILS_TYPE = "observational-memory";
 
 const DEFAULT_TIMESTAMP = "2026-05-02T10:00:00.000Z";
 
-export function rawMessage(
-	id: string,
-	text: string,
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
+export function rawMessage(id: string, text: string, overrides: Partial<TestEntry> = {}): TestEntry {
 	return {
 		type: "message",
 		id,
@@ -53,11 +49,7 @@ export function rawMessage(
 	};
 }
 
-export function customMessage(
-	id: string,
-	content: unknown,
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
+export function customMessage(id: string, content: unknown, overrides: Partial<TestEntry> = {}): TestEntry {
 	return {
 		type: "custom_message",
 		id,
@@ -68,19 +60,11 @@ export function customMessage(
 	};
 }
 
-export function textCustomMessage(
-	id: string,
-	text: string,
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
+export function textCustomMessage(id: string, text: string, overrides: Partial<TestEntry> = {}): TestEntry {
 	return customMessage(id, text, overrides);
 }
 
-export function branchSummary(
-	id: string,
-	summary: string,
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
+export function branchSummary(id: string, summary: string, overrides: Partial<TestEntry> = {}): TestEntry {
 	return {
 		type: "branch_summary",
 		id,
@@ -109,11 +93,7 @@ export function compactionEntry(
 }
 
 export function memoryDetails(
-	args: {
-		fullFold?: boolean;
-		observations?: TestObservation[];
-		reflections?: TestReflection[];
-	} = {},
+	args: { fullFold?: boolean; observations?: TestObservation[]; reflections?: TestReflection[] } = {},
 ): unknown {
 	return {
 		type: V3_FOLDED,
@@ -124,10 +104,7 @@ export function memoryDetails(
 	};
 }
 
-export function observation(
-	id: string,
-	overrides: Partial<TestObservation> = {},
-): TestObservation {
+export function observation(id: string, overrides: Partial<TestObservation> = {}): TestObservation {
 	return {
 		id,
 		content: `Observation ${id}`,
@@ -222,9 +199,7 @@ export function oldV2ObservationEntry(
 	};
 }
 
-export function oldV2CompactionDetails(
-	args: { observations?: unknown[]; reflections?: unknown[] } = {},
-): unknown {
+export function oldV2CompactionDetails(args: { observations?: unknown[]; reflections?: unknown[] } = {}): unknown {
 	return {
 		type: V2_DETAILS_TYPE,
 		version: 4,

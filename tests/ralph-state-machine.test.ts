@@ -177,7 +177,17 @@ function testController(mock: ManagedSubagentService): RalphController {
 					startedAt: now,
 					updatedAt: now,
 					inputHash: "test-input",
-					selected: [{ id: "item", path: "source.txt", status: "modified", insertions: 1, deletions: 1, fingerprint: "test", binary: false }],
+					selected: [
+						{
+							id: "item",
+							path: "source.txt",
+							status: "modified",
+							insertions: 1,
+							deletions: 1,
+							fingerprint: "test",
+							binary: false,
+						},
+					],
 					waived: [],
 					completedItemIds: ["item"],
 					failures: [],
@@ -198,7 +208,16 @@ function testController(mock: ManagedSubagentService): RalphController {
 					})),
 					residualRisk: output.residualRisk,
 					totalTokens: record.lifetimeUsage.input + record.lifetimeUsage.output,
-					budgets: { maxTokens: 10000, timeoutSeconds: 60, maxConcurrency: 1, plannerMaxTurns: 1, reviewerMaxTurns: 1, verifierMaxTurns: 1, maxGroups: 1, maxPromptBytes: 32768 },
+					budgets: {
+						maxTokens: 10000,
+						timeoutSeconds: 60,
+						maxConcurrency: 1,
+						plannerMaxTurns: 1,
+						reviewerMaxTurns: 1,
+						verifierMaxTurns: 1,
+						maxGroups: 1,
+						maxPromptBytes: 32768,
+					},
 					routing: { plannerMode: "test", fastMode: "test", strongMode: "test" },
 					agents: [],
 					lastOutcome: output.summary,
@@ -218,11 +237,18 @@ const executorDone = {
 	distillation: ["The implementation and focused test remain the durable owners of this bounded invariant."],
 	workItemCompletions: [],
 };
-const reviewPass = { verdict: "pass", summary: "No falsifying defect found.", findings: [], residualRisk: ["Only AC-001 was reviewed."] };
+const reviewPass = {
+	verdict: "pass",
+	summary: "No falsifying defect found.",
+	findings: [],
+	residualRisk: ["Only AC-001 was reviewed."],
+};
 const judgeClose = {
 	decision: "close",
 	reason: "Evidence, review, and authority agree.",
-	acceptanceCriteria: [{ id: "AC-001", status: "satisfied", evidence: "Task evidence maps the passing behavior test." }],
+	acceptanceCriteria: [
+		{ id: "AC-001", status: "satisfied", evidence: "Task evidence maps the passing behavior test." },
+	],
 	workItemJudgments: [],
 };
 
@@ -241,11 +267,14 @@ describe("Ralph state machine", () => {
 	it("runs three distinct fresh roles, records review/judgment, and closes only after all gates", async () => {
 		const root = repository();
 		const seen: ManagedAgentRequest[] = [];
-		const mock = service([
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], seen);
+		const mock = service(
+			[
+				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
+				{ role: "shared-review-test", output: reviewPass },
+				{ role: "ralph-judge", output: judgeClose },
+			],
+			seen,
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
@@ -269,36 +298,109 @@ describe("Ralph state machine", () => {
 	it("completes only judge-confirmed work-item proposals through the owned task lease", async () => {
 		const root = repository();
 		const path = join(root, TASK);
-		writeFileSync(path, readFileSync(path, "utf8").replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References"));
+		writeFileSync(
+			path,
+			readFileSync(path, "utf8").replace(
+				"## References",
+				"## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References",
+			),
+		);
 		execFileSync("git", ["-C", root, "add", TASK]);
 		execFileSync("git", ["-C", root, "commit", "-qm", "add work item"]);
-		const controller = testController(service([
-			{ role: "ralph-executor", output: { ...executorDone, workItemCompletions: [{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." }] }, mutate: () => completeTask(root) },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: { ...judgeClose, workItemJudgments: [{ id: "WI-001", decision: "confirmed", reason: "The reviewed behavior and focused evidence support completion." }] } },
-		], []));
+		const controller = testController(
+			service(
+				[
+					{
+						role: "ralph-executor",
+						output: {
+							...executorDone,
+							workItemCompletions: [
+								{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." },
+							],
+						},
+						mutate: () => completeTask(root),
+					},
+					{ role: "shared-review-test", output: reviewPass },
+					{
+						role: "ralph-judge",
+						output: {
+							...judgeClose,
+							workItemJudgments: [
+								{
+									id: "WI-001",
+									decision: "confirmed",
+									reason: "The reviewed behavior and focused evidence support completion.",
+								},
+							],
+						},
+					},
+				],
+				[],
+			),
+		);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
 		expect(result.state, result.lastOutcome).toBe("done");
 		expect(readFileSync(path, "utf8")).toContain("- [x] WI-001");
 		const receiptEvents = readReceiptEvents(root, result.runId);
-		expect(receiptEvents.find((event) => event.workItems?.proposals)?.workItems?.proposals).toEqual([{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." }]);
-		expect(receiptEvents.find((event) => event.workItems?.judgments)?.workItems?.judgments).toEqual([{ id: "WI-001", decision: "confirmed", reason: "The reviewed behavior and focused evidence support completion." }]);
-		expect(receiptEvents.find((event) => event.workItems?.taskDigest)?.workItems).toMatchObject({ confirmedIds: ["WI-001"], rejectedIds: [] });
+		expect(receiptEvents.find((event) => event.workItems?.proposals)?.workItems?.proposals).toEqual([
+			{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." },
+		]);
+		expect(receiptEvents.find((event) => event.workItems?.judgments)?.workItems?.judgments).toEqual([
+			{ id: "WI-001", decision: "confirmed", reason: "The reviewed behavior and focused evidence support completion." },
+		]);
+		expect(receiptEvents.find((event) => event.workItems?.taskDigest)?.workItems).toMatchObject({
+			confirmedIds: ["WI-001"],
+			rejectedIds: [],
+		});
 	}, 15_000);
 
 	it("names rejected work items in blocked and stopped terminal outcomes", async () => {
 		for (const decision of ["blocked", "stop"] as const) {
 			const root = repository();
 			const path = join(root, TASK);
-			writeFileSync(path, readFileSync(path, "utf8").replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References"));
+			writeFileSync(
+				path,
+				readFileSync(path, "utf8").replace(
+					"## References",
+					"## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References",
+				),
+			);
 			execFileSync("git", ["-C", root, "add", TASK]);
 			execFileSync("git", ["-C", root, "commit", "-qm", `add ${decision} work item`]);
-			const controller = testController(service([
-				{ role: "ralph-executor", output: { ...executorDone, workItemCompletions: [{ id: "WI-001", evidence: "The focused behavior check has not yet established this completion." }] }, mutate: () => completeTask(root) },
-				{ role: "shared-review-test", output: reviewPass },
-				{ role: "ralph-judge", output: { ...judgeClose, decision, reason: "The evidence does not support completing the implementation.", workItemJudgments: [{ id: "WI-001", decision: "rejected", reason: "The reviewed change lacks the required bounded behavior evidence." }] } },
-			], []));
+			const controller = testController(
+				service(
+					[
+						{
+							role: "ralph-executor",
+							output: {
+								...executorDone,
+								workItemCompletions: [
+									{ id: "WI-001", evidence: "The focused behavior check has not yet established this completion." },
+								],
+							},
+							mutate: () => completeTask(root),
+						},
+						{ role: "shared-review-test", output: reviewPass },
+						{
+							role: "ralph-judge",
+							output: {
+								...judgeClose,
+								decision,
+								reason: "The evidence does not support completing the implementation.",
+								workItemJudgments: [
+									{
+										id: "WI-001",
+										decision: "rejected",
+										reason: "The reviewed change lacks the required bounded behavior evidence.",
+									},
+								],
+							},
+						},
+					],
+					[],
+				),
+			);
 			const started = await controller.start(context(root), TASK);
 			const result = await controller.step(context(root), started.runId);
 			expect(result.state).toBe(decision === "blocked" ? "blocked" : "stopped");
@@ -314,12 +416,25 @@ describe("Ralph state machine", () => {
 		execFileSync("git", ["-C", root, "worktree", "add", "-q", "-b", `ralph-${randomUUID()}`, worktree]);
 		roots.push(worktree);
 		const seen: ManagedAgentRequest[] = [];
-		const controller = testController(service([
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(worktree, "changed only in linked worktree") },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], seen));
-		const result = await controller.run(context(root), TASK, { root: worktree, ledgerRoot: root, budgets: { maxIterations: 1 } });
+		const controller = testController(
+			service(
+				[
+					{
+						role: "ralph-executor",
+						output: executorDone,
+						mutate: () => completeTask(worktree, "changed only in linked worktree"),
+					},
+					{ role: "shared-review-test", output: reviewPass },
+					{ role: "ralph-judge", output: judgeClose },
+				],
+				seen,
+			),
+		);
+		const result = await controller.run(context(root), TASK, {
+			root: worktree,
+			ledgerRoot: root,
+			budgets: { maxIterations: 1 },
+		});
 		expect(result.state).toBe("done");
 		expect(result.projectRoot).toBe(realpathSync(worktree));
 		expect(result.ledgerRoot).toBe(realpathSync(root));
@@ -334,11 +449,16 @@ describe("Ralph state machine", () => {
 		const worktree = join(tmpdir(), `ralph-linked-local-ledger-${randomUUID()}`);
 		execFileSync("git", ["-C", root, "worktree", "add", "-q", "-b", `ralph-local-${randomUUID()}`, worktree]);
 		roots.push(worktree);
-		const controller = testController(service([
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(worktree) },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], []));
+		const controller = testController(
+			service(
+				[
+					{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(worktree) },
+					{ role: "shared-review-test", output: reviewPass },
+					{ role: "ralph-judge", output: judgeClose },
+				],
+				[],
+			),
+		);
 		const result = await controller.run(context(root), TASK, { root: worktree, budgets: { maxIterations: 1 } });
 		expect(result.state).toBe("done");
 		expect(result.projectRoot).toBe(realpathSync(worktree));
@@ -352,14 +472,21 @@ describe("Ralph state machine", () => {
 		const worktree = join(tmpdir(), `ralph-linked-drift-${randomUUID()}`);
 		execFileSync("git", ["-C", root, "worktree", "add", "-q", "-b", `ralph-drift-${randomUUID()}`, worktree]);
 		roots.push(worktree);
-		const controller = testController(service([{
-			role: "ralph-executor",
-			output: executorDone,
-			mutate: () => {
-				completeTask(worktree);
-				writeFileSync(join(root, TASK), `${readFileSync(join(root, TASK), "utf8")}\n`);
-			},
-		}], []));
+		const controller = testController(
+			service(
+				[
+					{
+						role: "ralph-executor",
+						output: executorDone,
+						mutate: () => {
+							completeTask(worktree);
+							writeFileSync(join(root, TASK), `${readFileSync(join(root, TASK), "utf8")}\n`);
+						},
+					},
+				],
+				[],
+			),
+		);
 		const started = await controller.start(context(root), TASK, { root: worktree, ledgerRoot: root });
 		const result = await controller.step(context(root), started.runId, undefined, worktree);
 		expect(result.state).toBe("workspace_conflict");
@@ -369,11 +496,16 @@ describe("Ralph state machine", () => {
 	it("completes normally when the team policy ignores .ledger", async () => {
 		const root = repository();
 		ignoreLedger(root);
-		const controller = testController(service([
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], []));
+		const controller = testController(
+			service(
+				[
+					{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
+					{ role: "shared-review-test", output: reviewPass },
+					{ role: "ralph-judge", output: judgeClose },
+				],
+				[],
+			),
+		);
 		const result = await controller.run(context(root), TASK, { budgets: { maxIterations: 1 } });
 		expect(result.state).toBe("done");
 		expect(readFileSync(join(root, TASK), "utf8")).toContain("Status: done");
@@ -390,16 +522,26 @@ describe("Ralph state machine", () => {
 			workItemJudgments: [],
 			nextObjective: "Run and record the missing behavior check.",
 		};
-		const mock = service([
-			{ role: "ralph-executor", output: { ...executorDone, status: "partial", nextObjective: "Record the behavior check." }, mutate: () => {
-					writeFileSync(join(root, "source.txt"), "first iteration\n");
-				} },
-			{ role: "shared-review-test", output: { ...reviewPass, verdict: "concerns", summary: "Evidence remains incomplete." } },
-			{ role: "ralph-judge", output: judgeIterate },
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root, "verified in iteration two") },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], seen);
+		const mock = service(
+			[
+				{
+					role: "ralph-executor",
+					output: { ...executorDone, status: "partial", nextObjective: "Record the behavior check." },
+					mutate: () => {
+						writeFileSync(join(root, "source.txt"), "first iteration\n");
+					},
+				},
+				{
+					role: "shared-review-test",
+					output: { ...reviewPass, verdict: "concerns", summary: "Evidence remains incomplete." },
+				},
+				{ role: "ralph-judge", output: judgeIterate },
+				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root, "verified in iteration two") },
+				{ role: "shared-review-test", output: reviewPass },
+				{ role: "ralph-judge", output: judgeClose },
+			],
+			seen,
+		);
 		const controller = testController(mock);
 		const result = await controller.run(context(root), TASK, { budgets: { maxIterations: 2 } });
 		expect(result.state).toBe("done");
@@ -410,14 +552,19 @@ describe("Ralph state machine", () => {
 
 	it("refuses executor attempts to rewrite .ledger task authority", async () => {
 		const root = repository();
-		const mock = service([{
-			role: "ralph-executor",
-			output: executorDone,
-			mutate: () => {
-				const path = join(root, TASK);
-				writeFileSync(path, readFileSync(path, "utf8").replace("Status: active", "Status: done"));
-			},
-		}], []);
+		const mock = service(
+			[
+				{
+					role: "ralph-executor",
+					output: executorDone,
+					mutate: () => {
+						const path = join(root, TASK);
+						writeFileSync(path, readFileSync(path, "utf8").replace("Status: active", "Status: done"));
+					},
+				},
+			],
+			[],
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
@@ -428,11 +575,16 @@ describe("Ralph state machine", () => {
 	it("detects direct ledger mutation when the team policy ignores .ledger", async () => {
 		const root = repository();
 		ignoreLedger(root);
-		const mock = service([{
-			role: "ralph-executor",
-			output: executorDone,
-			mutate: () => writeFileSync(join(root, ".ledger", "README.md"), "# Compromised ledger\n"),
-		}], []);
+		const mock = service(
+			[
+				{
+					role: "ralph-executor",
+					output: executorDone,
+					mutate: () => writeFileSync(join(root, ".ledger", "README.md"), "# Compromised ledger\n"),
+				},
+			],
+			[],
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
@@ -442,10 +594,17 @@ describe("Ralph state machine", () => {
 
 	it("stops when a read-only reviewer mutates the workspace", async () => {
 		const root = repository();
-		const mock = service([
-			{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-			{ role: "shared-review-test", output: reviewPass, mutate: () => writeFileSync(join(root, "reviewer-write.txt"), "not allowed\n") },
-		], []);
+		const mock = service(
+			[
+				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
+				{
+					role: "shared-review-test",
+					output: reviewPass,
+					mutate: () => writeFileSync(join(root, "reviewer-write.txt"), "not allowed\n"),
+				},
+			],
+			[],
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
@@ -455,11 +614,18 @@ describe("Ralph state machine", () => {
 
 	it("refuses a judge close decision when task evidence, retrospective, and distillation gates are unmet", async () => {
 		const root = repository();
-		const mock = service([
-			{ role: "ralph-executor", output: { ...executorDone, acceptanceCriteria: [] }, mutate: () => writeFileSync(join(root, "source.txt"), "changed without evidence\n") },
-			{ role: "shared-review-test", output: reviewPass },
-			{ role: "ralph-judge", output: judgeClose },
-		], []);
+		const mock = service(
+			[
+				{
+					role: "ralph-executor",
+					output: { ...executorDone, acceptanceCriteria: [] },
+					mutate: () => writeFileSync(join(root, "source.txt"), "changed without evidence\n"),
+				},
+				{ role: "shared-review-test", output: reviewPass },
+				{ role: "ralph-judge", output: judgeClose },
+			],
+			[],
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
@@ -484,7 +650,9 @@ describe("Ralph state machine", () => {
 	it("waits for the active role to quiesce before returning an operator stop", async () => {
 		const root = repository();
 		let started!: () => void;
-		const roleStarted = new Promise<void>((resolve) => { started = resolve; });
+		const roleStarted = new Promise<void>((resolve) => {
+			started = resolve;
+		});
 		let calls = 0;
 		const pending: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
@@ -524,14 +692,19 @@ describe("Ralph state machine", () => {
 	it("stops honestly on authority denial and compaction", async () => {
 		const deniedRoot = repository();
 		const deniedSeen: ManagedAgentRequest[] = [];
-		const deniedService = service([{
-			role: "ralph-executor",
-			output: executorDone,
-			mutate: async (request) => {
-				const result = await request.toolPolicy?.({ toolName: "bash", args: { command: "git push origin main" } });
-				expect(result).toMatchObject({ block: true, terminate: true });
-			},
-		}], deniedSeen);
+		const deniedService = service(
+			[
+				{
+					role: "ralph-executor",
+					output: executorDone,
+					mutate: async (request) => {
+						const result = await request.toolPolicy?.({ toolName: "bash", args: { command: "git push origin main" } });
+						expect(result).toMatchObject({ block: true, terminate: true });
+					},
+				},
+			],
+			deniedSeen,
+		);
 		const deniedController = testController(deniedService);
 		const deniedStart = await deniedController.start(context(deniedRoot), TASK);
 		const denied = await deniedController.step(context(deniedRoot), deniedStart.runId);

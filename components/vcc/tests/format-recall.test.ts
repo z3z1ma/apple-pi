@@ -14,9 +14,7 @@ describe("formatRecallOutput", () => {
 
   describe("browse mode (no query)", () => {
     it("formats entries with index and role", () => {
-      const entries: SearchHit[] = [
-        { index: 0, role: "user", summary: "hello" },
-      ];
+      const entries: SearchHit[] = [{ index: 0, role: "user", summary: "hello" }];
       const r = formatRecallOutput(entries);
       expect(r).toContain("#0 [user] hello");
     });
@@ -33,9 +31,7 @@ describe("formatRecallOutput", () => {
 
   describe("search mode (with query)", () => {
     it("shows match count with query", () => {
-      const entries: SearchHit[] = [
-        { index: 2, role: "assistant", summary: "done", snippet: "done" },
-      ];
+      const entries: SearchHit[] = [{ index: 2, role: "assistant", summary: "done", snippet: "done" }];
       const r = formatRecallOutput(entries, "done");
       expect(r).toContain('Found 1 matches for "done"');
     });

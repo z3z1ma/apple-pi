@@ -447,7 +447,7 @@ describe("proactiveThreshold: cooldown", () => {
     mock.emit("session_compact", { type: "session_compact", compactionEntry: {} });
 
     // Wait for cooldown to expire (3s + buffer)
-    await new Promise(r => setTimeout(r, 3200));
+    await new Promise((r) => setTimeout(r, 3200));
 
     // Second trigger should now work
     mock.emit("agent_end", { type: "agent_end", messages: [] });
@@ -619,13 +619,16 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 
     mock.emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        stopReason: "error",
-        errorMessage: "Model stopped because it reached the maximum output token limit. The response may be incomplete.",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          stopReason: "error",
+          errorMessage:
+            "Model stopped because it reached the maximum output token limit. The response may be incomplete.",
+        },
+      ],
     });
 
     expect(mock.captured).toHaveLength(1);
@@ -642,13 +645,15 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 
     mock.emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        stopReason: "error",
-        errorMessage: "Codex request failed",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          stopReason: "error",
+          errorMessage: "Codex request failed",
+        },
+      ],
     });
 
     expect(mock.captured).toHaveLength(0);
@@ -664,13 +669,16 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 
     mock.emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        stopReason: "error",
-        errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          stopReason: "error",
+          errorMessage:
+            "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+        },
+      ],
     });
 
     expect(mock.captured).toHaveLength(1);
@@ -688,14 +696,17 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 
     mock.emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        model: "luna",
-        stopReason: "error",
-        errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          model: "luna",
+          stopReason: "error",
+          errorMessage:
+            "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+        },
+      ],
     });
 
     // pi-core owns the overflow compaction here; pi-vcc defers.
@@ -713,14 +724,17 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 
     mock.emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        model: "luna",
-        stopReason: "error",
-        errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          model: "luna",
+          stopReason: "error",
+          errorMessage:
+            "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+        },
+      ],
     });
 
     // pi-core's _checkCompaction bails on `enabled: false`; pi-vcc must drive.

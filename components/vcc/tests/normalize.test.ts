@@ -1,12 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { normalize } from "../src/core/normalize";
-import {
-  userMsg,
-  assistantText,
-  assistantWithThinking,
-  assistantWithToolCall,
-  toolResult,
-} from "./fixtures";
+import { userMsg, assistantText, assistantWithThinking, assistantWithToolCall, toolResult } from "./fixtures";
 
 describe("normalize", () => {
   it("returns empty for empty input", () => {
@@ -32,30 +26,44 @@ describe("normalize", () => {
     const blocks = normalize([assistantWithThinking("result", "hmm")]);
     expect(blocks).toHaveLength(2);
     expect(blocks[0]).toEqual({
-      kind: "thinking", text: "hmm", redacted: false, sourceIndex: 0,
+      kind: "thinking",
+      text: "hmm",
+      redacted: false,
+      sourceIndex: 0,
     });
     expect(blocks[1]).toEqual({ kind: "assistant", text: "result", sourceIndex: 0 });
   });
 
   it("normalizes tool call", () => {
     const blocks = normalize([assistantWithToolCall("Read", { path: "a.ts" })]);
-    expect(blocks).toEqual([{
-      kind: "tool_call", name: "Read", args: { path: "a.ts" }, sourceIndex: 0,
-    }]);
+    expect(blocks).toEqual([
+      {
+        kind: "tool_call",
+        name: "Read",
+        args: { path: "a.ts" },
+        sourceIndex: 0,
+      },
+    ]);
   });
 
   it("normalizes tool result", () => {
     const blocks = normalize([toolResult("Read", "file contents")]);
-    expect(blocks).toEqual([{
-      kind: "tool_result", name: "Read",
-      text: "file contents", isError: false, sourceIndex: 0,
-    }]);
+    expect(blocks).toEqual([
+      {
+        kind: "tool_result",
+        name: "Read",
+        text: "file contents",
+        isError: false,
+        sourceIndex: 0,
+      },
+    ]);
   });
 
   it("normalizes error tool result", () => {
     const blocks = normalize([toolResult("Edit", "not found", true)]);
     expect(blocks[0]).toMatchObject({
-      kind: "tool_result", isError: true,
+      kind: "tool_result",
+      isError: true,
     });
   });
 
@@ -67,9 +75,7 @@ describe("normalize", () => {
       assistantText("done"),
     ]);
     expect(blocks).toHaveLength(4);
-    expect(blocks.map((b) => b.kind)).toEqual([
-      "user", "tool_call", "tool_result", "assistant",
-    ]);
+    expect(blocks.map((b) => b.kind)).toEqual(["user", "tool_call", "tool_result", "assistant"]);
   });
 
   it("produces image placeholder for user image content", () => {
@@ -90,9 +96,7 @@ describe("normalize", () => {
   it("normalizes bashExecution messages", () => {
     const msg = { role: "bashExecution", command: "ls -la", output: "files", exitCode: 0 } as any;
     const blocks = normalize([msg]);
-    expect(blocks).toEqual([
-      { kind: "bash", command: "ls -la", output: "files", exitCode: 0, sourceIndex: 0 },
-    ]);
+    expect(blocks).toEqual([{ kind: "bash", command: "ls -la", output: "files", exitCode: 0, sourceIndex: 0 }]);
   });
 
   it("skips truly unknown message roles gracefully", () => {

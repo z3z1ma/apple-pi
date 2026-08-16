@@ -1,9 +1,25 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { materializeReviewTree, previewReviewInput, resolveReviewInput, resolveReviewTargetRoot, ReviewInputError, reviewRepositoryRoot } from "../components/review/src/git.js";
+import {
+	materializeReviewTree,
+	previewReviewInput,
+	resolveReviewInput,
+	resolveReviewTargetRoot,
+	ReviewInputError,
+	reviewRepositoryRoot,
+} from "../components/review/src/git.js";
 import { resolveReviewAnchor } from "../components/review/src/location.js";
 import { compileReviewWorkGraph, ReviewGraphError } from "../components/review/src/work-graph.js";
 
@@ -34,11 +50,13 @@ describe("review input", () => {
 		writeFileSync(join(root, "new.ts"), "export const added = true;\n");
 		writeFileSync(join(root, "asset.bin"), Buffer.from([0, 1, 2]));
 		const preview = previewReviewInput(root, { mode: "workspace" });
-		expect(preview.reviewable.map((item) => [item.status, item.path])).toEqual([
-			["modified", "source.ts"],
-			["untracked", "asset.bin"],
-			["untracked", "new.ts"],
-		].filter(([, path]) => path !== "asset.bin"));
+		expect(preview.reviewable.map((item) => [item.status, item.path])).toEqual(
+			[
+				["modified", "source.ts"],
+				["untracked", "asset.bin"],
+				["untracked", "new.ts"],
+			].filter(([, path]) => path !== "asset.bin"),
+		);
 		expect(preview.waived.map(({ item }) => item.path)).toEqual(["asset.bin"]);
 		expect(preview.reviewable.find((item) => item.path === "new.ts")?.diff).toContain("+export const added = true;");
 		expect(preview.inputHash).toMatch(/^[a-f0-9]{64}$/);
@@ -137,22 +155,34 @@ describe("review graph and anchors", () => {
 		writeFileSync(join(root, "source.ts"), "export const value = 2;\n");
 		writeFileSync(join(root, "source.test.ts"), "test('value', () => expect(2).toBe(2));\n");
 		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
-		const graph = compileReviewWorkGraph({
-			summary: "Implementation and test form one behavior change.",
-			groups: [{
-				id: "value-contract",
-				title: "Value contract",
-				objective: "Falsify the changed value behavior and its test oracle.",
-				itemIds: items.map((item) => item.id),
-				contextPaths: [],
-				tier: "fast",
-				rationale: "The test directly specifies the implementation change.",
-			}],
-		}, items, "thorough", 8);
+		const graph = compileReviewWorkGraph(
+			{
+				summary: "Implementation and test form one behavior change.",
+				groups: [
+					{
+						id: "value-contract",
+						title: "Value contract",
+						objective: "Falsify the changed value behavior and its test oracle.",
+						itemIds: items.map((item) => item.id),
+						contextPaths: [],
+						tier: "fast",
+						rationale: "The test directly specifies the implementation change.",
+					},
+				],
+			},
+			items,
+			"thorough",
+			8,
+		);
 		expect(graph.groups[0].tier).toBe("strong");
 		expect(graph.graphHash).toMatch(/^[a-f0-9]{64}$/);
 		try {
-			compileReviewWorkGraph({ summary: "bad", groups: [{ ...graph.groups[0], itemIds: [items[0].id] }] }, items, "balanced", 8);
+			compileReviewWorkGraph(
+				{ summary: "bad", groups: [{ ...graph.groups[0], itemIds: [items[0].id] }] },
+				items,
+				"balanced",
+				8,
+			);
 			throw new Error("expected omitted item failure");
 		} catch (error) {
 			expect(error).toBeInstanceOf(ReviewGraphError);

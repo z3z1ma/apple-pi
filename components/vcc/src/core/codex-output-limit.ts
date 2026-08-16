@@ -14,9 +14,7 @@ const codexErrorMessage = (message: unknown): string | undefined => {
     errorMessage?: unknown;
   };
 
-  const isCodexMessage =
-    candidate.provider === "openai-codex" ||
-    candidate.api === "openai-codex-responses";
+  const isCodexMessage = candidate.provider === "openai-codex" || candidate.api === "openai-codex-responses";
 
   if (
     candidate.role !== "assistant" ||

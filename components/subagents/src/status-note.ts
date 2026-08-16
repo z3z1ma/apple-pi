@@ -20,16 +20,16 @@ import type { AgentRecord } from "./types.js";
  * from a budget cutoff.
  */
 export function getStatusNote(status: string): string {
-  switch (status) {
-    case "stopped":
-      return " (STOPPED BY THE USER before completion — output is partial; the task was NOT finished)";
-    case "aborted":
-      return " (aborted — hit the turn limit before completion; output may be incomplete)";
-    case "steered":
-      return " (wrapped up at the turn limit — output may be partial)";
-    default:
-      return "";
-  }
+	switch (status) {
+		case "stopped":
+			return " (STOPPED BY THE USER before completion — output is partial; the task was NOT finished)";
+		case "aborted":
+			return " (aborted — hit the turn limit before completion; output may be incomplete)";
+		case "steered":
+			return " (wrapped up at the turn limit — output may be partial)";
+		default:
+			return "";
+	}
 }
 
 /**
@@ -65,16 +65,16 @@ export function getStatusNote(status: string): string {
  * Don't add either back without a way to measure it.
  */
 export function getForegroundOutcomeNote(status: string): string {
-  switch (status) {
-    case "stopped":
-      return " (STOPPED BY THE USER — everything the agent produced is above; the task is unfinished)";
-    case "aborted":
-      return " (aborted at the turn limit — everything the agent produced is above; the task is unfinished)";
-    case "steered":
-      return " (wrapped up at the turn limit — everything the agent produced is above; the task may be unfinished)";
-    default:
-      return "";
-  }
+	switch (status) {
+		case "stopped":
+			return " (STOPPED BY THE USER — everything the agent produced is above; the task is unfinished)";
+		case "aborted":
+			return " (aborted at the turn limit — everything the agent produced is above; the task is unfinished)";
+		case "steered":
+			return " (wrapped up at the turn limit — everything the agent produced is above; the task may be unfinished)";
+		default:
+			return "";
+	}
 }
 
 /**
@@ -83,8 +83,8 @@ export function getForegroundOutcomeNote(status: string): string {
  * the run's own turns, so this is never a stale earlier answer (#144).
  */
 export function partialOutputSuffix(record: AgentRecord): string {
-  const partial = record.result?.trim();
-  return partial ? `\n\nPartial output before the failure:\n${partial}` : "";
+	const partial = record.result?.trim();
+	return partial ? `\n\nPartial output before the failure:\n${partial}` : "";
 }
 
 /**
@@ -94,7 +94,5 @@ export function partialOutputSuffix(record: AgentRecord): string {
  * exists; startup failures can create records that cannot be resumed.
  */
 export function continuationSuffix(record: Pick<AgentRecord, "id" | "session">): string {
-  return record.session
-    ? `\n\nAgent ID: ${record.id} (resume with the Agent tool's resume parameter)`
-    : "";
+	return record.session ? `\n\nAgent ID: ${record.id} (resume with the Agent tool's resume parameter)` : "";
 }

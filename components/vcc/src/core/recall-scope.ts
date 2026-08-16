@@ -9,9 +9,7 @@ interface ParsedRecallScope {
 
 const SCOPE_RE = /\bscope:(lineage|all|compaction:(\d+|latest))\b/i;
 
-export const normalizeRecallScope = (
-  scope?: unknown,
-): RecallScope => {
+export const normalizeRecallScope = (scope?: unknown): RecallScope => {
   if (typeof scope !== "string") return "lineage";
   const lower = scope.toLowerCase();
   if (lower === "all") return "all";

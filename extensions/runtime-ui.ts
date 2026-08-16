@@ -1,19 +1,7 @@
-import type {
-	Theme,
-	ToolRenderResultOptions,
-} from "@earendil-works/pi-coding-agent";
-import {
-	truncateToWidth,
-	type Component,
-} from "@earendil-works/pi-tui";
+import type { Theme, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
 
-export type ExecCallStatus =
-	| "queued"
-	| "running"
-	| "succeeded"
-	| "failed"
-	| "aborted"
-	| "timed_out";
+export type ExecCallStatus = "queued" | "running" | "succeeded" | "failed" | "aborted" | "timed_out";
 
 export interface ExecActivityCall {
 	sequence: number;
@@ -47,8 +35,7 @@ interface ExecRenderArgs {
 	display?: { name?: string; description?: string };
 }
 
-const safeText = (value: string): string =>
-	value.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, " ");
+const safeText = (value: string): string => value.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, " ");
 
 const oneLine = (value: unknown, max = 80): string => {
 	if (typeof value !== "string") return "";
@@ -65,11 +52,9 @@ const formatDuration = (milliseconds: number): string => {
 	return `${minutes}m ${seconds % 60}s`;
 };
 
-const spinner = (now = Date.now()): string =>
-	["◐", "◓", "◑", "◒"][Math.floor(now / 140) % 4]!;
+const spinner = (now = Date.now()): string => ["◐", "◓", "◑", "◒"][Math.floor(now / 140) % 4]!;
 
-const terminal = (status: ExecCallStatus): boolean =>
-	status !== "queued" && status !== "running";
+const terminal = (status: ExecCallStatus): boolean => status !== "queued" && status !== "running";
 
 const statusGlyph = (theme: Theme, status: ExecCallStatus): string => {
 	if (status === "succeeded") return theme.fg("success", "✓");
@@ -92,12 +77,10 @@ const resultSummary = (value: unknown): string => {
 	if (typeof value === "string") return oneLine(value, 64);
 	if (!value || typeof value !== "object" || Array.isArray(value)) return "";
 	const result = value as Record<string, unknown>;
-	const text = [result.output, result.text, result.status]
-		.map((candidate) => oneLine(candidate, 64))
-		.find(Boolean) ?? "";
-	const usage = result.usage && typeof result.usage === "object"
-		? result.usage as Record<string, unknown>
-		: undefined;
+	const text =
+		[result.output, result.text, result.status].map((candidate) => oneLine(candidate, 64)).find(Boolean) ?? "";
+	const usage =
+		result.usage && typeof result.usage === "object" ? (result.usage as Record<string, unknown>) : undefined;
 	const tokens = typeof usage?.totalTokens === "number" ? `${usage.totalTokens.toLocaleString()} tok` : "";
 	return [text, tokens].filter(Boolean).join(" · ");
 };
@@ -131,18 +114,16 @@ const visibleCalls = (calls: ExecActivityCall[], expanded: boolean): ExecActivit
 	return calls.filter((call) => selected.has(call.sequence));
 };
 
-export const renderExecCall = (
-	args: ExecRenderArgs,
-	theme: Theme,
-	context: ExecRenderContext,
-): Component => {
+export const renderExecCall = (args: ExecRenderArgs, theme: Theme, context: ExecRenderContext): Component => {
 	const codeLines = args.code.split("\n");
 	const name = oneLine(args.display?.name, 80);
 	const title = [
 		theme.fg("toolTitle", theme.bold("pi_exec")),
 		name ? theme.fg("accent", name) : "",
 		theme.fg("dim", `JavaScript · ${codeLines.length} ${codeLines.length === 1 ? "line" : "lines"}`),
-	].filter(Boolean).join(" ");
+	]
+		.filter(Boolean)
+		.join(" ");
 	const lines = [title];
 	if (args.display?.description) lines.push(theme.fg("muted", oneLine(args.display.description, 140)));
 	const limit = context.expanded ? Math.min(200, codeLines.length) : Math.min(8, codeLines.length);
@@ -154,7 +135,12 @@ export const renderExecCall = (
 	}
 	const hidden = codeLines.length - limit;
 	if (hidden > 0) {
-		lines.push(theme.fg("dim", `… ${hidden} lines hidden${context.expanded ? " (200-line display cap)" : " · ctrl-o to expand"}`));
+		lines.push(
+			theme.fg(
+				"dim",
+				`… ${hidden} lines hidden${context.expanded ? " (200-line display cap)" : " · ctrl-o to expand"}`,
+			),
+		);
 	}
 	return new LineList(lines);
 };
@@ -167,7 +153,11 @@ export const renderExecResult = (
 ): Component => {
 	const activity = result.details?.activity;
 	if (!activity) {
-		const fallback = result.content?.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n") || "";
+		const fallback =
+			result.content
+				?.filter((part) => part.type === "text")
+				.map((part) => part.text ?? "")
+				.join("\n") || "";
 		return new LineList([theme.fg(context.isError ? "error" : "muted", oneLine(fallback, 200))]);
 	}
 	const calls = activity.calls;
@@ -198,10 +188,11 @@ export const renderExecResult = (
 	if (hidden > 0) lines.push(theme.fg("dim", `… ${hidden} calls hidden · ctrl-o to expand`));
 
 	if (!partial && options.expanded) {
-		const output = result.content
-			?.filter((part) => part.type === "text")
-			.flatMap((part) => (part.text ?? "").split("\n"))
-			.slice(0, 20) ?? [];
+		const output =
+			result.content
+				?.filter((part) => part.type === "text")
+				.flatMap((part) => (part.text ?? "").split("\n"))
+				.slice(0, 20) ?? [];
 		if (output.length > 0) {
 			lines.push(theme.fg("dim", "Result:"));
 			lines.push(...output.map((line) => theme.fg("toolOutput", safeText(line))));

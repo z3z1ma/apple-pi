@@ -14,10 +14,7 @@ type AgentModelResolution = {
 	error?: string;
 };
 
-function resolveConfiguredModel(
-	input: string,
-	registry: ModelRegistry,
-): Model<any> | string {
+function resolveConfiguredModel(input: string, registry: ModelRegistry): Model<any> | string {
 	return resolveModel(input, registry as any) as Model<any> | string;
 }
 
@@ -57,9 +54,7 @@ export async function resolveAgentModel(args: {
 
 	if (config?.isDefault === true) {
 		const route = type ? await loadModeSpec(cwd, type, projectTrusted) : undefined;
-		const routeModel = route?.provider && route.modelId
-			? registry.find(route.provider, route.modelId)
-			: undefined;
+		const routeModel = route?.provider && route.modelId ? registry.find(route.provider, route.modelId) : undefined;
 		const thinkingLevel = (route?.thinkingLevel as ThinkingLevel | undefined) ?? configThinking;
 
 		if (routeModel) return { model: routeModel, thinkingLevel };

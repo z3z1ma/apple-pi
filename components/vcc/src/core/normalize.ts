@@ -27,13 +27,15 @@ const normalizeOne = (msg: Message, msgIndex: number): NormalizedBlock[] => {
   }
 
   if (msg.role === "toolResult") {
-    const blocks: NormalizedBlock[] = [{
-      kind: "tool_result",
-      name: msg.toolName,
-      text: sanitize(textOf(msg.content)),
-      isError: msg.isError,
-      sourceIndex: msgIndex,
-    }];
+    const blocks: NormalizedBlock[] = [
+      {
+        kind: "tool_result",
+        name: msg.toolName,
+        text: sanitize(textOf(msg.content)),
+        isError: msg.isError,
+        sourceIndex: msgIndex,
+      },
+    ];
     if (msg.toolName === "fabric_exec" || msg.toolName === "pi_exec") {
       for (const operation of executionOperationsOf((msg as any).details)) {
         blocks.push({
@@ -86,5 +88,4 @@ const normalizeOne = (msg: Message, msgIndex: number): NormalizedBlock[] => {
   return [];
 };
 
-export const normalize = (messages: Message[]): NormalizedBlock[] =>
-  messages.flatMap((msg, i) => normalizeOne(msg, i));
+export const normalize = (messages: Message[]): NormalizedBlock[] => messages.flatMap((msg, i) => normalizeOne(msg, i));

@@ -37,12 +37,14 @@ export const parseDrillDown = (query: string): DrillDownRequest | undefined => {
 const editBody = (args: Record<string, unknown>): string => {
   if (typeof args.content === "string") return args.content;
   if (Array.isArray(args.edits)) {
-    return args.edits.map((edit, index) => {
-      if (!edit || typeof edit !== "object") return `--- edit ${index + 1} ---`;
-      const oldText = typeof (edit as any).oldText === "string" ? (edit as any).oldText : "";
-      const newText = typeof (edit as any).newText === "string" ? (edit as any).newText : "";
-      return `--- edit ${index + 1} ---\n${oldText}\n--- becomes ---\n${newText}`;
-    }).join("\n\n");
+    return args.edits
+      .map((edit, index) => {
+        if (!edit || typeof edit !== "object") return `--- edit ${index + 1} ---`;
+        const oldText = typeof (edit as any).oldText === "string" ? (edit as any).oldText : "";
+        const newText = typeof (edit as any).newText === "string" ? (edit as any).newText : "";
+        return `--- edit ${index + 1} ---\n${oldText}\n--- becomes ---\n${newText}`;
+      })
+      .join("\n\n");
   }
   return contentBearingText(args);
 };
@@ -50,12 +52,7 @@ const editBody = (args: Record<string, unknown>): string => {
 const bytePrefix = (value: string, bytes: number): string =>
   Buffer.from(value, "utf8").subarray(0, bytes).toString("utf8");
 
-const formatContent = (
-  path: string,
-  toolName: string,
-  body: string,
-  request: DrillDownRequest,
-): string => {
+const formatContent = (path: string, toolName: string, body: string, request: DrillDownRequest): string => {
   const heading = `File: ${path}\nTool: ${toolName}`;
   const maxBytes = 50 * 1024;
   if (request.full) {
@@ -73,24 +70,22 @@ const formatContent = (
   }
   const window = lines.slice(offset, end).join("\n");
   const range = request.offset === undefined ? "" : `\nLines ${offset + 1}-${end} (of ${lines.length})`;
-  const continuation = end < lines.length
-    ? `\n\n--- Use #${request.index}:${path}:${end}:${limit} for the next ${limit} lines, or #${request.index}:${path}:full for complete content ---`
-    : "";
+  const continuation =
+    end < lines.length
+      ? `\n\n--- Use #${request.index}:${path}:${end}:${limit} for the next ${limit} lines, or #${request.index}:${path}:full for complete content ---`
+      : "";
   return `${heading}${range}\n\n${window}${continuation}`;
 };
 
 /** Expand file payloads from messages already filtered to the requested recall scope. */
-export const expandEntryFile = (
-  rendered: RenderedEntry[],
-  messages: Message[],
-  request: DrillDownRequest,
-): string => {
+export const expandEntryFile = (rendered: RenderedEntry[], messages: Message[], request: DrillDownRequest): string => {
   const offset = rendered.findIndex((entry) => entry.index === request.index);
   if (offset < 0) return `Entry #${request.index} is not available in the requested scope.`;
   const operations = fileOperationsOf(messages[offset]!);
-  const matches = request.pathPattern === "file"
-    ? operations
-    : operations.filter((operation) => operation.path.includes(request.pathPattern));
+  const matches =
+    request.pathPattern === "file"
+      ? operations
+      : operations.filter((operation) => operation.path.includes(request.pathPattern));
   if (matches.length === 0) {
     return `No file content found in entry #${request.index} for "${request.pathPattern}".`;
   }
@@ -101,10 +96,5 @@ export const expandEntryFile = (
     return `Entry #${request.index} has ${matches.length} matching file operations:\n${options}\n\nUse a more specific #N:path.`;
   }
   const operation = matches[0]!;
-  return formatContent(
-    operation.path,
-    operation.toolName,
-    editBody(operation.args),
-    request,
-  );
+  return formatContent(operation.path, operation.toolName, editBody(operation.args), request);
 };

@@ -18,7 +18,9 @@ export const loadAllMessages = (
   const entries: any[] = [];
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
-    try { entries.push(JSON.parse(line)); } catch {}
+    try {
+      entries.push(JSON.parse(line));
+    } catch {}
   }
   const rendered: RenderedEntry[] = [];
   const rawMessages: Message[] = [];
@@ -27,8 +29,7 @@ export const loadAllMessages = (
     const isMessage = e.type === "message" && e.message;
     if (!isMessage) continue;
 
-    const allowed = (!allowedEntryIds || allowedEntryIds.has(e.id)) &&
-      (!entryFilter || entryFilter(messageIndex));
+    const allowed = (!allowedEntryIds || allowedEntryIds.has(e.id)) && (!entryFilter || entryFilter(messageIndex));
     if (allowed) {
       rendered.push(renderMessage(e.message, messageIndex, full));
       rawMessages.push(e.message);

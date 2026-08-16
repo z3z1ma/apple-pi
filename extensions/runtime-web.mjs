@@ -1,24 +1,25 @@
 const ok = (value) => JSON.stringify({ ok: true, value });
-const failed = (error) => JSON.stringify({
-  ok: false,
-  error: {
-    name: error instanceof Error ? error.name : "Error",
-    message: error instanceof Error ? error.message : String(error),
-  },
-});
+const failed = (error) =>
+	JSON.stringify({
+		ok: false,
+		error: {
+			name: error instanceof Error ? error.name : "Error",
+			message: error instanceof Error ? error.message : String(error),
+		},
+	});
 
 const urlValue = (url) => ({
-  href: url.href,
-  origin: url.origin,
-  protocol: url.protocol,
-  username: url.username,
-  password: url.password,
-  host: url.host,
-  hostname: url.hostname,
-  port: url.port,
-  pathname: url.pathname,
-  search: url.search,
-  hash: url.hash,
+	href: url.href,
+	origin: url.origin,
+	protocol: url.protocol,
+	username: url.username,
+	password: url.password,
+	host: url.host,
+	hostname: url.hostname,
+	port: url.port,
+	pathname: url.pathname,
+	search: url.search,
+	hash: url.hash,
 });
 
 /**
@@ -27,107 +28,147 @@ const urlValue = (url) => ({
  * constructors never become an escape hatch from the context.
  */
 export function installWebHostHelpers(sandbox) {
-  const decoders = new Map();
-  let nextDecoderId = 1;
+	const decoders = new Map();
+	let nextDecoderId = 1;
 
-  sandbox.__webSync = (requestText) => {
-    try {
-      const request = JSON.parse(String(requestText));
-      const args = request.args ?? {};
-      switch (request.type) {
-        case "atob":
-          return ok(globalThis.atob(String(args.value)));
-        case "btoa":
-          return ok(globalThis.btoa(String(args.value)));
-        case "textEncode": {
-          const bytes = new TextEncoder().encode(String(args.value));
-          return ok(Buffer.from(bytes).toString("base64"));
-        }
-        case "textEncodeInto": {
-          const destination = new Uint8Array(Math.max(0, Number(args.length) || 0));
-          const result = new TextEncoder().encodeInto(String(args.value), destination);
-          return ok({
-            read: result.read,
-            written: result.written,
-            bytes: Buffer.from(destination.subarray(0, result.written)).toString("base64"),
-          });
-        }
-        case "textDecoderCreate": {
-          const decoder = new TextDecoder(args.label, args.options);
-          const id = nextDecoderId++;
-          decoders.set(id, decoder);
-          return ok({
-            id,
-            encoding: decoder.encoding,
-            fatal: decoder.fatal,
-            ignoreBOM: decoder.ignoreBOM,
-          });
-        }
-        case "textDecode": {
-          const decoder = decoders.get(Number(args.id));
-          if (!decoder) throw new TypeError("Unknown TextDecoder instance");
-          const bytes = Buffer.from(String(args.bytes ?? ""), "base64");
-          const decoded = decoder.decode(bytes, args.options);
-          return ok({ bytes: Buffer.from(new TextEncoder().encode(decoded)).toString("base64") });
-        }
-        case "url": {
-          const url = args.base === undefined
-            ? new URL(String(args.input))
-            : new URL(String(args.input), String(args.base));
-          if (Array.isArray(args.set)) {
-            const [property, value] = args.set;
-            if (!new Set([
-              "href", "protocol", "username", "password", "host", "hostname",
-              "port", "pathname", "search", "hash",
-            ]).has(property)) throw new TypeError(`Cannot set URL property ${String(property)}`);
-            url[property] = String(value);
-          }
-          return ok(urlValue(url));
-        }
-        case "urlCanParse":
-          return ok(URL.canParse(String(args.input), args.base === undefined ? undefined : String(args.base)));
-        case "searchParams": {
-          const params = args.initPairs
-            ? new URLSearchParams(args.initPairs)
-            : new URLSearchParams(String(args.query ?? ""));
-          const values = Array.isArray(args.values) ? args.values.map(String) : [];
-          let result;
-          switch (args.operation) {
-            case "append": params.append(values[0], values[1]); break;
-            case "delete": values.length > 1 ? params.delete(values[0], values[1]) : params.delete(values[0]); break;
-            case "get": result = params.get(values[0]); break;
-            case "getAll": result = params.getAll(values[0]); break;
-            case "has": result = values.length > 1 ? params.has(values[0], values[1]) : params.has(values[0]); break;
-            case "set": params.set(values[0], values[1]); break;
-            case "sort": params.sort(); break;
-            case "snapshot": break;
-            default: throw new TypeError(`Unknown URLSearchParams operation ${String(args.operation)}`);
-          }
-          return ok({ query: params.toString(), pairs: [...params], result });
-        }
-        case "headers": {
-          const headers = new Headers(args.pairs ?? []);
-          const values = Array.isArray(args.values) ? args.values.map(String) : [];
-          let result;
-          switch (args.operation) {
-            case "append": headers.append(values[0], values[1]); break;
-            case "delete": headers.delete(values[0]); break;
-            case "get": result = headers.get(values[0]); break;
-            case "getSetCookie": result = headers.getSetCookie(); break;
-            case "has": result = headers.has(values[0]); break;
-            case "set": headers.set(values[0], values[1]); break;
-            case "snapshot": break;
-            default: throw new TypeError(`Unknown Headers operation ${String(args.operation)}`);
-          }
-          return ok({ pairs: [...headers], result });
-        }
-        default:
-          throw new TypeError(`Unknown web helper ${String(request.type)}`);
-      }
-    } catch (error) {
-      return failed(error);
-    }
-  };
+	sandbox.__webSync = (requestText) => {
+		try {
+			const request = JSON.parse(String(requestText));
+			const args = request.args ?? {};
+			switch (request.type) {
+				case "atob":
+					return ok(globalThis.atob(String(args.value)));
+				case "btoa":
+					return ok(globalThis.btoa(String(args.value)));
+				case "textEncode": {
+					const bytes = new TextEncoder().encode(String(args.value));
+					return ok(Buffer.from(bytes).toString("base64"));
+				}
+				case "textEncodeInto": {
+					const destination = new Uint8Array(Math.max(0, Number(args.length) || 0));
+					const result = new TextEncoder().encodeInto(String(args.value), destination);
+					return ok({
+						read: result.read,
+						written: result.written,
+						bytes: Buffer.from(destination.subarray(0, result.written)).toString("base64"),
+					});
+				}
+				case "textDecoderCreate": {
+					const decoder = new TextDecoder(args.label, args.options);
+					const id = nextDecoderId++;
+					decoders.set(id, decoder);
+					return ok({
+						id,
+						encoding: decoder.encoding,
+						fatal: decoder.fatal,
+						ignoreBOM: decoder.ignoreBOM,
+					});
+				}
+				case "textDecode": {
+					const decoder = decoders.get(Number(args.id));
+					if (!decoder) throw new TypeError("Unknown TextDecoder instance");
+					const bytes = Buffer.from(String(args.bytes ?? ""), "base64");
+					const decoded = decoder.decode(bytes, args.options);
+					return ok({ bytes: Buffer.from(new TextEncoder().encode(decoded)).toString("base64") });
+				}
+				case "url": {
+					const url =
+						args.base === undefined ? new URL(String(args.input)) : new URL(String(args.input), String(args.base));
+					if (Array.isArray(args.set)) {
+						const [property, value] = args.set;
+						if (
+							!new Set([
+								"href",
+								"protocol",
+								"username",
+								"password",
+								"host",
+								"hostname",
+								"port",
+								"pathname",
+								"search",
+								"hash",
+							]).has(property)
+						)
+							throw new TypeError(`Cannot set URL property ${String(property)}`);
+						url[property] = String(value);
+					}
+					return ok(urlValue(url));
+				}
+				case "urlCanParse":
+					return ok(URL.canParse(String(args.input), args.base === undefined ? undefined : String(args.base)));
+				case "searchParams": {
+					const params = args.initPairs
+						? new URLSearchParams(args.initPairs)
+						: new URLSearchParams(String(args.query ?? ""));
+					const values = Array.isArray(args.values) ? args.values.map(String) : [];
+					let result;
+					switch (args.operation) {
+						case "append":
+							params.append(values[0], values[1]);
+							break;
+						case "delete":
+							values.length > 1 ? params.delete(values[0], values[1]) : params.delete(values[0]);
+							break;
+						case "get":
+							result = params.get(values[0]);
+							break;
+						case "getAll":
+							result = params.getAll(values[0]);
+							break;
+						case "has":
+							result = values.length > 1 ? params.has(values[0], values[1]) : params.has(values[0]);
+							break;
+						case "set":
+							params.set(values[0], values[1]);
+							break;
+						case "sort":
+							params.sort();
+							break;
+						case "snapshot":
+							break;
+						default:
+							throw new TypeError(`Unknown URLSearchParams operation ${String(args.operation)}`);
+					}
+					return ok({ query: params.toString(), pairs: [...params], result });
+				}
+				case "headers": {
+					const headers = new Headers(args.pairs ?? []);
+					const values = Array.isArray(args.values) ? args.values.map(String) : [];
+					let result;
+					switch (args.operation) {
+						case "append":
+							headers.append(values[0], values[1]);
+							break;
+						case "delete":
+							headers.delete(values[0]);
+							break;
+						case "get":
+							result = headers.get(values[0]);
+							break;
+						case "getSetCookie":
+							result = headers.getSetCookie();
+							break;
+						case "has":
+							result = headers.has(values[0]);
+							break;
+						case "set":
+							headers.set(values[0], values[1]);
+							break;
+						case "snapshot":
+							break;
+						default:
+							throw new TypeError(`Unknown Headers operation ${String(args.operation)}`);
+					}
+					return ok({ pairs: [...headers], result });
+				}
+				default:
+					throw new TypeError(`Unknown web helper ${String(request.type)}`);
+			}
+		} catch (error) {
+			return failed(error);
+		}
+	};
 }
 
 /** Source evaluated inside the VM context. It expects call, cancelCall, webSync,

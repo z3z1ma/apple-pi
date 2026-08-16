@@ -41,11 +41,7 @@ const makeAssistantMsg = (text: string): Message => ({
   stopReason: "stop",
 });
 
-const makeToolCall = (
-  name: string,
-  id: string,
-  args: Record<string, unknown>,
-): Message => ({
+const makeToolCall = (name: string, id: string, args: Record<string, unknown>): Message => ({
   role: "assistant",
   content: [
     { type: "text", text: "" },
@@ -55,19 +51,15 @@ const makeToolCall = (
   stopReason: "toolUse",
 });
 
-const makeToolResult = (
-  toolCallId: string,
-  toolName: string,
-  content: string,
-  isError = false,
-): Message => ({
-  role: "toolResult",
-  toolCallId,
-  toolName,
-  content: [{ type: "text", text: content }],
-  isError,
-  timestamp: ts,
-} as any);
+const makeToolResult = (toolCallId: string, toolName: string, content: string, isError = false): Message =>
+  ({
+    role: "toolResult",
+    toolCallId,
+    toolName,
+    content: [{ type: "text", text: content }],
+    isError,
+    timestamp: ts,
+  }) as any;
 
 // ── Realistic conversation rounds ──
 
@@ -83,26 +75,206 @@ interface RoundSpec {
 }
 
 const ROUNDS: RoundSpec[] = [
-  { goal: "Fix login bug", cause: "refreshToken() returns early on empty sessions", resolution: "added session check in refreshToken", file1: "src/auth.ts", file2: "src/session.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Fix signup validation", cause: "email validator rejects valid addresses with + signs", resolution: "switched to RFC 5322 regex", file1: "src/validators.ts", file2: "src/users.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Add password reset", cause: "users cant recover accounts without admin help", resolution: "added reset flow with rate limiter", file1: "src/reset.ts", file2: "src/middleware.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Fix race condition in token refresh", cause: "concurrent requests double-refresh the token", resolution: "added mutex lock around refresh path", file1: "src/auth.ts", file2: "src/token.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Add rate limiter to API", cause: "unauthenticated endpoints are being scraped", resolution: "added sliding window rate limiter middleware", file1: "src/middleware.ts", file2: "src/config.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Migrate to PostgreSQL", cause: "SQLite cant handle concurrent writes", resolution: "swapped driver to pg, updated connection pool", file1: "src/db.ts", file2: "src/config.ts", hasCommit: true, testPasses: false, errorInOutput: true },
-  { goal: "Fix flaky integration tests", cause: "tests share state via global singleton", resolution: "isolated test fixtures per suite", file1: "tests/auth.test.ts", file2: "tests/setup.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Refactor auth middleware", cause: "middleware has 300-line function doing auth + routing + logging", resolution: "split into auth, routing, logging layers", file1: "src/middleware.ts", file2: "src/logger.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Extract session handler", cause: "session logic mixed into route handlers", resolution: "extracted SessionHandler class", file1: "src/session.ts", file2: "src/routes.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Add OAuth2 integration", cause: "users want Google SSO login", resolution: "added OAuth2 strategy with PKCE flow", file1: "src/oauth.ts", file2: "src/auth.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Fix token expiry on slow connections", cause: "token expires during long API calls", resolution: "added client-side token refresh with 30s buffer", file1: "src/token.ts", file2: "src/api.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Add crypto utilities", cause: "password hashing uses outdated bcrypt rounds", resolution: "migrated to argon2id with adaptive cost", file1: "src/crypto.ts", file2: "src/validators.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Set up structured logging", cause: "console.log calls scattered everywhere, no correlation IDs", resolution: "added pino logger with request ID middleware", file1: "src/logger.ts", file2: "src/middleware.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Fix memory leak in connection pool", cause: "connections not returned to pool on error paths", resolution: "added try/finally release in all query paths", file1: "src/db.ts", file2: "src/services.ts", hasCommit: true, testPasses: false, errorInOutput: true },
-  { goal: "Add input validators for API", cause: "API accepts malformed payloads causing 500s downstream", resolution: "added zod schemas for all endpoints", file1: "src/validators.ts", file2: "src/routes.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Implement caching layer", cause: "repeated DB queries for user profile on every request", resolution: "added Redis cache with TTL-based invalidation", file1: "src/cache.ts", file2: "src/services.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Add type definitions", cause: "any-casts causing runtime errors in production", resolution: "added strict interfaces for all service boundaries", file1: "src/types.ts", file2: "src/models.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Fix error handling utilities", cause: "errors swallowed silently, no stack traces in logs", resolution: "added AppError class with cause chain", file1: "src/errors.ts", file2: "src/logger.ts", hasCommit: true, testPasses: true, errorInOutput: false },
-  { goal: "Build request handlers", cause: "route handlers directly call DB, no abstraction", resolution: "extracted handler layer with dependency injection", file1: "src/handlers.ts", file2: "src/services.ts", hasCommit: false, testPasses: true, errorInOutput: false },
-  { goal: "Fix CSRF protection", cause: "CSRF token not validated on mutation requests", resolution: "added double-submit cookie pattern", file1: "src/middleware.ts", file2: "src/routes.ts", hasCommit: true, testPasses: true, errorInOutput: false },
+  {
+    goal: "Fix login bug",
+    cause: "refreshToken() returns early on empty sessions",
+    resolution: "added session check in refreshToken",
+    file1: "src/auth.ts",
+    file2: "src/session.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix signup validation",
+    cause: "email validator rejects valid addresses with + signs",
+    resolution: "switched to RFC 5322 regex",
+    file1: "src/validators.ts",
+    file2: "src/users.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Add password reset",
+    cause: "users cant recover accounts without admin help",
+    resolution: "added reset flow with rate limiter",
+    file1: "src/reset.ts",
+    file2: "src/middleware.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix race condition in token refresh",
+    cause: "concurrent requests double-refresh the token",
+    resolution: "added mutex lock around refresh path",
+    file1: "src/auth.ts",
+    file2: "src/token.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Add rate limiter to API",
+    cause: "unauthenticated endpoints are being scraped",
+    resolution: "added sliding window rate limiter middleware",
+    file1: "src/middleware.ts",
+    file2: "src/config.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Migrate to PostgreSQL",
+    cause: "SQLite cant handle concurrent writes",
+    resolution: "swapped driver to pg, updated connection pool",
+    file1: "src/db.ts",
+    file2: "src/config.ts",
+    hasCommit: true,
+    testPasses: false,
+    errorInOutput: true,
+  },
+  {
+    goal: "Fix flaky integration tests",
+    cause: "tests share state via global singleton",
+    resolution: "isolated test fixtures per suite",
+    file1: "tests/auth.test.ts",
+    file2: "tests/setup.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Refactor auth middleware",
+    cause: "middleware has 300-line function doing auth + routing + logging",
+    resolution: "split into auth, routing, logging layers",
+    file1: "src/middleware.ts",
+    file2: "src/logger.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Extract session handler",
+    cause: "session logic mixed into route handlers",
+    resolution: "extracted SessionHandler class",
+    file1: "src/session.ts",
+    file2: "src/routes.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Add OAuth2 integration",
+    cause: "users want Google SSO login",
+    resolution: "added OAuth2 strategy with PKCE flow",
+    file1: "src/oauth.ts",
+    file2: "src/auth.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix token expiry on slow connections",
+    cause: "token expires during long API calls",
+    resolution: "added client-side token refresh with 30s buffer",
+    file1: "src/token.ts",
+    file2: "src/api.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Add crypto utilities",
+    cause: "password hashing uses outdated bcrypt rounds",
+    resolution: "migrated to argon2id with adaptive cost",
+    file1: "src/crypto.ts",
+    file2: "src/validators.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Set up structured logging",
+    cause: "console.log calls scattered everywhere, no correlation IDs",
+    resolution: "added pino logger with request ID middleware",
+    file1: "src/logger.ts",
+    file2: "src/middleware.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix memory leak in connection pool",
+    cause: "connections not returned to pool on error paths",
+    resolution: "added try/finally release in all query paths",
+    file1: "src/db.ts",
+    file2: "src/services.ts",
+    hasCommit: true,
+    testPasses: false,
+    errorInOutput: true,
+  },
+  {
+    goal: "Add input validators for API",
+    cause: "API accepts malformed payloads causing 500s downstream",
+    resolution: "added zod schemas for all endpoints",
+    file1: "src/validators.ts",
+    file2: "src/routes.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Implement caching layer",
+    cause: "repeated DB queries for user profile on every request",
+    resolution: "added Redis cache with TTL-based invalidation",
+    file1: "src/cache.ts",
+    file2: "src/services.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Add type definitions",
+    cause: "any-casts causing runtime errors in production",
+    resolution: "added strict interfaces for all service boundaries",
+    file1: "src/types.ts",
+    file2: "src/models.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix error handling utilities",
+    cause: "errors swallowed silently, no stack traces in logs",
+    resolution: "added AppError class with cause chain",
+    file1: "src/errors.ts",
+    file2: "src/logger.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Build request handlers",
+    cause: "route handlers directly call DB, no abstraction",
+    resolution: "extracted handler layer with dependency injection",
+    file1: "src/handlers.ts",
+    file2: "src/services.ts",
+    hasCommit: false,
+    testPasses: true,
+    errorInOutput: false,
+  },
+  {
+    goal: "Fix CSRF protection",
+    cause: "CSRF token not validated on mutation requests",
+    resolution: "added double-submit cookie pattern",
+    file1: "src/middleware.ts",
+    file2: "src/routes.ts",
+    hasCommit: true,
+    testPasses: true,
+    errorInOutput: false,
+  },
 ];
 
 const makeRound = (roundIdx: number): Message[] => {
@@ -135,14 +307,16 @@ const makeRound = (roundIdx: number): Message[] => {
   if (spec.hasCommit) {
     msgs.push(
       makeToolCall("bash", `r${roundIdx}-6`, { command: `git commit -m "feat: ${spec.goal.toLowerCase()}" ` }),
-      makeToolResult(`r${roundIdx}-6`, "bash", `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`),
+      makeToolResult(
+        `r${roundIdx}-6`,
+        "bash",
+        `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`,
+      ),
     );
   }
 
   if (spec.testPasses) {
-    msgs.push(
-      makeAssistantMsg(`All tests pass. ${spec.resolution} is working correctly.`),
-    );
+    msgs.push(makeAssistantMsg(`All tests pass. ${spec.resolution} is working correctly.`));
   }
 
   return msgs;
@@ -154,23 +328,47 @@ const isCausalChainPresent = (text: string, spec: RoundSpec): boolean => {
   const causeWords = spec.cause
     .replace(/[()]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w));
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    );
 
   const resolutionWords = spec.resolution
     .replace(/[()]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w));
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    );
 
   // Direct text presence
-  const hasCauseDirect = causeWords.some(w => text.toLowerCase().includes(w.toLowerCase()));
-  const hasResolutionDirect = resolutionWords.some(w => text.toLowerCase().includes(w.toLowerCase()));
+  const hasCauseDirect = causeWords.some((w) => text.toLowerCase().includes(w.toLowerCase()));
+  const hasResolutionDirect = resolutionWords.some((w) => text.toLowerCase().includes(w.toLowerCase()));
 
   if (hasCauseDirect && hasResolutionDirect) return true;
 
   // Causal breadcrumb: ...recall: file|resolution-key
   const file1Short = spec.file1.split("/").pop() ?? spec.file1;
-  const resolutionKeyWords = spec.resolution.split(/\s+/).filter(w => w.length > 3).slice(0, 2);
-  const causeKeyWords = spec.cause.split(/\s+/).filter(w => w.length > 3 && !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(w)).slice(0, 2);
+  const resolutionKeyWords = spec.resolution
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 2);
+  const causeKeyWords = spec.cause
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !/^(the|this|that|with|from|into|over|under|before|after|during|because|since|where|which|their|these|those|been|being|have|has|had|will|would|could|should|without|through|between)$/i.test(
+          w,
+        ),
+    )
+    .slice(0, 2);
 
   for (const line of text.split("\n")) {
     if (!line.includes("...recall:")) continue;
@@ -181,8 +379,8 @@ const isCausalChainPresent = (text: string, spec: RoundSpec): boolean => {
         const [filePart, keyPart] = bcPart.split("|");
         const hasFile = filePart.includes(file1Short);
         const keyWords = keyPart.split("-");
-        const hasResKey = resolutionKeyWords.some(rw => keyWords.some(kw => kw.toLowerCase() === rw.toLowerCase()));
-        const hasCauKey = causeKeyWords.some(cw => keyWords.some(kw => kw.toLowerCase() === cw.toLowerCase()));
+        const hasResKey = resolutionKeyWords.some((rw) => keyWords.some((kw) => kw.toLowerCase() === rw.toLowerCase()));
+        const hasCauKey = causeKeyWords.some((cw) => keyWords.some((kw) => kw.toLowerCase() === cw.toLowerCase()));
         if ((hasResKey || hasCauKey) && (hasFile || !hasCauseDirect)) return true;
       }
     }
@@ -227,7 +425,11 @@ const makeRoundV1 = (roundIdx: number): Message[] => {
   if (spec.hasCommit) {
     msgs.push(
       makeToolCall("bash", `r${roundIdx}-6`, { command: `git commit -m "feat: ${spec.goal.toLowerCase()}" ` }),
-      makeToolResult(`r${roundIdx}-6`, "bash", `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`),
+      makeToolResult(
+        `r${roundIdx}-6`,
+        "bash",
+        `[main abc${String(roundIdx).padStart(4, "0")}] feat: ${spec.goal.toLowerCase()}`,
+      ),
     );
   }
 
@@ -273,7 +475,10 @@ const computeMetrics = (rounds: number, makeRoundFn: (i: number) => Message[]): 
     // on the same Earlier Turns line?)
     let linked = 0;
     for (const s of allSpecs) {
-      const goalKey = s.goal.split(/\s+/).filter(w => w.length > 3).slice(0, 2);
+      const goalKey = s.goal
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+        .slice(0, 2);
       const fileShort = s.file1.split("/").pop() ?? s.file1;
       // Check Earlier Turns
       const etIdx = result.indexOf("[Earlier Turns]");
@@ -283,9 +488,12 @@ const computeMetrics = (rounds: number, makeRoundFn: (i: number) => Message[]): 
         const block = after.slice(0, end > 0 ? end : after.length);
         for (const line of block.split("\n")) {
           if (line.startsWith("- ...recall:")) continue;
-          const hasGoal = goalKey.some(kw => line.toLowerCase().includes(kw.toLowerCase()));
+          const hasGoal = goalKey.some((kw) => line.toLowerCase().includes(kw.toLowerCase()));
           const hasFile = line.includes(s.file1) || line.includes(fileShort);
-          if (hasGoal && hasFile) { linked++; break; }
+          if (hasGoal && hasFile) {
+            linked++;
+            break;
+          }
         }
       }
     }
@@ -336,13 +544,17 @@ describe("causal v2 comparison", () => {
     console.log("\nV2 FULL DEGRADATION CURVE:");
     console.log("Round | Causal | Linkage | Size");
     for (const m of v2Metrics) {
-      console.log(`  ${String(m.round).padStart(2)}   | ${pct(m.causalChainRate)} | ${pct(m.linkageRate)} | ${String(m.outputChars).padStart(5)}`);
+      console.log(
+        `  ${String(m.round).padStart(2)}   | ${pct(m.causalChainRate)} | ${pct(m.linkageRate)} | ${String(m.outputChars).padStart(5)}`,
+      );
     }
 
     console.log("\nV1 FULL DEGRADATION CURVE:");
     console.log("Round | Causal | Linkage | Size");
     for (const m of v1Metrics) {
-      console.log(`  ${String(m.round).padStart(2)}   | ${pct(m.causalChainRate)} | ${pct(m.linkageRate)} | ${String(m.outputChars).padStart(5)}`);
+      console.log(
+        `  ${String(m.round).padStart(2)}   | ${pct(m.causalChainRate)} | ${pct(m.linkageRate)} | ${String(m.outputChars).padStart(5)}`,
+      );
     }
 
     // Print the actual V2 Earlier Turns section for comparison

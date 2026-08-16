@@ -1,11 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type {
-	ReviewBudgets,
-	ReviewProfile,
-	ReviewRoleEnvelope,
-	ReviewSource,
-} from "./types.js";
+import type { ReviewBudgets, ReviewProfile, ReviewRoleEnvelope, ReviewSource } from "./types.js";
 
 /** Package-owned ceilings. Ordinary callers never configure these values. */
 export const REVIEW_PACKAGE_MAXIMA: Readonly<ReviewBudgets> = {
@@ -64,7 +59,8 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 function whole(value: number | undefined, fallback: number, maximum: number): number {
 	if (value === undefined) return fallback;
-	if (!Number.isInteger(value) || value < 1 || value > maximum) throw new Error(`Internal review constraint must be an integer between 1 and ${maximum}`);
+	if (!Number.isInteger(value) || value < 1 || value > maximum)
+		throw new Error(`Internal review constraint must be an integer between 1 and ${maximum}`);
 	return value;
 }
 
@@ -94,7 +90,11 @@ function modelNumber(value: number | undefined, fallback: number): number {
 	return Number.isFinite(value) && value! > 0 ? Math.floor(value!) : fallback;
 }
 
-function outputReserve(stage: ReviewRoleEnvelope["stage"], profile: ReviewProfile, modelMaxOutputTokens: number): number {
+function outputReserve(
+	stage: ReviewRoleEnvelope["stage"],
+	profile: ReviewProfile,
+	modelMaxOutputTokens: number,
+): number {
 	const base = stage === "reviewer" ? (profile === "thorough" ? 12_000 : 8_000) : 4_000;
 	return Math.max(1_024, Math.min(base, modelMaxOutputTokens));
 }
@@ -148,10 +148,14 @@ export function deriveRoleEnvelope(input: {
 	const reservedOutputTokens = outputReserve(input.stage, input.profile, modelMaxOutputTokens);
 	const contextSafe = contextWindow - estimatedInputTokens - reservedOutputTokens;
 	if (promptBytes > input.budgets.maxPromptBytes) {
-		throw new Error(`${input.stage} rendered prompt is ${promptBytes} bytes; policy maximum is ${input.budgets.maxPromptBytes}`);
+		throw new Error(
+			`${input.stage} rendered prompt is ${promptBytes} bytes; policy maximum is ${input.budgets.maxPromptBytes}`,
+		);
 	}
 	if (contextSafe < 1) {
-		throw new Error(`${input.stage} rendered prompt needs ${estimatedInputTokens} input tokens plus ${reservedOutputTokens} reserved output tokens, exceeding model context window ${contextWindow}`);
+		throw new Error(
+			`${input.stage} rendered prompt needs ${estimatedInputTokens} input tokens plus ${reservedOutputTokens} reserved output tokens, exceeding model context window ${contextWindow}`,
+		);
 	}
 	const remainingTokens = input.budgets.maxTokens - input.totalTokens;
 	// Context capacity is per request. A fresh role normally needs at least an
@@ -165,11 +169,12 @@ export function deriveRoleEnvelope(input: {
 	}
 	const remainingSeconds = input.budgets.timeoutSeconds - input.elapsedSeconds;
 	if (remainingSeconds < 1) throw new Error(`${input.stage} cannot start because the elapsed-time policy is exhausted`);
-	const maxTurns = input.stage === "planner"
-		? input.budgets.plannerMaxTurns
-		: input.stage === "reviewer"
-			? input.budgets.reviewerMaxTurns
-			: input.budgets.verifierMaxTurns;
+	const maxTurns =
+		input.stage === "planner"
+			? input.budgets.plannerMaxTurns
+			: input.stage === "reviewer"
+				? input.budgets.reviewerMaxTurns
+				: input.budgets.verifierMaxTurns;
 	return {
 		stage: input.stage,
 		...(input.groupId && { groupId: input.groupId }),
@@ -192,7 +197,11 @@ export function deriveRoleEnvelope(input: {
 	};
 }
 
-export function reviewShapeFrom(source: ReviewSource, items: Array<{ diff: string; binary: boolean }>, binaryWaivers: number): SealedReviewShape {
+export function reviewShapeFrom(
+	source: ReviewSource,
+	items: Array<{ diff: string; binary: boolean }>,
+	binaryWaivers: number,
+): SealedReviewShape {
 	void source;
 	return {
 		selectedItems: items.length,

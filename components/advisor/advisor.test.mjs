@@ -159,7 +159,10 @@ test("formatAdvisoryContent: finalAnswer appends self-contained-final-answer gui
 	assert.match(c, /self-contained final answer/);
 	assert.match(c, /do NOT write a terse follow-up/);
 	// absent without the option
-	assert.doesNotMatch(A.formatAdvisoryContent([{ note: "fix bug", severity: "blocker" }]), /self-contained final answer/);
+	assert.doesNotMatch(
+		A.formatAdvisoryContent([{ note: "fix bug", severity: "blocker" }]),
+		/self-contained final answer/,
+	);
 });
 
 test("formatTurnDelta: includes user, thinking, text, tool call + result", () => {
@@ -176,7 +179,16 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 			stopReason: "toolUse",
 			timestamp: 1,
 		},
-		toolResults: [{ role: "toolResult", toolCallId: "1", toolName: "write", content: [{ type: "text", text: "wrote a.js" }], isError: false, timestamp: 2 }],
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "1",
+				toolName: "write",
+				content: [{ type: "text", text: "wrote a.js" }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
 	});
 	assert.match(md, /#### User\n\ndo the thing/);
 	assert.match(md, /<thinking>\nlet me think\n<\/thinking>/);
@@ -250,7 +262,12 @@ test("formatTurnDelta: a failed edit (no diff) keeps its attempted args for diag
 		assistant: {
 			role: "assistant",
 			content: [
-				{ type: "toolCall", id: "9", name: "edit", arguments: { path: "f.py", edits: [{ oldText: "needle that did not match", newText: "x" }] } },
+				{
+					type: "toolCall",
+					id: "9",
+					name: "edit",
+					arguments: { path: "f.py", edits: [{ oldText: "needle that did not match", newText: "x" }] },
+				},
 			],
 			usage: {},
 			stopReason: "toolUse",
@@ -258,7 +275,14 @@ test("formatTurnDelta: a failed edit (no diff) keeps its attempted args for diag
 		},
 		// failed edit: error result, NO details.diff
 		toolResults: [
-			{ role: "toolResult", toolCallId: "9", toolName: "edit", content: [{ type: "text", text: "Error: oldText not found" }], isError: true, timestamp: 2 },
+			{
+				role: "toolResult",
+				toolCallId: "9",
+				toolName: "edit",
+				content: [{ type: "text", text: "Error: oldText not found" }],
+				isError: true,
+				timestamp: 2,
+			},
 		],
 	});
 	assert.ok(md.includes("needle that did not match"), "attempted oldText must survive when there is no diff");
@@ -272,13 +296,27 @@ test("formatTurnDelta: a multi-line failed edit preserves real newlines in old/n
 		assistant: {
 			role: "assistant",
 			content: [
-				{ type: "toolCall", id: "9", name: "edit", arguments: { path: "f.py", edits: [{ oldText, newText: "def foo():\n    return 2" }] } },
+				{
+					type: "toolCall",
+					id: "9",
+					name: "edit",
+					arguments: { path: "f.py", edits: [{ oldText, newText: "def foo():\n    return 2" }] },
+				},
 			],
 			usage: {},
 			stopReason: "toolUse",
 			timestamp: 1,
 		},
-		toolResults: [{ role: "toolResult", toolCallId: "9", toolName: "edit", content: [{ type: "text", text: "Error: not found" }], isError: true, timestamp: 2 }],
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "9",
+				toolName: "edit",
+				content: [{ type: "text", text: "Error: not found" }],
+				isError: true,
+				timestamp: 2,
+			},
+		],
 	});
 	assert.ok(md.includes(oldText), "multi-line oldText preserved verbatim");
 	assert.ok(!md.includes("def foo():\\n"), "no \\n escaping in failed-edit args");
@@ -307,7 +345,12 @@ test("formatTurnDelta: an ERROR result with a diff keeps args + error text (untr
 		assistant: {
 			role: "assistant",
 			content: [
-				{ type: "toolCall", id: "7", name: "multiedit", arguments: { path: "g.py", edits: [{ oldText: "attempted needle", newText: "z" }] } },
+				{
+					type: "toolCall",
+					id: "7",
+					name: "multiedit",
+					arguments: { path: "g.py", edits: [{ oldText: "attempted needle", newText: "z" }] },
+				},
 			],
 			usage: {},
 			stopReason: "toolUse",
@@ -343,7 +386,16 @@ test("formatTurnDelta: feeds large content verbatim (no truncation, no markers)"
 			stopReason: "toolUse",
 			timestamp: 1,
 		},
-		toolResults: [{ role: "toolResult", toolCallId: "1", toolName: "bash", content: [{ type: "text", text: big }], isError: false, timestamp: 2 }],
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "1",
+				toolName: "bash",
+				content: [{ type: "text", text: big }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
 	});
 	assert.ok(!md.includes("truncated"), "nothing should be truncated");
 	assert.ok(md.includes(big), "content rides verbatim");
@@ -351,7 +403,16 @@ test("formatTurnDelta: feeds large content verbatim (no truncation, no markers)"
 
 test("formatTurnDelta: marks tool errors", () => {
 	const md = renderDelta({
-		toolResults: [{ role: "toolResult", toolCallId: "1", toolName: "bash", content: [{ type: "text", text: "boom" }], isError: true, timestamp: 2 }],
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "1",
+				toolName: "bash",
+				content: [{ type: "text", text: "boom" }],
+				isError: true,
+				timestamp: 2,
+			},
+		],
 	});
 	assert.match(md, /#### Tool result: `bash` \(error\)/);
 });
@@ -363,12 +424,29 @@ test("formatTurnDelta: empty turn ⇒ empty string", () => {
 test("buildReviewMessages: header turn + one single-block user turn per delta, content verbatim", () => {
 	const d1 = A.formatTurnDelta({
 		userPrompt: "u",
-		assistant: { role: "assistant", content: [{ type: "toolCall", id: "1", name: "bash", arguments: { command: "echo hi\nls" } }], usage: {}, stopReason: "toolUse", timestamp: 1 },
+		assistant: {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "1", name: "bash", arguments: { command: "echo hi\nls" } }],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
 	});
-	const d2 = A.formatTurnDelta({ assistant: { role: "assistant", content: [{ type: "text", text: "done" }], usage: {}, stopReason: "stop", timestamp: 3 } });
+	const d2 = A.formatTurnDelta({
+		assistant: {
+			role: "assistant",
+			content: [{ type: "text", text: "done" }],
+			usage: {},
+			stopReason: "stop",
+			timestamp: 3,
+		},
+	});
 	const msgs = A.buildReviewMessages("", [d1, d2]);
 	assert.equal(msgs.length, 3, "header turn + two delta turns");
-	assert.ok(msgs.every((m) => m.role === "user"), "all user turns");
+	assert.ok(
+		msgs.every((m) => m.role === "user"),
+		"all user turns",
+	);
 	// Each message carries EXACTLY ONE text block: section separators are explicit in
 	// the content, so model-visibility never depends on provider content-part joining.
 	assert.ok(
@@ -490,11 +568,15 @@ test("project advisor mode and WATCHDOG are honored only when the project is tru
 	mkdirSync(join(cwd, ".pi"), { recursive: true });
 	writeFileSync(
 		join(agentDir, "modes.json"),
-		JSON.stringify({ modes: { advisor: { provider: "global-provider", modelId: "global-model", thinkingLevel: "low" } } }),
+		JSON.stringify({
+			modes: { advisor: { provider: "global-provider", modelId: "global-model", thinkingLevel: "low" } },
+		}),
 	);
 	writeFileSync(
 		join(cwd, ".pi", "modes.json"),
-		JSON.stringify({ modes: { advisor: { provider: "project-provider", modelId: "project-model", thinkingLevel: "high" } } }),
+		JSON.stringify({
+			modes: { advisor: { provider: "project-provider", modelId: "project-model", thinkingLevel: "high" } },
+		}),
 	);
 	writeFileSync(join(agentDir, "system-prompts", "advisor.md"), "GLOBAL-ADVISOR-PROMPT");
 	writeFileSync(join(cwd, "WATCHDOG.md"), "PROJECT-WATCHDOG-GUIDANCE");
@@ -515,7 +597,10 @@ test("project advisor mode and WATCHDOG are honored only when the project is tru
 		const primaryModel = { provider: "global-provider", id: "global-model" };
 		const resolved = await M.resolveModelAndThinking(
 			cwd,
-			{ find: (provider, modelId) => (provider === primaryModel.provider && modelId === primaryModel.id ? primaryModel : undefined) },
+			{
+				find: (provider, modelId) =>
+					provider === primaryModel.provider && modelId === primaryModel.id ? primaryModel : undefined,
+			},
 			primaryModel,
 			"medium",
 			{ mode: "advisor" },
@@ -649,7 +734,9 @@ const blockArgs = (over) => ({ consecutiveBlocks: 0, notify: () => {}, deliverHe
 test("runTurnBlock: non-terminal with nothing held → no block, streak resets", async () => {
 	const rt = stubRuntime({ held: [] });
 	const delivered = [];
-	const n = await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 3, deliverHeld: (x) => delivered.push(...x) }));
+	const n = await A.runTurnBlock(
+		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 3, deliverHeld: (x) => delivered.push(...x) }),
+	);
 	assert.equal(n, 0);
 	assert.equal(rt.waited, false, "must not block");
 	assert.equal(delivered.length, 0);
@@ -664,7 +751,9 @@ test("runTurnBlock: non-terminal with only queued nits does not block", async ()
 test("runTurnBlock: non-terminal + held + settled → delivers survivors, resets streak", async () => {
 	const delivered = [];
 	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "settled" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }));
+	const n = await A.runTurnBlock(
+		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }),
+	);
 	assert.equal(n, 0);
 	assert.deepEqual(delivered, [{ note: "x", severity: "blocker" }]);
 });
@@ -672,7 +761,9 @@ test("runTurnBlock: non-terminal + held + settled → delivers survivors, resets
 test("runTurnBlock: non-terminal + held + timeout → keeps held, doubles streak", async () => {
 	const delivered = [];
 	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "timeout" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }));
+	const n = await A.runTurnBlock(
+		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }),
+	);
 	assert.equal(n, 2, "streak doubles via consecutiveBlocks+1");
 	assert.equal(delivered.length, 0);
 	assert.equal(rt.hasHighPriority, true, "held notes are kept, not taken");
@@ -702,11 +793,29 @@ test("runTurnBlock: passes { terminal } through to deliverHeld (settled + timeou
 	const record = (notes, opts) => calls.push({ notes, opts });
 
 	// terminal + settled → { terminal: true }
-	await A.runTurnBlock(blockArgs({ terminal: true, runtime: stubRuntime({ held: [{ note: "a" }], settleResult: "settled" }), deliverHeld: record }));
+	await A.runTurnBlock(
+		blockArgs({
+			terminal: true,
+			runtime: stubRuntime({ held: [{ note: "a" }], settleResult: "settled" }),
+			deliverHeld: record,
+		}),
+	);
 	// non-terminal + settled → { terminal: false }
-	await A.runTurnBlock(blockArgs({ terminal: false, runtime: stubRuntime({ held: [{ note: "b", severity: "concern" }], settleResult: "settled" }), deliverHeld: record }));
+	await A.runTurnBlock(
+		blockArgs({
+			terminal: false,
+			runtime: stubRuntime({ held: [{ note: "b", severity: "concern" }], settleResult: "settled" }),
+			deliverHeld: record,
+		}),
+	);
 	// terminal + timeout (best-effort) → { terminal: true }
-	await A.runTurnBlock(blockArgs({ terminal: true, runtime: stubRuntime({ held: [{ note: "c", severity: "concern" }], settleResult: "timeout" }), deliverHeld: record })); // high-sev: a nit would stay held
+	await A.runTurnBlock(
+		blockArgs({
+			terminal: true,
+			runtime: stubRuntime({ held: [{ note: "c", severity: "concern" }], settleResult: "timeout" }),
+			deliverHeld: record,
+		}),
+	); // high-sev: a nit would stay held
 
 	assert.equal(calls.length, 3);
 	assert.equal(calls[0].opts?.terminal, true, "terminal settled → terminal:true");
@@ -717,7 +826,9 @@ test("runTurnBlock: passes { terminal } through to deliverHeld (settled + timeou
 test("runTurnBlock: aborted (user Escape) → keeps held + streak, no delivery", async () => {
 	const delivered = [];
 	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "aborted" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }));
+	const n = await A.runTurnBlock(
+		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }),
+	);
 	assert.equal(n, 2, "streak preserved");
 	assert.equal(delivered.length, 0);
 	assert.equal(rt.hasHighPriority, true);
@@ -728,7 +839,9 @@ test("runTurnBlock: non-terminal + failed reconfirm → keeps held unconfirmed, 
 	// confirmed — same handling as a timeout.
 	const delivered = [];
 	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "failed" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }));
+	const n = await A.runTurnBlock(
+		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }),
+	);
 	assert.equal(n, 2, "backoff lengthens");
 	assert.equal(delivered.length, 0, "unconfirmed held note is NOT delivered mid-run");
 	assert.equal(rt.hasHighPriority, true);
@@ -745,13 +858,24 @@ test("runTurnBlock: terminal + failed reconfirm → best-effort delivers", async
 test("runTurnBlock: terminal + timeout → only concerns/blockers ship best-effort; nits stay held", async () => {
 	const delivered = [];
 	const rt = stubRuntime({
-		held: [{ note: "x", severity: "concern" }, { note: "y", severity: "nit" }],
+		held: [
+			{ note: "x", severity: "concern" },
+			{ note: "y", severity: "nit" },
+		],
 		settleResult: "timeout",
 	});
 	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt, deliverHeld: (x) => delivered.push(...x) }));
 	assert.equal(n, 0);
-	assert.deepEqual(delivered, [{ note: "x", severity: "concern" }], "only high severity is worth an unconfirmed delivery");
-	assert.deepEqual(rt._held, [{ note: "y", severity: "nit" }], "unconfirmed nit is re-held, not steered after the final answer");
+	assert.deepEqual(
+		delivered,
+		[{ note: "x", severity: "concern" }],
+		"only high severity is worth an unconfirmed delivery",
+	);
+	assert.deepEqual(
+		rt._held,
+		[{ note: "y", severity: "nit" }],
+		"unconfirmed nit is re-held, not steered after the final answer",
+	);
 });
 
 // --- real AdvisorRuntime + stub Agent: hold → reconfirm → deliver/drop ---
@@ -964,7 +1088,11 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 	h.rt.push("final turn");
 	assert.equal(await h.block(true), 0);
 	assert.equal(h.getReviewCount(), 2);
-	assert.deepEqual(h.delivered, [{ note: "rename var", severity: "nit", kind: "held" }], "nit waits for the final turn's review, then lands as held");
+	assert.deepEqual(
+		h.delivered,
+		[{ note: "rename var", severity: "nit", kind: "held" }],
+		"nit waits for the final turn's review, then lands as held",
+	);
 	assert.equal(h.rt.hasHighPriority, false);
 });
 
@@ -1285,12 +1413,21 @@ test("runtime.reprime: an in-flight history rewrite clears the old advisor trans
 			if (promptCount === 1) {
 				processing = true;
 				await new Promise((resolve) => (releaseFirst = resolve));
-				this.state.messages.push({ role: "assistant", content: [{ type: "text", text: "ABORTED-OLD-REVIEW" }], usage: {}, stopReason: "aborted" });
+				this.state.messages.push({
+					role: "assistant",
+					content: [{ type: "text", text: "ABORTED-OLD-REVIEW" }],
+					usage: {},
+					stopReason: "aborted",
+				});
 				processing = false;
 				return;
 			}
 			reviews.push(input.map((message) => message.content.map((part) => part.text ?? "").join("\n")).join("\n\n"));
-			assert.deepEqual(this.state.messages, [], "stale and aborted advisor messages were cleared before the new review");
+			assert.deepEqual(
+				this.state.messages,
+				[],
+				"stale and aborted advisor messages were cleared before the new review",
+			);
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
 		},
 		abort() {
@@ -1366,7 +1503,13 @@ test("runtime.waitUntilSettled: an ACCUMULATED-context overflow self-compacts an
 	let attempts = 0;
 	let resets = 0;
 	const agent = {
-		state: { messages: [{ role: "user", content: [] }, { role: "assistant", content: [] }], model: {} },
+		state: {
+			messages: [
+				{ role: "user", content: [] },
+				{ role: "assistant", content: [] },
+			],
+			model: {},
+		},
 		async prompt() {
 			attempts++;
 			// First attempt overflows (accumulated context); after a self-compaction the
@@ -1444,7 +1587,11 @@ test("runtime: overflow rollback restores pre-existing held severity by value", 
 	rt.enqueueAdvice("shared mutation", "concern");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.deepEqual(rt.takeAllAdvice(), [{ note: "shared mutation", severity: "concern" }], "discarded blocker escalation must not mutate rollback snapshot");
+	assert.deepEqual(
+		rt.takeAllAdvice(),
+		[{ note: "shared mutation", severity: "concern" }],
+		"discarded blocker escalation must not mutate rollback snapshot",
+	);
 });
 
 test("runtime: attempt-only queued advice is rolled back after reactive overflow", async () => {
@@ -1546,7 +1693,12 @@ test("runtime: PROACTIVE self-compaction fires at ADVISOR_COMPACT_AT, replays fr
 		},
 		async prompt() {
 			promptMsgCounts.push(this.state.messages.length); // 0 ⇒ replayed into a fresh context
-			this.state.messages.push({ role: "assistant", content: [], usage: { input: 5, cost: { total: 0.01 } }, stopReason: "stop" });
+			this.state.messages.push({
+				role: "assistant",
+				content: [],
+				usage: { input: 5, cost: { total: 0.01 } },
+				stopReason: "stop",
+			});
 		},
 		abort() {},
 		reset() {
@@ -1611,7 +1763,11 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 });
 
 test("runtime queue: re-raising advice at higher severity escalates it", () => {
-	const rt = new A.AdvisorRuntime({ state: { messages: [], model: {} }, async prompt() {}, abort() {}, reset() {} }, new A.AdviseTool(() => false), 0);
+	const rt = new A.AdvisorRuntime(
+		{ state: { messages: [], model: {} }, async prompt() {}, abort() {}, reset() {} },
+		new A.AdviseTool(() => false),
+		0,
+	);
 	rt.enqueueAdvice("flaky test", "concern");
 	rt.enqueueAdvice("flaky   test", "blocker"); // same note (whitespace-normalized), escalated
 	const held = rt.takeAllAdvice();
@@ -1658,7 +1814,14 @@ test("agent-core ordering: a steer queued during streaming is inserted after tha
 					api: "openai-responses",
 					provider: "mock",
 					model: "mock",
-					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
 					stopReason: "stop",
 					timestamp: Date.now(),
 				},
@@ -1670,7 +1833,8 @@ test("agent-core ordering: a steer queued during streaming is inserted after tha
 	const order = [];
 	agent.subscribe((event) => {
 		if (event.type === "turn_start" || event.type === "turn_end") order.push(event.type);
-		if (event.type === "message_end" && event.message.role === "assistant") order.push(`assistant:${event.message.content[0]?.text}`);
+		if (event.type === "message_end" && event.message.role === "assistant")
+			order.push(`assistant:${event.message.content[0]?.text}`);
 		if (event.type === "message_end" && event.message.role === "custom") order.push("custom:advice");
 	});
 	const waitForResponders = async (count) => {
@@ -1688,7 +1852,10 @@ test("agent-core ordering: a steer queued during streaming is inserted after tha
 	const finalMessage = order.indexOf("assistant:final answer");
 	const finalTurnEnd = order.indexOf("turn_end", finalMessage);
 	const advice = order.indexOf("custom:advice");
-	assert.ok(finalMessage >= 0 && finalTurnEnd > finalMessage && advice > finalTurnEnd, `unexpected order: ${order.join(" → ")}`);
+	assert.ok(
+		finalMessage >= 0 && finalTurnEnd > finalMessage && advice > finalTurnEnd,
+		`unexpected order: ${order.join(" → ")}`,
+	);
 });
 
 // Drive real extension handlers for the hidden no-model command seam. Production

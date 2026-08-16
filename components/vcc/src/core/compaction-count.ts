@@ -35,9 +35,7 @@ export const countPiVccCompactions = (entries: any[]): number => {
   return total;
 };
 
-export const countPiVccCompactionsFromSession = (
-  sessionManager: SessionManagerLike | undefined,
-): number => {
+export const countPiVccCompactionsFromSession = (sessionManager: SessionManagerLike | undefined): number => {
   try {
     const entries = sessionManager?.getEntries?.() ?? [];
     return countPiVccCompactions(entries);

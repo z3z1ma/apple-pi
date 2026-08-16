@@ -114,14 +114,20 @@ function indexLedger(entries: Entry[]): {
 			continue;
 		}
 		if (isObservationsDroppedEntry(entry)) {
-			entry.data.observationIds.forEach((id) => droppedIds.add(id));
+			entry.data.observationIds.forEach((id) => {
+				droppedIds.add(id);
+			});
 		}
 	}
 
 	return { observations, reflections, droppedIds };
 }
 
-function resolveObservationSources(entries: Entry[], observation: Observation, location: ObservationLedgerLocation): RecalledObservation {
+function resolveObservationSources(
+	entries: Entry[],
+	observation: Observation,
+	location: ObservationLedgerLocation,
+): RecalledObservation {
 	const sourceEntryIds = uniqueStrings(observation.sourceEntryIds);
 	const byId = new Map(entries.map((entry) => [entry.id, entry]));
 	const sourceEntries: Entry[] = [];
@@ -220,11 +226,12 @@ export function recallMemorySources(entries: Entry[], memoryId: string): RecallR
 	return {
 		status: "found",
 		memoryId,
-		kind: directObservationMatches.length > 0 && reflectionMatches.length > 0
-			? "mixed"
-			: reflectionMatches.length > 0
-				? "reflection"
-				: "observation",
+		kind:
+			directObservationMatches.length > 0 && reflectionMatches.length > 0
+				? "mixed"
+				: reflectionMatches.length > 0
+					? "reflection"
+					: "observation",
 		reflections: recalledReflections,
 		observations: recalledObservations,
 		sourceEntries,
@@ -232,6 +239,9 @@ export function recallMemorySources(entries: Entry[], memoryId: string): RecallR
 		nonSourceEntryIds,
 		missingSupportingObservationIds: uniqueMissingSupportingObservationIds,
 		collision: matchCount > 1,
-		partial: missingSourceEntryIds.length > 0 || nonSourceEntryIds.length > 0 || uniqueMissingSupportingObservationIds.length > 0,
+		partial:
+			missingSourceEntryIds.length > 0 ||
+			nonSourceEntryIds.length > 0 ||
+			uniqueMissingSupportingObservationIds.length > 0,
 	};
 }

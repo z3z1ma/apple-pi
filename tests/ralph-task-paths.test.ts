@@ -6,7 +6,13 @@ describe("ledger task paths", () => {
 		expect(validTaskId("202602290930-leap-day")).toBe(false);
 		expect(validTaskId("202402290930-leap-day")).toBe(true);
 		expect(validTaskId("202608152359-valid-task-2")).toBe(true);
-		for (const invalid of ["202608152400-late", "202608151260-minute", "202608151200-Upper", "2026-08-15-task", "202608151200_"]) {
+		for (const invalid of [
+			"202608152400-late",
+			"202608151260-minute",
+			"202608151200-Upper",
+			"2026-08-15-task",
+			"202608151200_",
+		]) {
 			expect(validTaskId(invalid)).toBe(false);
 		}
 		expect(taskLocation(".ledger/202608151200-valid-task/task.md")).toEqual({

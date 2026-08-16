@@ -41,15 +41,18 @@ describe("debug logging", () => {
 	}
 
 	it("writes enabled events to a session-scoped debug file with session metadata", () => {
-		withDebugLogContext({
-			enabled: true,
-			cwd: "/tmp/project",
-			sessionId: "session-123",
-			sessionFile: "/tmp/session.jsonl",
-			runId: "run-1",
-		}, () => {
-			debugLog("dropper.result", { reason: "no_tool_call" });
-		});
+		withDebugLogContext(
+			{
+				enabled: true,
+				cwd: "/tmp/project",
+				sessionId: "session-123",
+				sessionFile: "/tmp/session.jsonl",
+				runId: "run-1",
+			},
+			() => {
+				debugLog("dropper.result", { reason: "no_tool_call" });
+			},
+		);
 
 		const logPath = join(agentDir, "observational-memory", "debug", "session-123.ndjson");
 		expect(existsSync(logPath)).toBe(true);
@@ -95,7 +98,9 @@ describe("debug logging", () => {
 
 	it("sanitizes session ids before using them as filenames", () => {
 		expect(safeDebugLogSessionId(" session/../id:value ")).toBe("session_.._id_value");
-		expect(debugLogRelativePath({ sessionId: " session/../id:value " })).toBe(join("observational-memory", "debug", "session_.._id_value.ndjson"));
+		expect(debugLogRelativePath({ sessionId: " session/../id:value " })).toBe(
+			join("observational-memory", "debug", "session_.._id_value.ndjson"),
+		);
 		expect(debugLogRelativePath({ sessionId: "---" })).toBe(DEBUG_LOG_RELATIVE_PATH);
 	});
 

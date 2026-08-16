@@ -47,10 +47,7 @@ function joinOrEmpty(items: string[]): string {
 	return items.length ? items.join("\n") : "(none yet)";
 }
 
-export function observationToReflectorLine(
-	observation: Observation,
-	coverage: ReflectionCoverageTier,
-): string {
+export function observationToReflectorLine(observation: Observation, coverage: ReflectionCoverageTier): string {
 	return `[${observation.id}] ${observation.timestamp} [${observation.relevance}] [coverage: ${coverage}] ${observation.content}`;
 }
 
@@ -63,7 +60,14 @@ export function summarizeSupportIdCounts(reflections: readonly Reflection[]): {
 	histogram: Record<string, number>;
 } {
 	if (reflections.length === 0) {
-		return { reflectionCount: 0, totalSupportIds: 0, minSupportIds: 0, maxSupportIds: 0, averageSupportIds: 0, histogram: {} };
+		return {
+			reflectionCount: 0,
+			totalSupportIds: 0,
+			minSupportIds: 0,
+			maxSupportIds: 0,
+			averageSupportIds: 0,
+			histogram: {},
+		};
 	}
 	const counts = reflections.map((reflection) => reflection.supportingObservationIds.length);
 	const totalSupportIds = counts.reduce((sum, count) => sum + count, 0);
@@ -137,7 +141,10 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 			let rejected = 0;
 			for (const proposal of params.reflections) {
 				const content = normalizeReflectionContent(proposal.content);
-				const supportingObservationIds = normalizeSupportingObservationIds(proposal.supportingObservationIds, allowedObservationIds);
+				const supportingObservationIds = normalizeSupportingObservationIds(
+					proposal.supportingObservationIds,
+					allowedObservationIds,
+				);
 				if (!content || !supportingObservationIds) {
 					rejected++;
 					continue;
@@ -159,7 +166,12 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 			duplicateReflectionCount += duplicates;
 			rejectedReflectionCount += rejected;
 			return {
-				content: [{ type: "text", text: `Recorded ${added} reflection${added === 1 ? "" : "s"}; ${duplicates} duplicate${duplicates === 1 ? "" : "s"}; ${rejected} rejected. Total this run: ${accumulated.size}.` }],
+				content: [
+					{
+						type: "text",
+						text: `Recorded ${added} reflection${added === 1 ? "" : "s"}; ${duplicates} duplicate${duplicates === 1 ? "" : "s"}; ${rejected} rejected. Total this run: ${accumulated.size}.`,
+					},
+				],
 				details: { added, duplicates, rejected, total: accumulated.size },
 			};
 		},
@@ -167,7 +179,11 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 
 	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map((observation) => observationToReflectorLine(observation, coverageTierForObservation(observation, coverageById))))}\n\nCrystallize any missing durable facts or patterns into new reflections. If nothing is stable enough, do not call the tool.`;
 	const prompts: Message[] = [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }];
-	const context: AgentContext = { systemPrompt: REFLECTOR_SYSTEM, messages: [], tools: [recordReflections as AgentTool<any>] };
+	const context: AgentContext = {
+		systemPrompt: REFLECTOR_SYSTEM,
+		messages: [],
+		tools: [recordReflections as AgentTool<any>],
+	};
 	const reasoning = (model as { reasoning?: unknown }).reasoning;
 	const thinkingLevel = args.thinkingLevel ?? "low";
 	const effectiveMaxTurns = args.maxTurns && args.maxTurns > 0 ? args.maxTurns : undefined;
@@ -193,14 +209,19 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 	const acceptedReflections = Array.from(accumulated.values());
 	const afterCoverageById = reflectionCoverageMap(observations, [...reflections, ...acceptedReflections]);
 	debugLog("reflector.result", {
-		reason: acceptedReflections.length > 0 ? "accepted_nonempty" : toolCallCount === 0 ? "no_tool_call" : "all_filtered",
+		reason:
+			acceptedReflections.length > 0 ? "accepted_nonempty" : toolCallCount === 0 ? "no_tool_call" : "all_filtered",
 		toolCallCount,
 		rawProposedReflectionCount,
 		acceptedReflectionCount,
 		duplicateReflectionCount,
 		rejectedReflectionCount,
 		acceptedSupportIdCounts: summarizeSupportIdCounts(acceptedReflections),
-		coverageTransitionsByRelevance: summarizeCoverageTransitionsByRelevance(observations, coverageById, afterCoverageById),
+		coverageTransitionsByRelevance: summarizeCoverageTransitionsByRelevance(
+			observations,
+			coverageById,
+			afterCoverageById,
+		),
 	});
 	return acceptedReflections.length > 0 ? acceptedReflections : undefined;
 }

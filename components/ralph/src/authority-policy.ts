@@ -12,28 +12,57 @@ function deny(reason: string): ManagedAgentToolPolicyResult {
 
 function classifyBash(command: string): string | undefined {
 	if (/\$\(|`/.test(command)) return "Shell command substitution is outside Ralph's inspectable authority boundary";
-	if (/[\r\n;&|]/.test(command)) return "Ralph Bash calls must contain one command; invoke validation commands separately";
-	if (/(?:^|\s)["']?(?:\/|~\/|\.\.?(?:\/|\s|$))/.test(command) || /\$(?:[A-Za-z_]\w*|\{)/.test(command)) return "Shell paths and variables may not escape the project boundary";
-	if (/\.ledger(?:\/|\b)/.test(command)) return "Shell access to ledger authority is not allowed; use read and the structured executor report";
+	if (/[\r\n;&|]/.test(command))
+		return "Ralph Bash calls must contain one command; invoke validation commands separately";
+	if (/(?:^|\s)["']?(?:\/|~\/|\.\.?(?:\/|\s|$))/.test(command) || /\$(?:[A-Za-z_]\w*|\{)/.test(command))
+		return "Shell paths and variables may not escape the project boundary";
+	if (/\.ledger(?:\/|\b)/.test(command))
+		return "Shell access to ledger authority is not allowed; use read and the structured executor report";
 	const normalized = command
 		.replace(/(^|\s)(["'])\/(?:[A-Za-z0-9._-]+\/)*([A-Za-z0-9._-]+)\2/g, "$1$3")
 		.replace(/(^|\s)\/(?:[A-Za-z0-9._-]+\/)*([A-Za-z0-9._-]+)/g, "$1$2");
 	if (/(?:^|\s)(?:curl|wget|ssh|scp|sftp|rsync|gh|aws|gcloud|az|doctl|flyctl|heroku)(?:\s|$)/i.test(normalized)) {
 		return "Network and remote-service commands require explicit human execution";
 	}
-	if (/(?:^|\s)(?:kubectl|helm)(?:\s+(?:apply|create|delete|edit|patch|replace|rollout|scale|set)|\s*$)/i.test(normalized)) {
+	if (
+		/(?:^|\s)(?:kubectl|helm)(?:\s+(?:apply|create|delete|edit|patch|replace|rollout|scale|set)|\s*$)/i.test(normalized)
+	) {
 		return "Cluster mutation requires explicit human execution";
 	}
 	if (/(?:^|\s)terraform\s+(?:apply|destroy|import|taint|untaint|state\s+(?:mv|rm|push))(?:\s|$)/i.test(normalized)) {
 		return "Infrastructure mutation requires explicit human execution";
 	}
-	if (/(?:^|\s)(?:npm|pnpm|yarn|bun)\s+(?:publish|deploy|install|add|link)(?:\s|$)/i.test(normalized) || /(?:^|\s)npx(?!\s+--no-install\b)/i.test(normalized)) {
+	if (
+		/(?:^|\s)(?:npm|pnpm|yarn|bun)\s+(?:publish|deploy|install|add|link)(?:\s|$)/i.test(normalized) ||
+		/(?:^|\s)npx(?!\s+--no-install\b)/i.test(normalized)
+	) {
 		return "Publishing and deployment require explicit human execution";
 	}
-	if (/(?:^|\s)(?:rm|rmdir|shred|ln|mv|cp|install|mkdir|touch|truncate|tee|dd|chmod|chown)\b/i.test(normalized) || /(?:^|\s)find\b.*(?:-delete|-exec\b)/i.test(normalized)) return "Direct filesystem mutation requires explicit human execution or the edit/write tools";
-	if (/(?:^|\s)(?:python\d*|node|ruby|perl|sh|bash|zsh|fish)\s+(?:-c|-e)\b/i.test(normalized) || /(?:^|\s)(?:eval|xargs|busybox|env|printenv)\b/i.test(normalized)) return "Inline, indirect, or environment-dumping programs are outside Ralph's inspectable command boundary";
-	const gitCommands = [...normalized.matchAll(/(?:^|[;&|]\s*|\s)git\s+([a-z-]+)/gi)].map((match) => match[1].toLowerCase());
-	const readOnlyGit = new Set(["status", "diff", "log", "show", "grep", "ls-files", "rev-parse", "branch", "blame", "describe"]);
+	if (
+		/(?:^|\s)(?:rm|rmdir|shred|ln|mv|cp|install|mkdir|touch|truncate|tee|dd|chmod|chown)\b/i.test(normalized) ||
+		/(?:^|\s)find\b.*(?:-delete|-exec\b)/i.test(normalized)
+	)
+		return "Direct filesystem mutation requires explicit human execution or the edit/write tools";
+	if (
+		/(?:^|\s)(?:python\d*|node|ruby|perl|sh|bash|zsh|fish)\s+(?:-c|-e)\b/i.test(normalized) ||
+		/(?:^|\s)(?:eval|xargs|busybox|env|printenv)\b/i.test(normalized)
+	)
+		return "Inline, indirect, or environment-dumping programs are outside Ralph's inspectable command boundary";
+	const gitCommands = [...normalized.matchAll(/(?:^|[;&|]\s*|\s)git\s+([a-z-]+)/gi)].map((match) =>
+		match[1].toLowerCase(),
+	);
+	const readOnlyGit = new Set([
+		"status",
+		"diff",
+		"log",
+		"show",
+		"grep",
+		"ls-files",
+		"rev-parse",
+		"branch",
+		"blame",
+		"describe",
+	]);
 	if (gitCommands.some((subcommand) => !readOnlyGit.has(subcommand))) {
 		return "Git mutation is owned by the human/orchestrator; Ralph agents may inspect Git only";
 	}
@@ -46,7 +75,8 @@ function classifyBash(command: string): string | undefined {
 	if (/[<>]/.test(normalized)) {
 		return "Shell redirection is not an auditable Ralph write; use edit or write inside the project";
 	}
-	if (/(?:^|\s)(?:cd|pushd)\s+(?:\.\.|\/|~)/.test(normalized)) return "Shell traversal outside the project is not allowed";
+	if (/(?:^|\s)(?:cd|pushd)\s+(?:\.\.|\/|~)/.test(normalized))
+		return "Shell traversal outside the project is not allowed";
 	return undefined;
 }
 
@@ -56,7 +86,7 @@ export function createExecutorAuthorityPolicy(
 	ledgerRoot = projectRoot,
 ): ManagedAgentToolPolicy {
 	return ({ toolName, args }) => {
-		const object = args && typeof args === "object" ? args as Record<string, unknown> : {};
+		const object = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
 		for (const key of ["path", "root", "cwd"]) {
 			const value = object[key];
 			if (typeof value !== "string") continue;
@@ -69,7 +99,10 @@ export function createExecutorAuthorityPolicy(
 				onDenial({ toolName, reason });
 				return deny(reason);
 			}
-			if ((toolName === "edit" || toolName === "write") && ((projectRelative === ".ledger" || projectRelative?.startsWith(".ledger/")) || targetsLedger)) {
+			if (
+				(toolName === "edit" || toolName === "write") &&
+				(projectRelative === ".ledger" || projectRelative?.startsWith(".ledger/") || targetsLedger)
+			) {
 				const reason = "Only the Ralph controller may mutate .ledger task authority";
 				onDenial({ toolName, reason });
 				return deny(reason);

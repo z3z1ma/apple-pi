@@ -91,9 +91,7 @@ export interface QuestionnaireResult {
 	error?: QuestionnaireError;
 }
 
-export type QuestionnaireValidation =
-	| { ok: true }
-	| { ok: false; error: QuestionnaireError; message: string };
+export type QuestionnaireValidation = { ok: true } | { ok: false; error: QuestionnaireError; message: string };
 
 const RESERVED_LABELS = new Set<string>(RESERVED_OPTION_LABELS);
 
@@ -122,7 +120,11 @@ export function validateQuestionnaire(params: AskUserQuestionParams): Questionna
 			(question.header !== undefined &&
 				(question.header.trim().length === 0 || question.header.length > MAX_HEADER_LENGTH))
 		) {
-			return { ok: false, error: "invalid_text", message: "Question text and headers must be non-empty and within their documented limits." };
+			return {
+				ok: false,
+				error: "invalid_text",
+				message: "Question text and headers must be non-empty and within their documented limits.",
+			};
 		}
 		if (questionTexts.has(normalizedQuestion)) {
 			return {
@@ -157,7 +159,11 @@ export function validateQuestionnaire(params: AskUserQuestionParams): Questionna
 				option.description.trim().length === 0 ||
 				option.description.length > MAX_DESCRIPTION_LENGTH
 			) {
-				return { ok: false, error: "invalid_text", message: "Option labels and descriptions must be non-empty and within their documented limits." };
+				return {
+					ok: false,
+					error: "invalid_text",
+					message: "Option labels and descriptions must be non-empty and within their documented limits.",
+				};
 			}
 			if (RESERVED_LABELS.has(normalizedLabel)) {
 				return {

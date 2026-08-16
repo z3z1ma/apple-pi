@@ -60,7 +60,8 @@ export function acquireReviewLease(projectRootInput: string, runId: string): () 
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			const owner = readOwner(path);
-			if (owner && processLive(owner.pid)) throw new Error(`Review run ${owner.runId} in process ${owner.pid} already owns this project`);
+			if (owner && processLive(owner.pid))
+				throw new Error(`Review run ${owner.runId} in process ${owner.pid} already owns this project`);
 			rmSync(path, { recursive: true, force: true });
 		}
 	}

@@ -9,113 +9,120 @@ const pending = new Map();
 const callIds = new WeakMap();
 
 const callOutcome = (ok, value) => {
-  try {
-    return JSON.stringify(ok ? { ok: true, value } : { ok: false, error: String(value) });
-  } catch (error) {
-    return JSON.stringify({
-      ok: false,
-      error: `pi_exec host result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
+	try {
+		return JSON.stringify(ok ? { ok: true, value } : { ok: false, error: String(value) });
+	} catch (error) {
+		return JSON.stringify({
+			ok: false,
+			error: `pi_exec host result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
+		});
+	}
 };
 
 const hostCall = (ref, args = {}) => {
-  const id = nextCallId++;
-  const promise = new Promise((resolve) => {
-    pending.set(id, { resolve });
-    try {
-      parentPort.postMessage({ type: "call", id, ref, args });
-    } catch (error) {
-      pending.delete(id);
-      resolve(callOutcome(false, `pi_exec call arguments are not serializable: ${error instanceof Error ? error.message : String(error)}`));
-    }
-  });
-  callIds.set(promise, id);
-  return promise;
+	const id = nextCallId++;
+	const promise = new Promise((resolve) => {
+		pending.set(id, { resolve });
+		try {
+			parentPort.postMessage({ type: "call", id, ref, args });
+		} catch (error) {
+			pending.delete(id);
+			resolve(
+				callOutcome(
+					false,
+					`pi_exec call arguments are not serializable: ${error instanceof Error ? error.message : String(error)}`,
+				),
+			);
+		}
+	});
+	callIds.set(promise, id);
+	return promise;
 };
 
 const cancelHostCall = (promise, reason = "host call aborted") => {
-  const id = callIds.get(promise);
-  const request = id === undefined ? undefined : pending.get(id);
-  if (id === undefined || !request) return;
-  pending.delete(id);
-  request.resolve(callOutcome(false, reason));
-  parentPort.postMessage({ type: "cancel", id, reason: String(reason) });
+	const id = callIds.get(promise);
+	const request = id === undefined ? undefined : pending.get(id);
+	if (id === undefined || !request) return;
+	pending.delete(id);
+	request.resolve(callOutcome(false, reason));
+	parentPort.postMessage({ type: "cancel", id, reason: String(reason) });
 };
 
 const MAX_LOG_CHARS = 20_000;
 let logChars = 0;
 let logsTruncated = false;
 const logValue = (value) => {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+	if (typeof value === "string") return value;
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
 };
 const guestPrint = (...values) => {
-  if (logsTruncated) return;
-  const line = values.map(logValue).join(" ");
-  const remaining = MAX_LOG_CHARS - logChars;
-  if (line.length > remaining) {
-    if (remaining > 0) parentPort.postMessage({ type: "log", values: [line.slice(0, remaining)] });
-    parentPort.postMessage({ type: "log", values: ["[pi_exec logs truncated]"] });
-    logsTruncated = true;
-    return;
-  }
-  logChars += line.length;
-  parentPort.postMessage({ type: "log", values: [line] });
+	if (logsTruncated) return;
+	const line = values.map(logValue).join(" ");
+	const remaining = MAX_LOG_CHARS - logChars;
+	if (line.length > remaining) {
+		if (remaining > 0) parentPort.postMessage({ type: "log", values: [line.slice(0, remaining)] });
+		parentPort.postMessage({ type: "log", values: ["[pi_exec logs truncated]"] });
+		logsTruncated = true;
+		return;
+	}
+	logChars += line.length;
+	parentPort.postMessage({ type: "log", values: [line] });
 };
 
 parentPort.on("message", (message) => {
-  if (!message || message.type !== "call_result") return;
-  const request = pending.get(message.id);
-  if (!request) return;
-  pending.delete(message.id);
-  request.resolve(typeof message.outcome === "string"
-    ? message.outcome
-    : callOutcome(message.ok, message.ok ? message.value : message.error || "host call failed"));
+	if (!message || message.type !== "call_result") return;
+	const request = pending.get(message.id);
+	if (!request) return;
+	pending.delete(message.id);
+	request.resolve(
+		typeof message.outcome === "string"
+			? message.outcome
+			: callOutcome(message.ok, message.ok ? message.value : message.error || "host call failed"),
+	);
 });
 
 process.on("unhandledRejection", (error) => {
-  parentPort.postMessage({
-    type: "failed",
-    error: `Unawaited pi_exec promise rejected: ${error instanceof Error ? error.stack || error.message : String(error)}`,
-  });
+	parentPort.postMessage({
+		type: "failed",
+		error: `Unawaited pi_exec promise rejected: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+	});
 });
 
 const sandbox = Object.create(null);
 const guestTimers = new Map();
 let nextTimerId = 1;
 const guestSetTimeout = (callback, milliseconds = 0, ...args) => {
-  if (typeof callback !== "function") throw new TypeError("setTimeout callback must be a function");
-  const id = nextTimerId++;
-  const delay = Math.max(0, Math.min(Number(milliseconds) || 0, 30 * 60 * 1_000));
-  const timer = setTimeout(() => {
-    guestTimers.delete(id);
-    callback(...args);
-  }, delay);
-  timer.unref?.();
-  guestTimers.set(id, timer);
-  return id;
+	if (typeof callback !== "function") throw new TypeError("setTimeout callback must be a function");
+	const id = nextTimerId++;
+	const delay = Math.max(0, Math.min(Number(milliseconds) || 0, 30 * 60 * 1_000));
+	const timer = setTimeout(() => {
+		guestTimers.delete(id);
+		callback(...args);
+	}, delay);
+	timer.unref?.();
+	guestTimers.set(id, timer);
+	return id;
 };
 const guestSetInterval = (callback, milliseconds = 0, ...args) => {
-  if (typeof callback !== "function") throw new TypeError("setInterval callback must be a function");
-  const id = nextTimerId++;
-  const delay = Math.max(0, Math.min(Number(milliseconds) || 0, 30 * 60 * 1_000));
-  const timer = setInterval(callback, delay, ...args);
-  timer.unref?.();
-  guestTimers.set(id, timer);
-  return id;
+	if (typeof callback !== "function") throw new TypeError("setInterval callback must be a function");
+	const id = nextTimerId++;
+	const delay = Math.max(0, Math.min(Number(milliseconds) || 0, 30 * 60 * 1_000));
+	const timer = setInterval(callback, delay, ...args);
+	timer.unref?.();
+	guestTimers.set(id, timer);
+	return id;
 };
 const guestClearTimer = (id) => {
-  const timer = guestTimers.get(id);
-  if (timer) {
-    clearTimeout(timer);
-    clearInterval(timer);
-  }
-  guestTimers.delete(id);
+	const timer = guestTimers.get(id);
+	if (timer) {
+		clearTimeout(timer);
+		clearInterval(timer);
+	}
+	guestTimers.delete(id);
 };
 
 sandbox.__hostCall = hostCall;
@@ -127,11 +134,12 @@ sandbox.__clearTimer = guestClearTimer;
 sandbox.__inputs = workerData.inputs ?? {};
 installWebHostHelpers(sandbox);
 const context = vm.createContext(sandbox, {
-  name: "apple-pi-exec",
-  codeGeneration: { strings: false, wasm: false },
+	name: "apple-pi-exec",
+	codeGeneration: { strings: false, wasm: false },
 });
 
-const setup = new vm.Script(`
+const setup = new vm.Script(
+	`
 (() => {
   "use strict";
   const callHost = globalThis.__hostCall;
@@ -262,42 +270,41 @@ ${WEB_SETUP_SOURCE}
     });
   };
 })();
-`, { filename: "apple-pi-setup.js" });
+`,
+	{ filename: "apple-pi-setup.js" },
+);
 
-const errorText = (error) => error instanceof Error
-  ? error.stack || error.message
-  : String(error);
+const errorText = (error) => (error instanceof Error ? error.stack || error.message : String(error));
 
 try {
-  setup.runInContext(context, { timeout: 1_000 });
-  const program = new vm.Script(
-    `(async () => {\n"use strict";\n${workerData.code}\n})()`,
-    { filename: "pi-exec-program.js" },
-  );
-  const promise = program.runInContext(context, { timeout: 1_000 });
-  Promise.resolve(promise).then(
-    (value) => {
-      const unfinishedCalls = pending.size;
-      setImmediate(() => {
-        if (unfinishedCalls > 0) {
-          parentPort.postMessage({
-            type: "failed",
-            error: `pi_exec program returned before ${unfinishedCalls} host call(s) were awaited`,
-          });
-          return;
-        }
-        try {
-          parentPort.postMessage({ type: "done", value });
-        } catch (error) {
-          parentPort.postMessage({
-            type: "failed",
-            error: `pi_exec result is not serializable: ${errorText(error)}`,
-          });
-        }
-      });
-    },
-    (error) => parentPort.postMessage({ type: "failed", error: errorText(error) }),
-  );
+	setup.runInContext(context, { timeout: 1_000 });
+	const program = new vm.Script(`(async () => {\n"use strict";\n${workerData.code}\n})()`, {
+		filename: "pi-exec-program.js",
+	});
+	const promise = program.runInContext(context, { timeout: 1_000 });
+	Promise.resolve(promise).then(
+		(value) => {
+			const unfinishedCalls = pending.size;
+			setImmediate(() => {
+				if (unfinishedCalls > 0) {
+					parentPort.postMessage({
+						type: "failed",
+						error: `pi_exec program returned before ${unfinishedCalls} host call(s) were awaited`,
+					});
+					return;
+				}
+				try {
+					parentPort.postMessage({ type: "done", value });
+				} catch (error) {
+					parentPort.postMessage({
+						type: "failed",
+						error: `pi_exec result is not serializable: ${errorText(error)}`,
+					});
+				}
+			});
+		},
+		(error) => parentPort.postMessage({ type: "failed", error: errorText(error) }),
+	);
 } catch (error) {
-  parentPort.postMessage({ type: "failed", error: errorText(error) });
+	parentPort.postMessage({ type: "failed", error: errorText(error) });
 }

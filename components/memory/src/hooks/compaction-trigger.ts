@@ -23,20 +23,19 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 		const hasUI = ctx.hasUI;
 		const ui = ctx.ui;
 
-		if (hasUI) ui?.notify(
-			`Observational memory: compaction threshold reached (~${progress.toLocaleString()} estimated source tokens); triggering compaction`,
-			"info",
-		);
+		if (hasUI)
+			ui?.notify(
+				`Observational memory: compaction threshold reached (~${progress.toLocaleString()} estimated source tokens); triggering compaction`,
+				"info",
+			);
 
 		runtime.compactInFlight = true;
 		setTimeout(() => {
 			try {
 				if (!ctx.isIdle()) {
 					runtime.compactInFlight = false;
-					if (hasUI) ui?.notify(
-						"Observational memory: compaction deferred — agent became busy before compaction",
-						"info",
-					);
+					if (hasUI)
+						ui?.notify("Observational memory: compaction deferred — agent became busy before compaction", "info");
 					return;
 				}
 				const currentEntries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
@@ -47,10 +46,11 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 				const currentProgress = rawTokensSinceLastCompaction(currentEntries);
 				if (currentProgress < threshold) {
 					runtime.compactInFlight = false;
-					if (hasUI) ui?.notify(
-						"Observational memory: compaction skipped — another compaction already ran before deferred compaction",
-						"info",
-					);
+					if (hasUI)
+						ui?.notify(
+							"Observational memory: compaction skipped — another compaction already ran before deferred compaction",
+							"info",
+						);
 					return;
 				}
 				ctx.compact({

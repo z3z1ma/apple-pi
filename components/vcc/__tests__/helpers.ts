@@ -28,10 +28,7 @@ export function resetIds(): void {
   nextId = 1;
 }
 
-export function makeUserEntry(
-  text: string,
-  overrides?: Partial<MockEntry>,
-): MockEntry {
+export function makeUserEntry(text: string, overrides?: Partial<MockEntry>): MockEntry {
   const id = makeId();
   return {
     type: "message",
@@ -44,11 +41,7 @@ export function makeUserEntry(
   };
 }
 
-export function makeAssistantEntry(
-  text: string,
-  stopReason = "stop",
-  overrides?: Partial<MockEntry>,
-): MockEntry {
+export function makeAssistantEntry(text: string, stopReason = "stop", overrides?: Partial<MockEntry>): MockEntry {
   const id = makeId();
   return {
     type: "message",
@@ -62,11 +55,7 @@ export function makeAssistantEntry(
   };
 }
 
-export function makeToolResultEntry(
-  toolCallId: string,
-  content: string,
-  overrides?: Partial<MockEntry>,
-): MockEntry {
+export function makeToolResultEntry(toolCallId: string, content: string, overrides?: Partial<MockEntry>): MockEntry {
   const id = makeId();
   return {
     type: "message",
@@ -79,10 +68,7 @@ export function makeToolResultEntry(
   };
 }
 
-export function makeCompactionEntry(
-  firstKeptEntryId: string,
-  overrides?: Partial<MockEntry>,
-): MockEntry {
+export function makeCompactionEntry(firstKeptEntryId: string, overrides?: Partial<MockEntry>): MockEntry {
   const id = makeId();
   return {
     type: "compaction",
@@ -103,9 +89,7 @@ export interface ContextMessage {
   stopReason?: string;
 }
 
-export function makeContextMessages(
-  ...msgs: ContextMessage[]
-): ContextMessage[] {
+export function makeContextMessages(...msgs: ContextMessage[]): ContextMessage[] {
   return msgs;
 }
 
@@ -113,17 +97,11 @@ export function userMsg(text: string): ContextMessage {
   return { role: "user", content: [{ type: "text", text }] };
 }
 
-export function assistantMsg(
-  text: string,
-  stopReason = "stop",
-): ContextMessage {
+export function assistantMsg(text: string, stopReason = "stop"): ContextMessage {
   return { role: "assistant", content: [{ type: "text", text }], stopReason };
 }
 
-export function toolResultMsg(
-  toolCallId: string,
-  content: string,
-): ContextMessage {
+export function toolResultMsg(toolCallId: string, content: string): ContextMessage {
   return {
     role: "toolResult",
     content: [{ type: "toolResult", toolCallId, content }],

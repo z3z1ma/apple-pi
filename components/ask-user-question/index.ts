@@ -1,11 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 
-import {
-	QuestionnaireDialog,
-	renderAskUserQuestionCall,
-	renderAskUserQuestionResult,
-} from "./dialog.js";
+import { QuestionnaireDialog, renderAskUserQuestionCall, renderAskUserQuestionResult } from "./dialog.js";
 import { hasQuestionnaireDialogUI, runRpcQuestionnaire } from "./rpc.js";
 import {
 	ASK_USER_QUESTION_TOOL_NAME,
@@ -103,16 +99,14 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 				result = await runRpcQuestionnaire(ctx.ui, typed, signal);
 			} else if (ctx.mode === "tui") {
 				if (signal?.aborted) return buildQuestionnaireToolResult({ answers: [], cancelled: true });
-				result = await ctx.ui.custom<QuestionnaireResult>((tui, theme, keybindings, done) =>
-					new QuestionnaireDialog(tui, theme, keybindings, typed, done, signal),
+				result = await ctx.ui.custom<QuestionnaireResult>(
+					(tui, theme, keybindings, done) => new QuestionnaireDialog(tui, theme, keybindings, typed, done, signal),
 				);
 			} else {
 				return buildQuestionnaireToolResult({ answers: [], cancelled: true, error: "no_ui" });
 			}
 
-			return buildQuestionnaireToolResult(
-				result ?? { answers: [], cancelled: true, error: "no_custom_ui" },
-			);
+			return buildQuestionnaireToolResult(result ?? { answers: [], cancelled: true, error: "no_custom_ui" });
 		},
 
 		renderCall(params, theme) {

@@ -8,16 +8,12 @@ describe("extractGoals", () => {
   });
 
   it("returns empty when no user blocks", () => {
-    const blocks: NormalizedBlock[] = [
-      { kind: "assistant", text: "hello" },
-    ];
+    const blocks: NormalizedBlock[] = [{ kind: "assistant", text: "hello" }];
     expect(extractGoals(blocks)).toEqual([]);
   });
 
   it("extracts first user message lines as goals", () => {
-    const blocks: NormalizedBlock[] = [
-      { kind: "user", text: "Fix login bug\nCheck auth flow" },
-    ];
+    const blocks: NormalizedBlock[] = [{ kind: "user", text: "Fix login bug\nCheck auth flow" }];
     const goals = extractGoals(blocks);
     expect(goals).toEqual(["Fix login bug", "Check auth flow"]);
   });

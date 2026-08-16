@@ -1,4 +1,4 @@
-Status: active
+Status: partial
 Created: 2026-08-15
 Updated: 2026-08-16
 Depends-On: .ledger/202608151813-replace-caller-budget-arithmetic/task.md
@@ -64,16 +64,18 @@ None.
 
 ## Evidence
 
-Pending.
+- 2026-08-16: Extracted advisor formatting/configuration, Pi Exec types/program/fetch, and subagent activity/notification/UI seams; public entrypoints now assemble their respective components.
+- 2026-08-16: Added Biome 2.5.8, `.editorconfig`, deterministic `format`/`format:check`/`lint`/`check` scripts, and `docs/development.md`.
+- 2026-08-16: Passed `npm run check`, `npm test`, and `npm run pack:check`. `npm test` covered 457 Vitest tests, 421 VCC Bun tests, 79 advisor harness checks, and package loading.
 
 ## Review
 
-Pending.
+Not verified: Ralph's fresh executor repeatedly stopped before implementation with `authority_required` because it issued compound Bash commands despite the recorded one-command constraint. No independent review was run after the operator instructed direct implementation rather than further agent delegation.
 
 ## Retrospective
 
-Pending.
+Kept Review/Ralph controllers, VCC algorithms, advisor runtime state, Pi Exec invocation state, and subagent lifecycle controllers intact because each is cohesive; documented the reasons in `docs/development.md`. Formatter churn is mechanically separate from the extracted entrypoint seams in the diff, but remains uncommitted pending operator integration direction.
 
 ## Distillation
 
-Pending.
+Promoted the lasting module, test-placement, import-boundary, formatting, lint, and complexity-exception conventions to `docs/development.md`; that document is the ongoing maintainer-facing owner. No new reusable skill emerged: the failed Ralph executor is an unresolved harness issue, not a repeatable repository procedure.

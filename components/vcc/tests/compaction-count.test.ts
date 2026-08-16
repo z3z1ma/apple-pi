@@ -1,9 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import {
-  countPiVccCompactions,
-  countPiVccCompactionsFromSession,
-  ordinalSuffix,
-} from "../src/core/compaction-count";
+import { countPiVccCompactions, countPiVccCompactionsFromSession, ordinalSuffix } from "../src/core/compaction-count";
 
 const compaction = (id: string) => ({
   id,
@@ -25,13 +21,7 @@ describe("countPiVccCompactions", () => {
   });
 
   test("counts only pi-vcc compactions, ignoring messages and other compactors", () => {
-    const entries = [
-      message("m1"),
-      compaction("c1"),
-      otherCompaction("c2"),
-      message("m2"),
-      compaction("c3"),
-    ];
+    const entries = [message("m1"), compaction("c1"), otherCompaction("c2"), message("m2"), compaction("c3")];
     expect(countPiVccCompactions(entries)).toBe(2);
   });
 
@@ -49,7 +39,11 @@ describe("countPiVccCompactionsFromSession", () => {
 
   test("returns 0 when sessionManager is undefined or throws", () => {
     expect(countPiVccCompactionsFromSession(undefined)).toBe(0);
-    const throwing = { getEntries: () => { throw new Error("boom"); } };
+    const throwing = {
+      getEntries: () => {
+        throw new Error("boom");
+      },
+    };
     expect(countPiVccCompactionsFromSession(throwing as any)).toBe(0);
   });
 });

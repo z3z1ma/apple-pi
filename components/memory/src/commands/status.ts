@@ -47,13 +47,13 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 
 			const visibleObservationTokens = tokenSum(visible.observations);
 			const visibleReflectionTokens = tokenSum(visible.reflections);
-			const activeObservationPool = observationPoolMetrics(folded.activeObservations, runtime.config.observationsPoolTargetTokens);
+			const activeObservationPool = observationPoolMetrics(
+				folded.activeObservations,
+				runtime.config.observationsPoolTargetTokens,
+			);
 			const observationLine = appendSuffixes(
 				`Observations: ${folded.observations.length} recorded / ${folded.droppedObservationIds.size} dropped / ${folded.activeObservations.length} active / ${visible.observations.length} visible`,
-				[
-					addedSuffix(drift.observationsOnlyInFull.length),
-					removedSuffix(drift.droppedOnlyInFull.length),
-				],
+				[addedSuffix(drift.observationsOnlyInFull.length), removedSuffix(drift.droppedOnlyInFull.length)],
 			);
 			const reflectionLine = appendSuffixes(
 				`Reflections:  ${folded.reflections.length} recorded / ${visible.reflections.length} visible`,
@@ -65,13 +65,14 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 			const contextWindow = typeof ctx.model?.contextWindow === "number" ? ctx.model.contextWindow : undefined;
 			const compactThreshold = resolveCompactAfterTokens(runtime.config, contextWindow);
 
-			const passiveLines = runtime.config.passive === true
-				? [
-					"── Mode ──",
-					"Passive: automatic memory workers and auto-compaction disabled; manual/Pi compaction, commands, and recall remain active",
-					"",
-				]
-				: [];
+			const passiveLines =
+				runtime.config.passive === true
+					? [
+							"── Mode ──",
+							"Passive: automatic memory workers and auto-compaction disabled; manual/Pi compaction, commands, and recall remain active",
+							"",
+						]
+					: [];
 
 			const lines = [
 				...passiveLines,

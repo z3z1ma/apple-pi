@@ -8,7 +8,14 @@ import { buildAgentPrompt } from "../../subagents/src/prompts.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { createReviewAuthorityPolicy } from "./authority-policy.js";
 import { deriveReviewBudgets, deriveRoleEnvelope, reviewShapeFrom } from "./policy.js";
-import { assertReviewInputUnchanged, materializeReviewTree, previewReviewInput, resolveReviewTargetRoot, reviewRepositoryRoot, ReviewInputError } from "./git.js";
+import {
+	assertReviewInputUnchanged,
+	materializeReviewTree,
+	previewReviewInput,
+	resolveReviewTargetRoot,
+	reviewRepositoryRoot,
+	ReviewInputError,
+} from "./git.js";
 import { activeReviewLease, acquireReviewLease } from "./lease.js";
 import { resolveReviewAnchor } from "./location.js";
 import { appendReviewReceipt, listReviewRunSummaries, loadReviewRun, reviewReceiptPath } from "./receipts.js";
@@ -55,22 +62,29 @@ export const DEFAULT_REVIEW_ROUTING: ReviewModelRouting = {
 	strongMode: "review-strong",
 };
 
-const TERMINAL = new Set([
-	"complete", "partial", "failed", "skipped", "stopped", "workspace_conflict", "error",
-]);
+const TERMINAL = new Set(["complete", "partial", "failed", "skipped", "stopped", "workspace_conflict", "error"]);
 
 /** Mirrors the managed runner's complete replace-mode system-prompt rendering. */
 function renderReviewRoleSystemPrompt(config: Parameters<typeof buildAgentPrompt>[0], cwd: string): string {
 	let isGitRepo = false;
 	let branch = "";
 	try {
-		isGitRepo = execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() === "true";
+		isGitRepo =
+			execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim() === "true";
 	} catch {
 		// Match detectEnv: an unavailable/non-repository Git probe renders the non-Git form.
 	}
 	if (isGitRepo) {
 		try {
-			branch = execFileSync("git", ["branch", "--show-current"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+			branch = execFileSync("git", ["branch", "--show-current"], {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim();
 		} catch {
 			branch = "unknown";
 		}
@@ -176,7 +190,12 @@ export class ReviewController {
 		return previewReviewInput(projectRoot, source);
 	}
 
-	async run(ctx: ExtensionContext, source: ReviewSource, options: StartReviewOptions = {}, signal?: AbortSignal): Promise<ReviewRun> {
+	async run(
+		ctx: ExtensionContext,
+		source: ReviewSource,
+		options: StartReviewOptions = {},
+		signal?: AbortSignal,
+	): Promise<ReviewRun> {
 		this.assertExecutionContext(ctx);
 		const preview = previewReviewInput(resolveReviewTargetRoot(ctx.cwd, options.root), source);
 		const now = new Date().toISOString();
@@ -219,9 +238,15 @@ export class ReviewController {
 			agents: [],
 		};
 		if (run.selected.length === 0) {
-			await appendReviewReceipt(run, { stage: "input", outcome: "input_sealed", details: { selected: 0, waived: run.waived.length, inputHash: run.inputHash } });
+			await appendReviewReceipt(run, {
+				stage: "input",
+				outcome: "input_sealed",
+				details: { selected: 0, waived: run.waived.length, inputHash: run.inputHash },
+			});
 			run.state = "skipped";
-			run.lastOutcome = run.waived.length ? "No reviewable text changes; all selected changes were waived" : "No changes selected for review";
+			run.lastOutcome = run.waived.length
+				? "No reviewable text changes; all selected changes were waived"
+				: "No changes selected for review";
 			run.updatedAt = new Date().toISOString();
 			await appendReviewReceipt(run, { stage: "finalize", outcome: "skipped" });
 			return run;
@@ -229,13 +254,19 @@ export class ReviewController {
 
 		const releaseLease = acquireReviewLease(run.projectRoot, run.runId);
 		try {
-			await appendReviewReceipt(run, { stage: "input", outcome: "input_sealed", details: { selected: run.selected.length, waived: run.waived.length, inputHash: run.inputHash } });
+			await appendReviewReceipt(run, {
+				stage: "input",
+				outcome: "input_sealed",
+				details: { selected: run.selected.length, waived: run.waived.length, inputHash: run.inputHash },
+			});
 		} catch (error) {
 			releaseLease();
 			throw error;
 		}
 		let resolveSettled!: () => void;
-		const settled = new Promise<void>((resolve) => { resolveSettled = resolve; });
+		const settled = new Promise<void>((resolve) => {
+			resolveSettled = resolve;
+		});
 		const control: ActiveReview = {
 			abort: new AbortController(),
 			activeAgentIds: new Set(),
@@ -274,14 +305,15 @@ export class ReviewController {
 			control.reviewRoot = tree.root;
 			control.cleanupReviewRoot = tree.cleanup;
 			await this.plan(ctx, run, input, preview.reviewable, control, options);
-			if (control.stopRequested || control.abort.signal.aborted) throw new ReviewStageError("Review stopped", "cancelled");
+			if (control.stopRequested || control.abort.signal.aborted)
+				throw new ReviewStageError("Review stopped", "cancelled");
 			assertReviewInputUnchanged(input);
 			await this.reviewGroups(ctx, run, input, preview.reviewable, control, options);
 			if (control.stopRequested) throw new ReviewStageError("Review stopped", "cancelled");
 			assertReviewInputUnchanged(input);
 			await this.verifyGroups(ctx, run, input, preview.reviewable, control, options);
 			assertReviewInputUnchanged(input);
-				if (control.stopRequested) {
+			if (control.stopRequested) {
 				run.state = "stopped";
 				run.terminalCause = "operator_stop";
 			} else this.deriveTerminalState(run);
@@ -300,7 +332,8 @@ export class ReviewController {
 			} else {
 				const reason = safeReason(error);
 				if (!run.workGraph) {
-					const classification: ReviewCoverageFailure["classification"] = error instanceof ReviewGraphError ? "planner" : this.failureClassification(cause);
+					const classification: ReviewCoverageFailure["classification"] =
+						error instanceof ReviewGraphError ? "planner" : this.failureClassification(cause);
 					for (const selected of run.selected) this.addFailure(run, selected.id, selected.path, classification, reason);
 				}
 				run.state = run.completedItemIds.length > 0 ? "partial" : "failed";
@@ -311,7 +344,11 @@ export class ReviewController {
 		}
 		run.updatedAt = new Date().toISOString();
 		try {
-			await appendReviewReceipt(run, { stage: "finalize", outcome: run.state, details: { completed: run.completedItemIds.length, failed: run.failures.length, findings: run.findings.length } });
+			await appendReviewReceipt(run, {
+				stage: "finalize",
+				outcome: run.state,
+				details: { completed: run.completedItemIds.length, failed: run.failures.length, findings: run.findings.length },
+			});
 			return run;
 		} finally {
 			control.cleanupReviewRoot();
@@ -366,7 +403,14 @@ export class ReviewController {
 		await Promise.all(controls.map((control) => control.settled));
 	}
 
-	private async plan(ctx: ExtensionContext, run: ReviewRun, input: ReviewInput, items: ReviewInput["items"], control: ActiveReview, options: StartReviewOptions): Promise<void> {
+	private async plan(
+		ctx: ExtensionContext,
+		run: ReviewRun,
+		input: ReviewInput,
+		items: ReviewInput["items"],
+		control: ActiveReview,
+		options: StartReviewOptions,
+	): Promise<void> {
 		const route = await this.resolveModel(ctx, run.routing.plannerMode, "fast");
 		this.assertActive(control);
 		const profile = reviewRoleProfile("planner");
@@ -385,11 +429,22 @@ export class ReviewController {
 		await appendReviewReceipt(run, { stage: "planner", outcome: "graph_sealed", details: run.workGraph });
 	}
 
-	private async reviewGroups(ctx: ExtensionContext, run: ReviewRun, input: ReviewInput, items: ReviewInput["items"], control: ActiveReview, options: StartReviewOptions): Promise<void> {
+	private async reviewGroups(
+		ctx: ExtensionContext,
+		run: ReviewRun,
+		input: ReviewInput,
+		items: ReviewInput["items"],
+		control: ActiveReview,
+		options: StartReviewOptions,
+	): Promise<void> {
 		if (!run.workGraph) throw new ReviewStageError("Review graph is missing", "planner");
 		run.state = "reviewing";
 		run.updatedAt = new Date().toISOString();
-		await appendReviewReceipt(run, { stage: "reviewer", outcome: "stage_started", details: { groups: run.workGraph.groups.length } });
+		await appendReviewReceipt(run, {
+			stage: "reviewer",
+			outcome: "stage_started",
+			details: { groups: run.workGraph.groups.length },
+		});
 		const itemById = new Map(items.map((item) => [item.id, item]));
 		await parallelLimit(run.workGraph.groups, run.budgets.maxConcurrency, async (group) => {
 			const focus = group.itemIds.map((id) => itemById.get(id)!).filter(Boolean);
@@ -399,16 +454,36 @@ export class ReviewController {
 				const route = await this.resolveModel(ctx, mode, group.tier);
 				this.assertActive(control);
 				const profile = reviewRoleProfile("reviewer");
-				const prompt = reviewerPrompt(input, group, focus, items, { background: options.background, authorityPacket: options.authorityPacket, reviewRoot: control.reviewRoot });
+				const prompt = reviewerPrompt(input, group, focus, items, {
+					background: options.background,
+					authorityPacket: options.authorityPacket,
+					reviewRoot: control.reviewRoot,
+				});
 				const roleRun = await this.runRole(ctx, run, control, "reviewer", group.id, route, profile, prompt);
 				const parsed = parseReviewerOutput(roleRun.submission);
 				exactIds(parsed.reviewedItemIds, group.itemIds, `Reviewer ${group.id}`);
 				const focusPaths = new Set(focus.map((item) => item.path));
 				for (const [index, proposed] of parsed.findings.entries()) {
-					if (!focusPaths.has(proposed.path)) throw new ReviewStageError(`Reviewer ${group.id} filed a finding outside its focus: ${proposed.path}`, "invalid_output");
-					const candidates = focus.filter((entry) => entry.path === proposed.path && (proposed.side === "old" ? entry.status === "deleted" || entry.status === "renamed" : entry.status !== "deleted"));
-					if (candidates.length !== 1) throw new ReviewStageError(`Finding anchor path is not unique in group ${group.id}: ${proposed.path}`, "invalid_output");
-					const located = resolveReviewAnchor(run.projectRoot, candidates[0], proposed.anchor, proposed.side, { allowCurrentFile: input.source.mode === "workspace" });
+					if (!focusPaths.has(proposed.path))
+						throw new ReviewStageError(
+							`Reviewer ${group.id} filed a finding outside its focus: ${proposed.path}`,
+							"invalid_output",
+						);
+					const candidates = focus.filter(
+						(entry) =>
+							entry.path === proposed.path &&
+							(proposed.side === "old"
+								? entry.status === "deleted" || entry.status === "renamed"
+								: entry.status !== "deleted"),
+					);
+					if (candidates.length !== 1)
+						throw new ReviewStageError(
+							`Finding anchor path is not unique in group ${group.id}: ${proposed.path}`,
+							"invalid_output",
+						);
+					const located = resolveReviewAnchor(run.projectRoot, candidates[0], proposed.anchor, proposed.side, {
+						allowCurrentFile: input.source.mode === "workspace",
+					});
 					const finding: ReviewFinding = {
 						...proposed,
 						id: proposedFindingId(run.runId, group.id, index, proposed),
@@ -417,24 +492,45 @@ export class ReviewController {
 						...(located.endLine !== undefined && { endLine: located.endLine }),
 						anchorProvenance: located.provenance,
 						anchorMatchCount: located.matchCount,
-						validation: { status: "retained_unresolved", reason: "Awaiting independent verification", evidence: "Not yet verified" },
+						validation: {
+							status: "retained_unresolved",
+							reason: "Awaiting independent verification",
+							evidence: "Not yet verified",
+						},
 					};
 					run.findings.push(finding);
 				}
 				run.residualRisk.push(...parsed.residualRisk.map((risk) => `${group.id}: ${risk}`));
 				for (const id of group.itemIds) if (!run.completedItemIds.includes(id)) run.completedItemIds.push(id);
-				await appendReviewReceipt(run, { stage: "reviewer", groupId: group.id, outcome: "group_completed", details: { summary: parsed.summary, findings: parsed.findings.length, residualRisk: parsed.residualRisk } });
+				await appendReviewReceipt(run, {
+					stage: "reviewer",
+					groupId: group.id,
+					outcome: "group_completed",
+					details: { summary: parsed.summary, findings: parsed.findings.length, residualRisk: parsed.residualRisk },
+				});
 			} catch (error) {
 				const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
 				const reason = safeReason(error);
 				for (const item of focus) this.addFailure(run, item.id, item.path, classification, reason);
-				await appendReviewReceipt(run, { stage: "reviewer", groupId: group.id, outcome: "group_failed", details: { classification, reason } });
+				await appendReviewReceipt(run, {
+					stage: "reviewer",
+					groupId: group.id,
+					outcome: "group_failed",
+					details: { classification, reason },
+				});
 			}
 		});
 		this.assertActive(control);
 	}
 
-	private async verifyGroups(ctx: ExtensionContext, run: ReviewRun, input: ReviewInput, items: ReviewInput["items"], control: ActiveReview, options: StartReviewOptions): Promise<void> {
+	private async verifyGroups(
+		ctx: ExtensionContext,
+		run: ReviewRun,
+		input: ReviewInput,
+		items: ReviewInput["items"],
+		control: ActiveReview,
+		options: StartReviewOptions,
+	): Promise<void> {
 		if (!run.workGraph) return;
 		run.state = "verifying";
 		run.updatedAt = new Date().toISOString();
@@ -446,34 +542,65 @@ export class ReviewController {
 			const findings = run.findings.filter((finding) => finding.groupId === group.id);
 			try {
 				if (control.abort.signal.aborted) throw new ReviewStageError("Review cancelled", "cancelled");
-				const severe = findings.some((finding) => finding.severity === "critical" || finding.severity === "significant");
-				const tier: ReviewModelTier = run.profile === "fast" ? "fast" : run.profile === "thorough" || group.tier === "strong" || severe ? "strong" : "fast";
+				const severe = findings.some(
+					(finding) => finding.severity === "critical" || finding.severity === "significant",
+				);
+				const tier: ReviewModelTier =
+					run.profile === "fast"
+						? "fast"
+						: run.profile === "thorough" || group.tier === "strong" || severe
+							? "strong"
+							: "fast";
 				const mode = tier === "strong" ? run.routing.strongMode : run.routing.fastMode;
 				const route = await this.resolveModel(ctx, mode, tier);
 				this.assertActive(control);
 				const profile = reviewRoleProfile("verifier");
-				const prompt = verifierPrompt(input, group, focus, findings, { background: options.background, authorityPacket: options.authorityPacket, reviewRoot: control.reviewRoot });
+				const prompt = verifierPrompt(input, group, focus, findings, {
+					background: options.background,
+					authorityPacket: options.authorityPacket,
+					reviewRoot: control.reviewRoot,
+				});
 				const roleRun = await this.runRole(ctx, run, control, "verifier", group.id, route, profile, prompt);
 				const parsed = parseVerifierOutput(roleRun.submission);
-				exactIds(parsed.decisions.map((decision) => decision.findingId), findings.map((finding) => finding.id), `Verifier ${group.id}`);
+				exactIds(
+					parsed.decisions.map((decision) => decision.findingId),
+					findings.map((finding) => finding.id),
+					`Verifier ${group.id}`,
+				);
 				const decisionById = new Map(parsed.decisions.map((decision) => [decision.findingId, decision]));
 				for (const finding of findings) finding.validation = decisionById.get(finding.id)!;
 				run.residualRisk.push(...parsed.residualRisk.map((risk) => `${group.id} verification: ${risk}`));
-				await appendReviewReceipt(run, { stage: "verifier", groupId: group.id, outcome: "group_verified", details: { decisions: parsed.decisions, residualRisk: parsed.residualRisk } });
+				await appendReviewReceipt(run, {
+					stage: "verifier",
+					groupId: group.id,
+					outcome: "group_verified",
+					details: { decisions: parsed.decisions, residualRisk: parsed.residualRisk },
+				});
 			} catch (error) {
 				const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
 				const reason = safeReason(error);
-				for (const finding of findings) finding.validation = { status: "retained_unresolved", reason: "Verification did not complete", evidence: reason };
+				for (const finding of findings)
+					finding.validation = {
+						status: "retained_unresolved",
+						reason: "Verification did not complete",
+						evidence: reason,
+					};
 				for (const item of focus) {
 					run.completedItemIds = run.completedItemIds.filter((id) => id !== item.id);
 					this.addFailure(run, item.id, item.path, classification, `Verification failed: ${reason}`);
 				}
-				await appendReviewReceipt(run, { stage: "verifier", groupId: group.id, outcome: "group_failed", details: { classification, reason } });
+				await appendReviewReceipt(run, {
+					stage: "verifier",
+					groupId: group.id,
+					outcome: "group_failed",
+					details: { classification, reason },
+				});
 			}
 		});
 		this.assertActive(control);
 	}
 
+	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one receipt-backed role lifecycle owns its cancellation and evidence transitions.
 	private async runRole(
 		ctx: ExtensionContext,
 		run: ReviewRun,
@@ -486,7 +613,8 @@ export class ReviewController {
 	) {
 		this.assertActive(control);
 		const service = this.getService();
-		if (!service) throw new ReviewStageError("Review requires apple-pi's subagent extension to be loaded first", "provider");
+		if (!service)
+			throw new ReviewStageError("Review requires apple-pi's subagent extension to be loaded first", "provider");
 		const resultTool = createReviewResultTool(stage);
 		let envelope: ReviewRoleEnvelope;
 		try {
@@ -514,10 +642,21 @@ export class ReviewController {
 		// the remaining run-wide ceiling; live usage enforces that ceiling.
 		control.reservedTokens += envelope.reservationTokens;
 		run.policy?.envelopes.push(envelope);
-		await appendReviewReceipt(run, { stage, ...(groupId && { groupId }), outcome: "role_policy_resolved", details: envelope });
+		await appendReviewReceipt(run, {
+			stage,
+			...(groupId && { groupId }),
+			outcome: "role_policy_resolved",
+			details: envelope,
+		});
 		const timeout = AbortSignal.timeout(envelope.timeoutSeconds * 1000);
 		let timedOut = false;
-		timeout.addEventListener("abort", () => { timedOut = true; }, { once: true });
+		timeout.addEventListener(
+			"abort",
+			() => {
+				timedOut = true;
+			},
+			{ once: true },
+		);
 		const signal = AbortSignal.any([control.abort.signal, timeout]);
 		let activeId: string | undefined;
 		let roleLiveTokens = 0;
@@ -536,7 +675,9 @@ export class ReviewController {
 				thinkingLevel: route.thinkingLevel as never,
 				cwd: control.reviewRoot,
 				signal,
-				toolPolicy: createReviewAuthorityPolicy(control.reviewRoot, () => { authorityDenied = true; }),
+				toolPolicy: createReviewAuthorityPolicy(control.reviewRoot, () => {
+					authorityDenied = true;
+				}),
 				customTools: [resultTool.tool],
 				toolExecution: "sequential",
 				onStarted: (agentId) => {
@@ -584,30 +725,85 @@ export class ReviewController {
 		run.agents.push(agent);
 		run.updatedAt = new Date().toISOString();
 		await appendReviewReceipt(run, { stage, ...(groupId && { groupId }), outcome: record.status, details: agent });
-		if (authorityDenied) throw new ReviewStageError(`${stage} attempted to escape read-only review authority`, "authority");
+		if (authorityDenied)
+			throw new ReviewStageError(`${stage} attempted to escape read-only review authority`, "authority");
 		if (control.budgetExceeded || run.totalTokens >= run.budgets.maxTokens) {
 			control.abort.abort();
 			for (const agentId of control.activeAgentIds) service.abort(agentId);
 			throw new ReviewStageError(`Review token budget exceeded: ${run.totalTokens}/${run.budgets.maxTokens}`, "budget");
 		}
-		if (record.compactionCount > 0) throw new ReviewStageError(`${stage} compacted and lost its curated fresh context`, "compacted");
+		if (record.compactionCount > 0)
+			throw new ReviewStageError(`${stage} compacted and lost its curated fresh context`, "compacted");
 		if (record.status === "steered" || record.status === "aborted") {
 			const cause = record.terminationCause;
 			throw new ReviewStageError(
-				control.stopRequested ? "Review stopped" : control.externalCancelled ? "Review cancelled by the caller" : timedOut ? `${stage} exceeded its elapsed-time envelope` : cause === "token_ceiling" ? `${stage} reached its token envelope` : cause === "compaction" ? `${stage} compacted` : `${stage} exceeded its turn envelope`,
-				control.stopRequested || control.externalCancelled ? "cancelled" : timedOut ? "timeout" : cause === "compaction" ? "compacted" : "budget",
-				control.stopRequested ? "operator_stop" : control.externalCancelled ? "external_cancellation" : timedOut ? "elapsed_time_ceiling" : cause === "token_ceiling" ? "aggregate_token_ceiling" : cause === "compaction" ? "compaction" : "role_turn_ceiling",
+				control.stopRequested
+					? "Review stopped"
+					: control.externalCancelled
+						? "Review cancelled by the caller"
+						: timedOut
+							? `${stage} exceeded its elapsed-time envelope`
+							: cause === "token_ceiling"
+								? `${stage} reached its token envelope`
+								: cause === "compaction"
+									? `${stage} compacted`
+									: `${stage} exceeded its turn envelope`,
+				control.stopRequested || control.externalCancelled
+					? "cancelled"
+					: timedOut
+						? "timeout"
+						: cause === "compaction"
+							? "compacted"
+							: "budget",
+				control.stopRequested
+					? "operator_stop"
+					: control.externalCancelled
+						? "external_cancellation"
+						: timedOut
+							? "elapsed_time_ceiling"
+							: cause === "token_ceiling"
+								? "aggregate_token_ceiling"
+								: cause === "compaction"
+									? "compaction"
+									: "role_turn_ceiling",
 			);
 		}
 		if (record.status === "stopped") {
 			const cause = record.terminationCause;
 			throw new ReviewStageError(
-				control.stopRequested ? "Review stopped" : control.externalCancelled ? "Review cancelled by the caller" : cause === "token_ceiling" ? `${stage} reached its token envelope` : cause === "compaction" ? `${stage} compacted` : timedOut ? `${stage} exceeded its elapsed-time envelope` : "Review agent stopped",
-				control.stopRequested || control.externalCancelled ? "cancelled" : cause === "compaction" ? "compacted" : cause === "token_ceiling" ? "budget" : "timeout",
-				control.stopRequested ? "operator_stop" : control.externalCancelled ? "external_cancellation" : cause === "token_ceiling" ? "aggregate_token_ceiling" : cause === "compaction" ? "compaction" : timedOut ? "elapsed_time_ceiling" : "internal_error",
+				control.stopRequested
+					? "Review stopped"
+					: control.externalCancelled
+						? "Review cancelled by the caller"
+						: cause === "token_ceiling"
+							? `${stage} reached its token envelope`
+							: cause === "compaction"
+								? `${stage} compacted`
+								: timedOut
+									? `${stage} exceeded its elapsed-time envelope`
+									: "Review agent stopped",
+				control.stopRequested || control.externalCancelled
+					? "cancelled"
+					: cause === "compaction"
+						? "compacted"
+						: cause === "token_ceiling"
+							? "budget"
+							: "timeout",
+				control.stopRequested
+					? "operator_stop"
+					: control.externalCancelled
+						? "external_cancellation"
+						: cause === "token_ceiling"
+							? "aggregate_token_ceiling"
+							: cause === "compaction"
+								? "compaction"
+								: timedOut
+									? "elapsed_time_ceiling"
+									: "internal_error",
 			);
 		}
-		if (record.status === "error") throw new ReviewStageError(`${stage} failed: ${record.error ?? "unknown error"}`, "provider");
+		if (record.status === "error")
+			throw new ReviewStageError(`${stage} failed: ${record.error ?? "unknown error"}`, "provider");
 		if (resultTool.calls() !== 1 || resultTool.value() === undefined) {
 			throw new ReviewStageError(`${stage} did not submit exactly one typed result`, "invalid_output");
 		}
@@ -623,15 +819,24 @@ export class ReviewController {
 		if (error instanceof ReviewStageError) {
 			if (error.cause) return error.cause;
 			switch (error.classification) {
-				case "timeout": return "elapsed_time_ceiling";
-				case "budget": return "role_turn_ceiling";
-				case "compacted": return "compaction";
-				case "provider": return "provider_error";
-				case "invalid_output": return "invalid_output";
-				case "authority": return "authority_denial";
-				case "policy_input": return "policy_input";
-				case "cancelled": return "external_cancellation";
-				default: return "internal_error";
+				case "timeout":
+					return "elapsed_time_ceiling";
+				case "budget":
+					return "role_turn_ceiling";
+				case "compacted":
+					return "compaction";
+				case "provider":
+					return "provider_error";
+				case "invalid_output":
+					return "invalid_output";
+				case "authority":
+					return "authority_denial";
+				case "policy_input":
+					return "policy_input";
+				case "cancelled":
+					return "external_cancellation";
+				default:
+					return "internal_error";
 			}
 		}
 		return "internal_error";
@@ -639,18 +844,28 @@ export class ReviewController {
 
 	private failureClassification(cause: ReviewTerminalCause): ReviewCoverageFailure["classification"] {
 		switch (cause) {
-			case "provider_error": return "provider";
-			case "elapsed_time_ceiling": return "timeout";
+			case "provider_error":
+				return "provider";
+			case "elapsed_time_ceiling":
+				return "timeout";
 			case "aggregate_token_ceiling":
-			case "role_turn_ceiling": return "budget";
-			case "compaction": return "compacted";
-			case "invalid_output": return "invalid_output";
-			case "authority_denial": return "authority";
-			case "workspace_conflict": return "workspace";
-			case "policy_input": return "policy_input";
+			case "role_turn_ceiling":
+				return "budget";
+			case "compaction":
+				return "compacted";
+			case "invalid_output":
+				return "invalid_output";
+			case "authority_denial":
+				return "authority";
+			case "workspace_conflict":
+				return "workspace";
+			case "policy_input":
+				return "policy_input";
 			case "operator_stop":
-			case "external_cancellation": return "cancelled";
-			default: return "unknown";
+			case "external_cancellation":
+				return "cancelled";
+			default:
+				return "unknown";
 		}
 	}
 
@@ -671,7 +886,8 @@ export class ReviewController {
 
 	private assertActive(control: ActiveReview): void {
 		if (control.budgetExceeded) throw new ReviewStageError("Review token budget reached", "budget");
-		if (control.stopRequested || control.abort.signal.aborted) throw new ReviewStageError("Review stopped", "cancelled");
+		if (control.stopRequested || control.abort.signal.aborted)
+			throw new ReviewStageError("Review stopped", "cancelled");
 	}
 
 	private addFailure(
@@ -742,10 +958,12 @@ export function summarizeReviewRun(run: ReviewRun): string {
 		`Tokens: ${run.totalTokens}/${run.budgets.maxTokens}`,
 		...(run.terminalCause ? [`Cause: ${run.terminalCause}`] : []),
 		...(run.lastOutcome ? [`Outcome: ${run.lastOutcome}`] : []),
-		...visible.slice(0, 20).flatMap((finding) => [
-			`- [${finding.severity}/${finding.validation.status}] ${finding.path}${finding.startLine ? `:${finding.startLine}` : ""} — ${finding.summary}`,
-			`  ${finding.impact}`,
-		]),
+		...visible
+			.slice(0, 20)
+			.flatMap((finding) => [
+				`- [${finding.severity}/${finding.validation.status}] ${finding.path}${finding.startLine ? `:${finding.startLine}` : ""} — ${finding.summary}`,
+				`  ${finding.impact}`,
+			]),
 		...(visible.length > 20 ? [`- … ${visible.length - 20} more finding(s) in the structured result`] : []),
 		`Receipt: ${reviewReceiptPath(run.projectRoot, run.runId)}`,
 	].join("\n");

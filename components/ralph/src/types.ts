@@ -90,13 +90,7 @@ export type RalphTerminalCause =
 	| "blocked"
 	| "internal_error";
 
-export type RalphState =
-	| "ready"
-	| "executing"
-	| "reviewing"
-	| "judging"
-	| "iterating"
-	| RalphTerminalState;
+export type RalphState = "ready" | "executing" | "reviewing" | "judging" | "iterating" | RalphTerminalState;
 
 export interface RalphBudgets {
 	maxIterations: number;

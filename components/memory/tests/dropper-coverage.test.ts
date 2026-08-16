@@ -21,10 +21,13 @@ describe("V3 dropper reflection coverage helpers", () => {
 		const none = observation("aaaaaaaaaaaa");
 		const partial = observation("bbbbbbbbbbbb");
 		const strong = observation("cccccccccccc");
-		const coverage = reflectionCoverageMap([none, partial, strong], [
-			reflection("rrrrrrrrrrr1", ["bbbbbbbbbbbb", "cccccccccccc"]),
-			reflection("rrrrrrrrrrr2", ["cccccccccccc", "cccccccccccc"]),
-		]);
+		const coverage = reflectionCoverageMap(
+			[none, partial, strong],
+			[
+				reflection("rrrrrrrrrrr1", ["bbbbbbbbbbbb", "cccccccccccc"]),
+				reflection("rrrrrrrrrrr2", ["cccccccccccc", "cccccccccccc"]),
+			],
+		);
 
 		expect(coverage.get("aaaaaaaaaaaa")).toBe("none");
 		expect(coverage.get("bbbbbbbbbbbb")).toBe("partial");
@@ -57,9 +60,7 @@ describe("V3 dropper reflection coverage helpers", () => {
 			observation("bbbbbbbbbbbb", { relevance: "critical", tokenCount: 5 }),
 			observation("cccccccccccc", { relevance: "critical", tokenCount: 7 }),
 		];
-		const before = reflectionCoverageMap(observations, [
-			reflection("rrrrrrrrrrr1", ["bbbbbbbbbbbb"]),
-		]);
+		const before = reflectionCoverageMap(observations, [reflection("rrrrrrrrrrr1", ["bbbbbbbbbbbb"])]);
 		const after = reflectionCoverageMap(observations, [
 			reflection("rrrrrrrrrrr1", ["bbbbbbbbbbbb"]),
 			reflection("rrrrrrrrrrr2", ["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"]),

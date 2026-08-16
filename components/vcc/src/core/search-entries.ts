@@ -1,17 +1,7 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { RenderedEntry } from "./render-entries";
-import {
-  contentBearingText,
-  isContentBearing,
-  textOf,
-  thinkingOf,
-  toolCallsOf,
-} from "./content";
-import {
-  executionArgsText,
-  executionOperationsOf,
-  executionResultText,
-} from "./execution-trace";
+import { contentBearingText, isContentBearing, textOf, thinkingOf, toolCallsOf } from "./content";
+import { executionArgsText, executionOperationsOf, executionResultText } from "./execution-trace";
 import { extractPath } from "./tool-args";
 import type { RecallMode } from "./recall-scope";
 
@@ -36,8 +26,7 @@ export interface SearchHit extends RenderedEntry {
   fileMatches?: FileMatch[];
 }
 
-const escapeRegex = (s: string): string =>
-  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ── British/American spelling variant expansion ──
 
@@ -118,8 +107,7 @@ const safeRegex = (pattern: string): RegExp => {
 };
 
 /** Detect if the query looks like a single regex pattern (contains regex metacharacters). */
-const looksLikeRegex = (query: string): boolean =>
-  /[|*+?{}()[\]\\^$.]/.test(query);
+const looksLikeRegex = (query: string): boolean => /[|*+?{}()[\]\\^$.]/.test(query);
 
 // ── Precompiled term cache ──
 
@@ -133,9 +121,7 @@ const compileTerms = (terms: string[]): Map<string, RegExp> => {
   const cache = new Map<string, RegExp>();
   for (const t of terms) {
     const expanded = expandSpellingVariants(t);
-    const source = expanded.length > MAX_REGEX_SOURCE_LEN
-      ? escapeRegex(expanded.slice(0, 64))
-      : expanded;
+    const source = expanded.length > MAX_REGEX_SOURCE_LEN ? escapeRegex(expanded.slice(0, 64)) : expanded;
     try {
       cache.set(t, new RegExp(source, "gi"));
     } catch {
@@ -168,16 +154,93 @@ const snippetRegex = (terms: string[], termCache: Map<string, RegExp>): RegExp =
 // ── Stopwords for natural language queries ──
 const STOPWORDS = new Set([
   // English
-  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-  "have", "has", "had", "do", "does", "did", "will", "would", "could",
-  "should", "may", "might", "can", "shall", "of", "in", "to", "for",
-  "with", "on", "at", "from", "by", "as", "into", "through", "during",
-  "before", "after", "above", "below", "between", "out", "off", "over",
-  "under", "again", "further", "then", "once", "here", "there", "when",
-  "where", "why", "how", "all", "both", "each", "few", "more", "most",
-  "other", "some", "such", "no", "nor", "not", "only", "own", "same",
-  "so", "than", "too", "very", "just", "about", "it", "its", "that",
-  "this", "what", "which", "who", "whom", "these", "those",
+  "the",
+  "a",
+  "an",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "will",
+  "would",
+  "could",
+  "should",
+  "may",
+  "might",
+  "can",
+  "shall",
+  "of",
+  "in",
+  "to",
+  "for",
+  "with",
+  "on",
+  "at",
+  "from",
+  "by",
+  "as",
+  "into",
+  "through",
+  "during",
+  "before",
+  "after",
+  "above",
+  "below",
+  "between",
+  "out",
+  "off",
+  "over",
+  "under",
+  "again",
+  "further",
+  "then",
+  "once",
+  "here",
+  "there",
+  "when",
+  "where",
+  "why",
+  "how",
+  "all",
+  "both",
+  "each",
+  "few",
+  "more",
+  "most",
+  "other",
+  "some",
+  "such",
+  "no",
+  "nor",
+  "not",
+  "only",
+  "own",
+  "same",
+  "so",
+  "than",
+  "too",
+  "very",
+  "just",
+  "about",
+  "it",
+  "its",
+  "that",
+  "this",
+  "what",
+  "which",
+  "who",
+  "whom",
+  "these",
+  "those",
 ]);
 
 /** Remove stopwords, keep meaningful terms. */
@@ -226,8 +289,8 @@ const termFreq = (text: string, pattern: RegExp): number => {
 };
 
 interface BM25Context {
-  n: number;         // total docs
-  avgDl: number;     // average doc length (words)
+  n: number; // total docs
+  avgDl: number; // average doc length (words)
   df: Map<string, number>; // term -> number of docs containing it
 }
 
@@ -262,7 +325,7 @@ const bm25Score = (doc: string, termCache: Map<string, RegExp>, ctx: BM25Context
     // IDF: log((N - df + 0.5) / (df + 0.5) + 1)
     const idf = Math.log((ctx.n - docFreq + 0.5) / (docFreq + 0.5) + 1);
     // TF saturation with length normalization
-    const tfNorm = (tf * (BM25_K + 1)) / (tf + BM25_K * (1 - BM25_B + BM25_B * dl / ctx.avgDl));
+    const tfNorm = (tf * (BM25_K + 1)) / (tf + BM25_K * (1 - BM25_B + (BM25_B * dl) / ctx.avgDl));
     score += idf * tfNorm;
   }
 
@@ -327,10 +390,7 @@ export const getFileIndicators = (msg: Message): FileMatch[] =>
       .filter((line) => line.trim().length > 0).length,
   }));
 
-export const getTouchedFiles = (
-  messages: Message[],
-  rendered: RenderedEntry[],
-): TouchedFile[] => {
+export const getTouchedFiles = (messages: Message[], rendered: RenderedEntry[]): TouchedFile[] => {
   const touched = new Map<string, TouchedFile>();
   for (let offset = 0; offset < messages.length; offset++) {
     for (const operation of fileOperationsOf(messages[offset]!)) {
@@ -365,9 +425,7 @@ const matchingFiles = (msg: Message | undefined, regex: RegExp): FileMatch[] => 
 /** Build full searchable text for a message. */
 const fullText = (msg: Message, mode: RecallMode): string => {
   if ((msg as any).role === "bashExecution") {
-    return mode === "file"
-      ? ""
-      : `${(msg as any).command ?? ""} ${(msg as any).output ?? ""}`;
+    return mode === "file" ? "" : `${(msg as any).command ?? ""} ${(msg as any).output ?? ""}`;
   }
   const fileText = fileOperationsOf(msg)
     .flatMap((operation) => [operation.path, contentBearingText(operation.args)])
@@ -379,11 +437,7 @@ const fullText = (msg: Message, mode: RecallMode): string => {
   let text = textOf(msg.content);
   if (msg.role === "toolResult") {
     const nested = executionOperationsOf((msg as any).details)
-      .flatMap((operation) => [
-        operation.ref,
-        executionArgsText(operation),
-        executionResultText(operation),
-      ])
+      .flatMap((operation) => [operation.ref, executionArgsText(operation), executionResultText(operation)])
       .filter(Boolean)
       .join("\n");
     if (nested) text += "\n" + nested;

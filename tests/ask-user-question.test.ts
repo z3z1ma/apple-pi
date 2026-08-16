@@ -113,10 +113,7 @@ describe("ask_user_question registration and validation", () => {
 				questions: [
 					{
 						...base,
-						options: [
-							{ label: "Other", description: "Reserved." },
-							base.options[1],
-						],
+						options: [{ label: "Other", description: "Reserved." }, base.options[1]],
 					},
 				],
 			}),
@@ -204,10 +201,7 @@ describe("ask_user_question TUI", () => {
 			component.handleInput(ENTER);
 			component.handleInput(ENTER);
 		});
-		expect(result.details.answers).toMatchObject([
-			{ answer: "SQLite" },
-			{ answer: "Explicit" },
-		]);
+		expect(result.details.answers).toMatchObject([{ answer: "SQLite" }, { answer: "Explicit" }]);
 	});
 
 	it("honors remapped selector navigation and confirmation keys", () => {

@@ -30,10 +30,7 @@ export type CompactionProjection = Projection & {
 	details: MemoryDetails;
 };
 
-type ProjectionBoundary =
-	| { kind: "entry"; entryId: string }
-	| { kind: "tip" }
-	| { kind: "none" };
+type ProjectionBoundary = { kind: "entry"; entryId: string } | { kind: "tip" } | { kind: "none" };
 
 type ProjectionFoldOptions = {
 	observationsBoundary: ProjectionBoundary;
@@ -187,9 +184,7 @@ export function buildCompactionProjection(
 		0,
 	);
 	const fullFold = observationTokens >= config.observationsPoolMaxTokens;
-	const projection = fullFold
-		? fullProjection(entries, firstKeptEntryId)
-		: normalProjection;
+	const projection = fullFold ? fullProjection(entries, firstKeptEntryId) : normalProjection;
 
 	const details: MemoryDetails = {
 		type: OM_FOLDED,

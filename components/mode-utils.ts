@@ -45,7 +45,9 @@ export async function loadModeSpec(
 			const matches = Object.keys(entries).filter((key) => key.toLowerCase() === modeName.toLowerCase());
 			const spec = Object.hasOwn(entries, modeName)
 				? entries[modeName]
-				: matches.length === 1 ? entries[matches[0]] : undefined;
+				: matches.length === 1
+					? entries[matches[0]]
+					: undefined;
 			if (!spec || typeof spec !== "object") continue;
 			const fields = spec as Record<string, unknown>;
 			return {
@@ -53,9 +55,7 @@ export async function loadModeSpec(
 				modelId: typeof fields.modelId === "string" ? fields.modelId : undefined,
 				thinkingLevel: typeof fields.thinkingLevel === "string" ? fields.thinkingLevel : undefined,
 			};
-		} catch {
-			continue;
-		}
+		} catch {}
 	}
 	return undefined;
 }

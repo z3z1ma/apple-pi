@@ -151,9 +151,7 @@ describe("session-ledger recall", () => {
 	it("reports missing and non-source source ids as partial recall", () => {
 		const entries = [
 			nonSourceEntry("custom-1"),
-			observationsEntry("obs-entry-1", [
-				observation({ id: OBS_1, sourceEntryIds: ["missing-src", "custom-1"] }),
-			]),
+			observationsEntry("obs-entry-1", [observation({ id: OBS_1, sourceEntryIds: ["missing-src", "custom-1"] })]),
 		];
 
 		const result = recallMemorySources(entries, OBS_1);

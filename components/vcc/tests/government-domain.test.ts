@@ -17,68 +17,199 @@ import type { SearchHit } from "../src/core/search-entries";
 
 const govEntries: RenderedEntry[] = [
   { index: 0, role: "user", summary: "Draft the new information security policy for FY2027" },
-  { index: 1, role: "assistant", summary: "I'll review the existing policy template and draft the update.", files: ["policies/infosec-2026.md"] },
+  {
+    index: 1,
+    role: "assistant",
+    summary: "I'll review the existing policy template and draft the update.",
+    files: ["policies/infosec-2026.md"],
+  },
   { index: 2, role: "tool_result", summary: "[Read] policies/infosec-2026.md" },
-  { index: 3, role: "assistant", summary: "The current policy covers data classification and access control. I'll draft revisions for the new compliance requirements." },
+  {
+    index: 3,
+    role: "assistant",
+    summary:
+      "The current policy covers data classification and access control. I'll draft revisions for the new compliance requirements.",
+  },
   { index: 4, role: "user", summary: "Make sure it complies with OMB Circular A-130 and FedRAMP requirements" },
-  { index: 5, role: "assistant", summary: "Adding FedRAMP compliance and OMB A-130 references to the policy document.", files: ["policies/infosec-2027.md"] },
+  {
+    index: 5,
+    role: "assistant",
+    summary: "Adding FedRAMP compliance and OMB A-130 references to the policy document.",
+    files: ["policies/infosec-2027.md"],
+  },
   { index: 6, role: "tool_result", summary: "[Edit] policies/infosec-2027.md" },
   { index: 7, role: "user", summary: "Send the policy document for review by the compliance office" },
-  { index: 8, role: "assistant", summary: "The policy document has been routed to the compliance review office for approval." },
+  {
+    index: 8,
+    role: "assistant",
+    summary: "The policy document has been routed to the compliance review office for approval.",
+  },
   { index: 9, role: "user", summary: "Update the regulation tracking spreadsheet with the new policy" },
-  { index: 10, role: "assistant", summary: "Updating the regulation tracking spreadsheet with the new policy entry.", files: ["tracking/regulations-2027.xlsx"] },
+  {
+    index: 10,
+    role: "assistant",
+    summary: "Updating the regulation tracking spreadsheet with the new policy entry.",
+    files: ["tracking/regulations-2027.xlsx"],
+  },
   { index: 11, role: "tool_result", summary: "[Edit] tracking/regulations-2027.xlsx" },
   { index: 12, role: "user", summary: "Review the document clearance procedure memo" },
-  { index: 13, role: "assistant", summary: "The document clearance procedure requires review by the policy office, compliance division, and legal counsel before approval.", files: ["memos/clearance-procedure.md"] },
+  {
+    index: 13,
+    role: "assistant",
+    summary:
+      "The document clearance procedure requires review by the policy office, compliance division, and legal counsel before approval.",
+    files: ["memos/clearance-procedure.md"],
+  },
   { index: 14, role: "tool_result", summary: "[Read] memos/clearance-procedure.md" },
   { index: 15, role: "user", summary: "Check if the new policy meets all regulation requirements" },
-  { index: 16, role: "assistant", summary: "Cross-referencing the policy against all applicable regulation and compliance requirements." },
+  {
+    index: 16,
+    role: "assistant",
+    summary: "Cross-referencing the policy against all applicable regulation and compliance requirements.",
+  },
   { index: 17, role: "user", summary: "The compliance office returned the document with comments" },
-  { index: 18, role: "assistant", summary: "Incorporating compliance office feedback into the policy document. Main comments address review timeline and approval workflow.", files: ["policies/infosec-2027.md"] },
+  {
+    index: 18,
+    role: "assistant",
+    summary:
+      "Incorporating compliance office feedback into the policy document. Main comments address review timeline and approval workflow.",
+    files: ["policies/infosec-2027.md"],
+  },
   { index: 19, role: "tool_result", summary: "[Edit] policies/infosec-2027.md" },
   { index: 20, role: "user", summary: "Submit for final approval through the document management system" },
-  { index: 21, role: "assistant", summary: "The updated policy document has been submitted through the document management system for final review and approval." },
+  {
+    index: 21,
+    role: "assistant",
+    summary:
+      "The updated policy document has been submitted through the document management system for final review and approval.",
+  },
 ];
 
 const govMessages: Message[] = [
   { role: "user", content: "Draft the new information security policy for FY2027" } as any,
-  { role: "assistant", content: [{ type: "text", text: "I'll review the existing policy template and draft the update." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "Current policy content: data classification, access control, incident response procedures" }], toolName: "Read", isError: false } as any,
-  { role: "assistant", content: [{ type: "text", text: "The current policy covers data classification and access control. I'll draft revisions for the new compliance requirements." }] } as any,
+  {
+    role: "assistant",
+    content: [{ type: "text", text: "I'll review the existing policy template and draft the update." }],
+  } as any,
+  {
+    role: "toolResult",
+    content: [
+      {
+        type: "text",
+        text: "Current policy content: data classification, access control, incident response procedures",
+      },
+    ],
+    toolName: "Read",
+    isError: false,
+  } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The current policy covers data classification and access control. I'll draft revisions for the new compliance requirements.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Make sure it complies with OMB Circular A-130 and FedRAMP requirements" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Adding FedRAMP compliance and OMB A-130 references to the policy document." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "File edited: added FedRAMP Section 4.2, OMB A-130 compliance annex" }], toolName: "Edit", isError: false } as any,
+  {
+    role: "assistant",
+    content: [{ type: "text", text: "Adding FedRAMP compliance and OMB A-130 references to the policy document." }],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "File edited: added FedRAMP Section 4.2, OMB A-130 compliance annex" }],
+    toolName: "Edit",
+    isError: false,
+  } as any,
   { role: "user", content: "Send the policy document for review by the compliance office" } as any,
-  { role: "assistant", content: [{ type: "text", text: "The policy document has been routed to the compliance review office for approval." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      { type: "text", text: "The policy document has been routed to the compliance review office for approval." },
+    ],
+  } as any,
   { role: "user", content: "Update the regulation tracking spreadsheet with the new policy" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Updating the regulation tracking spreadsheet with the new policy entry." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "Spreadsheet updated: row added for infosec-2027 policy" }], toolName: "Edit", isError: false } as any,
+  {
+    role: "assistant",
+    content: [{ type: "text", text: "Updating the regulation tracking spreadsheet with the new policy entry." }],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "Spreadsheet updated: row added for infosec-2027 policy" }],
+    toolName: "Edit",
+    isError: false,
+  } as any,
   { role: "user", content: "Review the document clearance procedure memo" } as any,
-  { role: "assistant", content: [{ type: "text", text: "The document clearance procedure requires review by the policy office, compliance division, and legal counsel before approval." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "Clearance memo: 3-stage review, policy office → compliance → legal approval" }], toolName: "Read", isError: false } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The document clearance procedure requires review by the policy office, compliance division, and legal counsel before approval.",
+      },
+    ],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "Clearance memo: 3-stage review, policy office → compliance → legal approval" }],
+    toolName: "Read",
+    isError: false,
+  } as any,
   { role: "user", content: "Check if the new policy meets all regulation requirements" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Cross-referencing the policy against all applicable regulation and compliance requirements." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Cross-referencing the policy against all applicable regulation and compliance requirements.",
+      },
+    ],
+  } as any,
   { role: "user", content: "The compliance office returned the document with comments" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Incorporating compliance office feedback into the policy document. Main comments address review timeline and approval workflow." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "File edited: addressed compliance comments on review timeline" }], toolName: "Edit", isError: false } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Incorporating compliance office feedback into the policy document. Main comments address review timeline and approval workflow.",
+      },
+    ],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "File edited: addressed compliance comments on review timeline" }],
+    toolName: "Edit",
+    isError: false,
+  } as any,
   { role: "user", content: "Submit for final approval through the document management system" } as any,
-  { role: "assistant", content: [{ type: "text", text: "The updated policy document has been submitted through the document management system for final review and approval." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The updated policy document has been submitted through the document management system for final review and approval.",
+      },
+    ],
+  } as any,
 ];
 
 // ── Session file helpers for integration tests ──
 
 const register = () => {
   let tool: any;
-  registerRecallTool({ registerTool: (t: any) => { tool = t; } } as any);
+  registerRecallTool({
+    registerTool: (t: any) => {
+      tool = t;
+    },
+  } as any);
   return tool;
 };
 
 const makeGovSession = () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-vcc-gov-"));
   const file = join(dir, "session.jsonl");
-  const lines = govMessages.map((msg, i) =>
-    JSON.stringify({ type: "message", id: `m${i}`, message: msg })
-  );
+  const lines = govMessages.map((msg, i) => JSON.stringify({ type: "message", id: `m${i}`, message: msg }));
   writeFileSync(file, lines.join("\n") + "\n", "utf8");
   return { dir, file };
 };
@@ -158,10 +289,13 @@ describe("government domain: searchEntries", () => {
     ];
     const msgs: Message[] = [
       { role: "user", content: "Update the FISMA report" } as any,
-      { role: "assistant", content: [
-        { type: "thinking", thinking: "Need to align with the NIST SP 800-53 control framework before submitting" },
-        { type: "text", text: "Working on FISMA report" },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Need to align with the NIST SP 800-53 control framework before submitting" },
+          { type: "text", text: "Working on FISMA report" },
+        ],
+      } as any,
     ];
     // "NIST" only appears in thinking content — should still be findable
     const r = searchEntries(entries, msgs, "NIST 800-53");
@@ -189,14 +323,18 @@ describe("government domain: searchEntries", () => {
     const bigEntries: RenderedEntry[] = Array.from({ length: 200 }, (_, i) => ({
       index: i,
       role: (i % 2 === 0 ? "user" : "assistant") as any,
-      summary: i % 2 === 0
-        ? `Review policy document section ${Math.floor(i / 2)} for compliance approval`
-        : `Processed policy document section ${Math.floor(i / 2)} — review pending`,
+      summary:
+        i % 2 === 0
+          ? `Review policy document section ${Math.floor(i / 2)} for compliance approval`
+          : `Processed policy document section ${Math.floor(i / 2)} — review pending`,
     }));
-    const bigMsgs: Message[] = bigEntries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant",
-      content: e.summary,
-    } as any));
+    const bigMsgs: Message[] = bigEntries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : "assistant",
+          content: e.summary,
+        }) as any,
+    );
 
     // Regex that matches everything
     const rRegex = searchEntries(bigEntries, bigMsgs, "policy.*document");
@@ -229,9 +367,8 @@ describe("government domain: formatRecallOutput", () => {
     const hits: SearchHit[] = Array.from({ length: 40 }, (_, i) => ({
       index: i,
       role: i % 2 === 0 ? "user" : "assistant",
-      summary: i % 2 === 0
-        ? `Review policy document ${Math.floor(i / 2)}`
-        : `Processed policy document ${Math.floor(i / 2)}`,
+      summary:
+        i % 2 === 0 ? `Review policy document ${Math.floor(i / 2)}` : `Processed policy document ${Math.floor(i / 2)}`,
       snippet: "policy",
     }));
     const r = formatRecallOutput(hits, "policy");
@@ -330,7 +467,7 @@ describe("government domain: vcc_recall integration", () => {
         type: "message",
         id: `m${i}`,
         message: { role: "user", content: `Policy document review item ${i} for compliance approval` },
-      })
+      }),
     );
     writeFileSync(file, entries.join("\n") + "\n", "utf8");
 
@@ -379,31 +516,93 @@ describe("government domain: stress scenarios", () => {
     // or "compliance" but specific regulation IDs are rare.
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Cross-reference FISMA with NIST SP 800-53" },
-      { index: 1, role: "assistant", summary: "Reviewing FISMA requirements against NIST SP 800-53 control catalog for compliance alignment." },
+      {
+        index: 1,
+        role: "assistant",
+        summary: "Reviewing FISMA requirements against NIST SP 800-53 control catalog for compliance alignment.",
+      },
       { index: 2, role: "tool_result", summary: "[Read] regulations/fisma-2027.txt" },
       { index: 3, role: "assistant", summary: "FISMA Section 3.2 maps to NIST controls AC-2, AU-1, and CA-7." },
       { index: 4, role: "user", summary: "Now check HIPAA compliance against the same regulation framework" },
-      { index: 5, role: "assistant", summary: "Cross-referencing HIPAA Security Rule with NIST SP 800-66 for compliance." },
+      {
+        index: 5,
+        role: "assistant",
+        summary: "Cross-referencing HIPAA Security Rule with NIST SP 800-66 for compliance.",
+      },
       { index: 6, role: "tool_result", summary: "[Read] regulations/hipaa-security-rule.txt" },
       { index: 7, role: "assistant", summary: "HIPAA §164.312 maps to NIST controls AC-3, AU-9, and SC-8." },
       { index: 8, role: "user", summary: "Generate compliance gap analysis document" },
-      { index: 9, role: "assistant", summary: "Generating compliance gap analysis across FISMA, HIPAA, and NIST frameworks.", files: ["reports/compliance-gap-analysis.md"] },
+      {
+        index: 9,
+        role: "assistant",
+        summary: "Generating compliance gap analysis across FISMA, HIPAA, and NIST frameworks.",
+        files: ["reports/compliance-gap-analysis.md"],
+      },
       { index: 10, role: "tool_result", summary: "[Write] reports/compliance-gap-analysis.md" },
-      { index: 11, role: "assistant", summary: "Compliance gap analysis document created. 3 gaps identified in access control and audit regulation." },
+      {
+        index: 11,
+        role: "assistant",
+        summary: "Compliance gap analysis document created. 3 gaps identified in access control and audit regulation.",
+      },
     ];
     const msgs: Message[] = [
       { role: "user", content: "Cross-reference FISMA with NIST SP 800-53" } as any,
-      { role: "assistant", content: [{ type: "text", text: "Reviewing FISMA requirements against NIST SP 800-53 control catalog for compliance alignment." }] } as any,
-      { role: "toolResult", content: [{ type: "text", text: "FISMA implementation guidance for 2027" }], toolName: "Read", isError: false } as any,
-      { role: "assistant", content: [{ type: "text", text: "FISMA Section 3.2 maps to NIST controls AC-2, AU-1, and CA-7." }] } as any,
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Reviewing FISMA requirements against NIST SP 800-53 control catalog for compliance alignment.",
+          },
+        ],
+      } as any,
+      {
+        role: "toolResult",
+        content: [{ type: "text", text: "FISMA implementation guidance for 2027" }],
+        toolName: "Read",
+        isError: false,
+      } as any,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "FISMA Section 3.2 maps to NIST controls AC-2, AU-1, and CA-7." }],
+      } as any,
       { role: "user", content: "Now check HIPAA compliance against the same regulation framework" } as any,
-      { role: "assistant", content: [{ type: "text", text: "Cross-referencing HIPAA Security Rule with NIST SP 800-66 for compliance." }] } as any,
-      { role: "toolResult", content: [{ type: "text", text: "HIPAA Security Rule provisions" }], toolName: "Read", isError: false } as any,
-      { role: "assistant", content: [{ type: "text", text: "HIPAA §164.312 maps to NIST controls AC-3, AU-9, and SC-8." }] } as any,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Cross-referencing HIPAA Security Rule with NIST SP 800-66 for compliance." }],
+      } as any,
+      {
+        role: "toolResult",
+        content: [{ type: "text", text: "HIPAA Security Rule provisions" }],
+        toolName: "Read",
+        isError: false,
+      } as any,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "HIPAA §164.312 maps to NIST controls AC-3, AU-9, and SC-8." }],
+      } as any,
       { role: "user", content: "Generate compliance gap analysis document" } as any,
-      { role: "assistant", content: [{ type: "text", text: "Generating compliance gap analysis across FISMA, HIPAA, and NIST frameworks." }] } as any,
-      { role: "toolResult", content: [{ type: "text", text: "File written successfully" }], toolName: "Write", isError: false } as any,
-      { role: "assistant", content: [{ type: "text", text: "Compliance gap analysis document created. 3 gaps identified in access control and audit regulation." }] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Generating compliance gap analysis across FISMA, HIPAA, and NIST frameworks." },
+        ],
+      } as any,
+      {
+        role: "toolResult",
+        content: [{ type: "text", text: "File written successfully" }],
+        toolName: "Write",
+        isError: false,
+      } as any,
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Compliance gap analysis document created. 3 gaps identified in access control and audit regulation.",
+          },
+        ],
+      } as any,
     ];
 
     // Specific regulation ID should find the right entries
@@ -425,20 +624,46 @@ describe("government domain: stress scenarios", () => {
     // but the specific step differs.
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Submit travel authorization for approval" },
-      { index: 1, role: "assistant", summary: "Travel authorization TA-2027-0442 submitted for supervisor review and approval." },
+      {
+        index: 1,
+        role: "assistant",
+        summary: "Travel authorization TA-2027-0442 submitted for supervisor review and approval.",
+      },
       { index: 2, role: "user", summary: "Check the approval status of TA-2027-0442" },
-      { index: 3, role: "assistant", summary: "TA-2027-0442 is pending review by direct supervisor. Approval chain: supervisor → division chief → finance office." },
+      {
+        index: 3,
+        role: "assistant",
+        summary:
+          "TA-2027-0442 is pending review by direct supervisor. Approval chain: supervisor → division chief → finance office.",
+      },
       { index: 4, role: "user", summary: "Supervisor approved — route to division chief" },
-      { index: 5, role: "assistant", summary: "TA-2027-0442 routed to division chief for review and approval. Current status: 1 of 3 approvals completed." },
+      {
+        index: 5,
+        role: "assistant",
+        summary:
+          "TA-2027-0442 routed to division chief for review and approval. Current status: 1 of 3 approvals completed.",
+      },
       { index: 6, role: "user", summary: "Division chief returned it — needs updated cost estimate" },
-      { index: 7, role: "assistant", summary: "TA-2027-0442 returned for revision. Updated cost estimate required before resubmission for approval." },
+      {
+        index: 7,
+        role: "assistant",
+        summary: "TA-2027-0442 returned for revision. Updated cost estimate required before resubmission for approval.",
+      },
       { index: 8, role: "user", summary: "Updated — resubmit for approval" },
-      { index: 9, role: "assistant", summary: "TA-2027-0442 resubmitted. Approval chain restarted: supervisor review → division chief → finance approval." },
+      {
+        index: 9,
+        role: "assistant",
+        summary:
+          "TA-2027-0442 resubmitted. Approval chain restarted: supervisor review → division chief → finance approval.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // Specific tracking ID
     const byId = searchEntries(entries, msgs, "TA-2027-0442");
@@ -494,12 +719,19 @@ describe("government domain: stress scenarios", () => {
       { index: 2, role: "user", summary: "Now check DoD Instruction 5205.11" },
       { index: 3, role: "assistant", summary: "DoD Instruction 5205.11 covers SAP investigation procedures." },
       { index: 4, role: "user", summary: "What about DoD Manual 5205.07?" },
-      { index: 5, role: "assistant", summary: "DoD Manual 5205.07 Volume 2 covers SAP indoctrination briefing requirements." },
+      {
+        index: 5,
+        role: "assistant",
+        summary: "DoD Manual 5205.07 Volume 2 covers SAP indoctrination briefing requirements.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // Match any DoD 5200-5205 series citation
     const r = searchEntries(entries, msgs, "DoD.*520[0-5]");
@@ -515,14 +747,25 @@ describe("government domain: stress scenarios", () => {
       { index: 0, role: "user", summary: "Map FISMA controls to our system" },
       { index: 1, role: "assistant", summary: "FISMA compliance requires annual assessment under NIST SP 800-53." },
       { index: 2, role: "user", summary: "Also check FedRAMP authorization status" },
-      { index: 3, role: "assistant", summary: "FedRAMP authorization is separate from FISMA but shares NIST control baselines." },
+      {
+        index: 3,
+        role: "assistant",
+        summary: "FedRAMP authorization is separate from FISMA but shares NIST control baselines.",
+      },
       { index: 4, role: "user", summary: "Validate FIPS 140-2 compliance for cryptographic modules" },
-      { index: 5, role: "assistant", summary: "FIPS 140-2 validation is required for all cryptographic modules per OMB policy." },
+      {
+        index: 5,
+        role: "assistant",
+        summary: "FIPS 140-2 validation is required for all cryptographic modules per OMB policy.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // Each acronym has distinct entries — search should be discriminate
     const fisma = searchEntries(entries, msgs, "FISMA");

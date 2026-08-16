@@ -34,7 +34,13 @@ export interface AgentConfig {
 export type JoinMode = "async" | "group" | "smart";
 export type WidgetMode = "all" | "background" | "off";
 
-export type AgentTerminationCause = "operator_stop" | "external_cancellation" | "token_ceiling" | "turn_ceiling" | "compaction" | "provider_error";
+export type AgentTerminationCause =
+	| "operator_stop"
+	| "external_cancellation"
+	| "token_ceiling"
+	| "turn_ceiling"
+	| "compaction"
+	| "provider_error";
 
 export interface AgentRecord {
 	id: string;

@@ -127,7 +127,14 @@ export interface VerifierOutput {
 	residualRisk: string[];
 }
 
-export type ReviewTerminalState = "complete" | "partial" | "failed" | "skipped" | "stopped" | "workspace_conflict" | "error";
+export type ReviewTerminalState =
+	| "complete"
+	| "partial"
+	| "failed"
+	| "skipped"
+	| "stopped"
+	| "workspace_conflict"
+	| "error";
 export type ReviewRunState = "planning" | "reviewing" | "verifying" | ReviewTerminalState;
 
 /**
@@ -214,7 +221,18 @@ export interface ReviewAgentReceipt {
 export interface ReviewCoverageFailure {
 	itemId: string;
 	path: string;
-	classification: "planner" | "provider" | "timeout" | "budget" | "invalid_output" | "compacted" | "cancelled" | "authority" | "policy_input" | "workspace" | "unknown";
+	classification:
+		| "planner"
+		| "provider"
+		| "timeout"
+		| "budget"
+		| "invalid_output"
+		| "compacted"
+		| "cancelled"
+		| "authority"
+		| "policy_input"
+		| "workspace"
+		| "unknown";
 	reason: string;
 }
 

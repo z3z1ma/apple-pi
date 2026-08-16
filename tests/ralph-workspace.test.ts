@@ -60,7 +60,9 @@ describe("Ralph workspace snapshots", () => {
 		expect(before.entries.map((entry) => entry.path)).toContain(".ledger/202608151200-local-task/task.md");
 		writeFileSync(join(root, ".ledger", "202608151200-local-task", "task.md"), "Status: done\n");
 		const after = captureWorkspace(root);
-		expect(changedPaths(before, after)).toContainEqual(expect.objectContaining({ change: "modified", path: ".ledger/202608151200-local-task/task.md" }));
+		expect(changedPaths(before, after)).toContainEqual(
+			expect.objectContaining({ change: "modified", path: ".ledger/202608151200-local-task/task.md" }),
+		);
 	});
 
 	it("includes staged changes and tracked symlinks in the sealed review state", () => {
@@ -123,10 +125,24 @@ describe("Ralph executor authority policy", () => {
 		writeFileSync(join(ledgerRoot, "unrelated.txt"), "not ledger authority\n");
 		const canonicalLedgerRoot = realpathSync(ledgerRoot);
 		const policy = createExecutorAuthorityPolicy(workspace, () => {}, canonicalLedgerRoot);
-		expect(await policy({ toolName: "read", args: { path: join(canonicalLedgerRoot, ".ledger", "202608151200-work", "task.md") } })).toBeUndefined();
-		expect(await policy({ toolName: "edit", args: { path: join(canonicalLedgerRoot, ".ledger", "202608151200-work", "task.md") } })).toMatchObject({ block: true, terminate: true });
-		expect(await policy({ toolName: "bash", args: { command: "npm test", cwd: join(canonicalLedgerRoot, ".ledger") } })).toMatchObject({ block: true, terminate: true });
-		expect(await policy({ toolName: "read", args: { path: join(canonicalLedgerRoot, "unrelated.txt") } })).toMatchObject({ block: true, terminate: true });
+		expect(
+			await policy({
+				toolName: "read",
+				args: { path: join(canonicalLedgerRoot, ".ledger", "202608151200-work", "task.md") },
+			}),
+		).toBeUndefined();
+		expect(
+			await policy({
+				toolName: "edit",
+				args: { path: join(canonicalLedgerRoot, ".ledger", "202608151200-work", "task.md") },
+			}),
+		).toMatchObject({ block: true, terminate: true });
+		expect(
+			await policy({ toolName: "bash", args: { command: "npm test", cwd: join(canonicalLedgerRoot, ".ledger") } }),
+		).toMatchObject({ block: true, terminate: true });
+		expect(
+			await policy({ toolName: "read", args: { path: join(canonicalLedgerRoot, "unrelated.txt") } }),
+		).toMatchObject({ block: true, terminate: true });
 	});
 
 	it("blocks external, destructive, and Git mutation commands while allowing local validation", async () => {
@@ -155,15 +171,27 @@ describe("Ralph executor authority policy", () => {
 		const denials: string[] = [];
 		const policy = createExecutorAuthorityPolicy(root, (denial) => denials.push(denial.reason));
 		expect(await policy({ toolName: "write", args: { path: "src/new.ts" } })).toBeUndefined();
-		expect(await policy({ toolName: "write", args: { path: "../outside.ts" } })).toMatchObject({ block: true, terminate: true });
+		expect(await policy({ toolName: "write", args: { path: "../outside.ts" } })).toMatchObject({
+			block: true,
+			terminate: true,
+		});
 		expect(await policy({ toolName: "edit", args: { path: ".git/config" } })).toMatchObject({ block: true });
-		expect(await policy({ toolName: "edit", args: { path: ".ledger/202608151200-work/task.md" } })).toMatchObject({ block: true });
-		expect(await policy({ toolName: "bash", args: { command: "sed -i s/active/done/ task.md", cwd: ".ledger/202608151200-work" } })).toMatchObject({ block: true });
+		expect(await policy({ toolName: "edit", args: { path: ".ledger/202608151200-work/task.md" } })).toMatchObject({
+			block: true,
+		});
+		expect(
+			await policy({
+				toolName: "bash",
+				args: { command: "sed -i s/active/done/ task.md", cwd: ".ledger/202608151200-work" },
+			}),
+		).toMatchObject({ block: true });
 		const outside = mkdtempSync(join(tmpdir(), "ralph-policy-outside-"));
 		roots.push(outside);
 		mkdirSync(join(root, "links"), { recursive: true });
 		symlinkSync(outside, join(root, "links", "outside"));
-		expect(await policy({ toolName: "write", args: { path: "links/outside/escaped.ts" } })).toMatchObject({ block: true });
+		expect(await policy({ toolName: "write", args: { path: "links/outside/escaped.ts" } })).toMatchObject({
+			block: true,
+		});
 		mkdirSync(join(root, "nested", ".git"), { recursive: true });
 		expect(await policy({ toolName: "read", args: { path: "nested/file.ts" } })).toMatchObject({ block: true });
 		expect(await policy({ toolName: "read", args: { path: "nested/.git/config" } })).toMatchObject({ block: true });

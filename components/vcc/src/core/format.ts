@@ -33,7 +33,10 @@ const wrapLine = (line: string, maxChars: number): string[] => {
 };
 
 export const wrapLongLines = (text: string, maxChars = TUI_SAFE_LINE_CHARS): string =>
-  text.split("\n").flatMap((line) => wrapLine(line, maxChars)).join("\n");
+  text
+    .split("\n")
+    .flatMap((line) => wrapLine(line, maxChars))
+    .join("\n");
 
 export const capBrief = (text: string): string => {
   const lines = text.split("\n");
@@ -52,9 +55,7 @@ export const capBrief = (text: string): string => {
  * Stable (merged/accumulated) sections come first so the prompt prefix
  * stays cacheable across compactions. Volatile (always-fresh) sections
  * come last. */
-export const formatSummary = (
-  data: SectionData,
-): string => {
+export const formatSummary = (data: SectionData): string => {
   // Cache-friendly ordering: stable first, volatile last
   const stableSections = [
     section("Session Goal", data.sessionGoal),
@@ -82,7 +83,7 @@ export const formatSummary = (
 
   if (parts.length === 0) return "";
 
-  let result = wrapLongLines(parts.join("\n\n---\n\n"));
+  const result = wrapLongLines(parts.join("\n\n---\n\n"));
 
   return result;
 };

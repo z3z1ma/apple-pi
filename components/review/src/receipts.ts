@@ -4,71 +4,133 @@ import { join } from "node:path";
 import { getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import type { ReviewReceiptEvent, ReviewRun, ReviewRunSummary } from "./types.js";
 
-const STATES = new Set(["planning", "reviewing", "verifying", "complete", "partial", "failed", "skipped", "stopped", "workspace_conflict", "error"]);
-const TERMINAL_CAUSES = new Set(["operator_stop", "external_cancellation", "elapsed_time_ceiling", "aggregate_token_ceiling", "role_turn_ceiling", "compaction", "provider_error", "invalid_output", "authority_denial", "workspace_conflict", "policy_input", "internal_error"]);
+const STATES = new Set([
+	"planning",
+	"reviewing",
+	"verifying",
+	"complete",
+	"partial",
+	"failed",
+	"skipped",
+	"stopped",
+	"workspace_conflict",
+	"error",
+]);
+const TERMINAL_CAUSES = new Set([
+	"operator_stop",
+	"external_cancellation",
+	"elapsed_time_ceiling",
+	"aggregate_token_ceiling",
+	"role_turn_ceiling",
+	"compaction",
+	"provider_error",
+	"invalid_output",
+	"authority_denial",
+	"workspace_conflict",
+	"policy_input",
+	"internal_error",
+]);
 const TRANSITIONS: Record<string, Set<string>> = {
 	planning: new Set(["planning", "reviewing", "failed", "skipped", "stopped", "workspace_conflict", "error"]),
 	reviewing: new Set(["reviewing", "verifying", "partial", "failed", "stopped", "workspace_conflict", "error"]),
 	verifying: new Set(["verifying", "complete", "partial", "failed", "stopped", "workspace_conflict", "error"]),
 };
 
-function validateRun(run: ReviewRun, event: Pick<ReviewReceiptEvent, "runId" | "state" | "sequence">, genesis?: ReviewRun, previous?: ReviewRun): void {
-	if (!run || run.schemaVersion !== 1 || run.runId !== event.runId || run.state !== event.state || !STATES.has(run.state)) {
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: receipt validation deliberately enumerates every persisted run-state invariant.
+function validateRun(
+	run: ReviewRun,
+	event: Pick<ReviewReceiptEvent, "runId" | "state" | "sequence">,
+	genesis?: ReviewRun,
+	previous?: ReviewRun,
+): void {
+	if (
+		!run ||
+		run.schemaVersion !== 1 ||
+		run.runId !== event.runId ||
+		run.state !== event.state ||
+		!STATES.has(run.state)
+	) {
 		throw new Error(`Review receipt event ${event.sequence} has inconsistent run state`);
 	}
 	if (!/^[a-f0-9]{64}$/.test(run.inputHash) || !Number.isFinite(run.totalTokens) || run.totalTokens < 0) {
 		throw new Error(`Review receipt event ${event.sequence} has invalid identity or usage`);
 	}
-	if (run.terminalCause !== undefined && !TERMINAL_CAUSES.has(run.terminalCause)) throw new Error(`Review receipt event ${event.sequence} has invalid terminal cause`);
+	if (run.terminalCause !== undefined && !TERMINAL_CAUSES.has(run.terminalCause))
+		throw new Error(`Review receipt event ${event.sequence} has invalid terminal cause`);
 	if (run.policy !== undefined) {
-		if (run.policy.version !== 1 || run.policy.profile !== run.profile || JSON.stringify(run.policy.budgets) !== JSON.stringify(run.budgets)) {
+		if (
+			run.policy.version !== 1 ||
+			run.policy.profile !== run.profile ||
+			JSON.stringify(run.policy.budgets) !== JSON.stringify(run.budgets)
+		) {
 			throw new Error(`Review receipt event ${event.sequence} has inconsistent resolved policy`);
 		}
 	}
 	const selected = new Set<string>();
 	for (const item of run.selected) {
-		if (!item.id || selected.has(item.id) || !item.path || !/^[a-f0-9]{64}$/.test(item.fingerprint)) throw new Error(`Review receipt event ${event.sequence} has invalid selected coverage`);
+		if (!item.id || selected.has(item.id) || !item.path || !/^[a-f0-9]{64}$/.test(item.fingerprint))
+			throw new Error(`Review receipt event ${event.sequence} has invalid selected coverage`);
 		selected.add(item.id);
 	}
 	const completed = new Set<string>();
 	for (const id of run.completedItemIds) {
-		if (!selected.has(id) || completed.has(id)) throw new Error(`Review receipt event ${event.sequence} has invalid completed coverage`);
+		if (!selected.has(id) || completed.has(id))
+			throw new Error(`Review receipt event ${event.sequence} has invalid completed coverage`);
 		completed.add(id);
 	}
 	const failed = new Set<string>();
 	for (const failure of run.failures) {
-		if (!selected.has(failure.itemId) || failed.has(failure.itemId) || completed.has(failure.itemId)) throw new Error(`Review receipt event ${event.sequence} has invalid failed coverage`);
+		if (!selected.has(failure.itemId) || failed.has(failure.itemId) || completed.has(failure.itemId))
+			throw new Error(`Review receipt event ${event.sequence} has invalid failed coverage`);
 		failed.add(failure.itemId);
 	}
 	if (run.workGraph) {
 		const graphed = new Set<string>();
-		for (const group of run.workGraph.groups) for (const id of group.itemIds) {
-			if (!selected.has(id) || graphed.has(id)) throw new Error(`Review receipt event ${event.sequence} has invalid work-graph coverage`);
-			graphed.add(id);
-		}
-		if (graphed.size !== selected.size) throw new Error(`Review receipt event ${event.sequence} has incomplete work-graph coverage`);
+		for (const group of run.workGraph.groups)
+			for (const id of group.itemIds) {
+				if (!selected.has(id) || graphed.has(id))
+					throw new Error(`Review receipt event ${event.sequence} has invalid work-graph coverage`);
+				graphed.add(id);
+			}
+		if (graphed.size !== selected.size)
+			throw new Error(`Review receipt event ${event.sequence} has incomplete work-graph coverage`);
 	}
 	const findingIds = new Set<string>();
 	for (const finding of run.findings) {
-		if (!finding.id || findingIds.has(finding.id)) throw new Error(`Review receipt event ${event.sequence} has duplicate finding IDs`);
+		if (!finding.id || findingIds.has(finding.id))
+			throw new Error(`Review receipt event ${event.sequence} has duplicate finding IDs`);
 		findingIds.add(finding.id);
 	}
-	if (run.state === "complete" && (completed.size !== selected.size || failed.size !== 0)) throw new Error("Complete review receipt has incomplete coverage");
-	if (run.state === "skipped" && selected.size !== 0) throw new Error("Skipped review receipt selected reviewable items");
-	if (run.state === "partial" && (completed.size === 0 || completed.size >= selected.size)) throw new Error("Partial review receipt has inconsistent coverage");
-	if (run.state === "failed" && completed.size !== 0) throw new Error("Failed review receipt contains completed coverage");
+	if (run.state === "complete" && (completed.size !== selected.size || failed.size !== 0))
+		throw new Error("Complete review receipt has incomplete coverage");
+	if (run.state === "skipped" && selected.size !== 0)
+		throw new Error("Skipped review receipt selected reviewable items");
+	if (run.state === "partial" && (completed.size === 0 || completed.size >= selected.size))
+		throw new Error("Partial review receipt has inconsistent coverage");
+	if (run.state === "failed" && completed.size !== 0)
+		throw new Error("Failed review receipt contains completed coverage");
 	if (genesis) {
 		const immutable = ["projectRoot", "startedAt", "inputHash", "profile"] as const;
-		for (const key of immutable) if (run[key] !== genesis[key]) throw new Error(`Review receipt event ${event.sequence} changed immutable ${key}`);
-		if (JSON.stringify(run.source) !== JSON.stringify(genesis.source) || JSON.stringify(run.budgets) !== JSON.stringify(genesis.budgets) || JSON.stringify(run.routing) !== JSON.stringify(genesis.routing) || JSON.stringify(run.selected) !== JSON.stringify(genesis.selected) || JSON.stringify(run.waived) !== JSON.stringify(genesis.waived)) {
+		for (const key of immutable)
+			if (run[key] !== genesis[key]) throw new Error(`Review receipt event ${event.sequence} changed immutable ${key}`);
+		if (
+			JSON.stringify(run.source) !== JSON.stringify(genesis.source) ||
+			JSON.stringify(run.budgets) !== JSON.stringify(genesis.budgets) ||
+			JSON.stringify(run.routing) !== JSON.stringify(genesis.routing) ||
+			JSON.stringify(run.selected) !== JSON.stringify(genesis.selected) ||
+			JSON.stringify(run.waived) !== JSON.stringify(genesis.waived)
+		) {
 			throw new Error(`Review receipt event ${event.sequence} changed immutable run metadata`);
 		}
 	}
 	if (previous) {
 		const allowed = TRANSITIONS[previous.state];
-		if (allowed && !allowed.has(run.state)) throw new Error(`Illegal review transition ${previous.state} -> ${run.state}`);
-		if (!allowed && previous.state !== run.state) throw new Error(`Review receipt event ${event.sequence} follows terminal state ${previous.state}`);
-		if (run.totalTokens < previous.totalTokens) throw new Error(`Review receipt event ${event.sequence} decreased token usage`);
+		if (allowed && !allowed.has(run.state))
+			throw new Error(`Illegal review transition ${previous.state} -> ${run.state}`);
+		if (!allowed && previous.state !== run.state)
+			throw new Error(`Review receipt event ${event.sequence} follows terminal state ${previous.state}`);
+		if (run.totalTokens < previous.totalTokens)
+			throw new Error(`Review receipt event ${event.sequence} decreased token usage`);
 	}
 }
 
@@ -146,7 +208,9 @@ export function listReviewRunSummaries(projectRoot: string): ReviewRunSummary[] 
 	const directory = reviewRunDirectory(projectRoot);
 	if (!existsSync(directory)) return [];
 	const summaries: ReviewRunSummary[] = [];
-	for (const file of readdirSync(directory).filter((name) => name.endsWith(".jsonl")).sort()) {
+	for (const file of readdirSync(directory)
+		.filter((name) => name.endsWith(".jsonl"))
+		.sort()) {
 		const runId = file.slice(0, -".jsonl".length);
 		try {
 			const run = loadReviewRun(projectRoot, runId);

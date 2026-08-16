@@ -8,10 +8,7 @@ import { Runtime } from "../components/memory/src/runtime.js";
 import { visibleProjection } from "../components/memory/src/session-ledger/projection.js";
 import { OM_FOLDED, type Entry, type Observation } from "../components/memory/src/session-ledger/types.js";
 import { countPiVccCompactions } from "../components/vcc/src/core/compaction-count";
-import {
-	PI_VCC_COMPACT_INSTRUCTION,
-	registerBeforeCompactHook,
-} from "../components/vcc/src/hooks/before-compact";
+import { PI_VCC_COMPACT_INSTRUCTION, registerBeforeCompactHook } from "../components/vcc/src/hooks/before-compact";
 import { createMemoryCompactionAugmenter } from "../extensions/context.js";
 
 let cwd: string;

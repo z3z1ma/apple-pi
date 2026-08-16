@@ -107,9 +107,7 @@ describe("compileBrief", () => {
 
   it("truncates long user text", () => {
     const longText = Array.from({ length: 300 }, (_, i) => `word${i}`).join(" ");
-    const blocks: NormalizedBlock[] = [
-      { kind: "user", text: longText },
-    ];
+    const blocks: NormalizedBlock[] = [{ kind: "user", text: longText }];
     const r = compileBrief(blocks);
     expect(r).toContain("(truncated)");
     expect(r).not.toContain("word299");
@@ -117,9 +115,7 @@ describe("compileBrief", () => {
 
   it("truncates long assistant text", () => {
     const longText = Array.from({ length: 300 }, (_, i) => `word${i}`).join(" ");
-    const blocks: NormalizedBlock[] = [
-      { kind: "assistant", text: longText },
-    ];
+    const blocks: NormalizedBlock[] = [{ kind: "assistant", text: longText }];
     const r = compileBrief(blocks);
     expect(r).toContain("(truncated)");
     expect(r).not.toContain("word299");
@@ -161,14 +157,6 @@ describe("compileBrief", () => {
 
   // ── noise filtering tests (aligned with VCC) ──
 
-
-
-
-
-
-
-
-
   it("suppresses blank lines between consecutive tool-only sections", () => {
     const blocks: NormalizedBlock[] = [
       { kind: "assistant", text: "Checking files." },
@@ -187,17 +175,15 @@ describe("compileBrief", () => {
   });
 
   it("caps tool calls per [assistant] turn at 8 (keep tail)", () => {
-    const blocks: NormalizedBlock[] = [
-      { kind: "assistant", text: "Working." },
-    ];
+    const blocks: NormalizedBlock[] = [{ kind: "assistant", text: "Working." }];
     for (let i = 1; i <= 12; i++) {
       blocks.push({ kind: "tool_call", name: "bash", args: { command: `echo ${i}` } });
     }
     const r = compileBrief(blocks);
     expect(r).toContain("(4 earlier tool-call entries omitted)");
     // Last 8 (5..12) kept; first 4 dropped
-    expect(r).not.toContain("echo 1\"");
-    expect(r).not.toContain("echo 4\"");
+    expect(r).not.toContain('echo 1"');
+    expect(r).not.toContain('echo 4"');
     expect(r).toContain("echo 5");
     expect(r).toContain("echo 12");
   });

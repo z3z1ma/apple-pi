@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectionText } from "../components/ralph/src/index.js";
-import { hasDistillation, hasRetrospective, compileWorkGraph, missingCriterionEvidence } from "../components/ralph/src/work-graph.js";
+import {
+	hasDistillation,
+	hasRetrospective,
+	compileWorkGraph,
+	missingCriterionEvidence,
+} from "../components/ralph/src/work-graph.js";
 
 const roots: string[] = [];
 const TASK = ".ledger/202608151200-implement-behavior/task.md";
@@ -26,7 +31,18 @@ function put(root: string, path: string, content: string): void {
 	writeFileSync(join(root, path), content, "utf8");
 }
 
-function task(extra: { status?: string; created?: string; headers?: string; references?: string; blockers?: string; evidence?: string; retrospective?: string; distillation?: string } = {}): string {
+function task(
+	extra: {
+		status?: string;
+		created?: string;
+		headers?: string;
+		references?: string;
+		blockers?: string;
+		evidence?: string;
+		retrospective?: string;
+		distillation?: string;
+	} = {},
+): string {
 	return `Status: ${extra.status ?? "active"}
 Created: ${extra.created ?? "2026-08-15"}
 Updated: ${extra.created ?? "2026-08-15"}
@@ -87,23 +103,50 @@ function record(status: string, title: string, related = ""): string {
 describe("compileWorkGraph", () => {
 	it("projects bounded canonical work-item IDs and states in inspection output", () => {
 		const root = project();
-		put(root, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the first bounded work item.\n- [x] WI-002: Preserve completed work-item visibility.\n\n## References"));
-		expect(inspectionText(compileWorkGraph(root, TASK))).toContain("Work Items: 2 total; 1 open; WI-001 (open), WI-002 (complete)");
+		put(
+			root,
+			TASK,
+			task().replace(
+				"## References",
+				"## Work Items\n\n- [ ] WI-001: Implement the first bounded work item.\n- [x] WI-002: Preserve completed work-item visibility.\n\n## References",
+			),
+		);
+		expect(inspectionText(compileWorkGraph(root, TASK))).toContain(
+			"Work Items: 2 total; 1 open; WI-001 (open), WI-002 (complete)",
+		);
 	});
 	it("compiles one deterministic self-contained task graph plus completed dependencies", () => {
 		const root = project([TASK, DEPENDENCY]);
-		put(root, DEPENDENCY, task({ status: "done", created: "2026-08-14", evidence: "- AC-001: Previously observed boundary behavior.\n- AC-002: Previously observed failure behavior.", retrospective: "The prior boundary made integration behavior explicit.", distillation: "The implementation and tests remain the durable owners." }));
+		put(
+			root,
+			DEPENDENCY,
+			task({
+				status: "done",
+				created: "2026-08-14",
+				evidence: "- AC-001: Previously observed boundary behavior.\n- AC-002: Previously observed failure behavior.",
+				retrospective: "The prior boundary made integration behavior explicit.",
+				distillation: "The implementation and tests remain the durable owners.",
+			}),
+		);
 		put(root, `${BUNDLE}/specs/behavior.md`, record("active", "Behavior", `- \`${BUNDLE}/decisions/choice.md\``));
 		put(root, `${BUNDLE}/decisions/choice.md`, record("active", "Choice"));
 		put(root, `${BUNDLE}/plans/implementation.md`, record("active", "Plan"));
 		put(root, `${BUNDLE}/research/findings.md`, record("done", "Findings"));
 		put(root, `${BUNDLE}/evidence/observation.md`, record("recorded", "Observation"));
 		put(root, `${BUNDLE}/knowledge/vocabulary.md`, record("active", "Vocabulary"));
-		put(root, `${BUNDLE}/skills/replay-fixture/SKILL.md`, "---\nname: replay-fixture\ndescription: Use when replaying the task fixture.\n---\n\n# Replay Fixture\n");
-		put(root, TASK, task({
-			headers: `Depends-On: ${DEPENDENCY}`,
-			references: `- \`${BUNDLE}/specs/behavior.md\`\n- \`${BUNDLE}/plans/implementation.md\`\n- \`${BUNDLE}/research/findings.md\`\n- \`${BUNDLE}/evidence/observation.md\`\n- \`${BUNDLE}/knowledge/vocabulary.md\`\n- \`${BUNDLE}/skills/replay-fixture/SKILL.md\`\n- \`src/owner.ts\``,
-		}));
+		put(
+			root,
+			`${BUNDLE}/skills/replay-fixture/SKILL.md`,
+			"---\nname: replay-fixture\ndescription: Use when replaying the task fixture.\n---\n\n# Replay Fixture\n",
+		);
+		put(
+			root,
+			TASK,
+			task({
+				headers: `Depends-On: ${DEPENDENCY}`,
+				references: `- \`${BUNDLE}/specs/behavior.md\`\n- \`${BUNDLE}/plans/implementation.md\`\n- \`${BUNDLE}/research/findings.md\`\n- \`${BUNDLE}/evidence/observation.md\`\n- \`${BUNDLE}/knowledge/vocabulary.md\`\n- \`${BUNDLE}/skills/replay-fixture/SKILL.md\`\n- \`src/owner.ts\``,
+			}),
+		);
 
 		const first = compileWorkGraph(root, TASK);
 		const second = compileWorkGraph(root, TASK);
@@ -194,33 +237,59 @@ describe("compileWorkGraph", () => {
 
 	it("uses the canonical work-item parser and rejects malformed work-item state", () => {
 		const valid = project();
-		put(valid, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the canonical task parser.\n\n## References"));
+		put(
+			valid,
+			TASK,
+			task().replace(
+				"## References",
+				"## Work Items\n\n- [ ] WI-001: Implement the canonical task parser.\n\n## References",
+			),
+		);
 		const graph = compileWorkGraph(valid, TASK);
-		expect(graph.task.taskDocument?.workItems).toEqual([{ id: "WI-001", state: "open", description: "Implement the canonical task parser." }]);
+		expect(graph.task.taskDocument?.workItems).toEqual([
+			{ id: "WI-001", state: "open", description: "Implement the canonical task parser." },
+		]);
 
 		const invalid = project();
-		put(invalid, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-ABC: Malformed identifiers must remain visible.\n\n## References"));
+		put(
+			invalid,
+			TASK,
+			task().replace(
+				"## References",
+				"## Work Items\n\n- [ ] WI-ABC: Malformed identifiers must remain visible.\n\n## References",
+			),
+		);
 		expect(() => compileWorkGraph(invalid, TASK)).toThrowError(/invalid Work Items/);
 	});
 
 	it("checks durable acceptance evidence, retrospective, and distillation", () => {
 		const root = project();
-		put(root, TASK, task({
-			evidence: "- AC-001: `npm test` passed; proves the named behavior only.",
-			retrospective: "The boundary failed because inferred state was ambiguous; explicit state removed that ambiguity.",
-			distillation: "No separate document: implementation tests own this bounded invariant and no reusable operation emerged.",
-		}));
+		put(
+			root,
+			TASK,
+			task({
+				evidence: "- AC-001: `npm test` passed; proves the named behavior only.",
+				retrospective:
+					"The boundary failed because inferred state was ambiguous; explicit state removed that ambiguity.",
+				distillation:
+					"No separate document: implementation tests own this bounded invariant and no reusable operation emerged.",
+			}),
+		);
 		const graph = compileWorkGraph(root, TASK);
 		expect(missingCriterionEvidence(graph)).toEqual(["AC-002"]);
 		expect(hasRetrospective(graph)).toBe(true);
 		expect(hasDistillation(graph)).toBe(true);
 
 		const placeholder = project();
-		put(placeholder, TASK, task({
-			evidence: "- AC-001 [satisfied]: Not verified in this run.\n- AC-002: The check did not run.",
-			retrospective: "TODO: write a retrospective later when the work is complete.",
-			distillation: "Pending.",
-		}));
+		put(
+			placeholder,
+			TASK,
+			task({
+				evidence: "- AC-001 [satisfied]: Not verified in this run.\n- AC-002: The check did not run.",
+				retrospective: "TODO: write a retrospective later when the work is complete.",
+				distillation: "Pending.",
+			}),
+		);
 		const placeholderGraph = compileWorkGraph(placeholder, TASK);
 		expect(missingCriterionEvidence(placeholderGraph)).toEqual(["AC-001", "AC-002"]);
 		expect(hasRetrospective(placeholderGraph)).toBe(false);

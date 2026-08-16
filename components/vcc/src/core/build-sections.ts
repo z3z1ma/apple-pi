@@ -73,9 +73,7 @@ const priorityTag = (item: string): string => {
 };
 
 // Write-tool names used for resolution detection
-const FILE_EDIT_TOOLS = new Set([
-  "Edit", "Write", "edit", "write", "MultiEdit",
-]);
+const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "edit", "write", "MultiEdit"]);
 
 /** Extract file path from a [tsc] error line like "src/auth.ts(5,18): error TS2304: ..." */
 const extractTscFile = (item: string): string | null => {
@@ -91,6 +89,7 @@ const isTscResolved = (file: string, tailIdx: number, editPositions: Map<number,
   return false;
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: VCC's extraction pass intentionally preserves all ordered context cases.
 const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
   const items: string[] = [];
   const itemTailIndices: number[] = [];
@@ -110,7 +109,11 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
 
     // 1. Bash non-zero exit codes (the exitCode field is already captured but was unused)
     if (b.kind === "bash" && b.exitCode !== undefined && b.exitCode !== 0) {
-      const cmd = b.command.split("\n").map(l => l.trim()).filter(Boolean)[0] ?? b.command;
+      const cmd =
+        b.command
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)[0] ?? b.command;
       const cmdDisplay = cmd.length > 80 ? cmd.slice(0, 77) + "..." : cmd;
       const outLine = firstLine(b.output, 120);
       const errTag = `exit ${b.exitCode}`;
@@ -124,8 +127,9 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
     if (b.kind === "bash" && b.output) {
       const outputHead = b.output.slice(0, BASH_OUTPUT_SCAN_LIMIT);
       if (TSC_ERROR_RE.test(outputHead)) {
-        const tsLines = outputHead.split("\n")
-          .filter(l => TSC_ERROR_RE.test(l.trim()))
+        const tsLines = outputHead
+          .split("\n")
+          .filter((l) => TSC_ERROR_RE.test(l.trim()))
           .slice(0, 3);
         for (const line of tsLines) {
           push(`[tsc] ${clip(line.trim(), 150)}`, bi);
@@ -141,12 +145,19 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
     }
 
     // 4. Empty grep/search results (searched for something that wasn't found = signal)
-    if (b.kind === "tool_result" && (b.name === "grep" || b.name === "Grep" || b.name === "Glob" || b.name === "glob")) {
+    if (
+      b.kind === "tool_result" &&
+      (b.name === "grep" || b.name === "Grep" || b.name === "Glob" || b.name === "glob")
+    ) {
       const trimmed = b.text.trim();
       if (EMPTY_RESULT_RE.test(trimmed) || trimmed === "") {
-        const prevIdx = tail.slice(0, bi).findLastIndex(
-          (p) => p.kind === "tool_call" && (p.name === "grep" || p.name === "Grep" || p.name === "Glob" || p.name === "glob")
-        );
+        const prevIdx = tail
+          .slice(0, bi)
+          .findLastIndex(
+            (p) =>
+              p.kind === "tool_call" &&
+              (p.name === "grep" || p.name === "Grep" || p.name === "Glob" || p.name === "glob"),
+          );
         let pattern = "";
         if (prevIdx >= 0) {
           const pc = tail[prevIdx];
@@ -164,8 +175,9 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
     if (b.kind === "tool_result" && b.isError) {
       // Check for tsc errors in tool result text first
       if (TSC_ERROR_RE.test(b.text)) {
-        const tsLines = b.text.split("\n")
-          .filter(l => TSC_ERROR_RE.test(l.trim()))
+        const tsLines = b.text
+          .split("\n")
+          .filter((l) => TSC_ERROR_RE.test(l.trim()))
           .slice(0, 3);
         for (const line of tsLines) {
           push(`[tsc] ${clip(line.trim(), 150)}`, bi);
@@ -287,12 +299,9 @@ export const buildSections = (input: BuildSectionsInput): SectionData => {
 
   const briefSections = buildBriefSections(blocks);
   const sessionGoal = extractGoals(blocks);
-  const userPreferences = dedupPreferencesAgainstGoals(
-    extractPreferences(blocks),
-    sessionGoal,
-  );
+  const userPreferences = dedupPreferencesAgainstGoals(extractPreferences(blocks), sessionGoal);
 
-  const turnSummaries = identifyTurns(blocks).map(t => t.summary);
+  const turnSummaries = identifyTurns(blocks).map((t) => t.summary);
   const outstandingContext = extractOutstandingContext(blocks);
 
   const result: SectionData = {

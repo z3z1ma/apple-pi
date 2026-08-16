@@ -40,7 +40,10 @@ describe("session-ledger V3 projections", () => {
 	it("visible projection is empty when there is no V3 compaction", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "raw-1" }),
+			observationsRecordedEntry("om-aaaaaaaaaaaa", {
+				observations: [observation("aaaaaaaaaaaa")],
+				coversUpToId: "raw-1",
+			}),
 		];
 
 		expect(visibleProjection(entries)).toEqual({ observations: [], reflections: [] });
@@ -52,9 +55,15 @@ describe("session-ledger V3 projections", () => {
 		const obs2 = observation("bbbbbbbbbbbb");
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			compactionEntry("cmp-1", { firstKeptEntryId: "raw-1", details: memoryDetails({ observations: [obs1], reflections: [] }) }),
+			compactionEntry("cmp-1", {
+				firstKeptEntryId: "raw-1",
+				details: memoryDetails({ observations: [obs1], reflections: [] }),
+			}),
 			textCustomMessage("raw-2", "bbbb"),
-			compactionEntry("cmp-2", { firstKeptEntryId: "raw-2", details: memoryDetails({ fullFold: true, observations: [obs2], reflections: [ref1] }) }),
+			compactionEntry("cmp-2", {
+				firstKeptEntryId: "raw-2",
+				details: memoryDetails({ fullFold: true, observations: [obs2], reflections: [ref1] }),
+			}),
 		];
 
 		expect(visibleProjection(entries)).toEqual({ observations: [obs2], reflections: [ref1] });
@@ -110,7 +119,10 @@ describe("session-ledger V3 projections", () => {
 			textCustomMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [obs1], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [ref1], coversUpToId: "raw-1" }),
-			compactionEntry("cmp-full", { firstKeptEntryId: "raw-1", details: memoryDetails({ fullFold: true, observations: [obs1], reflections: [ref1] }) }),
+			compactionEntry("cmp-full", {
+				firstKeptEntryId: "raw-1",
+				details: memoryDetails({ fullFold: true, observations: [obs1], reflections: [ref1] }),
+			}),
 			textCustomMessage("raw-2", "bbbb"),
 			observationsRecordedEntry("om-bbbbbbbbbbbb", { observations: [obs2], coversUpToId: "raw-2" }),
 			reflectionsRecordedEntry("om-ffffffffffff", { reflections: [ref2], coversUpToId: "raw-2" }),
@@ -134,7 +146,10 @@ describe("session-ledger V3 projections", () => {
 			textCustomMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [obs1], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [ref1], coversUpToId: "raw-1" }),
-			compactionEntry("cmp-full", { firstKeptEntryId: "raw-1", details: memoryDetails({ fullFold: true, observations: [obs1], reflections: [ref1] }) }),
+			compactionEntry("cmp-full", {
+				firstKeptEntryId: "raw-1",
+				details: memoryDetails({ fullFold: true, observations: [obs1], reflections: [ref1] }),
+			}),
 			textCustomMessage("raw-2", "bbbb"),
 			observationsRecordedEntry("om-bbbbbbbbbbbb", { observations: [obs2], coversUpToId: "raw-2" }),
 			reflectionsRecordedEntry("om-ffffffffffff", { reflections: [ref2], coversUpToId: "raw-2" }),

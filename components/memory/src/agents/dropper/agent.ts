@@ -35,7 +35,11 @@ export {
 	summarizeCoverageByRelevanceForIds,
 	summarizeCoverageTransitionsByRelevance,
 } from "./coverage.js";
-export type { CoverageSummaryByRelevance, CoverageTransitionSummaryByRelevance, ReflectionCoverageTier } from "./coverage.js";
+export type {
+	CoverageSummaryByRelevance,
+	CoverageTransitionSummaryByRelevance,
+	ReflectionCoverageTier,
+} from "./coverage.js";
 
 interface RunDropperArgs {
 	model: Model<any>;
@@ -69,10 +73,13 @@ function joinOrEmpty(items: string[]): string {
 }
 
 function relevanceCounts(observations: readonly Observation[]): Record<Observation["relevance"], number> {
-	return observations.reduce<Record<Observation["relevance"], number>>((counts, observation) => {
-		counts[observation.relevance]++;
-		return counts;
-	}, { low: 0, medium: 0, high: 0, critical: 0 });
+	return observations.reduce<Record<Observation["relevance"], number>>(
+		(counts, observation) => {
+			counts[observation.relevance]++;
+			return counts;
+		},
+		{ low: 0, medium: 0, high: 0, critical: 0 },
+	);
 }
 
 export function normalizeDropObservationIds(
@@ -116,13 +123,16 @@ export function selectDropCandidates(
 
 	return Array.from(firstProposalIndex.entries())
 		.map(([id, index]) => ({ id, index, observation: byId.get(id) }))
-		.filter((candidate): candidate is { id: string; index: number; observation: Observation } =>
-			candidate.observation !== undefined
+		.filter(
+			(candidate): candidate is { id: string; index: number; observation: Observation } =>
+				candidate.observation !== undefined,
 		)
 		.sort((a, b) => {
-			const coverageDelta = REFLECTION_COVERAGE_DROP_RANK[coverageTierForObservation(a.observation, coverageById)]
-				- REFLECTION_COVERAGE_DROP_RANK[coverageTierForObservation(b.observation, coverageById)];
-			const relevanceDelta = RELEVANCE_DROP_RANK[a.observation.relevance] - RELEVANCE_DROP_RANK[b.observation.relevance];
+			const coverageDelta =
+				REFLECTION_COVERAGE_DROP_RANK[coverageTierForObservation(a.observation, coverageById)] -
+				REFLECTION_COVERAGE_DROP_RANK[coverageTierForObservation(b.observation, coverageById)];
+			const relevanceDelta =
+				RELEVANCE_DROP_RANK[a.observation.relevance] - RELEVANCE_DROP_RANK[b.observation.relevance];
 			const ageDelta = timestampRank(a.observation.timestamp) - timestampRank(b.observation.timestamp);
 			return coverageDelta || relevanceDelta || ageDelta || a.index - b.index;
 		})
@@ -225,7 +235,12 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 				maxDropsAllowed,
 			});
 			return {
-				content: [{ type: "text", text: `Queued ${added} drop candidate${added === 1 ? "" : "s"}. Candidates this run: ${proposedDropIds.length}. Maximum drops allowed: ${maxDropsAllowed}.` }],
+				content: [
+					{
+						type: "text",
+						text: `Queued ${added} drop candidate${added === 1 ? "" : "s"}. Candidates this run: ${proposedDropIds.length}. Maximum drops allowed: ${maxDropsAllowed}.`,
+					},
+				],
 				details: { added, totalCandidates: proposedDropIds.length, maxDropsAllowed },
 			};
 		},
@@ -234,7 +249,11 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 	const fullnessPercent = Math.round(fullness * 100);
 	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map((observation) => observationToDropperLine(observation, coverageTierForObservation(observation, coverageById))))}\n\nActive observation pool: ~${observationTokens.toLocaleString()} tokens; target: ~${targetTokens.toLocaleString()} tokens; fullness against target: ~${fullnessPercent.toLocaleString()}%; over target by ~${tokensOverTarget.toLocaleString()} tokens.\nMaximum drops allowed this run: ${maxDropsAllowed.toLocaleString()} observation${maxDropsAllowed === 1 ? "" : "s"}. This maximum is sized to move the active pool toward the target if every proposed drop is clearly safe.\nThis maximum is a hard upper bound, not a target. Drop fewer or none if fewer observations are clearly safe.`;
 	const prompts: Message[] = [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }];
-	const context: AgentContext = { systemPrompt: DROPPER_SYSTEM, messages: [], tools: [dropObservations as AgentTool<any>] };
+	const context: AgentContext = {
+		systemPrompt: DROPPER_SYSTEM,
+		messages: [],
+		tools: [dropObservations as AgentTool<any>],
+	};
 	const reasoning = (model as { reasoning?: unknown }).reasoning;
 	const thinkingLevel = args.thinkingLevel ?? "low";
 	const effectiveMaxTurns = args.maxTurns && args.maxTurns > 0 ? args.maxTurns : undefined;
@@ -258,13 +277,14 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 	}
 	await stream.result();
 	const droppedIds = selectDropCandidates(proposedDropIds, observations, maxDropsAllowed, reflections);
-	const reason = droppedIds.length > 0
-		? "selected_nonempty"
-		: toolCallCount === 0
-			? "no_tool_call"
-			: proposedDropIds.length === 0
-				? "all_filtered"
-				: "selected_empty";
+	const reason =
+		droppedIds.length > 0
+			? "selected_nonempty"
+			: toolCallCount === 0
+				? "no_tool_call"
+				: proposedDropIds.length === 0
+					? "all_filtered"
+					: "selected_empty";
 	const selectedDropTokens = droppedIds.reduce((sum, id) => sum + (allowed.get(id)?.tokenCount ?? 0), 0);
 	debugLog("dropper.result", {
 		reason,

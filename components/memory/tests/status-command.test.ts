@@ -82,7 +82,10 @@ describe("V3 /om:status", () => {
 			textCustomMessage("raw-1", "aaaa"),
 			oldV2ObservationEntry("v2-obs"),
 			compactionEntry("cmp-v2", { firstKeptEntryId: "raw-1", details: oldV2CompactionDetails() }),
-			compactionEntry("cmp-visible", { firstKeptEntryId: "raw-1", details: memoryDetails({ observations: [obsA], reflections: [] }) }),
+			compactionEntry("cmp-visible", {
+				firstKeptEntryId: "raw-1",
+				details: memoryDetails({ observations: [obsA], reflections: [] }),
+			}),
 			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "om-obs" }),
 			observationsDroppedEntry("om-drop", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "om-ref" }),
@@ -110,7 +113,10 @@ describe("V3 /om:status", () => {
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "raw-1" }),
 			textCustomMessage("raw-2", "bbbbbbbb"),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-2", details: memoryDetails({ observations: [obs], reflections: [ref] }) }),
+			compactionEntry("cmp", {
+				firstKeptEntryId: "raw-2",
+				details: memoryDetails({ observations: [obs], reflections: [ref] }),
+			}),
 		];
 
 		const output = await setup({ entries }).run();
@@ -164,7 +170,14 @@ describe("V3 /om:status", () => {
 		const output = await setup({
 			entries: [],
 			runtime: {
-				config: { observeAfterTokens: 10, reflectAfterTokens: 20, compactAfterTokens: 30, observationsPoolMaxTokens: 40, observationsPoolTargetTokens: 20, passive: true },
+				config: {
+					observeAfterTokens: 10,
+					reflectAfterTokens: 20,
+					compactAfterTokens: 30,
+					observationsPoolMaxTokens: 40,
+					observationsPoolTargetTokens: 20,
+					passive: true,
+				},
 				consolidationInFlight: true,
 				consolidationPhase: "reflector",
 				compactInFlight: true,

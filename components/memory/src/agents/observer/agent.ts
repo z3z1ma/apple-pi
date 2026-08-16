@@ -46,15 +46,12 @@ const RecordObservationsSchema = Type.Object({
 				description: "Single-line plain prose. No markdown, no tags, no embedded timestamp.",
 			}),
 			relevance: RelevanceSchema,
-			sourceEntryIds: Type.Array(
-				Type.String({ minLength: 1 }),
-				{
-					minItems: 1,
-					description:
-						"Exact source entry ids from the chunk that directly support this observation. " +
-						"Use only ids shown in '[Source entry id: ...]' labels; never invent ids.",
-				},
-			),
+			sourceEntryIds: Type.Array(Type.String({ minLength: 1 }), {
+				minItems: 1,
+				description:
+					"Exact source entry ids from the chunk that directly support this observation. " +
+					"Use only ids shown in '[Source entry id: ...]' labels; never invent ids.",
+			}),
 		}),
 		{ description: "Batch of new observations. May be empty only if the tool is not called at all." },
 	),
@@ -144,16 +141,20 @@ export async function runObserver(args: RunObserverArgs): Promise<Observation[] 
 				});
 				added++;
 			}
-			const rejectedPart = rejected > 0
-				? ` ${rejected} observation${rejected === 1 ? "" : "s"} rejected for missing or invalid sourceEntryIds.`
-				: "";
+			const rejectedPart =
+				rejected > 0
+					? ` ${rejected} observation${rejected === 1 ? "" : "s"} rejected for missing or invalid sourceEntryIds.`
+					: "";
 			const ack =
 				`Recorded ${added} new observation${added === 1 ? "" : "s"} ` +
 				(duplicates > 0 ? `(${duplicates} duplicate${duplicates === 1 ? "" : "s"} skipped).` : ".") +
 				rejectedPart +
 				` Total so far this run: ${accumulated.size}. ` +
 				`Continue if the chunk still has uncovered content; otherwise stop calling the tool and emit a short plain-text confirmation.`;
-			return { content: [{ type: "text", text: ack }], details: { added, duplicates, rejected, total: accumulated.size } };
+			return {
+				content: [{ type: "text", text: ack }],
+				details: { added, duplicates, rejected, total: accumulated.size },
+			};
 		},
 	};
 
@@ -199,11 +200,11 @@ ${conversation}`;
 		...(reasoning && thinkingLevel !== "off" ? { reasoning: thinkingLevel } : {}),
 		...(effectiveMaxTurns !== undefined
 			? {
-				shouldStopAfterTurn: () => {
-					turnCount++;
-					return turnCount >= effectiveMaxTurns;
-				},
-			}
+					shouldStopAfterTurn: () => {
+						turnCount++;
+						return turnCount >= effectiveMaxTurns;
+					},
+				}
 			: {}),
 	};
 

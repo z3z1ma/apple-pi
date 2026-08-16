@@ -6,8 +6,8 @@ import type { AgentConfig, EnvInfo } from "./types.js";
 
 /** Extra sections to inject into the system prompt. */
 export interface PromptExtras {
-  /** Preloaded skill contents to inject. */
-  skillBlocks?: { name: string; content: string }[];
+	/** Preloaded skill contents to inject. */
+	skillBlocks?: { name: string; content: string }[];
 }
 
 /**
@@ -28,32 +28,32 @@ export interface PromptExtras {
  * @param extras  Optional preloaded skills.
  */
 export function buildAgentPrompt(
-  config: AgentConfig,
-  cwd: string,
-  env: EnvInfo,
-  parentSystemPrompt?: string,
-  extras?: PromptExtras,
+	config: AgentConfig,
+	cwd: string,
+	env: EnvInfo,
+	parentSystemPrompt?: string,
+	extras?: PromptExtras,
 ): string {
-  const activeAgentTag = `<active_agent name="${config.name}"/>\n\n`;
+	const activeAgentTag = `<active_agent name="${config.name}"/>\n\n`;
 
-  const envBlock = `# Environment
+	const envBlock = `# Environment
 Working directory: ${cwd}
 ${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : "Not a git repository"}
 Platform: ${env.platform}`;
 
-  // Build optional extras suffix.
-  const extraSections: string[] = [];
-  if (extras?.skillBlocks?.length) {
-    for (const skill of extras.skillBlocks) {
-      extraSections.push(`\n# Preloaded Skill: ${skill.name}\n${skill.content}`);
-    }
-  }
-  const extrasSuffix = extraSections.length > 0 ? "\n\n" + extraSections.join("\n") : "";
+	// Build optional extras suffix.
+	const extraSections: string[] = [];
+	if (extras?.skillBlocks?.length) {
+		for (const skill of extras.skillBlocks) {
+			extraSections.push(`\n# Preloaded Skill: ${skill.name}\n${skill.content}`);
+		}
+	}
+	const extrasSuffix = extraSections.length > 0 ? "\n\n" + extraSections.join("\n") : "";
 
-  if (config.promptMode === "append") {
-    const identity = parentSystemPrompt || genericBase;
+	if (config.promptMode === "append") {
+		const identity = parentSystemPrompt || genericBase;
 
-    const bridge = `<sub_agent_context>
+		const bridge = `<sub_agent_context>
 You are operating as a sub-agent invoked to handle a specific task.
 - Use the read tool instead of cat/head/tail
 - Use the edit tool instead of sed/awk
@@ -66,25 +66,25 @@ You are operating as a sub-agent invoked to handle a specific task.
 - Be concise but complete
 </sub_agent_context>`;
 
-    const customSection = config.systemPrompt?.trim()
-      ? `\n\n<agent_instructions>\n${config.systemPrompt}\n</agent_instructions>`
-      : "";
+		const customSection = config.systemPrompt?.trim()
+			? `\n\n<agent_instructions>\n${config.systemPrompt}\n</agent_instructions>`
+			: "";
 
-    // Place shared/stable content first so the LLM's KV cache can reuse the
-    // inherited prefix across all subagent invocations. The parent prompt is
-    // placed verbatim (no wrapper tag) so it forms an identical byte prefix
-    // with the parent session, maximising KV cache hits. The <active_agent>
-    // tag and env block vary per call and are placed after the cached prefix.
-    return identity + "\n\n" + bridge + "\n\n" + activeAgentTag + envBlock + customSection + extrasSuffix;
-  }
+		// Place shared/stable content first so the LLM's KV cache can reuse the
+		// inherited prefix across all subagent invocations. The parent prompt is
+		// placed verbatim (no wrapper tag) so it forms an identical byte prefix
+		// with the parent session, maximising KV cache hits. The <active_agent>
+		// tag and env block vary per call and are placed after the cached prefix.
+		return identity + "\n\n" + bridge + "\n\n" + activeAgentTag + envBlock + customSection + extrasSuffix;
+	}
 
-  // "replace" mode — env header + the config's full system prompt
-  const replaceHeader = `You are a pi coding agent sub-agent.
+	// "replace" mode — env header + the config's full system prompt
+	const replaceHeader = `You are a pi coding agent sub-agent.
 You have been invoked to handle a specific task autonomously.
 
 ${envBlock}`;
 
-  return activeAgentTag + replaceHeader + "\n\n" + config.systemPrompt + extrasSuffix;
+	return activeAgentTag + replaceHeader + "\n\n" + config.systemPrompt + extrasSuffix;
 }
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */

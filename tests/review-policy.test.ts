@@ -39,7 +39,9 @@ describe("review harness policy", () => {
 		expect(value.resultToolBytes).toBeGreaterThan(100);
 		expect(value.promptBytes).toBeGreaterThan(value.resultToolBytes);
 		expect(value.expectedRequests).toBe(3);
-		expect(value.maxTokens).toBeGreaterThanOrEqual(value.expectedRequests * (value.estimatedInputTokens + value.reservedOutputTokens));
+		expect(value.maxTokens).toBeGreaterThanOrEqual(
+			value.expectedRequests * (value.estimatedInputTokens + value.reservedOutputTokens),
+		);
 	});
 
 	it("rejects a broad authority packet before launching a model when it cannot fit context", () => {

@@ -156,7 +156,9 @@ export function isObservationsRecordedEntry(entry: Entry): entry is Entry & {
 	customType: typeof OM_OBSERVATIONS_RECORDED;
 	data: ObservationsRecordedEntryData;
 } {
-	return entry.type === "custom" && entry.customType === OM_OBSERVATIONS_RECORDED && isObservationsRecordedData(entry.data);
+	return (
+		entry.type === "custom" && entry.customType === OM_OBSERVATIONS_RECORDED && isObservationsRecordedData(entry.data)
+	);
 }
 
 export function isReflectionsRecordedEntry(entry: Entry): entry is Entry & {
@@ -164,7 +166,9 @@ export function isReflectionsRecordedEntry(entry: Entry): entry is Entry & {
 	customType: typeof OM_REFLECTIONS_RECORDED;
 	data: ReflectionsRecordedEntryData;
 } {
-	return entry.type === "custom" && entry.customType === OM_REFLECTIONS_RECORDED && isReflectionsRecordedData(entry.data);
+	return (
+		entry.type === "custom" && entry.customType === OM_REFLECTIONS_RECORDED && isReflectionsRecordedData(entry.data)
+	);
 }
 
 export function isObservationsDroppedEntry(entry: Entry): entry is Entry & {
@@ -172,7 +176,9 @@ export function isObservationsDroppedEntry(entry: Entry): entry is Entry & {
 	customType: typeof OM_OBSERVATIONS_DROPPED;
 	data: ObservationsDroppedEntryData;
 } {
-	return entry.type === "custom" && entry.customType === OM_OBSERVATIONS_DROPPED && isObservationsDroppedData(entry.data);
+	return (
+		entry.type === "custom" && entry.customType === OM_OBSERVATIONS_DROPPED && isObservationsDroppedData(entry.data)
+	);
 }
 
 export function buildObservationsRecordedData(

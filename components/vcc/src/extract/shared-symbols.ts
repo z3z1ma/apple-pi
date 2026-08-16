@@ -1,67 +1,44 @@
 import type { NormalizedBlock, ToolResultIndex } from "../types";
 import { extractPath } from "../core/tool-args";
 
-const FILE_WRITE_TOOLS = new Set([
-  "Edit", "Write", "edit", "write", "edit_file", "write_file",
-  "MultiEdit",
-]);
+const FILE_WRITE_TOOLS = new Set(["Edit", "Write", "edit", "write", "edit_file", "write_file", "MultiEdit"]);
 
-const FILE_READ_TOOLS = new Set([
-  "Read", "read", "read_file", "View",
-]);
+const FILE_READ_TOOLS = new Set(["Read", "read", "read_file", "View"]);
 
-const FILE_CREATE_TOOLS = new Set([
-  "Write", "write", "write_file",
-]);
+const FILE_CREATE_TOOLS = new Set(["Write", "write", "write_file"]);
 
 // Declaration regexes — consolidated from files.ts, symbol-changes.ts, type-catalog.ts
 // Order: more specific patterns first, generic fallbacks last.
 
 const TS_EXPORT_DECL_RE =
   /^\s*export\s+(?:default\s+)?(?:async\s+)?(?:function|class|type|interface|const|let|enum)\s+(\w+)/;
-const TS_TYPE_DECL_RE =
-  /^\s*(?:export\s+)?(?:type|interface)\s+(\w+)/;
+const TS_TYPE_DECL_RE = /^\s*(?:export\s+)?(?:type|interface)\s+(\w+)/;
 const TS_EXPORT_SIG_RE =
   /^\s*export\s+(?:default\s+)?(?:async\s+)?(?:function|class|type|interface|const|let|enum)\s+\w+[^;{]*[;{]?/;
 
-const RUST_DECL_RE =
-  /^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:fn|struct|enum|trait|type|const|union|var)\s+(\w+)/;
-const RUST_IMPL_RE =
-  /^\s*(?:pub(?:\s*\([^)]*\))?\s+)?impl\s+(?:<[^>]+>\s+)?(\w+)(?:\s+for\s+(\w+))?/;
-const RUST_SIG_RE =
-  /^\s*pub\s+(?:async\s+)?(?:fn|struct|enum|trait|type)\s+\w+/;
+const RUST_DECL_RE = /^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:fn|struct|enum|trait|type|const|union|var)\s+(\w+)/;
+const RUST_IMPL_RE = /^\s*(?:pub(?:\s*\([^)]*\))?\s+)?impl\s+(?:<[^>]+>\s+)?(\w+)(?:\s+for\s+(\w+))?/;
+const RUST_SIG_RE = /^\s*pub\s+(?:async\s+)?(?:fn|struct|enum|trait|type)\s+\w+/;
 
-const ELIXIR_DEF_RE =
-  /^\s*def(?:p|macro|macrop|guard|guardp)?\s+(\w+)/;
-const ELIXIR_MODULE_RE =
-  /^\s*defmodule\s+(\w+)/;
-const ELIXIR_SPECIAL_RE =
-  /^\s*def(?:struct|protocol|impl)\s+(\w+)/;
+const ELIXIR_DEF_RE = /^\s*def(?:p|macro|macrop|guard|guardp)?\s+(\w+)/;
+const ELIXIR_MODULE_RE = /^\s*defmodule\s+(\w+)/;
+const ELIXIR_SPECIAL_RE = /^\s*def(?:struct|protocol|impl)\s+(\w+)/;
 
 const JAVA_TYPE_RE =
   /^\s*(?:(?:public|private|protected)\s+)?(?:abstract\s+|static\s+|final\s+|sealed\s+)?(?:class|interface|enum|@interface|record)\s+(\w+)/;
-const JAVA_METHOD_RE =
-  /^\s*(?:public|protected)\s+(?:static\s+|abstract\s+|final\s+)?(?:\S+(?:\s*\[\])?\s+)(\w+)\s*\(/;
+const JAVA_METHOD_RE = /^\s*(?:public|protected)\s+(?:static\s+|abstract\s+|final\s+)?(?:\S+(?:\s*\[\])?\s+)(\w+)\s*\(/;
 
-const C_TYPE_RE =
-  /^\s*(?:typedef\s+)?(?:struct|class|enum|union)\s+(\w+)/;
-const C_FUNC_RE =
-  /^\s*(?!func\b)(?:(?:static|extern|inline|virtual)\s+)?[\w][\w:*&\s]*?(\b\w+)\s*\(/;
+const C_TYPE_RE = /^\s*(?:typedef\s+)?(?:struct|class|enum|union)\s+(\w+)/;
+const C_FUNC_RE = /^\s*(?!func\b)(?:(?:static|extern|inline|virtual)\s+)?[\w][\w:*&\s]*?(\b\w+)\s*\(/;
 
-const RUBY_DEF_RE =
-  /^\s*def\s+(?:self\.)?(\w+)/;
-const RUBY_TYPE_RE =
-  /^\s*(?:class|module)\s+(\w+)/;
+const RUBY_DEF_RE = /^\s*def\s+(?:self\.)?(\w+)/;
+const RUBY_TYPE_RE = /^\s*(?:class|module)\s+(\w+)/;
 
-const PY_DECL_RE =
-  /^\s*(?:async\s+)?def\s+(\w+)|^\s*class\s+(\w+)/;
-const PY_SIG_RE =
-  /^\s*(?:async\s+)?(?:def|class)\s+\w+\s*(?:\([^)]*\))?/;
+const PY_DECL_RE = /^\s*(?:async\s+)?def\s+(\w+)|^\s*class\s+(\w+)/;
+const PY_SIG_RE = /^\s*(?:async\s+)?(?:def|class)\s+\w+\s*(?:\([^)]*\))?/;
 
-const GO_DECL_RE =
-  /^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)/;
-const GO_SIG_RE =
-  /^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?\w+\s*(?:\([^)]*\))?\s*(?:\([^)]*\))?/;
+const GO_DECL_RE = /^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)/;
+const GO_SIG_RE = /^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?\w+\s*(?:\([^)]*\))?\s*(?:\([^)]*\))?/;
 
 interface SymbolInfo {
   /** Simple declaration name (used by files.ts, symbol-changes.ts) */
@@ -90,12 +67,17 @@ const parseDeclName = (line: string): { name: string; kind: SymbolInfo["kind"] }
 
   let m = line.match(TS_EXPORT_DECL_RE);
   if (m) {
-    const kind = line.includes("function") ? "function"
-      : line.includes("class") ? "class"
-      : line.includes("type") ? "type"
-      : line.includes("interface") ? "type"
-      : line.includes("enum") ? "variable"
-      : "variable";
+    const kind = line.includes("function")
+      ? "function"
+      : line.includes("class")
+        ? "class"
+        : line.includes("type")
+          ? "type"
+          : line.includes("interface")
+            ? "type"
+            : line.includes("enum")
+              ? "variable"
+              : "variable";
     return { name: m[1], kind };
   }
   m = line.match(TS_TYPE_DECL_RE);
@@ -131,7 +113,8 @@ const parseDeclName = (line: string): { name: string; kind: SymbolInfo["kind"] }
 
 const parseSignature = (line: string): string | null => {
   if (TS_EXPORT_SIG_RE.test(line)) return line.trim();
-  if (PY_SIG_RE.test(line) && !line.trim().startsWith("def _") && !line.trim().startsWith("class _")) return line.trim();
+  if (PY_SIG_RE.test(line) && !line.trim().startsWith("def _") && !line.trim().startsWith("class _"))
+    return line.trim();
   if (GO_SIG_RE.test(line)) {
     const nameMatch = line.match(/func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)/);
     if (nameMatch && nameMatch[1] && nameMatch[1][0] === nameMatch[1][0].toUpperCase()) return line.trim();
@@ -213,10 +196,8 @@ export interface UnifiedExtractResult {
  * All three scanned the same tool_result content with overlapping regex
  * patterns. This unified pass does it once and returns all three datasets.
  */
-export const extractFileAndSymbolData = (
-  blocks: NormalizedBlock[],
-  tri?: ToolResultIndex,
-): UnifiedExtractResult => {
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass correlates file and symbol observations without re-reading the session.
+export const extractFileAndSymbolData = (blocks: NormalizedBlock[], tri?: ToolResultIndex): UnifiedExtractResult => {
   const read = new Set<string>();
   const modified = new Set<string>();
   const created = new Set<string>();
@@ -253,11 +234,17 @@ export const extractFileAndSymbolData = (
 
         // File activity symbols
         let seen = symbolsSeen.get(p);
-        if (!seen) { seen = new Set(); symbolsSeen.set(p, seen); }
+        if (!seen) {
+          seen = new Set();
+          symbolsSeen.set(p, seen);
+        }
         if (!symbols.has(p)) symbols.set(p, []);
         const existing = symbols.get(p)!;
         for (const s of syms) {
-          if (!seen.has(s.name)) { seen.add(s.name); existing.push(s.name); }
+          if (!seen.has(s.name)) {
+            seen.add(s.name);
+            existing.push(s.name);
+          }
         }
 
         // Type catalog
@@ -286,13 +273,15 @@ export const extractFileAndSymbolData = (
 
     // Extract from tool_result (shared look-ahead via index)
     if (isRead || isWrite) {
-      const r = tri ? tri.get(i) : (() => {
-        for (let j = i + 1; j < Math.min(blocks.length, i + 4); j++) {
-          const b2 = blocks[j];
-          if (b2.kind === "tool_result") return b2 as Extract<NormalizedBlock, { kind: "tool_result" }>;
-        }
-        return null;
-      })();
+      const r = tri
+        ? tri.get(i)
+        : (() => {
+            for (let j = i + 1; j < Math.min(blocks.length, i + 4); j++) {
+              const b2 = blocks[j];
+              if (b2.kind === "tool_result") return b2 as Extract<NormalizedBlock, { kind: "tool_result" }>;
+            }
+            return null;
+          })();
 
       if (r && r.text && !r.isError) {
         const resultText = r.text;
@@ -302,11 +291,17 @@ export const extractFileAndSymbolData = (
 
         // File activity symbols
         let seen = symbolsSeen.get(p);
-        if (!seen) { seen = new Set(); symbolsSeen.set(p, seen); }
+        if (!seen) {
+          seen = new Set();
+          symbolsSeen.set(p, seen);
+        }
         if (!symbols.has(p)) symbols.set(p, []);
         const existing = symbols.get(p)!;
         for (const s of syms) {
-          if (!seen.has(s.name)) { seen.add(s.name); existing.push(s.name); }
+          if (!seen.has(s.name)) {
+            seen.add(s.name);
+            existing.push(s.name);
+          }
         }
 
         // Type catalog (Read results)
@@ -322,7 +317,7 @@ export const extractFileAndSymbolData = (
         }
 
         // Symbol changes
-        const access = isWrite ? "modified" as const : "read" as const;
+        const access = isWrite ? ("modified" as const) : ("read" as const);
         for (const s of syms) {
           const key = `${s.name}@${p}`;
           if (!refSeen.has(key)) {

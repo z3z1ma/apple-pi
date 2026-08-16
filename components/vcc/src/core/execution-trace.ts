@@ -10,12 +10,7 @@ export interface ExecutionOperation {
   result?: unknown;
 }
 
-const OUTCOMES = new Set<ExecutionOperationOutcome>([
-  "succeeded",
-  "failed",
-  "aborted",
-  "timed_out",
-]);
+const OUTCOMES = new Set<ExecutionOperationOutcome>(["succeeded", "failed", "aborted", "timed_out"]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -23,14 +18,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const nameOf = (ref: string, provider?: unknown, action?: unknown): string => {
   const separator = ref.indexOf(".");
   const lexicalProvider = separator > 0 ? ref.slice(0, separator) : undefined;
-  const lexicalAction = separator > 0 && separator < ref.length - 1
-    ? ref.slice(separator + 1)
-    : undefined;
+  const lexicalAction = separator > 0 && separator < ref.length - 1 ? ref.slice(separator + 1) : undefined;
   const resolvedProvider = typeof provider === "string" ? provider : lexicalProvider;
   const resolvedAction = typeof action === "string" ? action : lexicalAction;
-  return resolvedProvider === "pi" && resolvedAction
-    ? resolvedAction
-    : resolvedAction ?? ref;
+  return resolvedProvider === "pi" && resolvedAction ? resolvedAction : (resolvedAction ?? ref);
 };
 
 const operationOf = (value: unknown): ExecutionOperation | undefined => {
@@ -54,7 +45,7 @@ const operationOf = (value: unknown): ExecutionOperation | undefined => {
     outcome: value.outcome as ExecutionOperationOutcome,
     ...(children && children.length > 0 ? { children } : {}),
     ...(typeof value.error === "string" ? { error: value.error } : {}),
-    ...(Object.prototype.hasOwnProperty.call(value, "result") ? { result: value.result } : {}),
+    ...(Object.hasOwn(value, "result") ? { result: value.result } : {}),
   };
 };
 
@@ -68,7 +59,7 @@ const legacyOperationOf = (value: unknown): ExecutionOperation | undefined => {
     args: value.args,
     outcome: value.success ? "succeeded" : "failed",
     ...(typeof value.error === "string" ? { error: value.error } : {}),
-    ...(Object.prototype.hasOwnProperty.call(value, "result") ? { result: value.result } : {}),
+    ...(Object.hasOwn(value, "result") ? { result: value.result } : {}),
   };
 };
 
@@ -78,8 +69,7 @@ export const executionOperationsOf = (details: unknown): ExecutionOperation[] =>
   if (isRecord(details.trace)) {
     const trace = details.trace;
     const supported =
-      (trace.kind === "apple-pi.execution" || trace.kind === "pi-fabric.execution") &&
-      trace.version === 1;
+      (trace.kind === "apple-pi.execution" || trace.kind === "pi-fabric.execution") && trace.version === 1;
     if (!supported || !Array.isArray(trace.operations)) return [];
     const operations: ExecutionOperation[] = [];
     const append = (operation: ExecutionOperation): void => {

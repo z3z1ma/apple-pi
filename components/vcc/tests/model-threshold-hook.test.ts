@@ -300,10 +300,7 @@ describe("session_before_compact: per-model threshold", () => {
 
     // Below threshold, overrideDefaultCompaction: false → pi-vcc doesn't
     // handle the summary, but also doesn't cancel (threshold guard removed)
-    const entries = [
-      msg("m1", "user", "hello"),
-      msg("m2", "assistant", "hi"),
-    ];
+    const entries = [msg("m1", "user", "hello"), msg("m2", "assistant", "hi")];
     const result = emit("session_before_compact", makeEvent(entries, undefined, 100000));
     // Not cancelled — returns undefined (pi-vcc doesn't handle it)
     expect(result).toBeUndefined();

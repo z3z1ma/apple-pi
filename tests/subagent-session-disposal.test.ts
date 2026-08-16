@@ -20,11 +20,19 @@ describe("child session disposal", () => {
 	});
 
 	it("contains shutdown and disposal failures", async () => {
-		const dispose = vi.fn(() => { throw new Error("dispose failed"); });
-		await expect(disposeAgentSession({
-			extensionRunner: { emit: vi.fn(async () => { throw new Error("shutdown failed"); }) },
-			dispose,
-		} as any)).resolves.toBeUndefined();
+		const dispose = vi.fn(() => {
+			throw new Error("dispose failed");
+		});
+		await expect(
+			disposeAgentSession({
+				extensionRunner: {
+					emit: vi.fn(async () => {
+						throw new Error("shutdown failed");
+					}),
+				},
+				dispose,
+			} as any),
+		).resolves.toBeUndefined();
 		expect(dispose).toHaveBeenCalledOnce();
 	});
 });

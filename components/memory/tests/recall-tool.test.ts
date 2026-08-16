@@ -29,7 +29,10 @@ function fakeCtx(entries: TestEntry[]) {
 async function execute(id: string, entries: TestEntry[]) {
 	const { ctx, getBranch, getEntries } = fakeCtx(entries);
 	const result = await recallObservationTool.execute("tool-1", { id }, undefined as any, undefined as any, ctx as any);
-	const text = result.content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((part) => part.text).join("\n");
+	const text = result.content
+		.filter((part): part is { type: "text"; text: string } => part.type === "text")
+		.map((part) => part.text)
+		.join("\n");
 	return { result, text, getBranch, getEntries };
 }
 
@@ -47,7 +50,10 @@ describe("V3 recall tool", () => {
 
 	it("renders active observation source evidence", async () => {
 		const obs = observation("aaaaaaaaaaaa", { content: "User likes tea.", sourceEntryIds: ["raw-1"] });
-		const entries = [rawMessage("raw-1", "I like tea."), observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" })];
+		const entries = [
+			rawMessage("raw-1", "I like tea."),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		];
 
 		const { result, text, getBranch, getEntries } = await execute("aaaaaaaaaaaa", entries);
 

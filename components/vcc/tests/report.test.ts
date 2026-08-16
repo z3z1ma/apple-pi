@@ -1,11 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { buildCompactReport } from "../src/core/report";
-import {
-  userMsg,
-  assistantText,
-  assistantWithToolCall,
-  toolResult,
-} from "./fixtures";
+import { userMsg, assistantText, assistantWithToolCall, toolResult } from "./fixtures";
 
 describe("buildCompactReport", () => {
   it("includes before and after compact metrics", () => {

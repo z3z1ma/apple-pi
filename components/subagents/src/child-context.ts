@@ -7,9 +7,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 const childSessionContext = new AsyncLocalStorage<boolean>();
 
 export function inChildSessionContext(): boolean {
-  return childSessionContext.getStore() === true;
+	return childSessionContext.getStore() === true;
 }
 
 export function runInChildSessionContext<T>(fn: () => T): T {
-  return childSessionContext.run(true, fn);
+	return childSessionContext.run(true, fn);
 }

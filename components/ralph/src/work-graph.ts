@@ -38,7 +38,10 @@ export interface WorkGraphLimits {
 }
 
 export class WorkGraphError extends Error {
-	constructor(message: string, readonly code: string) {
+	constructor(
+		message: string,
+		readonly code: string,
+	) {
 		super(message);
 		this.name = "WorkGraphError";
 	}
@@ -78,7 +81,8 @@ function parseHeaders(content: string): Record<string, string> {
 		const match = /^([A-Za-z][A-Za-z -]*):\s*(.*?)\s*$/.exec(line);
 		if (!match) continue;
 		const key = match[1].toLowerCase();
-		if (headers[key] !== undefined) throw new WorkGraphError(`Duplicate record header: ${match[1]}`, "duplicate_header");
+		if (headers[key] !== undefined)
+			throw new WorkGraphError(`Duplicate record header: ${match[1]}`, "duplicate_header");
 		headers[key] = match[2];
 	}
 	return headers;
@@ -90,7 +94,8 @@ function parseSections(content: string): Map<string, string> {
 	for (let index = 0; index < matches.length; index++) {
 		const match = matches[index];
 		const heading = match[1].trim().toLowerCase();
-		if (sections.has(heading)) throw new WorkGraphError(`Duplicate record section: ${match[1].trim()}`, "duplicate_section");
+		if (sections.has(heading))
+			throw new WorkGraphError(`Duplicate record section: ${match[1].trim()}`, "duplicate_section");
 		const start = (match.index ?? 0) + match[0].length;
 		const end = matches[index + 1]?.index ?? content.length;
 		sections.set(heading, content.slice(start, end).trim());
@@ -101,7 +106,8 @@ function parseSections(content: string): Map<string, string> {
 function recordPaths(text: string): string[] {
 	for (const match of text.matchAll(/(?:^|[\s`(])([^\s`),;]*\.ledger\/[^\s`),;]+)/g)) {
 		const token = match[1].replace(/[.;:]+$/, "");
-		if (!token.startsWith(".ledger/")) throw new WorkGraphError(`Ledger reference must be project-relative without traversal: ${token}`, "path_escape");
+		if (!token.startsWith(".ledger/"))
+			throw new WorkGraphError(`Ledger reference must be project-relative without traversal: ${token}`, "path_escape");
 	}
 	const matches = text.match(/(?<![A-Za-z0-9._/-])\.ledger\/[A-Za-z0-9._/-]+(?:\.md|\/SKILL\.md)/g) ?? [];
 	return [...new Set(matches.map((path) => path.replace(/[),.;:]+$/, "")))].sort(byteSort);
@@ -118,7 +124,10 @@ function sourcePaths(text: string): string[] {
 
 function splitHeaderPaths(value: string | undefined): string[] {
 	if (!value) return [];
-	return value.split(",").map((item) => item.trim()).filter(Boolean);
+	return value
+		.split(",")
+		.map((item) => item.trim())
+		.filter(Boolean);
 }
 
 function referenceText(record: WorkRecord, root: boolean): string {
@@ -133,7 +142,8 @@ function referenceText(record: WorkRecord, root: boolean): string {
 
 function loadRecord(projectRoot: string, path: string): WorkRecord {
 	const normalized = normalizeProjectPath(projectRoot, path);
-	if (!normalized.startsWith(".ledger/")) throw new WorkGraphError(`Only .ledger records can enter the semantic graph: ${path}`, "non_record_reference");
+	if (!normalized.startsWith(".ledger/"))
+		throw new WorkGraphError(`Only .ledger records can enter the semantic graph: ${path}`, "non_record_reference");
 	const kind = recordKindForPath(normalized);
 	if (!kind) throw new WorkGraphError(`Unknown task-bundle record path: ${normalized}`, "unknown_record_kind");
 	const absolutePath = resolve(realpathSync(projectRoot), normalized);
@@ -143,15 +153,26 @@ function loadRecord(projectRoot: string, path: string): WorkRecord {
 		const expectedName = normalized.split("/").at(-2);
 		const name = /^name:\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/m.exec(frontmatter)?.[1];
 		const description = /^description:\s*["']?(.+?)["']?\s*$/m.exec(frontmatter)?.[1];
-		if (name !== expectedName || !description?.trim()) throw new WorkGraphError(`Task skill must have matching name and description frontmatter: ${normalized}`, "invalid_task_skill");
+		if (name !== expectedName || !description?.trim())
+			throw new WorkGraphError(
+				`Task skill must have matching name and description frontmatter: ${normalized}`,
+				"invalid_task_skill",
+			);
 	}
 	const taskDocument = kind === "task" ? parseTaskDocument(content) : undefined;
 	const headers = taskDocument?.headers ?? parseHeaders(content);
 	if (kind === "task") {
 		const location = taskLocation(normalized);
 		const created = headers.created;
-		if (!location || !/^\d{4}-\d{2}-\d{2}$/.test(created ?? "") || created?.replaceAll("-", "") !== location.taskId.slice(0, 8)) {
-			throw new WorkGraphError(`Task Created date must match its directory timestamp: ${normalized}`, "task_date_mismatch");
+		if (
+			!location ||
+			!/^\d{4}-\d{2}-\d{2}$/.test(created ?? "") ||
+			created?.replaceAll("-", "") !== location.taskId.slice(0, 8)
+		) {
+			throw new WorkGraphError(
+				`Task Created date must match its directory timestamp: ${normalized}`,
+				"task_date_mismatch",
+			);
 		}
 	}
 	return {
@@ -170,7 +191,10 @@ function loadRecord(projectRoot: string, path: string): WorkRecord {
 
 function requireStatus(record: WorkRecord, allowed: string[], relationship: string): void {
 	if (!record.status || !allowed.includes(record.status)) {
-		throw new WorkGraphError(`${relationship} ${record.path} has status ${record.status ?? "(missing)"}; expected ${allowed.join(" or ")}`, "inactive_authority");
+		throw new WorkGraphError(
+			`${relationship} ${record.path} has status ${record.status ?? "(missing)"}; expected ${allowed.join(" or ")}`,
+			"inactive_authority",
+		);
 	}
 	if (record.path.includes("/superseded/") || record.path.includes("/cancelled/")) {
 		throw new WorkGraphError(`${relationship} is terminal authority: ${record.path}`, "terminal_authority");
@@ -192,46 +216,77 @@ function blockerIsNone(value: string): boolean {
 }
 
 function assertTaskShape(task: WorkRecord): AcceptanceCriterion[] {
-	if (task.headers.parent) throw new WorkGraphError("Ledger tasks do not use Parent; keep plans inside the task or create a separate Depends-On task", "legacy_parent_header");
-	for (const [header, canonical] of [["status", "Status"], ["created", "Created"], ["updated", "Updated"]] as const) {
-		if (!task.headers[header]) throw new WorkGraphError(`Task is missing required header: ${header}`, "missing_task_header");
-		if (!new RegExp(`^${canonical}:\\s`, "m").test(task.content)) throw new WorkGraphError(`Task header must use canonical spelling: ${canonical}`, "invalid_task_header");
+	if (task.headers.parent)
+		throw new WorkGraphError(
+			"Ledger tasks do not use Parent; keep plans inside the task or create a separate Depends-On task",
+			"legacy_parent_header",
+		);
+	for (const [header, canonical] of [
+		["status", "Status"],
+		["created", "Created"],
+		["updated", "Updated"],
+	] as const) {
+		if (!task.headers[header])
+			throw new WorkGraphError(`Task is missing required header: ${header}`, "missing_task_header");
+		if (!new RegExp(`^${canonical}:\\s`, "m").test(task.content))
+			throw new WorkGraphError(`Task header must use canonical spelling: ${canonical}`, "invalid_task_header");
 	}
 	for (const header of ["created", "updated"]) {
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(task.headers[header])) throw new WorkGraphError(`Task ${header} must use YYYY-MM-DD`, "invalid_task_header");
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(task.headers[header]))
+			throw new WorkGraphError(`Task ${header} must use YYYY-MM-DD`, "invalid_task_header");
 	}
 	const titles = task.content.match(/^#\s+.+$/gm) ?? [];
-	if (titles.length !== 1) throw new WorkGraphError("Task must contain exactly one level-one title", "invalid_task_title");
+	if (titles.length !== 1)
+		throw new WorkGraphError("Task must contain exactly one level-one title", "invalid_task_title");
 	for (const section of REQUIRED_TASK_SECTIONS) {
-		if (!task.sections.has(section)) throw new WorkGraphError(`Task is missing required section: ${section}`, "missing_task_section");
+		if (!task.sections.has(section))
+			throw new WorkGraphError(`Task is missing required section: ${section}`, "missing_task_section");
 	}
-	if (!blockerIsNone(task.sections.get("blockers") ?? "")) throw new WorkGraphError("Task has unresolved blockers", "task_blocked");
+	if (!blockerIsNone(task.sections.get("blockers") ?? ""))
+		throw new WorkGraphError("Task has unresolved blockers", "task_blocked");
 	const document = task.taskDocument;
-	if (!document) throw new WorkGraphError("Task did not load through the canonical task parser", "invalid_task_document");
+	if (!document)
+		throw new WorkGraphError("Task did not load through the canonical task parser", "invalid_task_document");
 	if (document.workItemIssues.length > 0) {
-		throw new WorkGraphError(`Task has invalid Work Items: ${document.workItemIssues.map((issue) => `${issue.code} at line ${issue.line}`).join("; ")}`, "invalid_work_items");
+		throw new WorkGraphError(
+			`Task has invalid Work Items: ${document.workItemIssues.map((issue) => `${issue.code} at line ${issue.line}`).join("; ")}`,
+			"invalid_work_items",
+		);
 	}
-	if (document.criteria.length === 0) throw new WorkGraphError("Acceptance Criteria must contain stable IDs such as AC-001", "missing_criteria");
+	if (document.criteria.length === 0)
+		throw new WorkGraphError("Acceptance Criteria must contain stable IDs such as AC-001", "missing_criteria");
 	return document.criteria;
 }
 
 function ledgerIndex(projectRoot: string): string {
 	const normalized = normalizeProjectPath(projectRoot, LEDGER_INDEX_PATH);
-	if (normalized !== LEDGER_INDEX_PATH) throw new WorkGraphError("Ledger index must be .ledger/README.md", "invalid_ledger_index");
+	if (normalized !== LEDGER_INDEX_PATH)
+		throw new WorkGraphError("Ledger index must be .ledger/README.md", "invalid_ledger_index");
 	return readFileSync(resolve(projectRoot, normalized), "utf8");
 }
 
 function assertIndexed(index: string, taskPath: string): void {
-	if (!recordPaths(index).includes(taskPath)) throw new WorkGraphError(`Ledger index does not list task: ${taskPath}`, "unindexed_task");
+	if (!recordPaths(index).includes(taskPath))
+		throw new WorkGraphError(`Ledger index does not list task: ${taskPath}`, "unindexed_task");
 }
 
-export function compileWorkGraph(projectRootInput: string, taskInput: string, limits: WorkGraphLimits = {}, ledgerRootInput = projectRootInput): CompiledWorkGraph {
+export function compileWorkGraph(
+	projectRootInput: string,
+	taskInput: string,
+	limits: WorkGraphLimits = {},
+	ledgerRootInput = projectRootInput,
+): CompiledWorkGraph {
 	const projectRoot = realpathSync(projectRootInput);
 	const ledgerRoot = realpathSync(ledgerRootInput);
-	if (taskInput.includes(".10x/")) throw new WorkGraphError("Legacy .10x records are not executable; migrate the work into a .ledger task bundle", "legacy_10x_path");
+	if (taskInput.includes(".10x/"))
+		throw new WorkGraphError(
+			"Legacy .10x records are not executable; migrate the work into a .ledger task bundle",
+			"legacy_10x_path",
+		);
 	const taskPath = normalizeProjectPath(ledgerRoot, taskInput);
 	const rootLocation = taskLocation(taskPath);
-	if (!rootLocation) throw new WorkGraphError("Run root must be .ledger/<YYYYMMDDhhmm-slug>/task.md", "invalid_task_root");
+	if (!rootLocation)
+		throw new WorkGraphError("Run root must be .ledger/<YYYYMMDDhhmm-slug>/task.md", "invalid_task_root");
 	const index = ledgerIndex(ledgerRoot);
 	assertIndexed(index, taskPath);
 	const task = loadRecord(ledgerRoot, taskPath);
@@ -250,7 +305,8 @@ export function compileWorkGraph(projectRootInput: string, taskInput: string, li
 		if (!record) {
 			record = loadRecord(ledgerRoot, path);
 			records.set(path, record);
-			if (records.size > maxRecords) throw new WorkGraphError(`Work graph exceeds ${maxRecords} records`, "graph_record_budget");
+			if (records.size > maxRecords)
+				throw new WorkGraphError(`Work graph exceeds ${maxRecords} records`, "graph_record_budget");
 		}
 		return record;
 	};
@@ -263,12 +319,15 @@ export function compileWorkGraph(projectRootInput: string, taskInput: string, li
 		if (!ownerBundle) throw new WorkGraphError(`Record has no task bundle: ${record.path}`, "invalid_task_record");
 
 		const dependencies = splitHeaderPaths(record.headers["depends-on"]);
-		if (record.kind !== "task" && dependencies.length > 0) throw new WorkGraphError(`Only task roots may declare Depends-On: ${record.path}`, "invalid_dependency_owner");
+		if (record.kind !== "task" && dependencies.length > 0)
+			throw new WorkGraphError(`Only task roots may declare Depends-On: ${record.path}`, "invalid_dependency_owner");
 		const dependencyPaths: string[] = [];
 		for (const raw of dependencies) {
-			if (!raw.startsWith(".ledger/") || normalizeProjectPath(ledgerRoot, raw) !== raw) throw new WorkGraphError(`Dependency path must be canonical: ${raw}`, "path_escape");
+			if (!raw.startsWith(".ledger/") || normalizeProjectPath(ledgerRoot, raw) !== raw)
+				throw new WorkGraphError(`Dependency path must be canonical: ${raw}`, "path_escape");
 			const location = taskLocation(raw);
-			if (!location || location.bundlePath === ownerBundle) throw new WorkGraphError(`Dependency must name another task root: ${raw}`, "invalid_task_dependency");
+			if (!location || location.bundlePath === ownerBundle)
+				throw new WorkGraphError(`Dependency must name another task root: ${raw}`, "invalid_task_dependency");
 			assertIndexed(index, raw);
 			const dependency = addRecord(raw);
 			requireStatus(dependency, ["done"], "Task dependency");
@@ -282,8 +341,13 @@ export function compileWorkGraph(projectRootInput: string, taskInput: string, li
 		for (const raw of references) {
 			const normalized = normalizeProjectPath(ledgerRoot, raw);
 			if (normalized !== raw) throw new WorkGraphError(`Ledger reference must be canonical: ${raw}`, "path_escape");
-			if (bundleForRecord(normalized) !== ownerBundle) throw new WorkGraphError(`Task records may not reference another task bundle; use Depends-On: ${raw}`, "cross_task_reference");
-			if (taskLocation(normalized)) throw new WorkGraphError(`Task roots may only be linked through Depends-On: ${raw}`, "invalid_task_reference");
+			if (bundleForRecord(normalized) !== ownerBundle)
+				throw new WorkGraphError(
+					`Task records may not reference another task bundle; use Depends-On: ${raw}`,
+					"cross_task_reference",
+				);
+			if (taskLocation(normalized))
+				throw new WorkGraphError(`Task roots may only be linked through Depends-On: ${raw}`, "invalid_task_reference");
 			const child = addRecord(normalized);
 			validateSupportingRecord(child);
 			visit(child, false);
@@ -294,20 +358,44 @@ export function compileWorkGraph(projectRootInput: string, taskInput: string, li
 	};
 	visit(task, true);
 
-	const ordered = [task, ...[...records.values()].filter((record) => record.path !== task.path).sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || byteSort(a.path, b.path))];
-	const bundleParts = ordered.map((record) => [
-		`## Record: ${record.path}`,
-		`Type: ${record.kind}`,
-		`SHA-256: ${record.digest}`,
-		"",
-		record.content.trimEnd(),
-	].join("\n"));
-	if (sourcePointers.size > 0) bundleParts.push(`## Source pointers\n${[...sourcePointers].sort(byteSort).map((path) => `- ${path}`).join("\n")}`);
+	const ordered = [
+		task,
+		...[...records.values()]
+			.filter((record) => record.path !== task.path)
+			.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || byteSort(a.path, b.path)),
+	];
+	const bundleParts = ordered.map((record) =>
+		[
+			`## Record: ${record.path}`,
+			`Type: ${record.kind}`,
+			`SHA-256: ${record.digest}`,
+			"",
+			record.content.trimEnd(),
+		].join("\n"),
+	);
+	if (sourcePointers.size > 0)
+		bundleParts.push(
+			`## Source pointers\n${[...sourcePointers]
+				.sort(byteSort)
+				.map((path) => `- ${path}`)
+				.join("\n")}`,
+		);
 	const bundle = bundleParts.join("\n\n---\n\n") + "\n";
 	const byteLength = Buffer.byteLength(bundle);
-	if (byteLength > maxBytes) throw new WorkGraphError(`Compiled context is ${byteLength} bytes; limit is ${maxBytes}`, "graph_byte_budget");
+	if (byteLength > maxBytes)
+		throw new WorkGraphError(`Compiled context is ${byteLength} bytes; limit is ${maxBytes}`, "graph_byte_budget");
 	const graphHash = sha256(ordered.map((record) => `${record.path}\0${record.digest}`).join("\n"));
-	return { projectRoot, ledgerRoot, task, records: ordered, criteria, sourcePointers: [...sourcePointers].sort(byteSort), graphHash, bundle, byteLength };
+	return {
+		projectRoot,
+		ledgerRoot,
+		task,
+		records: ordered,
+		criteria,
+		sourcePointers: [...sourcePointers].sort(byteSort),
+		graphHash,
+		bundle,
+		byteLength,
+	};
 }
 
 export function missingCriterionEvidence(graph: CompiledWorkGraph): string[] {
@@ -317,19 +405,33 @@ export function missingCriterionEvidence(graph: CompiledWorkGraph): string[] {
 		const match = /^\s*[-*]\s*(AC-\d{3,})(?:\s*\[satisfied\])?\s*:\s*(.+?)\s*$/i.exec(line);
 		if (!match) continue;
 		const observation = match[2].trim();
-		if (observation.length < 12 || /\b(?:pending|unknown|todo|tbd|not yet|will be|to be verified|not verified|not tested|not executed|did not run|was not run|no evidence|could not verify)\b/i.test(observation)) continue;
+		if (
+			observation.length < 12 ||
+			/\b(?:pending|unknown|todo|tbd|not yet|will be|to be verified|not verified|not tested|not executed|did not run|was not run|no evidence|could not verify)\b/i.test(
+				observation,
+			)
+		)
+			continue;
 		supported.add(match[1].toUpperCase());
 	}
 	return graph.criteria.filter((criterion) => !supported.has(criterion.id)).map((criterion) => criterion.id);
 }
 
 function substantiveSection(value: string): boolean {
-	const normalized = value.trim().split(/\r?\n/).map((line) => line
-		.replace(/^\s*[-*]\s*/, "")
-		.replace(/^(?:Iteration\s+\d+|\d{4}-\d{2}-\d{2}):\s*/i, "")
-		.trim()).filter(Boolean);
-	return normalized.join(" ").length >= 20
-		&& normalized.every((line) => !/^(?:none|n\/a|todo|pending|tbd|not yet|will be|write\b.*\blater)\b/i.test(line));
+	const normalized = value
+		.trim()
+		.split(/\r?\n/)
+		.map((line) =>
+			line
+				.replace(/^\s*[-*]\s*/, "")
+				.replace(/^(?:Iteration\s+\d+|\d{4}-\d{2}-\d{2}):\s*/i, "")
+				.trim(),
+		)
+		.filter(Boolean);
+	return (
+		normalized.join(" ").length >= 20 &&
+		normalized.every((line) => !/^(?:none|n\/a|todo|pending|tbd|not yet|will be|write\b.*\blater)\b/i.test(line))
+	);
 }
 
 export function hasRetrospective(graph: CompiledWorkGraph): boolean {

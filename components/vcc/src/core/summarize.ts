@@ -40,8 +40,7 @@ const sectionOf = (text: string, header: string): string => {
   if (start < 0) return "";
   const after = text.slice(start);
   // Find next section header or separator
-  const nextSection = HEADER_NAMES
-    .filter((h) => h !== header)
+  const nextSection = HEADER_NAMES.filter((h) => h !== header)
     .map((h) => after.indexOf(`[${h}]`))
     .filter((n) => n > 0);
   const nextSep = after.indexOf("\n\n---\n\n");
@@ -75,7 +74,7 @@ const extractBreadcrumb = (line: string): string => {
   // The cause/resolution fragments are produced by extractCausalChain and
   // are typically short phrases without a leading verb.
   if (text.includes("\u2192")) {
-    const parts = text.split("\u2192").map(p => p.trim());
+    const parts = text.split("\u2192").map((p) => p.trim());
 
     // Extract file from the action parts
     const fileMatch = text.match(/(?:edited |read |wrote |created |deleted )?([^\s.]+\.\w{1,12})/);
@@ -85,7 +84,7 @@ const extractBreadcrumb = (line: string): string => {
     // (start with read/edited/ran or contain file paths).
     // Middle parts are causal fragments.
     const toolActionRe = /^(?:read|edited|wrote|created|deleted|ran)\s?/i;
-    const toolActionIdx = parts.findIndex(p => toolActionRe.test(p) || /\+\d+ more/.test(p));
+    const toolActionIdx = parts.findIndex((p) => toolActionRe.test(p) || /\+\d+ more/.test(p));
 
     // Causal parts are between goal (index 0) and tool actions
     const causalEnd = toolActionIdx >= 0 ? toolActionIdx : parts.length;
@@ -120,10 +119,13 @@ const extractBreadcrumb = (line: string): string => {
   if (fileMatch1) return fileMatch1[1];
   // "Fix login bug → ..." → first few words before →
   const beforeArrow = text.split("\u2192")[0].trim();
-  const words = beforeArrow.split(/\s+/).filter(w => w.length > 2).slice(0, 3);
+  const words = beforeArrow
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .slice(0, 3);
   if (words.length > 0) return words.join(" ");
   // fallback: first content word
-  const first = text.split(/\s+/).find(w => w.length > 2);
+  const first = text.split(/\s+/).find((w) => w.length > 2);
   return first ?? "";
 };
 
@@ -148,7 +150,12 @@ const mergeHeaderSection = (header: string, prev: string, fresh: string): string
   const prevBreadcrumbs = prev.split("\n").filter(isRecallBreadcrumb);
   const freshBreadcrumbs = fresh.split("\n").filter(isRecallBreadcrumb);
   const allBreadcrumbs = [...new Set([...prevBreadcrumbs, ...freshBreadcrumbs])];
-  const contentLines = [...new Set([...prevLines.filter(l => !isRecallBreadcrumb(l)), ...freshLines.filter(l => !isRecallBreadcrumb(l))])];
+  const contentLines = [
+    ...new Set([
+      ...prevLines.filter((l) => !isRecallBreadcrumb(l)),
+      ...freshLines.filter((l) => !isRecallBreadcrumb(l)),
+    ]),
+  ];
   const CAP = header === "Session Goal" ? 8 : header === "Commits" ? 8 : header === "Earlier Turns" ? 15 : 15;
   if (contentLines.length > CAP) {
     const kept = contentLines.slice(-CAP);
@@ -228,13 +235,11 @@ const mergeBriefTranscript = (prev: string, fresh: string): string => {
 
 const mergePrevious = (prev: string, fresh: string): string => {
   // Merge header sections
-  const headers = HEADER_NAMES
-    .map((header) => {
-      const freshSec = sectionOf(fresh, header);
-      const prevSec = sectionOf(prev, header);
-      return mergeHeaderSection(header, prevSec, freshSec);
-    })
-    .filter(Boolean);
+  const headers = HEADER_NAMES.map((header) => {
+    const freshSec = sectionOf(fresh, header);
+    const prevSec = sectionOf(prev, header);
+    return mergeHeaderSection(header, prevSec, freshSec);
+  }).filter(Boolean);
 
   // Merge brief transcript
   const prevBrief = briefOf(prev);
@@ -258,9 +263,7 @@ export const compile = (input: CompileInput): string => {
   const fresh = formatSummary(data);
   // Strip any legacy RECALL_NOTE baked into prev summary (pre-fix format)
   // so merge doesn't re-stack it inside the brief.
-  const prev = input.previousSummary
-    ? stripRecallNote(input.previousSummary)
-    : undefined;
+  const prev = input.previousSummary ? stripRecallNote(input.previousSummary) : undefined;
   const merged = prev ? mergePrevious(prev, fresh) : fresh;
   if (!merged) return "";
   const body = merged;
@@ -298,7 +301,10 @@ const stripRecallNote = (text: string): string => {
   const legacyRecall = "Use `vcc_recall` to search for prior work, decisions, and context from before this summary.";
   const legacyIdx = result.lastIndexOf(legacyRecall);
   if (legacyIdx > 0) {
-    result = result.slice(0, legacyIdx).replace(/\s*(?:\n\n---\n\n)?\s*$/, "").trimEnd();
+    result = result
+      .slice(0, legacyIdx)
+      .replace(/\s*(?:\n\n---\n\n)?\s*$/, "")
+      .trimEnd();
   }
 
   return result;

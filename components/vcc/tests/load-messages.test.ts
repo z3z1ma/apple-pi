@@ -13,8 +13,16 @@ describe("loadAllMessages", () => {
         JSON.stringify({ type: "session", id: "s1" }),
         JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: "u1" } }),
         JSON.stringify({ type: "custom", id: "c1", customType: "x", data: {} }),
-        JSON.stringify({ type: "message", id: "m2", message: { role: "assistant", content: [{ type: "text", text: "a1" }] } }),
-        JSON.stringify({ type: "message", id: "m3", message: { role: "toolResult", toolName: "read", content: [{ type: "text", text: "ok" }] } }),
+        JSON.stringify({
+          type: "message",
+          id: "m2",
+          message: { role: "assistant", content: [{ type: "text", text: "a1" }] },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "m3",
+          message: { role: "toolResult", toolName: "read", content: [{ type: "text", text: "ok" }] },
+        }),
       ];
       writeFileSync(file, lines.join("\n") + "\n", "utf8");
 
@@ -33,7 +41,11 @@ describe("loadAllMessages", () => {
     try {
       const lines = [
         JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: "u1" } }),
-        JSON.stringify({ type: "message", id: "m2", message: { role: "assistant", content: [{ type: "text", text: "a1" }] } }),
+        JSON.stringify({
+          type: "message",
+          id: "m2",
+          message: { role: "assistant", content: [{ type: "text", text: "a1" }] },
+        }),
         JSON.stringify({ type: "message", id: "m3", message: { role: "user", content: "u2" } }),
       ];
       writeFileSync(file, lines.join("\n") + "\n", "utf8");

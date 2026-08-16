@@ -5,7 +5,10 @@ import { execFileSync } from "node:child_process";
 import type { ChangedPath, WorkspaceEntry, WorkspaceSnapshot } from "./types.js";
 
 export class WorkspaceError extends Error {
-	constructor(message: string, readonly code: string) {
+	constructor(
+		message: string,
+		readonly code: string,
+	) {
 		super(message);
 		this.name = "WorkspaceError";
 	}
@@ -17,7 +20,11 @@ function sha256(value: string | Buffer): string {
 
 function git(projectRoot: string, args: string[], maxBuffer = 16 * 1024 * 1024): Buffer {
 	try {
-		return execFileSync("git", ["-C", projectRoot, ...args], { encoding: "buffer", maxBuffer, stdio: ["ignore", "pipe", "pipe"] });
+		return execFileSync("git", ["-C", projectRoot, ...args], {
+			encoding: "buffer",
+			maxBuffer,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 	} catch (error) {
 		const stderr = (error as { stderr?: Buffer }).stderr?.toString("utf8").trim();
 		throw new WorkspaceError(stderr || `git ${args.join(" ")} failed`, "git_error");
@@ -37,11 +44,13 @@ function assertRepositoryReady(projectRoot: string): void {
 	if (unmerged.length > 0) throw new WorkspaceError("Workspace has unmerged paths", "unmerged_paths");
 	for (const marker of ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"]) {
 		const path = git(projectRoot, ["rev-parse", "--git-path", marker]).toString("utf8").trim();
-		if (path && existsSync(resolve(projectRoot, path))) throw new WorkspaceError(`Git operation in progress: ${marker}`, "git_operation_in_progress");
+		if (path && existsSync(resolve(projectRoot, path)))
+			throw new WorkspaceError(`Git operation in progress: ${marker}`, "git_operation_in_progress");
 	}
 	for (const marker of ["rebase-apply", "rebase-merge"]) {
 		const path = git(projectRoot, ["rev-parse", "--git-path", marker]).toString("utf8").trim();
-		if (path && existsSync(resolve(projectRoot, path))) throw new WorkspaceError(`Git operation in progress: ${marker}`, "git_operation_in_progress");
+		if (path && existsSync(resolve(projectRoot, path)))
+			throw new WorkspaceError(`Git operation in progress: ${marker}`, "git_operation_in_progress");
 	}
 }
 
@@ -60,31 +69,70 @@ export function captureWorkspace(projectRootInput: string): WorkspaceSnapshot {
 	const head = git(projectRoot, ["rev-parse", "HEAD"]).toString("utf8").trim();
 	const branch = git(projectRoot, ["branch", "--show-current"]).toString("utf8").trim();
 	const index = git(projectRoot, ["ls-files", "--stage", "-z"]);
-	if (/(?:^|\0)160000\s/.test(index.toString("utf8"))) throw new WorkspaceError("Ralph does not execute in workspaces containing Git submodules", "unsupported_gitlink");
+	if (/(?:^|\0)160000\s/.test(index.toString("utf8")))
+		throw new WorkspaceError("Ralph does not execute in workspaces containing Git submodules", "unsupported_gitlink");
 	const indexHash = sha256(index);
 	const statusHash = sha256(git(projectRoot, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]));
 	const repositoryPaths = git(projectRoot, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
-		.toString("utf8").split("\0").filter(Boolean);
-	const ignoredLedgerPaths = git(projectRoot, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", ".ledger"])
-		.toString("utf8").split("\0").filter(Boolean);
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean);
+	const ignoredLedgerPaths = git(projectRoot, [
+		"ls-files",
+		"--others",
+		"--ignored",
+		"--exclude-standard",
+		"-z",
+		"--",
+		".ledger",
+	])
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean);
 	const paths = [...new Set([...repositoryPaths, ...ignoredLedgerPaths])].sort(byteSort);
 	const entries: WorkspaceEntry[] = [];
 	for (const path of paths) {
 		const absolute = resolve(projectRoot, path);
 		if (!existsSync(absolute)) continue;
 		for (let ancestor = dirname(absolute); ancestor !== projectRoot; ancestor = dirname(ancestor)) {
-			if (existsSync(resolve(ancestor, ".git"))) throw new WorkspaceError(`Ralph does not execute across nested Git repository: ${relative(projectRoot, ancestor)}`, "unsupported_gitlink");
+			if (existsSync(resolve(ancestor, ".git")))
+				throw new WorkspaceError(
+					`Ralph does not execute across nested Git repository: ${relative(projectRoot, ancestor)}`,
+					"unsupported_gitlink",
+				);
 			if (dirname(ancestor) === ancestor) break;
 		}
 		const stat = lstatSync(absolute);
 		const normalized = relative(projectRoot, absolute).split(sep).join("/");
 		if (stat.isSymbolicLink()) {
-			entries.push({ path: normalized, kind: "symlink", mode: stat.mode, size: stat.size, digest: sha256(readlinkSync(absolute)) });
+			entries.push({
+				path: normalized,
+				kind: "symlink",
+				mode: stat.mode,
+				size: stat.size,
+				digest: sha256(readlinkSync(absolute)),
+			});
 		} else if (stat.isFile()) {
-			entries.push({ path: normalized, kind: "file", mode: stat.mode, size: stat.size, digest: sha256(readFileSync(absolute)) });
+			entries.push({
+				path: normalized,
+				kind: "file",
+				mode: stat.mode,
+				size: stat.size,
+				digest: sha256(readFileSync(absolute)),
+			});
 		} else if (stat.isDirectory()) {
-			if (existsSync(resolve(absolute, ".git"))) throw new WorkspaceError(`Ralph does not execute across nested Git repository: ${normalized}`, "unsupported_gitlink");
-			entries.push({ path: normalized, kind: "directory", mode: stat.mode, size: stat.size, digest: sha256(`${stat.mode}:${stat.size}`) });
+			if (existsSync(resolve(absolute, ".git")))
+				throw new WorkspaceError(
+					`Ralph does not execute across nested Git repository: ${normalized}`,
+					"unsupported_gitlink",
+				);
+			entries.push({
+				path: normalized,
+				kind: "directory",
+				mode: stat.mode,
+				size: stat.size,
+				digest: sha256(`${stat.mode}:${stat.size}`),
+			});
 		}
 	}
 	const hash = sha256(JSON.stringify({ head, branch, indexHash, statusHash, entries }));
@@ -93,7 +141,8 @@ export function captureWorkspace(projectRootInput: string): WorkspaceSnapshot {
 
 export function changedPaths(before: WorkspaceSnapshot, after: WorkspaceSnapshot): ChangedPath[] {
 	if (before.head !== after.head) throw new WorkspaceError("Git HEAD changed during the Ralph run", "head_changed");
-	if (before.branch !== after.branch) throw new WorkspaceError("Git branch changed during the Ralph run", "branch_changed");
+	if (before.branch !== after.branch)
+		throw new WorkspaceError("Git branch changed during the Ralph run", "branch_changed");
 	const prior = new Map(before.entries.map((entry) => [entry.path, entry]));
 	const next = new Map(after.entries.map((entry) => [entry.path, entry]));
 	const paths = [...new Set([...prior.keys(), ...next.keys()])].sort(byteSort);
@@ -113,8 +162,14 @@ export function changedPaths(before: WorkspaceSnapshot, after: WorkspaceSnapshot
 export function assertWorkspaceMatches(expected: WorkspaceSnapshot, actual: WorkspaceSnapshot): void {
 	if (expected.hash !== actual.hash) {
 		const changes = changedPaths(expected, actual);
-		const summary = changes.slice(0, 20).map((change) => `${change.change}: ${change.path}`).join(", ");
-		throw new WorkspaceError(`Workspace changed outside the active Ralph stage${summary ? ` (${summary})` : ""}`, "workspace_conflict");
+		const summary = changes
+			.slice(0, 20)
+			.map((change) => `${change.change}: ${change.path}`)
+			.join(", ");
+		throw new WorkspaceError(
+			`Workspace changed outside the active Ralph stage${summary ? ` (${summary})` : ""}`,
+			"workspace_conflict",
+		);
 	}
 }
 
@@ -126,7 +181,9 @@ export function renderWorkspaceChanges(
 ): { manifest: ChangedPath[]; text: string } {
 	const projectRoot = realpathSync(projectRootInput);
 	const manifest = changedPaths(baseline, current);
-	const diff = git(projectRoot, ["diff", "HEAD", "--no-ext-diff", "--unified=40", "--", "."], maxBytes + 1024).toString("utf8");
+	const diff = git(projectRoot, ["diff", "HEAD", "--no-ext-diff", "--unified=40", "--", "."], maxBytes + 1024).toString(
+		"utf8",
+	);
 	const tracked = new Set(git(projectRoot, ["ls-files", "-z"]).toString("utf8").split("\0").filter(Boolean));
 	const currentEntries = new Map(current.entries.map((entry) => [entry.path, entry]));
 	const untrackedParts: string[] = [];
@@ -136,7 +193,8 @@ export function renderWorkspaceChanges(
 		const entry = currentEntries.get(change.path);
 		const stat = lstatSync(absolute);
 		if (!entry || stat.isSymbolicLink() || entry.kind === "symlink") {
-			if (!stat.isSymbolicLink() || entry?.kind !== "symlink") throw new WorkspaceError(`Untracked path changed while rendering: ${change.path}`, "workspace_conflict");
+			if (!stat.isSymbolicLink() || entry?.kind !== "symlink")
+				throw new WorkspaceError(`Untracked path changed while rendering: ${change.path}`, "workspace_conflict");
 			untrackedParts.push(`### Untracked symlink: ${change.path}\n(target: ${readlinkSync(absolute)})`);
 			continue;
 		}
@@ -145,7 +203,8 @@ export function renderWorkspaceChanges(
 			continue;
 		}
 		const content = readFileSync(absolute);
-		if (sha256(content) !== entry.digest) throw new WorkspaceError(`Untracked file changed while rendering: ${change.path}`, "workspace_conflict");
+		if (sha256(content) !== entry.digest)
+			throw new WorkspaceError(`Untracked file changed while rendering: ${change.path}`, "workspace_conflict");
 		if (content.includes(0)) {
 			untrackedParts.push(`### Untracked binary: ${change.path}\n(${content.length} bytes)`);
 		} else {
@@ -159,7 +218,9 @@ export function renderWorkspaceChanges(
 		"## Git diff",
 		diff || "(no tracked diff)",
 		untrackedParts.join("\n\n"),
-	].filter(Boolean).join("\n");
+	]
+		.filter(Boolean)
+		.join("\n");
 	if (Buffer.byteLength(text) > maxBytes) {
 		throw new WorkspaceError(`Review context exceeds ${maxBytes} bytes`, "review_context_budget");
 	}

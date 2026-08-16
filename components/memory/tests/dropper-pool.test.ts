@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { observationPoolMetrics } from "../src/agents/dropper/pool.js";
 import { observationLineTokenCount } from "../src/tokens.js";
 import { foldLedger } from "../src/session-ledger/index.js";
-import { observation, observationsDroppedEntry, observationsRecordedEntry, textCustomMessage } from "./fixtures/session.js";
+import {
+	observation,
+	observationsDroppedEntry,
+	observationsRecordedEntry,
+	textCustomMessage,
+} from "./fixtures/session.js";
 
 describe("V3 dropper active observation pool metrics", () => {
 	it("reports below-target pools as not ready", () => {

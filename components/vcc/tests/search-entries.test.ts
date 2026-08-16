@@ -35,12 +35,8 @@ describe("searchEntries", () => {
 
   it("finds keyword beyond clip boundary in full content", () => {
     const longText = "A".repeat(400) + " hidden_keyword here";
-    const longEntries: RenderedEntry[] = [
-      { index: 0, role: "user", summary: "A".repeat(300) },
-    ];
-    const longMsgs: Message[] = [
-      { role: "user", content: longText } as any,
-    ];
+    const longEntries: RenderedEntry[] = [{ index: 0, role: "user", summary: "A".repeat(300) }];
+    const longMsgs: Message[] = [{ role: "user", content: longText } as any];
     const r = searchEntries(longEntries, longMsgs, "hidden_keyword");
     expect(r).toHaveLength(1);
     expect(r[0].snippet).toContain("hidden_keyword");
@@ -157,10 +153,13 @@ describe("searchEntries", () => {
     ];
     const m: Message[] = [
       { role: "user", content: "Fix the parser" } as any,
-      { role: "assistant", content: [
-        { type: "thinking", thinking: "The race condition is in the event emitter" },
-        { type: "text", text: "Looking at parser" },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "The race condition is in the event emitter" },
+          { type: "text", text: "Looking at parser" },
+        ],
+      } as any,
     ];
     const r = searchEntries(e, m, "race condition");
     expect(r).toHaveLength(1);
@@ -177,10 +176,18 @@ describe("searchEntries", () => {
     ];
     const m: Message[] = [
       { role: "user", content: "set up env" } as any,
-      { role: "assistant", content: [
-        { type: "text", text: "let me grep for the key" },
-        { type: "toolCall", name: "bash", id: "tc_1", arguments: { command: "DEV_API_KEY=$(grep DEV_API_KEY .dev.vars) curl -X POST https://api.test" } },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "let me grep for the key" },
+          {
+            type: "toolCall",
+            name: "bash",
+            id: "tc_1",
+            arguments: { command: "DEV_API_KEY=$(grep DEV_API_KEY .dev.vars) curl -X POST https://api.test" },
+          },
+        ],
+      } as any,
     ];
     // Query has no regex metacharacters, so it takes the BM25 term path
     // (the .dev.vars dots would otherwise make the whole query a single
@@ -192,14 +199,20 @@ describe("searchEntries", () => {
   });
 
   it("finds terms in a non-bash toolCall's string args (edit newText)", () => {
-    const e: RenderedEntry[] = [
-      { index: 0, role: "assistant", summary: "edit" },
-    ];
+    const e: RenderedEntry[] = [{ index: 0, role: "assistant", summary: "edit" }];
     const m: Message[] = [
-      { role: "assistant", content: [
-        { type: "text", text: "applying the fix" },
-        { type: "toolCall", name: "edit", id: "tc_1", arguments: { path: "a.ts", oldText: "oldToken", newText: "freshToken" } },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "applying the fix" },
+          {
+            type: "toolCall",
+            name: "edit",
+            id: "tc_1",
+            arguments: { path: "a.ts", oldText: "oldToken", newText: "freshToken" },
+          },
+        ],
+      } as any,
     ];
     const r = searchEntries(e, m, "freshToken");
     expect(r).toHaveLength(1);
@@ -212,13 +225,24 @@ describe("searchEntries", () => {
       { index: 1, role: "assistant", summary: "write", files: ["output.txt"] },
     ];
     const fileMessages: Message[] = [
-      { role: "assistant", content: [
-        { type: "text", text: "secret in transcript" },
-        { type: "toolCall", name: "read", id: "read", arguments: { path: "secret.txt" } },
-      ] } as any,
-      { role: "assistant", content: [
-        { type: "toolCall", name: "write", id: "write", arguments: { path: "output.txt", content: "payload needle" } },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "secret in transcript" },
+          { type: "toolCall", name: "read", id: "read", arguments: { path: "secret.txt" } },
+        ],
+      } as any,
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            name: "write",
+            id: "write",
+            arguments: { path: "output.txt", content: "payload needle" },
+          },
+        ],
+      } as any,
     ];
     expect(searchEntries(fileEntries, fileMessages, "secret", "file")).toEqual([]);
     expect(searchEntries(fileEntries, fileMessages, "assistant", "file")).toEqual([]);
@@ -228,14 +252,15 @@ describe("searchEntries", () => {
   });
 
   it("does not match on toolCall args that are absent (regression guard)", () => {
-    const e: RenderedEntry[] = [
-      { index: 0, role: "assistant", summary: "reading" },
-    ];
+    const e: RenderedEntry[] = [{ index: 0, role: "assistant", summary: "reading" }];
     const m: Message[] = [
-      { role: "assistant", content: [
-        { type: "text", text: "looking around" },
-        { type: "toolCall", name: "read", id: "tc_1", arguments: { path: "a.ts" } },
-      ] } as any,
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "looking around" },
+          { type: "toolCall", name: "read", id: "tc_1", arguments: { path: "a.ts" } },
+        ],
+      } as any,
     ];
     expect(searchEntries(e, m, "DEV_API_KEY")).toEqual([]);
   });
@@ -254,9 +279,15 @@ describe("searchEntries", () => {
     ];
     const govMsgs: Message[] = [
       { role: "user", content: "Review the policy document" } as any,
-      { role: "assistant", content: [{ type: "text", text: "I found the policy document. It covers the review process." }] } as any,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "I found the policy document. It covers the review process." }],
+      } as any,
       { role: "user", content: "Check the deployment pipeline" } as any,
-      { role: "assistant", content: [{ type: "text", text: "The pipeline has a step for document generation" }] } as any,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "The pipeline has a step for document generation" }],
+      } as any,
       { role: "user", content: "Fix the login bug" } as any,
       { role: "assistant", content: [{ type: "text", text: "Updated the document in README" }] } as any,
     ];
@@ -294,11 +325,18 @@ describe("searchEntries", () => {
   it("hard caps regex search results", () => {
     // Build many entries that all match the same regex
     const manyEntries: RenderedEntry[] = Array.from({ length: 100 }, (_, i) => ({
-      index: i, role: "user" as const, summary: `document ${i} review`,
+      index: i,
+      role: "user" as const,
+      summary: `document ${i} review`,
     }));
-    const manyMsgs: Message[] = Array.from({ length: 100 }, (_, i) => ({
-      role: "user" as const, content: `document ${i} review`,
-    } as any));
+    const manyMsgs: Message[] = Array.from(
+      { length: 100 },
+      (_, i) =>
+        ({
+          role: "user" as const,
+          content: `document ${i} review`,
+        }) as any,
+    );
     const r = searchEntries(manyEntries, manyMsgs, "document.*review");
     expect(r.length).toBeLessThanOrEqual(50); // MAX_SEARCH_RESULTS
   });

@@ -282,10 +282,14 @@ Additional boundaries:
 ## Development
 
 ```bash
+npm run format:check
+npm run lint
 npm run typecheck
 npm test
 npm run pack:check
 ```
+
+See [`docs/development.md`](docs/development.md) for module conventions, formatting, linting, and the rationale for retained cohesive modules.
 
 The VCC suite runs under Bun because its upstream tests use `bun:test`; memory and apple-pi integration tests run under Vitest. The advisor's offline harness uses the locally installed Pi distribution. Networked advisor E2E remains opt-in with `ADVISOR_E2E=1 npm run test:advisor`.
 

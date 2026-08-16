@@ -62,9 +62,12 @@ export function reviewRoleProfile(role: ReviewRole): ReviewRoleProfile {
 
 function sourceDescription(input: ReviewInput): string {
 	switch (input.source.mode) {
-		case "workspace": return `workspace at ${input.resolvedHead ?? "unborn HEAD"}`;
-		case "range": return `merge-base ${input.resolvedBase} to ${input.resolvedHead}`;
-		case "commit": return `commit ${input.resolvedHead} against ${input.resolvedBase}`;
+		case "workspace":
+			return `workspace at ${input.resolvedHead ?? "unborn HEAD"}`;
+		case "range":
+			return `merge-base ${input.resolvedBase} to ${input.resolvedHead}`;
+		case "commit":
+			return `commit ${input.resolvedHead} against ${input.resolvedBase}`;
 	}
 }
 
@@ -76,14 +79,18 @@ function authorityBlocks(background?: string, authorityPacket?: string): string[
 }
 
 function itemManifest(items: ReviewItem[]): string {
-	return items.map((entry) => [
-		`- id: ${entry.id}`,
-		`  path: ${entry.path}`,
-		...(entry.oldPath ? [`  oldPath: ${entry.oldPath}`] : []),
-		`  status: ${entry.status}`,
-		`  changedLines: +${entry.insertions}/-${entry.deletions}`,
-		`  diffBytes: ${Buffer.byteLength(entry.diff)}`,
-	].join("\n")).join("\n");
+	return items
+		.map((entry) =>
+			[
+				`- id: ${entry.id}`,
+				`  path: ${entry.path}`,
+				...(entry.oldPath ? [`  oldPath: ${entry.oldPath}`] : []),
+				`  status: ${entry.status}`,
+				`  changedLines: +${entry.insertions}/-${entry.deletions}`,
+				`  diffBytes: ${Buffer.byteLength(entry.diff)}`,
+			].join("\n"),
+		)
+		.join("\n");
 }
 
 function diffPacket(items: ReviewItem[], maxBytes?: number): string {
@@ -109,7 +116,14 @@ function diffPacket(items: ReviewItem[], maxBytes?: number): string {
 export function plannerPrompt(
 	input: ReviewInput,
 	items: ReviewItem[],
-	options: { background?: string; authorityPacket?: string; reviewRoot: string; maxGroups: number; maxGroupPromptBytes: number; excerptBytes: number },
+	options: {
+		background?: string;
+		authorityPacket?: string;
+		reviewRoot: string;
+		maxGroups: number;
+		maxGroupPromptBytes: number;
+		excerptBytes: number;
+	},
 ): string {
 	return [
 		"<sealed-review-input>",
@@ -149,7 +163,9 @@ export function reviewerPrompt(
 		"Assigned focus item IDs:",
 		...group.itemIds.map((id) => `- ${id}`),
 		"Suggested evidence context paths:",
-		...(group.contextPaths.length ? group.contextPaths.map((path) => `- ${path}`) : ["- None supplied; trace dependencies as evidence requires."]),
+		...(group.contextPaths.length
+			? group.contextPaths.map((path) => `- ${path}`)
+			: ["- None supplied; trace dependencies as evidence requires."]),
 		"</review-assignment>",
 		"",
 		...authorityBlocks(options.background, options.authorityPacket),
@@ -215,7 +231,8 @@ function optionalArray(value: unknown, label: string): unknown[] {
 }
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
-	if (typeof value !== "string" || !allowed.includes(value as T)) throw new Error(`${label} must be one of ${allowed.join(", ")}`);
+	if (typeof value !== "string" || !allowed.includes(value as T))
+		throw new Error(`${label} must be one of ${allowed.join(", ")}`);
 	return value as T;
 }
 
@@ -227,9 +244,13 @@ export function parsePlannerOutput(value: unknown): PlannerOutput {
 		groups: output.groups.map((raw, index) => {
 			const group = record(raw, `groups[${index}]`);
 			return {
-				id: string(group.id, `groups[${index}].id`), title: string(group.title, `groups[${index}].title`), objective: string(group.objective, `groups[${index}].objective`),
-				itemIds: stringArray(group.itemIds, `groups[${index}].itemIds`), contextPaths: optionalStringArray(group.contextPaths, `groups[${index}].contextPaths`),
-				tier: oneOf(group.tier, ["fast", "strong"] as const, `groups[${index}].tier`), rationale: string(group.rationale, `groups[${index}].rationale`),
+				id: string(group.id, `groups[${index}].id`),
+				title: string(group.title, `groups[${index}].title`),
+				objective: string(group.objective, `groups[${index}].objective`),
+				itemIds: stringArray(group.itemIds, `groups[${index}].itemIds`),
+				contextPaths: optionalStringArray(group.contextPaths, `groups[${index}].contextPaths`),
+				tier: oneOf(group.tier, ["fast", "strong"] as const, `groups[${index}].tier`),
+				rationale: string(group.rationale, `groups[${index}].rationale`),
 			};
 		}),
 	};
@@ -243,11 +264,24 @@ export function parseReviewerOutput(value: unknown): ReviewerOutput {
 		findings: optionalArray(output.findings, "findings").map((raw, index) => {
 			const finding = record(raw, `findings[${index}]`);
 			return {
-				severity: oneOf(finding.severity, ["critical", "significant", "minor", "nit"] as const, `findings[${index}].severity`),
-				category: oneOf(finding.category, ["bug", "security", "performance", "maintainability", "test", "documentation", "other"] as const, `findings[${index}].category`),
-				summary: string(finding.summary, `findings[${index}].summary`), impact: string(finding.impact, `findings[${index}].impact`), evidence: string(finding.evidence, `findings[${index}].evidence`),
-				path: string(finding.path, `findings[${index}].path`), anchor: string(finding.anchor, `findings[${index}].anchor`), side: oneOf(finding.side, ["new", "old"] as const, `findings[${index}].side`),
-				...(typeof finding.suggestion === "string" && finding.suggestion.trim() && { suggestion: finding.suggestion.trim() }),
+				severity: oneOf(
+					finding.severity,
+					["critical", "significant", "minor", "nit"] as const,
+					`findings[${index}].severity`,
+				),
+				category: oneOf(
+					finding.category,
+					["bug", "security", "performance", "maintainability", "test", "documentation", "other"] as const,
+					`findings[${index}].category`,
+				),
+				summary: string(finding.summary, `findings[${index}].summary`),
+				impact: string(finding.impact, `findings[${index}].impact`),
+				evidence: string(finding.evidence, `findings[${index}].evidence`),
+				path: string(finding.path, `findings[${index}].path`),
+				anchor: string(finding.anchor, `findings[${index}].anchor`),
+				side: oneOf(finding.side, ["new", "old"] as const, `findings[${index}].side`),
+				...(typeof finding.suggestion === "string" &&
+					finding.suggestion.trim() && { suggestion: finding.suggestion.trim() }),
 			};
 		}),
 		residualRisk: optionalStringArray(output.residualRisk, "residualRisk"),
@@ -260,7 +294,16 @@ export function parseVerifierOutput(value: unknown): VerifierOutput {
 	return {
 		decisions: output.decisions.map((raw, index) => {
 			const decision = record(raw, `decisions[${index}]`);
-			return { findingId: string(decision.findingId, `decisions[${index}].findingId`), status: oneOf<ReviewValidationStatus>(decision.status, ["confirmed", "rejected", "retained_unresolved"] as const, `decisions[${index}].status`), reason: string(decision.reason, `decisions[${index}].reason`), evidence: string(decision.evidence, `decisions[${index}].evidence`) };
+			return {
+				findingId: string(decision.findingId, `decisions[${index}].findingId`),
+				status: oneOf<ReviewValidationStatus>(
+					decision.status,
+					["confirmed", "rejected", "retained_unresolved"] as const,
+					`decisions[${index}].status`,
+				),
+				reason: string(decision.reason, `decisions[${index}].reason`),
+				evidence: string(decision.evidence, `decisions[${index}].evidence`),
+			};
 		}),
 		residualRisk: optionalStringArray(output.residualRisk, "residualRisk"),
 	};
@@ -272,18 +315,112 @@ export interface ReviewResultCapture {
 	value(): unknown;
 }
 
-function resultTool(name: string, label: string, description: string, parameters: ToolDefinition["parameters"]): ReviewResultCapture {
+function resultTool(
+	name: string,
+	label: string,
+	description: string,
+	parameters: ToolDefinition["parameters"],
+): ReviewResultCapture {
 	let callCount = 0;
 	let submitted: unknown;
 	return {
-		tool: defineTool({ name, label, description, promptSnippet: `Submit the final ${label.toLowerCase()} through this terminating tool.`, promptGuidelines: ["Call this tool exactly once with the complete final result. Do not return prose JSON."], parameters, executionMode: "sequential", async execute(_toolCallId, params) { callCount++; submitted = params; return { content: [{ type: "text", text: `${label} submitted.` }], details: params, terminate: true }; } }),
+		tool: defineTool({
+			name,
+			label,
+			description,
+			promptSnippet: `Submit the final ${label.toLowerCase()} through this terminating tool.`,
+			promptGuidelines: ["Call this tool exactly once with the complete final result. Do not return prose JSON."],
+			parameters,
+			executionMode: "sequential",
+			async execute(_toolCallId, params) {
+				callCount++;
+				submitted = params;
+				return { content: [{ type: "text", text: `${label} submitted.` }], details: params, terminate: true };
+			},
+		}),
 		calls: () => callCount,
 		value: () => submitted,
 	};
 }
 
 export function createReviewResultTool(role: ReviewRole): ReviewResultCapture {
-	if (role === "planner") return resultTool("submit_review_plan", "Review plan", "Submit the complete semantic review plan.", Type.Object({ summary: Type.String(), groups: Type.Array(Type.Object({ id: Type.String(), title: Type.String(), objective: Type.String(), itemIds: Type.Array(Type.String()), contextPaths: Type.Optional(Type.Array(Type.String())), tier: Type.Union([Type.Literal("fast"), Type.Literal("strong")]), rationale: Type.String() })) }));
-	if (role === "reviewer") return resultTool("submit_review_findings", "Review findings", "Submit complete findings and coverage.", Type.Object({ summary: Type.String(), reviewedItemIds: Type.Array(Type.String()), findings: Type.Optional(Type.Array(Type.Object({ severity: Type.Union([Type.Literal("critical"), Type.Literal("significant"), Type.Literal("minor"), Type.Literal("nit")]), category: Type.Union([Type.Literal("bug"), Type.Literal("security"), Type.Literal("performance"), Type.Literal("maintainability"), Type.Literal("test"), Type.Literal("documentation"), Type.Literal("other")]), summary: Type.String(), impact: Type.String(), evidence: Type.String(), path: Type.String(), anchor: Type.String(), side: Type.Union([Type.Literal("new"), Type.Literal("old")]), suggestion: Type.Optional(Type.String()) }))), residualRisk: Type.Optional(Type.Array(Type.String())) }));
-	return resultTool("submit_review_verdict", "Review verdict", "Submit the complete independent verification verdict.", Type.Object({ decisions: Type.Array(Type.Object({ findingId: Type.String(), status: Type.Union([Type.Literal("confirmed"), Type.Literal("rejected"), Type.Literal("retained_unresolved")]), reason: Type.String(), evidence: Type.String() })), residualRisk: Type.Optional(Type.Array(Type.String())) }));
+	if (role === "planner")
+		return resultTool(
+			"submit_review_plan",
+			"Review plan",
+			"Submit the complete semantic review plan.",
+			Type.Object({
+				summary: Type.String(),
+				groups: Type.Array(
+					Type.Object({
+						id: Type.String(),
+						title: Type.String(),
+						objective: Type.String(),
+						itemIds: Type.Array(Type.String()),
+						contextPaths: Type.Optional(Type.Array(Type.String())),
+						tier: Type.Union([Type.Literal("fast"), Type.Literal("strong")]),
+						rationale: Type.String(),
+					}),
+				),
+			}),
+		);
+	if (role === "reviewer")
+		return resultTool(
+			"submit_review_findings",
+			"Review findings",
+			"Submit complete findings and coverage.",
+			Type.Object({
+				summary: Type.String(),
+				reviewedItemIds: Type.Array(Type.String()),
+				findings: Type.Optional(
+					Type.Array(
+						Type.Object({
+							severity: Type.Union([
+								Type.Literal("critical"),
+								Type.Literal("significant"),
+								Type.Literal("minor"),
+								Type.Literal("nit"),
+							]),
+							category: Type.Union([
+								Type.Literal("bug"),
+								Type.Literal("security"),
+								Type.Literal("performance"),
+								Type.Literal("maintainability"),
+								Type.Literal("test"),
+								Type.Literal("documentation"),
+								Type.Literal("other"),
+							]),
+							summary: Type.String(),
+							impact: Type.String(),
+							evidence: Type.String(),
+							path: Type.String(),
+							anchor: Type.String(),
+							side: Type.Union([Type.Literal("new"), Type.Literal("old")]),
+							suggestion: Type.Optional(Type.String()),
+						}),
+					),
+				),
+				residualRisk: Type.Optional(Type.Array(Type.String())),
+			}),
+		);
+	return resultTool(
+		"submit_review_verdict",
+		"Review verdict",
+		"Submit the complete independent verification verdict.",
+		Type.Object({
+			decisions: Type.Array(
+				Type.Object({
+					findingId: Type.String(),
+					status: Type.Union([
+						Type.Literal("confirmed"),
+						Type.Literal("rejected"),
+						Type.Literal("retained_unresolved"),
+					]),
+					reason: Type.String(),
+					evidence: Type.String(),
+				}),
+			),
+			residualRisk: Type.Optional(Type.Array(Type.String())),
+		}),
+	);
 }

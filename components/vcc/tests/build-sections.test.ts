@@ -21,7 +21,7 @@ describe("buildSections", () => {
     ];
     const r = buildSections({ blocks });
     expect(r.sessionGoal).toContain("Fix the auth bug");
-    expect(r.briefTranscript).toContain('[user]');
+    expect(r.briefTranscript).toContain("[user]");
     expect(r.briefTranscript).toContain('* Read "auth.ts"');
     expect(r.briefTranscript).toContain('* Edit "auth.ts"');
   });

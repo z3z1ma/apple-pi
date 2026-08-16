@@ -21,9 +21,7 @@ export const registerVccRecallCommand = (pi: ExtensionAPI) => {
 
       const raw = args.trim();
       const parsed = parseRecallScope(raw);
-      const lineageEntryIds = parsed.scope === "lineage"
-        ? getActiveLineageEntryIds(ctx.sessionManager)
-        : undefined;
+      const lineageEntryIds = parsed.scope === "lineage" ? getActiveLineageEntryIds(ctx.sessionManager) : undefined;
       const pageMatch = parsed.text.match(/\bpage:(\d+)\b/i);
       const page = pageMatch ? Math.max(1, parseInt(pageMatch[1], 10)) : 1;
       const modeMatch = parsed.text.match(/\bmode:(history|file|touched)\b/i);
@@ -64,12 +62,14 @@ export const registerVccRecallCommand = (pi: ExtensionAPI) => {
       const pageResults = allResults.slice(start, start + PAGE_SIZE);
       const totalPages = Math.ceil(allResults.length / PAGE_SIZE);
       const scopeSuffix = parsed.scope === "all" ? " (scope: all)" : "";
-      const header = totalPages > 1
-        ? `Page ${page}/${totalPages} (${allResults.length} total matches${scopeSuffix})`
-        : `${allResults.length} matches${scopeSuffix}`;
-      const footer = page < totalPages
-        ? `\n--- /pi-vcc-recall ${query}${parsed.scope === "all" ? " scope:all" : ""} page:${page + 1} ---`
-        : "";
+      const header =
+        totalPages > 1
+          ? `Page ${page}/${totalPages} (${allResults.length} total matches${scopeSuffix})`
+          : `${allResults.length} matches${scopeSuffix}`;
+      const footer =
+        page < totalPages
+          ? `\n--- /pi-vcc-recall ${query}${parsed.scope === "all" ? " scope:all" : ""} page:${page + 1} ---`
+          : "";
       const output = formatRecallOutput(pageResults, query, header) + footer;
       pi.sendMessage({ customType: "vcc-recall", content: output, display: true }, { triggerTurn: true });
     },

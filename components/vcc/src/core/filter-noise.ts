@@ -1,8 +1,13 @@
 import type { NormalizedBlock } from "../types";
 
 const NOISE_TOOLS = new Set([
-  "TodoWrite", "TodoRead", "ToolSearch", "WebSearch",
-  "AskUser", "ExitSpecMode", "GenerateDroid",
+  "TodoWrite",
+  "TodoRead",
+  "ToolSearch",
+  "WebSearch",
+  "AskUser",
+  "ExitSpecMode",
+  "GenerateDroid",
 ]);
 
 const NOISE_STRINGS = [
@@ -20,8 +25,7 @@ const isNoiseUserBlock = (text: string): boolean => {
   return stripped.length === 0;
 };
 
-const cleanUserText = (text: string): string =>
-  text.replace(XML_WRAPPER_RE, "").trim();
+const cleanUserText = (text: string): string => text.replace(XML_WRAPPER_RE, "").trim();
 
 export const filterNoise = (blocks: NormalizedBlock[]): NormalizedBlock[] => {
   const out: NormalizedBlock[] = [];

@@ -39,16 +39,28 @@ function sanitize(raw: unknown): SubagentsSettings {
 	if (!raw || typeof raw !== "object") return {};
 	const value = raw as Record<string, unknown>;
 	const result: SubagentsSettings = {};
-	if (Number.isInteger(value.maxConcurrent) && Number(value.maxConcurrent) >= 1 && Number(value.maxConcurrent) <= 1024) {
+	if (
+		Number.isInteger(value.maxConcurrent) &&
+		Number(value.maxConcurrent) >= 1 &&
+		Number(value.maxConcurrent) <= 1024
+	) {
 		result.maxConcurrent = Number(value.maxConcurrent);
 	}
-	if (Number.isInteger(value.defaultMaxTurns) && Number(value.defaultMaxTurns) >= 0 && Number(value.defaultMaxTurns) <= 10_000) {
+	if (
+		Number.isInteger(value.defaultMaxTurns) &&
+		Number(value.defaultMaxTurns) >= 0 &&
+		Number(value.defaultMaxTurns) <= 10_000
+	) {
 		result.defaultMaxTurns = Number(value.defaultMaxTurns);
 	}
 	if (Number.isInteger(value.graceTurns) && Number(value.graceTurns) >= 1 && Number(value.graceTurns) <= 1_000) {
 		result.graceTurns = Number(value.graceTurns);
 	}
-	if (Number.isInteger(value.maxSubagentDepth) && Number(value.maxSubagentDepth) >= 0 && Number(value.maxSubagentDepth) <= 16) {
+	if (
+		Number.isInteger(value.maxSubagentDepth) &&
+		Number(value.maxSubagentDepth) >= 0 &&
+		Number(value.maxSubagentDepth) <= 16
+	) {
 		result.maxSubagentDepth = Number(value.maxSubagentDepth);
 	}
 	if (typeof value.defaultJoinMode === "string" && JOIN_MODES.has(value.defaultJoinMode as JoinMode)) {
@@ -72,7 +84,9 @@ function readSettingsFile(path: string): SubagentsSettings {
 	try {
 		return sanitize(JSON.parse(readFileSync(path, "utf-8")));
 	} catch (error) {
-		console.warn(`[apple-pi/subagents] Ignoring malformed settings at ${path}: ${error instanceof Error ? error.message : String(error)}`);
+		console.warn(
+			`[apple-pi/subagents] Ignoring malformed settings at ${path}: ${error instanceof Error ? error.message : String(error)}`,
+		);
 		return {};
 	}
 }

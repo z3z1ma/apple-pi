@@ -120,14 +120,17 @@ describe("integration: proactive trigger + before-compact", () => {
 
     emit("agent_end", {
       type: "agent_end",
-      messages: [{
-        role: "assistant",
-        api: "openai-codex-responses",
-        provider: "openai-codex",
-        model: "luna",
-        stopReason: "error",
-        errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
-      }],
+      messages: [
+        {
+          role: "assistant",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          model: "luna",
+          stopReason: "error",
+          errorMessage:
+            "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+        },
+      ],
     });
 
     expect(compactCalls).toHaveLength(0);
@@ -146,7 +149,8 @@ describe("integration: proactive trigger + before-compact", () => {
           provider: "openai-codex",
           model: "luna",
           stopReason: "error",
-          errorMessage: "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
+          errorMessage:
+            "Codex error: Your input exceeds the context window of this model. Please adjust your input and try again.",
         },
       },
     ];
@@ -331,10 +335,7 @@ describe("integration: proactive trigger + before-compact with overrideDefaultCo
 
     // Previously this would cancel (threshold guard). Now: compaction
     // proceeds (threshold guard removed).
-    const entries = [
-      msg("m1", "user", "hello"),
-      msg("m2", "assistant", "hi"),
-    ];
+    const entries = [msg("m1", "user", "hello"), msg("m2", "assistant", "hi")];
     const result = emit("session_before_compact", makeBeforeCompactEvent(entries, undefined, 80000));
     // No longer cancelled — returns undefined (pi-vcc doesn't handle it,
     // but doesn't block it either)

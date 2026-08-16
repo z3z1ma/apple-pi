@@ -32,32 +32,28 @@ export const clipSentence = (text: string, max = 200): string => {
 };
 
 export const nonEmptyLines = (text: string): string[] =>
-  text.split("\n").map((line) => line.trim()).filter(Boolean);
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-export const firstLine = (text: string, max = 200): string =>
-  clip(text.split("\n")[0] ?? "", max);
+export const firstLine = (text: string, max = 200): string => clip(text.split("\n")[0] ?? "", max);
 
 const textParts = (content: Message["content"]): string[] => {
   if (!content) return [];
   if (typeof content === "string") return [content];
-  return content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text);
+  return content.filter((part) => part.type === "text").map((part) => part.text);
 };
 
-export const textOf = (content: Message["content"]): string =>
-  textParts(content).join("\n");
+export const textOf = (content: Message["content"]): string => textParts(content).join("\n");
 
 const thinkingParts = (content: Message["content"]): string[] => {
   if (!content) return [];
   if (typeof content === "string") return [];
-  return content
-    .filter((part) => part.type === "thinking")
-    .map((part) => part.thinking ?? "");
+  return content.filter((part) => part.type === "thinking").map((part) => part.thinking ?? "");
 };
 
-export const thinkingOf = (content: Message["content"]): string =>
-  thinkingParts(content).join("\n");
+export const thinkingOf = (content: Message["content"]): string => thinkingParts(content).join("\n");
 
 const toolCallArgText = (args: Record<string, unknown>): string => {
   const vals: string[] = [];
@@ -69,17 +65,14 @@ const toolCallArgText = (args: Record<string, unknown>): string => {
 
 const toolCallParts = (content: Message["content"]): string[] => {
   if (!content || typeof content === "string") return [];
-  return content
-    .filter((part) => part.type === "toolCall")
-    .map((part) => toolCallArgText(part.arguments));
+  return content.filter((part) => part.type === "toolCall").map((part) => toolCallArgText(part.arguments));
 };
 
 /** Extract all string-valued arguments from toolCall content parts.
  *  Lets vcc_recall match against tool invocations — e.g. a bash
  *  toolCall's `arguments.command`, a grep's `pattern`, an edit's
  *  `oldText`/`newText`. Non-string args are skipped. */
-export const toolCallsOf = (content: Message["content"]): string =>
-  toolCallParts(content).filter(Boolean).join("\n");
+export const toolCallsOf = (content: Message["content"]): string => toolCallParts(content).filter(Boolean).join("\n");
 
 const CONTENT_PATH_KEYS = ["path", "file_path", "filePath", "file"] as const;
 
@@ -88,9 +81,11 @@ export const isContentBearing = (args: Record<string, unknown>): boolean => {
   if (!CONTENT_PATH_KEYS.some((key) => typeof args[key] === "string")) return false;
   if (typeof args.content === "string" && args.content.length > 0) return true;
   if (Array.isArray(args.edits) && args.edits.length > 0) {
-    return args.edits.some((edit) =>
-      Boolean(edit) && typeof edit === "object" &&
-      (typeof (edit as any).oldText === "string" || typeof (edit as any).newText === "string")
+    return args.edits.some(
+      (edit) =>
+        Boolean(edit) &&
+        typeof edit === "object" &&
+        (typeof (edit as any).oldText === "string" || typeof (edit as any).newText === "string"),
     );
   }
   return typeof args.oldText === "string" || typeof args.newText === "string";

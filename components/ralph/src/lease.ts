@@ -66,7 +66,9 @@ export function acquireProjectLease(projectRootInput: string, runId: string): ()
 				released = true;
 				const current = readOwner(path);
 				if (current?.pid === process.pid && current.runId === runId) {
-					try { unlinkSync(path); } catch (error) {
+					try {
+						unlinkSync(path);
+					} catch (error) {
 						if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 					}
 				}
@@ -75,8 +77,11 @@ export function acquireProjectLease(projectRootInput: string, runId: string): ()
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			const owner = readOwner(path);
 			if (!owner) throw new Error(`Ralph resource lease is unreadable: ${path}`);
-			if (live(owner.pid)) throw new Error(`Ralph run ${owner.runId} in process ${owner.pid} already owns this resource: ${projectRoot}`);
-			try { unlinkSync(path); } catch (unlinkError) {
+			if (live(owner.pid))
+				throw new Error(`Ralph run ${owner.runId} in process ${owner.pid} already owns this resource: ${projectRoot}`);
+			try {
+				unlinkSync(path);
+			} catch (unlinkError) {
 				if ((unlinkError as NodeJS.ErrnoException).code !== "ENOENT") throw unlinkError;
 			}
 		}
@@ -84,7 +89,12 @@ export function acquireProjectLease(projectRootInput: string, runId: string): ()
 	throw new Error("Could not acquire the Ralph resource lease");
 }
 
-export function acquireRalphRunLeases(workspaceRoot: string, ledgerRoot: string, taskPath: string, runId: string): () => void {
+export function acquireRalphRunLeases(
+	workspaceRoot: string,
+	ledgerRoot: string,
+	taskPath: string,
+	runId: string,
+): () => void {
 	if (!taskLocation(taskPath)) throw new Error(`Invalid Ralph task path: ${taskPath}`);
 	const taskBundle = realpathSync(resolve(ledgerRoot, dirname(taskPath)));
 	const resources = [...new Set([realpathSync(workspaceRoot), taskBundle])].sort();

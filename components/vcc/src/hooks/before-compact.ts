@@ -34,9 +34,7 @@ export interface VccCompactionAugmentation {
   details?: Record<string, unknown>;
 }
 
-export type VccCompactionAugmenter = (
-  input: VccCompactionAugmentationInput,
-) => VccCompactionAugmentation | undefined;
+export type VccCompactionAugmenter = (input: VccCompactionAugmentationInput) => VccCompactionAugmentation | undefined;
 
 let lastStats: CompactionStats | null = null;
 let lastCompactWasPiVcc = false;
@@ -59,10 +57,7 @@ const formatTokens = (n: number): string => {
  *
  * Returns [firstSummarizedEntryId, lastSummarizedEntryId] or undefined.
  */
-const computeMessageRange = (
-  branchEntries: any[],
-  firstKeptEntryId: string,
-): [string, string] | undefined => {
+const computeMessageRange = (branchEntries: any[], firstKeptEntryId: string): [string, string] | undefined => {
   if (!firstKeptEntryId) return undefined;
 
   // If compact-all sentinel, find the last message entry
@@ -73,13 +68,13 @@ const computeMessageRange = (
         lastId = e.id;
       }
     }
-    return lastId ? [branchEntries.find((e: any) => e.type === "message" && e.message)?.id ?? "", lastId] as [string, string] : undefined;
+    return lastId
+      ? ([branchEntries.find((e: any) => e.type === "message" && e.message)?.id ?? "", lastId] as [string, string])
+      : undefined;
   }
 
   // Find the first message entry (start of summarized range)
-  const firstMsgId = branchEntries.find(
-    (e: any) => e.type === "message" && e.message && e.id,
-  )?.id;
+  const firstMsgId = branchEntries.find((e: any) => e.type === "message" && e.message && e.id)?.id;
   if (!firstMsgId) return undefined;
 
   // If first kept entry IS the first message, nothing was summarized
@@ -90,7 +85,9 @@ const computeMessageRange = (
 
 const dbg = (settings: PiVccSettings, data: Record<string, unknown>) => {
   if (!settings.debug) return;
-  try { writeFileSync("/tmp/pi-vcc-debug.json", JSON.stringify(data, null, 2)); } catch {}
+  try {
+    writeFileSync("/tmp/pi-vcc-debug.json", JSON.stringify(data, null, 2));
+  } catch {}
 };
 
 const previewContent = (content: unknown): string => {
@@ -123,14 +120,10 @@ const isHiddenEmptyCustomMessage = (message: unknown): boolean => {
     display?: unknown;
   };
   if (candidate.role !== "custom" || candidate.display !== false) return false;
-  return candidate.content === "" || (
-    Array.isArray(candidate.content) && candidate.content.length === 0
-  );
+  return candidate.content === "" || (Array.isArray(candidate.content) && candidate.content.length === 0);
 };
 
-export type OwnCutCancelReason =
-  | "no_live_messages"
-  | "too_few_live_messages";
+export type OwnCutCancelReason = "no_live_messages" | "too_few_live_messages";
 
 export type OwnCutResult =
   | { ok: true; messages: any[]; firstKeptEntryId: string; compactAll: boolean }
@@ -201,11 +194,12 @@ function estimateMessageTokens(message: { content: unknown }): number {
       if (part.text) chars += part.text.length;
       else if (part.type === "toolCall") {
         const args = part.arguments ?? part.input;
-        chars += (part.name?.length ?? 0) + (typeof args === "string" ? args.length : JSON.stringify(args ?? "").length);
+        chars +=
+          (part.name?.length ?? 0) + (typeof args === "string" ? args.length : JSON.stringify(args ?? "").length);
       } else if (part.type === "toolResult") {
         chars += typeof part.content === "string" ? part.content.length : JSON.stringify(part.content ?? "").length;
       } else if (part.type === "thinking") {
-        chars += (part.thinking?.length ?? 0);
+        chars += part.thinking?.length ?? 0;
       }
     }
   }
@@ -217,10 +211,7 @@ function estimateMessageTokens(message: { content: unknown }): number {
  * much recent context as possible. Returns the index of the first message to
  * KEEP, or -1 when the suffix can't be split to fit (single oversized cycle,
  * or no completed cycles). */
-const findSuffixSplitPoint = (
-  suffix: EntryWithMessage[],
-  budgetTokens: number,
-): number => {
+const findSuffixSplitPoint = (suffix: EntryWithMessage[], budgetTokens: number): number => {
   if (suffix.length <= 2) return -1;
 
   // Completed-cycle end-indices (toolResult closing a cycle). Same detection
@@ -230,7 +221,11 @@ const findSuffixSplitPoint = (
   const pendingCalls = new Set<string>();
   for (let i = 0; i < suffix.length; i++) {
     const msg = suffix[i].message;
-    if (msg.role === "user") { currentAssistantIdx = -1; pendingCalls.clear(); continue; }
+    if (msg.role === "user") {
+      currentAssistantIdx = -1;
+      pendingCalls.clear();
+      continue;
+    }
     if (msg.role === "assistant") {
       currentAssistantIdx = i;
       pendingCalls.clear();
@@ -269,6 +264,7 @@ const findSuffixSplitPoint = (
   return -1;
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: compaction-cut selection keeps every lineage and token-boundary case together.
 export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: number }): OwnCutResult {
   const maxKeptTokens = options?.maxKeptTokens ?? 0;
   // Find the last compaction entry and its firstKeptEntryId
@@ -295,11 +291,7 @@ export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: nu
     for (let i = lastCompactionIdx + 1; i < branchEntries.length; i++) {
       const e = branchEntries[i];
       if (e.type === "compaction") continue;
-      if (
-        e.type === "message" &&
-        e.message &&
-        !isHiddenEmptyCustomMessage(e.message)
-      ) {
+      if (e.type === "message" && e.message && !isHiddenEmptyCustomMessage(e.message)) {
         liveMessages.push({ entry: e, message: e.message });
       }
     }
@@ -309,11 +301,7 @@ export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: nu
       if (!foundKept && e.id === lastKeptId) foundKept = true;
       if (!foundKept) continue;
       if (e.type === "compaction") continue;
-      if (
-        e.type === "message" &&
-        e.message &&
-        !isHiddenEmptyCustomMessage(e.message)
-      ) {
+      if (e.type === "message" && e.message && !isHiddenEmptyCustomMessage(e.message)) {
         liveMessages.push({ entry: e, message: e.message });
       }
     }
@@ -351,7 +339,7 @@ export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: nu
         if (part.type === "toolResult" && part.toolCallId) toolResultIds.add(part.toolCallId);
       }
     }
-    const hasUnmatchedToolCall = [...toolCallIds].some(id => !toolResultIds.has(id));
+    const hasUnmatchedToolCall = [...toolCallIds].some((id) => !toolResultIds.has(id));
     if (hasUnmatchedToolCall) {
       // Push cut back to the previous user message
       for (let i = cutIdx - 1; i > 0; i--) {
@@ -434,19 +422,13 @@ const REASON_MESSAGES: Record<OwnCutCancelReason, string> = {
   too_few_live_messages: "pi-vcc: Too few messages to compact",
 };
 
-export const shouldResumeAfterCompaction = (
-  lastMsg: unknown,
-  allowCodexRecovery = false,
-): boolean => {
+export const shouldResumeAfterCompaction = (lastMsg: unknown, allowCodexRecovery = false): boolean => {
   if (!lastMsg || typeof lastMsg !== "object") return false;
   const message = lastMsg as { role?: unknown; stopReason?: unknown };
   if (message.role !== "assistant") return false;
   if (message.stopReason === "stop" || message.stopReason === "aborted") return false;
   if (message.stopReason === "error") {
-    return allowCodexRecovery && (
-      isCodexOutputLimitError(lastMsg) ||
-      isCodexContextOverflowError(lastMsg)
-    );
+    return allowCodexRecovery && (isCodexOutputLimitError(lastMsg) || isCodexContextOverflowError(lastMsg));
   }
   return true;
 };
@@ -472,10 +454,8 @@ export function shouldTriggerResumeForCompaction(
   return !sessionIsIdle;
 }
 
-export const registerBeforeCompactHook = (
-  pi: ExtensionAPI,
-  augmentCompaction?: VccCompactionAugmenter,
-) => {
+export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: VccCompactionAugmenter) => {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the hook coordinates one atomic compaction lifecycle.
   pi.on("session_before_compact", (event, ctx) => {
     const { preparation, branchEntries, customInstructions } = event;
     const settings = loadSettings();
@@ -497,21 +477,17 @@ export const registerBeforeCompactHook = (
     // per-model threshold's perspective, but this is preferable to blocking
     // an explicit user action (/compact).
     const isPiVcc = customInstructions === PI_VCC_COMPACT_INSTRUCTION;
-    const isCodexOutputLimitCompaction =
-      customInstructions === CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION;
-    const isCodexContextOverflowMarker =
-      customInstructions === CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION;
+    const isCodexOutputLimitCompaction = customInstructions === CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION;
+    const isCodexContextOverflowMarker = customInstructions === CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION;
     const lastBranchAssistant = [...(branchEntries as any[])]
       .reverse()
-      .find((entry: any) => entry.type === "message" && entry.message?.role === "assistant")
-      ?.message;
+      .find((entry: any) => entry.type === "message" && entry.message?.role === "assistant")?.message;
     const isCodexContextOverflowCompaction =
       isCodexContextOverflowMarker ||
       (settings.overrideDefaultCompaction &&
         isCodexContextOverflowPending() &&
         isCodexContextOverflowError(lastBranchAssistant));
-    const isPiVccHandled =
-      isPiVcc || isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
+    const isPiVccHandled = isPiVcc || isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
 
     // Always handle explicit /pi-vcc and Codex recovery markers. Otherwise,
     // only handle when the user opted in via settings.
@@ -528,9 +504,8 @@ export const registerBeforeCompactHook = (
     const keepRecentTokens = (preparation as any)?.settings?.keepRecentTokens ?? 20000;
     const overhead = contextWindow > 0 ? Math.min(32768, Math.floor(contextWindow * 0.2)) : 32768;
     const outputReserve = maxTokens > 0 ? maxTokens : Math.floor(contextWindow * 0.5);
-    const maxKeptTokens = contextWindow > 0
-      ? Math.max(2048, contextWindow - outputReserve - overhead)
-      : keepRecentTokens;
+    const maxKeptTokens =
+      contextWindow > 0 ? Math.max(2048, contextWindow - outputReserve - overhead) : keepRecentTokens;
     const ownCut = buildOwnCut(branchEntries as any[], { maxKeptTokens });
     if (!ownCut.ok) {
       const lastComp = [...branchEntries].reverse().find((e: any) => e.type === "compaction");
@@ -574,16 +549,17 @@ export const registerBeforeCompactHook = (
           userCount: userIndices.length,
           firstUserIdx: userIndices[0] ?? null,
           lastUserIdx: userIndices[userIndices.length - 1] ?? null,
-          roleSequence: liveRoles.length <= 30
-            ? liveRoles
-            : [...liveRoles.slice(0, 10), "...", ...liveRoles.slice(-10)],
+          roleSequence:
+            liveRoles.length <= 30 ? liveRoles : [...liveRoles.slice(0, 10), "...", ...liveRoles.slice(-10)],
         },
-        lastCompaction: lastComp ? {
-          hasFirstKeptEntryId: !!(lastComp as any).firstKeptEntryId,
-          foundInBranch: (lastComp as any).firstKeptEntryId
-            ? (branchEntries as any[]).some((e: any) => e.id === (lastComp as any).firstKeptEntryId)
-            : null,
-        } : null,
+        lastCompaction: lastComp
+          ? {
+              hasFirstKeptEntryId: !!(lastComp as any).firstKeptEntryId,
+              foundInBranch: (lastComp as any).firstKeptEntryId
+                ? (branchEntries as any[]).some((e: any) => e.id === (lastComp as any).firstKeptEntryId)
+                : null,
+            }
+          : null,
         tail: (branchEntries as any[]).slice(-5).map((e: any) => ({
           type: e.type,
           role: e.type === "message" ? e.message?.role : undefined,
@@ -603,18 +579,27 @@ export const registerBeforeCompactHook = (
 
     // Count kept messages and estimate tokens
     const keptIdx = (branchEntries as any[]).findIndex((e: any) => e.id === firstKeptEntryId);
-    const keptEntries = keptIdx >= 0
-      ? (branchEntries as any[]).slice(keptIdx).filter((e: any) => e.type === "message")
-      : [];
+    const keptEntries =
+      keptIdx >= 0 ? (branchEntries as any[]).slice(keptIdx).filter((e: any) => e.type === "message") : [];
     const keptChars = keptEntries.reduce((sum: number, e: any) => {
       const c = e.message?.content;
       if (typeof c === "string") return sum + c.length;
-      if (Array.isArray(c)) return sum + c.reduce((s: number, p: any) => {
-        if (p.text) return s + p.text.length;
-        if (p.type === "toolCall") return s + (p.name?.length ?? 0) + (typeof p.input === "string" ? p.input.length : JSON.stringify(p.input ?? "").length);
-        if (p.type === "toolResult") return s + (typeof p.content === "string" ? p.content.length : JSON.stringify(p.content ?? "").length);
-        return s;
-      }, 0);
+      if (Array.isArray(c))
+        return (
+          sum +
+          c.reduce((s: number, p: any) => {
+            if (p.text) return s + p.text.length;
+            if (p.type === "toolCall")
+              return (
+                s +
+                (p.name?.length ?? 0) +
+                (typeof p.input === "string" ? p.input.length : JSON.stringify(p.input ?? "").length)
+              );
+            if (p.type === "toolResult")
+              return s + (typeof p.content === "string" ? p.content.length : JSON.stringify(p.content ?? "").length);
+            return s;
+          }, 0)
+        );
       return sum;
     }, 0);
     lastStats = {
@@ -626,10 +611,7 @@ export const registerBeforeCompactHook = (
     const config = settings;
 
     // Compute entry-ID range for compaction-scoped recall
-    const messageRange = computeMessageRange(
-      branchEntries as any[],
-      firstKeptEntryId,
-    );
+    const messageRange = computeMessageRange(branchEntries as any[], firstKeptEntryId);
 
     const compileInput: CompileInput = {
       messages,
@@ -644,20 +626,25 @@ export const registerBeforeCompactHook = (
 
     const branchIds = branchEntries.map((e: any) => e.id);
     const cutIdx = branchIds.indexOf(firstKeptEntryId);
-    const cutWindow = cutIdx >= 0
-      ? branchEntries.slice(Math.max(0, cutIdx - 3), Math.min(branchEntries.length, cutIdx + 3)).map((e: any) => ({
-          id: e.id,
-          type: e.type,
-          role: e.type === "message" ? e.message?.role : undefined,
-          preview: e.type === "message" ? previewContent(e.message?.content) : undefined,
-        }))
-      : [];
+    const cutWindow =
+      cutIdx >= 0
+        ? branchEntries.slice(Math.max(0, cutIdx - 3), Math.min(branchEntries.length, cutIdx + 3)).map((e: any) => ({
+            id: e.id,
+            type: e.type,
+            role: e.type === "message" ? e.message?.role : undefined,
+            preview: e.type === "message" ? previewContent(e.message?.content) : undefined,
+          }))
+        : [];
 
     dbg(config, {
       usedOwnCut: true,
       messagesToSummarize: agentMessages.length,
-      messagesPreviewHead: agentMessages.slice(0, 3).map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
-      messagesPreviewTail: agentMessages.slice(-3).map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
+      messagesPreviewHead: agentMessages
+        .slice(0, 3)
+        .map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
+      messagesPreviewTail: agentMessages
+        .slice(-3)
+        .map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
       convertedMessages: messages.length,
       firstKeptEntryId,
       messageRange,
@@ -676,9 +663,10 @@ export const registerBeforeCompactHook = (
       sourceMessageCount: agentMessages.length,
       previousSummaryUsed: Boolean(preparation.previousSummary),
       messageRange,
-      compressionRatio: preparation.tokensBefore > 0
-        ? Math.round(preparation.tokensBefore / Math.max(1, agentMessages.length))
-        : undefined,
+      compressionRatio:
+        preparation.tokensBefore > 0
+          ? Math.round(preparation.tokensBefore / Math.max(1, agentMessages.length))
+          : undefined,
       timestamp: new Date().toISOString(),
       tokensBefore: preparation.tokensBefore || undefined,
       keptCount: lastStats?.kept || undefined,
@@ -695,13 +683,10 @@ export const registerBeforeCompactHook = (
     // The details stay flat by design. VCC recall identifies `compactor`, while
     // observational memory identifies `type`; preserving both top-level tags
     // lets each projection read the same compaction entry without a wrapper.
-    const combinedDetails = augmentation?.details
-      ? { ...details, ...augmentation.details }
-      : details;
+    const combinedDetails = augmentation?.details ? { ...details, ...augmentation.details } : details;
 
     lastCompactWasPiVcc = isPiVcc;
-    lastCompactWasCodexRecovery =
-      isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
+    lastCompactWasCodexRecovery = isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
     lastCompactWasProactive = isProactiveTriggerActive();
     lastCompactHandledByVcc = true;
 
@@ -741,9 +726,7 @@ export const registerBeforeCompactHook = (
     if (!lastCompactWasPiVcc) {
       const stats = lastStats;
       const count = countPiVccCompactionsFromSession(ctx?.sessionManager as any);
-      const compactionLabel = count > 0
-        ? ` (${count}${ordinalSuffix(count)} compaction)`
-        : "";
+      const compactionLabel = count > 0 ? ` (${count}${ordinalSuffix(count)} compaction)` : "";
       if (stats) {
         setTimeout(() => {
           try {
@@ -791,20 +774,17 @@ export const registerBeforeCompactHook = (
       // prototype fallback is needed.
       const completion = event as CompactionCompletionMetadata;
       const legacyActiveCompaction =
-        completion.reason === undefined &&
-        completion.willRetry === undefined &&
-        !ctx.isIdle();
+        completion.reason === undefined && completion.willRetry === undefined && !ctx.isIdle();
       if (
         !completion.willRetry &&
         !legacyActiveCompaction &&
         !shouldResumeAfterCompaction(lastMsg, wasCodexRecoveryCompaction)
-      ) return;
-      if (!shouldTriggerResumeForCompaction(
-        completion,
-        ctx.isIdle(),
-        wasProactiveCompaction,
-        wasCodexRecoveryCompaction,
-      )) return;
+      )
+        return;
+      if (
+        !shouldTriggerResumeForCompaction(completion, ctx.isIdle(), wasProactiveCompaction, wasCodexRecoveryCompaction)
+      )
+        return;
 
       // Queue through Pi's native follow-up path so a concurrent user prompt
       // wins cleanly instead of racing a low-level Agent.prompt([]) call.

@@ -33,11 +33,7 @@ const makeAssistantMsg = (text: string): Message => ({
   content: text,
 });
 
-const makeToolCall = (
-  name: string,
-  id: string,
-  args: Record<string, unknown>,
-): Message => ({
+const makeToolCall = (name: string, id: string, args: Record<string, unknown>): Message => ({
   role: "assistant",
   content: [
     { type: "text", text: "" },
@@ -45,28 +41,39 @@ const makeToolCall = (
   ],
 });
 
-const makeToolResult = (
-  toolCallId: string,
-  toolName: string,
-  content: string,
-  isError = false,
-): Message => ({
-  role: "toolResult",
-  toolCallId,
-  toolName,
-  content,
-  isError,
-} as any);
+const makeToolResult = (toolCallId: string, toolName: string, content: string, isError = false): Message =>
+  ({
+    role: "toolResult",
+    toolCallId,
+    toolName,
+    content,
+    isError,
+  }) as any;
 
 // Each "round" simulates a realistic compaction-worthy conversation chunk.
 // We vary the files and goals to create accumulation pressure.
 
 const FILES = [
-  "src/auth.ts", "src/users.ts", "src/api.ts", "src/db.ts",
-  "src/utils.ts", "src/config.ts", "src/routes.ts", "src/middleware.ts",
-  "src/models.ts", "src/services.ts", "src/handlers.ts", "src/types.ts",
-  "src/errors.ts", "src/validators.ts", "src/cache.ts", "src/logger.ts",
-  "src/session.ts", "src/token.ts", "src/oauth.ts", "src/crypto.ts",
+  "src/auth.ts",
+  "src/users.ts",
+  "src/api.ts",
+  "src/db.ts",
+  "src/utils.ts",
+  "src/config.ts",
+  "src/routes.ts",
+  "src/middleware.ts",
+  "src/models.ts",
+  "src/services.ts",
+  "src/handlers.ts",
+  "src/types.ts",
+  "src/errors.ts",
+  "src/validators.ts",
+  "src/cache.ts",
+  "src/logger.ts",
+  "src/session.ts",
+  "src/token.ts",
+  "src/oauth.ts",
+  "src/crypto.ts",
 ];
 
 const GOALS = [
@@ -148,9 +155,7 @@ const extractFilePaths = (text: string): Set<string> => {
   for (const line of text.split("\n")) {
     const match = line.match(/^-\s*(?:Modified|Created|Read):\s*(.*)/);
     if (!match) continue;
-    const rest = match[1]
-      .replace(/\+recall:\s*/g, "")
-      .replace(/\s*\([^)]*\)/g, "");
+    const rest = match[1].replace(/\+recall:\s*/g, "").replace(/\s*\([^)]*\)/g, "");
     for (const p of rest.split(",")) {
       const trimmed = p.trim();
       if (trimmed && !trimmed.startsWith("+")) paths.add(trimmed);
@@ -164,10 +169,11 @@ const extractGoals = (text: string): string[] => {
   if (section < 0) return [];
   const after = text.slice(section);
   const nextSection = after.indexOf("\n[", 1);
-  const block = (nextSection > 0 ? after.slice(0, nextSection) : after);
-  return block.split("\n")
-    .filter(l => l.startsWith("- ") && !l.startsWith("- ...recall:"))
-    .map(l => l.slice(2));
+  const block = nextSection > 0 ? after.slice(0, nextSection) : after;
+  return block
+    .split("\n")
+    .filter((l) => l.startsWith("- ") && !l.startsWith("- ...recall:"))
+    .map((l) => l.slice(2));
 };
 
 const countTypeCatalogEntries = (text: string): number => {
@@ -176,12 +182,9 @@ const countTypeCatalogEntries = (text: string): number => {
   const after = text.slice(section);
   const nextSection = after.indexOf("\n\n[", 1);
   const nextSep = after.indexOf("\n\n---\n\n", 1);
-  const end = Math.min(
-    nextSection > 0 ? nextSection : Infinity,
-    nextSep > 0 ? nextSep : Infinity,
-  );
+  const end = Math.min(nextSection > 0 ? nextSection : Infinity, nextSep > 0 ? nextSep : Infinity);
   const block = after.slice(0, end);
-  return block.split("\n").filter(l => l.match(/^\s*src\//) || l.match(/^\s*\S+\.\w{1,12}:$/)).length;
+  return block.split("\n").filter((l) => l.match(/^\s*src\//) || l.match(/^\s*\S+\.\w{1,12}:$/)).length;
 };
 
 const countSections = (text: string): number => {
@@ -215,10 +218,13 @@ const isFileRecoverable = (text: string, filePath: string): boolean => {
 const isGoalRecoverable = (text: string, goal: string): boolean => {
   if (text.includes(goal)) return true;
   // Check breadcrumbs for keywords from the goal
-  const keywords = goal.split(/\s+/).filter(w => w.length > 3).slice(0, 3);
+  const keywords = goal
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 3);
   for (const line of text.split("\n")) {
     if (line.startsWith("- ...recall:")) {
-      const allPresent = keywords.every(kw => line.toLowerCase().includes(kw.toLowerCase()));
+      const allPresent = keywords.every((kw) => line.toLowerCase().includes(kw.toLowerCase()));
       if (allPresent) return true;
     }
   }

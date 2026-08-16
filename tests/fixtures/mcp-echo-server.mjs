@@ -28,15 +28,17 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
 				jsonrpc: "2.0",
 				id: request.id,
 				result: {
-					tools: [{
-						name: "echo",
-						description: "Echo a value",
-						inputSchema: {
-							type: "object",
-							properties: { value: { type: "string" } },
-							required: ["value"],
+					tools: [
+						{
+							name: "echo",
+							description: "Echo a value",
+							inputSchema: {
+								type: "object",
+								properties: { value: { type: "string" } },
+								required: ["value"],
+							},
 						},
-					}],
+					],
 				},
 			});
 			break;

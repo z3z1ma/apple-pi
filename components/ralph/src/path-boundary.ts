@@ -6,7 +6,8 @@ export function containedProjectPath(projectRootInput: string, value: string): s
 	const projectRoot = realpathSync(projectRootInput);
 	const absolute = isAbsolute(value) ? resolve(value) : resolve(projectRoot, value);
 	const lexical = relative(projectRoot, absolute).split(sep).join("/");
-	if (lexical === ".." || lexical.startsWith("../") || isAbsolute(lexical) || lexical.split("/").includes(".git")) return undefined;
+	if (lexical === ".." || lexical.startsWith("../") || isAbsolute(lexical) || lexical.split("/").includes(".git"))
+		return undefined;
 
 	let existing = absolute;
 	while (!existsSync(existing)) {
@@ -24,7 +25,8 @@ export function containedProjectPath(projectRootInput: string, value: string): s
 		cursor = resolve(cursor, part);
 		if (!existsSync(cursor)) break;
 		if (lstatSync(cursor).isSymbolicLink()) return undefined;
-		if (cursor !== projectRoot && lstatSync(cursor).isDirectory() && existsSync(resolve(cursor, ".git"))) return undefined;
+		if (cursor !== projectRoot && lstatSync(cursor).isDirectory() && existsSync(resolve(cursor, ".git")))
+			return undefined;
 	}
 	return lexical;
 }

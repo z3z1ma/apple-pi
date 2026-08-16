@@ -14,20 +14,18 @@ const NOISE_SHORT_RE = /^(ok|yes|no|sure|yeah|yep|go|hi|hey|thx|thanks|ok\b.*|y|
 // or meta-prompt boilerplate (command templates like `/issues` that start with "For each issue:"
 // followed by numbered "Read the issue in full..." steps).
 const NON_GOAL_RE =
-  /^\s*[\[│├└─╭╰]|```|^\s*(=[A-Z]+\(|function |const |let |var |import |export |class )|^(https?:|file:|\/[A-Za-z])|\\n|^\s*For each\b|\bin full\b[^\n]*\b(comments|issue|issues|PRs?|linked)\b/;
+  /^\s*[[│├└─╭╰]|```|^\s*(=[A-Z]+\(|function |const |let |var |import |export |class )|^(https?:|file:|\/[A-Za-z])|\\n|^\s*For each\b|\bin full\b[^\n]*\b(comments|issue|issues|PRs?|linked)\b/;
 
 // Signals that the rest of the user message is a command template (e.g. /issues),
 // in which case we should stop collecting goals at the signal line.
-const TEMPLATE_SIGNAL_RE =
-  /^\s*(For each\b|Do NOT implement\b|Analyze and propose\b|If Task\/context\b|Output:\s*$)/i;
+const TEMPLATE_SIGNAL_RE = /^\s*(For each\b|Do NOT implement\b|Analyze and propose\b|If Task\/context\b|Output:\s*$)/i;
 
 const truncateAtTemplate = (lines: string[]): string[] => {
   const idx = lines.findIndex((l) => TEMPLATE_SIGNAL_RE.test(l));
   return idx >= 0 ? lines.slice(0, idx) : lines;
 };
 
-const stripLeadingBullet = (line: string): string =>
-  line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").trim();
+const stripLeadingBullet = (line: string): string => line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").trim();
 
 const MAX_GOAL_CHARS = 200;
 

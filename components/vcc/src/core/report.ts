@@ -61,8 +61,7 @@ export interface CompactReport {
   };
 }
 
-const estimateTokensFromChars = (chars: number): number =>
-  Math.ceil(chars / 4);
+const estimateTokensFromChars = (chars: number): number => Math.ceil(chars / 4);
 
 const countRoles = (messages: Message[]): RoleCounts => {
   const counts: RoleCounts = { user: 0, assistant: 0, toolResult: 0 };
@@ -95,9 +94,7 @@ const countBlocks = (messages: Message[]): BlockCounts => {
 };
 
 const inputCharsOf = (messages: Message[]): number =>
-  messages
-    .map((msg, index) => renderMessage(msg, index, true).summary.length)
-    .reduce((sum, len) => sum + len, 0);
+  messages.map((msg, index) => renderMessage(msg, index, true).summary.length).reduce((sum, len) => sum + len, 0);
 
 const topFilesOf = (messages: Message[]): string[] => {
   const files = new Set<string>();
@@ -105,7 +102,10 @@ const topFilesOf = (messages: Message[]): string[] => {
     if (block.kind === "tool_call") {
       for (const key of ["path", "file_path", "filePath", "file"]) {
         const val = block.args[key];
-        if (typeof val === "string") { files.add(val); break; }
+        if (typeof val === "string") {
+          files.add(val);
+          break;
+        }
       }
     }
   }
@@ -116,9 +116,7 @@ const previewOf = (messages: Message[], edgeCount = 3): string => {
   const rendered = messages.map((msg, index) => renderMessage(msg, index));
   if (rendered.length === 0) return "(empty)";
   if (rendered.length <= edgeCount * 2) {
-    return rendered
-      .map((entry) => `#${entry.index} [${entry.role}] ${clip(entry.summary, 220)}`)
-      .join("\n");
+    return rendered.map((entry) => `#${entry.index} [${entry.role}] ${clip(entry.summary, 220)}`).join("\n");
   }
 
   const first = rendered.slice(0, edgeCount);
@@ -141,9 +139,7 @@ const briefLineCountOf = (summary: string): number => {
 };
 
 const queryTermsOf = (text: string): string[] =>
-  (text.match(/[\p{L}\p{N}_./-]{3,}/gu) ?? [])
-    .map((part) => part.trim())
-    .filter(Boolean);
+  (text.match(/[\p{L}\p{N}_./-]{3,}/gu) ?? []).map((part) => part.trim()).filter(Boolean);
 
 const queryOf = (text: string): string => {
   const terms = queryTermsOf(text);
@@ -168,7 +164,10 @@ const probesOf = (messages: Message[], summary: string): RecallProbe[] => {
   for (const b of blocks) {
     if (b.kind === "tool_call") {
       for (const key of ["path", "file_path", "filePath", "file"]) {
-        if (typeof b.args[key] === "string") { firstFile = b.args[key] as string; break; }
+        if (typeof b.args[key] === "string") {
+          firstFile = b.args[key] as string;
+          break;
+        }
       }
       if (firstFile) break;
     }

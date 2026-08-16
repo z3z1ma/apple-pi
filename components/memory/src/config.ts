@@ -77,7 +77,15 @@ export function resolveCompactAfterTokens(config: Config, contextWindow: number 
 	return config.compactAfterTokens;
 }
 
-export const THINKING_LEVEL_VALUES: readonly ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export const THINKING_LEVEL_VALUES: readonly ModelThinkingLevel[] = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+] as const;
 
 /** Observer chunk cap used when no config is set and the model's context window is unknown. */
 export const OBSERVER_CHUNK_FALLBACK_MAX_TOKENS = 60_000;
@@ -113,10 +121,7 @@ export function resolveObserverChunkMaxTokens(config: Config, contextWindow: num
 		return Math.max(OBSERVER_CHUNK_MIN_TOKENS, config.observerChunkMaxTokens);
 	}
 	if (typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0) {
-		return Math.max(
-			OBSERVER_CHUNK_MIN_TOKENS,
-			Math.floor(contextWindow * OBSERVER_CHUNK_CONTEXT_RATIO),
-		);
+		return Math.max(OBSERVER_CHUNK_MIN_TOKENS, Math.floor(contextWindow * OBSERVER_CHUNK_CONTEXT_RATIO));
 	}
 	return OBSERVER_CHUNK_FALLBACK_MAX_TOKENS;
 }
@@ -178,7 +183,8 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	}
 	const ratio = validRatioOrUndefined(value.compactAfterTokensRatio);
 	if (ratio !== undefined) normalized.compactAfterTokensRatio = ratio;
-	if (typeof value.showWorkerNotifications === "boolean") normalized.showWorkerNotifications = value.showWorkerNotifications;
+	if (typeof value.showWorkerNotifications === "boolean")
+		normalized.showWorkerNotifications = value.showWorkerNotifications;
 	if (typeof value.passive === "boolean") normalized.passive = value.passive;
 	if (typeof value.debugLog === "boolean") normalized.debugLog = value.debugLog;
 	return normalized;
@@ -217,10 +223,9 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): C
 		...projectConfig,
 		...envConfig,
 	};
-	const target = validTargetOrUndefined(
-		merged.observationsPoolTargetTokens,
-		merged.observationsPoolMaxTokens,
-	) ?? derivedObservationPoolTarget(merged.observationsPoolMaxTokens);
+	const target =
+		validTargetOrUndefined(merged.observationsPoolTargetTokens, merged.observationsPoolMaxTokens) ??
+		derivedObservationPoolTarget(merged.observationsPoolMaxTokens);
 
 	return {
 		...merged,

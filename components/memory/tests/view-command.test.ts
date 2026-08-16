@@ -81,7 +81,10 @@ describe("V3 /om:view", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-obs", { observations: [observation("bbbbbbbbbbbb")], coversUpToId: "raw-1" }),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-1", details: memoryDetails({ observations: [obs], reflections: [ref] }) }),
+			compactionEntry("cmp", {
+				firstKeptEntryId: "raw-1",
+				details: memoryDetails({ observations: [obs], reflections: [ref] }),
+			}),
 		];
 
 		const { output, clipboardText, copyToClipboard } = await setup(entries).run();

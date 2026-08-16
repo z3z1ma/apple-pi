@@ -18,68 +18,218 @@ import type { SearchHit } from "../src/core/search-entries";
 
 const ausEntries: RenderedEntry[] = [
   { index: 0, role: "user", summary: "Update the ISM compliance documentation for the new Essential Eight controls" },
-  { index: 1, role: "assistant", summary: "Reviewing the ASD Information Security Manual and Essential Eight maturity model for compliance alignment.", files: ["security/ism-compliance-2027.md"] },
+  {
+    index: 1,
+    role: "assistant",
+    summary:
+      "Reviewing the ASD Information Security Manual and Essential Eight maturity model for compliance alignment.",
+    files: ["security/ism-compliance-2027.md"],
+  },
   { index: 2, role: "tool_result", summary: "[Read] security/ism-compliance-2027.md" },
-  { index: 3, role: "assistant", summary: "The current ISM compliance documentation covers the Essential Eight at Maturity Level 2. I'll update for Level 3 requirements." },
+  {
+    index: 3,
+    role: "assistant",
+    summary:
+      "The current ISM compliance documentation covers the Essential Eight at Maturity Level 2. I'll update for Level 3 requirements.",
+  },
   { index: 4, role: "user", summary: "Ensure the authorisation controls meet PSPF requirements" },
-  { index: 5, role: "assistant", summary: "The PSPF requires multi-factor authorisation for all privileged access. Updating authorisation policy to align with PSPF Policy 9.", files: ["security/authorisation-policy.md"] },
+  {
+    index: 5,
+    role: "assistant",
+    summary:
+      "The PSPF requires multi-factor authorisation for all privileged access. Updating authorisation policy to align with PSPF Policy 9.",
+    files: ["security/authorisation-policy.md"],
+  },
   { index: 6, role: "tool_result", summary: "[Edit] security/authorisation-policy.md" },
   { index: 7, role: "user", summary: "Organise the IRAP assessment for the cloud service" },
-  { index: 8, role: "assistant", summary: "Scheduling IRAP assessment with an ASD-certified assessor for the cloud service. The programme includes documentation review and testing phases." },
+  {
+    index: 8,
+    role: "assistant",
+    summary:
+      "Scheduling IRAP assessment with an ASD-certified assessor for the cloud service. The programme includes documentation review and testing phases.",
+  },
   { index: 9, role: "user", summary: "Check the Privacy Act 1988 compliance for the new data handling procedures" },
-  { index: 10, role: "assistant", summary: "Cross-referencing data handling procedures against Australian Privacy Principles under the Privacy Act 1988. APP 6 and APP 8 require authorisation for overseas disclosure." },
+  {
+    index: 10,
+    role: "assistant",
+    summary:
+      "Cross-referencing data handling procedures against Australian Privacy Principles under the Privacy Act 1988. APP 6 and APP 8 require authorisation for overseas disclosure.",
+  },
   { index: 11, role: "user", summary: "Update the protective security policy with the new risk management framework" },
-  { index: 12, role: "assistant", summary: "Updating protective security policy to include the new risk management programme per PSPF Policy 1 and the ANAO guidance.", files: ["security/protective-policy.md"] },
+  {
+    index: 12,
+    role: "assistant",
+    summary:
+      "Updating protective security policy to include the new risk management programme per PSPF Policy 1 and the ANAO guidance.",
+    files: ["security/protective-policy.md"],
+  },
   { index: 13, role: "tool_result", summary: "[Edit] security/protective-policy.md" },
   { index: 14, role: "user", summary: "Review the DTA digital service standard compliance" },
-  { index: 15, role: "assistant", summary: "The Digital Transformation Agency service standard requires accessibility, privacy impact assessment, and user-centred design. All 13 criteria are being assessed." },
+  {
+    index: 15,
+    role: "assistant",
+    summary:
+      "The Digital Transformation Agency service standard requires accessibility, privacy impact assessment, and user-centred design. All 13 criteria are being assessed.",
+  },
   { index: 16, role: "user", summary: "Analyse the cyber security incident response procedures" },
-  { index: 17, role: "assistant", summary: "Analysing incident response procedures against the ASD Cyber Security Centre guidance. The current procedures cover reporting, containment, and recovery. Defence in depth measures are documented." },
+  {
+    index: 17,
+    role: "assistant",
+    summary:
+      "Analysing incident response procedures against the ASD Cyber Security Centre guidance. The current procedures cover reporting, containment, and recovery. Defence in depth measures are documented.",
+  },
   { index: 18, role: "user", summary: "Submit the security clearance pool documentation for review" },
-  { index: 19, role: "assistant", summary: "Security clearance pool documentation has been submitted for formal review. NV1 and NV2 clearance records are current through the AGSVA programme." },
+  {
+    index: 19,
+    role: "assistant",
+    summary:
+      "Security clearance pool documentation has been submitted for formal review. NV1 and NV2 clearance records are current through the AGSVA programme.",
+  },
   { index: 20, role: "user", summary: "Catalogue the information management framework references" },
-  { index: 21, role: "assistant", summary: "Cataloguing information management references across the National Archives of Australia, Records Authorities, and the Digital Continuity 2025 programme." },
+  {
+    index: 21,
+    role: "assistant",
+    summary:
+      "Cataloguing information management references across the National Archives of Australia, Records Authorities, and the Digital Continuity 2025 programme.",
+  },
 ];
 
 const ausMessages: Message[] = [
   { role: "user", content: "Update the ISM compliance documentation for the new Essential Eight controls" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Reviewing the ASD Information Security Manual and Essential Eight maturity model for compliance alignment." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "ISM compliance doc: Essential Eight controls at Maturity Level 2" }], toolName: "Read", isError: false } as any,
-  { role: "assistant", content: [{ type: "text", text: "The current ISM compliance documentation covers the Essential Eight at Maturity Level 2. I'll update for Level 3 requirements." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Reviewing the ASD Information Security Manual and Essential Eight maturity model for compliance alignment.",
+      },
+    ],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "ISM compliance doc: Essential Eight controls at Maturity Level 2" }],
+    toolName: "Read",
+    isError: false,
+  } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The current ISM compliance documentation covers the Essential Eight at Maturity Level 2. I'll update for Level 3 requirements.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Ensure the authorisation controls meet PSPF requirements" } as any,
-  { role: "assistant", content: [{ type: "text", text: "The PSPF requires multi-factor authorisation for all privileged access. Updating authorisation policy to align with PSPF Policy 9." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "File edited: updated authorisation section per PSPF Policy 9" }], toolName: "Edit", isError: false } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The PSPF requires multi-factor authorisation for all privileged access. Updating authorisation policy to align with PSPF Policy 9.",
+      },
+    ],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "File edited: updated authorisation section per PSPF Policy 9" }],
+    toolName: "Edit",
+    isError: false,
+  } as any,
   { role: "user", content: "Organise the IRAP assessment for the cloud service" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Scheduling IRAP assessment with an ASD-certified assessor for the cloud service. The programme includes documentation review and testing phases." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Scheduling IRAP assessment with an ASD-certified assessor for the cloud service. The programme includes documentation review and testing phases.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Check the Privacy Act 1988 compliance for the new data handling procedures" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Cross-referencing data handling procedures against Australian Privacy Principles under the Privacy Act 1988. APP 6 and APP 8 require authorisation for overseas disclosure." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Cross-referencing data handling procedures against Australian Privacy Principles under the Privacy Act 1988. APP 6 and APP 8 require authorisation for overseas disclosure.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Update the protective security policy with the new risk management framework" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Updating protective security policy to include the new risk management programme per PSPF Policy 1 and the ANAO guidance." }] } as any,
-  { role: "toolResult", content: [{ type: "text", text: "File edited: added risk management programme section" }], toolName: "Edit", isError: false } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Updating protective security policy to include the new risk management programme per PSPF Policy 1 and the ANAO guidance.",
+      },
+    ],
+  } as any,
+  {
+    role: "toolResult",
+    content: [{ type: "text", text: "File edited: added risk management programme section" }],
+    toolName: "Edit",
+    isError: false,
+  } as any,
   { role: "user", content: "Review the DTA digital service standard compliance" } as any,
-  { role: "assistant", content: [{ type: "text", text: "The Digital Transformation Agency service standard requires accessibility, privacy impact assessment, and user-centred design. All 13 criteria are being assessed." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "The Digital Transformation Agency service standard requires accessibility, privacy impact assessment, and user-centred design. All 13 criteria are being assessed.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Analyse the cyber security incident response procedures" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Analysing incident response procedures against the ASD Cyber Security Centre guidance. The current procedures cover reporting, containment, and recovery. Defence in depth measures are documented." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Analysing incident response procedures against the ASD Cyber Security Centre guidance. The current procedures cover reporting, containment, and recovery. Defence in depth measures are documented.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Submit the security clearance pool documentation for review" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Security clearance pool documentation has been submitted for formal review. NV1 and NV2 clearance records are current through the AGSVA programme." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Security clearance pool documentation has been submitted for formal review. NV1 and NV2 clearance records are current through the AGSVA programme.",
+      },
+    ],
+  } as any,
   { role: "user", content: "Catalogue the information management framework references" } as any,
-  { role: "assistant", content: [{ type: "text", text: "Cataloguing information management references across the National Archives of Australia, Records Authorities, and the Digital Continuity 2025 programme." }] } as any,
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: "Cataloguing information management references across the National Archives of Australia, Records Authorities, and the Digital Continuity 2025 programme.",
+      },
+    ],
+  } as any,
 ];
 
 // ── Helpers ──
 
 const register = () => {
   let tool: any;
-  registerRecallTool({ registerTool: (t: any) => { tool = t; } } as any);
+  registerRecallTool({
+    registerTool: (t: any) => {
+      tool = t;
+    },
+  } as any);
   return tool;
 };
 
 const makeAusSession = () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-vcc-aus-gov-"));
   const file = join(dir, "session.jsonl");
-  const lines = ausMessages.map((msg, i) =>
-    JSON.stringify({ type: "message", id: `m${i}`, message: msg })
-  );
+  const lines = ausMessages.map((msg, i) => JSON.stringify({ type: "message", id: `m${i}`, message: msg }));
   writeFileSync(file, lines.join("\n") + "\n", "utf8");
   return { dir, file };
 };
@@ -116,10 +266,13 @@ describe("Australian government: spelling variant search", () => {
       { index: 0, role: "user", summary: "Organise the security review" },
       { index: 1, role: "assistant", summary: "Arranging the security review schedule" },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     const r = searchEntries(entries, msgs, "organize");
     expect(r).toHaveLength(1);
@@ -149,12 +302,19 @@ describe("Australian government: spelling variant search", () => {
   it("US 'color' finds British 'colour' in government context", () => {
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Update the colour coding for security classifications" },
-      { index: 1, role: "assistant", summary: "Updating colour coding: TOP SECRET (red), SECRET (blue), PROTECTED (green)" },
+      {
+        index: 1,
+        role: "assistant",
+        summary: "Updating colour coding: TOP SECRET (red), SECRET (blue), PROTECTED (green)",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     const r = searchEntries(entries, msgs, "color");
     expect(r).toHaveLength(2);
@@ -172,10 +332,13 @@ describe("Australian government: spelling variant search", () => {
       { index: 0, role: "user", summary: "Check the software licence compliance" },
       { index: 1, role: "assistant", summary: "All software licences are current and compliant." },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // US spelling "license" should match British "licence"
     const r = searchEntries(entries, msgs, "license");
@@ -202,9 +365,13 @@ describe("Australian government: spelling variant search", () => {
       { index: 0, role: "user", summary: "authorisation required" },
       { index: 1, role: "user", summary: "authorization pending" },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: "user" as any, content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: "user" as any,
+          content: e.summary,
+        }) as any,
+    );
 
     // Natural language query (no metacharacters) → expansion applied → finds both
     const rNl = searchEntries(entries, msgs, "authorisation");
@@ -367,18 +534,41 @@ describe("Australian government: stress scenarios", () => {
   it("defence portfolio session with Commonwealth spelling", () => {
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Review the Defence procurement authorisation framework" },
-      { index: 1, role: "assistant", summary: "Analysing the Defence procurement authorisation framework against the Commonwealth Procurement Rules." },
+      {
+        index: 1,
+        role: "assistant",
+        summary:
+          "Analysing the Defence procurement authorisation framework against the Commonwealth Procurement Rules.",
+      },
       { index: 2, role: "user", summary: "Check behaviour against the Defence behaviour and values framework" },
-      { index: 3, role: "assistant", summary: "Behaviour standards are set by the Defence Values and Behaviour Framework. All personnel must adhere." },
+      {
+        index: 3,
+        role: "assistant",
+        summary:
+          "Behaviour standards are set by the Defence Values and Behaviour Framework. All personnel must adhere.",
+      },
       { index: 4, role: "user", summary: "Update the catalogue of defence equipment authorisations" },
-      { index: 5, role: "assistant", summary: "Cataloguing defence equipment authorisations per the Defence and Industry Programme. Honour system requirements apply." },
+      {
+        index: 5,
+        role: "assistant",
+        summary:
+          "Cataloguing defence equipment authorisations per the Defence and Industry Programme. Honour system requirements apply.",
+      },
       { index: 6, role: "user", summary: "Organise the offshore licence compliance review" },
-      { index: 7, role: "assistant", summary: "Organising offshore licence compliance review against the Foreign Investment Review Board requirements and Defence Trade Controls Act." },
+      {
+        index: 7,
+        role: "assistant",
+        summary:
+          "Organising offshore licence compliance review against the Foreign Investment Review Board requirements and Defence Trade Controls Act.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // US spelling → British hits
     expect(searchEntries(entries, msgs, "authorization").length).toBeGreaterThanOrEqual(2);
@@ -400,14 +590,27 @@ describe("Australian government: stress scenarios", () => {
     // documents but "authorization" in technical contexts (OAuth, etc.)
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Check the OAuth authorization server configuration" },
-      { index: 1, role: "assistant", summary: "The OAuth authorization server is configured per standard. Authorisation for API access follows PSPF guidelines." },
+      {
+        index: 1,
+        role: "assistant",
+        summary:
+          "The OAuth authorization server is configured per standard. Authorisation for API access follows PSPF guidelines.",
+      },
       { index: 2, role: "user", summary: "Update the data classification programme documentation" },
-      { index: 3, role: "assistant", summary: "Updating the data classification program per ISM guidance. Both programme and program references are retained for compatibility." },
+      {
+        index: 3,
+        role: "assistant",
+        summary:
+          "Updating the data classification program per ISM guidance. Both programme and program references are retained for compatibility.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // Either spelling should find the relevant entries
     const fromUs = searchEntries(entries, msgs, "authorization");
@@ -427,14 +630,18 @@ describe("Australian government: stress scenarios", () => {
     const bigEntries: RenderedEntry[] = Array.from({ length: 150 }, (_, i) => ({
       index: i,
       role: (i % 2 === 0 ? "user" : "assistant") as any,
-      summary: i % 2 === 0
-        ? `Review security policy compliance authorisation for department ${Math.floor(i / 2)}`
-        : `Processed defence programme policy compliance review for section ${Math.floor(i / 2)}`,
+      summary:
+        i % 2 === 0
+          ? `Review security policy compliance authorisation for department ${Math.floor(i / 2)}`
+          : `Processed defence programme policy compliance review for section ${Math.floor(i / 2)}`,
     }));
-    const bigMsgs: Message[] = bigEntries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const bigMsgs: Message[] = bigEntries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // US-spelled query against British-spelled data
     const rUs = searchEntries(bigEntries, bigMsgs, "authorization defense program");
@@ -451,16 +658,34 @@ describe("Australian government: stress scenarios", () => {
   it("ASD Essential Eight maturity model search", () => {
     const entries: RenderedEntry[] = [
       { index: 0, role: "user", summary: "Assess Essential Eight Maturity Level 3 compliance" },
-      { index: 1, role: "assistant", summary: "Assessing Essential Eight Maturity Level 3: application control, patch management, and multi-factor authentication requirements per ASD guidance." },
+      {
+        index: 1,
+        role: "assistant",
+        summary:
+          "Assessing Essential Eight Maturity Level 3: application control, patch management, and multi-factor authentication requirements per ASD guidance.",
+      },
       { index: 2, role: "user", summary: "What are the gaps at Maturity Level 2?" },
-      { index: 3, role: "assistant", summary: "At Maturity Level 2 gaps include: application control partial coverage, Microsoft Office macro configuration, and operating system patch authorisation delays." },
+      {
+        index: 3,
+        role: "assistant",
+        summary:
+          "At Maturity Level 2 gaps include: application control partial coverage, Microsoft Office macro configuration, and operating system patch authorisation delays.",
+      },
       { index: 4, role: "user", summary: "Organise the remediation programme" },
-      { index: 5, role: "assistant", summary: "Organising the Essential Eight remediation programme. Priority: macro configuration and patch management authorisation workflows." },
+      {
+        index: 5,
+        role: "assistant",
+        summary:
+          "Organising the Essential Eight remediation programme. Priority: macro configuration and patch management authorisation workflows.",
+      },
     ];
-    const msgs: Message[] = entries.map((e) => ({
-      role: e.role === "user" ? "user" : "assistant" as any,
-      content: e.summary,
-    } as any));
+    const msgs: Message[] = entries.map(
+      (e) =>
+        ({
+          role: e.role === "user" ? "user" : ("assistant" as any),
+          content: e.summary,
+        }) as any,
+    );
 
     // US spelling "authorization" matching British "authorisation"
     const r = searchEntries(entries, msgs, "Essential Eight authorization");

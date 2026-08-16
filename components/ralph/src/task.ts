@@ -7,7 +7,10 @@ import { parseTaskDocument, type WorkItem } from "./task-document.js";
 import type { ExecutorOutput, JudgeOutput, ReviewerOutput } from "./types.js";
 
 export class TaskMutationError extends Error {
-	constructor(message: string, readonly code: string) {
+	constructor(
+		message: string,
+		readonly code: string,
+	) {
 		super(message);
 		this.name = "TaskMutationError";
 	}
@@ -25,7 +28,10 @@ function sha256(value: string): string {
 }
 
 function oneLine(value: string): string {
-	return value.replace(/\s+/g, " ").replace(/^#+\s*/, "").trim();
+	return value
+		.replace(/\s+/g, " ")
+		.replace(/^#+\s*/, "")
+		.trim();
 }
 
 function updateHeader(content: string, name: string, value: string): string {
@@ -53,10 +59,15 @@ function replaceSection(content: string, heading: string, markdown: string): str
 	return content.slice(0, bounds.bodyStart) + replacement + content.slice(bounds.bodyEnd).replace(/^\s*/, "");
 }
 
-async function mutateTask(path: string, expectedDigest: string, mutate: (content: string) => string): Promise<{ content: string; digest: string }> {
+async function mutateTask(
+	path: string,
+	expectedDigest: string,
+	mutate: (content: string) => string,
+): Promise<{ content: string; digest: string }> {
 	return withFileMutationQueue(path, async () => {
 		const current = readFileSync(path, "utf8");
-		if (sha256(current) !== expectedDigest) throw new TaskMutationError("Task changed concurrently", "task_compare_and_swap");
+		if (sha256(current) !== expectedDigest)
+			throw new TaskMutationError("Task changed concurrently", "task_compare_and_swap");
 		let next = mutate(current);
 		next = updateHeader(next, "Updated", new Date().toISOString().slice(0, 10));
 		if (next === current) return { content: current, digest: expectedDigest };
@@ -67,17 +78,21 @@ async function mutateTask(path: string, expectedDigest: string, mutate: (content
 
 function substantive(value: string): boolean {
 	const normalized = value.trim();
-	return normalized.length >= 12
-		&& !/^(?:none|n\/a|todo|pending|tbd|not yet|will be|do it)(?:\b|[.:])/i.test(normalized)
-		&& !/^no\.?$/i.test(normalized);
+	return (
+		normalized.length >= 12 &&
+		!/^(?:none|n\/a|todo|pending|tbd|not yet|will be|do it)(?:\b|[.:])/i.test(normalized) &&
+		!/^no\.?$/i.test(normalized)
+	);
 }
 
 function renderWorkItems(items: WorkItem[]): string {
-	return items.map((item) => {
-		if (item.state === "open") return `- [ ] ${item.id}: ${item.description}`;
-		if (item.state === "complete") return `- [x] ${item.id}: ${item.description}`;
-		return `- [-] ${item.id}: ${item.description} — Cancelled: ${item.cancellationReason}`;
-	}).join("\n");
+	return items
+		.map((item) => {
+			if (item.state === "open") return `- [ ] ${item.id}: ${item.description}`;
+			if (item.state === "complete") return `- [x] ${item.id}: ${item.description}`;
+			return `- [-] ${item.id}: ${item.description} — Cancelled: ${item.cancellationReason}`;
+		})
+		.join("\n");
 }
 
 function replaceWorkItems(content: string, items: WorkItem[]): string {
@@ -88,11 +103,16 @@ function replaceWorkItems(content: string, items: WorkItem[]): string {
 
 function mutateWorkItems(content: string, operation: WorkItemMutation): string {
 	const document = parseTaskDocument(content);
-	if (document.workItemIssues.length > 0) throw new TaskMutationError("Task has invalid Work Items", "invalid_work_items");
+	if (document.workItemIssues.length > 0)
+		throw new TaskMutationError("Task has invalid Work Items", "invalid_work_items");
 	const items = document.workItems.map((item) => ({ ...item }));
 	const index = items.findIndex((item) => item.id === operation.id);
 	if (operation.kind === "add") {
-		if (!/^WI-\d{3}$/.test(operation.id) || !substantive(operation.description)) throw new TaskMutationError("New work item must have a canonical ID and substantive description", "invalid_work_item");
+		if (!/^WI-\d{3}$/.test(operation.id) || !substantive(operation.description))
+			throw new TaskMutationError(
+				"New work item must have a canonical ID and substantive description",
+				"invalid_work_item",
+			);
 		if (index !== -1) throw new TaskMutationError(`Work item already exists: ${operation.id}`, "duplicate_work_item");
 		items.push({ id: operation.id, state: "open", description: operation.description.trim() });
 	} else {
@@ -107,13 +127,19 @@ function mutateWorkItems(content: string, operation: WorkItemMutation): string {
 				items.splice(target, 0, item);
 			}
 		} else if (operation.kind === "complete") {
-			if (item.state !== "open") throw new TaskMutationError(`Only open work items can complete: ${item.id}`, "invalid_work_item_transition");
+			if (item.state !== "open")
+				throw new TaskMutationError(`Only open work items can complete: ${item.id}`, "invalid_work_item_transition");
 			item.state = "complete";
 		} else if (operation.kind === "reopen") {
-			if (item.state !== "complete") throw new TaskMutationError(`Only complete work items can reopen: ${item.id}`, "invalid_work_item_transition");
+			if (item.state !== "complete")
+				throw new TaskMutationError(`Only complete work items can reopen: ${item.id}`, "invalid_work_item_transition");
 			item.state = "open";
 		} else {
-			if (item.state !== "open" || !substantive(operation.reason)) throw new TaskMutationError(`Only open work items can cancel with a substantive reason: ${item.id}`, "invalid_work_item_transition");
+			if (item.state !== "open" || !substantive(operation.reason))
+				throw new TaskMutationError(
+					`Only open work items can cancel with a substantive reason: ${item.id}`,
+					"invalid_work_item_transition",
+				);
 			item.state = "cancelled";
 			item.cancellationReason = operation.reason.trim();
 		}
@@ -124,7 +150,11 @@ function mutateWorkItems(content: string, operation: WorkItemMutation): string {
 	return replaceWorkItems(content, items);
 }
 
-export async function mutateTaskWorkItems(path: string, expectedDigest: string, operation: WorkItemMutation): Promise<{ content: string; digest: string }> {
+export async function mutateTaskWorkItems(
+	path: string,
+	expectedDigest: string,
+	operation: WorkItemMutation,
+): Promise<{ content: string; digest: string }> {
 	const release = acquireProjectLease(realpathSync(dirname(path)), `task-mutation-${randomUUID()}`);
 	try {
 		return await mutateTask(path, expectedDigest, (content) => mutateWorkItems(content, operation));
@@ -134,7 +164,12 @@ export async function mutateTaskWorkItems(path: string, expectedDigest: string, 
 }
 
 /** Ralph proves the active run owns the task-bundle lease inside the queued write. */
-export function completeTaskWorkItemsUnderLease(path: string, expectedDigest: string, runId: string, ids: string[]): Promise<{ content: string; digest: string }> {
+export function completeTaskWorkItemsUnderLease(
+	path: string,
+	expectedDigest: string,
+	runId: string,
+	ids: string[],
+): Promise<{ content: string; digest: string }> {
 	return mutateTask(path, expectedDigest, (content) => {
 		assertProjectLease(dirname(path), runId);
 		return ids.reduce((next, id) => mutateWorkItems(next, { kind: "complete", id }), content);
@@ -145,12 +180,23 @@ export function activateTask(path: string, expectedDigest: string): Promise<{ co
 	return mutateTask(path, expectedDigest, (content) => updateHeader(content, "Status", "active"));
 }
 
-export function recordExecutorOutcome(path: string, expectedDigest: string, runId: string, iteration: number, outcome: ExecutorOutput): Promise<{ content: string; digest: string }> {
+export function recordExecutorOutcome(
+	path: string,
+	expectedDigest: string,
+	runId: string,
+	iteration: number,
+	outcome: ExecutorOutput,
+): Promise<{ content: string; digest: string }> {
 	const date = new Date().toISOString().slice(0, 10);
 	return mutateTask(path, expectedDigest, (content) => {
 		let next = content;
 		const journal = outcome.journal.length > 0 ? outcome.journal : [outcome.summary];
-		for (const item of journal) next = appendSection(next, "Journal", `- ${date}: Ralph run \`${runId}\`, iteration ${iteration}: ${oneLine(item)}`);
+		for (const item of journal)
+			next = appendSection(
+				next,
+				"Journal",
+				`- ${date}: Ralph run \`${runId}\`, iteration ${iteration}: ${oneLine(item)}`,
+			);
 		for (const criterion of outcome.acceptanceCriteria) {
 			next = appendSection(next, "Evidence", `- ${criterion.id} [${criterion.status}]: ${oneLine(criterion.evidence)}`);
 		}
@@ -169,48 +215,95 @@ export function recordExecutorOutcome(path: string, expectedDigest: string, runI
 		}
 		if (outcome.status === "blocked") {
 			next = updateHeader(next, "Status", "blocked");
-			next = replaceSection(next, "Blockers", outcome.blockers.length ? outcome.blockers.map((blocker) => `- ${oneLine(blocker)}`).join("\n") : `- ${oneLine(outcome.summary)}`);
+			next = replaceSection(
+				next,
+				"Blockers",
+				outcome.blockers.length
+					? outcome.blockers.map((blocker) => `- ${oneLine(blocker)}`).join("\n")
+					: `- ${oneLine(outcome.summary)}`,
+			);
 		}
 		return next;
 	});
 }
 
-export function appendRunJournal(path: string, expectedDigest: string, runId: string, iteration: number, message: string): Promise<{ content: string; digest: string }> {
+export function appendRunJournal(
+	path: string,
+	expectedDigest: string,
+	runId: string,
+	iteration: number,
+	message: string,
+): Promise<{ content: string; digest: string }> {
 	const date = new Date().toISOString().slice(0, 10);
-	return mutateTask(path, expectedDigest, (content) => appendSection(content, "Journal", `- ${date}: Ralph run \`${runId}\`, iteration ${iteration}: ${oneLine(message)}`));
+	return mutateTask(path, expectedDigest, (content) =>
+		appendSection(content, "Journal", `- ${date}: Ralph run \`${runId}\`, iteration ${iteration}: ${oneLine(message)}`),
+	);
 }
 
-export function appendIndependentReview(path: string, expectedDigest: string, runId: string, iteration: number, review: ReviewerOutput): Promise<{ content: string; digest: string }> {
+export function appendIndependentReview(
+	path: string,
+	expectedDigest: string,
+	runId: string,
+	iteration: number,
+	review: ReviewerOutput,
+): Promise<{ content: string; digest: string }> {
 	const findings = review.findings.length
-		? review.findings.map((finding) => `  - **${finding.severity}**${finding.path ? ` \`${oneLine(finding.path)}\`` : ""}: ${oneLine(finding.summary)} Evidence: ${oneLine(finding.evidence)}`).join("\n")
+		? review.findings
+				.map(
+					(finding) =>
+						`  - **${finding.severity}**${finding.path ? ` \`${oneLine(finding.path)}\`` : ""}: ${oneLine(finding.summary)} Evidence: ${oneLine(finding.evidence)}`,
+				)
+				.join("\n")
 		: "  - None.";
-	const risks = review.residualRisk.length ? review.residualRisk.map((risk) => `  - ${oneLine(risk)}`).join("\n") : "  - None recorded.";
+	const risks = review.residualRisk.length
+		? review.residualRisk.map((risk) => `  - ${oneLine(risk)}`).join("\n")
+		: "  - None recorded.";
 	const markdown = [
 		`### Ralph independent review — run ${runId}, iteration ${iteration}`,
 		`Verdict: **${review.verdict}**`,
 		`Summary: ${oneLine(review.summary)}`,
-		"Findings:", findings,
-		"Residual risk:", risks,
+		"Findings:",
+		findings,
+		"Residual risk:",
+		risks,
 	].join("\n");
 	return mutateTask(path, expectedDigest, (content) => appendSection(content, "Review", markdown));
 }
 
-export function appendJudgment(path: string, expectedDigest: string, runId: string, iteration: number, judgment: JudgeOutput): Promise<{ content: string; digest: string }> {
-	const criteria = judgment.acceptanceCriteria.map((criterion) => `  - ${criterion.id}: **${criterion.status}** — ${oneLine(criterion.evidence)}`).join("\n");
-	const workItems = judgment.workItemJudgments.map((item) => `  - ${item.id}: **${item.decision}** — ${oneLine(item.reason)}`).join("\n");
+export function appendJudgment(
+	path: string,
+	expectedDigest: string,
+	runId: string,
+	iteration: number,
+	judgment: JudgeOutput,
+): Promise<{ content: string; digest: string }> {
+	const criteria = judgment.acceptanceCriteria
+		.map((criterion) => `  - ${criterion.id}: **${criterion.status}** — ${oneLine(criterion.evidence)}`)
+		.join("\n");
+	const workItems = judgment.workItemJudgments
+		.map((item) => `  - ${item.id}: **${item.decision}** — ${oneLine(item.reason)}`)
+		.join("\n");
 	const markdown = [
 		`### Ralph judgment — run ${runId}, iteration ${iteration}`,
 		`Decision: **${judgment.decision}**`,
 		`Reason: ${oneLine(judgment.reason)}`,
-		"Acceptance:", criteria || "  - No criterion assessment returned.",
-		"Work items:", workItems || "  - No work-item proposals were assessed.",
+		"Acceptance:",
+		criteria || "  - No criterion assessment returned.",
+		"Work items:",
+		workItems || "  - No work-item proposals were assessed.",
 		...(judgment.nextObjective ? [`Next objective: ${oneLine(judgment.nextObjective)}`] : []),
 	].join("\n");
 	return mutateTask(path, expectedDigest, (content) => appendSection(content, "Review", markdown));
 }
 
-export function blockTask(path: string, expectedDigest: string, reason: string): Promise<{ content: string; digest: string }> {
-	return mutateTask(path, expectedDigest, (content) => replaceSection(updateHeader(content, "Status", "blocked"), "Blockers", `- ${oneLine(reason)}`));
+export function blockTask(
+	path: string,
+	expectedDigest: string,
+	reason: string,
+): Promise<{ content: string; digest: string }> {
+	return mutateTask(path, expectedDigest, (content) =>
+		replaceSection(updateHeader(content, "Status", "blocked"), "Blockers", `- ${oneLine(reason)}`),
+	);
 }
 
 export function closeTask(path: string, expectedDigest: string): Promise<{ content: string; digest: string }> {

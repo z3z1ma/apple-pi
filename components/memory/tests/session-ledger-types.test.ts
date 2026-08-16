@@ -86,26 +86,42 @@ describe("session-ledger V3 type guards and builders", () => {
 	});
 
 	it("recognizes V3 memory entries", () => {
-		expect(isObservationsRecordedEntry(observationsRecordedEntry("om-aaaaaaaaaaaa", {
-			observations: [observation("aaaaaaaaaaaa")],
-			coversUpToId: "raw-1",
-		}))).toBe(true);
-		expect(isReflectionsRecordedEntry(reflectionsRecordedEntry("om-eeeeeeeeeeee", {
-			reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
-			coversUpToId: "raw-1",
-		}))).toBe(true);
-		expect(isObservationsDroppedEntry(observationsDroppedEntry("om-drop-1", {
-			observationIds: ["aaaaaaaaaaaa"],
-			coversUpToId: "om-eeeeeeeeeeee",
-		}))).toBe(true);
+		expect(
+			isObservationsRecordedEntry(
+				observationsRecordedEntry("om-aaaaaaaaaaaa", {
+					observations: [observation("aaaaaaaaaaaa")],
+					coversUpToId: "raw-1",
+				}),
+			),
+		).toBe(true);
+		expect(
+			isReflectionsRecordedEntry(
+				reflectionsRecordedEntry("om-eeeeeeeeeeee", {
+					reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+					coversUpToId: "raw-1",
+				}),
+			),
+		).toBe(true);
+		expect(
+			isObservationsDroppedEntry(
+				observationsDroppedEntry("om-drop-1", {
+					observationIds: ["aaaaaaaaaaaa"],
+					coversUpToId: "om-eeeeeeeeeeee",
+				}),
+			),
+		).toBe(true);
 	});
 
 	it("accepts flat V3 folded memory details", () => {
-		expect(isMemoryDetails(memoryDetails({
-			fullFold: true,
-			observations: [observation("aaaaaaaaaaaa")],
-			reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
-		}))).toBe(true);
+		expect(
+			isMemoryDetails(
+				memoryDetails({
+					fullFold: true,
+					observations: [observation("aaaaaaaaaaaa")],
+					reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+				}),
+			),
+		).toBe(true);
 	});
 
 	it("ignores old V2 observation entries and old V2 compaction details", () => {

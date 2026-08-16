@@ -2,7 +2,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "../components/subagents/src/abortable.js";
+import {
+	MAX_SUBAGENT_RESULT_WAIT_SECONDS,
+	normalizeWaitSeconds,
+	waitForAgentSettlement,
+} from "../components/subagents/src/abortable.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../components/subagents/src/conversation.js";
 import { buildFullParentContext } from "../components/subagents/src/context.js";
 import { DEFAULT_AGENTS } from "../components/subagents/src/default-agents.js";
@@ -38,13 +42,16 @@ describe("owned subagent surface", () => {
 		const root = temporaryRoot();
 		const globalRoot = join(root, "pi-agent");
 		mkdirSync(globalRoot, { recursive: true });
-		writeFileSync(join(globalRoot, "modes.json"), JSON.stringify({
-			modes: {
-				explore: { provider: "anthropic", modelId: "route-explore", thinkingLevel: "high" },
-				plan: { provider: "anthropic", modelId: "route-plan", thinkingLevel: "xhigh" },
-				"general-purpose": { thinkingLevel: "low" },
-			},
-		}));
+		writeFileSync(
+			join(globalRoot, "modes.json"),
+			JSON.stringify({
+				modes: {
+					explore: { provider: "anthropic", modelId: "route-explore", thinkingLevel: "high" },
+					plan: { provider: "anthropic", modelId: "route-plan", thinkingLevel: "xhigh" },
+					"general-purpose": { thinkingLevel: "low" },
+				},
+			}),
+		);
 		const previous = process.env.PI_CODING_AGENT_DIR;
 		process.env.PI_CODING_AGENT_DIR = globalRoot;
 		try {
@@ -129,7 +136,6 @@ describe("owned subagent surface", () => {
 			});
 			expect(embeddedFallback.model).toBe(parentModel);
 			expect(embeddedFallback.error).toBeUndefined();
-
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
@@ -143,10 +149,12 @@ describe("owned subagent surface", () => {
 			error: 'Model not found: "openai-codex/does-not-exist"',
 		});
 		expect(selected).toBe(explicitModel);
-		expect(() => selectAgentModel(undefined, {
-			model: undefined,
-			error: "invalid configured model",
-		})).toThrow("invalid configured model");
+		expect(() =>
+			selectAgentModel(undefined, {
+				model: undefined,
+				error: "invalid configured model",
+			}),
+		).toThrow("invalid configured model");
 	});
 
 	it("keeps explicit thinking overrides and normalizes invocation booleans", () => {
@@ -179,18 +187,22 @@ describe("owned subagent surface", () => {
 	});
 
 	it("uses explicit invocation booleans for context and advisor", () => {
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
-			run_in_background: false,
-			isolated: false,
-			inherit_context: false,
-			advisor: false,
-		})).toMatchObject({ inheritContext: false, advisor: false });
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
-			run_in_background: false,
-			isolated: false,
-			inherit_context: true,
-			advisor: true,
-		})).toMatchObject({ inheritContext: true, advisor: true });
+		expect(
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+				run_in_background: false,
+				isolated: false,
+				inherit_context: false,
+				advisor: false,
+			}),
+		).toMatchObject({ inheritContext: false, advisor: false });
+		expect(
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+				run_in_background: false,
+				isolated: false,
+				inherit_context: true,
+				advisor: true,
+			}),
+		).toMatchObject({ inheritContext: true, advisor: true });
 	});
 
 	it("retains the full branch only for explicit inheritance", () => {
@@ -233,7 +245,9 @@ describe("owned subagent surface", () => {
 		});
 		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
-		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context", "advisor"]));
+		expect(agentSchema.required).toEqual(
+			expect.arrayContaining(["run_in_background", "isolated", "inherit_context", "advisor"]),
+		);
 		expect(agentSchema.properties.advisor.description).toContain("Keep false for exploration");
 		expect(resultSchema.required).toContain("wait_seconds");
 		expect(resultSchema.properties.wait_seconds.maximum).toBe(MAX_SUBAGENT_RESULT_WAIT_SECONDS);
@@ -242,14 +256,17 @@ describe("owned subagent surface", () => {
 	it("sanitizes settings to the retained orchestration controls", () => {
 		const root = temporaryRoot();
 		mkdirSync(join(root, ".pi"), { recursive: true });
-		writeFileSync(join(root, ".pi", "subagents.json"), JSON.stringify({
-			maxConcurrent: 7,
-			persistAgentSessions: false,
-			widgetMode: "all",
-			schedulingEnabled: true,
-			agentMentions: "model",
-			outputTranscript: true,
-		}));
+		writeFileSync(
+			join(root, ".pi", "subagents.json"),
+			JSON.stringify({
+				maxConcurrent: 7,
+				persistAgentSessions: false,
+				widgetMode: "all",
+				schedulingEnabled: true,
+				agentMentions: "model",
+				outputTranscript: true,
+			}),
+		);
 		const settings = loadSettings(root) as Record<string, unknown>;
 		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false, widgetMode: "all" });
 		expect(settings).not.toHaveProperty("schedulingEnabled");
@@ -258,13 +275,18 @@ describe("owned subagent surface", () => {
 	});
 
 	it("bounds recent transcript snapshots while preserving their newest content", () => {
-		const output = getAgentConversation({
-			messages: [{
-				role: "assistant",
-				content: [{ type: "text", text: `OLDEST-${"x".repeat(TRANSCRIPT_TAIL_MAX_CHARS * 2)}-NEWEST` }],
-			}],
-			state: {},
-		} as any, 1);
+		const output = getAgentConversation(
+			{
+				messages: [
+					{
+						role: "assistant",
+						content: [{ type: "text", text: `OLDEST-${"x".repeat(TRANSCRIPT_TAIL_MAX_CHARS * 2)}-NEWEST` }],
+					},
+				],
+				state: {},
+			} as any,
+			1,
+		);
 		expect(output.length).toBeLessThanOrEqual(TRANSCRIPT_TAIL_MAX_CHARS);
 		expect(output).toContain("Earlier transcript content clipped");
 		expect(output).toContain("[Assistant]: …");
@@ -305,10 +327,14 @@ describe("owned subagent surface", () => {
 			configCwd: process.cwd(),
 		});
 		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
-		const result = await resultTool.execute("check-child", {
-			agent_id: "child-1",
-			transcript_tail: 2,
-		}, undefined);
+		const result = await resultTool.execute(
+			"check-child",
+			{
+				agent_id: "child-1",
+				transcript_tail: 2,
+			},
+			undefined,
+		);
 		const output = result.content[0].text as string;
 		expect(output).toContain("Agent child-1 is running.");
 		expect(output).toContain("latest direction");
@@ -318,10 +344,14 @@ describe("owned subagent surface", () => {
 
 		(record as any).status = "completed";
 		(record as any).result = "FULL-FINAL-RESULT-MUST-NOT-LEAK-INTO-A-TAIL-CHECK";
-		const settledResult = await resultTool.execute("check-settled-child", {
-			agent_id: "child-1",
-			transcript_tail: 2,
-		}, undefined);
+		const settledResult = await resultTool.execute(
+			"check-settled-child",
+			{
+				agent_id: "child-1",
+				transcript_tail: 2,
+			},
+			undefined,
+		);
 		const settledOutput = settledResult.content[0].text as string;
 		expect(settledOutput).toContain("Agent child-1 is completed.");
 		expect(settledOutput).not.toContain("FULL-FINAL-RESULT-MUST-NOT-LEAK-INTO-A-TAIL-CHECK");
@@ -338,7 +368,10 @@ describe("owned subagent surface", () => {
 			parentAgentId: "parent-2",
 			status: "running",
 		};
-		const records = new Map([[owned.id, owned], [foreign.id, foreign]]);
+		const records = new Map([
+			[owned.id, owned],
+			[foreign.id, foreign],
+		]);
 		const manager = {
 			getRecord: vi.fn((id: string) => records.get(id)),
 			abort: vi.fn((id: string) => {
@@ -385,7 +418,9 @@ describe("owned subagent surface", () => {
 			setStrictAgentFiles: () => {},
 			setDisableDefaultAgents: () => {},
 			setFleetView: () => {},
-			setPersistAgentSessions: (value) => { persistent = value; },
+			setPersistAgentSessions: (value) => {
+				persistent = value;
+			},
 			setWidgetMode: () => {},
 			setMaxSubagentDepth: () => {},
 			setFallbackSubagent: () => {},

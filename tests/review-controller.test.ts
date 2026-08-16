@@ -98,29 +98,33 @@ describe("ReviewController", () => {
 				sequence++;
 				expect(request.model?.id).toMatch(/^review-/);
 				if (request.type === "review-planner") {
-					return record(request, {
-						summary: "Implementation and test share a contract; documentation is independent.",
-						groups: [
-							{
-								id: "value-contract",
-								title: "Value contract",
-								objective: "Trace the changed exported value into its test consumer.",
-								itemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
-								contextPaths: [],
-								tier: "strong",
-								rationale: "The test directly consumes the changed value contract.",
-							},
-							{
-								id: "value-doc",
-								title: "Value documentation",
-								objective: "Check that the documentation agrees with the new value.",
-								itemIds: [byPath.get("docs/value.md")],
-								contextPaths: ["src/value.ts"],
-								tier: "fast",
-								rationale: "This is a small documentation synchronization change.",
-							},
-						],
-					}, sequence);
+					return record(
+						request,
+						{
+							summary: "Implementation and test share a contract; documentation is independent.",
+							groups: [
+								{
+									id: "value-contract",
+									title: "Value contract",
+									objective: "Trace the changed exported value into its test consumer.",
+									itemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
+									contextPaths: [],
+									tier: "strong",
+									rationale: "The test directly consumes the changed value contract.",
+								},
+								{
+									id: "value-doc",
+									title: "Value documentation",
+									objective: "Check that the documentation agrees with the new value.",
+									itemIds: [byPath.get("docs/value.md")],
+									contextPaths: ["src/value.ts"],
+									tier: "fast",
+									rationale: "This is a small documentation synchronization change.",
+								},
+							],
+						},
+						sequence,
+					);
 				}
 				if (request.type === "reviewer") {
 					runningReviewers++;
@@ -128,40 +132,56 @@ describe("ReviewController", () => {
 					await new Promise((resolve) => setTimeout(resolve, 15));
 					runningReviewers--;
 					if (request.prompt.includes("Group: value-contract")) {
-						return record(request, {
-							summary: "The changed implementation and test agree, but the exported contract may break callers.",
-							reviewedItemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
-							findings: [{
-								severity: "significant",
-								category: "bug",
-								summary: "Preserve callers expecting the old exported value",
-								impact: "Existing consumers receive a changed sentinel and take the wrong branch.",
-								evidence: "The patch changes the exported value from 1 to 2.",
-								path: "src/value.ts",
-								anchor: "export const value = 2;",
-								side: "new",
-							}],
-							residualRisk: [],
-						}, sequence);
+						return record(
+							request,
+							{
+								summary: "The changed implementation and test agree, but the exported contract may break callers.",
+								reviewedItemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
+								findings: [
+									{
+										severity: "significant",
+										category: "bug",
+										summary: "Preserve callers expecting the old exported value",
+										impact: "Existing consumers receive a changed sentinel and take the wrong branch.",
+										evidence: "The patch changes the exported value from 1 to 2.",
+										path: "src/value.ts",
+										anchor: "export const value = 2;",
+										side: "new",
+									},
+								],
+								residualRisk: [],
+							},
+							sequence,
+						);
 					}
-					return record(request, {
-						summary: "Documentation agrees with the change.",
-						reviewedItemIds: [byPath.get("docs/value.md")],
-						findings: [],
-						residualRisk: [],
-					}, sequence);
+					return record(
+						request,
+						{
+							summary: "Documentation agrees with the change.",
+							reviewedItemIds: [byPath.get("docs/value.md")],
+							findings: [],
+							residualRisk: [],
+						},
+						sequence,
+					);
 				}
 				if (request.type === "review-verifier") {
 					const findingId = request.prompt.match(/"id": "([a-f0-9]+)"/)?.[1];
-					return record(request, {
-						decisions: [{
-							findingId,
-							status: "confirmed",
-							reason: "The changed export is observable outside the module.",
-							evidence: "The exact changed line exports the new value.",
-						}],
-						residualRisk: [],
-					}, sequence);
+					return record(
+						request,
+						{
+							decisions: [
+								{
+									findingId,
+									status: "confirmed",
+									reason: "The changed export is observable outside the module.",
+									evidence: "The exact changed line exports the new value.",
+								},
+							],
+							residualRisk: [],
+						},
+						sequence,
+					);
 				}
 				throw new Error(`unexpected role ${request.type}`);
 			},
@@ -169,7 +189,11 @@ describe("ReviewController", () => {
 		};
 		const routes: Array<{ mode: string; tier: string }> = [];
 		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute(routes) });
-		const run = await controller.run(context(tmpdir()), { mode: "workspace" }, { root, profile: "balanced", background: "Changing the public value contract." });
+		const run = await controller.run(
+			context(tmpdir()),
+			{ mode: "workspace" },
+			{ root, profile: "balanced", background: "Changing the public value contract." },
+		);
 		expect(run.state).toBe("complete");
 		expect(run.completedItemIds).toHaveLength(3);
 		expect(run.failures).toEqual([]);
@@ -193,7 +217,9 @@ describe("ReviewController", () => {
 			{ mode: "review-strong", tier: "strong" },
 		]);
 		expect(run.totalTokens).toBe(600);
-		expect(requests.every((request) => request.agentConfig.builtinToolNames?.join(",") === "read,grep,find,ls")).toBe(true);
+		expect(requests.every((request) => request.agentConfig.builtinToolNames?.join(",") === "read,grep,find,ls")).toBe(
+			true,
+		);
 		expect(run.projectRoot).toBe(reviewRepositoryRoot(root));
 		expect(requests.every((request) => request.cwd === run.projectRoot)).toBe(true);
 		expect(requests.every((request) => request.toolPolicy)).toBe(true);
@@ -205,12 +231,19 @@ describe("ReviewController", () => {
 		expect(receipts[0].run.selected.every((item) => !("diff" in item))).toBe(true);
 		// Additive policy/cause fields leave pre-policy schema-v1 review receipts readable.
 		const path = reviewReceiptPath(root, run.runId);
-		writeFileSync(path, readFileSync(path, "utf8").split(/\n/).filter(Boolean).map((line) => {
-			const event = JSON.parse(line);
-			delete event.run.policy;
-			delete event.run.terminalCause;
-			return JSON.stringify(event);
-		}).join("\n") + "\n");
+		writeFileSync(
+			path,
+			readFileSync(path, "utf8")
+				.split(/\n/)
+				.filter(Boolean)
+				.map((line) => {
+					const event = JSON.parse(line);
+					delete event.run.policy;
+					delete event.run.terminalCause;
+					return JSON.stringify(event);
+				})
+				.join("\n") + "\n",
+		);
 		expect(loadReviewRun(root, run.runId).state).toBe("complete");
 	});
 
@@ -228,7 +261,10 @@ describe("ReviewController", () => {
 					lifetimeUsage: { input: 59_000, output: 1_000, cacheWrite: 0 },
 				};
 			},
-			abort: () => { aborted = true; return true; },
+			abort: () => {
+				aborted = true;
+				return true;
+			},
 		};
 		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
 		const run = await controller.run(context(root), { mode: "workspace" }, { constraints: { maxTokens: 60_000 } });
@@ -246,7 +282,9 @@ describe("ReviewController", () => {
 			async runFresh(_ctx, next) {
 				request = next;
 				next.onStarted?.("active-planner");
-				await new Promise<void>((resolve) => { release = resolve; });
+				await new Promise<void>((resolve) => {
+					release = resolve;
+				});
 				return {
 					...record(next, {}, 1),
 					status: "stopped",
@@ -265,7 +303,9 @@ describe("ReviewController", () => {
 		const summary = controller.status(root) as Array<{ runId: string }>;
 		expect(summary).toHaveLength(1);
 		const otherController = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		await expect(otherController.run(context(root), { mode: "workspace" })).rejects.toThrow(/already owns this project/);
+		await expect(otherController.run(context(root), { mode: "workspace" })).rejects.toThrow(
+			/already owns this project/,
+		);
 		await expect(otherController.stop(root, summary[0].runId)).rejects.toThrow(/owning Pi session/);
 		const stopped = await controller.stop(root, summary[0].runId);
 		const final = await running;
@@ -289,7 +329,9 @@ describe("ReviewController", () => {
 		const controller = new ReviewController({
 			getService: () => service,
 			resolveModel: async (_ctx, mode, tier) => {
-				await new Promise<void>((resolve) => { releaseRoute = resolve; });
+				await new Promise<void>((resolve) => {
+					releaseRoute = resolve;
+				});
 				return { model: { provider: "test", id: mode } as Model<any>, thinkingLevel: "high", mode, tier };
 			},
 		});
@@ -314,18 +356,24 @@ describe("ReviewController", () => {
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				request.onStarted?.("planner");
-				return record(request, {
-					summary: "Incomplete partition.",
-					groups: [{
-						id: "partial",
-						title: "Partial",
-						objective: "Review one file.",
-						itemIds: [items[0].id],
-						contextPaths: [],
-						tier: "fast",
-						rationale: "Incomplete on purpose for the test.",
-					}],
-				}, 1);
+				return record(
+					request,
+					{
+						summary: "Incomplete partition.",
+						groups: [
+							{
+								id: "partial",
+								title: "Partial",
+								objective: "Review one file.",
+								itemIds: [items[0].id],
+								contextPaths: [],
+								tier: "fast",
+								rationale: "Incomplete on purpose for the test.",
+							},
+						],
+					},
+					1,
+				);
 			},
 			abort: () => true,
 		};
@@ -345,16 +393,47 @@ describe("ReviewController", () => {
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				request.onStarted?.(`agent-${++sequence}`);
-				if (request.type === "review-planner") return record(request, {
-					summary: "One semantic group.",
-					groups: [{ id: "all", title: "All", objective: "Review all changed behavior.", itemIds: items.map((item) => item.id), contextPaths: [], tier: "fast", rationale: "Small cohesive change." }],
-				}, sequence);
-				if (request.type === "reviewer") return record(request, {
-					summary: "Candidate found.",
-					reviewedItemIds: items.map((item) => item.id),
-					findings: [{ severity: "minor", category: "bug", summary: "Check changed value", impact: "Consumer behavior may change.", evidence: "Export changed.", path: "src/value.ts", anchor: "export const value = 2;", side: "new" }],
-					residualRisk: [],
-				}, sequence);
+				if (request.type === "review-planner")
+					return record(
+						request,
+						{
+							summary: "One semantic group.",
+							groups: [
+								{
+									id: "all",
+									title: "All",
+									objective: "Review all changed behavior.",
+									itemIds: items.map((item) => item.id),
+									contextPaths: [],
+									tier: "fast",
+									rationale: "Small cohesive change.",
+								},
+							],
+						},
+						sequence,
+					);
+				if (request.type === "reviewer")
+					return record(
+						request,
+						{
+							summary: "Candidate found.",
+							reviewedItemIds: items.map((item) => item.id),
+							findings: [
+								{
+									severity: "minor",
+									category: "bug",
+									summary: "Check changed value",
+									impact: "Consumer behavior may change.",
+									evidence: "Export changed.",
+									path: "src/value.ts",
+									anchor: "export const value = 2;",
+									side: "new",
+								},
+							],
+							residualRisk: [],
+						},
+						sequence,
+					);
 				return record(request, { decisions: [], residualRisk: [] }, sequence);
 			},
 			abort: () => true,
@@ -364,7 +443,10 @@ describe("ReviewController", () => {
 		expect(run.state).toBe("failed");
 		expect(run.completedItemIds).toEqual([]);
 		expect(run.failures).toHaveLength(3);
-		expect(run.findings[0].validation).toMatchObject({ status: "retained_unresolved", reason: "Verification did not complete" });
+		expect(run.findings[0].validation).toMatchObject({
+			status: "retained_unresolved",
+			reason: "Verification did not complete",
+		});
 	});
 
 	it("fails closed when a role omits its typed result submission", async () => {
@@ -387,7 +469,11 @@ describe("ReviewController", () => {
 		const cases = [
 			{ name: "provider", record: { status: "error", error: "provider unavailable" }, cause: "provider_error" },
 			{ name: "turn", record: { status: "aborted", terminationCause: "turn_ceiling" }, cause: "role_turn_ceiling" },
-			{ name: "compaction", record: { status: "aborted", terminationCause: "compaction", compactionCount: 1 }, cause: "compaction" },
+			{
+				name: "compaction",
+				record: { status: "aborted", terminationCause: "compaction", compactionCount: 1 },
+				cause: "compaction",
+			},
 		] as const;
 		for (const testCase of cases) {
 			const root = repository();
@@ -398,7 +484,10 @@ describe("ReviewController", () => {
 				},
 				abort: () => true,
 			};
-			const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" });
+			const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+				context(root),
+				{ mode: "workspace" },
+			);
 			expect(run.terminalCause, testCase.name).toBe(testCase.cause);
 		}
 		const root = repository();
@@ -409,7 +498,10 @@ describe("ReviewController", () => {
 			},
 			abort: () => true,
 		};
-		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" });
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+		);
 		expect(run.terminalCause).toBe("authority_denial");
 	});
 
@@ -417,8 +509,18 @@ describe("ReviewController", () => {
 		const root = repository();
 		const abort = new AbortController();
 		abort.abort();
-		const service: ManagedSubagentService = { async runFresh() { throw new Error("must not launch"); }, abort: () => true };
-		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" }, {}, abort.signal);
+		const service: ManagedSubagentService = {
+			async runFresh() {
+				throw new Error("must not launch");
+			},
+			abort: () => true,
+		};
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+			{},
+			abort.signal,
+		);
 		expect(run.state).toBe("stopped");
 		expect(run.terminalCause).toBe("external_cancellation");
 	});
@@ -428,12 +530,18 @@ describe("ReviewController", () => {
 		const timeoutService: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				request.onStarted?.("timeout");
-				await new Promise<void>((resolve) => request.signal?.addEventListener("abort", () => resolve(), { once: true }));
+				await new Promise<void>((resolve) =>
+					request.signal?.addEventListener("abort", () => resolve(), { once: true }),
+				);
 				return { ...record(request, {}, 1, false), status: "stopped" } as AgentRecord;
 			},
 			abort: () => true,
 		};
-		const timedOut = await new ReviewController({ getService: () => timeoutService, resolveModel: modelRoute([]) }).run(context(timeoutRoot), { mode: "workspace" }, { constraints: { timeoutSeconds: 2 } });
+		const timedOut = await new ReviewController({ getService: () => timeoutService, resolveModel: modelRoute([]) }).run(
+			context(timeoutRoot),
+			{ mode: "workspace" },
+			{ constraints: { timeoutSeconds: 2 } },
+		);
 		expect(timedOut.terminalCause).toBe("elapsed_time_ceiling");
 
 		const workspaceRoot = repository();
@@ -442,11 +550,31 @@ describe("ReviewController", () => {
 			async runFresh(_ctx, request) {
 				request.onStarted?.("planner");
 				writeFileSync(join(workspaceRoot, "src", "value.ts"), "export const value = 3;\n");
-				return record(request, { summary: "One group.", groups: [{ id: "all", title: "All", objective: "Review all.", itemIds: items.map((item) => item.id), contextPaths: [], tier: "fast", rationale: "Small change." }] }, 1);
+				return record(
+					request,
+					{
+						summary: "One group.",
+						groups: [
+							{
+								id: "all",
+								title: "All",
+								objective: "Review all.",
+								itemIds: items.map((item) => item.id),
+								contextPaths: [],
+								tier: "fast",
+								rationale: "Small change.",
+							},
+						],
+					},
+					1,
+				);
 			},
 			abort: () => true,
 		};
-		const conflicted = await new ReviewController({ getService: () => workspaceService, resolveModel: modelRoute([]) }).run(context(workspaceRoot), { mode: "workspace" });
+		const conflicted = await new ReviewController({
+			getService: () => workspaceService,
+			resolveModel: modelRoute([]),
+		}).run(context(workspaceRoot), { mode: "workspace" });
 		expect(conflicted.state).toBe("workspace_conflict");
 		expect(conflicted.terminalCause).toBe("workspace_conflict");
 	});
@@ -458,7 +586,19 @@ describe("ReviewController", () => {
 			async runFresh(_ctx, request) {
 				request.onStarted?.("planner");
 				const output = request.customTools?.[0];
-				const value = { summary: "One group.", groups: [{ id: "all", title: "All", objective: "Review all items.", itemIds: items.map((item) => item.id), tier: "fast", rationale: "One change." }] };
+				const value = {
+					summary: "One group.",
+					groups: [
+						{
+							id: "all",
+							title: "All",
+							objective: "Review all items.",
+							itemIds: items.map((item) => item.id),
+							tier: "fast",
+							rationale: "One change.",
+						},
+					],
+				};
 				if (output) {
 					void output.execute("first", value as never, undefined, undefined, {} as never);
 					void output.execute("second", value as never, undefined, undefined, {} as never);

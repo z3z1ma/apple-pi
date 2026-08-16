@@ -2,12 +2,7 @@ import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readFileSync } from "fs";
 import { loadAllMessages } from "../core/load-messages";
-import {
-  getFileIndicators,
-  getTouchedFiles,
-  searchEntries,
-  type SearchHit,
-} from "../core/search-entries";
+import { getFileIndicators, getTouchedFiles, searchEntries, type SearchHit } from "../core/search-entries";
 import { formatRecallOutput, formatTouchedOutput } from "../core/format-recall";
 import { getActiveLineageEntryIds } from "../core/lineage";
 import { normalizeRecallMode, normalizeRecallScope } from "../core/recall-scope";
@@ -32,14 +27,9 @@ export const invalidExpandIndices = (requested: number[], available: Set<number>
  *
  * Returns [startIndex, endIndex] or undefined if not found.
  */
-const resolveCompactionMessageRange = (
-  sessionFile: string,
-  scopeStr: string,
-): [number, number] | undefined => {
+const resolveCompactionMessageRange = (sessionFile: string, scopeStr: string): [number, number] | undefined => {
   const isLatest = scopeStr === "compaction:latest";
-  const targetIndex = isLatest
-    ? -1
-    : parseInt(scopeStr.replace("compaction:", ""), 10);
+  const targetIndex = isLatest ? -1 : parseInt(scopeStr.replace("compaction:", ""), 10);
   if (isNaN(targetIndex) && !isLatest) return undefined;
 
   const content = readFileSync(sessionFile, "utf-8");
@@ -54,15 +44,11 @@ const resolveCompactionMessageRange = (
   }
 
   // Collect pi-vcc compaction entries in order
-  const compactions = entries.filter(
-    (e: any) => e.type === "compaction" && e.details?.compactor === "pi-vcc",
-  );
+  const compactions = entries.filter((e: any) => e.type === "compaction" && e.details?.compactor === "pi-vcc");
 
   if (compactions.length === 0) return undefined;
 
-  const target = isLatest
-    ? compactions[compactions.length - 1]
-    : compactions[targetIndex];
+  const target = isLatest ? compactions[compactions.length - 1] : compactions[targetIndex];
 
   const msgRange = target?.details?.messageRange as [string, string] | undefined;
   if (!msgRange) return undefined;
@@ -95,25 +81,33 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       "Use mode:'touched' for a file inventory, mode:'file' for payload-only search, query:'#N:path[:offset[:limit]|:full]' for write/edit content, scope:'all' for branches, and expand:[indices] for full entries.",
     parameters: Type.Object({
       query: Type.Optional(
-        Type.String({ description: "Search terms or regex pattern (e.g. 'hook|inject', 'fail.*build'). Multi-word = OR ranked by relevance." }),
+        Type.String({
+          description:
+            "Search terms or regex pattern (e.g. 'hook|inject', 'fail.*build'). Multi-word = OR ranked by relevance.",
+        }),
       ),
       expand: Type.Optional(
-        Type.Array(Type.Number(), { description: "Entry indices to return full untruncated content for. Works alone (any index in scope) or alongside query (expands matching entries on the current page)." }),
+        Type.Array(Type.Number(), {
+          description:
+            "Entry indices to return full untruncated content for. Works alone (any index in scope) or alongside query (expands matching entries on the current page).",
+        }),
       ),
       page: Type.Optional(
         Type.Number({ description: "Page number (1-based) for paginated search results. Default: 1." }),
       ),
       mode: Type.Optional(
-        Type.Union([
-          Type.Literal("history"),
-          Type.Literal("file"),
-          Type.Literal("touched"),
-        ], { description: "history (default), file (write/edit payload search only), or touched (files grouped by path)." }),
+        Type.Union([Type.Literal("history"), Type.Literal("file"), Type.Literal("touched")], {
+          description: "history (default), file (write/edit payload search only), or touched (files grouped by path).",
+        }),
       ),
       scope: Type.Optional(
-        Type.String({ description: "Search scope. Options: 'lineage' (default), 'all' (entire session), 'compaction:N' (within compaction #N), 'compaction:latest' (most recent compaction segment)." }),
+        Type.String({
+          description:
+            "Search scope. Options: 'lineage' (default), 'all' (entire session), 'compaction:N' (within compaction #N), 'compaction:latest' (most recent compaction segment).",
+        }),
       ),
     }),
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recall resolution owns the complete request-validation and scope-selection flow.
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionFile = ctx.sessionManager.getSessionFile();
       if (!sessionFile) {
@@ -136,7 +130,12 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         const range = resolveCompactionMessageRange(sessionFile, scopeStr);
         if (!range) {
           return {
-            content: [{ type: "text", text: `No compaction found for scope: ${scopeStr}. Use scope:'lineage' (default) or scope:'all'.` }],
+            content: [
+              {
+                type: "text",
+                text: `No compaction found for scope: ${scopeStr}. Use scope:'lineage' (default) or scope:'all'.`,
+              },
+            ],
             details: undefined,
           };
         }
@@ -145,20 +144,13 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         scopeLabel = ` (scope: ${scopeStr}, messages [#${start}, #${end}])`;
       }
 
-      const lineageEntryIds = rawScope === "lineage"
-        ? getActiveLineageEntryIds(ctx.sessionManager)
-        : undefined;
+      const lineageEntryIds = rawScope === "lineage" ? getActiveLineageEntryIds(ctx.sessionManager) : undefined;
       const expandSet = new Set(params.expand ?? []);
       const hasExpand = expandSet.size > 0;
       const drillDown = params.query ? parseDrillDown(params.query) : undefined;
 
       if (drillDown) {
-        const { rendered, rawMessages } = loadAllMessages(
-          sessionFile,
-          false,
-          lineageEntryIds,
-          entryFilter,
-        );
+        const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds, entryFilter);
         return {
           content: [{ type: "text", text: expandEntryFile(rendered, rawMessages, drillDown) }],
           details: undefined,
@@ -166,17 +158,14 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       }
 
       if (mode === "touched") {
-        const { rendered, rawMessages } = loadAllMessages(
-          sessionFile,
-          false,
-          lineageEntryIds,
-          entryFilter,
-        );
+        const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds, entryFilter);
         return {
-          content: [{
-            type: "text",
-            text: formatTouchedOutput(getTouchedFiles(rawMessages, rendered), params.page),
-          }],
+          content: [
+            {
+              type: "text",
+              text: formatTouchedOutput(getTouchedFiles(rawMessages, rendered), params.page),
+            },
+          ],
           details: undefined,
         };
       }
@@ -188,7 +177,12 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         const invalid = invalidExpandIndices(requested, new Set(byIndex.keys()));
         if (invalid.length > 0) {
           return {
-            content: [{ type: "text", text: `Cannot expand indices outside ${rawScope === "all" ? "session history" : "active lineage"}${scopeLabel}: ${invalid.join(", ")}` }],
+            content: [
+              {
+                type: "text",
+                text: `Cannot expand indices outside ${rawScope === "all" ? "session history" : "active lineage"}${scopeLabel}: ${invalid.join(", ")}`,
+              },
+            ],
             details: undefined,
           };
         }
@@ -219,15 +213,21 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         const MAX_PAGES = 5;
         if (allResults.length > 0 && page > Math.min(totalPages, MAX_PAGES)) {
           return {
-            content: [{ type: "text", text: `Too many results to page through (${allResults.length} matches across ${totalPages} pages). Try a more specific query or use scope:'compaction:N' to narrow the range${searchScopeLabel}.` }],
+            content: [
+              {
+                type: "text",
+                text: `Too many results to page through (${allResults.length} matches across ${totalPages} pages). Try a more specific query or use scope:'compaction:N' to narrow the range${searchScopeLabel}.`,
+              },
+            ],
             details: undefined,
           };
         }
         const start = (page - 1) * PAGE_SIZE;
         const pageResults = allResults.slice(start, start + PAGE_SIZE) as SearchHit[];
-        const header = totalPages > 1
-          ? `Page ${page}/${totalPages} (${allResults.length} total matches${searchScopeLabel})`
-          : `${allResults.length} matches${searchScopeLabel}`;
+        const header =
+          totalPages > 1
+            ? `Page ${page}/${totalPages} (${allResults.length} total matches${searchScopeLabel})`
+            : `${allResults.length} matches${searchScopeLabel}`;
 
         // Compose: when expand indices accompany a query, swap the truncated
         // snippet for full untruncated content on any paged result whose
@@ -257,7 +257,9 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         if (page < totalPages && page < MAX_PAGES) {
           footerParts.push(`--- Use page:${page + 1} for more results ---`);
         } else if (totalPages > MAX_PAGES) {
-          footerParts.push(`--- Results truncated at ${MAX_PAGES} pages. Use a more specific query or scope to narrow results. ---`);
+          footerParts.push(
+            `--- Results truncated at ${MAX_PAGES} pages. Use a more specific query or scope to narrow results. ---`,
+          );
         }
         if (hasExpand) {
           const notExpanded = [...expandSet].filter((i) => !expanded.includes(i));
@@ -265,7 +267,9 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
           if (expanded.length > 0 && notExpanded.length === 0) {
             footerParts.push(`--- expanded ${expanded.length} ${noun} to full content ---`);
           } else if (expanded.length > 0) {
-            footerParts.push(`--- expanded ${expanded.length} ${noun} to full content; not on this page: ${notExpanded.join(", ")} ---`);
+            footerParts.push(
+              `--- expanded ${expanded.length} ${noun} to full content; not on this page: ${notExpanded.join(", ")} ---`,
+            );
           } else if (notExpanded.length > 0) {
             footerParts.push(`--- no expand indices on this page: ${notExpanded.join(", ")} ---`);
           }
@@ -278,7 +282,8 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         };
       }
 
-      const output = (scopeLabel || (rawScope === "all" ? "Scope: all" : "")) + "\n" + formatRecallOutput(allResults, params.query);
+      const output =
+        (scopeLabel || (rawScope === "all" ? "Scope: all" : "")) + "\n" + formatRecallOutput(allResults, params.query);
       return {
         content: [{ type: "text", text: output }],
         details: undefined,
