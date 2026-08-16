@@ -24,13 +24,22 @@ try {
 			"extensions/subagents.ts",
 			"extensions/review.ts",
 			"extensions/ralph.ts",
+			"extensions/xai-hosted-tools.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 8);
+	assert.equal(result.extensions.length, 9);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.includes("xai-hosted-tools") &&
+				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
+		),
+		"missing xAI hosted tools before_provider_request hook",
+	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));

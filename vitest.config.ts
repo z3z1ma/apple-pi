@@ -8,6 +8,7 @@ export default defineConfig({
 			"components/memory/tests/**/*.test.ts",
 			"components/ralph/tests/**/*.test.ts",
 			"components/review/tests/**/*.test.ts",
+			"components/xai-hosted-tools/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

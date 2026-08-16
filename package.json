@@ -27,6 +27,7 @@
     "components/subagents/src/",
     "components/ralph/src/",
     "components/review/src/",
+    "components/xai-hosted-tools/src/",
     "extensions/",
     "skills/",
     "docs/",
@@ -43,7 +44,8 @@
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",
       "./extensions/review.ts",
-      "./extensions/ralph.ts"
+      "./extensions/ralph.ts",
+      "./extensions/xai-hosted-tools.ts"
     ],
     "skills": [
       "./skills"

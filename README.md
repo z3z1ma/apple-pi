@@ -11,8 +11,9 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **First-class review** (`review`, `/review`) — sealed Git scope, model-planned semantic change groups, parallel fresh read-only reviewers, conservative finding verification, exact source anchoring, model-tier routing, and coverage receipts.
 - **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, shared review, closure judgment, and user-local run receipts.
+- **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
-apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, review, and Ralph source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
+apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, review, Ralph, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
 
 ## Install
 
@@ -46,6 +47,10 @@ The advisor makes additional model calls. Its status and accumulated cost are vi
 The `ask_user_question` tool lets the model group up to four related decisions into one questionnaire. Each question presents two to four described options, always includes a custom free-text answer, and can opt into multi-select. Multiple questions use tabs and a final review step in the terminal.
 
 In the TUI, use `↑`/`↓` to move, `Enter` to select, `Space` or `Enter` to toggle multi-select choices, `Tab`/`←`/`→` to change questions, and `Esc` to cancel. Custom answers use Pi's multiline editor. RPC/ACP hosts receive the same questions through native select/input dialogs; multi-select accepts comma-separated option numbers or free text. The tool removes itself from non-interactive runs so the model falls back to ordinary chat questions instead of calling an unusable UI.
+
+### xAI hosted tools
+
+Every xAI request that uses Pi's `openai-responses` API receives xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` tools unless the payload already includes that tool. Completions-routed Grok models are left unchanged: switch those models to `openai-responses` against `https://api.x.ai/v1` if they should search. Domain filters, handle filters, and image-search flags are not configured; xAI bills each tool when the model uses it.
 
 ### Context and memory
 
