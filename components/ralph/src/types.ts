@@ -70,6 +70,23 @@ export type RalphTerminalState =
 	| "interrupted"
 	| "stopped"
 	| "error";
+export type RalphTerminalCause =
+	| "operator_stop"
+	| "external_cancellation"
+	| "elapsed_time_ceiling"
+	| "aggregate_token_ceiling"
+	| "iteration_ceiling"
+	| "role_turn_ceiling"
+	| "compaction"
+	| "provider_error"
+	| "invalid_output"
+	| "authority_denial"
+	| "workspace_conflict"
+	| "review_failure"
+	| "evidence_failure"
+	| "blocked"
+	| "internal_error";
+
 export type RalphState =
 	| "ready"
 	| "executing"
@@ -87,6 +104,15 @@ export interface RalphBudgets {
 	judgeMaxTurns: number;
 }
 
+/** Additive receipt policy. Numeric values remain controller-owned internal ceilings. */
+export interface RalphResolvedPolicy {
+	version: 1;
+	mode: RalphMode;
+	recordCount: number;
+	contextBytes: number;
+	budgets: RalphBudgets;
+}
+
 export interface RalphRun {
 	schemaVersion: 2;
 	runId: string;
@@ -97,6 +123,7 @@ export interface RalphRun {
 	state: RalphState;
 	iteration: number;
 	budgets: RalphBudgets;
+	policy?: RalphResolvedPolicy;
 	startedAt: string;
 	updatedAt: string;
 	graphHash: string;
@@ -105,6 +132,7 @@ export interface RalphRun {
 	totalTokens: number;
 	activeAgentId?: string;
 	lastOutcome?: string;
+	terminalCause?: RalphTerminalCause;
 	nextObjective?: string;
 }
 

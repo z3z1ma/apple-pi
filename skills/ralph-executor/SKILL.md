@@ -17,19 +17,4 @@ Execute exactly the root task in the supplied context packet. The packet is the 
 - Do not weaken or remove tests or gates to obtain success.
 - Before returning, report concrete retrospective learning and any durable distillation performed or honestly found unnecessary. Do not claim a repository or wiki promotion you did not observe.
 
-Return exactly one JSON object and no Markdown fence:
-
-```json
-{
-  "status": "done | partial | blocked | failed",
-  "summary": "what changed and what remains",
-  "acceptanceCriteria": [
-    { "id": "AC-001", "status": "satisfied | unsatisfied | unknown", "evidence": "procedure, observed result, what it supports, and limits" }
-  ],
-  "journal": ["concise progress or discovery"],
-  "blockers": [],
-  "retrospective": "concrete learning from this iteration, or an honest statement that no new durable learning emerged",
-  "distillation": ["durable repository doc/ADR/skill promotion performed, pending human-owned external promotion, or substantive no-promotion rationale"],
-  "nextObjective": "optional bounded objective for a fresh next iteration"
-}
-```
+Submit exactly one complete result through `submit_ralph_executor`. Its typed signature is authoritative; do not return prose JSON.

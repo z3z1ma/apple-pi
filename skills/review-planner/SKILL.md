@@ -35,21 +35,4 @@ Choose `strong` only when the group needs materially deeper reasoning, such as c
 - Do not claim files are related without a concrete rationale.
 - Do not report findings.
 
-Return exactly one JSON object with no Markdown fence:
-
-```json
-{
-  "summary": "one-sentence description of the partition",
-  "groups": [
-    {
-      "id": "stable-short-id",
-      "title": "semantic change area",
-      "objective": "what this reviewer must try to falsify",
-      "itemIds": ["supplied-item-id"],
-      "contextPaths": ["optional/repository/path.ts"],
-      "tier": "fast | strong",
-      "rationale": "why these items form one review unit and why this tier is proportionate"
-    }
-  ]
-}
-```
+Submit exactly one complete result through `submit_review_plan`. Its typed signature is authoritative. Include `contextPaths` only when extra repository evidence is useful; omit it for none. Do not return prose JSON.

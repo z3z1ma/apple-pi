@@ -99,9 +99,9 @@ describe("Ralph role contracts", () => {
 	});
 
 	it("rejects malformed or incomplete structured role output", () => {
-		expect(() => parseExecutorOutput("```json\n{}\n```")).toThrowError(/malformed JSON/);
-		expect(() => parseExecutorOutput(JSON.stringify({ status: "done", summary: "done", acceptanceCriteria: [], journal: [], blockers: [], retrospective: "learned" }))).toThrowError(/distillation/);
-		expect(() => parseJudgeOutput(JSON.stringify({ decision: "iterate", reason: "more", acceptanceCriteria: [] }))).toThrowError(/nextObjective/);
+		expect(() => parseExecutorOutput("prose output")).toThrowError(/JSON object/);
+		expect(() => parseExecutorOutput({ status: "done", summary: "done", acceptanceCriteria: [], journal: [], blockers: [], retrospective: "learned" })).toThrowError(/distillation/);
+		expect(() => parseJudgeOutput({ decision: "iterate", reason: "more", acceptanceCriteria: [] })).toThrowError(/nextObjective/);
 	});
 });
 

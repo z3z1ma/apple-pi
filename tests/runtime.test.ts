@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { Type } from "typebox";
 import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
 
-import runtime, { aggregateUsage, executeProgram } from "../extensions/runtime.js";
+import runtime, { aggregateUsage, deriveProgramEnvelope, executeProgram } from "../extensions/runtime.js";
 import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
 
@@ -306,7 +306,7 @@ describe("pi_exec tool", () => {
     return { tool, resultHandler };
   };
 
-  it("queues broad Promise.all fan-out above the configured host concurrency", async () => {
+  it("bounds broad Promise.all fan-out through the harness-owned envelope", async () => {
     const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-"));
     try {
       for (let index = 0; index < 10; index++) {
@@ -317,8 +317,6 @@ describe("pi_exec tool", () => {
         "fanout",
         {
           code: `return Promise.all(Array.from({ length: 10 }, (_, index) => pi.read({ path: index + ".txt" })));`,
-          concurrency: 2,
-          callBudget: 10,
         },
         undefined,
         undefined,
@@ -328,6 +326,26 @@ describe("pi_exec tool", () => {
       expect(result.details.trace.operations).toHaveLength(10);
       expect(result.details.activity.calls).toHaveLength(10);
       expect(result.details.activity.calls.every((call: any) => call.status === "succeeded")).toBe(true);
+      expect(result.details.policy).toEqual(deriveProgramEnvelope(`return Promise.all(Array.from({ length: 10 }, (_, index) => pi.read({ path: index + ".txt" })));`));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when a program exceeds its harness-owned call envelope", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-envelope-"));
+    try {
+      const template = (count: number) => `return Promise.all(Array.from({ length: ${count} }, (_, index) => pi.read({ path: index + ".txt" })));`;
+      const count = deriveProgramEnvelope(template(100)).callBudget + 1;
+      for (let index = 0; index < count; index++) writeFileSync(join(dir, `${index}.txt`), String(index), "utf8");
+      const { tool } = register();
+      await expect(tool.execute(
+        "call-envelope",
+        { code: template(count) },
+        undefined,
+        undefined,
+        { cwd: dir },
+      )).rejects.toThrow(/call budget exhausted/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -36,25 +36,4 @@ Severity:
 - `minor`: real bounded defect with lower impact.
 - `nit`: clearly valuable but non-blocking; use rarely.
 
-Return exactly one JSON object with no Markdown fence:
-
-```json
-{
-  "summary": "what was reviewed and the overall result",
-  "reviewedItemIds": ["every assigned item ID"],
-  "findings": [
-    {
-      "severity": "critical | significant | minor | nit",
-      "category": "bug | security | performance | maintainability | test | documentation | other",
-      "summary": "imperative, concise title",
-      "impact": "trigger and observable consequence",
-      "evidence": "specific repository evidence and reasoning",
-      "path": "assigned/path.ts",
-      "anchor": "exact changed source snippet",
-      "side": "new | old",
-      "suggestion": "optional concrete remediation, not required"
-    }
-  ],
-  "residualRisk": ["material limits or areas not established by evidence"]
-}
-```
+Submit exactly one complete result through `submit_review_findings`. Its typed signature is authoritative. Omit `findings` and `residualRisk` when they are empty; `reviewedItemIds` remains required. Do not return prose JSON.

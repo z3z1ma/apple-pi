@@ -74,6 +74,28 @@ const MAX_FETCH_BODY_BYTES = 10 * 1_024 * 1_024;
 const DEFAULT_CALL_BUDGET = 128;
 const DEFAULT_CONCURRENCY = 16;
 const DEFAULT_AGENT_BUDGET = 8;
+
+interface ProgramEnvelope {
+	callBudget: number;
+	concurrency: number;
+	agentBudget: number;
+	memoryMb: number;
+	timeoutSeconds: number;
+}
+
+/** Package-owned bounds derived from program shape, never model-selected arithmetic. */
+export function deriveProgramEnvelope(code: string): ProgramEnvelope {
+	const hasWorkers = /\bagent\s*\(|\bagents\.run\s*\(/.test(code);
+	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(/.test(code);
+	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
+	return {
+		callBudget,
+		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
+		agentBudget: hasWorkers ? DEFAULT_AGENT_BUDGET : 0,
+		memoryMb: 128,
+		timeoutSeconds: hasWorkers ? 600 : 300,
+	};
+}
 const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
@@ -605,31 +627,6 @@ export default function runtime(pi: ExtensionAPI): void {
 				name: Type.Optional(Type.String({ maxLength: 120, description: "Concise program milestone." })),
 				description: Type.Optional(Type.String({ maxLength: 300, description: "Program objective or acceptance criterion." })),
 			})),
-			callBudget: Type.Optional(Type.Number({
-				minimum: 1,
-				maximum: 1_000,
-				description: `Total core-tool, extension, fetch, and agent calls. Default: ${DEFAULT_CALL_BUDGET}.`,
-			})),
-			concurrency: Type.Optional(Type.Number({
-				minimum: 1,
-				maximum: 64,
-				description: `Maximum simultaneous host calls; excess fan-out queues. Default: ${DEFAULT_CONCURRENCY}.`,
-			})),
-			memoryMb: Type.Optional(Type.Number({
-				minimum: 32,
-				maximum: 1_024,
-				description: "Worker old-generation memory limit in MB. Default: 128.",
-			})),
-			agentBudget: Type.Optional(Type.Number({
-				minimum: 0,
-				maximum: 32,
-				description: `Maximum model-worker calls. Default: ${DEFAULT_AGENT_BUDGET}.`,
-			})),
-			timeoutSeconds: Type.Optional(Type.Number({
-				minimum: 1,
-				maximum: 1_800,
-				description: "Whole-program deadline in seconds. Default: 300.",
-			})),
 		}),
 		renderCall(args, theme, context) {
 			return renderExecCall(args, theme, context);
@@ -639,9 +636,8 @@ export default function runtime(pi: ExtensionAPI): void {
 		},
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const startedAt = Date.now();
-			const callBudget = Math.floor(params.callBudget ?? DEFAULT_CALL_BUDGET);
-			const concurrency = Math.floor(params.concurrency ?? DEFAULT_CONCURRENCY);
-			const agentBudget = Math.floor(params.agentBudget ?? DEFAULT_AGENT_BUDGET);
+			const envelope = deriveProgramEnvelope(params.code);
+			const { callBudget, concurrency, agentBudget } = envelope;
 			const programName = params.display?.name?.trim() || "Program";
 			const operations: ExecutionOperation[] = [];
 			const pendingOperations = new Set<ExecutionOperation>();
@@ -891,7 +887,7 @@ export default function runtime(pi: ExtensionAPI): void {
 			};
 
 			try {
-				const timeoutMs = Math.floor((params.timeoutSeconds ?? 300) * 1_000);
+				const timeoutMs = envelope.timeoutSeconds * 1_000;
 				const result = await executeProgram(
 					params.code,
 					params.inputs ?? {},
@@ -899,7 +895,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					hostCall,
 					signal,
 					(values) => logs.push(values.map(displayValue).join(" ")),
-					Math.floor(params.memoryMb ?? 128),
+					envelope.memoryMb,
 				);
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
@@ -919,7 +915,7 @@ export default function runtime(pi: ExtensionAPI): void {
 				const finalActivity = activity();
 				if (result.outcome !== "succeeded") {
 					failedDetails.set(toolCallId, {
-						details: { trace, logs, activity: finalActivity },
+						details: { trace, logs, activity: finalActivity, policy: envelope },
 						...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
 					});
 					throw new Error(result.error ?? `pi_exec ${result.outcome}`);
@@ -933,7 +929,7 @@ export default function runtime(pi: ExtensionAPI): void {
 				).value;
 				return {
 					content: [{ type: "text", text: output }],
-					details: { trace, logs, activity: finalActivity },
+					details: { trace, logs, activity: finalActivity, policy: envelope },
 					...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
 				};
 			} finally {

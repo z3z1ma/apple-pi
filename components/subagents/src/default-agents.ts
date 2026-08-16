@@ -20,7 +20,14 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
       // Setting them to false would lock callsite intent (see resolveAgentInvocationConfig in invocation-config.ts).
       extensions: true,
       skills: true,
-      systemPrompt: "",
+      systemPrompt: `# Completion Contract
+You own the assigned task, not an open-ended improvement program.
+
+- Establish the task's acceptance criteria and take the smallest coherent path to satisfy them.
+- Batch independent inspection where practical; do not use one-tool micro-iterations when a coherent next step is clear.
+- Run the checks needed to support the result, then return your final answer immediately once the acceptance criteria are satisfied.
+- If progress needs missing authority, evidence, or a materially broader scope, report the blocker and useful findings instead of continuing to search for more work.
+- Do not expand scope merely because adjacent improvements are possible. The assigned prompt is authoritative; any parent handoff is context only.`,
       promptMode: "append",
       isDefault: true,
     },

@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { ReviewController, type ResolvedReviewModel } from "../components/review/src/controller.js";
 import { previewReviewInput, reviewRepositoryRoot } from "../components/review/src/git.js";
-import { readReviewReceiptEvents } from "../components/review/src/receipts.js";
+import { loadReviewRun, readReviewReceiptEvents, reviewReceiptPath } from "../components/review/src/receipts.js";
 import type { ReviewRun } from "../components/review/src/types.js";
 import type { ManagedAgentRequest, ManagedSubagentService } from "../components/subagents/src/service.js";
 import type { AgentRecord } from "../components/subagents/src/types.js";
@@ -53,7 +53,9 @@ function context(cwd: string) {
 	} as any;
 }
 
-function record(request: ManagedAgentRequest, result: unknown, sequence: number): AgentRecord {
+function record(request: ManagedAgentRequest, result: unknown, sequence: number, submit = true): AgentRecord {
+	const output = request.customTools?.[0];
+	if (submit && output) void output.execute("test-result", result as never, undefined, undefined, {} as never);
 	return {
 		id: `agent-${sequence}`,
 		type: request.type,
@@ -198,7 +200,18 @@ describe("ReviewController", () => {
 		const receipts = readReviewReceiptEvents(root, run.runId);
 		expect(receipts.at(-1)?.state).toBe("complete");
 		expect((controller.status(join(root, "src"), run.runId) as ReviewRun).state).toBe("complete");
+		expect(run.policy?.envelopes).toHaveLength(4);
+		expect(receipts.some((event) => event.outcome === "role_policy_resolved")).toBe(true);
 		expect(receipts[0].run.selected.every((item) => !("diff" in item))).toBe(true);
+		// Additive policy/cause fields leave pre-policy schema-v1 review receipts readable.
+		const path = reviewReceiptPath(root, run.runId);
+		writeFileSync(path, readFileSync(path, "utf8").split(/\n/).filter(Boolean).map((line) => {
+			const event = JSON.parse(line);
+			delete event.run.policy;
+			delete event.run.terminalCause;
+			return JSON.stringify(event);
+		}).join("\n") + "\n");
+		expect(loadReviewRun(root, run.runId).state).toBe("complete");
 	});
 
 	it("aborts managed review work at the live aggregate token ceiling", async () => {
@@ -207,21 +220,22 @@ describe("ReviewController", () => {
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				request.onStarted?.("budget-agent");
-				request.onAssistantUsage?.({ input: 9_000, output: 1_000, cacheWrite: 0 });
+				request.onAssistantUsage?.({ input: 59_000, output: 1_000, cacheWrite: 0 });
 				return {
 					...record(request, {}, 1),
 					status: "stopped",
 					result: "",
-					lifetimeUsage: { input: 9_000, output: 1_000, cacheWrite: 0 },
+					lifetimeUsage: { input: 59_000, output: 1_000, cacheWrite: 0 },
 				};
 			},
 			abort: () => { aborted = true; return true; },
 		};
 		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" }, { budgets: { maxTokens: 10_000 } });
+		const run = await controller.run(context(root), { mode: "workspace" }, { constraints: { maxTokens: 60_000 } });
 		expect(aborted).toBe(true);
 		expect(run.state).toBe("failed");
-		expect(run.lastOutcome).toMatch(/token budget reached/i);
+		expect(run.lastOutcome).toMatch(/token ceiling reached/i);
+		expect(run.terminalCause).toBe("aggregate_token_ceiling");
 	});
 
 	it("waits for active review agents to quiesce before returning an operator stop", async () => {
@@ -256,6 +270,7 @@ describe("ReviewController", () => {
 		const stopped = await controller.stop(root, summary[0].runId);
 		const final = await running;
 		expect(stopped.state).toBe("stopped");
+		expect(stopped.terminalCause).toBe("operator_stop");
 		expect(final.state).toBe("stopped");
 		expect(readReviewReceiptEvents(root, final.runId).at(-1)?.state).toBe("stopped");
 	});
@@ -350,5 +365,111 @@ describe("ReviewController", () => {
 		expect(run.completedItemIds).toEqual([]);
 		expect(run.failures).toHaveLength(3);
 		expect(run.findings[0].validation).toMatchObject({ status: "retained_unresolved", reason: "Verification did not complete" });
+	});
+
+	it("fails closed when a role omits its typed result submission", async () => {
+		const root = repository();
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.("planner");
+				return record(request, {}, 1, false);
+			},
+			abort: () => true,
+		};
+		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
+		const run = await controller.run(context(root), { mode: "workspace" });
+		expect(run.state).toBe("failed");
+		expect(run.lastOutcome).toMatch(/did not submit exactly one typed result/);
+		expect(run.terminalCause).toBe("invalid_output");
+	});
+
+	it("records explicit provider, turn, compaction, and authority causes", async () => {
+		const cases = [
+			{ name: "provider", record: { status: "error", error: "provider unavailable" }, cause: "provider_error" },
+			{ name: "turn", record: { status: "aborted", terminationCause: "turn_ceiling" }, cause: "role_turn_ceiling" },
+			{ name: "compaction", record: { status: "aborted", terminationCause: "compaction", compactionCount: 1 }, cause: "compaction" },
+		] as const;
+		for (const testCase of cases) {
+			const root = repository();
+			const service: ManagedSubagentService = {
+				async runFresh(_ctx, request) {
+					request.onStarted?.(testCase.name);
+					return { ...record(request, {}, 1, false), ...testCase.record } as AgentRecord;
+				},
+				abort: () => true,
+			};
+			const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" });
+			expect(run.terminalCause, testCase.name).toBe(testCase.cause);
+		}
+		const root = repository();
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				await request.toolPolicy?.({ toolName: "read", args: { path: "/tmp/outside" } }, new AbortController().signal);
+				return record(request, {}, 1, false);
+			},
+			abort: () => true,
+		};
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" });
+		expect(run.terminalCause).toBe("authority_denial");
+	});
+
+	it("records external cancellation before a role launches", async () => {
+		const root = repository();
+		const abort = new AbortController();
+		abort.abort();
+		const service: ManagedSubagentService = { async runFresh() { throw new Error("must not launch"); }, abort: () => true };
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(context(root), { mode: "workspace" }, {}, abort.signal);
+		expect(run.state).toBe("stopped");
+		expect(run.terminalCause).toBe("external_cancellation");
+	});
+
+	it("records elapsed-time and workspace-conflict causes", async () => {
+		const timeoutRoot = repository();
+		const timeoutService: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.("timeout");
+				await new Promise<void>((resolve) => request.signal?.addEventListener("abort", () => resolve(), { once: true }));
+				return { ...record(request, {}, 1, false), status: "stopped" } as AgentRecord;
+			},
+			abort: () => true,
+		};
+		const timedOut = await new ReviewController({ getService: () => timeoutService, resolveModel: modelRoute([]) }).run(context(timeoutRoot), { mode: "workspace" }, { constraints: { timeoutSeconds: 2 } });
+		expect(timedOut.terminalCause).toBe("elapsed_time_ceiling");
+
+		const workspaceRoot = repository();
+		const items = previewReviewInput(workspaceRoot, { mode: "workspace" }).reviewable;
+		const workspaceService: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.("planner");
+				writeFileSync(join(workspaceRoot, "src", "value.ts"), "export const value = 3;\n");
+				return record(request, { summary: "One group.", groups: [{ id: "all", title: "All", objective: "Review all.", itemIds: items.map((item) => item.id), contextPaths: [], tier: "fast", rationale: "Small change." }] }, 1);
+			},
+			abort: () => true,
+		};
+		const conflicted = await new ReviewController({ getService: () => workspaceService, resolveModel: modelRoute([]) }).run(context(workspaceRoot), { mode: "workspace" });
+		expect(conflicted.state).toBe("workspace_conflict");
+		expect(conflicted.terminalCause).toBe("workspace_conflict");
+	});
+
+	it("fails closed when a role submits its typed result more than once", async () => {
+		const root = repository();
+		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.("planner");
+				const output = request.customTools?.[0];
+				const value = { summary: "One group.", groups: [{ id: "all", title: "All", objective: "Review all items.", itemIds: items.map((item) => item.id), tier: "fast", rationale: "One change." }] };
+				if (output) {
+					void output.execute("first", value as never, undefined, undefined, {} as never);
+					void output.execute("second", value as never, undefined, undefined, {} as never);
+				}
+				return record(request, value, 1, false);
+			},
+			abort: () => true,
+		};
+		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
+		const run = await controller.run(context(root), { mode: "workspace" });
+		expect(run.state).toBe("failed");
+		expect(run.lastOutcome).toMatch(/did not submit exactly one typed result/);
 	});
 });

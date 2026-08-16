@@ -37,16 +37,6 @@ function optionsFrom(values: Record<string, unknown>): StartReviewOptions {
 			...(typeof values.fast_mode === "string" && { fastMode: values.fast_mode }),
 			...(typeof values.strong_mode === "string" && { strongMode: values.strong_mode }),
 		},
-		budgets: {
-			...(typeof values.max_tokens === "number" && { maxTokens: values.max_tokens }),
-			...(typeof values.timeout_seconds === "number" && { timeoutSeconds: values.timeout_seconds }),
-			...(typeof values.concurrency === "number" && { maxConcurrency: values.concurrency }),
-			...(typeof values.max_groups === "number" && { maxGroups: values.max_groups }),
-			...(typeof values.planner_max_turns === "number" && { plannerMaxTurns: values.planner_max_turns }),
-			...(typeof values.reviewer_max_turns === "number" && { reviewerMaxTurns: values.reviewer_max_turns }),
-			...(typeof values.verifier_max_turns === "number" && { verifierMaxTurns: values.verifier_max_turns }),
-			...(typeof values.max_prompt_kb === "number" && { maxPromptBytes: values.max_prompt_kb * 1024 }),
-		},
 	};
 }
 
@@ -81,10 +71,7 @@ const RUN_OPTIONS: Array<{ name: string; description: string }> = [
 	{ name: "--planner-mode", description: "Override the semantic-grouping mode" },
 	{ name: "--fast-mode", description: "Override the ordinary-review mode" },
 	{ name: "--strong-mode", description: "Override the high-risk review mode" },
-	{ name: "--concurrency", description: "Maximum parallel review groups" },
-	{ name: "--max-tokens", description: "Aggregate review token budget" },
-	{ name: "--timeout-seconds", description: "Whole-run timeout" },
-	{ name: "--max-groups", description: "Maximum semantic groups" },
+	{ name: "--background", description: "Behavioral contract or change background" },
 ];
 
 function matchingCompletions(prefix: string, items: AutocompleteItem[]): AutocompleteItem[] | null {
@@ -156,7 +143,8 @@ function parseCommand(input: string): ParsedCommand {
 	const action = first && !first.startsWith("--") ? tokens.shift()! : "run";
 	const values: Record<string, string | number> = {};
 	const positional: string[] = [];
-	const numeric = new Set(["max_tokens", "timeout_seconds", "concurrency", "max_groups", "planner_max_turns", "reviewer_max_turns", "verifier_max_turns", "max_prompt_kb"]);
+	const numeric = new Set<string>();
+	const strings = new Set(["root", "profile", "background", "planner_mode", "fast_mode", "strong_mode", "from", "to", "commit"]);
 	for (let index = 0; index < tokens.length; index++) {
 		const token = tokens[index];
 		if (!token.startsWith("--")) {
@@ -167,6 +155,7 @@ function parseCommand(input: string): ParsedCommand {
 		const name = raw.replace(/-/g, "_");
 		const value = inline ?? tokens[++index];
 		if (value === undefined) throw new Error(`--${raw} requires a value`);
+		if (!numeric.has(name) && !strings.has(name)) throw new Error(`Unknown review option: --${raw}`);
 		if (numeric.has(name)) {
 			const number = Number(value);
 			if (!Number.isFinite(number)) throw new Error(`--${raw} requires a number`);
@@ -185,7 +174,7 @@ function setWidget(ctx: ExtensionCommandContext, run?: ReviewRun): void {
 	}
 	ctx.ui.setWidget(WIDGET_ID, [
 		`Review ${run.state} · ${run.source.mode}/${run.profile} · coverage ${run.completedItemIds.length}/${run.selected.length}`,
-		`Findings ${run.findings.filter((finding) => finding.validation.status !== "rejected").length} · tokens ${run.totalTokens}/${run.budgets.maxTokens}`,
+		`Findings ${run.findings.filter((finding) => finding.validation.status !== "rejected").length} · tokens ${run.totalTokens} · ${run.terminalCause ?? "running"}`,
 	], { placement: "aboveEditor" });
 }
 
@@ -205,14 +194,6 @@ export default function installReview(pi: ExtensionAPI): void {
 		planner_mode: Type.Optional(Type.String({ description: "modes.json entry for semantic grouping; defaults to review-planner." })),
 		fast_mode: Type.Optional(Type.String({ description: "modes.json entry for ordinary review groups." })),
 		strong_mode: Type.Optional(Type.String({ description: "modes.json entry for high-risk review groups." })),
-		max_tokens: Type.Optional(Type.Number({ minimum: 10000, maximum: 10000000 })),
-		timeout_seconds: Type.Optional(Type.Number({ minimum: 60, maximum: 86400 })),
-		concurrency: Type.Optional(Type.Number({ minimum: 1, maximum: 16 })),
-		max_groups: Type.Optional(Type.Number({ minimum: 1, maximum: 128 })),
-		planner_max_turns: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
-		reviewer_max_turns: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
-		verifier_max_turns: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
-		max_prompt_kb: Type.Optional(Type.Number({ minimum: 32, maximum: 2048 })),
 	};
 	const tool = defineTool({
 		name: "review",

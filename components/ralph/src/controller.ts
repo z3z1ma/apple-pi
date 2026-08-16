@@ -12,6 +12,7 @@ import { resolveRalphRoots } from "./roots.js";
 import {
 	executorPrompt,
 	judgePrompt,
+	createRalphResultTool,
 	parseExecutorOutput,
 	parseJudgeOutput,
 	roleProfile,
@@ -34,6 +35,7 @@ import type {
 	RalphRole,
 	RalphRun,
 	RalphState,
+	RalphTerminalCause,
 	RalphTerminalState,
 	ReviewerOutput,
 	RunSummary,
@@ -80,7 +82,8 @@ interface ActiveRunControl {
 	agentId?: string;
 	projectRoot: string;
 	stopRequested: boolean;
-	forcedGate?: { state: RalphTerminalState; reason: string };
+	externalCancelled: boolean;
+	forcedGate?: { state: RalphTerminalState; reason: string; cause: RalphTerminalCause };
 	settled?: Promise<void>;
 	resolveSettled?: () => void;
 }
@@ -99,9 +102,9 @@ export class RalphController {
 		this.assertExecutionContext(ctx);
 		const mode = options.mode ?? "step";
 		if (mode !== "step" && mode !== "auto") throw new Error(`Invalid Ralph mode: ${String(mode)}`);
-		const budgets = normalizeBudgets(options.budgets);
 		const roots = resolveRalphRoots(ctx.cwd, options.root, options.ledgerRoot);
 		const preflight = compileWorkGraph(roots.workspaceRoot, taskPath, {}, roots.ledgerRoot);
+		const budgets = normalizeBudgets(options.budgets, deriveRalphBudgets(mode, preflight));
 		const runId = randomUUID();
 		const releaseLeases = acquireRalphRunLeases(roots.workspaceRoot, roots.ledgerRoot, preflight.task.path, runId);
 		try {
@@ -124,6 +127,7 @@ export class RalphController {
 			state: "ready",
 			iteration: 0,
 			budgets,
+			policy: { version: 1, mode, recordCount: graph.records.length, contextBytes: graph.byteLength, budgets },
 			startedAt: now,
 			updatedAt: now,
 			graphHash: graph.graphHash,
@@ -193,20 +197,27 @@ export class RalphController {
 			agentId: undefined,
 			projectRoot: run.projectRoot,
 			stopRequested: false,
+			externalCancelled: false,
 			settled,
 			resolveSettled,
 		};
 		this.active.set(runId, control);
-		const onExternalAbort = () => control.abort.abort();
+		const onExternalAbort = () => {
+			control.externalCancelled = true;
+			control.abort.abort();
+		};
 		signal?.addEventListener("abort", onExternalAbort, { once: true });
-		if (signal?.aborted) control.abort.abort();
+		if (signal?.aborted) {
+			control.externalCancelled = true;
+			control.abort.abort();
+		}
 		try {
 			for (let count = 0; count < maxIterations; count++) {
 				if (run.iteration >= run.budgets.maxIterations) {
-					return await this.gate(run, "budget_exhausted", `Maximum iterations reached: ${run.budgets.maxIterations}`);
+					return await this.gate(run, "budget_exhausted", `Maximum iterations reached: ${run.budgets.maxIterations}`, "iteration_ceiling");
 				}
 				if (this.elapsedSeconds(run) >= run.budgets.timeoutSeconds || run.totalTokens >= run.budgets.maxTokens) {
-					return await this.gate(run, "budget_exhausted", "Run time or token budget exhausted before the next iteration");
+					return await this.gate(run, "budget_exhausted", "Run time or token budget exhausted before the next iteration", this.elapsedSeconds(run) >= run.budgets.timeoutSeconds ? "elapsed_time_ceiling" : "aggregate_token_ceiling");
 				}
 				run.iteration++;
 				run.updatedAt = new Date().toISOString();
@@ -215,7 +226,7 @@ export class RalphController {
 				if (run.mode === "step") return run;
 			}
 			return run.state === "iterating"
-				? await this.gate(run, "budget_exhausted", `Invocation iteration limit reached: ${maxIterations}`)
+				? await this.gate(run, "budget_exhausted", `Invocation iteration limit reached: ${maxIterations}`, "iteration_ceiling")
 				: run;
 		} catch (error) {
 			return await this.handleFailure(run, error);
@@ -282,7 +293,7 @@ export class RalphController {
 		await appendReceipt(run, { stage: "executor", outcome: "stage_started", graphHash: graph.graphHash, roleSkillHash: executorProfile.skillHash, workspaceHashBefore: run.expectedWorkspace.hash });
 		const denials: AuthorityDenial[] = [];
 		const executorStageAbort = new AbortController();
-		const executorRecord = await this.runRole(
+		const executorRole = await this.runRole(
 			ctx,
 			run,
 			control,
@@ -295,7 +306,7 @@ export class RalphController {
 			}, run.ledgerRoot),
 			executorStageAbort.signal,
 		);
-		run = await this.accountAgent(run, "executor", executorRecord, executorProfile.skillHash, control, denials.length > 0);
+		run = await this.accountAgent(run, "executor", executorRole.record, executorProfile.skillHash, control, denials.length > 0);
 		const afterExecutorTools = captureWorkspace(run.projectRoot);
 		run.expectedWorkspace = afterExecutorTools;
 		if (denials.length > 0) return this.gate(run, "authority_required", denials.map((denial) => denial.reason).join("; "));
@@ -304,7 +315,10 @@ export class RalphController {
 			return this.gate(run, "authority_required", `Executor changed semantic authority directly: ${semanticChanges.map((change) => change.path).join(", ")}`);
 		}
 		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
-		const executor = parseExecutorOutput(executorRecord.result ?? "");
+		if (executorRole.submissionCount !== 1 || executorRole.output === undefined) {
+			throw new RalphGateError("error", "Ralph executor did not submit exactly one typed result", "invalid_output");
+		}
+		const executor = parseExecutorOutput(executorRole.output);
 		await recordExecutorOutcome(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, executor);
 		const afterExecutor = captureWorkspace(run.projectRoot);
 		run.expectedWorkspace = afterExecutor;
@@ -321,24 +335,30 @@ export class RalphController {
 		await appendReceipt(run, { stage: "reviewer", outcome: "stage_started", graphHash: graph.graphHash, workspaceHashBefore: afterExecutor.hash });
 		const remainingSeconds = Math.max(1, run.budgets.timeoutSeconds - this.elapsedSeconds(run));
 		const remainingReviewTokens = run.budgets.maxTokens - run.totalTokens;
-		if (remainingReviewTokens < 10_000) return this.gate(run, "budget_exhausted", `Fewer than 10,000 tokens remain for independent review: ${remainingReviewTokens}`);
-		const reviewSignal = AbortSignal.any([control.abort.signal, AbortSignal.timeout(remainingSeconds * 1000)]);
+		if (remainingReviewTokens < 10_000) return this.gate(run, "budget_exhausted", `Fewer than 10,000 tokens remain for independent review: ${remainingReviewTokens}`, "aggregate_token_ceiling");
+		const reviewTimeout = AbortSignal.timeout(remainingSeconds * 1000);
+		const reviewSignal = AbortSignal.any([control.abort.signal, reviewTimeout]);
 		const reviewRun = await this.reviewController.run(ctx, { mode: "workspace" }, {
 			root: run.projectRoot,
 			profile: "balanced",
 			background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
 			authorityPacket: graph.bundle,
-			budgets: {
+			// Parent safety capacity is controller-owned; Ralph never exposes or forwards caller arithmetic.
+			constraints: {
 				maxTokens: remainingReviewTokens,
-				timeoutSeconds: Math.max(60, Math.ceil(remainingSeconds)),
-				plannerMaxTurns: Math.min(100, run.budgets.reviewerMaxTurns),
-				reviewerMaxTurns: run.budgets.reviewerMaxTurns,
-				verifierMaxTurns: Math.min(100, run.budgets.reviewerMaxTurns),
+				timeoutSeconds: Math.max(1, Math.ceil(remainingSeconds)),
 			},
 		}, reviewSignal);
 		run.totalTokens += reviewRun.totalTokens;
-		if (control.stopRequested) throw new RalphGateError("stopped", "Stopped by the operator during independent review");
-		if (run.totalTokens >= run.budgets.maxTokens) return this.gate(run, "budget_exhausted", `Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`);
+		if (control.stopRequested) throw new RalphGateError("stopped", "Stopped by the operator during independent review", "operator_stop");
+		if (control.externalCancelled) throw new RalphGateError("interrupted", "Independent review was cancelled by the caller", "external_cancellation");
+		if (reviewTimeout.aborted || reviewRun.terminalCause === "elapsed_time_ceiling") {
+			throw new RalphGateError("budget_exhausted", "Independent review reached Ralph's elapsed-time ceiling", "elapsed_time_ceiling");
+		}
+		if (reviewRun.terminalCause === "external_cancellation") {
+			throw new RalphGateError("interrupted", "Independent review was interrupted", "external_cancellation");
+		}
+		if (run.totalTokens >= run.budgets.maxTokens) return this.gate(run, "budget_exhausted", `Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`, "aggregate_token_ceiling");
 		const afterReviewer = captureWorkspace(run.projectRoot);
 		assertWorkspaceMatches(afterExecutor, afterReviewer);
 		const review = ralphReviewOutput(reviewRun);
@@ -360,7 +380,7 @@ export class RalphController {
 		const beforeJudge = run.expectedWorkspace;
 		const judgeDenials: AuthorityDenial[] = [];
 		const judgeStageAbort = new AbortController();
-		const judgeRecord = await this.runRole(
+		const judgeRole = await this.runRole(
 			ctx,
 			run,
 			control,
@@ -373,11 +393,14 @@ export class RalphController {
 			}, run.ledgerRoot),
 			judgeStageAbort.signal,
 		);
-		run = await this.accountAgent(run, "judge", judgeRecord, judgeProfileValue.skillHash, control, judgeDenials.length > 0);
+		run = await this.accountAgent(run, "judge", judgeRole.record, judgeProfileValue.skillHash, control, judgeDenials.length > 0);
 		if (judgeDenials.length > 0) return this.gate(run, "authority_required", judgeDenials.map((denial) => denial.reason).join("; "));
 		const afterJudge = captureWorkspace(run.projectRoot);
 		assertWorkspaceMatches(beforeJudge, afterJudge);
-		const judgment = parseJudgeOutput(judgeRecord.result ?? "");
+		if (judgeRole.submissionCount !== 1 || judgeRole.output === undefined) {
+			throw new RalphGateError("error", "Ralph judge did not submit exactly one typed result", "invalid_output");
+		}
+		const judgment = parseJudgeOutput(judgeRole.output);
 		await appendReceipt(run, { stage: "judge", outcome: judgment.decision, structuredOutput: judgment, workspaceHashAfter: afterJudge.hash });
 		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
 		await appendJudgment(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, judgment);
@@ -417,13 +440,14 @@ export class RalphController {
 	) {
 		const service = this.getService();
 		if (!service) throw new Error("Ralph requires apple-pi's subagent extension to be loaded first");
-		if (control.stopRequested || control.abort.signal.aborted) throw new RalphGateError(control.stopRequested ? "stopped" : "interrupted", "Run was cancelled before the next fresh role");
-		if (run.totalTokens >= run.budgets.maxTokens) throw new RalphGateError("budget_exhausted", "No token budget remains for the next fresh role");
+		if (control.stopRequested || control.abort.signal.aborted) throw new RalphGateError(control.stopRequested ? "stopped" : "interrupted", "Run was cancelled before the next fresh role", control.stopRequested ? "operator_stop" : control.externalCancelled ? "external_cancellation" : "internal_error");
+		if (run.totalTokens >= run.budgets.maxTokens) throw new RalphGateError("budget_exhausted", "No token budget remains for the next fresh role", "aggregate_token_ceiling");
 		const remainingMs = Math.max(1, run.budgets.timeoutSeconds * 1000 - (Date.now() - Date.parse(run.startedAt)));
 		const timeout = AbortSignal.timeout(remainingMs);
 		const signals = [control.abort.signal, timeout, ...(stageAbort ? [stageAbort] : [])];
 		const signal = AbortSignal.any(signals);
 		const maxTurns = role === "executor" ? run.budgets.executorMaxTurns : run.budgets.judgeMaxTurns;
+		const resultTool = createRalphResultTool(role);
 		let liveTokens = 0;
 		const record = await service.runFresh(ctx, {
 			type: `ralph-${role}`,
@@ -438,22 +462,23 @@ export class RalphController {
 			cwd: run.projectRoot,
 			signal,
 			toolPolicy,
+			customTools: [resultTool.tool],
 			internalOwner: `ralph:${run.runId}`,
 			onStarted: (agentId) => { control.agentId = agentId; },
 			onAssistantUsage: (usage) => {
 				liveTokens += usage.input + usage.output + usage.cacheWrite;
 				if (run.totalTokens + liveTokens >= run.budgets.maxTokens && !control.forcedGate) {
-					control.forcedGate = { state: "budget_exhausted", reason: `Token budget reached during ${role}` };
+					control.forcedGate = { state: "budget_exhausted", reason: `Token budget reached during ${role}`, cause: "aggregate_token_ceiling" };
 					control.abort.abort();
 				}
 			},
 			onCompaction: () => {
-				if (!control.forcedGate) control.forcedGate = { state: "compacted", reason: `${role} compacted and no longer has the curated fresh context` };
+				if (!control.forcedGate) control.forcedGate = { state: "compacted", reason: `${role} compacted and no longer has the curated fresh context`, cause: "compaction" };
 				control.abort.abort();
 			},
 		});
 		control.agentId = undefined;
-		return record;
+		return { record, output: resultTool.value(), submissionCount: resultTool.calls() };
 	}
 
 	private async accountAgent(
@@ -477,16 +502,19 @@ export class RalphController {
 			compactions: record.compactionCount,
 			outcome: record.status,
 		});
-		if (control.stopRequested) throw new RalphGateError("stopped", `Stopped by the operator during ${stage}`);
-		if (control.forcedGate) throw new RalphGateError(control.forcedGate.state, control.forcedGate.reason);
-		if (record.compactionCount > 0) throw new RalphGateError("compacted", `${stage} compacted and no longer has the curated fresh context`);
-		if (run.totalTokens >= run.budgets.maxTokens) throw new RalphGateError("budget_exhausted", `Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`);
-		if (record.status === "steered" || record.status === "aborted") throw new RalphGateError("budget_exhausted", `${stage} exceeded its turn budget`);
+		if (control.stopRequested) throw new RalphGateError("stopped", `Stopped by the operator during ${stage}`, "operator_stop");
+		if (control.externalCancelled) throw new RalphGateError("interrupted", `Cancelled by the caller during ${stage}`, "external_cancellation");
+		if (control.forcedGate) throw new RalphGateError(control.forcedGate.state, control.forcedGate.reason, control.forcedGate.cause);
+		if (record.compactionCount > 0) throw new RalphGateError("compacted", `${stage} compacted and no longer has the curated fresh context`, "compaction");
+		if (run.totalTokens >= run.budgets.maxTokens) throw new RalphGateError("budget_exhausted", `Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`, "aggregate_token_ceiling");
+		if (record.status === "steered" || record.status === "aborted") {
+			throw new RalphGateError(control.externalCancelled ? "interrupted" : "budget_exhausted", control.externalCancelled ? `${stage} was cancelled by the caller` : `${stage} exceeded its turn budget`, control.externalCancelled ? "external_cancellation" : "role_turn_ceiling");
+		}
 		if (record.status === "stopped" && !allowStopped) {
 			const timedOut = this.elapsedSeconds(run) >= run.budgets.timeoutSeconds;
-			throw new RalphGateError(control.stopRequested ? "stopped" : timedOut ? "budget_exhausted" : "interrupted", `${stage} was stopped`);
+			throw new RalphGateError(control.stopRequested ? "stopped" : control.externalCancelled ? "interrupted" : timedOut ? "budget_exhausted" : "interrupted", `${stage} was stopped`, control.stopRequested ? "operator_stop" : control.externalCancelled ? "external_cancellation" : timedOut ? "elapsed_time_ceiling" : "internal_error");
 		}
-		if (record.status === "error") throw new RalphGateError("error", `${stage} failed: ${record.error ?? "unknown error"}`);
+		if (record.status === "error") throw new RalphGateError("error", `${stage} failed: ${record.error ?? "unknown error"}`, "provider_error");
 		return run;
 	}
 
@@ -519,17 +547,32 @@ export class RalphController {
 		return run;
 	}
 
-	private async gate(run: RalphRun, state: RalphTerminalState, reason: string): Promise<RalphRun> {
+	private async gate(run: RalphRun, state: RalphTerminalState, reason: string, cause = this.causeForGate(state, reason)): Promise<RalphRun> {
 		run.state = state;
 		run.lastOutcome = reason;
+		run.terminalCause = cause;
 		run.activeAgentId = undefined;
 		run.updatedAt = new Date().toISOString();
 		await appendReceipt(run, { outcome: "gate", gate: { kind: state, reason } });
 		return run;
 	}
 
+	private causeForGate(state: RalphTerminalState, reason: string): RalphTerminalCause | undefined {
+		if (state === "done") return undefined;
+		if (state === "blocked") return "blocked";
+		if (state === "review_failed") return "review_failure";
+		if (state === "evidence_failed") return "evidence_failure";
+		if (state === "workspace_conflict") return "workspace_conflict";
+		if (state === "authority_required") return "authority_denial";
+		if (state === "compacted") return "compaction";
+		if (state === "stopped") return "operator_stop";
+		if (state === "interrupted") return "external_cancellation";
+		if (state === "budget_exhausted") return "internal_error";
+		return "internal_error";
+	}
+
 	private async handleFailure(run: RalphRun, error: unknown): Promise<RalphRun> {
-		if (error instanceof RalphGateError) return this.gate(run, error.state, error.message);
+		if (error instanceof RalphGateError) return this.gate(run, error.state, error.message, error.cause);
 		if (error instanceof WorkspaceError) {
 			return this.gate(run, error.code === "workspace_conflict" || error.code === "head_changed" || error.code === "branch_changed" ? "workspace_conflict" : "error", error.message);
 		}
@@ -581,7 +624,7 @@ function ralphReviewOutput(run: ReviewRun): ReviewerOutput {
 }
 
 class RalphGateError extends Error {
-	constructor(readonly state: RalphTerminalState, message: string) {
+	constructor(readonly state: RalphTerminalState, message: string, readonly cause?: RalphTerminalCause) {
 		super(message);
 		this.name = "RalphGateError";
 	}
@@ -593,14 +636,27 @@ function boundedInteger(value: number | undefined, fallback: number, min: number
 	return value;
 }
 
-export function normalizeBudgets(input: Partial<RalphBudgets> = {}): RalphBudgets {
+export function deriveRalphBudgets(mode: RalphMode, graph: Pick<ReturnType<typeof compileWorkGraph>, "records" | "byteLength">): RalphBudgets {
+	const scale = Math.max(1, Math.ceil(graph.byteLength / (64 * 1024)), Math.ceil(graph.records.length / 8));
 	return {
-		maxIterations: boundedInteger(input.maxIterations, DEFAULT_RALPH_BUDGETS.maxIterations, 1, 100),
-		maxTokens: boundedInteger(input.maxTokens, DEFAULT_RALPH_BUDGETS.maxTokens, 10_000, 10_000_000),
-		timeoutSeconds: boundedInteger(input.timeoutSeconds, DEFAULT_RALPH_BUDGETS.timeoutSeconds, 60, 86_400),
-		executorMaxTurns: boundedInteger(input.executorMaxTurns, DEFAULT_RALPH_BUDGETS.executorMaxTurns, 1, 500),
-		reviewerMaxTurns: boundedInteger(input.reviewerMaxTurns, DEFAULT_RALPH_BUDGETS.reviewerMaxTurns, 1, 200),
-		judgeMaxTurns: boundedInteger(input.judgeMaxTurns, DEFAULT_RALPH_BUDGETS.judgeMaxTurns, 1, 200),
+		maxIterations: mode === "step" ? 1 : Math.min(10, Math.max(2, scale * 2)),
+		maxTokens: Math.min(1_000_000, 250_000 + scale * 100_000),
+		timeoutSeconds: Math.min(7_200, 1_800 + scale * 900),
+		executorMaxTurns: Math.min(80, 24 + scale * 8),
+		reviewerMaxTurns: Math.min(30, 12 + scale * 4),
+		judgeMaxTurns: Math.min(20, 8 + scale * 2),
+	};
+}
+
+/** Internal test/config normalization only. Normal model and slash-command calls do not supply this input. */
+export function normalizeBudgets(input: Partial<RalphBudgets> = {}, fallback: RalphBudgets = DEFAULT_RALPH_BUDGETS): RalphBudgets {
+	return {
+		maxIterations: boundedInteger(input.maxIterations, fallback.maxIterations, 1, 100),
+		maxTokens: boundedInteger(input.maxTokens, fallback.maxTokens, 10_000, 10_000_000),
+		timeoutSeconds: boundedInteger(input.timeoutSeconds, fallback.timeoutSeconds, 60, 86_400),
+		executorMaxTurns: boundedInteger(input.executorMaxTurns, fallback.executorMaxTurns, 1, 500),
+		reviewerMaxTurns: boundedInteger(input.reviewerMaxTurns, fallback.reviewerMaxTurns, 1, 200),
+		judgeMaxTurns: boundedInteger(input.judgeMaxTurns, fallback.judgeMaxTurns, 1, 200),
 	};
 }
 
@@ -613,6 +669,7 @@ export function summarizeRun(run: RalphRun): string {
 		`Task: ${run.taskPath}`,
 		`Iteration: ${run.iteration}/${run.budgets.maxIterations}`,
 		`Tokens: ${run.totalTokens}/${run.budgets.maxTokens}`,
+		...(run.terminalCause ? [`Cause: ${run.terminalCause}`] : []),
 		...(run.nextObjective ? [`Next objective: ${run.nextObjective}`] : []),
 		...(run.lastOutcome ? [`Outcome: ${run.lastOutcome}`] : []),
 		`Receipt: ${receiptPath(run.projectRoot, run.runId)}`,

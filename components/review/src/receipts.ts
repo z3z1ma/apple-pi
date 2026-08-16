@@ -5,6 +5,7 @@ import { getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-ag
 import type { ReviewReceiptEvent, ReviewRun, ReviewRunSummary } from "./types.js";
 
 const STATES = new Set(["planning", "reviewing", "verifying", "complete", "partial", "failed", "skipped", "stopped", "workspace_conflict", "error"]);
+const TERMINAL_CAUSES = new Set(["operator_stop", "external_cancellation", "elapsed_time_ceiling", "aggregate_token_ceiling", "role_turn_ceiling", "compaction", "provider_error", "invalid_output", "authority_denial", "workspace_conflict", "policy_input", "internal_error"]);
 const TRANSITIONS: Record<string, Set<string>> = {
 	planning: new Set(["planning", "reviewing", "failed", "skipped", "stopped", "workspace_conflict", "error"]),
 	reviewing: new Set(["reviewing", "verifying", "partial", "failed", "stopped", "workspace_conflict", "error"]),
@@ -17,6 +18,12 @@ function validateRun(run: ReviewRun, event: Pick<ReviewReceiptEvent, "runId" | "
 	}
 	if (!/^[a-f0-9]{64}$/.test(run.inputHash) || !Number.isFinite(run.totalTokens) || run.totalTokens < 0) {
 		throw new Error(`Review receipt event ${event.sequence} has invalid identity or usage`);
+	}
+	if (run.terminalCause !== undefined && !TERMINAL_CAUSES.has(run.terminalCause)) throw new Error(`Review receipt event ${event.sequence} has invalid terminal cause`);
+	if (run.policy !== undefined) {
+		if (run.policy.version !== 1 || run.policy.profile !== run.profile || JSON.stringify(run.policy.budgets) !== JSON.stringify(run.budgets)) {
+			throw new Error(`Review receipt event ${event.sequence} has inconsistent resolved policy`);
+		}
 	}
 	const selected = new Set<string>();
 	for (const item of run.selected) {

@@ -120,7 +120,7 @@ return reports.reduce((summary, report) => ({
 }), {});
 ```
 
-Defaults are 128 core/extension/agent/fetch calls, 16 simultaneous host operations, eight model workers, 128 MB of worker old-generation memory, and a 300-second deadline. A program can request up to 1,000 calls, 64-way host concurrency, 32 agents, 1,024 MB of worker old-generation memory, and a 30-minute deadline. Excess fan-out queues instead of failing. Synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
+Pi Exec derives a package-owned envelope from program shape: bounded host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Normal model calls never choose those numbers. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
 
 `fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
 
@@ -185,7 +185,7 @@ allowed_subagents: scout
 Review the requested change. Report concrete findings with file paths and evidence.
 ```
 
-Supported controls include tool and extension scope, skills, model/thinking, turn limits with graceful wrap-up, foreground/background defaults, parent-context inheritance, session persistence, and explicit nested-agent allowlists. `max_turns` is an optional run-length cutoff, not an output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
+Trusted agent definitions and settings control tool/extension scope, skills, model/thinking, turn limits with graceful wrap-up, foreground/background defaults, parent-context inheritance, session persistence, and explicit nested-agent allowlists. `max_turns` is a trusted definition-level run-length cutoff, not a model-facing output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
 
 Built-in agent types can also be routed through the shared `modes.json` mechanism without editing TypeScript. Named entries such as `Explore`, `Plan`, and `general-purpose` override the embedded built-in default for those agent types when the project is trusted or when the global mode is used. `provider` and `modelId` select a model together; `thinkingLevel` is independent, so a route may set only thinking. Custom Markdown agent files still win: a file's frontmatter `model:`/`thinking:` override the route, and an explicit `model` argument passed to the Agent tool remains highest precedence.
 
@@ -246,13 +246,13 @@ Ralph compiles the shaped task graph, launches a fresh executor for one bounded 
 /ralph inspect .ledger/202608151430-example/task.md
 /ralph start .ledger/202608151430-example/task.md
 /ralph step <run-id>
-/ralph run .ledger/202608151430-example/task.md --max-iterations 5
+/ralph run .ledger/202608151430-example/task.md
 /ralph run .ledger/202608151430-example/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
 /ralph status [run-id]
 /ralph stop <run-id>
 ```
 
-`step` performs one complete executor → grouped review → judge iteration. `run` repeats only when judgment says `iterate`, under explicit iteration, lifetime-token, review-concurrency, per-agent-turn, and elapsed-time limits. Compaction invalidates the curated-window premise and stops the affected coverage.
+`step` performs one complete executor → grouped review → judge iteration. `run` repeats only when judgment says `iterate`, under harness-owned iteration, lifetime-token, review-concurrency, per-agent-turn, and elapsed-time ceilings. Normal model and slash-command calls do not configure the numeric arithmetic; compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
 
 The implementation checkout must have an established Git `HEAD` and be clean at start. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory, leases the implementation workspace and task bundle, and reviews the targeted worktree. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
 

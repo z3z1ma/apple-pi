@@ -127,6 +127,8 @@ function service(plan: PlannedRole[], seen: ManagedAgentRequest[]): ManagedSubag
 			if (!next) throw new Error("unexpected role call");
 			expect(request.type).toBe(next.role);
 			await next.mutate?.(request);
+			const output = request.customTools?.[0];
+			if (output) void output.execute("test-result", next.output as never, undefined, undefined, {} as never);
 			sequence++;
 			return {
 				id: `agent-${sequence}`,
@@ -358,7 +360,7 @@ describe("Ralph state machine", () => {
 		expect(result.iteration).toBe(2);
 		expect(seen.filter((request) => request.type === "ralph-executor")).toHaveLength(2);
 		expect(seen[3].prompt).toContain("Run and record the missing behavior check.");
-	});
+	}, 15_000);
 
 	it("refuses executor attempts to rewrite .ledger task authority", async () => {
 		const root = repository();

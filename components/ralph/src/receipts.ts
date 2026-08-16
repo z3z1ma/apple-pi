@@ -7,6 +7,7 @@ import { taskLocation } from "./task-paths.js";
 
 const STATES = new Set(["ready", "executing", "reviewing", "judging", "iterating", "done", "blocked", "review_failed", "evidence_failed", "workspace_conflict", "authority_required", "budget_exhausted", "compacted", "interrupted", "stopped", "error"]);
 const TERMINAL = new Set(["done", "blocked", "review_failed", "evidence_failed", "workspace_conflict", "authority_required", "budget_exhausted", "compacted", "interrupted", "stopped", "error"]);
+const TERMINAL_CAUSES = new Set(["operator_stop", "external_cancellation", "elapsed_time_ceiling", "aggregate_token_ceiling", "iteration_ceiling", "role_turn_ceiling", "compaction", "provider_error", "authority_denial", "workspace_conflict", "review_failure", "evidence_failure", "blocked", "internal_error"]);
 const TRANSITIONS: Record<string, Set<string>> = {
 	ready: new Set(["ready", "executing", ...TERMINAL]),
 	executing: new Set(["executing", "reviewing", ...TERMINAL]),
@@ -39,8 +40,15 @@ function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun
 		if (value !== undefined && (typeof value !== "string" || value.length > 20_000)) throw new Error(`Receipt event ${event.sequence} has invalid ${name}`);
 	}
 	if (!STATES.has(run.state) || !["step", "auto"].includes(run.mode) || !Number.isInteger(run.iteration) || run.iteration < 0 || !Number.isFinite(run.totalTokens) || run.totalTokens < 0) throw new Error(`Receipt event ${event.sequence} has invalid run values`);
+	if (run.terminalCause !== undefined && !TERMINAL_CAUSES.has(run.terminalCause)) throw new Error(`Receipt event ${event.sequence} has invalid terminal cause`);
 	if (!/^[a-f0-9]{64}$/.test(run.graphHash) || !Number.isFinite(Date.parse(run.startedAt)) || !Number.isFinite(Date.parse(run.updatedAt))) throw new Error(`Receipt event ${event.sequence} has invalid hashes or timestamps`);
 	if (run.nextObjective !== undefined && (typeof run.nextObjective !== "string" || !run.nextObjective.trim() || run.nextObjective.length > 10_000)) throw new Error(`Receipt event ${event.sequence} has invalid next objective`);
+	if (run.policy !== undefined && (
+		run.policy.version !== 1 || run.policy.mode !== run.mode || !Number.isInteger(run.policy.recordCount) || run.policy.recordCount < 1 ||
+		!Number.isInteger(run.policy.contextBytes) || run.policy.contextBytes < 1 || JSON.stringify(run.policy.budgets) !== JSON.stringify(run.budgets)
+	)) {
+		throw new Error(`Receipt event ${event.sequence} has inconsistent resolved policy`);
+	}
 	const budgets = run.budgets;
 	const budgetKeys = ["executorMaxTurns", "judgeMaxTurns", "maxIterations", "maxTokens", "reviewerMaxTurns", "timeoutSeconds"];
 	if (!budgets || JSON.stringify(Object.keys(budgets).sort()) !== JSON.stringify(budgetKeys)) throw new Error(`Receipt event ${event.sequence} has incomplete budgets`);

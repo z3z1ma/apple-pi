@@ -23,6 +23,8 @@ export interface AgentConfig {
 	persistSession?: boolean;
 	sessionDir?: string;
 	allowedSubagents?: "all" | string[];
+	/** Enable the costly continuous advisor inside this child session. Off unless explicitly requested. */
+	advisor?: boolean;
 	systemPrompt: string;
 	promptMode: "replace" | "append";
 	inheritContext?: boolean;
@@ -36,6 +38,8 @@ export interface AgentConfig {
 
 export type JoinMode = "async" | "group" | "smart";
 export type WidgetMode = "all" | "background" | "off";
+
+export type AgentTerminationCause = "operator_stop" | "external_cancellation" | "token_ceiling" | "turn_ceiling" | "compaction" | "provider_error";
 
 export interface AgentRecord {
 	id: string;
@@ -66,6 +70,8 @@ export interface AgentRecord {
 	maxSubagentDepth?: number;
 	/** Internal orchestrator ownership; records with this marker are never publicly resumed or steered. */
 	internalOwner?: string;
+	/** Controller-owned termination attribution; absent for ordinary successful agents. */
+	terminationCause?: AgentTerminationCause;
 }
 
 export interface AgentInvocation {

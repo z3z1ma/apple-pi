@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { defineTool, parseFrontmatter, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import type { AgentConfig } from "../../subagents/src/types.js";
 import type {
 	CompiledWorkGraph,
@@ -120,17 +121,6 @@ function array(value: unknown, label: string): unknown[] {
 	return value;
 }
 
-function parseJson(text: string, role: RalphAgentRole): Record<string, unknown> {
-	const trimmed = text.trim();
-	let value: unknown;
-	try {
-		value = JSON.parse(trimmed);
-	} catch {
-		throw new Error(`Ralph ${role} returned malformed JSON`);
-	}
-	return object(value, `Ralph ${role} output`);
-}
-
 function criterionRows(value: unknown): { id: string; status: "satisfied" | "unsatisfied" | "unknown"; evidence: string }[] {
 	return array(value, "acceptanceCriteria").map((row, index) => {
 		const item = object(row, `acceptanceCriteria[${index}]`);
@@ -142,30 +132,39 @@ function criterionRows(value: unknown): { id: string; status: "satisfied" | "uns
 	});
 }
 
-export function parseExecutorOutput(text: string): ExecutorOutput {
-	const value = parseJson(text, "executor");
-	const nextObjective = typeof value.nextObjective === "string" && value.nextObjective.trim() ? value.nextObjective.trim() : undefined;
+export function parseExecutorOutput(value: unknown): ExecutorOutput {
+	const output = object(value, "Ralph executor result");
+	const nextObjective = typeof output.nextObjective === "string" && output.nextObjective.trim() ? output.nextObjective.trim() : undefined;
 	return {
-		status: enumValue(value.status, ["done", "partial", "blocked", "failed"] as const, "status"),
-		summary: string(value.summary, "summary"),
-		acceptanceCriteria: criterionRows(value.acceptanceCriteria),
-		journal: array(value.journal, "journal").map((item, index) => string(item, `journal[${index}]`)),
-		blockers: array(value.blockers, "blockers").map((item, index) => string(item, `blockers[${index}]`)),
-		retrospective: string(value.retrospective, "retrospective"),
-		distillation: array(value.distillation, "distillation").map((item, index) => string(item, `distillation[${index}]`)),
+		status: enumValue(output.status, ["done", "partial", "blocked", "failed"] as const, "status"),
+		summary: string(output.summary, "summary"),
+		acceptanceCriteria: criterionRows(output.acceptanceCriteria),
+		journal: array(output.journal, "journal").map((item, index) => string(item, `journal[${index}]`)),
+		blockers: array(output.blockers, "blockers").map((item, index) => string(item, `blockers[${index}]`)),
+		retrospective: string(output.retrospective, "retrospective"),
+		distillation: array(output.distillation, "distillation").map((item, index) => string(item, `distillation[${index}]`)),
 		...(nextObjective && { nextObjective }),
 	};
 }
 
-export function parseJudgeOutput(text: string): JudgeOutput {
-	const value = parseJson(text, "judge");
-	const decision = enumValue(value.decision, ["close", "iterate", "blocked", "stop"] as const, "decision");
-	const nextObjective = typeof value.nextObjective === "string" && value.nextObjective.trim() ? value.nextObjective.trim() : undefined;
+export function parseJudgeOutput(value: unknown): JudgeOutput {
+	const output = object(value, "Ralph judge result");
+	const decision = enumValue(output.decision, ["close", "iterate", "blocked", "stop"] as const, "decision");
+	const nextObjective = typeof output.nextObjective === "string" && output.nextObjective.trim() ? output.nextObjective.trim() : undefined;
 	if (decision === "iterate" && !nextObjective) throw new Error("Ralph judge must supply nextObjective for iterate");
-	return {
-		decision,
-		reason: string(value.reason, "reason"),
-		acceptanceCriteria: criterionRows(value.acceptanceCriteria),
-		...(nextObjective && { nextObjective }),
-	};
+	return { decision, reason: string(output.reason, "reason"), acceptanceCriteria: criterionRows(output.acceptanceCriteria), ...(nextObjective && { nextObjective }) };
+}
+
+export interface RalphResultCapture { tool: ToolDefinition; calls(): number; value(): unknown; }
+
+function resultTool(name: string, label: string, parameters: ToolDefinition["parameters"]): RalphResultCapture {
+	let count = 0;
+	let submitted: unknown;
+	return { tool: defineTool({ name, label, description: `Submit the typed Ralph ${label.toLowerCase()}.`, parameters, executionMode: "sequential", async execute(_id, params) { count++; submitted = params; return { content: [{ type: "text", text: `${label} submitted.` }], details: params, terminate: true }; } }), calls: () => count, value: () => submitted };
+}
+
+export function createRalphResultTool(role: RalphAgentRole): RalphResultCapture {
+	const criterion = Type.Object({ id: Type.String(), status: Type.Union([Type.Literal("satisfied"), Type.Literal("unsatisfied"), Type.Literal("unknown")]), evidence: Type.String() });
+	if (role === "executor") return resultTool("submit_ralph_executor", "Executor result", Type.Object({ status: Type.Union([Type.Literal("done"), Type.Literal("partial"), Type.Literal("blocked"), Type.Literal("failed")]), summary: Type.String(), acceptanceCriteria: Type.Array(criterion), journal: Type.Array(Type.String()), blockers: Type.Array(Type.String()), retrospective: Type.String(), distillation: Type.Array(Type.String()), nextObjective: Type.Optional(Type.String()) }));
+	return resultTool("submit_ralph_judgment", "Judge result", Type.Object({ decision: Type.Union([Type.Literal("close"), Type.Literal("iterate"), Type.Literal("blocked"), Type.Literal("stop")]), reason: Type.String(), acceptanceCriteria: Type.Array(criterion), nextObjective: Type.Optional(Type.String()) }));
 }

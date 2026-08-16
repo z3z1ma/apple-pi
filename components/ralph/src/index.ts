@@ -46,14 +46,6 @@ function optionsFromParams(params: Record<string, unknown>): StartRunOptions {
 	return {
 		...(typeof params.root === "string" && params.root.trim() && { root: params.root.trim() }),
 		...(typeof params.ledger_root === "string" && params.ledger_root.trim() && { ledgerRoot: params.ledger_root.trim() }),
-		budgets: {
-			...(typeof params.max_iterations === "number" && { maxIterations: params.max_iterations }),
-			...(typeof params.max_tokens === "number" && { maxTokens: params.max_tokens }),
-			...(typeof params.timeout_seconds === "number" && { timeoutSeconds: params.timeout_seconds }),
-			...(typeof params.executor_max_turns === "number" && { executorMaxTurns: params.executor_max_turns }),
-			...(typeof params.reviewer_max_turns === "number" && { reviewerMaxTurns: params.reviewer_max_turns }),
-			...(typeof params.judge_max_turns === "number" && { judgeMaxTurns: params.judge_max_turns }),
-		},
 	};
 }
 
@@ -62,7 +54,7 @@ function parseCommandArgs(input: string): { action: string; positional: string[]
 	const action = tokens.shift() ?? "status";
 	const positional: string[] = [];
 	const options: Record<string, number | string> = {};
-	const numericOptions = new Set(["max_iterations", "max_tokens", "timeout_seconds", "executor_max_turns", "reviewer_max_turns", "judge_max_turns"]);
+	const numericOptions = new Set<string>();
 	const stringOptions = new Set(["root", "ledger_root"]);
 	for (let index = 0; index < tokens.length; index++) {
 		const token = tokens[index];
@@ -96,12 +88,6 @@ const RALPH_ACTIONS: AutocompleteItem[] = [
 ];
 
 const RALPH_RUN_OPTIONS: Array<{ name: string; description: string }> = [
-	{ name: "--max-iterations", description: "Maximum executor/review/judge iterations" },
-	{ name: "--max-tokens", description: "Aggregate token budget for the run" },
-	{ name: "--timeout-seconds", description: "Whole-run wall-clock timeout" },
-	{ name: "--executor-max-turns", description: "Turn limit for each fresh executor" },
-	{ name: "--reviewer-max-turns", description: "Per-agent turn limit for shared review" },
-	{ name: "--judge-max-turns", description: "Turn limit for each fresh closure judge" },
 	{ name: "--root", description: "Implementation root in a linked Git worktree" },
 	{ name: "--ledger-root", description: "Linked checkout containing authoritative .ledger" },
 ];
@@ -154,7 +140,7 @@ function setRunWidget(ctx: ExtensionCommandContext, run: RalphRun | undefined): 
 		return;
 	}
 	ctx.ui.setWidget(WIDGET_ID, [
-		`Ralph ${run.state} · iteration ${run.iteration}/${run.budgets.maxIterations} · ${run.taskPath}`,
+		`Ralph ${run.state} · iteration ${run.iteration} · ${run.taskPath}`,
 		...(run.nextObjective ? [`Next: ${run.nextObjective}`] : []),
 	], { placement: "aboveEditor" });
 }
@@ -176,12 +162,6 @@ export default function installRalph(pi: ExtensionAPI): void {
 			run_id: Type.Optional(Type.String()),
 			root: Type.Optional(Type.String({ description: "Implementation worktree root, absolute or relative to the session repository. Defaults to the session worktree." })),
 			ledger_root: Type.Optional(Type.String({ description: "Linked checkout root containing the authoritative .ledger. Defaults to root." })),
-			max_iterations: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-			max_tokens: Type.Optional(Type.Integer({ minimum: 10000, maximum: 10000000 })),
-			timeout_seconds: Type.Optional(Type.Integer({ minimum: 60, maximum: 86400 })),
-			executor_max_turns: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
-			reviewer_max_turns: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
-			judge_max_turns: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			try {
@@ -241,8 +221,6 @@ export default function installRalph(pi: ExtensionAPI): void {
 				const parsed = parseCommandArgs(input);
 				const expectedPositionals = parsed.action === "status" ? [0, 1] : ["inspect", "start", "step", "run", "stop"].includes(parsed.action) ? [1] : [];
 				if (!expectedPositionals.includes(parsed.positional.length)) throw new Error(`Unexpected arguments for /ralph ${parsed.action}`);
-				const budgetNames = new Set(["max_iterations", "max_tokens", "timeout_seconds", "executor_max_turns", "reviewer_max_turns", "judge_max_turns"]);
-				if (!["start", "run"].includes(parsed.action) && Object.keys(parsed.options).some((name) => budgetNames.has(name))) throw new Error("Budget options are valid only for /ralph start or /ralph run");
 				if (!["inspect", "start", "run"].includes(parsed.action) && parsed.options.ledger_root) throw new Error("--ledger-root is valid only for inspect, start, and run");
 				const params = parsed.options as Record<string, unknown>;
 				const workspaceRoot = resolveRalphRoots(ctx.cwd, typeof params.root === "string" ? params.root : undefined).workspaceRoot;
@@ -268,7 +246,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 					return;
 				}
 				if (parsed.action !== "step" && parsed.action !== "run") {
-					throw new Error("Usage: /ralph inspect <task.md> | start <task.md> | step <run-id> | run <task.md> [--max-iterations N] | status [run-id] | stop <run-id>");
+					throw new Error("Usage: /ralph inspect <task.md> | start <task.md> | step <run-id> | run <task.md> [--root PATH] [--ledger-root PATH] | status [run-id] | stop <run-id>");
 				}
 				const operation = parsed.action === "step"
 					? controller.step(ctx, requireString(parsed.positional[0], "run-id"), undefined, workspaceRoot)

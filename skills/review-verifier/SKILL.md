@@ -17,18 +17,4 @@ For every candidate ID choose exactly one status:
 
 The removal bar is deliberately high. Mere disagreement, missing runtime reproduction, low confidence, or low value is not counterevidence. Never reject memory-safety, concurrency, security-boundary, data-loss, compatibility, or silent-dispatch findings merely because the trigger is uncommon. Name the exact counterevidence for every rejection.
 
-Return exactly one JSON object with no Markdown fence:
-
-```json
-{
-  "decisions": [
-    {
-      "findingId": "supplied-id",
-      "status": "confirmed | rejected | retained_unresolved",
-      "reason": "concise verdict",
-      "evidence": "exact supporting or counter evidence"
-    }
-  ],
-  "residualRisk": ["verification limits"]
-}
-```
+Submit exactly one complete result through `submit_review_verdict`. Its typed signature is authoritative. `decisions` remains required; omit `residualRisk` when it is empty. Do not return prose JSON.

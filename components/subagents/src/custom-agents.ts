@@ -135,6 +135,9 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
       sessionDir: str(fm.session_dir),
       allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
+      // The advisor is intentionally opt-in for child sessions: it is a second
+      // model that can continuously reopen implementation work.
+      advisor: fm.advisor === true ? true : undefined,
       systemPrompt: body.trim(),
       promptMode: fm.prompt_mode === "append" ? "append" : "replace",
       inheritContext: fm.inherit_context != null ? fm.inherit_context === true : undefined,

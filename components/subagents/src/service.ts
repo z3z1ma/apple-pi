@@ -1,5 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
-import type { EventBus, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { EventBus, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentConfig, AgentRecord, ThinkingLevel } from "./types.js";
 
 export interface ManagedAgentToolPolicyCall {
@@ -34,6 +34,8 @@ export interface ManagedAgentRequest {
 	cwd?: string;
 	signal?: AbortSignal;
 	toolPolicy?: ManagedAgentToolPolicy;
+	/** Controller-supplied typed result tools, available even when extensions are disabled. */
+	customTools?: ToolDefinition[];
 	internalOwner?: string;
 	onStarted?: (agentId: string) => void;
 	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { defineTool, parseFrontmatter, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import type { AgentConfig } from "../../subagents/src/types.js";
 import type {
 	PlannerOutput,
@@ -203,77 +204,86 @@ function stringArray(value: unknown, label: string): string[] {
 	return value.map((entry, index) => string(entry, `${label}[${index}]`));
 }
 
+function optionalStringArray(value: unknown, label: string): string[] {
+	return value === undefined ? [] : stringArray(value, label);
+}
+
+function optionalArray(value: unknown, label: string): unknown[] {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+	return value;
+}
+
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
 	if (typeof value !== "string" || !allowed.includes(value as T)) throw new Error(`${label} must be one of ${allowed.join(", ")}`);
 	return value as T;
 }
 
-function json(text: string, role: ReviewRole): Record<string, unknown> {
-	try {
-		return record(JSON.parse(text.trim()), `${role} output`);
-	} catch (error) {
-		if (error instanceof SyntaxError) throw new Error(`Review ${role} returned malformed JSON`);
-		throw error;
-	}
-}
-
-export function parsePlannerOutput(text: string): PlannerOutput {
-	const value = json(text, "planner");
-	if (!Array.isArray(value.groups)) throw new Error("groups must be an array");
+export function parsePlannerOutput(value: unknown): PlannerOutput {
+	const output = record(value, "planner result");
+	if (!Array.isArray(output.groups)) throw new Error("groups must be an array");
 	return {
-		summary: string(value.summary, "summary"),
-		groups: value.groups.map((raw, index) => {
+		summary: string(output.summary, "summary"),
+		groups: output.groups.map((raw, index) => {
 			const group = record(raw, `groups[${index}]`);
 			return {
-				id: string(group.id, `groups[${index}].id`),
-				title: string(group.title, `groups[${index}].title`),
-				objective: string(group.objective, `groups[${index}].objective`),
-				itemIds: stringArray(group.itemIds, `groups[${index}].itemIds`),
-				contextPaths: stringArray(group.contextPaths, `groups[${index}].contextPaths`),
-				tier: oneOf(group.tier, ["fast", "strong"] as const, `groups[${index}].tier`),
-				rationale: string(group.rationale, `groups[${index}].rationale`),
+				id: string(group.id, `groups[${index}].id`), title: string(group.title, `groups[${index}].title`), objective: string(group.objective, `groups[${index}].objective`),
+				itemIds: stringArray(group.itemIds, `groups[${index}].itemIds`), contextPaths: optionalStringArray(group.contextPaths, `groups[${index}].contextPaths`),
+				tier: oneOf(group.tier, ["fast", "strong"] as const, `groups[${index}].tier`), rationale: string(group.rationale, `groups[${index}].rationale`),
 			};
 		}),
 	};
 }
 
-export function parseReviewerOutput(text: string): ReviewerOutput {
-	const value = json(text, "reviewer");
-	if (!Array.isArray(value.findings)) throw new Error("findings must be an array");
+export function parseReviewerOutput(value: unknown): ReviewerOutput {
+	const output = record(value, "reviewer result");
 	return {
-		summary: string(value.summary, "summary"),
-		reviewedItemIds: stringArray(value.reviewedItemIds, "reviewedItemIds"),
-		findings: value.findings.map((raw, index) => {
+		summary: string(output.summary, "summary"),
+		reviewedItemIds: stringArray(output.reviewedItemIds, "reviewedItemIds"),
+		findings: optionalArray(output.findings, "findings").map((raw, index) => {
 			const finding = record(raw, `findings[${index}]`);
 			return {
 				severity: oneOf(finding.severity, ["critical", "significant", "minor", "nit"] as const, `findings[${index}].severity`),
 				category: oneOf(finding.category, ["bug", "security", "performance", "maintainability", "test", "documentation", "other"] as const, `findings[${index}].category`),
-				summary: string(finding.summary, `findings[${index}].summary`),
-				impact: string(finding.impact, `findings[${index}].impact`),
-				evidence: string(finding.evidence, `findings[${index}].evidence`),
-				path: string(finding.path, `findings[${index}].path`),
-				anchor: string(finding.anchor, `findings[${index}].anchor`),
-				side: oneOf(finding.side, ["new", "old"] as const, `findings[${index}].side`),
+				summary: string(finding.summary, `findings[${index}].summary`), impact: string(finding.impact, `findings[${index}].impact`), evidence: string(finding.evidence, `findings[${index}].evidence`),
+				path: string(finding.path, `findings[${index}].path`), anchor: string(finding.anchor, `findings[${index}].anchor`), side: oneOf(finding.side, ["new", "old"] as const, `findings[${index}].side`),
 				...(typeof finding.suggestion === "string" && finding.suggestion.trim() && { suggestion: finding.suggestion.trim() }),
 			};
 		}),
-		residualRisk: stringArray(value.residualRisk, "residualRisk"),
+		residualRisk: optionalStringArray(output.residualRisk, "residualRisk"),
 	};
 }
 
-export function parseVerifierOutput(text: string): VerifierOutput {
-	const value = json(text, "verifier");
-	if (!Array.isArray(value.decisions)) throw new Error("decisions must be an array");
+export function parseVerifierOutput(value: unknown): VerifierOutput {
+	const output = record(value, "verifier result");
+	if (!Array.isArray(output.decisions)) throw new Error("decisions must be an array");
 	return {
-		decisions: value.decisions.map((raw, index) => {
+		decisions: output.decisions.map((raw, index) => {
 			const decision = record(raw, `decisions[${index}]`);
-			return {
-				findingId: string(decision.findingId, `decisions[${index}].findingId`),
-				status: oneOf<ReviewValidationStatus>(decision.status, ["confirmed", "rejected", "retained_unresolved"] as const, `decisions[${index}].status`),
-				reason: string(decision.reason, `decisions[${index}].reason`),
-				evidence: string(decision.evidence, `decisions[${index}].evidence`),
-			};
+			return { findingId: string(decision.findingId, `decisions[${index}].findingId`), status: oneOf<ReviewValidationStatus>(decision.status, ["confirmed", "rejected", "retained_unresolved"] as const, `decisions[${index}].status`), reason: string(decision.reason, `decisions[${index}].reason`), evidence: string(decision.evidence, `decisions[${index}].evidence`) };
 		}),
-		residualRisk: stringArray(value.residualRisk, "residualRisk"),
+		residualRisk: optionalStringArray(output.residualRisk, "residualRisk"),
 	};
+}
+
+export interface ReviewResultCapture {
+	tool: ToolDefinition;
+	calls(): number;
+	value(): unknown;
+}
+
+function resultTool(name: string, label: string, description: string, parameters: ToolDefinition["parameters"]): ReviewResultCapture {
+	let callCount = 0;
+	let submitted: unknown;
+	return {
+		tool: defineTool({ name, label, description, promptSnippet: `Submit the final ${label.toLowerCase()} through this terminating tool.`, promptGuidelines: ["Call this tool exactly once with the complete final result. Do not return prose JSON."], parameters, executionMode: "sequential", async execute(_toolCallId, params) { callCount++; submitted = params; return { content: [{ type: "text", text: `${label} submitted.` }], details: params, terminate: true }; } }),
+		calls: () => callCount,
+		value: () => submitted,
+	};
+}
+
+export function createReviewResultTool(role: ReviewRole): ReviewResultCapture {
+	if (role === "planner") return resultTool("submit_review_plan", "Review plan", "Submit the complete semantic review plan.", Type.Object({ summary: Type.String(), groups: Type.Array(Type.Object({ id: Type.String(), title: Type.String(), objective: Type.String(), itemIds: Type.Array(Type.String()), contextPaths: Type.Optional(Type.Array(Type.String())), tier: Type.Union([Type.Literal("fast"), Type.Literal("strong")]), rationale: Type.String() })) }));
+	if (role === "reviewer") return resultTool("submit_review_findings", "Review findings", "Submit complete findings and coverage.", Type.Object({ summary: Type.String(), reviewedItemIds: Type.Array(Type.String()), findings: Type.Optional(Type.Array(Type.Object({ severity: Type.Union([Type.Literal("critical"), Type.Literal("significant"), Type.Literal("minor"), Type.Literal("nit")]), category: Type.Union([Type.Literal("bug"), Type.Literal("security"), Type.Literal("performance"), Type.Literal("maintainability"), Type.Literal("test"), Type.Literal("documentation"), Type.Literal("other")]), summary: Type.String(), impact: Type.String(), evidence: Type.String(), path: Type.String(), anchor: Type.String(), side: Type.Union([Type.Literal("new"), Type.Literal("old")]), suggestion: Type.Optional(Type.String()) }))), residualRisk: Type.Optional(Type.Array(Type.String())) }));
+	return resultTool("submit_review_verdict", "Review verdict", "Submit the complete independent verification verdict.", Type.Object({ decisions: Type.Array(Type.Object({ findingId: Type.String(), status: Type.Union([Type.Literal("confirmed"), Type.Literal("rejected"), Type.Literal("retained_unresolved")]), reason: Type.String(), evidence: Type.String() })), residualRisk: Type.Optional(Type.Array(Type.String())) }));
 }

@@ -12,12 +12,12 @@ apple-pi's `review` extension turns a Git change into a sealed, coverage-account
 /review run range --root repos/service-a --from main --to HEAD
 /review run commit --commit abc123
 /review run --profile fast
-/review run --profile thorough --concurrency 6
+/review run --profile thorough --background "Prioritize migration compatibility."
 /review status [run-id]
 /review stop <run-id>
 ```
 
-The `review` tool exposes the same `preview`, `run`, `status`, and `stop` actions. Its optional `root` selects the Git repository or linked worktree to review; relative paths resolve from the caller's cwd. This is the primary agent workflow, so a model can review a worktree it created or select a repository beneath a non-Git parent directory without moving the parent Pi session. Tool results include the full structured run; the text result is a bounded summary. In the TUI, `/review` argument completion lists actions, source modes, root/profile/routing flags, and known run IDs for status/stop.
+The `review` tool exposes the same `preview`, `run`, `status`, and `stop` actions. Normal tool and command calls accept semantic source, profile, routing, and background intent only; they never ask a model to estimate token, turn, timeout, group, concurrency, or prompt limits. Its optional `root` selects the Git repository or linked worktree to review; relative paths resolve from the caller's cwd. This is the primary agent workflow, so a model can review a worktree it created or select a repository beneath a non-Git parent directory without moving the parent Pi session. Tool results include the full structured run; the text result is a bounded summary. In the TUI, `/review` argument completion lists actions, source modes, root/profile/routing flags, and known run IDs for status/stop.
 
 Review execution requires a trusted project and an active model. Preview performs only local Git/file inspection.
 
@@ -26,13 +26,15 @@ Review execution requires a trusted project and an active model. Preview perform
 1. Resolve the Git repository root and source.
 2. Freeze range/commit refs to immutable commits and materialize the resolved head into a temporary read-only review tree, or hash the complete workspace input.
 3. Separate reviewable text changes from visible binary waivers.
-4. Ask a fresh planner to partition every reviewable item into semantic groups.
-5. Mechanically reject a graph that omits, duplicates, or invents an item.
-6. Review groups concurrently with fresh read-only agents.
-7. Require every reviewer to account for exactly its assigned item IDs.
-8. Derive source locations from exact changed-code anchors.
-9. Ask fresh verifiers to confirm, reject, or retain every candidate finding.
-10. Re-hash the input and freeze complete, partial, failed, skipped, stopped, or conflict state.
+4. Resolve the planner route, render its complete prompt and typed result-tool contract, and preflight its context envelope.
+5. Ask a fresh planner to partition every reviewable item into semantic groups through a controller-supplied typed result tool.
+6. Mechanically reject a graph that omits, duplicates, or invents an item.
+7. Resolve and preflight each reviewer/verifier's complete rendered context before launch; admitted roles reserve aggregate capacity atomically.
+8. Review groups concurrently with fresh read-only agents.
+9. Require every reviewer to account for exactly its assigned item IDs.
+10. Derive source locations from exact changed-code anchors.
+11. Ask fresh verifiers to confirm, reject, or retain every candidate finding.
+12. Re-hash the input and freeze complete, partial, failed, skipped, stopped, or conflict state with an explicit cause when incomplete.
 
 The planner groups implementation with tests, producers with consumers, schemas with clients/migrations, and other files that implement one behavior. A focus file belongs to exactly one group. Reviewers may read any repository file for dependency tracing and evidence, but findings must anchor the patch-introduced cause in their assigned focus paths.
 
@@ -110,18 +112,11 @@ $PI_CODING_AGENT_DIR/reviews/runs/<project-hash>/<run-id>.jsonl
 
 They include source identity, work graph, coverage, findings, model routes, usage, role-skill hashes, and child-session paths. They are operational state outside the repository. Persisted child sessions may contain source excerpts and model responses; ordinary Pi session retention and filesystem protections apply.
 
-## Budgets
+## Harness-owned limits and outcomes
 
-Defaults:
+Profiles select routing and package policy together. After sealing input, the controller derives group/concurrency caps from the change shape. Before every planner, reviewer, and verifier launch it measures the full rendered prompt, packaged role instructions, typed result-tool signature, background/authority context, resolved model context window, output capacity, remaining aggregate capacity, and elapsed time. The receipt records the resolved policy and each stage envelope.
 
-- 500,000 lifetime tokens;
-- one hour;
-- four concurrent groups;
-- 32 groups;
-- planner/reviewer/verifier turn limits of 12/25/15;
-- 384 KiB maximum rendered prompt.
-
-A limit never converts incomplete work into success. Group and verifier failures remain visible in coverage. Concurrent in-flight requests can finish near the token boundary, so the token budget is a bounded orchestration control rather than a transactional provider billing cap.
+Package-owned ceilings still bound tokens, time, groups, concurrency, prompt bytes, and role turns. They are not normal model or command arguments, and no invalid typed result receives a prose repair retry. A limit never converts incomplete work into success. Terminal receipts and summaries distinguish operator stop, external cancellation, elapsed-time/token/turn ceilings, compaction, provider failure, invalid output, authority denial, workspace conflict, policy/input refusal, and internal error. Existing schema-v1 receipts without these additive fields remain readable as historical audit records.
 
 ## Ralph
 

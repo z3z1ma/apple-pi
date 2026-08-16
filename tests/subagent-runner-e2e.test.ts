@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
+import { defineTool } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import installSubagents from "../components/subagents/src/index.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../components/subagents/src/agent-runner.js";
@@ -57,6 +59,48 @@ describe("subagent runner with Pi's real AgentSession", () => {
 		expect(result.responseText).toBe("SUBAGENT-OK");
 		expect(result.failure).toBeUndefined();
 		expect(activeTools).toEqual(["read"]);
+		result.session.dispose();
+	}, 30_000);
+
+	it("reports a clean terminal turn without text as a failure", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-empty-stop-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-empty-stop", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([() => fauxAssistantMessage([fauxText("")])]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+
+		const result = await runAgent({ cwd, model, modelRegistry: runtime.modelRegistry, getSystemPrompt: () => "parent", sessionManager: { getSessionFile: () => undefined } } as any, "empty-stop", "answer", {
+			pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+			model,
+			agentConfig: { name: "empty-stop", description: "test", builtinToolNames: ["read"], extensions: false, skills: false, persistSession: false, systemPrompt: "Answer.", promptMode: "replace" },
+		});
+
+		expect(result.responseText).toBe("");
+		expect(result.failure).toBe("run ended without producing any text");
+		result.session.dispose();
+	}, 30_000);
+
+	it("admits a controller-supplied typed tool in an extensionless session", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-custom-tool-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-custom-tool", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([() => fauxAssistantMessage([fauxToolCall("submit_result", { value: "accepted" })], { stopReason: "toolUse" })]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		let submitted: string | undefined;
+		let activeTools: string[] = [];
+		const result = await runAgent({ cwd, model, modelRegistry: runtime.modelRegistry, getSystemPrompt: () => "parent", sessionManager: { getSessionFile: () => undefined } } as any, "extensionless-role", "submit", {
+			pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+			model,
+			agentConfig: { name: "extensionless-role", description: "test", builtinToolNames: ["read"], extensions: false, skills: false, persistSession: false, systemPrompt: "Submit the result.", promptMode: "replace" },
+			customTools: [defineTool({ name: "submit_result", label: "Submit result", description: "Submit the typed result.", parameters: Type.Object({ value: Type.String() }), async execute(_id, params) { submitted = params.value; return { content: [{ type: "text", text: "submitted" }], terminate: true }; } })],
+			onSessionCreated: (session) => { activeTools = session.getActiveToolNames(); },
+		});
+		expect(submitted).toBe("accepted");
+		expect(activeTools).toEqual(["read", "submit_result"]);
 		result.session.dispose();
 	}, 30_000);
 

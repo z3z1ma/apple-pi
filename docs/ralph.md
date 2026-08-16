@@ -56,18 +56,18 @@ The context packet is root-first, then deterministically ordered by record kind 
 /ralph inspect .ledger/202608151430-example/task.md
 /ralph start .ledger/202608151430-example/task.md
 /ralph step <run-id>
-/ralph run .ledger/202608151430-example/task.md --max-iterations 5
+/ralph run .ledger/202608151430-example/task.md
 /ralph run .ledger/202608151430-example/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
 /ralph status [run-id] --root ../task-worktree
 /ralph stop <run-id> --root ../task-worktree
 ```
 
 - `inspect` validates and describes the graph without a model call or mutation.
-- `start` requires a trusted project, active model, established Git `HEAD`, and clean Git checkout. It validates budgets before changing an open task to active.
+- `start` requires a trusted project, active model, established Git `HEAD`, and clean Git checkout. It derives and records harness-owned limits before changing an open task to active.
 - `step` performs one complete fresh executor → shared independent review → fresh judge iteration.
-- `run` performs explicitly bounded autonomous iterations. Defaults: 10 iterations, 1,000,000 lifetime tokens, two hours, executor 80 turns, review 30 turns, and judge 20 turns. Accepted maxima are 100 iterations, 10,000,000 tokens, and 24 hours.
+- `run` performs bounded autonomous iterations under package-owned iteration, token, elapsed-time, and role-turn ceilings. Normal model and slash-command calls do not configure those numeric limits; receipts retain the resolved internal policy and explicit terminal cause.
 - `status` validates and replays the user-local receipt.
-- `stop` aborts active work, waits for it to quiesce, and records one terminal operator stop.
+- `stop` aborts active work, waits for it to quiesce, and records an `operator_stop` terminal cause.
 
 The model-facing `ralph` tool is the primary orchestration interface; the slash command is human operational parity. The tool uses `task`, `root`, and `ledger_root`:
 

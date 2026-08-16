@@ -130,6 +130,10 @@ export interface VerifierOutput {
 export type ReviewTerminalState = "complete" | "partial" | "failed" | "skipped" | "stopped" | "workspace_conflict" | "error";
 export type ReviewRunState = "planning" | "reviewing" | "verifying" | ReviewTerminalState;
 
+/**
+ * Internal controller ceilings. These are not part of ordinary model or command
+ * input; tests and trusted package policy may use them to establish a boundary.
+ */
 export interface ReviewBudgets {
 	maxTokens: number;
 	timeoutSeconds: number;
@@ -139,6 +143,50 @@ export interface ReviewBudgets {
 	verifierMaxTurns: number;
 	maxGroups: number;
 	maxPromptBytes: number;
+}
+
+export type ReviewTerminalCause =
+	| "operator_stop"
+	| "external_cancellation"
+	| "elapsed_time_ceiling"
+	| "aggregate_token_ceiling"
+	| "role_turn_ceiling"
+	| "compaction"
+	| "provider_error"
+	| "invalid_output"
+	| "authority_denial"
+	| "workspace_conflict"
+	| "policy_input"
+	| "internal_error";
+
+export interface ReviewRoleEnvelope {
+	stage: "planner" | "reviewer" | "verifier";
+	groupId?: string;
+	mode: string;
+	model: string;
+	contextWindow: number;
+	modelMaxOutputTokens: number;
+	promptBytes: number;
+	resultToolBytes: number;
+	builtinToolBytes: number;
+	estimatedInputTokens: number;
+	reservedOutputTokens: number;
+	expectedRequests: number;
+	reservationTokens: number;
+	maxTokens: number;
+	maxTurns: number;
+	timeoutSeconds: number;
+}
+
+/** Additive, receipt-persisted policy selected by a semantic profile and sealed input. */
+export interface ReviewResolvedPolicy {
+	version: 1;
+	profile: ReviewProfile;
+	selectedItems: number;
+	diffBytes: number;
+	binaryWaivers: number;
+	budgets: ReviewBudgets;
+	envelopes: ReviewRoleEnvelope[];
 }
 
 export interface ReviewModelRouting {
@@ -158,6 +206,7 @@ export interface ReviewAgentReceipt {
 	agentId: string;
 	sessionFile?: string;
 	status: AgentRecord["status"];
+	terminationCause?: AgentRecord["terminationCause"];
 	usage: { input: number; output: number; cacheWrite: number };
 	compactions: number;
 }
@@ -165,7 +214,7 @@ export interface ReviewAgentReceipt {
 export interface ReviewCoverageFailure {
 	itemId: string;
 	path: string;
-	classification: "planner" | "provider" | "timeout" | "budget" | "invalid_output" | "compacted" | "cancelled" | "unknown";
+	classification: "planner" | "provider" | "timeout" | "budget" | "invalid_output" | "compacted" | "cancelled" | "authority" | "policy_input" | "workspace" | "unknown";
 	reason: string;
 }
 
@@ -190,6 +239,9 @@ export interface ReviewRun {
 	residualRisk: string[];
 	totalTokens: number;
 	budgets: ReviewBudgets;
+	/** Resolved package policy, additive so schema-v1 receipts remain readable. */
+	policy?: ReviewResolvedPolicy;
+	terminalCause?: ReviewTerminalCause;
 	routing: ReviewModelRouting;
 	agents: ReviewAgentReceipt[];
 	lastOutcome?: string;
@@ -214,7 +266,8 @@ export interface StartReviewOptions {
 	profile?: ReviewProfile;
 	background?: string;
 	authorityPacket?: string;
-	budgets?: Partial<ReviewBudgets>;
+	/** Internal parent/controller safety constraints; never populated by normal tool or command input. */
+	constraints?: Partial<Pick<ReviewBudgets, "maxTokens" | "timeoutSeconds">>;
 	routing?: Partial<ReviewModelRouting>;
 }
 

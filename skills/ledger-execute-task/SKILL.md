@@ -19,10 +19,10 @@ Choose supervised execution when learning or risk is high:
 /ralph status <run-id>
 ```
 
-Choose autonomous execution only with explicit finite budgets:
+Choose autonomous execution only after shaping a bounded task. Ralph derives and records its own package-owned ceilings; ordinary model and slash-command calls do not estimate token, turn, or timeout arithmetic:
 
 ```text
-/ralph run .ledger/<task-id>/task.md --max-iterations 5 --max-tokens 500000
+/ralph run .ledger/<task-id>/task.md
 /ralph run .ledger/<task-id>/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
 ```
 

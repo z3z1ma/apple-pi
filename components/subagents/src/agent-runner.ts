@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, LoadExtensionsResult, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -50,6 +50,9 @@ const CHILD_DENIED_TOOL_NAMES: string[] = [
   ...Object.values(SUBAGENT_TOOL_NAMES),
   "pi_exec",
 ];
+
+/** Continuous second-model review is expensive and must be explicitly enabled per agent. */
+const ADVISOR_EXTENSION_NAME = "pi-advisor";
 
 /**
  * Canonical name of an extension for `extensions: [...]` allowlist matching.
@@ -242,9 +245,11 @@ export function installExtensionToolScope(
     narrowing: Map<string, Set<string>>;
     /** Opt-in nested-delegation tool names to keep active despite the child denylist. */
     nestedToolNames: Set<string>;
+    /** Controller-supplied SDK tools that do not belong to a loaded extension. */
+    customToolNames: Set<string>;
   },
 ): void {
-  const { loader, toolNames, disallowedSet, extNames, narrowing, nestedToolNames } = ctx;
+  const { loader, toolNames, disallowedSet, extNames, narrowing, nestedToolNames, customToolNames } = ctx;
 
   // The names allowed right now. Mirrors the `ext:` opt-in flip: when any `ext:`
   // selector is present, extension tools become an explicit allowlist — a loaded
@@ -270,6 +275,9 @@ export function installExtensionToolScope(
     // are legitimately active for this agent — re-admit them so the renarrow keeps
     // them in the active set and beforeToolCall doesn't block them.
     for (const name of nestedToolNames) {
+      if (!disallowedSet?.has(name)) keep.add(name);
+    }
+    for (const name of customToolNames) {
       if (!disallowedSet?.has(name)) keep.add(name);
     }
     return keep;
@@ -373,6 +381,8 @@ export interface RunOptions {
   agentConfig?: AgentConfig;
   /** Enforcement that runs before the session's existing beforeToolCall hook. */
   toolPolicy?: ManagedAgentToolPolicy;
+  /** Controller-supplied SDK tools, independent of extension discovery. */
+  customTools?: ToolDefinition[];
   signal?: AbortSignal;
   isolated?: boolean;
   inheritContext?: boolean;
@@ -481,14 +491,16 @@ function getLastAssistantText(session: AgentSession, startIndex = 0): string {
 
 /**
  * Error message of THIS invocation's final assistant message, when that turn
- * failed. Two failure shapes, both keyed off how the final turn STOPPED:
+ * failed. Three failure shapes, all keyed off how the final turn STOPPED:
  *   - stopReason "error": a provider failure pi resolved instead of rejecting
  *     (any text; partial output is surfaced separately).
  *   - stopReason "length" with NO text: a silent max-token death — the run hit
  *     the output-token ceiling before writing anything, which would otherwise
  *     land as a "completed" run with an empty result (the #144 symptom).
- * Everything else completes: a clean "stop"/"toolUse" final, and — crucially — a
- * "length" stop that DID produce text (a legitimate truncated-but-useful answer).
+ *   - any non-"toolUse" stop with NO text: a clean terminal stop that must not
+ *     report completed with an earlier message as its final answer.
+ * Everything else completes: a "toolUse" stop (which is not terminal), and —
+ * crucially — a "length" or "stop" stop that DID produce text.
  * "aborted" is handled by the manager's abort flag / "stopped" guard, not here.
  * Bounded by `startIndex` (like the text fallback) so a resume that produced no
  * assistant message of its own never inherits a PRIOR turn's stop reason.
@@ -500,8 +512,12 @@ function finalTurnError(session: AgentSession, startIndex = 0): string | undefin
     if (msg.stopReason === "error") {
       return (msg as { errorMessage?: string }).errorMessage?.trim() || "provider error with no output";
     }
-    if (msg.stopReason === "length" && !extractText(msg.content).trim()) {
+    const text = extractText(msg.content).trim();
+    if (msg.stopReason === "length" && !text) {
       return "run hit the output token limit before producing any text";
+    }
+    if (msg.stopReason !== "toolUse" && !text) {
+      return "run ended without producing any text";
     }
     return undefined;
   }
@@ -631,6 +647,10 @@ export async function runAgent(
   // factories still run once during reload() (see comment above) — exclusion
   // suppresses handler binding and tool registration; it is not a sandbox.
   const excludeNames = new Set((excludeExtensions ?? []).map((n) => n.toLowerCase()));
+  // Generic extension inheritance must not silently create a second-model
+  // review loop in every child. Custom agent frontmatter opts in with
+  // `advisor: true`; explicit exclusions still win below.
+  if (agentConfig?.advisor !== true) excludeNames.add(ADVISOR_EXTENSION_NAME);
   const hasExcludes = excludeNames.size > 0;
   // The override filters loaded extensions down to `keepNames` minus `excludeNames`.
   // It's only needed when we're neither loading everything without excludes
@@ -787,6 +807,9 @@ export async function runAgent(
       })
     : [];
   const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
+  const customTools = [...nestedTools, ...(options.customTools ?? [])];
+  const customToolNames = new Set(customTools.map(tool => tool.name));
+  if (customToolNames.size !== customTools.length) throw new Error(`Agent "${type}" received duplicate custom tool names`);
 
   // ─── Tool scoping ───────────────────────────────────────────────────────
   //
@@ -826,7 +849,7 @@ export async function runAgent(
       ...toolNames.filter(
         (t) => !CHILD_DENIED_TOOL_NAMES.includes(t) && !disallowedSet?.has(t),
       ),
-      ...[...nestedToolNames].filter((t) => !disallowedSet?.has(t)),
+      ...[...customToolNames].filter((t) => !disallowedSet?.has(t)),
     ];
   } else {
     // Deny the orchestration tools EXCEPT the nested ones this agent opted into —
@@ -879,7 +902,7 @@ export async function runAgent(
     ...(parentModelRuntime !== undefined && { modelRuntime: parentModelRuntime as never }),
     model,
     tools: sessionTools,
-    customTools: nestedTools,
+    customTools,
     resourceLoader: loader,
   };
   if (sessionExcludeTools) {
@@ -923,6 +946,7 @@ export async function runAgent(
       extNames,
       narrowing,
       nestedToolNames,
+      customToolNames,
     });
   }
 

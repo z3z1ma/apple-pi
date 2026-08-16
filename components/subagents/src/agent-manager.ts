@@ -11,16 +11,35 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
-import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import type { ManagedAgentToolPolicy } from "./service.js";
-import type { AgentConfig, AgentInvocation, AgentRecord, SubagentType, ThinkingLevel } from "./types.js";
+import type { AgentConfig, AgentInvocation, AgentRecord, AgentTerminationCause, SubagentType, ThinkingLevel } from "./types.js";
 import { addUsage } from "./usage.js";
 
 export type OnAgentComplete = (record: AgentRecord) => void;
 export type OnAgentStart = (record: AgentRecord) => void;
 export type OnAgentCompact = (record: AgentRecord, info: CompactionInfo) => void;
 export type CompactionInfo = { reason: "manual" | "threshold" | "overflow"; tokensBefore: number };
+
+/**
+ * Terminate a child session through the same lifecycle boundary as Pi's
+ * AgentSessionRuntime. AgentSession.dispose() invalidates extensions without
+ * notifying them, which leaves session-scoped resources running.
+ */
+export async function disposeAgentSession(session: AgentSession | undefined): Promise<void> {
+  if (!session) return;
+  try {
+    await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+  } catch {
+    // A broken extension must not prevent the session and its resources closing.
+  }
+  try {
+    session.dispose();
+  } catch {
+    // Dispose is best-effort: this cleanup path must not leak a rejection.
+  }
+}
 
 /** Default max concurrent background agents. */
 const DEFAULT_MAX_CONCURRENT = 4;
@@ -82,6 +101,8 @@ export interface SpawnOptions {
   agentConfig?: AgentConfig;
   /** Per-call enforcement layered ahead of the session's existing tool policy. */
   toolPolicy?: ManagedAgentToolPolicy;
+  /** Controller-supplied SDK tools, independent of extension discovery. */
+  customTools?: ToolDefinition[];
   /** Capability owner; internal records cannot be resumed or steered through public tools. */
   internalOwner?: string;
   isolated?: boolean;
@@ -263,7 +284,7 @@ export class AgentManager {
     // Wire parent abort signal to stop the subagent when the parent is interrupted
     let detachParentSignal: (() => void) | undefined;
     if (options.signal) {
-      const onParentAbort = () => this.abort(id);
+      const onParentAbort = () => this.abort(id, "external_cancellation");
       options.signal.addEventListener("abort", onParentAbort, { once: true });
       detachParentSignal = () => options.signal!.removeEventListener("abort", onParentAbort);
       if (options.signal.aborted) onParentAbort();
@@ -280,6 +301,7 @@ export class AgentManager {
       toolExecution: options.toolExecution,
       agentConfig: options.agentConfig,
       toolPolicy: options.toolPolicy,
+      customTools: options.customTools,
       isolated: options.isolated,
       inheritContext: options.inheritContext,
       thinkingLevel: options.thinkingLevel,
@@ -329,9 +351,11 @@ export class AgentManager {
           // honest "error" — not a completion with an empty or stale result.
           if (aborted) {
             record.status = "aborted";
+            record.terminationCause ??= "turn_ceiling";
           } else if (failure) {
             record.status = "error";
             record.error = failure;
+            record.terminationCause ??= "provider_error";
           } else {
             record.status = steered ? "steered" : "completed";
           }
@@ -359,6 +383,7 @@ export class AgentManager {
         // Don't overwrite status if externally stopped via abort()
         if (record.status !== "stopped") {
           record.status = "error";
+          record.terminationCause ??= "provider_error";
         }
         record.error = err instanceof Error ? err.message : String(err);
         record.completedAt ??= Date.now();
@@ -669,7 +694,7 @@ export class AgentManager {
     );
   }
 
-  abort(id: string): boolean {
+  abort(id: string, cause: AgentTerminationCause = "operator_stop"): boolean {
     const record = this.agents.get(id);
     if (!record) return false;
 
@@ -677,6 +702,7 @@ export class AgentManager {
     if (record.status === "queued") {
       this.queue = this.queue.filter(q => q.id !== id);
       record.status = "stopped";
+      record.terminationCause = cause;
       record.completedAt = Date.now();
       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
       return true;
@@ -685,15 +711,17 @@ export class AgentManager {
     if (record.status !== "running") return false;
     record.abortController?.abort();
     record.status = "stopped";
+    record.terminationCause = cause;
     record.completedAt = Date.now();
     return true;
   }
 
   /** Dispose a record's in-process session and remove it from the roster. */
   private removeRecord(id: string, record: AgentRecord): void {
-    record.session?.dispose?.();
+    const session = record.session;
     record.session = undefined;
     this.agents.delete(id);
+    void disposeAgentSession(session);
   }
 
   private cleanup() {
@@ -770,9 +798,12 @@ export class AgentManager {
     clearInterval(this.cleanupInterval);
     // Clear queue
     this.queue = [];
-    for (const record of this.agents.values()) {
-      record.session?.dispose();
-    }
+    const sessions = [...this.agents.values()].map((record) => {
+      const session = record.session;
+      record.session = undefined;
+      return session;
+    });
     this.agents.clear();
+    void Promise.all(sessions.map(disposeAgentSession));
   }
 }

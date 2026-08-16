@@ -39,6 +39,7 @@ interface NestedSpawnOptions {
 	description: string;
 	model?: Model<any>;
 	modelResolved?: boolean;
+	/** Trusted agent-definition turn ceiling; never supplied by the parent model. */
 	maxTurns?: number;
 	isolated?: boolean;
 	inheritContext?: boolean;
@@ -118,11 +119,10 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			subagent_type: Type.String({ description: `Allowed type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.` }),
 			model: Type.Optional(Type.String()),
 			thinking: Type.Optional(Type.String()),
-			max_turns: Type.Optional(Type.Number({ minimum: 1, description: "Optional turn safety limit. Omit for unlimited; do not impose one by default on broad investigations." })),
 			run_in_background: Type.Optional(Type.Boolean()),
 			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
 			isolated: Type.Optional(Type.Boolean()),
-			inherit_context: Type.Optional(Type.Boolean()),
+			inherit_context: Type.Optional(Type.Boolean({ description: "Prepend a bounded parent handoff, not the full transcript." })),
 		}),
 		execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
 			if (params.resume) {

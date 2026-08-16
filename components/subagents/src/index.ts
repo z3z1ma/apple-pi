@@ -8,7 +8,7 @@ import {
 import { Type } from "typebox";
 import { abortable } from "./abortable.js";
 import { renderAgentName } from "./agent-color.js";
-import { AgentManager } from "./agent-manager.js";
+import { AgentManager, disposeAgentSession } from "./agent-manager.js";
 import {
 	getAgentConversation,
 	getDefaultMaxTurns,
@@ -95,11 +95,18 @@ function createActivityTracker(maxTurns?: number, onChange?: () => void) {
 	};
 }
 
-function statusLabel(record: Pick<AgentRecord, "status" | "error">): string {
+function statusLabel(record: Pick<AgentRecord, "status" | "error" | "terminationCause">): string {
+	const cause = record.terminationCause;
+	if (cause === "token_ceiling") return "Stopped (token ceiling)";
+	if (cause === "turn_ceiling") return record.status === "steered" ? "Wrapped up (turn ceiling)" : "Aborted (turn ceiling)";
+	if (cause === "compaction") return "Stopped (compacted)";
+	if (cause === "operator_stop") return "Stopped by the operator";
+	if (cause === "external_cancellation") return "Cancelled by the caller";
+	if (cause === "provider_error") return `Provider error: ${record.error ?? "unknown"}`;
 	switch (record.status) {
 		case "error": return `Error: ${record.error ?? "unknown"}`;
-		case "aborted": return "Aborted (max turns exceeded)";
-		case "steered": return "Wrapped up (turn limit)";
+		case "aborted": return "Aborted";
+		case "steered": return "Wrapped up";
 		case "stopped": return "Stopped";
 		default: return "Done";
 	}
@@ -310,6 +317,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		async runFresh(ctx, request) {
 			let id: string | undefined;
 			let liveTokens = 0;
+			let tokenCeilingReached = false;
+			let compacted = false;
 			const internalOwner = request.internalOwner ?? `managed:${request.type}`;
 			const tracker = createActivityTracker(normalizeMaxTurns(request.maxTurns ?? request.agentConfig.maxTurns ?? getDefaultMaxTurns()), () => {
 				widget.update();
@@ -323,6 +332,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				toolExecution: request.toolExecution,
 				agentConfig: request.agentConfig,
 				toolPolicy: request.toolPolicy,
+				customTools: request.customTools,
 				internalOwner,
 				inheritContext: false,
 				thinkingLevel: request.thinkingLevel,
@@ -343,11 +353,15 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					tracker.callbacks.onAssistantUsage(usage);
 					request.onAssistantUsage?.(usage);
 					liveTokens += usage.input + usage.output + usage.cacheWrite;
-					if (request.maxTokens !== undefined && liveTokens >= request.maxTokens && id) manager.abort(id);
+					if (request.maxTokens !== undefined && liveTokens >= request.maxTokens && id) {
+						tokenCeilingReached = true;
+						manager.abort(id, "token_ceiling");
+					}
 				},
 				onCompaction: (info) => {
+					compacted = true;
 					request.onCompaction?.(info);
-					if (id) manager.abort(id);
+					if (id) manager.abort(id, "compaction");
 				},
 				onSessionCreated: tracker.callbacks.onSessionCreated,
 				maxSubagentDepth: 0,
@@ -357,8 +371,14 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				request.onStarted?.(agentId);
 			});
 			if (id) activityById.set(id, tracker.state);
-			record.session?.dispose();
+			if (tokenCeilingReached) record.terminationCause = "token_ceiling";
+			else if (compacted || record.compactionCount > 0) record.terminationCause = "compaction";
+			else if (request.signal?.aborted) record.terminationCause = "external_cancellation";
+			else if (record.status === "steered" || record.status === "aborted") record.terminationCause = "turn_ceiling";
+			else if (record.status === "error") record.terminationCause = "provider_error";
+			const session = record.session;
 			record.session = undefined;
+			await disposeAgentSession(session);
 			return record;
 		},
 		abort(agentId) {
@@ -456,7 +476,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		].join(" "),
 		promptGuidelines: [
 			"Prefer direct tools for straightforward work. Use a subagent only when it owns a substantial independent investigation, enables genuine parallelism, or provides a materially valuable fresh-context review. Do not delegate targeted lookups, routine planning, or work already underway, and do not launch overlapping agents.",
-			"Leave max_turns unset for broad or long-running investigations unless the user or task requires a bounded run. Omitted max_turns is unlimited; use stop_subagent if a live run should be terminated.",
+			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
 			prompt: Type.String({ description: "Self-contained task for the agent." }),
@@ -467,11 +487,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				Type.Literal("off"), Type.Literal("minimal"), Type.Literal("low"), Type.Literal("medium"),
 				Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"),
 			])),
-			max_turns: Type.Optional(Type.Number({ minimum: 1, description: "Optional turn safety limit. Omit for unlimited; do not impose one by default on broad investigations." })),
 			run_in_background: Type.Optional(Type.Boolean()),
 			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
 			isolated: Type.Optional(Type.Boolean({ description: "Disable extension and skill inheritance." })),
-			inherit_context: Type.Optional(Type.Boolean({ description: "Prepend the parent conversation to the task." })),
+			inherit_context: Type.Optional(Type.Boolean({ description: "Prepend a bounded parent handoff (latest summary and decisions), never the full transcript." })),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -481,7 +500,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const existing = manager.getRecord(params.resume);
 				if (!existing || existing.parentAgentId || existing.internalOwner) return textResult(`Agent not found: ${params.resume}`, undefined, true);
 				const background = params.run_in_background ?? false;
-				const activity = createActivityTracker(normalizeMaxTurns(params.max_turns ?? getDefaultMaxTurns()), () => widget.update());
+				const activity = createActivityTracker(normalizeMaxTurns(existing.invocation?.maxTurns ?? getDefaultMaxTurns()), () => widget.update());
 				activityById.set(existing.id, activity.state);
 				const resumed = await manager.resume(existing.id, params.prompt, background ? undefined : signal, {
 					isBackground: background,
