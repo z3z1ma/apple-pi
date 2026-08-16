@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { inspectionText } from "../components/ralph/src/index.js";
 import { hasDistillation, hasRetrospective, compileWorkGraph, missingCriterionEvidence } from "../components/ralph/src/work-graph.js";
 
 const roots: string[] = [];
@@ -84,6 +85,11 @@ function record(status: string, title: string, related = ""): string {
 }
 
 describe("compileWorkGraph", () => {
+	it("projects bounded canonical work-item IDs and states in inspection output", () => {
+		const root = project();
+		put(root, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the first bounded work item.\n- [x] WI-002: Preserve completed work-item visibility.\n\n## References"));
+		expect(inspectionText(compileWorkGraph(root, TASK))).toContain("Work Items: 2 total; 1 open; WI-001 (open), WI-002 (complete)");
+	});
 	it("compiles one deterministic self-contained task graph plus completed dependencies", () => {
 		const root = project([TASK, DEPENDENCY]);
 		put(root, DEPENDENCY, task({ status: "done", created: "2026-08-14", evidence: "- AC-001: Previously observed boundary behavior.\n- AC-002: Previously observed failure behavior.", retrospective: "The prior boundary made integration behavior explicit.", distillation: "The implementation and tests remain the durable owners." }));

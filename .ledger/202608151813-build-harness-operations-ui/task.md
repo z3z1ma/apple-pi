@@ -73,14 +73,17 @@ Design and implement a coherent terminal operations experience for long-running 
 - 2026-08-15: Kept active-task state pointer-only and deferred work-item syntax and mutation authority to an explicit specification.
 - 2026-08-15: Operator selected branch-scoped task restoration, gated WI-### work items, and a unified operations hub; activated the governing decision and behavioral specifications.
 - 2026-08-15: Split gated work-item authority into a manual bootstrap dependency so legacy Ralph cannot close this root while ignoring open work items or mix new role skills with old in-memory parsers.
+- 2026-08-15: Bootstrap task `202608151843-bootstrap-gated-work-items` closed in `bc57e35`; the operator confirmed Pi reload before this task resumed.
+- 2026-08-15: Reloaded Ralph compiled this task but its inspector output did not project WI-001 through WI-007, so commissioning remains blocked pending that observable inspector behavior.
 
 ## Blockers
 
-- The gated-work-item bootstrap dependency must be done with full validation and independent review, then Pi must be reloaded and the reloaded Ralph inspector must demonstrate that this task's open WI-### items are recognized before this blocker is cleared.
+- The reloaded Ralph inspector must enumerate this task's WI-001 through WI-007 before the operations task can resume.
 
 ## Evidence
 
-Pending.
+- 2026-08-15: Bootstrap dependency closed in `bc57e35`; operator confirmed the required Pi reload before resuming this WI-bearing task.
+- 2026-08-15: Reloaded Ralph `inspect` compiled the task graph but did not enumerate work items.
 
 ## Review
 

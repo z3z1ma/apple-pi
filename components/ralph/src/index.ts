@@ -26,9 +26,15 @@ function summariesText(summaries: RunSummary[]): string {
 	).join("\n");
 }
 
-function inspectText(cwd: string, task: string, root?: string, ledgerRoot?: string): string {
-	const roots = resolveRalphRoots(cwd, root, ledgerRoot);
-	const graph = compileWorkGraph(roots.workspaceRoot, task, {}, roots.ledgerRoot);
+export function inspectionText(graph: ReturnType<typeof compileWorkGraph>): string {
+	const workItems = graph.task.taskDocument?.workItems ?? [];
+	const visibleWorkItems = workItems.slice(0, 20);
+	const workItemSummary = [
+		`${workItems.length} total`,
+		`${workItems.filter((item) => item.state === "open").length} open`,
+		...(visibleWorkItems.length === 0 ? [] : [visibleWorkItems.map((item) => `${item.id} (${item.state})`).join(", ")]),
+		...(workItems.length > visibleWorkItems.length ? [`${workItems.length - visibleWorkItems.length} omitted`] : []),
+	].join("; ");
 	return [
 		`Workspace: ${graph.projectRoot}`,
 		`Ledger: ${graph.ledgerRoot}`,
@@ -37,9 +43,15 @@ function inspectText(cwd: string, task: string, root?: string, ledgerRoot?: stri
 		`Graph: ${graph.graphHash}`,
 		`Context: ${graph.byteLength} bytes across ${graph.records.length} records`,
 		`Acceptance: ${graph.criteria.map((criterion) => criterion.id).join(", ")}`,
+		`Work Items: ${workItemSummary}`,
 		"Records:",
 		...graph.records.map((record) => `- ${record.kind}: ${record.path} (${record.digest.slice(0, 12)})`),
 	].join("\n");
+}
+
+function inspectText(cwd: string, task: string, root?: string, ledgerRoot?: string): string {
+	const roots = resolveRalphRoots(cwd, root, ledgerRoot);
+	return inspectionText(compileWorkGraph(roots.workspaceRoot, task, {}, roots.ledgerRoot));
 }
 
 function optionsFromParams(params: Record<string, unknown>): StartRunOptions {
