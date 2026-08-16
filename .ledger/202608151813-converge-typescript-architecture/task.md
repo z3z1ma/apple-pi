@@ -49,12 +49,14 @@ After the budget-contract changes settle, make apple-pi's TypeScript and JavaScr
 - Record-backed: Budget changes touch the same entrypoints and must land first to avoid polishing obsolete structure.
 - Record-backed: VCC's CommonJS package and Bun suite explain its import convention and are not accidental drift.
 - Record-backed: file length alone is not evidence of mixed responsibility; extraction requires a consumer, test seam, or dependency-direction improvement.
+- Execution constraint: Ralph executor Bash calls must contain exactly one shell command; run every validation command separately.
 
 ## Journal
 
 - 2026-08-15: Opened after measuring component layouts, largest implementation files, entrypoint conventions, module regimes, indentation, tests, and absent quality tooling.
 - 2026-08-15: Ordered this task after budget API work to avoid churn and make convergence the final quality pass.
 - 2026-08-15: Removed the harness-operations UI dependency: it does not own or constrain this TypeScript organization work.
+- 2026-08-16: Ralph execution requires one shell command per Bash call; recorded after the executor was denied for a compound validation command.
 
 ## Blockers
 
