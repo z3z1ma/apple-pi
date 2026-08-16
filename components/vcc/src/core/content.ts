@@ -109,7 +109,7 @@ export const contentBearingText = (args: Record<string, unknown>): string => {
 };
 
 /** Extract a snippet of ~`radius` chars around the first match of `term` in `text`. */
-const snippet = (text: string, term: string, radius = 60): string | null => {
+const _snippet = (text: string, term: string, radius = 60): string | null => {
 	const idx = text.toLowerCase().indexOf(term.toLowerCase());
 	if (idx === -1) return null;
 	const start = Math.max(0, idx - radius);

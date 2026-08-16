@@ -89,7 +89,7 @@ describe("VCC file recall", () => {
 		const dir = mkdtempSync(join(tmpdir(), "vcc-file-recall-"));
 		const file = join(dir, "session.jsonl");
 		try {
-			writeFileSync(file, JSON.stringify({ type: "message", id: "m1", message: writeMessage }) + "\n", "utf8");
+			writeFileSync(file, `${JSON.stringify({ type: "message", id: "m1", message: writeMessage })}\n`, "utf8");
 			let tool: any;
 			registerRecallTool({
 				registerTool(value: any) {

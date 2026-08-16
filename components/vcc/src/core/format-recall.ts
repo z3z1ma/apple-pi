@@ -51,7 +51,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 				if (assumeAllMatched || slice[j].snippet) matched.add(j);
 			}
 			segments.push({
-				range: `#${slice[0].index}` + (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
+				range: `#${slice[0].index}${slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""}`,
 				entries: slice,
 				matchedIndices: matched,
 			});
@@ -67,7 +67,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 			if (assumeAllMatched || slice[j].snippet) matched.add(j);
 		}
 		segments.push({
-			range: `#${slice[0].index}` + (slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""),
+			range: `#${slice[0].index}${slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""}`,
 			entries: slice,
 			matchedIndices: matched,
 		});
@@ -79,7 +79,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 const shortPath = (path: string): string => {
 	const normalized = path.replace(/\\/g, "/");
 	const cwd = process.cwd().replace(/\\/g, "/");
-	if (normalized.startsWith(cwd + "/")) return "." + normalized.slice(cwd.length);
+	if (normalized.startsWith(`${cwd}/`)) return `.${normalized.slice(cwd.length)}`;
 	const parts = normalized.split("/");
 	return parts.length > 3 ? `.../${parts.slice(-3).join("/")}` : normalized;
 };

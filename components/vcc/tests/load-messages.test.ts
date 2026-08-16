@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadAllMessages } from "../src/core/load-messages.js";
 
 describe("loadAllMessages", () => {
@@ -24,7 +24,7 @@ describe("loadAllMessages", () => {
 					message: { role: "toolResult", toolName: "read", content: [{ type: "text", text: "ok" }] },
 				}),
 			];
-			writeFileSync(file, lines.join("\n") + "\n", "utf8");
+			writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
 
 			const loaded = loadAllMessages(file, false);
 			expect(loaded.rendered).toHaveLength(3);
@@ -48,7 +48,7 @@ describe("loadAllMessages", () => {
 				}),
 				JSON.stringify({ type: "message", id: "m3", message: { role: "user", content: "u2" } }),
 			];
-			writeFileSync(file, lines.join("\n") + "\n", "utf8");
+			writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
 
 			const loaded = loadAllMessages(file, false, new Set(["m2"]));
 			expect(loaded.rendered).toHaveLength(1);

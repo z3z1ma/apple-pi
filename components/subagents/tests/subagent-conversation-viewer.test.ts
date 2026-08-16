@@ -169,7 +169,7 @@ describe("ConversationViewer", () => {
 		});
 
 		it("no line exceeds width with long URLs", () => {
-			const url = "https://example.com/" + "a/b/c/d/e/".repeat(30) + "?q=" + "x".repeat(100);
+			const url = `https://example.com/${"a/b/c/d/e/".repeat(30)}?q=${"x".repeat(100)}`;
 			const messages = [{ role: "assistant", content: [{ type: "text", text: `Check this link: ${url}` }] }];
 			for (const w of widths) {
 				const viewer = new ConversationViewer(
@@ -185,8 +185,8 @@ describe("ConversationViewer", () => {
 		});
 
 		it("no line exceeds width with wide table-like content", () => {
-			const header = "| " + Array.from({ length: 20 }, (_, i) => `Column${i}`).join(" | ") + " |";
-			const dataRow = "| " + Array.from({ length: 20 }, () => "value123").join(" | ") + " |";
+			const header = `| ${Array.from({ length: 20 }, (_, i) => `Column${i}`).join(" | ")} |`;
+			const dataRow = `| ${Array.from({ length: 20 }, () => "value123").join(" | ")} |`;
 			const table = [header, dataRow, dataRow, dataRow].join("\n");
 			const messages = [{ role: "toolResult", toolUseId: "t1", content: [{ type: "text", text: table }] }];
 			for (const w of widths) {
@@ -206,7 +206,7 @@ describe("ConversationViewer", () => {
 			const messages = [
 				{
 					role: "bashExecution",
-					command: "cat " + "/very/long/path/".repeat(20) + "file.txt",
+					command: `cat ${"/very/long/path/".repeat(20)}file.txt`,
 					output: "O".repeat(600),
 					exitCode: 0,
 					cancelled: false,
@@ -261,7 +261,7 @@ describe("ConversationViewer", () => {
 					role: "assistant",
 					content: [
 						{ type: "text", text: "Let me check that." },
-						{ type: "toolCall", toolUseId: "t1", name: "very_long_tool_name_" + "x".repeat(200), input: {} },
+						{ type: "toolCall", toolUseId: "t1", name: `very_long_tool_name_${"x".repeat(200)}`, input: {} },
 					],
 				},
 			];

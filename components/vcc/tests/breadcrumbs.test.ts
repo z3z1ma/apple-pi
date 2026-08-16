@@ -66,7 +66,7 @@ describe("breadcrumbs: mergeHeaderSection", () => {
 describe("breadcrumbs: mergeFileLines (+recall:)", () => {
 	it("replaces (+N more) with +recall: listing omitted paths", () => {
 		const paths = Array.from({ length: 12 }, (_, i) => `src/mod${i}.ts`);
-		const prevSummary = ["[Files And Changes]", `- Modified: ${paths.join(", ")}`].join("\n") + "\n\n---\n\n[user]\ngo";
+		const prevSummary = `${["[Files And Changes]", `- Modified: ${paths.join(", ")}`].join("\n")}\n\n---\n\n[user]\ngo`;
 		const r = compile({
 			messages: [userMsg("continue")],
 			previousSummary: prevSummary,
@@ -78,7 +78,7 @@ describe("breadcrumbs: mergeFileLines (+recall:)", () => {
 
 	it("no breadcrumb when all paths fit within cap", () => {
 		const paths = ["src/a.ts", "src/b.ts"];
-		const prevSummary = ["[Files And Changes]", `- Modified: ${paths.join(", ")}`].join("\n") + "\n\n---\n\n[user]\ngo";
+		const prevSummary = `${["[Files And Changes]", `- Modified: ${paths.join(", ")}`].join("\n")}\n\n---\n\n[user]\ngo`;
 		const r = compile({
 			messages: [userMsg("continue")],
 			previousSummary: prevSummary,
@@ -99,7 +99,7 @@ describe("breadcrumbs: mergeFileLines (+recall:)", () => {
 
 	it("applies +recall: cap even when only previous has files (no fresh)", () => {
 		const paths = Array.from({ length: 15 }, (_, i) => `src/file${i}.ts`);
-		const prevSummary = ["[Files And Changes]", `- Read: ${paths.join(", ")}`].join("\n") + "\n\n---\n\n[user]\ngo";
+		const prevSummary = `${["[Files And Changes]", `- Read: ${paths.join(", ")}`].join("\n")}\n\n---\n\n[user]\ngo`;
 		const r = compile({
 			messages: [userMsg("continue")],
 			previousSummary: prevSummary,
@@ -214,19 +214,18 @@ describe("breadcrumbs: determinism and idempotency", () => {
 	});
 
 	it("prior compaction breadcrumb lines survive across compactions", () => {
-		const prevSummary =
-			[
-				"[Session Goal]",
-				"- ...recall: auth0, auth1",
-				"- Goal 2",
-				"- Goal 3",
-				"- Goal 4",
-				"- Goal 5",
-				"- Goal 6",
-				"- Goal 7",
-				"- Goal 8",
-				"- Goal 9",
-			].join("\n") + "\n\n---\n\n[user]\nhi";
+		const prevSummary = `${[
+			"[Session Goal]",
+			"- ...recall: auth0, auth1",
+			"- Goal 2",
+			"- Goal 3",
+			"- Goal 4",
+			"- Goal 5",
+			"- Goal 6",
+			"- Goal 7",
+			"- Goal 8",
+			"- Goal 9",
+		].join("\n")}\n\n---\n\n[user]\nhi`;
 		const r = compile({
 			messages: [userMsg("continue")],
 			previousSummary: prevSummary,

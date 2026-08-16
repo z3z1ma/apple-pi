@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerRecallTool } from "../src/tools/recall.js";
 
 const makeSession = () => {
@@ -11,7 +11,7 @@ const makeSession = () => {
 		JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: "active lineage token" } }),
 		JSON.stringify({ type: "message", id: "m2", message: { role: "user", content: "off lineage secret" } }),
 	];
-	writeFileSync(file, lines.join("\n") + "\n", "utf8");
+	writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
 	return { dir, file };
 };
 

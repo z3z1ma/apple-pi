@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { searchEntries } from "../src/core/search-entries.js";
 import { formatRecallOutput } from "../src/core/format-recall.js";
 import { registerRecallTool } from "../src/tools/recall.js";
@@ -210,7 +210,7 @@ const makeGovSession = () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-vcc-gov-"));
 	const file = join(dir, "session.jsonl");
 	const lines = govMessages.map((msg, i) => JSON.stringify({ type: "message", id: `m${i}`, message: msg }));
-	writeFileSync(file, lines.join("\n") + "\n", "utf8");
+	writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
 	return { dir, file };
 };
 
@@ -469,7 +469,7 @@ describe("government domain: vcc_recall integration", () => {
 				message: { role: "user", content: `Policy document review item ${i} for compliance approval` },
 			}),
 		);
-		writeFileSync(file, entries.join("\n") + "\n", "utf8");
+		writeFileSync(file, `${entries.join("\n")}\n`, "utf8");
 
 		try {
 			const tool = register();
@@ -486,7 +486,7 @@ describe("government domain: vcc_recall integration", () => {
 			const indexLines = result.split("\n").filter((l: string) => /^#\d+/.test(l.trim()));
 			expect(indexLines.length).toBeLessThanOrEqual(25);
 			// Should start past the midpoint of the session, not at #0
-			const firstIndex = parseInt(indexLines[0]?.match(/#(\d+)/)?.[1] ?? "0");
+			const firstIndex = parseInt(indexLines[0]?.match(/#(\d+)/)?.[1] ?? "0", 10);
 			expect(firstIndex).toBeGreaterThan(30);
 			// Should NOT include entry #0
 			expect(result).not.toContain("#0 [user]");

@@ -74,7 +74,7 @@ const guestPrint = (...values) => {
 };
 
 parentPort.on("message", (message) => {
-	if (!message || message.type !== "call_result") return;
+	if (message?.type !== "call_result") return;
 	const request = pending.get(message.id);
 	if (!request) return;
 	pending.delete(message.id);

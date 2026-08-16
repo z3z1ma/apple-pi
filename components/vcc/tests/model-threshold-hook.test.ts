@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { describe, test, expect, afterEach, beforeAll, afterAll } from "bun:test";
+import { existsSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerBeforeCompactHook, PI_VCC_COMPACT_INSTRUCTION } from "../src/hooks/before-compact.js";
 
 let tmpDir: string;
@@ -87,7 +87,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,
@@ -115,7 +115,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,
@@ -141,7 +141,7 @@ describe("session_before_compact: per-model threshold", () => {
 			overrideDefaultCompaction: true,
 			globalThreshold: { compactPercent: 65 },
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "some-model",
 			provider: "some-provider",
 			contextWindow: 128000,
@@ -169,7 +169,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"neuralwatt/GLM-5.1": { compactPercent: 80 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,
@@ -194,7 +194,7 @@ describe("session_before_compact: per-model threshold", () => {
 			overrideDefaultCompaction: true,
 			defaultThreshold: { reserveTokens: 16384 },
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "some-model",
 			provider: "some-provider",
 			contextWindow: 128000,
@@ -221,7 +221,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,
@@ -245,7 +245,7 @@ describe("session_before_compact: per-model threshold", () => {
 			debug: false,
 			overrideDefaultCompaction: true,
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,
@@ -270,7 +270,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi(undefined);
+		const { pi, emit } = createMockPi(undefined);
 		registerBeforeCompactHook(pi);
 
 		const entries = [
@@ -291,7 +291,7 @@ describe("session_before_compact: per-model threshold", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi({
+		const { pi, emit } = createMockPi({
 			id: "GLM-5.1",
 			provider: "neuralwatt",
 			contextWindow: 200000,

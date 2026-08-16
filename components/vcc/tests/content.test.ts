@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { textOf, thinkingOf, toolCallsOf, clip, firstLine } from "../src/core/content.js";
+import { textOf, thinkingOf, toolCallsOf } from "../src/core/content.js";
 
 describe("textOf", () => {
 	it("returns empty string for undefined content", () => {

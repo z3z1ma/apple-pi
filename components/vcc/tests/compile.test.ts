@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { compile } from "../src/core/summarize.js";
-import { userMsg, assistantText, assistantWithToolCall, toolResult } from "./fixtures.js";
+import { userMsg, assistantText, assistantWithToolCall } from "./fixtures.js";
 
 describe("compile", () => {
 	it("returns empty string for no messages", () => {

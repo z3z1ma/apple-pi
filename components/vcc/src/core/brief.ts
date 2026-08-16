@@ -2,7 +2,7 @@ import type { NormalizedBlock } from "../types.js";
 import { clip, firstLine } from "./content.js";
 import { extractPath } from "./tool-args.js";
 import { collapseSkillText } from "./skill-collapse.js";
-import { KEY_STOPS, refineBreadcrumbKey } from "./causal-keys.js";
+import { refineBreadcrumbKey } from "./causal-keys.js";
 
 const TRUNCATE_USER = 256;
 const TRUNCATE_ASSISTANT = 200;
@@ -146,7 +146,7 @@ const truncateTokens = (text: string, limit: number): string => {
 		cutIdx = match.index + match[0].length;
 	}
 	if (count <= limit) return flat;
-	return flat.slice(0, cutIdx).trimEnd() + "...(truncated)";
+	return `${flat.slice(0, cutIdx).trimEnd()}...(truncated)`;
 };
 
 // ── bash command compression ──
@@ -171,7 +171,7 @@ const compressBash = (raw: string): string => {
 		cmd = stripped;
 	}
 	if (cmd.length > BASH_CAP) {
-		return cmd.slice(0, BASH_CAP - 3) + "...";
+		return `${cmd.slice(0, BASH_CAP - 3)}...`;
 	}
 	return cmd;
 };
@@ -317,7 +317,7 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 			const last = out.length > 0 ? out[out.length - 1] : "";
 			const m = last.match(/^(.*) \((#[\d, #]+)\) x(\d+)$/);
 			if (m && m[1] === base) {
-				out[out.length - 1] = `${base} (${m[2]}, #${ref}) x${parseInt(m[3]) + 1}`;
+				out[out.length - 1] = `${base} (${m[2]}, #${ref}) x${parseInt(m[3], 10) + 1}`;
 			} else if (last.match(/\(#\d+\)$/) && last.replace(/\s*\(#\d+\)$/, "") === base) {
 				const prevRef = last.match(/\(#(\d+)\)$/)?.[1];
 				out[out.length - 1] = `${base} (#${prevRef}, #${ref}) x2`;
@@ -368,7 +368,7 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 		const prevMatch = prev?.header.match(/^\[tool_error\]\s+(\S+?)\s*\(((?:#\d+(?:,\s*)?)+)\)(?:\s*x(\d+))?$/);
 		if (prev && prevMatch && prevMatch[1] === tool && prev.lines.length === 1 && prev.lines[0] === body) {
 			const refs = prevMatch[2] + (ref ? `, #${ref}` : "");
-			const count = prevMatch[3] ? parseInt(prevMatch[3]) + 1 : 2;
+			const count = prevMatch[3] ? parseInt(prevMatch[3], 10) + 1 : 2;
 			prev.header = `[tool_error] ${tool} (${refs}) x${count}`;
 		} else {
 			collapsedErrors.push(sec);
@@ -416,7 +416,7 @@ const parseToolLine = (line: string): { tool: string; cmd?: string; ref?: string
 		tool: m[1],
 		cmd: m[2] || undefined,
 		ref: m[3] || undefined,
-		count: m[4] ? parseInt(m[4]) : undefined,
+		count: m[4] ? parseInt(m[4], 10) : undefined,
 	};
 };
 
@@ -729,7 +729,7 @@ const synthesizeTurnSummary = (
  * Deterministic: same input always produces the same breadcrumb.
  * Idempotent: the breadcrumb is a pure function of the line text and causal chain.
  */
-const buildCausalBreadcrumb = (
+const _buildCausalBreadcrumb = (
 	turnSummary: string,
 	causalChain: { cause: string | null; resolution: string | null },
 ): string => {

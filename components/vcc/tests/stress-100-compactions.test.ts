@@ -199,7 +199,7 @@ const briefTranscriptSize = (text: string): { lines: number; chars: number } => 
 	return { lines: brief.split("\n").filter(Boolean).length, chars: brief.length };
 };
 
-const previousSummaryChars = (text: string): number => text.length;
+const _previousSummaryChars = (text: string): number => text.length;
 
 /** Check if a file path is recoverable via breadcrumb or section content */
 const isFileRecoverable = (text: string, filePath: string): boolean => {

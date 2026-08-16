@@ -1,5 +1,3 @@
-import type { Message } from "@earendil-works/pi-ai";
-
 export interface FileOps {
 	readFiles?: string[];
 	modifiedFiles?: string[];

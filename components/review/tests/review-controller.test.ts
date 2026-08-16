@@ -233,7 +233,7 @@ describe("ReviewController", () => {
 		const path = reviewReceiptPath(root, run.runId);
 		writeFileSync(
 			path,
-			readFileSync(path, "utf8")
+			`${readFileSync(path, "utf8")
 				.split(/\n/)
 				.filter(Boolean)
 				.map((line) => {
@@ -242,7 +242,7 @@ describe("ReviewController", () => {
 					delete event.run.terminalCause;
 					return JSON.stringify(event);
 				})
-				.join("\n") + "\n",
+				.join("\n")}\n`,
 		);
 		expect(loadReviewRun(root, run.runId).state).toBe("complete");
 	});

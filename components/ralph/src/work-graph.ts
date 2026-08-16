@@ -380,7 +380,7 @@ export function compileWorkGraph(
 				.map((path) => `- ${path}`)
 				.join("\n")}`,
 		);
-	const bundle = bundleParts.join("\n\n---\n\n") + "\n";
+	const bundle = `${bundleParts.join("\n\n---\n\n")}\n`;
 	const byteLength = Buffer.byteLength(bundle);
 	if (byteLength > maxBytes)
 		throw new WorkGraphError(`Compiled context is ${byteLength} bytes; limit is ${maxBytes}`, "graph_byte_budget");

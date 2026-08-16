@@ -440,12 +440,12 @@ const fullText = (msg: Message, mode: RecallMode): string => {
 			.flatMap((operation) => [operation.ref, executionArgsText(operation), executionResultText(operation)])
 			.filter(Boolean)
 			.join("\n");
-		if (nested) text += "\n" + nested;
+		if (nested) text += `\n${nested}`;
 	}
 	const thinking = thinkingOf(msg.content);
-	if (thinking) text = thinking + "\n" + text;
+	if (thinking) text = `${thinking}\n${text}`;
 	const toolArgs = toolCallsOf(msg.content);
-	if (toolArgs) text = toolArgs + "\n" + text;
+	if (toolArgs) text = `${toolArgs}\n${text}`;
 	return text;
 };
 

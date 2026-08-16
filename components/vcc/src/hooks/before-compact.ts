@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { writeFileSync } from "fs";
+import { writeFileSync } from "node:fs";
 import { compile, type CompileInput } from "../core/summarize.js";
 import {
 	CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION,
@@ -532,7 +532,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 					if (e.type === "message" && e.message) liveRoles.push(e.message.role);
 				}
 			}
-			const userIndices = liveRoles.reduce<number[]>((acc, r, i) => (r === "user" ? (acc.push(i), acc) : acc), []);
+			const userIndices = liveRoles.flatMap((role, index) => (role === "user" ? [index] : []));
 
 			dbg(settings, {
 				cancelled: true,

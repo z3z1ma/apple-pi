@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerBeforeCompactHook, PI_VCC_COMPACT_INSTRUCTION } from "../src/hooks/before-compact.js";
 import {
 	CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION,
@@ -89,7 +89,7 @@ const msg = (id: string, role: "user" | "assistant" | "toolResult", content = "x
 	type: "message",
 	message: { role, content },
 });
-const comp = (id: string, firstKeptEntryId?: string) => ({ id, type: "compaction", firstKeptEntryId });
+const _comp = (id: string, firstKeptEntryId?: string) => ({ id, type: "compaction", firstKeptEntryId });
 
 describe("registerBeforeCompactHook: cancel paths", () => {
 	beforeEach(() => {
@@ -114,7 +114,7 @@ describe("registerBeforeCompactHook: cancel paths", () => {
 
 	test("/pi-vcc with no user message compacts all instead of cancelling", () => {
 		setConfig({ debug: false, overrideDefaultCompaction: false });
-		const { pi, invoke, notifyCalls } = createMockPi();
+		const { pi, invoke } = createMockPi();
 		registerBeforeCompactHook(pi);
 
 		const entries = [msg("m1", "assistant"), msg("m2", "assistant"), msg("m3", "assistant")];

@@ -9,7 +9,6 @@ import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { selectAgentModel } from "../src/agent-runner.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
-import { loadCustomAgents } from "../src/custom-agents.js";
 import { resolveAgentModel } from "../src/model-routing.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
 import type { AgentConfig } from "../src/types.js";

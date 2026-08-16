@@ -389,7 +389,7 @@ export class FleetList {
 
 		const hint = this.active ? "↑↓ select · enter view · esc back" : "esc to interrupt · ← for agents · ↓ to manage";
 		const lines: string[] = [];
-		lines.push(truncateToWidth("  " + theme.fg("dim", hint), width));
+		lines.push(truncateToWidth(`  ${theme.fg("dim", hint)}`, width));
 		lines.push("");
 		lines.push(truncateToWidth(`  ${this.bullet(0, sel, theme)} main`, width));
 

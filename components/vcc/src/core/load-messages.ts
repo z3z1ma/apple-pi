@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import type { Message } from "@earendil-works/pi-ai";
 import { renderMessage, type RenderedEntry } from "./render-entries.js";
 

@@ -216,7 +216,7 @@ const mergeFileLines = (prev: string, fresh: string): string => {
 		if (arr.length <= limit) return arr.join(", ");
 		const kept = arr.slice(0, limit);
 		const omitted = arr.slice(limit);
-		return kept.join(", ") + `, +recall: ${omitted.join(", ")}`;
+		return `${kept.join(", ")}, +recall: ${omitted.join(", ")}`;
 	};
 
 	const lines: string[] = [];
@@ -230,7 +230,7 @@ const mergeFileLines = (prev: string, fresh: string): string => {
 const mergeBriefTranscript = (prev: string, fresh: string): string => {
 	if (!prev) return fresh;
 	if (!fresh) return prev;
-	return prev + "\n\n" + fresh;
+	return `${prev}\n\n${fresh}`;
 };
 
 const mergePrevious = (prev: string, fresh: string): string => {
@@ -267,7 +267,7 @@ export const compile = (input: CompileInput): string => {
 	const merged = prev ? mergePrevious(prev, fresh) : fresh;
 	if (!merged) return "";
 	const body = merged;
-	return wrapLongLines(HANDFOFF_PREAMBLE + "\n\n" + body);
+	return wrapLongLines(`${HANDFOFF_PREAMBLE}\n\n${body}`);
 };
 
 const stripRecallNote = (text: string): string => {

@@ -102,7 +102,7 @@ function diffPacket(items: ReviewItem[], maxBytes?: number): string {
 		if (maxBytes !== undefined) {
 			const remaining = Math.max(0, maxBytes - used - Buffer.byteLength(heading));
 			if (Buffer.byteLength(diff) > remaining) {
-				diff = Buffer.from(diff).subarray(0, remaining).toString("utf8") + "\n[planner excerpt ended]";
+				diff = `${Buffer.from(diff).subarray(0, remaining).toString("utf8")}\n[planner excerpt ended]`;
 			}
 		}
 		const part = `${heading}\n\`\`\`diff\n${diff.trimEnd()}\n\`\`\``;

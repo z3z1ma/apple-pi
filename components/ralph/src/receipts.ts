@@ -177,8 +177,7 @@ function validateWorkItems(event: ReceiptEvent): void {
 
 function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun, previous?: RalphRun): void {
 	if (
-		!run ||
-		run.schemaVersion !== 2 ||
+		run?.schemaVersion !== 2 ||
 		run.runId !== event.runId ||
 		run.projectRoot !== event.projectRoot ||
 		run.ledgerRoot !== event.ledgerRoot ||

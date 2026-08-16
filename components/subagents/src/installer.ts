@@ -51,7 +51,7 @@ import {
 } from "./ui/agent-widget.js";
 import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./ui/conversation-viewer.js";
 import { FleetList } from "./ui/fleet-list.js";
-import { detailsFor, formatNotification, notificationDetails, statusLabel } from "./notifications.js";
+import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };

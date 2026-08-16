@@ -20,13 +20,7 @@ import {
 import { ExecActivityWidget, renderExecCall, renderExecResult, type ExecActivitySnapshot } from "./runtime-ui.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 
-import type {
-	ExecutionOperation,
-	ExecutionOutcome,
-	ProgramExecution,
-	ProgramHostCall,
-	WorkerResult,
-} from "./runtime-types.js";
+import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
 
 export type {
 	ExecutionOperation,

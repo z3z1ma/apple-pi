@@ -1,13 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { searchEntries } from "../src/core/search-entries.js";
-import { formatRecallOutput } from "../src/core/format-recall.js";
 import { registerRecallTool } from "../src/tools/recall.js";
 import type { RenderedEntry } from "../src/core/render-entries.js";
 import type { Message } from "@earendil-works/pi-ai";
-import type { SearchHit } from "../src/core/search-entries.js";
 
 // ── Australian government session fixture ──
 // Uses British/Commonwealth spelling and Australian government frameworks:
@@ -230,7 +228,7 @@ const makeAusSession = () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-vcc-aus-gov-"));
 	const file = join(dir, "session.jsonl");
 	const lines = ausMessages.map((msg, i) => JSON.stringify({ type: "message", id: `m${i}`, message: msg }));
-	writeFileSync(file, lines.join("\n") + "\n", "utf8");
+	writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
 	return { dir, file };
 };
 

@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import { loadAllMessages } from "../core/load-messages.js";
 import { getFileIndicators, getTouchedFiles, searchEntries, type SearchHit } from "../core/search-entries.js";
 import { formatRecallOutput, formatTouchedOutput } from "../core/format-recall.js";
@@ -9,7 +9,6 @@ import { normalizeRecallMode, normalizeRecallScope } from "../core/recall-scope.
 import { expandEntryFile, parseDrillDown } from "../core/drill-down.js";
 import { renderMessage } from "../core/render-entries.js";
 import type { Message } from "@earendil-works/pi-ai";
-import type { PiVccCompactionDetails } from "../details.js";
 
 const DEFAULT_RECENT = 25;
 const PAGE_SIZE = 5;
@@ -30,7 +29,7 @@ export const invalidExpandIndices = (requested: number[], available: Set<number>
 const resolveCompactionMessageRange = (sessionFile: string, scopeStr: string): [number, number] | undefined => {
 	const isLatest = scopeStr === "compaction:latest";
 	const targetIndex = isLatest ? -1 : parseInt(scopeStr.replace("compaction:", ""), 10);
-	if (isNaN(targetIndex) && !isLatest) return undefined;
+	if (Number.isNaN(targetIndex) && !isLatest) return undefined;
 
 	const content = readFileSync(sessionFile, "utf-8");
 	const entries: any[] = [];
@@ -188,7 +187,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
 				}
 
 				const expanded = requested.map((i) => byIndex.get(i)).filter((m): m is NonNullable<typeof m> => Boolean(m));
-				const output = (scopeLabel || (rawScope === "all" ? "Scope: all" : "")) + "\n" + formatRecallOutput(expanded);
+				const output = `${scopeLabel || (rawScope === "all" ? "Scope: all" : "")}\n${formatRecallOutput(expanded)}`;
 				return {
 					content: [{ type: "text", text: output }],
 					details: undefined,
@@ -274,7 +273,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
 						footerParts.push(`--- no expand indices on this page: ${notExpanded.join(", ")} ---`);
 					}
 				}
-				const footer = footerParts.length ? "\n" + footerParts.join("\n") : "";
+				const footer = footerParts.length ? `\n${footerParts.join("\n")}` : "";
 				const output = formatRecallOutput(pageResults, params.query, header) + footer;
 				return {
 					content: [{ type: "text", text: output }],
@@ -282,8 +281,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
 				};
 			}
 
-			const output =
-				(scopeLabel || (rawScope === "all" ? "Scope: all" : "")) + "\n" + formatRecallOutput(allResults, params.query);
+			const output = `${scopeLabel || (rawScope === "all" ? "Scope: all" : "")}\n${formatRecallOutput(allResults, params.query)}`;
 			return {
 				content: [{ type: "text", text: output }],
 				details: undefined,

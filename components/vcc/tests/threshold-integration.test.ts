@@ -11,9 +11,9 @@
  *   the "compact earlier than pi-core" direction.
  */
 import { describe, test, expect, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerBeforeCompactHook } from "../src/hooks/before-compact.js";
 import { registerProactiveThresholdHook, resetProactiveState } from "../src/hooks/proactive-threshold.js";
 import { isCodexContextOverflowPending } from "../src/core/codex-output-limit.js";
@@ -169,7 +169,7 @@ describe("integration: proactive trigger + before-compact", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit, compactCalls } = createMockPi(
+		const { pi, emit, compactCalls } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
@@ -204,7 +204,7 @@ describe("integration: proactive trigger + before-compact", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi(
+		const { pi, emit } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 80000, contextWindow: 128000, percent: 63 },
 		);
@@ -231,7 +231,7 @@ describe("integration: proactive trigger + before-compact", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit, compactCalls } = createMockPi(
+		const { pi, emit, compactCalls } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
@@ -264,7 +264,7 @@ describe("integration: proactive trigger + before-compact", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi(
+		const { pi, emit } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 5000, contextWindow: 128000, percent: 4 },
 		);
@@ -297,7 +297,7 @@ describe("integration: proactive trigger + before-compact with overrideDefaultCo
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit, compactCalls } = createMockPi(
+		const { pi, emit, compactCalls } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
@@ -326,7 +326,7 @@ describe("integration: proactive trigger + before-compact with overrideDefaultCo
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit } = createMockPi(
+		const { pi, emit } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 80000, contextWindow: 128000, percent: 63 },
 		);
@@ -357,7 +357,7 @@ describe("integration: cooldown prevents double compaction", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit, compactCalls } = createMockPi(
+		const { pi, emit, compactCalls } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
@@ -378,7 +378,7 @@ describe("integration: cooldown prevents double compaction", () => {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},
 		});
-		const { pi, ctx, emit, compactCalls } = createMockPi(
+		const { pi, emit, compactCalls } = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);

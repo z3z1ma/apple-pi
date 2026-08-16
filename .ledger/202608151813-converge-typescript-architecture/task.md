@@ -1,4 +1,4 @@
-Status: partial
+Status: done
 Created: 2026-08-15
 Updated: 2026-08-16
 Depends-On: .ledger/202608151813-replace-caller-budget-arithmetic/task.md
@@ -65,7 +65,7 @@ None.
 
 - 2026-08-16: Extracted advisor formatting/configuration, Pi Exec types/program/fetch, and subagent activity/notification/UI seams; public entrypoints now assemble their respective components.
 - 2026-08-16: Added Biome 2.5.8, `.editorconfig`, deterministic `format`/`format:check`/`lint`/`check` scripts, and `docs/development.md`.
-- 2026-08-16: Passed `npm run format:check`, `npm run typecheck`, `npm test`, and `npm run pack:check`. `npm test` covered 457 Vitest tests, 421 VCC Bun tests, 79 advisor harness checks, and package loading.
+- 2026-08-16: Passed `npm run check` with zero Biome diagnostics, `npm test`, and `npm run pack:check`. `npm test` covered 457 Vitest tests, 421 VCC Bun tests, 79 advisor harness checks, and package loading.
 
 ## Review
 
@@ -73,7 +73,7 @@ Not verified: Ralph's fresh executor repeatedly stopped before implementation wi
 
 ## Retrospective
 
-Kept Review/Ralph controllers, VCC algorithms, advisor runtime state, Pi Exec invocation state, and subagent lifecycle controllers intact because each is cohesive; documented the reasons in `docs/development.md`. Formatter churn is mechanically separate from the extracted entrypoint seams in the diff, but remains uncommitted pending operator integration direction.
+Kept Review/Ralph controllers, VCC algorithms, advisor runtime state, Pi Exec invocation state, and subagent lifecycle controllers intact because each is cohesive; documented the reasons in `docs/development.md`. Formatter churn is mechanically separate from the extracted entrypoint seams in the commit history.
 
 ## Distillation
 

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { describe, test, expect, afterEach, beforeAll, afterAll } from "bun:test";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerProactiveThresholdHook, resetProactiveState } from "../src/hooks/proactive-threshold.js";
 
 let tmpDir: string;

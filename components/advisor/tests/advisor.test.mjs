@@ -2010,7 +2010,7 @@ class RpcPi {
 		});
 	}
 	send(cmd) {
-		this.proc.stdin.write(JSON.stringify(cmd) + "\n");
+		this.proc.stdin.write(`${JSON.stringify(cmd)}\n`);
 	}
 	prompt(message) {
 		this.send({ type: "prompt", message });
@@ -2027,7 +2027,7 @@ class RpcPi {
 		throw new Error(`timeout waiting for ${label}`);
 	}
 	async getMessages() {
-		const id = "gm-" + Math.random().toString(36).slice(2);
+		const id = `gm-${Math.random().toString(36).slice(2)}`;
 		const before = this.events.length;
 		this.send({ id, type: "get_messages" });
 		await this.waitFor(

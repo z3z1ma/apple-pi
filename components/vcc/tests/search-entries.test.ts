@@ -34,7 +34,7 @@ describe("searchEntries", () => {
 	});
 
 	it("finds keyword beyond clip boundary in full content", () => {
-		const longText = "A".repeat(400) + " hidden_keyword here";
+		const longText = `${"A".repeat(400)} hidden_keyword here`;
 		const longEntries: RenderedEntry[] = [{ index: 0, role: "user", summary: "A".repeat(300) }];
 		const longMsgs: Message[] = [{ role: "user", content: longText } as any];
 		const r = searchEntries(longEntries, longMsgs, "hidden_keyword");

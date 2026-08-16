@@ -43,13 +43,7 @@ function validateRun(
 	genesis?: ReviewRun,
 	previous?: ReviewRun,
 ): void {
-	if (
-		!run ||
-		run.schemaVersion !== 1 ||
-		run.runId !== event.runId ||
-		run.state !== event.state ||
-		!STATES.has(run.state)
-	) {
+	if (run?.schemaVersion !== 1 || run.runId !== event.runId || run.state !== event.state || !STATES.has(run.state)) {
 		throw new Error(`Review receipt event ${event.sequence} has inconsistent run state`);
 	}
 	if (!/^[a-f0-9]{64}$/.test(run.inputHash) || !Number.isFinite(run.totalTokens) || run.totalTokens < 0) {

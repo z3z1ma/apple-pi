@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const settingsPath = (): string => process.env.PI_VCC_CONFIG_PATH ?? join(getAgentDir(), "pi-vcc-config.json");
 /** Backwards-compat export. Resolves at access time, not import time. */
-const SETTINGS_PATH = settingsPath();
+const _SETTINGS_PATH = settingsPath();
 
 /** Per-model or global compaction threshold. */
 export interface ModelThreshold {

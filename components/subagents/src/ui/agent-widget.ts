@@ -196,7 +196,7 @@ function truncateLine(text: string, len = 60): string {
 			.find((l) => l.trim())
 			?.trim() ?? "";
 	if (line.length <= len) return line;
-	return line.slice(0, len) + "…";
+	return `${line.slice(0, len)}…`;
 }
 
 /** Build a human-readable activity string from currently-running tools or response text. */
@@ -216,7 +216,7 @@ export function describeActivity(activeTools: Map<string, string>, responseText?
 				parts.push(action);
 			}
 		}
-		return parts.join(", ") + "…";
+		return `${parts.join(", ")}…`;
 	}
 
 	// No tools active — show truncated response text if available
@@ -415,7 +415,7 @@ export class AgentWidget {
 
 		const finishedLines: string[] = [];
 		for (const a of finished) {
-			finishedLines.push(truncate(theme.fg("dim", "├─") + " " + this.renderFinishedLine(a, theme)));
+			finishedLines.push(truncate(`${theme.fg("dim", "├─")} ${this.renderFinishedLine(a, theme)}`));
 		}
 
 		const runningLines: string[][] = []; // each entry is [header, activity]
@@ -450,14 +450,14 @@ export class AgentWidget {
 
 		const queuedLine =
 			queued.length > 0
-				? truncate(theme.fg("dim", "├─") + ` ${theme.fg("muted", "◦")} ${theme.fg("dim", `${queued.length} queued`)}`)
+				? truncate(`${theme.fg("dim", "├─")} ${theme.fg("muted", "◦")} ${theme.fg("dim", `${queued.length} queued`)}`)
 				: undefined;
 
 		// Assemble with overflow cap (heading + overflow indicator = 2 reserved lines).
 		const maxBody = MAX_WIDGET_LINES - 1; // heading takes 1 line
 		const totalBody = finishedLines.length + runningLines.length * 2 + (queuedLine ? 1 : 0);
 
-		const lines: string[] = [truncate(theme.fg(headingColor, headingIcon) + " " + theme.fg(headingColor, "Agents"))];
+		const lines: string[] = [truncate(`${theme.fg(headingColor, headingIcon)} ${theme.fg(headingColor, "Agents")}`)];
 
 		if (totalBody <= maxBody) {
 			// Everything fits — add all lines and fix up connectors for the last item.
@@ -530,7 +530,7 @@ export class AgentWidget {
 			const overflowText = overflowParts.join(", ");
 			lines.push(
 				truncate(
-					theme.fg("dim", "└─") + ` ${theme.fg("dim", `+${hiddenRunning + hiddenFinished} more (${overflowText})`)}`,
+					`${theme.fg("dim", "└─")} ${theme.fg("dim", `+${hiddenRunning + hiddenFinished} more (${overflowText})`)}`,
 				),
 			);
 		}

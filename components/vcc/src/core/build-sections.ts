@@ -114,7 +114,7 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
 					.split("\n")
 					.map((l) => l.trim())
 					.filter(Boolean)[0] ?? b.command;
-			const cmdDisplay = cmd.length > 80 ? cmd.slice(0, 77) + "..." : cmd;
+			const cmdDisplay = cmd.length > 80 ? `${cmd.slice(0, 77)}...` : cmd;
 			const outLine = firstLine(b.output, 120);
 			const errTag = `exit ${b.exitCode}`;
 			push(`[bash:${errTag}] ${cmdDisplay}${outLine && outLine !== cmdDisplay ? ` → ${outLine}` : ""}`);

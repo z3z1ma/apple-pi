@@ -443,7 +443,7 @@ export class AgentManager {
 		while (this.queue.length > 0 && this.runningBackground < this.maxConcurrent) {
 			const next = this.queue.shift()!;
 			const record = this.agents.get(next.id);
-			if (!record || record.status !== "queued") continue;
+			if (record?.status !== "queued") continue;
 			try {
 				next.start();
 			} catch (err) {

@@ -28,7 +28,6 @@ import {
 	recordExecutorOutcome,
 } from "./task.js";
 import type {
-	ExecutorOutput,
 	JudgeOutput,
 	RalphAgentRole,
 	WorkItemCompletionProposal,
@@ -42,7 +41,6 @@ import type {
 	RalphTerminalState,
 	ReviewerOutput,
 	RunSummary,
-	WorkspaceSnapshot,
 } from "./types.js";
 import {
 	compileWorkGraph,
@@ -828,7 +826,7 @@ export class RalphController {
 		return run;
 	}
 
-	private causeForGate(state: RalphTerminalState, reason: string): RalphTerminalCause | undefined {
+	private causeForGate(state: RalphTerminalState, _reason: string): RalphTerminalCause | undefined {
 		if (state === "done") return undefined;
 		if (state === "blocked") return "blocked";
 		if (state === "review_failed") return "review_failure";

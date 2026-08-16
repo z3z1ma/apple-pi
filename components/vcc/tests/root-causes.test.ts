@@ -264,11 +264,11 @@ describe("RC5: stopReason string values", () => {
 		};
 
 		// Verify the decisions match our intent
-		expect(decisions["stop"]).toBe(false);
-		expect(decisions["toolUse"]).toBe(true);
-		expect(decisions["length"]).toBe(true);
-		expect(decisions["error"]).toBe(true);
-		expect(decisions["aborted"]).toBe(false);
+		expect(decisions.stop).toBe(false);
+		expect(decisions.toolUse).toBe(true);
+		expect(decisions.length).toBe(true);
+		expect(decisions.error).toBe(true);
+		expect(decisions.aborted).toBe(false);
 	});
 
 	it("using 'end_turn' would NEVER match — always continues", () => {

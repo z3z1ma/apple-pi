@@ -30,7 +30,7 @@ export const parseRecallScope = (text: string): ParsedRecallScope => {
 		return { scope: "lineage", text: text.replace(/\s+/g, " ").trim() };
 	}
 
-	const rawScope = match[0];
+	const _rawScope = match[0];
 	const cleaned = text.replace(SCOPE_RE, "").replace(/\s+/g, " ").trim();
 
 	// compaction:N or compaction:latest
@@ -42,7 +42,7 @@ export const parseRecallScope = (text: string): ParsedRecallScope => {
 		const num = parseInt(val ?? "0", 10);
 		return {
 			scope: `compaction:${num}` as RecallScope,
-			compactionIndex: isNaN(num) ? undefined : num,
+			compactionIndex: Number.isNaN(num) ? undefined : num,
 			text: cleaned,
 		};
 	}

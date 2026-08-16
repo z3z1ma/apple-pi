@@ -49,13 +49,6 @@ interface SymbolInfo {
 	signature?: string;
 }
 
-interface ToolCallSymbols {
-	/** Symbols found in the tool_result text */
-	resultSymbols: SymbolInfo[];
-	/** Symbols found in Edit/Write args (newText/content) */
-	argSymbols: SymbolInfo[];
-}
-
 // Fast screening regex: rejects lines that can't start any declaration.
 // Avoids running the full 15-regex cascade on body code / comments / blank lines.
 const DECL_SCREEN_RE =
@@ -117,7 +110,7 @@ const parseSignature = (line: string): string | null => {
 		return line.trim();
 	if (GO_SIG_RE.test(line)) {
 		const nameMatch = line.match(/func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)/);
-		if (nameMatch && nameMatch[1] && nameMatch[1][0] === nameMatch[1][0].toUpperCase()) return line.trim();
+		if (nameMatch?.[1] && nameMatch[1][0] === nameMatch[1][0].toUpperCase()) return line.trim();
 	}
 	if (RUST_SIG_RE.test(line)) return line.trim();
 	return null;
@@ -283,7 +276,7 @@ export const extractFileAndSymbolData = (blocks: NormalizedBlock[], tri?: ToolRe
 						return null;
 					})();
 
-			if (r && r.text && !r.isError) {
+			if (r?.text && !r.isError) {
 				const resultText = r.text;
 
 				// Parse symbols once — 200 lines covers all three extractors' needs
