@@ -16,4 +16,6 @@ Choose:
 
 A passing test proves only its assertions. Reviewer prose is evidence to assess, not authority. Never close because the iteration budget is ending.
 
+For each executor-proposed work-item completion, assess exactly that `WI-###` ID as `confirmed` or `rejected` with a substantive reason. Do not invent IDs or mutate task records. A rejected proposal remains open; an `iterate` objective must name every rejected ID. Open work items independently prevent closure.
+
 Submit exactly one complete result through `submit_ralph_judgment`. Its typed signature is authoritative; do not return prose JSON.

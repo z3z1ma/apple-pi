@@ -24,12 +24,15 @@ import {
 	appendRunJournal,
 	blockTask,
 	closeTask,
+	completeTaskWorkItemsUnderLease,
 	recordExecutorOutcome,
 } from "./task.js";
 import type {
 	ExecutorOutput,
 	JudgeOutput,
 	RalphAgentRole,
+	WorkItemCompletionProposal,
+	WorkItemJudgment,
 	RalphBudgets,
 	RalphMode,
 	RalphRole,
@@ -319,16 +322,17 @@ export class RalphController {
 			throw new RalphGateError("error", "Ralph executor did not submit exactly one typed result", "invalid_output");
 		}
 		const executor = parseExecutorOutput(executorRole.output);
+		const workItemProposals = validateWorkItemProposals(graph, executor.workItemCompletions);
 		await recordExecutorOutcome(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, executor);
 		const afterExecutor = captureWorkspace(run.projectRoot);
 		run.expectedWorkspace = afterExecutor;
 		if (executor.status === "blocked") {
-			await appendReceipt(run, { stage: "executor", outcome: executor.status, structuredOutput: executor, workspaceHashAfter: afterExecutor.hash });
+			await appendReceipt(run, { stage: "executor", outcome: executor.status, structuredOutput: executor, workItems: { proposals: workItemProposals }, workspaceHashAfter: afterExecutor.hash });
 			return this.gate(run, "blocked", executor.blockers.join("; ") || executor.summary);
 		}
 		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
-		await appendReceipt(run, { stage: "executor", outcome: executor.status, structuredOutput: executor, workspaceHashAfter: afterExecutor.hash });
+		await appendReceipt(run, { stage: "executor", outcome: executor.status, structuredOutput: executor, workItems: { proposals: workItemProposals }, workspaceHashAfter: afterExecutor.hash });
 		if (executor.status === "failed") return this.gate(run, "error", executor.summary);
 		run.state = "reviewing";
 		run.updatedAt = new Date().toISOString();
@@ -401,23 +405,43 @@ export class RalphController {
 			throw new RalphGateError("error", "Ralph judge did not submit exactly one typed result", "invalid_output");
 		}
 		const judgment = parseJudgeOutput(judgeRole.output);
-		await appendReceipt(run, { stage: "judge", outcome: judgment.decision, structuredOutput: judgment, workspaceHashAfter: afterJudge.hash });
+		const workItemJudgments = validateWorkItemJudgments(workItemProposals, judgment.workItemJudgments);
+		await appendReceipt(run, { stage: "judge", outcome: judgment.decision, structuredOutput: judgment, workItems: { judgments: workItemJudgments }, workspaceHashAfter: afterJudge.hash });
 		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
-		await appendJudgment(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, judgment);
+		const judgmentMutation = await appendJudgment(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, judgment);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		if (graph.task.digest !== judgmentMutation.digest) {
+			throw new WorkGraphError("Ledger authority changed after judgment", "semantic_authority_changed");
+		}
+		const confirmedWorkItems = workItemJudgments.filter((item) => item.decision === "confirmed").map((item) => item.id);
+		const rejectedWorkItems = workItemJudgments.filter((item) => item.decision === "rejected");
+		const rejectedSummary = rejectedWorkItems.length === 0 ? undefined : `Rejected work items: ${rejectedWorkItems.map((item) => `${item.id} (${item.reason})`).join(", ")}`;
+		if (confirmedWorkItems.length > 0) await completeTaskWorkItemsUnderLease(graph.task.absolutePath, graph.task.digest, run.runId, confirmedWorkItems);
 		run.expectedWorkspace = captureWorkspace(run.projectRoot);
 		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
+		await appendReceipt(run, {
+			stage: "judge",
+			outcome: "work_items_applied",
+			workItems: {
+				confirmedIds: confirmedWorkItems,
+				rejectedIds: rejectedWorkItems.map((item) => item.id),
+				taskDigest: graph.task.digest,
+			},
+			workspaceHashAfter: run.expectedWorkspace.hash,
+		});
 
 		if (judgment.decision === "close") return this.closeIfSupported(run, graph, review, judgment);
 		if (judgment.decision === "blocked") {
-			await blockTask(graph.task.absolutePath, graph.task.digest, judgment.reason);
+			const reason = [judgment.reason, rejectedSummary].filter(Boolean).join("; ");
+			await blockTask(graph.task.absolutePath, graph.task.digest, reason);
 			run.expectedWorkspace = captureWorkspace(run.projectRoot);
-			return this.gate(run, "blocked", judgment.reason);
+			return this.gate(run, "blocked", reason);
 		}
-		if (judgment.decision === "stop") return this.gate(run, "stopped", judgment.reason);
+		if (judgment.decision === "stop") return this.gate(run, "stopped", [judgment.reason, rejectedSummary].filter(Boolean).join("; "), "judge_stop");
 
 		run.state = "iterating";
-		run.nextObjective = judgment.nextObjective;
+		run.nextObjective = [judgment.nextObjective, rejectedSummary].filter(Boolean).join("; ");
 		run.lastOutcome = judgment.reason;
 		run.updatedAt = new Date().toISOString();
 		await appendRunJournal(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, `Judgment requested another fresh iteration: ${judgment.reason}`);
@@ -528,6 +552,8 @@ export class RalphController {
 		const assessments = new Map(judgment.acceptanceCriteria.map((criterion) => [criterion.id, criterion.status]));
 		const unsatisfied = graph.criteria.filter((criterion) => assessments.get(criterion.id) !== "satisfied").map((criterion) => criterion.id);
 		const severeFindings = review.findings.filter((finding) => finding.severity === "critical" || finding.severity === "significant");
+		const openWorkItems = graph.task.taskDocument?.workItems.filter((item) => item.state === "open").map((item) => item.id) ?? [];
+		const workItemIssues = graph.task.taskDocument?.workItemIssues ?? [];
 		const failures = [
 			...(review.verdict === "pass" ? [] : [`review verdict is ${review.verdict}`]),
 			...(severeFindings.length === 0 ? [] : ["review has closure-blocking findings"]),
@@ -535,6 +561,8 @@ export class RalphController {
 			...(unsatisfied.length === 0 ? [] : [`judgment does not satisfy ${unsatisfied.join(", ")}`]),
 			...(hasRetrospective(graph) ? [] : ["task Retrospective is missing or placeholder"]),
 			...(hasDistillation(graph) ? [] : ["task Distillation is missing or placeholder"]),
+			...(openWorkItems.length === 0 ? [] : [`task Work Items remain open: ${openWorkItems.join(", ")}`]),
+			...(workItemIssues.length === 0 ? [] : ["task Work Items are malformed"]),
 		];
 		if (failures.length > 0) return this.gate(run, "evidence_failed", failures.join("; "));
 		await closeTask(graph.task.absolutePath, graph.task.digest);
@@ -599,6 +627,39 @@ export class RalphController {
 	private elapsedSeconds(run: RalphRun): number {
 		return (Date.now() - Date.parse(run.startedAt)) / 1000;
 	}
+}
+
+function substantiveWorkItemEvidence(value: string): boolean {
+	const normalized = value.trim();
+	return normalized.length >= 12 && !/^(?:none|n\/a|todo|pending|tbd|not yet|will be)(?:\b|[.:])/i.test(normalized);
+}
+
+function validateWorkItemProposals(graph: ReturnType<typeof compileWorkGraph>, proposals: WorkItemCompletionProposal[]): WorkItemCompletionProposal[] {
+	const items = graph.task.taskDocument?.workItems ?? [];
+	const known = new Map(items.map((item) => [item.id, item]));
+	const ids = new Set<string>();
+	for (const proposal of proposals) {
+		if (ids.has(proposal.id)) throw new RalphGateError("error", `Duplicate work-item proposal: ${proposal.id}`, "invalid_output");
+		ids.add(proposal.id);
+		if (known.get(proposal.id)?.state !== "open") throw new RalphGateError("error", `Work-item proposal must target a known open item: ${proposal.id}`, "invalid_output");
+		if (!substantiveWorkItemEvidence(proposal.evidence)) throw new RalphGateError("error", `Work-item proposal lacks substantive evidence: ${proposal.id}`, "invalid_output");
+	}
+	return proposals;
+}
+
+function validateWorkItemJudgments(
+	proposals: WorkItemCompletionProposal[],
+	judgments: WorkItemJudgment[],
+): WorkItemJudgment[] {
+	const proposed = new Set(proposals.map((proposal) => proposal.id));
+	const assessed = new Set<string>();
+	for (const assessment of judgments) {
+		if (!proposed.has(assessment.id) || assessed.has(assessment.id)) throw new RalphGateError("error", `Judge must assess each proposed work item exactly once: ${assessment.id}`, "invalid_output");
+		if (!substantiveWorkItemEvidence(assessment.reason)) throw new RalphGateError("error", `Work-item judgment lacks substantive reason: ${assessment.id}`, "invalid_output");
+		assessed.add(assessment.id);
+	}
+	if (assessed.size !== proposed.size) throw new RalphGateError("error", "Judge omitted a proposed work-item assessment", "invalid_output");
+	return judgments;
 }
 
 function ralphReviewOutput(run: ReviewRun): ReviewerOutput {

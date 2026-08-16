@@ -9,6 +9,8 @@ import type {
 	ExecutorOutput,
 	JudgeOutput,
 	ReviewerOutput,
+	WorkItemCompletionProposal,
+	WorkItemJudgment,
 	RalphAgentRole,
 } from "./types.js";
 
@@ -101,9 +103,11 @@ export function judgePrompt(
 	].join("\n");
 }
 
-function object(value: unknown, label: string): Record<string, unknown> {
+function object(value: unknown, label: string, keys?: readonly string[]): Record<string, unknown> {
 	if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be a JSON object`);
-	return value as Record<string, unknown>;
+	const record = value as Record<string, unknown>;
+	if (keys && Object.keys(record).some((key) => !keys.includes(key))) throw new Error(`${label} contains unsupported fields`);
+	return record;
 }
 
 function string(value: unknown, label: string): string {
@@ -123,7 +127,7 @@ function array(value: unknown, label: string): unknown[] {
 
 function criterionRows(value: unknown): { id: string; status: "satisfied" | "unsatisfied" | "unknown"; evidence: string }[] {
 	return array(value, "acceptanceCriteria").map((row, index) => {
-		const item = object(row, `acceptanceCriteria[${index}]`);
+		const item = object(row, `acceptanceCriteria[${index}]`, ["id", "status", "evidence"]);
 		return {
 			id: string(item.id, `acceptanceCriteria[${index}].id`),
 			status: enumValue(item.status, ["satisfied", "unsatisfied", "unknown"] as const, `acceptanceCriteria[${index}].status`),
@@ -132,9 +136,27 @@ function criterionRows(value: unknown): { id: string; status: "satisfied" | "uns
 	});
 }
 
+function workItemCompletions(value: unknown): WorkItemCompletionProposal[] {
+	return array(value, "workItemCompletions").map((row, index) => {
+		const item = object(row, `workItemCompletions[${index}]`, ["id", "evidence"]);
+		return { id: string(item.id, `workItemCompletions[${index}].id`), evidence: string(item.evidence, `workItemCompletions[${index}].evidence`) };
+	});
+}
+
+function workItemJudgments(value: unknown): WorkItemJudgment[] {
+	return array(value, "workItemJudgments").map((row, index) => {
+		const item = object(row, `workItemJudgments[${index}]`, ["id", "decision", "reason"]);
+		return {
+			id: string(item.id, `workItemJudgments[${index}].id`),
+			decision: enumValue(item.decision, ["confirmed", "rejected"] as const, `workItemJudgments[${index}].decision`),
+			reason: string(item.reason, `workItemJudgments[${index}].reason`),
+		};
+	});
+}
+
 export function parseExecutorOutput(value: unknown): ExecutorOutput {
-	const output = object(value, "Ralph executor result");
-	const nextObjective = typeof output.nextObjective === "string" && output.nextObjective.trim() ? output.nextObjective.trim() : undefined;
+	const output = object(value, "Ralph executor result", ["status", "summary", "acceptanceCriteria", "journal", "blockers", "retrospective", "distillation", "workItemCompletions", "nextObjective"]);
+	const nextObjective = output.nextObjective === undefined ? undefined : string(output.nextObjective, "nextObjective");
 	return {
 		status: enumValue(output.status, ["done", "partial", "blocked", "failed"] as const, "status"),
 		summary: string(output.summary, "summary"),
@@ -143,16 +165,17 @@ export function parseExecutorOutput(value: unknown): ExecutorOutput {
 		blockers: array(output.blockers, "blockers").map((item, index) => string(item, `blockers[${index}]`)),
 		retrospective: string(output.retrospective, "retrospective"),
 		distillation: array(output.distillation, "distillation").map((item, index) => string(item, `distillation[${index}]`)),
+		workItemCompletions: workItemCompletions(output.workItemCompletions),
 		...(nextObjective && { nextObjective }),
 	};
 }
 
 export function parseJudgeOutput(value: unknown): JudgeOutput {
-	const output = object(value, "Ralph judge result");
+	const output = object(value, "Ralph judge result", ["decision", "reason", "acceptanceCriteria", "workItemJudgments", "nextObjective"]);
 	const decision = enumValue(output.decision, ["close", "iterate", "blocked", "stop"] as const, "decision");
-	const nextObjective = typeof output.nextObjective === "string" && output.nextObjective.trim() ? output.nextObjective.trim() : undefined;
+	const nextObjective = output.nextObjective === undefined ? undefined : string(output.nextObjective, "nextObjective");
 	if (decision === "iterate" && !nextObjective) throw new Error("Ralph judge must supply nextObjective for iterate");
-	return { decision, reason: string(output.reason, "reason"), acceptanceCriteria: criterionRows(output.acceptanceCriteria), ...(nextObjective && { nextObjective }) };
+	return { decision, reason: string(output.reason, "reason"), acceptanceCriteria: criterionRows(output.acceptanceCriteria), workItemJudgments: workItemJudgments(output.workItemJudgments), ...(nextObjective && { nextObjective }) };
 }
 
 export interface RalphResultCapture { tool: ToolDefinition; calls(): number; value(): unknown; }
@@ -164,7 +187,10 @@ function resultTool(name: string, label: string, parameters: ToolDefinition["par
 }
 
 export function createRalphResultTool(role: RalphAgentRole): RalphResultCapture {
-	const criterion = Type.Object({ id: Type.String(), status: Type.Union([Type.Literal("satisfied"), Type.Literal("unsatisfied"), Type.Literal("unknown")]), evidence: Type.String() });
-	if (role === "executor") return resultTool("submit_ralph_executor", "Executor result", Type.Object({ status: Type.Union([Type.Literal("done"), Type.Literal("partial"), Type.Literal("blocked"), Type.Literal("failed")]), summary: Type.String(), acceptanceCriteria: Type.Array(criterion), journal: Type.Array(Type.String()), blockers: Type.Array(Type.String()), retrospective: Type.String(), distillation: Type.Array(Type.String()), nextObjective: Type.Optional(Type.String()) }));
-	return resultTool("submit_ralph_judgment", "Judge result", Type.Object({ decision: Type.Union([Type.Literal("close"), Type.Literal("iterate"), Type.Literal("blocked"), Type.Literal("stop")]), reason: Type.String(), acceptanceCriteria: Type.Array(criterion), nextObjective: Type.Optional(Type.String()) }));
+	const strict = { additionalProperties: false };
+	const criterion = Type.Object({ id: Type.String(), status: Type.Union([Type.Literal("satisfied"), Type.Literal("unsatisfied"), Type.Literal("unknown")]), evidence: Type.String() }, strict);
+	const completion = Type.Object({ id: Type.String(), evidence: Type.String() }, strict);
+	const judgment = Type.Object({ id: Type.String(), decision: Type.Union([Type.Literal("confirmed"), Type.Literal("rejected")]), reason: Type.String() }, strict);
+	if (role === "executor") return resultTool("submit_ralph_executor", "Executor result", Type.Object({ status: Type.Union([Type.Literal("done"), Type.Literal("partial"), Type.Literal("blocked"), Type.Literal("failed")]), summary: Type.String(), acceptanceCriteria: Type.Array(criterion), journal: Type.Array(Type.String()), blockers: Type.Array(Type.String()), retrospective: Type.String(), distillation: Type.Array(Type.String()), workItemCompletions: Type.Array(completion), nextObjective: Type.Optional(Type.String()) }, strict));
+	return resultTool("submit_ralph_judgment", "Judge result", Type.Object({ decision: Type.Union([Type.Literal("close"), Type.Literal("iterate"), Type.Literal("blocked"), Type.Literal("stop")]), reason: Type.String(), acceptanceCriteria: Type.Array(criterion), workItemJudgments: Type.Array(judgment), nextObjective: Type.Optional(Type.String()) }, strict));
 }

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { DEFAULT_RALPH_BUDGETS, RalphController } from "../components/ralph/src/controller.js";
 import { roleProfile } from "../components/ralph/src/roles.js";
+import { readReceiptEvents } from "../components/ralph/src/receipts.js";
 import type { ReviewerOutput } from "../components/ralph/src/types.js";
 import type { ReviewRun } from "../components/review/src/types.js";
 import type { ManagedAgentRequest, ManagedSubagentService } from "../components/subagents/src/service.js";
@@ -215,12 +216,14 @@ const executorDone = {
 	blockers: [],
 	retrospective: "An explicit boundary made the behavior and failure observable.",
 	distillation: ["The implementation and focused test remain the durable owners of this bounded invariant."],
+	workItemCompletions: [],
 };
 const reviewPass = { verdict: "pass", summary: "No falsifying defect found.", findings: [], residualRisk: ["Only AC-001 was reviewed."] };
 const judgeClose = {
 	decision: "close",
 	reason: "Evidence, review, and authority agree.",
 	acceptanceCriteria: [{ id: "AC-001", status: "satisfied", evidence: "Task evidence maps the passing behavior test." }],
+	workItemJudgments: [],
 };
 
 describe("Ralph state machine", () => {
@@ -261,6 +264,48 @@ describe("Ralph state machine", () => {
 		expect(updated).toContain("Ralph judgment");
 		expect(existsSync(join(root, ".ledger", "202608151200-work", "evidence"))).toBe(false);
 		expect(existsSync(join(root, ".ledger", "202608151200-work", "reviews"))).toBe(false);
+	}, 15_000);
+
+	it("completes only judge-confirmed work-item proposals through the owned task lease", async () => {
+		const root = repository();
+		const path = join(root, TASK);
+		writeFileSync(path, readFileSync(path, "utf8").replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References"));
+		execFileSync("git", ["-C", root, "add", TASK]);
+		execFileSync("git", ["-C", root, "commit", "-qm", "add work item"]);
+		const controller = testController(service([
+			{ role: "ralph-executor", output: { ...executorDone, workItemCompletions: [{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." }] }, mutate: () => completeTask(root) },
+			{ role: "shared-review-test", output: reviewPass },
+			{ role: "ralph-judge", output: { ...judgeClose, workItemJudgments: [{ id: "WI-001", decision: "confirmed", reason: "The reviewed behavior and focused evidence support completion." }] } },
+		], []));
+		const started = await controller.start(context(root), TASK);
+		const result = await controller.step(context(root), started.runId);
+		expect(result.state, result.lastOutcome).toBe("done");
+		expect(readFileSync(path, "utf8")).toContain("- [x] WI-001");
+		const receiptEvents = readReceiptEvents(root, result.runId);
+		expect(receiptEvents.find((event) => event.workItems?.proposals)?.workItems?.proposals).toEqual([{ id: "WI-001", evidence: "The focused behavior check passed after the implementation." }]);
+		expect(receiptEvents.find((event) => event.workItems?.judgments)?.workItems?.judgments).toEqual([{ id: "WI-001", decision: "confirmed", reason: "The reviewed behavior and focused evidence support completion." }]);
+		expect(receiptEvents.find((event) => event.workItems?.taskDigest)?.workItems).toMatchObject({ confirmedIds: ["WI-001"], rejectedIds: [] });
+	}, 15_000);
+
+	it("names rejected work items in blocked and stopped terminal outcomes", async () => {
+		for (const decision of ["blocked", "stop"] as const) {
+			const root = repository();
+			const path = join(root, TASK);
+			writeFileSync(path, readFileSync(path, "utf8").replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the bounded task behavior.\n\n## References"));
+			execFileSync("git", ["-C", root, "add", TASK]);
+			execFileSync("git", ["-C", root, "commit", "-qm", `add ${decision} work item`]);
+			const controller = testController(service([
+				{ role: "ralph-executor", output: { ...executorDone, workItemCompletions: [{ id: "WI-001", evidence: "The focused behavior check has not yet established this completion." }] }, mutate: () => completeTask(root) },
+				{ role: "shared-review-test", output: reviewPass },
+				{ role: "ralph-judge", output: { ...judgeClose, decision, reason: "The evidence does not support completing the implementation.", workItemJudgments: [{ id: "WI-001", decision: "rejected", reason: "The reviewed change lacks the required bounded behavior evidence." }] } },
+			], []));
+			const started = await controller.start(context(root), TASK);
+			const result = await controller.step(context(root), started.runId);
+			expect(result.state).toBe(decision === "blocked" ? "blocked" : "stopped");
+			expect(result.terminalCause).toBe(decision === "blocked" ? "blocked" : "judge_stop");
+			expect(result.lastOutcome).toContain("WI-001");
+			expect(readFileSync(path, "utf8")).toContain("- [ ] WI-001");
+		}
 	}, 15_000);
 
 	it("targets a linked worktree while keeping task authority in the main checkout", async () => {
@@ -342,6 +387,7 @@ describe("Ralph state machine", () => {
 			decision: "iterate",
 			reason: "One in-scope observation remains.",
 			acceptanceCriteria: [{ id: "AC-001", status: "unknown", evidence: "Not observed yet." }],
+			workItemJudgments: [],
 			nextObjective: "Run and record the missing behavior check.",
 		};
 		const mock = service([

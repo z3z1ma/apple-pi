@@ -53,23 +53,30 @@ Implement canonical optional `WI-###` work items across task parsing, leased dig
 
 - 2026-08-15: Split from the operations-hub task after identifying the legacy-closure and mixed old-code/new-skill self-hosting hazard.
 - 2026-08-15: Declared manual main-agent implementation, independent review, full validation, and reload as the bootstrap boundary.
+- 2026-08-15: Implemented the parser, leased mutation, controller proposal/judgment flow, receipt protocol, documentation, and deterministic regressions outside Ralph. Receipt replay now rejects malformed, mixed, wrong-stage, omitted-assessment, invented-ID, overlapping-ID, and repeated work-item event payloads.
+- 2026-08-15: Addressed all five confirmed findings from independent review `dd57bbee-6763-40e1-adbd-5c8c3a329edc`: strict role and receipt record shapes, canonical receipt semantics and lifecycle progression, post-judgment authority drift, and done-task work-item invariants. Human `/review` completion now delivers a bounded verified follow-up to the model without interrupting active work or crossing session lifecycle boundaries.
+- 2026-08-15: Full validation is pending final execution in the isolated verification worktree before closure or commit.
 
 ## Blockers
 
-- Do not execute this task through the currently loaded Ralph runtime. Implement outside Ralph, then validate, independently review, and reload before dependent Ralph use.
+- Pi reload remains required before a dependent WI-bearing task is inspected or run with Ralph. The currently loaded controller/parser/runtime cannot prove that the committed implementation is active.
 
 ## Evidence
 
-Pending.
+- 2026-08-15: `npm run typecheck` passed.
+- 2026-08-15: `npm test` passed: 421 tests across 39 files, 1,414 assertions; 79/79 advisor checks; package-loader validation passed.
+- 2026-08-15: `npm run pack:check` passed with 158 package files.
+- 2026-08-15: Focused Ralph parser, graph, receipt, and state-machine suites passed 34/34 after review remediation; `git diff --check` and package-loader validation passed.
+- 2026-08-15: Isolated worktree `/tmp/apple-pi-bootstrap-verify.sW4YpJ` passed `npm run typecheck`, `npm test` (421 tests, 1,414 assertions; 79/79 advisor checks; loader validation), `npm run pack:check` (158 files), and `git diff --check`.
 
 ## Review
 
-Pending.
+- 2026-08-15: Independent balanced workspace review `dd57bbee-6763-40e1-adbd-5c8c3a329edc` completed 18/18 selected items with five confirmed significant findings. All five were resolved with deterministic regressions, including the judgment → concurrent work-item description edit → leased completion CAS rejection path; receipt: `/Users/alexanderbut/.pi/agent/reviews/runs/f4e5ea2688032efb83a59f99/dd57bbee-6763-40e1-adbd-5c8c3a329edc.jsonl`.
 
 ## Retrospective
 
-Pending.
+- Canonical typed submission still requires explicit runtime shape validation because tool schemas alone do not protect persisted or test-injected values; receipt replay must validate both payload content and the controller lifecycle that emitted it.
 
 ## Distillation
 
-Pending.
+- No reusable promotion: this task's durable contract belongs in the existing Ralph role, receipt, task-mutation, and review-handoff documentation rather than a new repository-wide skill.

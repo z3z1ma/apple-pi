@@ -7,7 +7,7 @@ import { taskLocation } from "./task-paths.js";
 
 const STATES = new Set(["ready", "executing", "reviewing", "judging", "iterating", "done", "blocked", "review_failed", "evidence_failed", "workspace_conflict", "authority_required", "budget_exhausted", "compacted", "interrupted", "stopped", "error"]);
 const TERMINAL = new Set(["done", "blocked", "review_failed", "evidence_failed", "workspace_conflict", "authority_required", "budget_exhausted", "compacted", "interrupted", "stopped", "error"]);
-const TERMINAL_CAUSES = new Set(["operator_stop", "external_cancellation", "elapsed_time_ceiling", "aggregate_token_ceiling", "iteration_ceiling", "role_turn_ceiling", "compaction", "provider_error", "authority_denial", "workspace_conflict", "review_failure", "evidence_failure", "blocked", "internal_error"]);
+const TERMINAL_CAUSES = new Set(["operator_stop", "judge_stop", "external_cancellation", "elapsed_time_ceiling", "aggregate_token_ceiling", "iteration_ceiling", "role_turn_ceiling", "compaction", "provider_error", "invalid_output", "authority_denial", "workspace_conflict", "review_failure", "evidence_failure", "blocked", "internal_error"]);
 const TRANSITIONS: Record<string, Set<string>> = {
 	ready: new Set(["ready", "executing", ...TERMINAL]),
 	executing: new Set(["executing", "reviewing", ...TERMINAL]),
@@ -33,6 +33,42 @@ function validateSnapshot(value: RalphRun["expectedWorkspace"], label: string): 
 	if (expected !== value.hash) throw new Error(`${label} hash does not match its contents`);
 }
 
+function substantive(value: string): boolean {
+	const normalized = value.trim();
+	return normalized.length >= 12 && !/^(?:none|n\/?a|todo|pending|tbd|not yet|will be|do it)(?:\b|[.:])/i.test(normalized) && !/^no\.?$/i.test(normalized);
+}
+
+function hasExactKeys(value: object, expected: readonly string[]): boolean {
+	const keys = Object.keys(value).sort();
+	return JSON.stringify(keys) === JSON.stringify([...expected].sort());
+}
+
+function validateWorkItems(event: ReceiptEvent): void {
+	const value = event.workItems;
+	const label = `Receipt event ${event.sequence} workItems`;
+	if (value === undefined) return;
+	if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} is invalid`);
+	const validateIds = (ids: string[] | undefined, field: string) => {
+		if (!Array.isArray(ids) || new Set(ids).size !== ids.length || ids.some((id) => !/^WI-\d{3}$/.test(id))) throw new Error(`${label}.${field} is invalid`);
+	};
+	if (hasExactKeys(value, ["proposals"])) {
+		if (event.stage !== "executor" || event.state !== "executing" || !["done", "partial", "blocked", "failed"].includes(event.outcome ?? "") || !Array.isArray(value.proposals)
+			|| value.proposals.some((item) => !item || typeof item !== "object" || !hasExactKeys(item, ["id", "evidence"])
+				|| !/^WI-\d{3}$/.test(item.id) || typeof item.evidence !== "string" || !substantive(item.evidence))) throw new Error(`${label} has invalid proposal event`);
+		return;
+	}
+	if (hasExactKeys(value, ["judgments"])) {
+		if (event.stage !== "judge" || event.state !== "judging" || !["close", "iterate", "blocked", "stop"].includes(event.outcome ?? "") || !Array.isArray(value.judgments)
+			|| value.judgments.some((item) => !item || typeof item !== "object" || !hasExactKeys(item, ["id", "decision", "reason"])
+				|| !/^WI-\d{3}$/.test(item.id) || !["confirmed", "rejected"].includes(item.decision) || typeof item.reason !== "string" || !substantive(item.reason))) throw new Error(`${label} has invalid judgment event`);
+		return;
+	}
+	if (!hasExactKeys(value, ["confirmedIds", "rejectedIds", "taskDigest"]) || event.stage !== "judge" || event.state !== "judging" || event.outcome !== "work_items_applied") throw new Error(`${label} has invalid envelope`);
+	validateIds(value.confirmedIds, "confirmedIds");
+	validateIds(value.rejectedIds, "rejectedIds");
+	if (typeof value.taskDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.taskDigest)) throw new Error(`${label}.taskDigest is invalid`);
+}
+
 function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun, previous?: RalphRun): void {
 	if (!run || run.schemaVersion !== 2 || run.runId !== event.runId || run.projectRoot !== event.projectRoot || run.ledgerRoot !== event.ledgerRoot || run.taskPath !== event.taskPath || run.mode !== event.mode || run.state !== event.state || run.iteration !== event.iteration) throw new Error(`Receipt event ${event.sequence} has inconsistent run state`);
 	if (!taskLocation(run.taskPath) || !isAbsolute(run.ledgerRoot) || normalize(run.ledgerRoot) !== run.ledgerRoot) throw new Error(`Receipt event ${event.sequence} has invalid task or ledger path`);
@@ -43,6 +79,7 @@ function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun
 	if (run.terminalCause !== undefined && !TERMINAL_CAUSES.has(run.terminalCause)) throw new Error(`Receipt event ${event.sequence} has invalid terminal cause`);
 	if (!/^[a-f0-9]{64}$/.test(run.graphHash) || !Number.isFinite(Date.parse(run.startedAt)) || !Number.isFinite(Date.parse(run.updatedAt))) throw new Error(`Receipt event ${event.sequence} has invalid hashes or timestamps`);
 	if (run.nextObjective !== undefined && (typeof run.nextObjective !== "string" || !run.nextObjective.trim() || run.nextObjective.length > 10_000)) throw new Error(`Receipt event ${event.sequence} has invalid next objective`);
+	validateWorkItems(event);
 	if (run.policy !== undefined && (
 		run.policy.version !== 1 || run.policy.mode !== run.mode || !Number.isInteger(run.policy.recordCount) || run.policy.recordCount < 1 ||
 		!Number.isInteger(run.policy.contextBytes) || run.policy.contextBytes < 1 || JSON.stringify(run.policy.budgets) !== JSON.stringify(run.budgets)
@@ -68,12 +105,47 @@ function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun
 	if (previous) {
 		if (TERMINAL.has(previous.state)) throw new Error(`Receipt event ${event.sequence} follows terminal state ${previous.state}`);
 		if (!TRANSITIONS[previous.state]?.has(run.state)) throw new Error(`Illegal Ralph transition ${previous.state} -> ${run.state}`);
-		if (run.iteration < previous.iteration || run.iteration > previous.iteration + 1) throw new Error(`Receipt event ${event.sequence} has invalid iteration progression`);
+		const startsIteration = (previous.state === "ready" || previous.state === "iterating") && run.state === "executing";
+		if (run.iteration !== previous.iteration + (startsIteration ? 1 : 0)) throw new Error(`Receipt event ${event.sequence} has invalid iteration progression`);
 		if (run.totalTokens < previous.totalTokens) throw new Error(`Receipt event ${event.sequence} decreased lifetime token usage`);
 	}
 }
 
-function projectKey(projectRoot: string): string {
+function validateWorkItemHistory(events: ReceiptEvent[]): void {
+	const proposals = new Map<number, string[]>();
+	const judgments = new Map<number, Map<string, "confirmed" | "rejected">>();
+	const appliedIterations = new Set<number>();
+	for (const event of events) {
+		const workItems = event.workItems;
+		if (!workItems) continue;
+		if (workItems.proposals) {
+			const ids = workItems.proposals.map((item) => item.id);
+			if (new Set(ids).size !== ids.length || proposals.has(event.iteration)) throw new Error(`Receipt event ${event.sequence} has duplicate work-item proposals`);
+			proposals.set(event.iteration, ids);
+		}
+		if (workItems.judgments) {
+			if (judgments.has(event.iteration)) throw new Error(`Receipt event ${event.sequence} repeats work-item judgments`);
+			const expected = proposals.get(event.iteration);
+			const ids = workItems.judgments.map((item) => item.id);
+			if (!expected || new Set(ids).size !== ids.length || ids.length !== expected.length || ids.some((id) => !expected.includes(id))) throw new Error(`Receipt event ${event.sequence} does not assess work-item proposals exactly`);
+			judgments.set(event.iteration, new Map(workItems.judgments.map((item) => [item.id, item.decision])));
+		}
+		if (workItems.confirmedIds || workItems.rejectedIds || workItems.taskDigest) {
+			if (appliedIterations.has(event.iteration)) throw new Error(`Receipt event ${event.sequence} repeats applied work-item state`);
+			const assessed = judgments.get(event.iteration);
+			const confirmed = workItems.confirmedIds ?? [];
+			const rejected = workItems.rejectedIds ?? [];
+			const applied = [...confirmed, ...rejected];
+			if (!assessed || !workItems.taskDigest || new Set(applied).size !== applied.length || applied.length !== assessed.size
+				|| confirmed.some((id) => assessed.get(id) !== "confirmed") || rejected.some((id) => assessed.get(id) !== "rejected")) {
+				throw new Error(`Receipt event ${event.sequence} has invalid applied work-item state`);
+			}
+			appliedIterations.add(event.iteration);
+		}
+	}
+}
+
+function projectKey(projectRoot: string) {
 	return createHash("sha256").update(realpathSync(projectRoot)).digest("hex").slice(0, 24);
 }
 
@@ -108,6 +180,7 @@ export function readReceiptEvents(projectRoot: string, runId: string): ReceiptEv
 		genesis ??= event.run;
 		previous = event.run;
 		events.push(event);
+		validateWorkItemHistory(events);
 	}
 	return events;
 }
@@ -146,6 +219,7 @@ export async function appendReceipt(
 			run,
 		};
 		validateRunState(run, value, priorEvents[0]?.run, priorEvents.at(-1)?.run);
+		validateWorkItemHistory([...priorEvents, value]);
 		appendFileSync(path, `${JSON.stringify(value)}\n`, { encoding: "utf8", mode: 0o600 });
 		return value;
 	});

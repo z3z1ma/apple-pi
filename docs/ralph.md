@@ -22,6 +22,8 @@ The timestamp must be a valid calendar minute whose date matches the task's `Cre
 
 `Depends-On` may name only other canonical task roots. Every dependency must be indexed and `done`. References may name supporting records in the same task bundle or ordinary repository source pointers. Cross-task supporting-record links are rejected; use `Depends-On` for a cross-task relationship.
 
+A task may optionally place `## Work Items` between Acceptance Criteria and References. Its body contains only canonical rows: `- [ ] WI-001: description`, `- [x] WI-001: description`, or `- [-] WI-001: description — Cancelled: substantive reason`. IDs are unique uppercase `WI-###` values. Malformed, misplaced, duplicate, or placeholder rows fail graph compilation; no Work Items section remains compatible.
+
 ## Deterministic graph compilation
 
 Ralph follows only explicit semantic edges:
@@ -111,7 +113,10 @@ Even a judge's `close` cannot bypass deterministic closure checks:
 - the judge assessed every criterion as satisfied;
 - dependencies remain done and Blockers remain absent;
 - Retrospective is substantive;
-- Distillation contains performed promotion, an honest pending human-owned external action, or a substantive no-promotion rationale.
+- Distillation contains performed promotion, an honest pending human-owned external action, or a substantive no-promotion rationale;
+- every Work Item is complete or substantively cancelled, with no parse issue.
+
+Executors may only propose completion evidence for known open work items. Independent review receives those proposals; judges assess exactly that set, and the controller alone completes confirmed IDs under its task-bundle lease. Rejected IDs remain open and are named in the next objective or terminal reason.
 
 Only then does the controller set `Status: done`. The bundle is not moved or deleted.
 

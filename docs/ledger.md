@@ -75,6 +75,10 @@ The complete outcome this task owns.
 - AC-001: One observable success outcome.
 - AC-002: One observable boundary or failure outcome.
 
+## Work Items
+
+- [ ] WI-001: One stable implementation decomposition item.
+
 ## References
 
 - `.ledger/202608151430-implement-bounded-behavior/specs/behavior.md`
@@ -113,6 +117,8 @@ Pending.
 Canonical headers and exactly one level-one title are required. Acceptance criteria use stable `AC-###` IDs. Ralph can execute only `open` or `active` tasks whose Blockers section is `None.`.
 
 Task status is `open | active | blocked | done | cancelled`. Ralph owns activation, blocked outcomes, and closure while a run is active.
+
+Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. Executors propose known open-item completion with evidence; independent review receives that proposal; judges confirm or reject exactly it; the controller alone applies confirmed completion under the task-bundle lease. Any open or malformed item independently blocks closure.
 
 ## Task dependencies
 

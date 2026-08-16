@@ -8,6 +8,19 @@ import { resolveReviewTargetRoot } from "./git.js";
 import type { ReviewProfile, ReviewRun, ReviewRunSummary, ReviewSource, StartReviewOptions } from "./types.js";
 
 const WIDGET_ID = "review-run";
+const REVIEW_COMPLETION_TYPE = "review-complete";
+
+function reviewCompletionText(run: ReviewRun): string {
+	const findings = run.findings.filter((finding) => finding.validation.status !== "rejected");
+	return [
+		`Review completed: ${run.runId}`,
+		`Root: ${run.projectRoot}`,
+		`State: ${run.state}; coverage: ${run.completedItemIds.length}/${run.selected.length}; findings: ${findings.length}.`,
+		...findings.slice(0, 20).map((finding) => `- [${finding.severity}/${finding.validation.status}] ${finding.path}: ${finding.summary}`),
+		...(findings.length > 20 ? [`- ${findings.length - 20} additional findings are available in the review receipt.`] : []),
+		`Receipt-backed result: ${summarizeReviewRun(run)}`,
+	].join("\n");
+}
 
 function textResult(text: string, isError = false, details?: unknown) {
 	return { content: [{ type: "text" as const, text }], isError, details };
@@ -180,6 +193,7 @@ function setWidget(ctx: ExtensionCommandContext, run?: ReviewRun): void {
 
 export default function installReview(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
+	let lifecycleEpoch = 0;
 	const controller = new ReviewController({ getService: () => getManagedSubagentService(pi.events) });
 	const sourceSchema = {
 		root: Type.Optional(Type.String({ description: "Git repository or linked-worktree directory to review. Relative paths resolve from the caller cwd." })),
@@ -275,9 +289,16 @@ export default function installReview(pi: ExtensionAPI): void {
 				}
 				ctx.ui.setWidget(WIDGET_ID, [`Review planning · ${source.mode}`, "Sealing input and building semantic work graph…"], { placement: "aboveEditor" });
 				ctx.ui.notify("Review started. Changes to the selected input before completion will invalidate the run.", "info");
+				const launchEpoch = lifecycleEpoch;
 				void controller.run(ctx, source, optionsFrom(parsed.values)).then((run) => {
 					setWidget(ctx, run);
 					ctx.ui.notify(summarizeReviewRun(run), run.state === "complete" || run.state === "skipped" ? "info" : "warning");
+					if (launchEpoch === lifecycleEpoch) {
+						pi.sendMessage(
+							{ customType: REVIEW_COMPLETION_TYPE, content: reviewCompletionText(run), display: true, details: run },
+							{ deliverAs: "followUp", triggerTurn: true },
+						);
+					}
 				}, (error) => {
 					setWidget(ctx, undefined);
 					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
@@ -288,6 +309,12 @@ export default function installReview(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("session_before_switch", async () => controller.stopAll());
-	pi.on("session_shutdown", async () => controller.stopAll());
+	pi.on("session_before_switch", async () => {
+		lifecycleEpoch++;
+		await controller.stopAll();
+	});
+	pi.on("session_shutdown", async () => {
+		lifecycleEpoch++;
+		await controller.stopAll();
+	});
 }

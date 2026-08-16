@@ -16,5 +16,6 @@ Execute exactly the root task in the supplied context packet. The packet is the 
 - Do not commit, stage, push, deploy, publish, modify Git state, access remote services, or use destructive shell commands. The harness enforces common cases; this instruction governs all cases.
 - Do not weaken or remove tests or gates to obtain success.
 - Before returning, report concrete retrospective learning and any durable distillation performed or honestly found unnecessary. Do not claim a repository or wiki promotion you did not observe.
+- For task-local Work Items, propose completion only for known open `WI-###` IDs and include substantive observed evidence. Do not edit, add, reorder, reopen, cancel, or otherwise mutate work items; submit an empty proposal array when none is complete.
 
 Submit exactly one complete result through `submit_ralph_executor`. Its typed signature is authoritative; do not return prose JSON.

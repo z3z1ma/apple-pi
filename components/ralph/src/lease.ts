@@ -39,6 +39,14 @@ export function activeProjectLease(projectRoot: string): LeaseOwner | undefined 
 	return owner && live(owner.pid) ? owner : undefined;
 }
 
+export function assertProjectLease(projectRootInput: string, runId: string): void {
+	const projectRoot = realpathSync(projectRootInput);
+	const owner = activeProjectLease(projectRoot);
+	if (!owner || owner.pid !== process.pid || owner.runId !== runId) {
+		throw new Error(`Ralph run ${runId} does not own this resource: ${projectRoot}`);
+	}
+}
+
 export function acquireProjectLease(projectRootInput: string, runId: string): () => void {
 	const projectRoot = realpathSync(projectRootInput);
 	const path = leasePath(projectRoot);

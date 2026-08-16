@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { AcceptanceCriterion, CompiledWorkGraph, RecordKind, WorkRecord } from "./types.js";
+import { parseTaskDocument } from "./task-document.js";
 import { LEDGER_INDEX_PATH, bundleForRecord, recordKindForPath, taskLocation } from "./task-paths.js";
 
 const REQUIRED_TASK_SECTIONS = [
@@ -144,7 +145,8 @@ function loadRecord(projectRoot: string, path: string): WorkRecord {
 		const description = /^description:\s*["']?(.+?)["']?\s*$/m.exec(frontmatter)?.[1];
 		if (name !== expectedName || !description?.trim()) throw new WorkGraphError(`Task skill must have matching name and description frontmatter: ${normalized}`, "invalid_task_skill");
 	}
-	const headers = parseHeaders(content);
+	const taskDocument = kind === "task" ? parseTaskDocument(content) : undefined;
+	const headers = taskDocument?.headers ?? parseHeaders(content);
 	if (kind === "task") {
 		const location = taskLocation(normalized);
 		const created = headers.created;
@@ -160,8 +162,9 @@ function loadRecord(projectRoot: string, path: string): WorkRecord {
 		content,
 		digest: sha256(content),
 		headers,
-		sections: parseSections(content),
+		sections: taskDocument?.sections ?? parseSections(content),
 		references: [],
+		...(taskDocument && { taskDocument }),
 	};
 }
 
@@ -184,20 +187,6 @@ function validateSupportingRecord(record: WorkRecord): void {
 	}
 }
 
-function parseCriteria(section: string): AcceptanceCriterion[] {
-	const criteria: AcceptanceCriterion[] = [];
-	const ids = new Set<string>();
-	for (const line of section.split(/\r?\n/)) {
-		const match = /^\s*(?:[-*]\s*)?(AC-\d{3,})\s*:\s*(.+?)\s*$/.exec(line);
-		if (!match) continue;
-		if (ids.has(match[1])) throw new WorkGraphError(`Duplicate acceptance criterion: ${match[1]}`, "duplicate_criterion");
-		ids.add(match[1]);
-		criteria.push({ id: match[1], text: match[2] });
-	}
-	if (criteria.length === 0) throw new WorkGraphError("Acceptance Criteria must contain stable IDs such as AC-001", "missing_criteria");
-	return criteria;
-}
-
 function blockerIsNone(value: string): boolean {
 	return /^none\.?$/i.test(value.trim());
 }
@@ -217,7 +206,13 @@ function assertTaskShape(task: WorkRecord): AcceptanceCriterion[] {
 		if (!task.sections.has(section)) throw new WorkGraphError(`Task is missing required section: ${section}`, "missing_task_section");
 	}
 	if (!blockerIsNone(task.sections.get("blockers") ?? "")) throw new WorkGraphError("Task has unresolved blockers", "task_blocked");
-	return parseCriteria(task.sections.get("acceptance criteria") ?? "");
+	const document = task.taskDocument;
+	if (!document) throw new WorkGraphError("Task did not load through the canonical task parser", "invalid_task_document");
+	if (document.workItemIssues.length > 0) {
+		throw new WorkGraphError(`Task has invalid Work Items: ${document.workItemIssues.map((issue) => `${issue.code} at line ${issue.line}`).join("; ")}`, "invalid_work_items");
+	}
+	if (document.criteria.length === 0) throw new WorkGraphError("Acceptance Criteria must contain stable IDs such as AC-001", "missing_criteria");
+	return document.criteria;
 }
 
 function ledgerIndex(projectRoot: string): string {

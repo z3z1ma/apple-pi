@@ -186,6 +186,17 @@ describe("compileWorkGraph", () => {
 		expect(() => compileWorkGraph(dependency, TASK)).toThrowError(/cycle/);
 	});
 
+	it("uses the canonical work-item parser and rejects malformed work-item state", () => {
+		const valid = project();
+		put(valid, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-001: Implement the canonical task parser.\n\n## References"));
+		const graph = compileWorkGraph(valid, TASK);
+		expect(graph.task.taskDocument?.workItems).toEqual([{ id: "WI-001", state: "open", description: "Implement the canonical task parser." }]);
+
+		const invalid = project();
+		put(invalid, TASK, task().replace("## References", "## Work Items\n\n- [ ] WI-ABC: Malformed identifiers must remain visible.\n\n## References"));
+		expect(() => compileWorkGraph(invalid, TASK)).toThrowError(/invalid Work Items/);
+	});
+
 	it("checks durable acceptance evidence, retrospective, and distillation", () => {
 		const root = project();
 		put(root, TASK, task({

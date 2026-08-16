@@ -1,4 +1,5 @@
 import type { AgentRecord } from "../../subagents/src/types.js";
+import type { TaskDocument } from "./task-document.js";
 
 export type RecordKind = "task" | "spec" | "plan" | "decision" | "research" | "evidence" | "knowledge" | "skill";
 
@@ -12,6 +13,7 @@ export interface WorkRecord {
 	headers: Record<string, string>;
 	sections: Map<string, string>;
 	references: string[];
+	taskDocument?: TaskDocument;
 }
 
 export interface AcceptanceCriterion {
@@ -72,6 +74,7 @@ export type RalphTerminalState =
 	| "error";
 export type RalphTerminalCause =
 	| "operator_stop"
+	| "judge_stop"
 	| "external_cancellation"
 	| "elapsed_time_ceiling"
 	| "aggregate_token_ceiling"
@@ -136,6 +139,14 @@ export interface RalphRun {
 	nextObjective?: string;
 }
 
+export interface WorkItemReceipt {
+	proposals?: WorkItemCompletionProposal[];
+	judgments?: WorkItemJudgment[];
+	confirmedIds?: string[];
+	rejectedIds?: string[];
+	taskDigest?: string;
+}
+
 export interface ReceiptEvent {
 	schemaVersion: 2;
 	sequence: number;
@@ -158,8 +169,20 @@ export interface ReceiptEvent {
 	compactions?: number;
 	outcome?: string;
 	structuredOutput?: unknown;
+	workItems?: WorkItemReceipt;
 	gate?: { kind: RalphTerminalState; reason: string };
 	run?: RalphRun;
+}
+
+export interface WorkItemCompletionProposal {
+	id: string;
+	evidence: string;
+}
+
+export interface WorkItemJudgment {
+	id: string;
+	decision: "confirmed" | "rejected";
+	reason: string;
 }
 
 export interface ExecutorOutput {
@@ -170,6 +193,7 @@ export interface ExecutorOutput {
 	blockers: string[];
 	retrospective: string;
 	distillation: string[];
+	workItemCompletions: WorkItemCompletionProposal[];
 	nextObjective?: string;
 }
 
@@ -191,6 +215,7 @@ export interface JudgeOutput {
 	decision: "close" | "iterate" | "blocked" | "stop";
 	reason: string;
 	acceptanceCriteria: { id: string; status: "satisfied" | "unsatisfied" | "unknown"; evidence: string }[];
+	workItemJudgments: WorkItemJudgment[];
 	nextObjective?: string;
 }
 
