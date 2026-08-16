@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-08-15
 Updated: 2026-08-15
 
@@ -55,11 +55,12 @@ Implement canonical optional `WI-###` work items across task parsing, leased dig
 - 2026-08-15: Declared manual main-agent implementation, independent review, full validation, and reload as the bootstrap boundary.
 - 2026-08-15: Implemented the parser, leased mutation, controller proposal/judgment flow, receipt protocol, documentation, and deterministic regressions outside Ralph. Receipt replay now rejects malformed, mixed, wrong-stage, omitted-assessment, invented-ID, overlapping-ID, and repeated work-item event payloads.
 - 2026-08-15: Addressed all five confirmed findings from independent review `dd57bbee-6763-40e1-adbd-5c8c3a329edc`: strict role and receipt record shapes, canonical receipt semantics and lifecycle progression, post-judgment authority drift, and done-task work-item invariants. Human `/review` completion now delivers a bounded verified follow-up to the model without interrupting active work or crossing session lifecycle boundaries.
-- 2026-08-15: Full validation is pending final execution in the isolated verification worktree before closure or commit.
+- 2026-08-15: Validated the final patch in an isolated worktree, committed it as `1912531 Gate Ralph work item completion`, and pushed it to `origin/main`.
+- 2026-08-15: Operator confirmed Pi reload after the commit, satisfying the final self-hosting activation gate before dependent Ralph use.
 
 ## Blockers
 
-- Pi reload remains required before a dependent WI-bearing task is inspected or run with Ralph. The currently loaded controller/parser/runtime cannot prove that the committed implementation is active.
+None.
 
 ## Evidence
 
@@ -68,6 +69,7 @@ Implement canonical optional `WI-###` work items across task parsing, leased dig
 - 2026-08-15: `npm run pack:check` passed with 158 package files.
 - 2026-08-15: Focused Ralph parser, graph, receipt, and state-machine suites passed 34/34 after review remediation; `git diff --check` and package-loader validation passed.
 - 2026-08-15: Isolated worktree `/tmp/apple-pi-bootstrap-verify.sW4YpJ` passed `npm run typecheck`, `npm test` (421 tests, 1,414 assertions; 79/79 advisor checks; loader validation), `npm run pack:check` (158 files), and `git diff --check`.
+- 2026-08-15: Operator confirmed Pi reload after commit `1912531`, activating the parser/controller/skill changes before dependent Ralph use.
 
 ## Review
 
