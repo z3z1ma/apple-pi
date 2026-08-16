@@ -107,6 +107,7 @@ export interface SpawnOptions {
   internalOwner?: string;
   isolated?: boolean;
   inheritContext?: boolean;
+  advisor?: boolean;
   thinkingLevel?: ThinkingLevel;
   isBackground?: boolean;
   /**
@@ -304,6 +305,7 @@ export class AgentManager {
       customTools: options.customTools,
       isolated: options.isolated,
       inheritContext: options.inheritContext,
+      advisor: options.advisor,
       thinkingLevel: options.thinkingLevel,
       nested: options.parentAgentId !== undefined,
       cwd: customCwd,

@@ -2,9 +2,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { waitForAgentSettlement } from "../components/subagents/src/abortable.js";
+import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "../components/subagents/src/abortable.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../components/subagents/src/conversation.js";
-import { buildCompactParentHandoff, buildFullParentContext, MAX_PARENT_HANDOFF_CHARS } from "../components/subagents/src/context.js";
+import { buildFullParentContext } from "../components/subagents/src/context.js";
 import { DEFAULT_AGENTS } from "../components/subagents/src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../components/subagents/src/invocation-config.js";
 import { selectAgentModel } from "../components/subagents/src/agent-runner.js";
@@ -149,30 +149,7 @@ describe("owned subagent surface", () => {
 		})).toThrow("invalid configured model");
 	});
 
-	it("fails closed on removed memory, transcript, scheduling, and worktree fields", () => {
-		const root = temporaryRoot();
-		const directory = join(root, ".pi", "agents");
-		mkdirSync(directory, { recursive: true });
-		writeFileSync(join(directory, "reviewer.md"), `---
-name: reviewer
-description: Reviews a change
-tools: read, grep
-allowed_subagents: scout
-memory: project
-isolation: worktree
-output_transcript: true
----
-Review carefully.
-`);
-
-		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const agents = loadCustomAgents(root);
-		expect(agents.has("reviewer")).toBe(false);
-		expect(warning).toHaveBeenCalledWith(expect.stringContaining("removed apple-pi fields isolation, memory, output_transcript"));
-		warning.mockRestore();
-	});
-
-	it("keeps explicit thinking overrides while preserving config policy fields", () => {
+	it("keeps explicit thinking overrides and normalizes invocation booleans", () => {
 		const config = {
 			name: "reviewer",
 			description: "review",
@@ -183,50 +160,37 @@ Review carefully.
 			model: "openai-codex/embedded",
 			thinking: "low" as const,
 			maxTurns: 11,
-			inheritContext: false,
-			runInBackground: false,
-			isolated: false,
 		} satisfies AgentConfig;
 		const resolved = resolveAgentInvocationConfig(config, {
 			thinking: "high",
-			max_turns: 8,
-			run_in_background: true,
-			isolated: true,
+			run_in_background: false,
+			isolated: false,
+			inherit_context: false,
+			advisor: false,
 		});
 		expect(resolved).toMatchObject({
 			thinking: "high",
 			maxTurns: 11,
 			inheritContext: false,
+			advisor: false,
 			runInBackground: false,
 			isolated: false,
 		});
-		expect(resolved).not.toHaveProperty("isolation");
 	});
 
-	it("uses a bounded parent handoff by default while trusted definitions retain full and no-context modes", () => {
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {}).inheritContext).toBeUndefined();
-		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("general-purpose")!, inheritContext: true }, {}).inheritContext).toBe(true);
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {}).inheritContext).toBe(false);
-	});
-
-	it("keeps only recent decision context in an inherited handoff", () => {
-		const handoff = buildCompactParentHandoff({
-			sessionManager: {
-				getBranch: () => [
-					{ type: "message", message: { role: "user", content: [{ type: "text", text: "old request must not survive" }] } },
-					{ type: "compaction", summary: `latest summary ${"s".repeat(MAX_PARENT_HANDOFF_CHARS)}` },
-					{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "latest assistant report" }] } },
-					{ type: "message", message: { role: "user", content: [{ type: "text", text: "latest user request" }] } },
-				],
-			},
-		} as any);
-
-		expect(handoff).toContain("# Parent Handoff");
-		expect(handoff).toContain("latest summary");
-		expect(handoff).toContain("latest user request");
-		expect(handoff).toContain("latest assistant report");
-		expect(handoff).not.toContain("old request must not survive");
-		expect(handoff.length).toBeLessThanOrEqual(MAX_PARENT_HANDOFF_CHARS + 300);
+	it("uses explicit invocation booleans for context and advisor", () => {
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+			run_in_background: false,
+			isolated: false,
+			inherit_context: false,
+			advisor: false,
+		})).toMatchObject({ inheritContext: false, advisor: false });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+			run_in_background: false,
+			isolated: false,
+			inherit_context: true,
+			advisor: true,
+		})).toMatchObject({ inheritContext: true, advisor: true });
 	});
 
 	it("retains the full branch only for explicit inheritance", () => {
@@ -238,34 +202,41 @@ Review carefully.
 				],
 			},
 		} as any;
-		expect(buildCompactParentHandoff(ctx)).not.toContain("earlier decision");
 		expect(buildFullParentContext(ctx)).toContain("earlier decision");
 	});
 
 	it("stops queued result polling after its bounded wait expires", async () => {
 		vi.useFakeTimers();
 		const record = { status: "queued" as const };
-		const waiting = waitForAgentSettlement(record, undefined, 10);
+		const waiting = waitForAgentSettlement(record, 10);
 		await vi.advanceTimersByTimeAsync(10);
 		expect(await waiting).toBe(false);
 		await vi.advanceTimersByTimeAsync(50);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
-	it("parses continuous advisor as explicit custom-agent opt-in", () => {
-		const root = temporaryRoot();
-		const directory = join(root, ".pi", "agents");
-		mkdirSync(directory, { recursive: true });
-		writeFileSync(join(directory, "deep-implementation.md"), `---
-name: deep-implementation
-description: correctness-critical implementation
-advisor: true
----
-Implement carefully.
-`);
+	it("clamps model-selected wait durations", () => {
+		expect(normalizeWaitSeconds(-1)).toBe(0);
+		expect(normalizeWaitSeconds(1.9)).toBe(1);
+		expect(normalizeWaitSeconds(MAX_SUBAGENT_RESULT_WAIT_SECONDS + 1)).toBe(MAX_SUBAGENT_RESULT_WAIT_SECONDS);
+	});
 
-		expect(loadCustomAgents(root).get("deep-implementation")?.advisor).toBe(true);
-		expect(DEFAULT_AGENTS.get("general-purpose")?.advisor).toBeUndefined();
+	it("requires explicit nested invocation choices and a bounded wait duration", () => {
+		const tools = createNestedSubagentTools({
+			manager: {} as any,
+			pi: {} as any,
+			parentAgentId: "parent-1",
+			depth: 0,
+			maxSubagentDepth: 1,
+			allowedSubagents: "all",
+			configCwd: process.cwd(),
+		});
+		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
+		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
+		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context", "advisor"]));
+		expect(agentSchema.properties.advisor.description).toContain("Keep false for exploration");
+		expect(resultSchema.required).toContain("wait_seconds");
+		expect(resultSchema.properties.wait_seconds.maximum).toBe(MAX_SUBAGENT_RESULT_WAIT_SECONDS);
 	});
 
 	it("sanitizes settings to the retained orchestration controls", () => {

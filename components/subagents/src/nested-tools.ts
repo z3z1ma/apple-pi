@@ -7,7 +7,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { SUBAGENT_RESULT_WAIT_TIMEOUT_MS, waitForAgentSettlement } from "./abortable.js";
+import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "./abortable.js";
 import {
 	buildAgentRegistry,
 	getAgentConfigIn,
@@ -43,6 +43,7 @@ interface NestedSpawnOptions {
 	maxTurns?: number;
 	isolated?: boolean;
 	inheritContext?: boolean;
+	advisor?: boolean;
 	thinkingLevel?: ThinkingLevel;
 	isBackground?: boolean;
 	invocation?: AgentInvocation;
@@ -118,16 +119,31 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			description: Type.String({ description: "Short task description." }),
 			subagent_type: Type.String({ description: `Allowed type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.` }),
 			model: Type.Optional(Type.String()),
-			thinking: Type.Optional(Type.String()),
-			run_in_background: Type.Optional(Type.Boolean()),
+			thinking: Type.Optional(Type.Union([
+				Type.Literal("off"), Type.Literal("minimal"), Type.Literal("low"), Type.Literal("medium"),
+				Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"),
+			])),
 			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
-			isolated: Type.Optional(Type.Boolean()),
+			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
+			isolated: Type.Boolean({ default: false, description: "Disable extension and skill inheritance for a new agent session." }),
+			inherit_context: Type.Boolean({ default: false, description: "Include the full parent conversation before the initial task prompt." }),
+			advisor: Type.Boolean({ default: false, description: "Keep false for exploration, search, planning, and routine work. Set true only for correctness-critical implementation where continuous second-model review justifies substantial cost and latency." }),
 		}),
 		execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
 			if (params.resume) {
 				const existing = context.manager.getRecord(params.resume);
 				if (!ownsRecord(existing, context.parentAgentId)) {
 					return textResult(`Nested agent not found or not owned by this parent: "${params.resume}".`, true);
+				}
+				const requestedInheritance = params.inherit_context === true;
+				const requestedAdvisor = params.advisor === true;
+				const requestedIsolation = params.isolated === true;
+				if (
+					requestedInheritance !== (existing.invocation?.inheritContext === true)
+					|| requestedAdvisor !== (existing.invocation?.advisor === true)
+					|| requestedIsolation !== (existing.invocation?.isolated === true)
+				) {
+					return textResult("inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.", true);
 				}
 				const resumed = await context.manager.resume(params.resume, params.prompt, signal);
 				return resumed
@@ -162,10 +178,6 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			});
 			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
-			if (config?.source === "project" && !projectTrusted && invocation.inheritContext === true) {
-				// Full conversation inheritance is trusted agent-definition policy.
-				invocation.inheritContext = undefined;
-			}
 			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
 				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
@@ -178,12 +190,14 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				maxTurns: invocation.maxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
+				advisor: invocation.advisor,
 				thinkingLevel: invocation.thinking,
 				invocation: {
 					thinking: invocation.thinking,
 					maxTurns: invocation.maxTurns,
 					isolated: invocation.isolated,
 					inheritContext: invocation.inheritContext,
+					advisor: invocation.advisor,
 					runInBackground: invocation.runInBackground,
 				},
 				onAssistantUsage: (usage) => {
@@ -216,26 +230,27 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 	const resultTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Nested Agent Result",
-		description: `Check an owned child without blocking by default. wait=true waits at most ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s, then returns control while the child continues. Use transcript_tail for a bounded recent conversation slice. transcript_tail cannot be combined with wait=true.`,
+		description: `Check an owned child without blocking by default. wait_seconds chooses how long to wait (0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s) before returning control while the child continues. Use transcript_tail for a bounded recent conversation slice; it cannot be combined with a positive wait.`,
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait: Type.Optional(Type.Boolean({ description: `Wait up to ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s for the child; it continues after the wait expires. Defaults to false.` })),
+			wait_seconds: Type.Integer({ minimum: 0, maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS, default: 0, description: `Seconds to wait before yielding control; 0 checks immediately and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.` }),
 			transcript_tail: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Append up to 12,000 characters from the most recent N conversation messages, including current streaming output." })),
 		}),
 		execute: async (_toolCallId, params, signal) => {
-			if (params.transcript_tail !== undefined && params.wait) {
-				return textResult("transcript_tail cannot be combined with wait=true.", true);
+			const waitSeconds = normalizeWaitSeconds(params.wait_seconds);
+			if (params.transcript_tail !== undefined && waitSeconds > 0) {
+				return textResult("transcript_tail cannot be combined with a positive wait_seconds value.", true);
 			}
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId)) return textResult("Nested agent not found or not owned by this parent.", true);
-			const waitExpired = params.wait && (record.status === "queued" || record.status === "running")
-				? !await waitForAgentSettlement(record, signal)
+			const waitExpired = waitSeconds > 0 && (record.status === "queued" || record.status === "running")
+				? !await waitForAgentSettlement(record, waitSeconds * 1_000, signal)
 				: false;
 			let output = params.transcript_tail === undefined
 				? formatRecord(record, false)
 				: `Agent ${record.id} is ${record.status}.`;
 			if (waitExpired && (record.status === "queued" || record.status === "running")) {
-				output += `\n\nWait limit (${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s) reached; it continues in the background.`;
+				output += `\n\nWait limit (${waitSeconds}s) reached; it continues in the background.`;
 			}
 			if (params.transcript_tail !== undefined && record.session) {
 				const tail = Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));

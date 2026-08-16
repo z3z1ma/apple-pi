@@ -1,4 +1,4 @@
-Status: partial
+Status: done
 Created: 2026-08-15
 Updated: 2026-08-16
 
@@ -62,6 +62,7 @@ Redesign review, Ralph, subagent, and Pi Exec execution limits so ordinary model
 - 2026-08-16: Removed raw numeric resource arithmetic from normal review, Ralph, Agent/nested-Agent, and Pi Exec tool/command schemas. Review now derives a sealed-input profile policy, measures full stage prompt/tool contracts against resolved model capacity, reserves aggregate admission capacity, and persists additive policy/envelope/cause fields. Ralph derives internal policy from mode and compiled graph shape; Pi Exec derives its envelope from program shape.
 - 2026-08-16: Live normal-environment fast review runs `8b94d4a4-532f-419c-bfef-8db27d71bcdb` and `9670d5bc-f25c-4efe-bdc4-5262f829574f` each completed 2/2 coverage in disposable repositories using the new policy path. The final run followed complete managed system-prompt and read-only-tool envelope accounting; receipts recorded per-stage policy envelopes and both repositories were removed after their runs.
 - 2026-08-16: Corrected concurrent review admission accounting: each role now consumes its own reservation as live usage arrives and releases only its unused remainder. Role hard caps use settled plus live usage; admission uses only unconsumed reservations, avoiding double-counting.
+- 2026-08-16: Extended the controller-supplied typed terminating result-tool boundary to Ralph executor and judge roles, removing their remaining prose JSON path. Final whole-suite validation passed after this change.
 
 ## Blockers
 
@@ -76,11 +77,11 @@ None.
 - Done: `npm run typecheck`.
 - Done: focused unit suites (9 files, 86 tests), including typed causes, policy capacity, receipt compatibility, public-schema removal, Pi Exec bounds, and Ralph policy derivation.
 - Done: `npm run typecheck`, focused policy/controller/runtime/Ralph suites, `npm run test:loader`, `npm run pack:check`, and `git diff --check`; package dry-run left no tarball artifact.
-- Partial: a final whole-suite `npm test` run timed out only in pre-existing `tests/ralph-state-machine.test.ts` under its 5-second per-test limit. Running that file alone immediately passed all 14 tests in 31.89 seconds; the full suite passed before the final review-policy-only reservation correction. The final whole-suite proof is therefore not available from this run.
+- Done: Final `npm run typecheck`, `npm test`, `npm run pack:check`, and `git diff --check` passed after the completed Ralph typed-output migration. `npm test` passed 421 tests across 39 files, 1,414 assertions, 79/79 advisor checks, and package-loader validation; `pack:check` produced a 157-file package.
 
 ## Review
 
-Same-context review validated the terminal-cause and policy-reservation invariants through focused tests. No independent review was requested for this manual reliability/policy increment.
+Same-context review validated the terminal-cause and policy-reservation invariants through focused tests. No independent review was requested for this manual reliability/policy increment; final validation covered the completed typed-result boundary.
 
 ## Retrospective
 

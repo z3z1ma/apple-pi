@@ -213,6 +213,19 @@ Answer the task.
 			expect(agentId).toBeTruthy();
 			expect(result.details).toMatchObject({ agentId, subagentType: "tool-test", status: "completed" });
 
+			const incompatibleResume = await tool.execute("public-agent-incompatible-resume", {
+				prompt: "continue",
+				description: "Incompatible continuation",
+				subagent_type: "tool-test",
+				resume: agentId,
+				advisor: true,
+				inherit_context: false,
+				isolated: false,
+				run_in_background: false,
+			}, undefined, undefined, extensionCtx);
+			expect(incompatibleResume.isError).toBe(true);
+			expect(incompatibleResume.content[0].text).toContain("fixed when an agent session starts");
+
 			const resumed = await tool.execute("public-agent-resume", {
 				prompt: "follow up using existing context",
 				description: "Continue answer test",
@@ -418,7 +431,7 @@ Answer the task.
 		}
 	}, 30_000);
 
-	it("downgrades untrusted project full-context policy to the bounded handoff", async () => {
+	it("uses full parent context only when the invocation requests it", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-trust-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-context-trust", contextWindow: 200_000 }] });
@@ -430,7 +443,7 @@ Answer the task.
 		]);
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
-		const run = async (projectTrusted: boolean) => {
+		const run = async (inheritContext: boolean, projectTrusted: boolean) => {
 			registerAgents(new Map<string, AgentConfig>([["context-trust", {
 				name: "context-trust",
 				description: "context trust test",
@@ -438,7 +451,6 @@ Answer the task.
 				extensions: false,
 				skills: false,
 				persistSession: false,
-				inheritContext: true,
 				source: "project",
 				systemPrompt: "Answer the task.",
 				promptMode: "replace",
@@ -459,19 +471,20 @@ Answer the task.
 			} as any, "context-trust", "answer", {
 				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
 				model,
-				inheritContext: true,
+				inheritContext,
 			});
 			result.session.dispose();
 		};
 
-		await run(false);
-		await run(true);
+		await run(false, true);
+		await run(true, false);
 		expect(requests[0]).not.toContain("earlier-secret");
-		expect(requests[0]).toContain("latest-handoff");
+		expect(requests[0]).not.toContain("latest-handoff");
 		expect(requests[1]).toContain("earlier-secret");
+		expect(requests[1]).toContain("latest-handoff");
 	}, 30_000);
 
-	it("loads the advisor extension in child sessions only with explicit agent opt-in", async () => {
+	it("loads the advisor extension only when the invocation opts in", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-advisor-scope-"));
 		temporaryDirectories.push(cwd);
 		const extensionPath = join(cwd, "pi-advisor.ts");
@@ -496,7 +509,7 @@ export default function advisorMarker(pi) {
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
 
-		const run = async (advisor: boolean | undefined, projectTrusted = true) => {
+		const run = async (advisor: boolean, projectTrusted = true) => {
 			registerAgents(new Map<string, AgentConfig>([["advisor-scope", {
 				name: "advisor-scope",
 				description: "advisor scope test",
@@ -504,7 +517,6 @@ export default function advisorMarker(pi) {
 				extensions: [extensionPath],
 				skills: false,
 				persistSession: false,
-				advisor,
 				source: "project",
 				systemPrompt: "Answer the task.",
 				promptMode: "replace",
@@ -520,15 +532,16 @@ export default function advisorMarker(pi) {
 			} as any, "advisor-scope", "answer", {
 				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
 				model,
+				advisor,
 				onSessionCreated: (session) => { tools = session.getAllTools().map((tool) => tool.name); },
 			});
 			result.session.dispose();
 			return tools;
 		};
 
-		expect(await run(undefined)).not.toContain("child_advisor_marker");
+		expect(await run(false)).not.toContain("child_advisor_marker");
 		expect(await run(true)).toContain("child_advisor_marker");
-		expect(await run(true, false)).not.toContain("child_advisor_marker");
+		expect(await run(true, false)).toContain("child_advisor_marker");
 	}, 30_000);
 
 	it("keeps pi_exec out of child sessions even when explicitly selected", async () => {

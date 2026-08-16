@@ -42,8 +42,15 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
   });
 }
 
-/** A wait tool yields control after this long without stopping the child. */
-export const SUBAGENT_RESULT_WAIT_TIMEOUT_MS = 10_000;
+/** The longest a result check may wait without returning control to its caller. */
+export const MAX_SUBAGENT_RESULT_WAIT_SECONDS = 60;
+export const MAX_SUBAGENT_RESULT_WAIT_MS = MAX_SUBAGENT_RESULT_WAIT_SECONDS * 1_000;
+
+/** Clamp model-facing wait input defensively at the tool boundary. */
+export function normalizeWaitSeconds(seconds: number): number {
+  if (!Number.isFinite(seconds)) return 0;
+  return Math.min(MAX_SUBAGENT_RESULT_WAIT_SECONDS, Math.max(0, Math.floor(seconds)));
+}
 
 type WaitableAgent = {
   status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
@@ -55,24 +62,29 @@ function isPending(record: WaitableAgent): boolean {
 }
 
 /**
- * Wait briefly for a child to settle without ever cancelling it.
+ * Wait for the requested bounded interval without ever cancelling the child.
  *
  * A bounded wait keeps the parent able to inspect, steer, or work in parallel
  * instead of wedging on one slow child. `true` means the record settled; `false`
- * means the wait limit elapsed and the child is still active. Caller abort still
- * rejects exactly as {@link abortable} does.
+ * means the requested wait elapsed and the child is still active. Caller abort
+ * still rejects exactly as {@link abortable} does.
  */
 export async function waitForAgentSettlement(
   record: WaitableAgent,
+  timeoutMs: number,
   signal?: AbortSignal,
-  timeoutMs = SUBAGENT_RESULT_WAIT_TIMEOUT_MS,
 ): Promise<boolean> {
   if (!isPending(record)) return true;
+
+  const boundedTimeoutMs = Number.isFinite(timeoutMs)
+    ? Math.min(MAX_SUBAGENT_RESULT_WAIT_MS, Math.max(0, Math.floor(timeoutMs)))
+    : 0;
+  if (boundedTimeoutMs === 0) return false;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   const timeout = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+    timer = setTimeout(() => resolve("timeout"), boundedTimeoutMs);
   });
   const settled = (async (): Promise<"settled" | "cancelled"> => {
     // Queued records have no run promise until they reach the pool. The outer

@@ -6,7 +6,7 @@ import {
 	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { SUBAGENT_RESULT_WAIT_TIMEOUT_MS, waitForAgentSettlement } from "./abortable.js";
+import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "./abortable.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
 import {
@@ -355,6 +355,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					maxTurns: request.maxTurns,
 					isolated: false,
 					inheritContext: false,
+					advisor: false,
 					runInBackground: false,
 				},
 				onToolActivity: tracker.callbacks.onToolActivity,
@@ -487,6 +488,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		].join(" "),
 		promptGuidelines: [
 			"Prefer direct tools for straightforward work. Use a subagent only when it owns a substantial independent investigation, enables genuine parallelism, or provides a materially valuable fresh-context review. Do not delegate targeted lookups, routine planning, or work already underway, and do not launch overlapping agents.",
+			"Set advisor: false for exploration, search, planning, and routine work. Set it true only for correctness-critical implementation where a continuous second-model review loop justifies its substantial cost and latency.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
@@ -498,9 +500,11 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				Type.Literal("off"), Type.Literal("minimal"), Type.Literal("low"), Type.Literal("medium"),
 				Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"),
 			])),
-			run_in_background: Type.Optional(Type.Boolean()),
 			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
-			isolated: Type.Optional(Type.Boolean({ description: "Disable extension and skill inheritance." })),
+			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
+			isolated: Type.Boolean({ default: false, description: "Disable extension and skill inheritance for a new agent session." }),
+			inherit_context: Type.Boolean({ default: false, description: "Include the full parent conversation before the initial task prompt." }),
+			advisor: Type.Boolean({ default: false, description: "Keep false for exploration, search, planning, and routine work. Set true only for correctness-critical implementation where continuous second-model review justifies substantial cost and latency." }),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -509,7 +513,17 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (params.resume) {
 				const existing = manager.getRecord(params.resume);
 				if (!existing || existing.parentAgentId || existing.internalOwner) return textResult(`Agent not found: ${params.resume}`, undefined, true);
-				const background = params.run_in_background ?? false;
+				const requestedInheritance = params.inherit_context === true;
+				const requestedAdvisor = params.advisor === true;
+				const requestedIsolation = params.isolated === true;
+				if (
+					requestedInheritance !== (existing.invocation?.inheritContext === true)
+					|| requestedAdvisor !== (existing.invocation?.advisor === true)
+					|| requestedIsolation !== (existing.invocation?.isolated === true)
+				) {
+					return textResult("inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.", undefined, true);
+				}
+				const background = params.run_in_background === true;
 				const activity = createActivityTracker(normalizeMaxTurns(existing.invocation?.maxTurns ?? getDefaultMaxTurns()), () => widget.update());
 				activityById.set(existing.id, activity.state);
 				const resumed = await manager.resume(existing.id, params.prompt, background ? undefined : signal, {
@@ -539,10 +553,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			});
 			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, undefined, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
-			if (config?.source === "project" && !projectTrusted && invocation.inheritContext === true) {
-				// Full conversation inheritance is trusted agent-definition policy.
-				invocation.inheritContext = undefined;
-			}
 			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
 				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
@@ -568,6 +578,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
+				advisor: invocation.advisor,
 				runInBackground: invocation.runInBackground,
 			};
 			const options = {
@@ -577,6 +588,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
+				advisor: invocation.advisor,
 				thinkingLevel: invocation.thinking,
 				cwd: params.cwd,
 				invocation: invocationDetails,
@@ -643,21 +655,22 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	pi.registerTool(defineTool({
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Subagent Result",
-		description: `Check a subagent without blocking by default. Settled final output is returned in full. wait=true waits at most ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s, then returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation. transcript_tail is mutually exclusive with verbose and wait=true.`,
+		description: `Check a subagent without blocking by default. Settled final output is returned in full. wait_seconds chooses how long to wait (0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s) before returning control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.`,
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait: Type.Optional(Type.Boolean({ description: `Wait up to ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s for a queued or running agent; it continues after the wait expires. Defaults to false.` })),
-			verbose: Type.Optional(Type.Boolean({ description: "Append the full conversation transcript. Mutually exclusive with transcript_tail." })),
+			wait_seconds: Type.Integer({ minimum: 0, maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS, default: 0, description: `Seconds to wait before yielding control; 0 checks immediately and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.` }),
+			verbose: Type.Boolean({ default: false, description: "Append the full conversation transcript. Mutually exclusive with transcript_tail." }),
 			transcript_tail: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Append up to 12,000 characters from the most recent N conversation messages, including current streaming output. Mutually exclusive with verbose." })),
 		}),
 		async execute(_toolCallId, params, signal) {
-			if (params.transcript_tail !== undefined && (params.verbose || params.wait)) {
-				return textResult("transcript_tail cannot be combined with verbose or wait=true.", undefined, true);
+			const waitSeconds = normalizeWaitSeconds(params.wait_seconds);
+			if (params.transcript_tail !== undefined && (params.verbose || waitSeconds > 0)) {
+				return textResult("transcript_tail cannot be combined with verbose or a positive wait_seconds value.", undefined, true);
 			}
 			const record = manager.getRecord(params.agent_id);
 			if (!record || record.parentAgentId || record.internalOwner) return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
-			const waitExpired = params.wait && (record.status === "queued" || record.status === "running")
-				? !await waitForAgentSettlement(record, signal)
+			const waitExpired = waitSeconds > 0 && (record.status === "queued" || record.status === "running")
+				? !await waitForAgentSettlement(record, waitSeconds * 1_000, signal)
 				: false;
 			const settled = record.status !== "queued" && record.status !== "running";
 			if (settled && params.transcript_tail === undefined) {
@@ -667,7 +680,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			let output = !settled || params.transcript_tail !== undefined
 				? `Agent ${record.id} is ${record.status}.`
 				: record.result || record.error || "No output.";
-			if (waitExpired && !settled) output += ` Wait limit (${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s) reached; it continues in the background.`;
+			if (waitExpired && !settled) output += ` Wait limit (${waitSeconds}s) reached; it continues in the background.`;
 			if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
 				const tail = params.transcript_tail === undefined ? undefined : Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));
 				const transcript = getAgentConversation(record.session, tail) || "(no conversation messages yet)";

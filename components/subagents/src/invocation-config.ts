@@ -4,6 +4,8 @@ interface AgentInvocationParams {
 	thinking?: string;
 	run_in_background?: boolean;
 	isolated?: boolean;
+	inherit_context?: boolean;
+	advisor?: boolean;
 }
 
 export function resolveAgentInvocationConfig(
@@ -13,7 +15,8 @@ export function resolveAgentInvocationConfig(
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	/** undefined = compact handoff, true = full parent branch, false = none. */
-	inheritContext?: boolean;
+	inheritContext: boolean;
+	advisor: boolean;
 	runInBackground: boolean;
 	isolated: boolean;
 } {
@@ -21,11 +24,12 @@ export function resolveAgentInvocationConfig(
 		thinking: (params.thinking ?? agentConfig?.thinking) as ThinkingLevel | undefined,
 		// Turn ceilings are agent-definition or trusted-settings policy, never model arithmetic.
 		maxTurns: agentConfig?.maxTurns,
-		// Context breadth is trusted agent-definition policy: omitted is the
-		// bounded handoff, true retains legacy full conversation, false opts out.
-		inheritContext: agentConfig?.inheritContext,
-		runInBackground: agentConfig?.runInBackground ?? params.run_in_background ?? false,
-		isolated: agentConfig?.isolated ?? params.isolated ?? false,
+		// These execution choices belong to each invocation. Explicit false is the
+		// ordinary case: the prompt is the complete handoff.
+		inheritContext: params.inherit_context === true,
+		advisor: params.advisor === true,
+		runInBackground: params.run_in_background === true,
+		isolated: params.isolated === true,
 	};
 }
 

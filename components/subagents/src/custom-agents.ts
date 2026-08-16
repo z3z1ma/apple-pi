@@ -3,24 +3,11 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOL_NAMES } from "./agent-types.js";
 import type { AgentConfig, ThinkingLevel } from "./types.js";
 
-/**
- * The one thing a declared `name:` may not contain, matching Claude Code
- * exactly: it reserves `:` for plugin-scoped identifiers (`my-plugin:reviewer`)
- * and refuses to load a file whose name uses one.
- *
- * Nothing else is rejected. Claude Code's docs describe names as "lowercase
- * letters and hyphens", but that is guidance — the only stated load failure is
- * the colon, so `name: Code Reviewer` must work here too. (The stricter
- * letters/digits/underscore/hyphen regex in Claude Code applies to the Agent
- * tool's spawn-time `name` parameter, which is a different field.) Mixed case
- * has to be allowed regardless: the built-in types `Explore` and `Plan` use it,
- * and a file must be able to override one.
- */
 const RESERVED_IN_TYPE = ":";
 
 /**
@@ -35,11 +22,8 @@ const RESERVED_IN_TYPE = ":";
  * authority; .agents/agents is an additional read location.
  * Any name is allowed — names matching defaults (e.g. "Explore") override them.
  *
- * An agent's type comes from its frontmatter `name:`, falling back to the
- * filename — Claude Code's rule, where "the filename doesn't have to match".
- * Because the type is now declared rather than derived from a unique path, two
- * files can claim the same one; the later load wins, as it always has for a
- * filename clash, and `warnSkippedOverride` reports the substitution.
+ * An agent's type comes from its required frontmatter `name:`. Two files can
+ * claim the same name; the later load wins.
  */
 export function loadCustomAgents(cwd: string, strict = false): Map<string, AgentConfig> {
   const globalDir = join(getAgentDir(), "agents");
@@ -68,81 +52,40 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
   }
 
   for (const file of files) {
-    const filenameType = basename(file, ".md");
-
     const path = join(dir, file);
 
     const parsed = readAgentFile(path, strict);
-    if (!parsed) {
-      warnSkippedOverride(filenameType, agents);
-      continue;
-    }
+    if (!parsed) continue;
     const { frontmatter: fm, body } = parsed;
 
-    const removedFields = ["isolation", "memory", "output_transcript", "schedule"]
-      .filter((field) => Object.prototype.hasOwnProperty.call(fm, field));
-    if (removedFields.length > 0) {
-      warnIfNew(
-        `Skipping agent file ${path}: removed apple-pi field${removedFields.length === 1 ? "" : "s"} `
-        + `${removedFields.join(", ")}. Remove ${removedFields.length === 1 ? "it" : "them"}; subagents use normal `
-        + "Pi sessions with VCC/observational memory and never create worktrees or schedules.",
-      );
+    const name = str(fm.name)?.trim();
+    if (!name || name.includes(RESERVED_IN_TYPE)) {
+      warnIfNew(`Skipping agent file ${path}: name must be a non-empty string without "${RESERVED_IN_TYPE}".`);
       continue;
     }
-
-    // Claude Code's rule: `name:` IS the agent type, and the filename need not
-    // match. Absent, the filename stands in — Claude Code requires the field,
-    // but most files here predate it and must keep loading.
-    const declared = str(fm.name)?.trim();
-    if (declared?.includes(RESERVED_IN_TYPE)) {
-      // Refusing beats silently substituting: the file would otherwise load
-      // under its filename, so `Agent({subagent_type})` would succeed against
-      // an agent whose declared identity nothing honoured.
-      warnIfNew(
-        `Agent file ${path} declares name "${declared}", which contains "${RESERVED_IN_TYPE}" — reserved for `
-        + "plugin-scoped identifiers. Rename it, or move the label to `display_name:`. Skipping.",
-      );
-      // No `warnSkippedOverride`: this file would have registered under its
-      // *declared* name, which nothing else can hold (a colon keeps it out of
-      // the registry), so it shadowed nothing. Passing the filename instead
-      // would report a substitution of an unrelated agent that never happened.
-      continue;
-    }
-    // `||`, not `??`: a quoted empty or all-whitespace `name:` would otherwise
-    // register the agent under the empty type — unspawnable, and it takes the
-    // filename-derived one down with it.
-    const name = declared || filenameType;
 
     const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
 
     agents.set(name, {
       name,
-      // Only `display_name` now: `name` is the type, and `getConfig` already
-      // falls back to the type when no label is set — so a Claude Code file
-      // with `name: code-reviewer` still badges as "code-reviewer".
+      // `name` is the type; `display_name` is only the optional UI label.
       displayName: str(fm.display_name),
       color: str(fm.color),
       description: str(fm.description) ?? name,
       builtinToolNames,
       extSelectors,
       disallowedTools: csvListOptional(fm.disallowed_tools),
-      extensions: inheritField(fm.extensions ?? fm.inherit_extensions),
+      extensions: inheritField(fm.extensions),
       excludeExtensions: csvListOptional(fm.exclude_extensions),
-      skills: inheritField(fm.skills ?? fm.inherit_skills),
+      skills: inheritField(fm.skills),
       model: str(fm.model),
       thinking: str(fm.thinking) as ThinkingLevel | undefined,
       maxTurns: nonNegativeInt(fm.max_turns),
       persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
       sessionDir: str(fm.session_dir),
       allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
-      // The advisor is intentionally opt-in for child sessions: it is a second
-      // model that can continuously reopen implementation work.
-      advisor: fm.advisor === true ? true : undefined,
       systemPrompt: body.trim(),
       promptMode: fm.prompt_mode === "append" ? "append" : "replace",
-      inheritContext: fm.inherit_context != null ? fm.inherit_context === true : undefined,
-      runInBackground: fm.run_in_background != null ? fm.run_in_background === true : undefined,
-      isolated: fm.isolated != null ? fm.isolated === true : undefined,
       enabled: fm.enabled !== false,  // default true; explicitly false disables
       source,
       sourcePath: path,
@@ -173,19 +116,6 @@ function readAgentFile(path: string, strict: boolean): { frontmatter: Record<str
   }
 }
 
-/**
- * A skipped file that was overriding an already-loaded agent leaves the name
- * pointing at a *different* file — its own prompt, model and tools. Nothing
- * downstream can flag that: unlike an unknown type, the `Agent` call succeeds.
- */
-function warnSkippedOverride(name: string, agents: Map<string, AgentConfig>): void {
-  const surviving = agents.get(name);
-  // Nothing shadowed, or what it shadowed is disabled: dispatch refuses the type
-  // either way (see resolveEnabledTypeIn), so there is no substitution to report.
-  if (!surviving?.sourcePath || surviving.enabled === false) return;
-  warnIfNew(`Agent "${name}" now loads from ${surviving.sourcePath} instead`);
-}
-
 let warnedLastLoad = new Set<string>();
 let warnedThisLoad = new Set<string>();
 
@@ -202,7 +132,6 @@ function warnIfNew(message: string): void {
 }
 
 // ---- Field parsers ----
-// All follow the same convention: omitted → default, "none"/empty → nothing, value → exact.
 
 /** Extract a string or undefined. */
 function str(val: unknown): string | undefined {
@@ -215,51 +144,45 @@ function nonNegativeInt(val: unknown): number | undefined {
 }
 
 /**
- * Parse a raw CSV field value into items, or undefined if absent/empty/"none".
+ * Parse a raw CSV field value into items, or undefined if absent or empty.
  */
 function parseCsvField(val: unknown): string[] | undefined {
-  if (val === undefined || val === null) return undefined;
-  const s = String(val).trim();
-  if (!s || s === "none") return undefined;
+  if (typeof val !== "string") return undefined;
+  const s = val.trim();
+  if (!s) return undefined;
   const items = s.split(",").map(t => t.trim()).filter(Boolean);
   return items.length > 0 ? items : undefined;
 }
 
 /**
- * Parse the nested-delegation allowlist. Single field, default-off:
- * omitted/empty/"none"/`false` → undefined (no nested tools); "all"/"*"/`true`
- * → "all" (any enabled agent); csv → only the listed types.
- *
- * Booleans are accepted because `extensions:`/`skills:` take them and users
- * generalize: without this, YAML's `true` stringifies into an agent type
- * literally named "true", so the tools appear and every spawn is refused.
+ * Parse the nested-delegation allowlist. Omitted or empty means no nested
+ * tools; the exact string "all" permits every enabled type; otherwise CSV
+ * names permit those types only.
  */
 function parseAllowedSubagents(val: unknown): "all" | string[] | undefined {
-  if (typeof val === "boolean") return val ? "all" : undefined;
   const items = parseCsvField(val);
   if (!items) return undefined;
-  return items.some(i => i === "*" || i.toLowerCase() === "all") ? "all" : items;
+  return items.length === 1 && items[0] === "all" ? "all" : items;
 }
 
 /**
  * Parse a comma-separated list field with defaults.
- * omitted → defaults; "none"/empty → []; csv → listed items.
+ * omitted → defaults; empty → []; CSV → listed items.
  */
 function csvList(val: unknown, defaults: string[]): string[] {
-  if (val === undefined || val === null) return defaults;
+  if (val === undefined) return defaults;
   return parseCsvField(val) ?? [];
 }
 
 /**
  * Partition the `tools:` CSV into the built-in tool allowlist and raw `ext:` selectors.
- * `*` (and the case-insensitive alias `all`, for `tools: all`) expands to all
- * built-ins; plain entries are built-in names; `ext:` entries are extension-tool
+ * `*` expands to all built-ins; plain entries are built-in names; `ext:` entries are extension-tool
  * selectors parsed later by the runner. omitted → all built-ins, no selectors.
  * `tools:` present with only `ext:` entries → zero built-ins (use `*`).
  */
 function parseToolsField(val: unknown): { builtinToolNames: string[]; extSelectors: string[] | undefined } {
   const entries = csvList(val, BUILTIN_TOOL_NAMES);
-  const isWildcard = (e: string) => e === "*" || e.toLowerCase() === "all";
+  const isWildcard = (e: string) => e === "*";
   const hasWildcard = entries.some(isWildcard);
   const plain = entries.filter(e => !isWildcard(e) && !e.startsWith("ext:"));
   const extEntries = entries.filter(e => e.startsWith("ext:"));
@@ -271,7 +194,7 @@ function parseToolsField(val: unknown): { builtinToolNames: string[]; extSelecto
 
 /**
  * Parse an optional comma-separated list field.
- * omitted → undefined; "none"/empty → undefined; csv → listed items.
+ * omitted or empty → undefined; CSV → listed items.
  */
 function csvListOptional(val: unknown): string[] | undefined {
   return parseCsvField(val);
@@ -279,11 +202,11 @@ function csvListOptional(val: unknown): string[] | undefined {
 
 /**
  * Parse an inherit field (extensions, skills).
- * omitted/true → true (inherit all); false/"none"/empty → false; csv → listed names.
+ * omitted/true → true (inherit all); false or empty → false; CSV → listed names.
  */
 function inheritField(val: unknown): true | string[] | false {
-  if (val === undefined || val === null || val === true) return true;
-  if (val === false || val === "none") return false;
+  if (val === undefined || val === true) return true;
+  if (val === false) return false;
   const items = csvList(val, []);
   return items.length > 0 ? items : false;
 }

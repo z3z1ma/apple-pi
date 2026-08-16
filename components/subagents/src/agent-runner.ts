@@ -19,7 +19,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
-import { buildCompactParentHandoff, buildFullParentContext, extractText } from "./context.js";
+import { buildFullParentContext, extractText } from "./context.js";
 import { DEFAULT_AGENTS } from "./default-agents.js";
 import { detectEnv } from "./env.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager, SUBAGENT_TOOL_NAMES } from "./nested-tools.js";
@@ -386,6 +386,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   isolated?: boolean;
   inheritContext?: boolean;
+  advisor?: boolean;
   thinkingLevel?: ThinkingLevel;
   /**
    * True when another agent spawned this one. Nested runs stay in memory by
@@ -564,11 +565,7 @@ export async function runAgent(
         promptMode: suppliedAgentConfig.promptMode,
       }
     : getConfig(type);
-  // Project agent definitions are code input until Pi trusts the project. They
-  // may still supply ordinary role prompts, but cannot elevate a child into the
-  // costly advisor or legacy complete-conversation modes.
   const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
-  const trustsAgentPolicy = agentConfig?.source !== "project" || projectTrusted;
 
   // Resolve working directory: explicit override > parent cwd.
   const effectiveCwd = options.cwd ?? ctx.cwd;
@@ -631,10 +628,8 @@ export async function runAgent(
   //
   // Suppress AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's
   // buildSystemPrompt() re-appends both AFTER systemPromptOverride, which
-  // would defeat prompt_mode: replace and isolated: true. Parent context, if
-  // wanted, reaches the subagent via prompt_mode: append (parentSystemPrompt
-  // is embedded in systemPromptOverride) or inherit_context (bounded by default,
-  // complete only when explicitly true).
+  // would defeat prompt_mode: replace and isolated: true. Parent context, when
+  // requested, is prepended to the task prompt below.
   // `ext:` selectors from the `tools:` CSV narrow which extension tools surface to
   // the LLM. They do NOT control loading — `extensions:` is the sole authority for
   // which extensions load. `ext:foo` against an extension that `extensions:` excluded
@@ -654,9 +649,9 @@ export async function runAgent(
   // suppresses handler binding and tool registration; it is not a sandbox.
   const excludeNames = new Set((excludeExtensions ?? []).map((n) => n.toLowerCase()));
   // Generic extension inheritance must not silently create a second-model
-  // review loop in every child. Custom agent frontmatter opts in with
-  // `advisor: true`; explicit exclusions still win below.
-  if (!trustsAgentPolicy || agentConfig?.advisor !== true) excludeNames.add(ADVISOR_EXTENSION_NAME);
+  // review loop in every child. This per-invocation boolean is false by default;
+  // explicit extension exclusions still win below.
+  if (options.advisor !== true) excludeNames.add(ADVISOR_EXTENSION_NAME);
   const hasExcludes = excludeNames.size > 0;
   // The override filters loaded extensions down to `keepNames` minus `excludeNames`.
   // It's only needed when we're neither loading everything without excludes
@@ -1024,17 +1019,11 @@ export async function runAgent(
   const collector = collectResponseText(session);
   const cleanupAbort = forwardAbortSignal(session, options.signal);
 
-  // Omitted inheritance is the ordinary bounded handoff. Trusted definition
-  // policy may retain the exceptional complete-conversation mode; `false` is a
-  // fresh, self-contained child (used by managed roles).
+  // A task prompt is the entire handoff unless this invocation explicitly
+  // requests the parent conversation.
   let effectivePrompt = prompt;
-  const inheritance = options.inheritContext === true && !trustsAgentPolicy
-    ? undefined
-    : options.inheritContext;
-  if (inheritance !== false) {
-    const parentContext = inheritance === true
-      ? buildFullParentContext(ctx)
-      : buildCompactParentHandoff(ctx);
+  if (options.inheritContext === true) {
+    const parentContext = buildFullParentContext(ctx);
     if (parentContext) effectivePrompt = parentContext + prompt;
   }
 

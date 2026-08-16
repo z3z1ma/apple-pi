@@ -23,14 +23,8 @@ export interface AgentConfig {
 	persistSession?: boolean;
 	sessionDir?: string;
 	allowedSubagents?: "all" | string[];
-	/** Enable the costly continuous advisor inside this child session. Off unless explicitly requested. */
-	advisor?: boolean;
 	systemPrompt: string;
 	promptMode: "replace" | "append";
-	/** Omitted = bounded parent handoff; true = full parent branch; false = none. */
-	inheritContext?: boolean;
-	runInBackground?: boolean;
-	isolated?: boolean;
 	isDefault?: boolean;
 	enabled?: boolean;
 	source?: "default" | "project" | "global";
@@ -80,8 +74,10 @@ export interface AgentInvocation {
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;
-	/** Omitted = bounded handoff; true = full parent branch; false = none. */
-	inheritContext?: boolean;
+	/** Whether this invocation received the parent conversation. */
+	inheritContext: boolean;
+	/** Whether this invocation enabled the continuous advisor. */
+	advisor: boolean;
 	runInBackground?: boolean;
 }
 
