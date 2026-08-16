@@ -90,7 +90,6 @@ function realContextTokens(ctx: ConsolidationCtx): number | undefined {
 
 function stageDue(
 	entries: Entry[],
-	_runtime: Runtime,
 	currentTokens: number | undefined,
 	customType: V3MemoryCustomType,
 	rawEstimateFn: (entries: Entry[]) => number,
@@ -110,7 +109,6 @@ function anyStageDue(entries: Entry[], runtime: Runtime, currentTokens: number |
 	return (
 		stageDue(
 			entries,
-			runtime,
 			currentTokens,
 			OM_OBSERVATIONS_RECORDED,
 			rawTokensSinceObservationCoverage,
@@ -118,7 +116,6 @@ function anyStageDue(entries: Entry[], runtime: Runtime, currentTokens: number |
 		) ||
 		stageDue(
 			entries,
-			runtime,
 			currentTokens,
 			OM_REFLECTIONS_RECORDED,
 			rawTokensSinceReflectionCoverage,

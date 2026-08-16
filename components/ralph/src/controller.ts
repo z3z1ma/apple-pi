@@ -815,7 +815,7 @@ export class RalphController {
 		run: RalphRun,
 		state: RalphTerminalState,
 		reason: string,
-		cause = this.causeForGate(state, reason),
+		cause = this.causeForGate(state),
 	): Promise<RalphRun> {
 		run.state = state;
 		run.lastOutcome = reason;
@@ -826,7 +826,7 @@ export class RalphController {
 		return run;
 	}
 
-	private causeForGate(state: RalphTerminalState, _reason: string): RalphTerminalCause | undefined {
+	private causeForGate(state: RalphTerminalState): RalphTerminalCause | undefined {
 		if (state === "done") return undefined;
 		if (state === "blocked") return "blocked";
 		if (state === "review_failed") return "review_failure";
