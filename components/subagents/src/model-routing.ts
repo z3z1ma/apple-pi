@@ -1,5 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
-import { loadModeSpec } from "../../mode-utils.js";
+import { loadModeSpec } from "../../shared/src/mode-utils.js";
 import { resolveModel } from "./model-resolver.js";
 import type { AgentConfig, ThinkingLevel } from "./types.js";
 

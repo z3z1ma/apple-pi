@@ -14,8 +14,9 @@
   },
   "include": [
     "extensions/**/*.ts",
-    "components/advisor/**/*.ts",
-    "components/ask-user-question/**/*.ts",
+    "components/advisor/src/**/*.ts",
+    "components/ask-user-question/src/**/*.ts",
+    "components/shared/src/**/*.ts",
     "components/vcc/src/**/*.ts",
     "components/memory/src/**/*.ts",
     "components/subagents/src/**/*.ts",

@@ -33,13 +33,6 @@
   },
   "overrides": [
     {
-      "includes": ["components/vcc/**"],
-      "formatter": {
-        "indentStyle": "space",
-        "indentWidth": 2
-      }
-    },
-    {
       "includes": ["*.json", "**/*.json"],
       "formatter": {
         "indentStyle": "space",

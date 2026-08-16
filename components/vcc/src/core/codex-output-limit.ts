@@ -4,45 +4,45 @@ export const CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION = "__pi_vcc_codex_contex
 let codexContextOverflowPending = false;
 
 const codexErrorMessage = (message: unknown): string | undefined => {
-  if (!message || typeof message !== "object") return undefined;
+	if (!message || typeof message !== "object") return undefined;
 
-  const candidate = message as {
-    role?: unknown;
-    provider?: unknown;
-    api?: unknown;
-    stopReason?: unknown;
-    errorMessage?: unknown;
-  };
+	const candidate = message as {
+		role?: unknown;
+		provider?: unknown;
+		api?: unknown;
+		stopReason?: unknown;
+		errorMessage?: unknown;
+	};
 
-  const isCodexMessage = candidate.provider === "openai-codex" || candidate.api === "openai-codex-responses";
+	const isCodexMessage = candidate.provider === "openai-codex" || candidate.api === "openai-codex-responses";
 
-  if (
-    candidate.role !== "assistant" ||
-    !isCodexMessage ||
-    candidate.stopReason !== "error" ||
-    typeof candidate.errorMessage !== "string"
-  ) {
-    return undefined;
-  }
+	if (
+		candidate.role !== "assistant" ||
+		!isCodexMessage ||
+		candidate.stopReason !== "error" ||
+		typeof candidate.errorMessage !== "string"
+	) {
+		return undefined;
+	}
 
-  return candidate.errorMessage;
+	return candidate.errorMessage;
 };
 
 /** Identify the Codex provider error used when a response reaches its output cap. */
 export const isCodexOutputLimitError = (message: unknown): boolean => {
-  const errorMessage = codexErrorMessage(message);
-  return errorMessage !== undefined && /maximum output token limit/i.test(errorMessage);
+	const errorMessage = codexErrorMessage(message);
+	return errorMessage !== undefined && /maximum output token limit/i.test(errorMessage);
 };
 
 /** Identify the Codex provider error used when the request input is too large. */
 export const isCodexContextOverflowError = (message: unknown): boolean => {
-  const errorMessage = codexErrorMessage(message);
-  return errorMessage !== undefined && /exceeds the context window/i.test(errorMessage);
+	const errorMessage = codexErrorMessage(message);
+	return errorMessage !== undefined && /exceeds the context window/i.test(errorMessage);
 };
 
 /** Mark a Codex context overflow until pi-core begins its recovery compaction. */
 export const markCodexContextOverflowPending = (): void => {
-  codexContextOverflowPending = true;
+	codexContextOverflowPending = true;
 };
 
 /** Check whether the pending Codex overflow belongs to the next compaction. */
@@ -50,5 +50,5 @@ export const isCodexContextOverflowPending = (): boolean => codexContextOverflow
 
 /** Clear pending Codex overflow state after compaction or session reset. */
 export const clearCodexContextOverflowPending = (): void => {
-  codexContextOverflowPending = false;
+	codexContextOverflowPending = false;
 };

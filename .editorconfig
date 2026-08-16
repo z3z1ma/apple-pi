@@ -11,7 +11,3 @@ indent_size = tab
 [*.{json,yml,yaml,md}]
 indent_style = space
 indent_size = 2
-
-[components/vcc/**]
-indent_style = space
-indent_size = 2

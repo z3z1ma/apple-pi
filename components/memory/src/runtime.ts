@@ -1,5 +1,5 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { loadModeSpec } from "../../mode-utils.js";
+import { loadModeSpec } from "../../shared/src/mode-utils.js";
 import { isThinkingLevel, type Config, DEFAULTS, loadConfig } from "./config.js";
 
 export const OBSERVATIONAL_MEMORY_MODE = "observational-memory";

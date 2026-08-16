@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Model } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { resolveModelAndThinking } from "../../mode-utils.js";
+import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
 import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
 import { buildAgentPrompt } from "../../subagents/src/prompts.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";

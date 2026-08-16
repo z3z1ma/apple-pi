@@ -1,1 +1,1 @@
-export { default } from "../components/advisor/index.js";
+export { default } from "../components/advisor/src/index.js";

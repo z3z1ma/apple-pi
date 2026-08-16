@@ -1,25 +1,25 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-  CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION,
-  CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION,
-  clearCodexContextOverflowPending,
-  isCodexContextOverflowError,
-  isCodexOutputLimitError,
-  markCodexContextOverflowPending,
-} from "../core/codex-output-limit";
-import { loadSettings, getModelThreshold, isPiCoreCompactionEnabled, resolveTriggerTokens } from "../core/settings";
+	CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION,
+	CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION,
+	clearCodexContextOverflowPending,
+	isCodexContextOverflowError,
+	isCodexOutputLimitError,
+	markCodexContextOverflowPending,
+} from "../core/codex-output-limit.js";
+import { loadSettings, getModelThreshold, isPiCoreCompactionEnabled, resolveTriggerTokens } from "../core/settings.js";
 
 type ProactiveContext = {
-  model?: any;
-  getContextUsage?: () => any;
-  compact?: (options?: any) => void;
-  ui?: any;
-  sessionManager?: { getCwd?: () => string };
+	model?: any;
+	getContextUsage?: () => any;
+	compact?: (options?: any) => void;
+	ui?: any;
+	sessionManager?: { getCwd?: () => string };
 };
 
 const formatTokens = (n: number): string => {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
+	if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+	return String(n);
 };
 
 // Cooldown after compaction to prevent double-trigger.
@@ -36,7 +36,7 @@ const COOLDOWN_MS = 3000;
 let proactiveTriggerActive = false;
 
 const setCooldown = () => {
-  lastCompactTime = Date.now();
+	lastCompactTime = Date.now();
 };
 const isCoolingDown = () => Date.now() - lastCompactTime < COOLDOWN_MS;
 
@@ -45,9 +45,9 @@ export const isProactiveTriggerActive = () => proactiveTriggerActive;
 
 /** Reset all proactive state (for testing / session start). */
 export const resetProactiveState = () => {
-  lastCompactTime = 0;
-  proactiveTriggerActive = false;
-  clearCodexContextOverflowPending();
+	lastCompactTime = 0;
+	proactiveTriggerActive = false;
+	clearCodexContextOverflowPending();
 };
 
 /**
@@ -56,87 +56,87 @@ export const resetProactiveState = () => {
  * double-triggering.
  */
 const checkAndTrigger = (ctx: ProactiveContext, source: string) => {
-  const settings = loadSettings();
-  const threshold = getModelThreshold(settings, ctx.model);
+	const settings = loadSettings();
+	const threshold = getModelThreshold(settings, ctx.model);
 
-  // No threshold → nothing to do (pi-core's global threshold owns it)
-  if (!threshold) return;
+	// No threshold → nothing to do (pi-core's global threshold owns it)
+	if (!threshold) return;
 
-  const contextWindow = ctx.model?.contextWindow ?? 0;
-  const effectiveThreshold = resolveTriggerTokens(threshold, contextWindow);
-  if (effectiveThreshold == null) return;
+	const contextWindow = ctx.model?.contextWindow ?? 0;
+	const effectiveThreshold = resolveTriggerTokens(threshold, contextWindow);
+	if (effectiveThreshold == null) return;
 
-  const usage = ctx.getContextUsage?.();
-  if (!usage || usage.tokens === null) return;
+	const usage = ctx.getContextUsage?.();
+	if (!usage || usage.tokens === null) return;
 
-  // This threshold's compaction trigger point.
+	// This threshold's compaction trigger point.
 
-  // Only trigger if context EXCEEDS the threshold.
-  if (usage.tokens <= effectiveThreshold) return;
+	// Only trigger if context EXCEEDS the threshold.
+	if (usage.tokens <= effectiveThreshold) return;
 
-  // Cooldown guard — prevent double-trigger within 3s of last compaction.
-  if (isCoolingDown()) return;
+	// Cooldown guard — prevent double-trigger within 3s of last compaction.
+	if (isCoolingDown()) return;
 
-  try {
-    const pct = Math.round((usage.tokens / contextWindow) * 100);
-    ctx?.ui?.notify?.(
-      `pi-vcc: [${source}] Context at ${pct}% exceeds threshold (${formatTokens(effectiveThreshold)} tok). Compacting...`,
-      "info",
-    );
-  } catch {}
+	try {
+		const pct = Math.round((usage.tokens / contextWindow) * 100);
+		ctx?.ui?.notify?.(
+			`pi-vcc: [${source}] Context at ${pct}% exceeds threshold (${formatTokens(effectiveThreshold)} tok). Compacting...`,
+			"info",
+		);
+	} catch {}
 
-  // Set cooldown IMMEDIATELY (before ctx.compact() runs) to prevent
-  // pi-core's own _checkCompaction from also triggering compaction
-  // on the same turn.
-  setCooldown();
+	// Set cooldown IMMEDIATELY (before ctx.compact() runs) to prevent
+	// pi-core's own _checkCompaction from also triggering compaction
+	// on the same turn.
+	setCooldown();
 
-  // Mark that this compaction was triggered by us, so session_before_compact
-  // doesn't cancel it if tokensBefore differs from getContextUsage().
-  proactiveTriggerActive = true;
+	// Mark that this compaction was triggered by us, so session_before_compact
+	// doesn't cancel it if tokensBefore differs from getContextUsage().
+	proactiveTriggerActive = true;
 
-  ctx.compact?.();
+	ctx.compact?.();
 };
 
 /** Force compaction for Codex responses that report an output limit as an error. */
 const triggerCodexOutputLimitCompaction = (ctx: ProactiveContext) => {
-  if (isCoolingDown()) return;
+	if (isCoolingDown()) return;
 
-  try {
-    ctx?.ui?.notify?.("pi-vcc: Codex reached its maximum output token limit. Compacting...", "info");
-  } catch {}
+	try {
+		ctx?.ui?.notify?.("pi-vcc: Codex reached its maximum output token limit. Compacting...", "info");
+	} catch {}
 
-  setCooldown();
-  proactiveTriggerActive = true;
-  ctx.compact?.({ customInstructions: CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION });
+	setCooldown();
+	proactiveTriggerActive = true;
+	ctx.compact?.({ customInstructions: CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION });
 };
 
 /** Force compaction when Codex omits the model identity from an overflow error. */
 const triggerCodexContextOverflowCompaction = (ctx: ProactiveContext) => {
-  if (isCoolingDown()) return;
+	if (isCoolingDown()) return;
 
-  try {
-    ctx?.ui?.notify?.("pi-vcc: Codex input exceeded the context window. Compacting...", "info");
-  } catch {}
+	try {
+		ctx?.ui?.notify?.("pi-vcc: Codex input exceeded the context window. Compacting...", "info");
+	} catch {}
 
-  setCooldown();
-  proactiveTriggerActive = true;
-  ctx.compact?.({ customInstructions: CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION });
+	setCooldown();
+	proactiveTriggerActive = true;
+	ctx.compact?.({ customInstructions: CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION });
 };
 
 const hasCurrentModelIdentity = (message: unknown, model: any): boolean => {
-  if (!message || typeof message !== "object" || !model) return false;
-  const candidate = message as { model?: unknown; provider?: unknown };
-  return candidate.model === model.id && candidate.provider === model.provider;
+	if (!message || typeof message !== "object" || !model) return false;
+	const candidate = message as { model?: unknown; provider?: unknown };
+	return candidate.model === model.id && candidate.provider === model.provider;
 };
 
 const lastAssistantMessage = (event: unknown): unknown => {
-  const messages = (event as any)?.messages;
-  if (!Array.isArray(messages)) return undefined;
+	const messages = (event as any)?.messages;
+	if (!Array.isArray(messages)) return undefined;
 
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "assistant") return messages[i];
-  }
-  return undefined;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		if (messages[i]?.role === "assistant") return messages[i];
+	}
+	return undefined;
 };
 
 /**
@@ -166,52 +166,52 @@ const lastAssistantMessage = (event: unknown): unknown => {
  * "Compacting..." then "Skipped compaction" notifications.
  */
 export const registerProactiveThresholdHook = (pi: ExtensionAPI) => {
-  // Codex reports output-limit responses as errors instead of the standard
-  // "length" stop reason. Those errors have no usable context usage, so
-  // pi-core cannot discover the need to compact from its normal checks.
-  // Context-window errors are tracked separately because pi-core already
-  // recognizes and compacts those.
-  pi.on("agent_end", (event, ctx) => {
-    const lastMessage = lastAssistantMessage(event);
-    if (isCodexOutputLimitError(lastMessage)) {
-      triggerCodexOutputLimitCompaction(ctx);
-      return;
-    }
-    if (isCodexContextOverflowError(lastMessage)) {
-      markCodexContextOverflowPending();
-      // pi-core's overflow compaction only fires when compaction is enabled AND
-      // the assistant message carries the current model identity. If either
-      // is missing pi-core bails (or its LLM compaction would re-overflow), so
-      // pi-vcc must drive the recovery compaction itself via ctx.compact(),
-      // whose manual path skips the `enabled` gate and uses pi-vcc's static
-      // summary. When pi-core will handle it, defer to avoid a racing second
-      // compaction that would abort pi-core's own retry.
-      const piCoreWillHandle =
-        hasCurrentModelIdentity(lastMessage, ctx.model) && isPiCoreCompactionEnabled(ctx.sessionManager?.getCwd?.());
-      if (!piCoreWillHandle) {
-        triggerCodexContextOverflowCompaction(ctx);
-      }
-      return;
-    }
-    checkAndTrigger(ctx, "auto");
-  });
+	// Codex reports output-limit responses as errors instead of the standard
+	// "length" stop reason. Those errors have no usable context usage, so
+	// pi-core cannot discover the need to compact from its normal checks.
+	// Context-window errors are tracked separately because pi-core already
+	// recognizes and compacts those.
+	pi.on("agent_end", (event, ctx) => {
+		const lastMessage = lastAssistantMessage(event);
+		if (isCodexOutputLimitError(lastMessage)) {
+			triggerCodexOutputLimitCompaction(ctx);
+			return;
+		}
+		if (isCodexContextOverflowError(lastMessage)) {
+			markCodexContextOverflowPending();
+			// pi-core's overflow compaction only fires when compaction is enabled AND
+			// the assistant message carries the current model identity. If either
+			// is missing pi-core bails (or its LLM compaction would re-overflow), so
+			// pi-vcc must drive the recovery compaction itself via ctx.compact(),
+			// whose manual path skips the `enabled` gate and uses pi-vcc's static
+			// summary. When pi-core will handle it, defer to avoid a racing second
+			// compaction that would abort pi-core's own retry.
+			const piCoreWillHandle =
+				hasCurrentModelIdentity(lastMessage, ctx.model) && isPiCoreCompactionEnabled(ctx.sessionManager?.getCwd?.());
+			if (!piCoreWillHandle) {
+				triggerCodexContextOverflowCompaction(ctx);
+			}
+			return;
+		}
+		checkAndTrigger(ctx, "auto");
+	});
 
-  // Proactive compaction on model switch
-  pi.on("model_select", (_event, ctx) => {
-    checkAndTrigger(ctx, "model-switch");
-  });
+	// Proactive compaction on model switch
+	pi.on("model_select", (_event, ctx) => {
+		checkAndTrigger(ctx, "model-switch");
+	});
 
-  // Track compaction completion: set cooldown and clear self-initiated flag
-  pi.on("session_compact", () => {
-    setCooldown();
-    proactiveTriggerActive = false;
-    clearCodexContextOverflowPending();
-  });
+	// Track compaction completion: set cooldown and clear self-initiated flag
+	pi.on("session_compact", () => {
+		setCooldown();
+		proactiveTriggerActive = false;
+		clearCodexContextOverflowPending();
+	});
 
-  // Reset state on session start so state doesn't leak between sessions
-  pi.on("session_start", () => {
-    lastCompactTime = 0;
-    proactiveTriggerActive = false;
-    clearCodexContextOverflowPending();
-  });
+	// Reset state on session start so state doesn't leak between sessions
+	pi.on("session_start", () => {
+		lastCompactTime = 0;
+		proactiveTriggerActive = false;
+		clearCodexContextOverflowPending();
+	});
 };
