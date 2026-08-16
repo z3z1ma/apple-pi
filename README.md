@@ -69,7 +69,7 @@ Commands and tools:
 - `/om:status` and `/om:view` — observational-memory state
 - `recall` — exact source recall by observation or reflection ID
 
-VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. See [`components/memory/src/config.ts`](components/memory/src/config.ts) for the validated keys and defaults.
+VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](components/memory/src/config.ts) for the validated operational keys and defaults.
 
 ### Where memory persists
 
@@ -186,6 +186,18 @@ Review the requested change. Report concrete findings with file paths and eviden
 ```
 
 Supported controls include tool and extension scope, skills, model/thinking, turn limits with graceful wrap-up, foreground/background defaults, parent-context inheritance, session persistence, and explicit nested-agent allowlists. `max_turns` is an optional run-length cutoff, not an output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
+
+Built-in agent types can also be routed through the shared `modes.json` mechanism without editing TypeScript. Named entries such as `Explore`, `Plan`, and `general-purpose` override the embedded built-in default for those agent types when the project is trusted or when the global mode is used. `provider` and `modelId` select a model together; `thinkingLevel` is independent, so a route may set only thinking. Custom Markdown agent files still win: a file's frontmatter `model:`/`thinking:` override the route, and an explicit `model` argument passed to the Agent tool remains highest precedence.
+
+```json
+{
+  "modes": {
+    "general-purpose": { "provider": "anthropic", "modelId": "claude-3-7-sonnet-20250219", "thinkingLevel": "medium" },
+    "Explore": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" },
+    "Plan": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" }
+  }
+}
+```
 
 Top-level subagents persist as normal Pi child-session JSONL by default. The child loads apple-pi's context extension, so its long run uses the same single VCC compaction owner, observational-memory ledger, `vcc_recall`, and exact `recall` tools as the main session. There is no plugin-specific memory directory and no duplicate `.output` transcript. Set `persist_session: false` only when a definition should be ephemeral. Operational defaults can be overridden globally or per project in `subagents.json`; retained settings are `maxConcurrent`, `defaultMaxTurns`, `graceTurns`, `defaultJoinMode`, `strictAgentFiles`, `disableDefaultAgents`, `fleetView`, `persistAgentSessions`, `widgetMode`, `maxSubagentDepth`, and `fallbackSubagent`.
 

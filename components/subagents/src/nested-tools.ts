@@ -17,7 +17,7 @@ import {
 } from "./agent-types.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { resolveAgentInvocationConfig } from "./invocation-config.js";
-import { resolveModel } from "./model-resolver.js";
+import { resolveAgentModel } from "./model-routing.js";
 import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
 import { getAgentConversation } from "./conversation.js";
 import type { AgentConfig, AgentInvocation, AgentRecord, ThinkingLevel } from "./types.js";
@@ -38,6 +38,7 @@ export const SUBAGENT_TOOL_NAMES = {
 interface NestedSpawnOptions {
 	description: string;
 	model?: Model<any>;
+	modelResolved?: boolean;
 	maxTurns?: number;
 	isolated?: boolean;
 	inheritContext?: boolean;
@@ -150,17 +151,27 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			}
 
 			const config = getAgentConfigIn(registry, resolvedType);
+			const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
+			const resolvedAgentModel = await resolveAgentModel({
+				cwd: context.configCwd,
+				projectTrusted,
+				registry: ctx.modelRegistry,
+				parentModel: ctx.model,
+				config,
+				type: resolvedType,
+				explicitModel: params.model,
+			});
+			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
-			let model = ctx.model;
-			if (invocation.modelInput) {
-				const resolvedModel = resolveModel(invocation.modelInput, ctx.modelRegistry);
-				if (typeof resolvedModel === "string") return textResult(resolvedModel, true);
-				model = resolvedModel;
+			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
+				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
+			const model = resolvedAgentModel.model;
 
 			const options: NestedSpawnOptions = {
 				description: params.description,
 				model,
+				modelResolved: true,
 				maxTurns: invocation.maxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,

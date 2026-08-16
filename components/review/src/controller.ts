@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Model } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { resolveModelAndThinking } from "../../advisor/lib/mode-utils.js";
+import { resolveModelAndThinking } from "../../mode-utils.js";
 import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { createReviewAuthorityPolicy } from "./authority-policy.js";

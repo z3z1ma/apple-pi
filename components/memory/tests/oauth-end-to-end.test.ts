@@ -1,6 +1,9 @@
 import { createServer, type Server } from "node:http";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModelRegistry } from "@earendil-works/pi-coding-agent";
 
@@ -107,10 +110,21 @@ function expiredOAuthModelRegistry(provider: string): any {
 }
 
 let activeServer: Server | undefined;
+let testAgentDir: string;
+let previousAgentDir: string | undefined;
+
+beforeEach(() => {
+	testAgentDir = mkdtempSync(join(tmpdir(), "om-oauth-"));
+	previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = testAgentDir;
+});
 
 afterEach(async () => {
 	if (activeServer) await new Promise<void>((resolve) => activeServer!.close(() => resolve()));
 	activeServer = undefined;
+	if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	rmSync(testAgentDir, { recursive: true, force: true });
 });
 
 describe("OAuth provider end-to-end consolidation", () => {

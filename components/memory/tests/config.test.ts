@@ -60,7 +60,6 @@ describe("V3 config", () => {
 				observationsPoolMaxTokens: 40,
 				observationsPoolTargetTokens: 15,
 				agentMaxTurns: 5,
-				model: { provider: "anthropic", id: "global", thinking: "medium" },
 				showWorkerNotifications: true,
 				passive: false,
 				debugLog: true,
@@ -69,7 +68,6 @@ describe("V3 config", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
 			"observational-memory": {
 				observeAfterTokens: 100,
-				model: { provider: "openai", id: "project", thinking: "low" },
 				showWorkerNotifications: false,
 			},
 		});
@@ -81,23 +79,20 @@ describe("V3 config", () => {
 			observationsPoolMaxTokens: 40,
 			observationsPoolTargetTokens: 15,
 			agentMaxTurns: 5,
-			model: { provider: "openai", id: "project", thinking: "low" },
 			showWorkerNotifications: false,
 			passive: true,
 			debugLog: true,
 		});
 	});
 
-	it("accepts max as a valid model thinking level", () => {
+	it("ignores model settings; model selection belongs in modes.json", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
 			"observational-memory": {
 				model: { provider: "anthropic", id: "claude", thinking: "max" },
 			},
 		});
 
-		expect(loadConfig(cwd, {})).toMatchObject({
-			model: { provider: "anthropic", id: "claude", thinking: "max" },
-		});
+		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
 	});
 
 	it("ignores invalid V3 values", () => {
@@ -109,7 +104,6 @@ describe("V3 config", () => {
 				observationsPoolMaxTokens: "20000",
 				observationsPoolTargetTokens: "10000",
 				agentMaxTurns: null,
-				model: { provider: "anthropic", id: "", thinking: "huge" },
 				showWorkerNotifications: "no",
 				passive: "yes",
 				debugLog: "true",

@@ -70,7 +70,10 @@ interface SpawnArgs {
 
 export interface SpawnOptions {
   description: string;
+  /** Model selected at the spawning boundary, including modes.json routing. */
   model?: Model<any>;
+  /** True when `model`/`thinkingLevel` are the completed spawn-boundary resolution. */
+  modelResolved?: boolean;
   maxTurns?: number;
   /** Internal roles can enforce an immediate hard stop instead of the public grace window. */
   hardTurnLimit?: boolean;
@@ -271,6 +274,7 @@ export class AgentManager {
       pi,
       agentId: id,
       model: options.model,
+      modelResolved: options.modelResolved,
       maxTurns: options.maxTurns,
       hardTurnLimit: options.hardTurnLimit,
       toolExecution: options.toolExecution,

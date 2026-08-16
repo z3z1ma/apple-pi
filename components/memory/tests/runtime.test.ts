@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Runtime } from "../src/runtime.js";
 
@@ -10,30 +13,49 @@ function modelRegistry(args: { found?: unknown; auth?: unknown } = {}) {
 }
 
 describe("Runtime V3 behavior", () => {
-	it("uses configured model when present", async () => {
+	let agentDir: string;
+	let previousAgentDir: string | undefined;
+
+	beforeEach(() => {
+		agentDir = mkdtempSync(join(tmpdir(), "om-runtime-"));
+		previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+	});
+
+	afterEach(() => {
+		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+		rmSync(agentDir, { recursive: true, force: true });
+	});
+
+	it("uses the observational-memory mode when present", async () => {
+		writeFileSync(join(agentDir, "modes.json"), JSON.stringify({
+			modes: { "observational-memory": { provider: "anthropic", modelId: "configured", thinkingLevel: "max" } },
+		}));
 		const runtime = new Runtime();
 		const configured = { provider: "anthropic", id: "configured" };
 		const registry = modelRegistry({ found: configured });
-		runtime.config = { ...runtime.config, model: { provider: "anthropic", id: "configured" } };
 
-		const result = await runtime.resolveModel({ model: { provider: "openai" }, modelRegistry: registry, hasUI: false });
+		const result = await runtime.resolveModel({ cwd: agentDir, projectTrusted: false, model: { provider: "openai" }, modelRegistry: registry, hasUI: false });
 
 		expect(registry.find).toHaveBeenCalledWith("anthropic", "configured");
-		expect(result).toEqual({ ok: true, model: configured, apiKey: "key", headers: { test: "yes" } });
+		expect(result).toEqual({ ok: true, model: configured, apiKey: "key", headers: { test: "yes" }, thinkingLevel: "max" });
 	});
 
-	it("falls back to session model and notifies when configured model is missing", async () => {
+	it("falls back to the session model and notifies when the configured mode model is missing", async () => {
+		writeFileSync(join(agentDir, "modes.json"), JSON.stringify({
+			modes: { "observational-memory": { provider: "anthropic", modelId: "missing" } },
+		}));
 		const runtime = new Runtime();
 		const notify = vi.fn();
 		const sessionModel = { provider: "openai" };
 		const registry = modelRegistry();
-		runtime.config = { ...runtime.config, model: { provider: "anthropic", id: "missing" } };
 
-		const result = await runtime.resolveModel({ model: sessionModel, modelRegistry: registry, hasUI: true, ui: { notify } });
+		const result = await runtime.resolveModel({ cwd: agentDir, projectTrusted: false, model: sessionModel, modelRegistry: registry, hasUI: true, ui: { notify } });
 
 		expect(result).toMatchObject({ ok: true, model: sessionModel });
 		expect(notify).toHaveBeenCalledWith(
-			"Observational memory: configured model anthropic/missing not found, using session model",
+			"Observational memory: configured mode anthropic/missing not found, using session model",
 			"warning",
 		);
 	});
@@ -42,7 +64,7 @@ describe("Runtime V3 behavior", () => {
 		const runtime = new Runtime();
 		await expect(runtime.resolveModel({ model: undefined, modelRegistry: modelRegistry(), hasUI: false })).resolves.toEqual({
 			ok: false,
-			reason: "no model available (session has no model and no observational-memory model configured)",
+			reason: "no model available (session has no model and no observational-memory mode configured)",
 		});
 
 		const registry = modelRegistry({ auth: { ok: false } });

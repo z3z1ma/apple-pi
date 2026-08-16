@@ -1,7 +1,11 @@
-import { type Config, DEFAULTS, loadConfig } from "./config.js";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { loadModeSpec } from "../../mode-utils.js";
+import { isThinkingLevel, type Config, DEFAULTS, loadConfig } from "./config.js";
+
+export const OBSERVATIONAL_MEMORY_MODE = "observational-memory";
 
 export type ResolveResult =
-	| { ok: true; model: unknown; apiKey?: string; headers?: Record<string, string> }
+	| { ok: true; model: unknown; apiKey?: string; headers?: Record<string, string>; thinkingLevel?: ModelThinkingLevel }
 	| { ok: false; reason: string };
 
 /**
@@ -26,6 +30,9 @@ type Notify = (message: string, type?: NotifyLevel) => void;
 export type ConsolidationPhase = "observer" | "reflector" | "dropper";
 
 export interface ResolveCtx {
+	/** Omit only for direct programmatic callers; normal Pi contexts always provide this. */
+	cwd?: string;
+	projectTrusted?: boolean;
 	model: unknown;
 	modelRegistry: any;
 	hasUI: boolean;
@@ -62,19 +69,20 @@ export class Runtime {
 	}
 
 	async resolveModel(ctx: ResolveCtx): Promise<ResolveResult> {
+		const route = await loadModeSpec(ctx.cwd ?? process.cwd(), OBSERVATIONAL_MEMORY_MODE, ctx.projectTrusted === true);
 		let model = ctx.model;
-		if (this.config.model) {
-			const configured = ctx.modelRegistry.find(this.config.model.provider, this.config.model.id);
+		if (route?.provider && route.modelId) {
+			const configured = ctx.modelRegistry.find(route.provider, route.modelId);
 			if (configured) {
 				model = configured;
 			} else if (ctx.hasUI && ctx.ui) {
 				ctx.ui.notify(
-					`Observational memory: configured model ${this.config.model.provider}/${this.config.model.id} not found, using session model`,
+					`Observational memory: configured mode ${route.provider}/${route.modelId} not found, using session model`,
 					"warning",
 				);
 			}
 		}
-		if (!model) return { ok: false, reason: "no model available (session has no model and no observational-memory model configured)" };
+		if (!model) return { ok: false, reason: "no model available (session has no model and no observational-memory mode configured)" };
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		const provider = (model as { provider?: string }).provider ?? "unknown";
 		if (!auth.ok || !hasUsableAuth(auth)) {
@@ -84,7 +92,14 @@ export class Runtime {
 				: `no API key or auth headers for provider "${provider}"`;
 			return { ok: false, reason };
 		}
-		return { ok: true, model, apiKey: auth.apiKey as string | undefined, headers: auth.headers as Record<string, string> | undefined };
+		const thinkingLevel = isThinkingLevel(route?.thinkingLevel) ? route.thinkingLevel : undefined;
+		return {
+			ok: true,
+			model,
+			apiKey: auth.apiKey as string | undefined,
+			headers: auth.headers as Record<string, string> | undefined,
+			...(thinkingLevel ? { thinkingLevel } : {}),
+		};
 	}
 
 	launchConsolidationTask(ctx: LaunchCtx, work: () => Promise<void>): Promise<void> {

@@ -19,6 +19,7 @@
     "work-graph"
   ],
   "files": [
+    "components/mode-utils.ts",
     "components/advisor/index.ts",
     "components/advisor/lib/",
     "components/ask-user-question/",

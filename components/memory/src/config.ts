@@ -3,12 +3,6 @@ import { join } from "node:path";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-export interface ConfiguredModel {
-	provider: string;
-	id: string;
-	thinking?: ModelThinkingLevel;
-}
-
 /**
  * How `compactAfterTokens` is interpreted.
  *
@@ -45,7 +39,6 @@ export interface Config {
 	observationsPoolMaxTokens: number;
 	observationsPoolTargetTokens: number;
 	agentMaxTurns: number;
-	model?: ConfiguredModel;
 	showWorkerNotifications: boolean;
 	passive: boolean;
 	debugLog: boolean;
@@ -144,7 +137,7 @@ function derivedObservationPoolTarget(maxTokens: number): number {
 	return Math.floor(maxTokens / 2);
 }
 
-function isThinkingLevel(value: unknown): value is ModelThinkingLevel {
+export function isThinkingLevel(value: unknown): value is ModelThinkingLevel {
 	return typeof value === "string" && (THINKING_LEVEL_VALUES as readonly string[]).includes(value);
 }
 
@@ -163,20 +156,6 @@ function validRatioOrUndefined(value: unknown): number | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-	return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function normalizeModel(value: unknown): ConfiguredModel | undefined {
-	if (!isRecord(value)) return undefined;
-	const provider = nonEmptyString(value.provider);
-	const id = nonEmptyString(value.id);
-	if (!provider || !id) return undefined;
-	const model: ConfiguredModel = { provider, id };
-	if (isThinkingLevel(value.thinking)) model.thinking = value.thinking;
-	return model;
 }
 
 function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config> {
@@ -202,8 +181,6 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	if (typeof value.showWorkerNotifications === "boolean") normalized.showWorkerNotifications = value.showWorkerNotifications;
 	if (typeof value.passive === "boolean") normalized.passive = value.passive;
 	if (typeof value.debugLog === "boolean") normalized.debugLog = value.debugLog;
-	const model = normalizeModel(value.model);
-	if (model) normalized.model = model;
 	return normalized;
 }
 

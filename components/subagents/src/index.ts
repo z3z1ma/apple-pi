@@ -30,7 +30,7 @@ import { inChildSessionContext } from "./child-context.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
-import { resolveModel } from "./model-resolver.js";
+import { resolveAgentModel } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import {
 	installManagedSubagentService,
@@ -498,13 +498,22 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (!dispatch.ok) return textResult(dispatch.message, undefined, true);
 			const type = dispatch.type;
 			const config = getAgentConfig(type);
+			const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
+			const resolvedAgentModel = await resolveAgentModel({
+				cwd: ctx.cwd,
+				projectTrusted,
+				registry: ctx.modelRegistry,
+				parentModel: ctx.model,
+				config,
+				type,
+				explicitModel: params.model,
+			});
+			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, undefined, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
-			let model = ctx.model;
-			if (invocation.modelInput) {
-				const resolved = resolveModel(invocation.modelInput, ctx.modelRegistry);
-				if (typeof resolved === "string") return textResult(resolved, undefined, true);
-				model = resolved;
+			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
+				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
+			const model = resolvedAgentModel.model;
 			const effectiveMaxTurns = normalizeMaxTurns(invocation.maxTurns ?? getDefaultMaxTurns());
 			let id: string | undefined;
 			const tracker = createActivityTracker(effectiveMaxTurns, () => {
@@ -531,6 +540,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			const options = {
 				description: params.description,
 				model,
+				modelResolved: true,
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,

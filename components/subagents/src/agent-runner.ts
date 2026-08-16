@@ -23,6 +23,7 @@ import { buildParentContext, extractText } from "./context.js";
 import { DEFAULT_AGENTS } from "./default-agents.js";
 import { detectEnv } from "./env.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager, SUBAGENT_TOOL_NAMES } from "./nested-tools.js";
+import { resolveAgentModel } from "./model-routing.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { ManagedAgentToolPolicy } from "./service.js";
@@ -337,41 +338,23 @@ export function getGraceTurns(): number { return graceTurns; }
 /** Set the grace turns value (minimum 1). */
 export function setGraceTurns(n: number): void { graceTurns = Math.max(1, n); }
 
-/**
- * Try to find the right model for an agent type.
- * Priority: explicit option > config.model > parent model.
- */
-export function resolveDefaultModel(
-  parentModel: Model<any> | undefined,
-  registry: { find(provider: string, modelId: string): Model<any> | undefined; getAvailable?(): Model<any>[] },
-  configModel?: string,
-): Model<any> | undefined {
-  if (configModel) {
-    const slashIdx = configModel.indexOf("/");
-    if (slashIdx !== -1) {
-      const provider = configModel.slice(0, slashIdx);
-      const modelId = configModel.slice(slashIdx + 1);
-
-      // Build a set of available model keys for fast lookup
-      const available = registry.getAvailable?.();
-      const availableKeys = available
-        ? new Set(available.map((m: any) => `${m.provider}/${m.id}`))
-        : undefined;
-      const isAvailable = (p: string, id: string) =>
-        !availableKeys || availableKeys.has(`${p}/${id}`);
-
-      const found = registry.find(provider, modelId);
-      if (found && isAvailable(provider, modelId)) return found;
-    }
-  }
-
-  return parentModel;
-}
-
 /** Info about a tool event in the subagent. */
 export interface ToolActivity {
   type: "start" | "end";
   toolName: string;
+}
+
+/**
+ * Apply the final model precedence after config routing has run.
+ * An explicit Model object is already resolved and must not be blocked by a
+ * lower-priority config/frontmatter lookup failure.
+ */
+export function selectAgentModel(
+  explicitModel: Model<any> | undefined,
+  resolved: { model: Model<any> | undefined; error?: string },
+): Model<any> | undefined {
+  if (!explicitModel && resolved.error) throw new Error(resolved.error);
+  return explicitModel ?? resolved.model;
 }
 
 export interface RunOptions {
@@ -380,6 +363,8 @@ export interface RunOptions {
   /** Manager-assigned id; suffixes session name to disambiguate parallel spawns (e.g. `Explore#a1b2c3d4`). */
   agentId?: string;
   model?: Model<any>;
+  /** True when the caller has already resolved model routing at its spawn boundary. */
+  modelResolved?: boolean;
   maxTurns?: number;
   /** Abort on the exact turn boundary instead of steering through the public grace window. */
   hardTurnLimit?: boolean;
@@ -755,13 +740,24 @@ export async function runAgent(
     }
   }
 
-  // Resolve model: explicit option > config.model > parent model
-  const model = options.model ?? resolveDefaultModel(
-    ctx.model, ctx.modelRegistry, agentConfig?.model,
-  );
+  // Top-level and nested Agent tools resolve routing before queueing a spawn so
+  // queued work cannot observe a later config change. Direct runAgent callers
+  // retain the same resolution here.
+  const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
+  const resolvedModel = options.modelResolved
+    ? { model: options.model, thinkingLevel: options.thinkingLevel }
+    : await resolveAgentModel({
+        cwd: configCwd,
+        projectTrusted,
+        registry: ctx.modelRegistry,
+        parentModel: ctx.model,
+        config: agentConfig,
+        type,
+      });
+  const model = selectAgentModel(options.model, resolvedModel);
 
-  // Resolve thinking level: explicit option > agent config > undefined (inherit)
-  const thinkingLevel = options.thinkingLevel ?? agentConfig?.thinking;
+  // Resolve thinking level: explicit option > custom frontmatter > named built-in mode route > embedded built-in fallback > undefined (inherit)
+  const thinkingLevel = options.thinkingLevel ?? resolvedModel.thinkingLevel ?? agentConfig?.thinking;
 
   const disallowedSet = agentConfig?.disallowedTools
     ? new Set(agentConfig.disallowedTools)

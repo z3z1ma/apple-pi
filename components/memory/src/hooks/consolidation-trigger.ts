@@ -35,6 +35,8 @@ type ResolvedModel = Extract<ResolveResult, { ok: true }>;
 
 type ConsolidationCtx = {
 	cwd: string;
+	projectTrusted?: boolean;
+	isProjectTrusted?: () => boolean;
 	hasUI: boolean;
 	ui?: { notify: (message: string, type?: "warning" | "info" | "error") => void };
 	model: unknown;
@@ -117,6 +119,8 @@ function makeModelResolver(runtime: Runtime, ctx: ConsolidationCtx): (stage: "ob
 	let cached: ResolveResult | undefined;
 	return async (stage) => {
 		cached ??= await runtime.resolveModel({
+			cwd: ctx.cwd,
+			projectTrusted: ctx.projectTrusted,
 			model: ctx.model,
 			modelRegistry: ctx.modelRegistry,
 			hasUI: ctx.hasUI,
@@ -165,6 +169,7 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 	const runId = `consolidation-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 	const consolidationCtx: ConsolidationCtx = {
 		cwd: ctx.cwd,
+		projectTrusted: typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false,
 		hasUI: ctx.hasUI,
 		ui: ctx.ui,
 		model: ctx.model,
@@ -316,7 +321,7 @@ async function runObserverStage(
 			chunk,
 			allowedSourceEntryIds: sourceEntryIds,
 			maxTurns: runtime.config.agentMaxTurns,
-			thinkingLevel: runtime.config.model?.thinking ?? "low",
+			thinkingLevel: resolved.thinkingLevel ?? "low",
 		});
 	} catch (error) {
 		if (error instanceof ObserverStreamError) {
@@ -386,7 +391,7 @@ async function runReflectorStage(
 		reflections: folded.reflections,
 		observations: folded.activeObservations,
 		maxTurns: runtime.config.agentMaxTurns,
-		thinkingLevel: runtime.config.model?.thinking ?? "low",
+		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
 	if (!reflections) return { outcome: "continue", sameRunReflections: [] };
 
@@ -459,7 +464,7 @@ async function runDropperStage(
 		observations: folded.activeObservations,
 		targetTokens: runtime.config.observationsPoolTargetTokens,
 		maxTurns: runtime.config.agentMaxTurns,
-		thinkingLevel: runtime.config.model?.thinking ?? "low",
+		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
 	const coversUpToId = earlierCoverageMarkerId(entries, observationCoverageId, sameRunReflectionCoverageId);
 	const data = coversUpToId && droppedIds ? buildObservationsDroppedData(droppedIds, coversUpToId) : undefined;

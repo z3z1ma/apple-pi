@@ -55,7 +55,7 @@ import { convertToLlm, createReadOnlyTools, sessionEntryToContextMessages } from
 import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
-import { resolveModelAndThinking } from "./lib/mode-utils.js";
+import { resolveModelAndThinking } from "../mode-utils.js";
 
 // ===========================================================================
 // Advisor core — persistent second model that watches the main agent.

@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../components/subagents/src/conversation.js";
 import { DEFAULT_AGENTS } from "../components/subagents/src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../components/subagents/src/invocation-config.js";
+import { selectAgentModel } from "../components/subagents/src/agent-runner.js";
 import { createNestedSubagentTools } from "../components/subagents/src/nested-tools.js";
 import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
+import { resolveAgentModel } from "../components/subagents/src/model-routing.js";
 import { applySettings, loadSettings, saveSettings } from "../components/subagents/src/settings.js";
 import type { AgentConfig } from "../components/subagents/src/types.js";
 
@@ -22,11 +24,126 @@ afterEach(() => {
 });
 
 describe("owned subagent surface", () => {
-	it("uses Spark for the built-in read-only explorer", () => {
+	it("uses Luna for the built-in read-only explorer", () => {
 		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({
-			model: "openai-codex/gpt-5.3-codex-spark",
-			thinking: "high",
+			model: "openai-codex/gpt-5.6-luna",
+			thinking: "medium",
 		});
+	});
+
+	it("routes built-in agent models through modes.json and keeps custom frontmatter highest precedence", async () => {
+		const root = temporaryRoot();
+		const globalRoot = join(root, "pi-agent");
+		mkdirSync(globalRoot, { recursive: true });
+		writeFileSync(join(globalRoot, "modes.json"), JSON.stringify({
+			modes: {
+				explore: { provider: "anthropic", modelId: "route-explore", thinkingLevel: "high" },
+				plan: { provider: "anthropic", modelId: "route-plan", thinkingLevel: "xhigh" },
+				"general-purpose": { thinkingLevel: "low" },
+			},
+		}));
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = globalRoot;
+		try {
+			const registry = {
+				find: (provider: string, modelId: string) => {
+					const match = available.find((m) => m.provider === provider && m.id === modelId);
+					return match ?? undefined;
+				},
+				getAvailable: () => available,
+			};
+			const available = [
+				{ provider: "anthropic", id: "route-explore", name: "route-explore" },
+				{ provider: "anthropic", id: "route-plan", name: "route-plan" },
+				{ provider: "anthropic", id: "explicit", name: "explicit" },
+				{ provider: "openai-codex", id: "custom-frontmatter", name: "custom-frontmatter" },
+				{ provider: "openai-codex", id: "parent-model", name: "parent-model" },
+			];
+			const parentModel = { provider: "openai-codex", id: "parent-model" } as any;
+
+			const route = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("Explore"),
+				type: "Explore",
+			});
+			expect(route.model).toMatchObject({ provider: "anthropic", id: "route-explore" });
+			expect(route.thinkingLevel).toBe("high");
+
+			const plan = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("Plan"),
+				type: "Plan",
+			});
+			expect(plan.model).toMatchObject({ provider: "anthropic", id: "route-plan" });
+			expect(plan.thinkingLevel).toBe("xhigh");
+
+			const custom = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: { ...DEFAULT_AGENTS.get("Explore")!, isDefault: false, model: "openai-codex/custom-frontmatter" },
+				type: "Explore",
+			});
+			expect(custom.model).toMatchObject({ provider: "openai-codex", id: "custom-frontmatter" });
+			expect(custom.thinkingLevel).toBe("medium");
+
+			const explicit = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("Explore"),
+				type: "Explore",
+				explicitModel: "anthropic/explicit",
+			});
+			expect(explicit.model).toMatchObject({ provider: "anthropic", id: "explicit" });
+
+			const generalPurpose = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("general-purpose"),
+				type: "general-purpose",
+			});
+			expect(generalPurpose.model).toBe(parentModel);
+			expect(generalPurpose.thinkingLevel).toBe("low");
+
+			const embeddedFallback = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("Plan"),
+				type: "unrouted-built-in",
+			});
+			expect(embeddedFallback.model).toBe(parentModel);
+			expect(embeddedFallback.error).toBeUndefined();
+
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+		}
+	});
+
+	it("lets an explicit Model bypass a lower-priority routing error", () => {
+		const explicitModel = { provider: "anthropic", id: "explicit" } as any;
+		const selected = selectAgentModel(explicitModel, {
+			model: undefined,
+			error: 'Model not found: "openai-codex/does-not-exist"',
+		});
+		expect(selected).toBe(explicitModel);
+		expect(() => selectAgentModel(undefined, {
+			model: undefined,
+			error: "invalid configured model",
+		})).toThrow("invalid configured model");
 	});
 
 	it("fails closed on removed memory, transcript, scheduling, and worktree fields", () => {
@@ -52,7 +169,7 @@ Review carefully.
 		warning.mockRestore();
 	});
 
-	it("does not carry worktree isolation through invocation resolution", () => {
+	it("keeps explicit thinking overrides while preserving config policy fields", () => {
 		const config = {
 			name: "reviewer",
 			description: "review",
@@ -60,12 +177,27 @@ Review carefully.
 			skills: true,
 			systemPrompt: "review",
 			promptMode: "replace",
+			model: "openai-codex/embedded",
+			thinking: "low" as const,
+			maxTurns: 11,
+			inheritContext: false,
+			runInBackground: false,
+			isolated: false,
 		} satisfies AgentConfig;
 		const resolved = resolveAgentInvocationConfig(config, {
-			model: "anthropic/test",
+			thinking: "high",
+			max_turns: 8,
 			run_in_background: true,
+			inherit_context: true,
+			isolated: true,
 		});
-		expect(resolved).toMatchObject({ modelInput: "anthropic/test", runInBackground: true });
+		expect(resolved).toMatchObject({
+			thinking: "high",
+			maxTurns: 11,
+			inheritContext: false,
+			runInBackground: false,
+			isolated: false,
+		});
 		expect(resolved).not.toHaveProperty("isolation");
 	});
 
