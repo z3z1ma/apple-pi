@@ -4,7 +4,7 @@ import { observationPoolMetrics } from "../agents/dropper/pool.js";
 import { ObserverStreamError, runObserver } from "../agents/observer/agent.js";
 import { runReflector } from "../agents/reflector/agent.js";
 import { debugLog, withDebugLogContext } from "../debug-log.js";
-import { resolveObserverChunkMaxTokens } from "../config.js";
+import { resolveObserverChunkMaxTokens, type Config } from "../config.js";
 import type { ResolveResult, Runtime } from "../runtime.js";
 import { serializeSourceAddressedBranchEntries } from "../serialize.js";
 import {
@@ -105,27 +105,27 @@ function stageDue(
 	return rawEstimateFn(entries) >= threshold;
 }
 
-function anyStageDue(entries: Entry[], runtime: Runtime, currentTokens: number | undefined): boolean {
+function anyStageDue(entries: Entry[], config: Config, currentTokens: number | undefined): boolean {
 	return (
 		stageDue(
 			entries,
 			currentTokens,
 			OM_OBSERVATIONS_RECORDED,
 			rawTokensSinceObservationCoverage,
-			runtime.config.observeAfterTokens,
+			config.observeAfterTokens,
 		) ||
 		stageDue(
 			entries,
 			currentTokens,
 			OM_REFLECTIONS_RECORDED,
 			rawTokensSinceReflectionCoverage,
-			runtime.config.reflectAfterTokens,
+			config.reflectAfterTokens,
 		)
 	);
 }
 
-function shouldNotifyWorker(runtime: Runtime, ctx: ConsolidationCtx): boolean {
-	return runtime.config.showWorkerNotifications && ctx.hasUI;
+function shouldNotifyWorker(config: Config, ctx: ConsolidationCtx): boolean {
+	return config.showWorkerNotifications && ctx.hasUI;
 }
 
 function makeModelResolver(
@@ -175,12 +175,12 @@ function debugSessionMetadata(ctx: ConsolidationCtx): { sessionId?: string; sess
 }
 
 function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: ConsolidationCtx): void {
-	runtime.ensureConfig(ctx.cwd);
-	if (runtime.config.passive === true) return;
+	const config = runtime.ensureConfig(ctx.cwd);
+	if (config.passive === true) return;
 	if (runtime.consolidationInFlight) return;
 
 	const entries = ctx.sessionManager.getBranch() as Entry[];
-	if (!anyStageDue(entries, runtime, realContextTokens(ctx))) return;
+	if (!anyStageDue(entries, config, realContextTokens(ctx))) return;
 
 	const runId = `consolidation-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 	const consolidationCtx: ConsolidationCtx = {
@@ -198,13 +198,13 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 	void runtime.launchConsolidationTask(ctx, async () =>
 		withDebugLogContext(
 			{
-				enabled: runtime.config.debugLog === true,
+				enabled: config.debugLog === true,
 				cwd: ctx.cwd,
 				...sessionMetadata,
 				runId,
 			},
 			async () => {
-				await runConsolidationPipeline(pi, runtime, consolidationCtx);
+				await runConsolidationPipeline(pi, runtime, consolidationCtx, config);
 			},
 		),
 	);
@@ -214,12 +214,13 @@ export async function runConsolidationPipeline(
 	pi: ExtensionAPI,
 	runtime: Runtime,
 	ctx: ConsolidationCtx,
+	config: Config = runtime.config,
 ): Promise<void> {
 	const resolveModel = makeModelResolver(runtime, ctx);
 
 	runtime.consolidationPhase = "observer";
 	try {
-		const observerOutcome = await runObserverStage(pi, runtime, ctx, resolveModel);
+		const observerOutcome = await runObserverStage(pi, runtime, ctx, resolveModel, config);
 		if (observerOutcome === "abort") return;
 	} catch (error) {
 		debugLog("observer.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "observer", error) });
@@ -229,7 +230,7 @@ export async function runConsolidationPipeline(
 	runtime.consolidationPhase = "reflector";
 	let reflectorResult: ReflectorStageResult;
 	try {
-		reflectorResult = await runReflectorStage(pi, runtime, ctx, resolveModel);
+		reflectorResult = await runReflectorStage(pi, runtime, ctx, resolveModel, config);
 		if (reflectorResult.outcome === "abort") return;
 	} catch (error) {
 		debugLog("reflector.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "reflector", error) });
@@ -245,6 +246,7 @@ export async function runConsolidationPipeline(
 			resolveModel,
 			reflectorResult.sameRunReflections,
 			reflectorResult.effectiveReflectionCoverageId,
+			config,
 		);
 	} catch (error) {
 		debugLog("dropper.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "dropper", error) });
@@ -256,13 +258,14 @@ async function runObserverStage(
 	runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "observer") => Promise<ResolvedModel | undefined>,
+	config: Config,
 ): Promise<StageOutcome> {
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const currentTokens = realContextTokens(ctx);
 	const real =
 		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_OBSERVATIONS_RECORDED, currentTokens) : undefined;
 	const tokens = real !== undefined ? real : rawTokensSinceObservationCoverage(entries); // fallback: no usage baseline / basis change
-	if (tokens < runtime.config.observeAfterTokens) return "continue";
+	if (tokens < config.observeAfterTokens) return "continue";
 
 	const sessionMetadata = debugSessionMetadata(ctx);
 	const sessionIdentity = sessionMetadata.sessionId ?? sessionMetadata.sessionFile;
@@ -277,13 +280,13 @@ async function runObserverStage(
 		if (
 			sessionIdentity !== backoff.sessionIdentity ||
 			coverageId !== backoff.coverageId ||
-			tokens >= backoff.tokensAtEmpty + runtime.config.observeAfterTokens
+			tokens >= backoff.tokensAtEmpty + config.observeAfterTokens
 		) {
 			runtime.observerEmptyBackoff = undefined;
 		} else {
 			debugLog("observer.empty_backoff", {
 				tokens,
-				resumeAtTokens: backoff.tokensAtEmpty + runtime.config.observeAfterTokens,
+				resumeAtTokens: backoff.tokensAtEmpty + config.observeAfterTokens,
 			});
 			return "continue";
 		}
@@ -302,7 +305,7 @@ async function runObserverStage(
 	// Only a first entry that cannot fit by itself is represented by a clearly
 	// marked head/tail excerpt; the original ledger entry remains untouched.
 	const contextWindow = (resolved.model as { contextWindow?: number }).contextWindow;
-	const maxChunkTokens = resolveObserverChunkMaxTokens(runtime.config, contextWindow);
+	const maxChunkTokens = resolveObserverChunkMaxTokens(config, contextWindow);
 	const {
 		text: chunk,
 		sourceEntryIds,
@@ -328,7 +331,7 @@ async function runObserverStage(
 	const priorReflections = memory.reflections.map(reflectionToSummaryLine);
 	const priorObservations = memory.observations.map(observationToSummaryLine);
 
-	if (shouldNotifyWorker(runtime, ctx))
+	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(`Observational memory: observer running on ~${chunkTokens.toLocaleString()}-token chunk`, "info");
 	debugLog("observer.start", {
 		tokens,
@@ -350,7 +353,7 @@ async function runObserverStage(
 			priorObservations,
 			chunk,
 			allowedSourceEntryIds: sourceEntryIds,
-			maxTurns: runtime.config.agentMaxTurns,
+			maxTurns: config.agentMaxTurns,
 			thinkingLevel: resolved.thinkingLevel ?? "low",
 		});
 	} catch (error) {
@@ -367,7 +370,7 @@ async function runObserverStage(
 		// over the same span (#23).
 		debugLog("observer.empty", { coversUpToId });
 		runtime.observerEmptyBackoff = { sessionIdentity, coverageId, tokensAtEmpty: tokens };
-		if (shouldNotifyWorker(runtime, ctx))
+		if (shouldNotifyWorker(config, ctx))
 			ctx.ui?.notify(
 				"Observational memory: observer found nothing new in this chunk (coverage unchanged; will retry later)",
 				"info",
@@ -385,7 +388,7 @@ async function runObserverStage(
 	});
 	appendEntry(pi, OM_OBSERVATIONS_RECORDED, data);
 	debugLog("observer.appended", { count: observations.length, coversUpToId });
-	if (shouldNotifyWorker(runtime, ctx))
+	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(
 			`Observational memory: ${observations.length} observation${observations.length === 1 ? "" : "s"} recorded`,
 			"info",
@@ -395,21 +398,22 @@ async function runObserverStage(
 
 async function runReflectorStage(
 	pi: ExtensionAPI,
-	runtime: Runtime,
+	_runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "reflector") => Promise<ResolvedModel | undefined>,
+	config: Config,
 ): Promise<ReflectorStageResult> {
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const currentTokens = realContextTokens(ctx);
 	const real =
 		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_REFLECTIONS_RECORDED, currentTokens) : undefined;
 	const reflectionTokens = real !== undefined ? real : rawTokensSinceReflectionCoverage(entries); // fallback: no usage baseline / basis change
-	if (reflectionTokens < runtime.config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
+	if (reflectionTokens < config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
 
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
 	if (!observationCoverageId) return { outcome: "continue", sameRunReflections: [] };
 
-	if (shouldNotifyWorker(runtime, ctx))
+	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(`Observational memory: reflector running (~${reflectionTokens.toLocaleString()} tokens)`, "info");
 	const resolved = await resolveModel("reflector");
 	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
@@ -421,7 +425,7 @@ async function runReflectorStage(
 		headers: resolved.headers,
 		reflections: folded.reflections,
 		observations: folded.activeObservations,
-		maxTurns: runtime.config.agentMaxTurns,
+		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
 	if (!reflections) return { outcome: "continue", sameRunReflections: [] };
@@ -438,11 +442,12 @@ async function runReflectorStage(
 
 async function runDropperStage(
 	pi: ExtensionAPI,
-	runtime: Runtime,
+	_runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "dropper") => Promise<ResolvedModel | undefined>,
 	sameRunReflections: Reflection[],
 	sameRunReflectionCoverageId: string | undefined,
+	config: Config,
 ): Promise<StageOutcome> {
 	if (!sameRunReflectionCoverageId || sameRunReflections.length === 0) {
 		debugLog("dropper.waiting_for_reflection", { sameRunReflections: sameRunReflections.length });
@@ -454,7 +459,7 @@ async function runDropperStage(
 	if (!observationCoverageId) return "continue";
 
 	const folded = foldLedger(entries);
-	const metrics = observationPoolMetrics(folded.activeObservations, runtime.config.observationsPoolTargetTokens);
+	const metrics = observationPoolMetrics(folded.activeObservations, config.observationsPoolTargetTokens);
 	if (!metrics.ready) {
 		debugLog("dropper.not_ready", {
 			observationTokens: metrics.observationTokens,
@@ -479,7 +484,7 @@ async function runDropperStage(
 		maxDropsAllowed: metrics.maxDropsAllowed,
 	});
 
-	if (shouldNotifyWorker(runtime, ctx))
+	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(
 			`Observational memory: dropper running after reflection — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
 			"info",
@@ -494,8 +499,8 @@ async function runDropperStage(
 		headers: resolved.headers,
 		reflections: reflectionsForDropper,
 		observations: folded.activeObservations,
-		targetTokens: runtime.config.observationsPoolTargetTokens,
-		maxTurns: runtime.config.agentMaxTurns,
+		targetTokens: config.observationsPoolTargetTokens,
+		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
 	const coversUpToId = earlierCoverageMarkerId(entries, observationCoverageId, sameRunReflectionCoverageId);

@@ -34,7 +34,7 @@ import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-conf
 import { resolveAgentModel } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
-import { applySettings, loadSettings } from "./settings.js";
+import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, partialOutputSuffix } from "./status-note.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, WidgetMode } from "./types.js";
 import {
@@ -62,9 +62,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	// but never create a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 
-	let strictAgentFiles = loadSettings(process.cwd()).strictAgentFiles === true;
-	const reloadAgents = (strict = false) => registerAgents(loadCustomAgents(process.cwd(), strict));
-	reloadAgents(strictAgentFiles);
+	let strictAgentFiles = false;
+	const reloadAgents = (cwd: string, strict = strictAgentFiles) => registerAgents(loadCustomAgents(cwd, strict));
+	registerAgents(new Map());
 
 	const activityById = new Map<string, AgentActivity>();
 	let widgetMode: WidgetMode = "background";
@@ -288,33 +288,32 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	};
 	const uninstallManagedService = installManagedSubagentService(managedService, pi.events);
 
-	const settings = loadSettings(process.cwd());
-	applySettings(settings, {
-		setMaxConcurrent: (value) => manager.setMaxConcurrent(value),
-		setDefaultMaxTurns,
-		setGraceTurns,
-		setDefaultJoinMode: (value) => {
-			defaultJoinMode = value;
-		},
-		setStrictAgentFiles: (value) => {
-			strictAgentFiles = value;
-		},
-		setDisableDefaultAgents: (value) => {
-			setDefaultsDisabled(value);
-			reloadAgents();
-		},
-		setFleetView: (value) => {
-			fleetEnabled = value;
-			fleet.setEnabled(value);
-		},
-		setPersistAgentSessions,
-		setWidgetMode: (value) => {
-			widgetMode = value;
-			widget.update();
-		},
-		setMaxSubagentDepth,
-		setFallbackSubagent,
-	});
+	const bindSessionCwd = (cwd: string) => {
+		applyCompleteSettings(loadSettings(cwd), {
+			setMaxConcurrent: (value) => manager.setMaxConcurrent(value),
+			setDefaultMaxTurns,
+			setGraceTurns,
+			setDefaultJoinMode: (value) => {
+				defaultJoinMode = value;
+			},
+			setStrictAgentFiles: (value) => {
+				strictAgentFiles = value;
+			},
+			setDisableDefaultAgents: setDefaultsDisabled,
+			setFleetView: (value) => {
+				fleetEnabled = value;
+				fleet.setEnabled(value);
+			},
+			setPersistAgentSessions,
+			setWidgetMode: (value) => {
+				widgetMode = value;
+				widget.update();
+			},
+			setMaxSubagentDepth,
+			setFallbackSubagent,
+		});
+		reloadAgents(cwd, strictAgentFiles);
+	};
 
 	pi.registerMessageRenderer<NotificationDetails>("subagent-notification", (message, { expanded }, theme) => {
 		const all = message.details ? [message.details, ...(message.details.others ?? [])] : [];
@@ -342,6 +341,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		bindSessionCwd(ctx.cwd);
 		manager.clearCompleted(true);
 		if (ctx.hasUI) {
 			widget.setUICtx(ctx.ui);
@@ -438,7 +438,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
-			reloadAgents();
+			bindSessionCwd(ctx.cwd);
 
 			if (params.resume) {
 				const existing = manager.getRecord(params.resume);
@@ -766,7 +766,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		description: "View live subagents and discovered Markdown agent types",
 		handler: async (_args, ctx) => {
 			if (!ctx.hasUI) return;
-			reloadAgents();
+			bindSessionCwd(ctx.cwd);
 			const records = manager.listAgents().filter((record) => !record.parentAgentId && !record.internalOwner);
 			const choices = [
 				...records.map(

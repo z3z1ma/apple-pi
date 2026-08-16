@@ -1,8 +1,8 @@
 /** Shared modes.json model and thinking-level resolution. */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export type ModeSpec = {
 	provider?: string;
@@ -20,17 +20,9 @@ export async function loadModeSpec(
 	modeName: string,
 	projectTrusted: boolean,
 ): Promise<ModeSpec | undefined> {
-	const expandUser = (value: string) => {
-		if (value === "~") return os.homedir();
-		if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
-		return value;
-	};
-	const agentDir = process.env.PI_CODING_AGENT_DIR
-		? expandUser(process.env.PI_CODING_AGENT_DIR)
-		: path.join(os.homedir(), ".pi", "agent");
 	const candidates = [
 		...(projectTrusted ? [path.join(cwd, ".pi", "modes.json")] : []),
-		path.join(agentDir, "modes.json"),
+		path.join(getAgentDir(), "modes.json"),
 	];
 
 	for (const modesPath of candidates) {

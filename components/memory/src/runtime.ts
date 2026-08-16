@@ -47,6 +47,7 @@ export interface LaunchCtx {
 export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;
+	configCwd: string | undefined;
 	consolidationInFlight = false;
 	consolidationPromise: Promise<void> | null = null;
 	consolidationPhase: ConsolidationPhase | undefined;
@@ -64,10 +65,15 @@ export class Runtime {
 		  }
 		| undefined;
 
-	ensureConfig(cwd: string): void {
-		if (this.configLoaded) return;
+	ensureConfig(cwd: string): Config {
+		if (this.configLoaded && (this.configCwd === cwd || this.configCwd === undefined)) {
+			this.configCwd = cwd;
+			return this.config;
+		}
 		this.config = loadConfig(cwd);
+		this.configCwd = cwd;
 		this.configLoaded = true;
+		return this.config;
 	}
 
 	async resolveModel(ctx: ResolveCtx): Promise<ResolveResult> {

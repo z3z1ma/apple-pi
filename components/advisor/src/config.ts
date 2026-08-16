@@ -1,18 +1,12 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export const DEFAULT_ADVISOR_PROVIDER = "openrouter";
 export const DEFAULT_ADVISOR_MODEL = "z-ai/glm-5.2";
 export const DEFAULT_THINKING = "low";
 
-function agentDir(): string {
-	const env = process.env.PI_CODING_AGENT_DIR;
-	if (env) return env.startsWith("~/") ? path.join(os.homedir(), env.slice(2)) : env;
-	return path.join(os.homedir(), ".pi", "agent");
-}
-
-const STATE_FILE = () => path.join(agentDir(), ".advisor-state.json");
+const STATE_FILE = () => path.join(getAgentDir(), ".advisor-state.json");
 
 export function loadEnabled(): boolean {
 	// Opt-out: enabled unless explicitly turned off (`/advisor off`).
@@ -118,7 +112,7 @@ Offer the better design, not just the warning.
 export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 	let prompt = "";
 	try {
-		prompt = fs.readFileSync(path.join(agentDir(), "system-prompts", "advisor.md"), "utf8");
+		prompt = fs.readFileSync(path.join(getAgentDir(), "system-prompts", "advisor.md"), "utf8");
 	} catch {
 		prompt = DEFAULT_ADVISOR_SYSTEM_PROMPT;
 	}

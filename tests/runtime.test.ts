@@ -59,6 +59,14 @@ return values.map((value) => value.toUpperCase());
 		expect(calls.sort()).toEqual(["a", "b"]);
 	});
 
+	it("accepts the parent session's max thinking level", async () => {
+		const result = await execute(`return agents.run({ task: "inspect", thinking: "max" });`, async (_ref, args) => ({
+			status: "completed",
+			text: String(args.thinking),
+		}));
+		expect(result.value).toEqual({ status: "completed", text: "max" });
+	});
+
 	it("supports structured agents.run and the text-returning agent convenience", async () => {
 		const result = await execute(
 			`

@@ -1,6 +1,7 @@
 import { Text, type AutocompleteItem } from "@earendil-works/pi-tui";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { completeUnusedFlags, matchingCompletions, parseArgv } from "../../shared/src/argv.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
 import { RalphController, summarizeRun, type StartRunOptions } from "./controller.js";
@@ -66,39 +67,13 @@ function optionsFromParams(params: Record<string, unknown>): StartRunOptions {
 	};
 }
 
-function parseCommandArgs(input: string): {
-	action: string;
-	positional: string[];
-	options: Record<string, number | string>;
-} {
-	const tokens =
-		input.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => token.replace(/^(?:"(.*)"|'(.*)')$/, "$1$2")) ?? [];
-	const action = tokens.shift() ?? "status";
-	const positional: string[] = [];
-	const options: Record<string, number | string> = {};
-	const numericOptions = new Set<string>();
-	const stringOptions = new Set(["root", "ledger_root"]);
-	for (let index = 0; index < tokens.length; index++) {
-		const token = tokens[index];
-		if (!token.startsWith("--")) {
-			positional.push(token);
-			continue;
-		}
-		const [rawName, inline] = token.slice(2).split("=", 2);
-		const normalizedName = rawName.replace(/-/g, "_");
-		if (!numericOptions.has(normalizedName) && !stringOptions.has(normalizedName))
-			throw new Error(`Unknown Ralph option: --${rawName}`);
-		const rawValue = inline ?? tokens[++index];
-		if (!rawValue) throw new Error(`--${rawName} requires a value`);
-		if (numericOptions.has(normalizedName)) {
-			const value = Number(rawValue);
-			if (!Number.isFinite(value)) throw new Error(`--${rawName} requires a number`);
-			options[normalizedName] = value;
-		} else {
-			options[normalizedName] = rawValue;
-		}
-	}
-	return { action, positional, options };
+function parseCommandArgs(input: string) {
+	return parseArgv(input, {
+		defaultAction: "status",
+		actions: ["inspect", "start", "step", "run", "status", "stop"],
+		stringOptions: ["root", "ledger_root"],
+		unknownOption: (rawName) => `Unknown Ralph option: --${rawName}`,
+	});
 }
 
 const RALPH_ACTIONS: AutocompleteItem[] = [
@@ -129,11 +104,6 @@ const RALPH_TERMINAL_STATES = new Set([
 	"error",
 ]);
 
-function matchingCompletions(prefix: string, items: AutocompleteItem[]): AutocompleteItem[] | null {
-	const matches = items.filter((item) => item.value.startsWith(prefix));
-	return matches.length ? matches : null;
-}
-
 export function ralphArgumentCompletions(prefix: string, runs: RunSummary[] = []): AutocompleteItem[] | null {
 	const input = prefix.replace(/^\s+/, "");
 	if (!input.includes(" ")) return matchingCompletions(input, RALPH_ACTIONS);
@@ -160,16 +130,11 @@ export function ralphArgumentCompletions(prefix: string, runs: RunSummary[] = []
 
 	const rest = input.slice(action.length + 1);
 	if (!rest || (!rest.includes(" ") && !rest.startsWith("--"))) return null;
-	const tokens = input.trim().split(/\s+/);
-	if (RALPH_RUN_OPTIONS.some(({ name }) => name === tokens.at(-1))) return null;
-	const partial = input.endsWith(" ") ? "" : (tokens.at(-1) ?? "");
-	const base = partial ? input.slice(0, -partial.length) : input;
-	const options = RALPH_RUN_OPTIONS.filter(({ name }) => !tokens.includes(name)).map(({ name, description }) => ({
-		value: `${base}${name} `,
-		label: name,
-		description,
-	}));
-	return matchingCompletions(input, options);
+	return completeUnusedFlags(
+		input,
+		RALPH_RUN_OPTIONS,
+		RALPH_RUN_OPTIONS.map(({ name }) => name),
+	);
 }
 
 function setRunWidget(ctx: ExtensionCommandContext, run: RalphRun | undefined): void {
@@ -190,6 +155,7 @@ function setRunWidget(ctx: ExtensionCommandContext, run: RalphRun | undefined): 
 
 export default function installRalph(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
+	let sessionCwd: string | undefined;
 	const controller = new RalphController({ getService: () => getManagedSubagentService(pi.events) });
 
 	const tool = defineTool({
@@ -222,6 +188,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			try {
+				sessionCwd = ctx.cwd;
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
 				if (params.ledger_root && !["inspect", "start", "run"].includes(params.action))
 					throw new Error("ledger_root is valid only for inspect, start, and run");
@@ -268,9 +235,9 @@ export default function installRalph(pi: ExtensionAPI): void {
 		description: "Inspect, start, step, run, stop, or view a bounded ledger-backed Ralph loop",
 		getArgumentCompletions: async (prefix) => {
 			let runs: RunSummary[] = [];
-			if (/^(?:status|step|stop)\s/.test(prefix.trimStart())) {
+			if (/^(?:status|step|stop)\s/.test(prefix.trimStart()) && sessionCwd) {
 				try {
-					const status = controller.status(process.cwd());
+					const status = controller.status(sessionCwd);
 					if (Array.isArray(status)) runs = status;
 				} catch {
 					// Action help still works outside a Ralph project.
@@ -280,6 +247,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 		},
 		handler: async (input, ctx) => {
 			try {
+				sessionCwd = ctx.cwd;
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
 				const parsed = parseCommandArgs(input);
 				const expectedPositionals =
@@ -356,6 +324,9 @@ export default function installRalph(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.on("session_start", (_event, ctx) => {
+		sessionCwd = ctx.cwd;
+	});
 	pi.on("session_before_switch", async () => {
 		await controller.stopAll();
 	});

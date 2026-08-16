@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getLastCompactionStats, PI_VCC_COMPACT_INSTRUCTION } from "../hooks/before-compact.js";
+import { PI_VCC_COMPACT_INSTRUCTION, type CompactionStatsGetter } from "../hooks/before-compact.js";
 import { countPiVccCompactionsFromSession, ordinalSuffix } from "../core/compaction-count.js";
 
 const formatTokens = (n: number): string => {
@@ -7,7 +7,7 @@ const formatTokens = (n: number): string => {
 	return String(n);
 };
 
-export const registerPiVccCommand = (pi: ExtensionAPI) => {
+export const registerPiVccCommand = (pi: ExtensionAPI, getLastCompactionStats: CompactionStatsGetter) => {
 	pi.registerCommand("pi-vcc", {
 		description: "Compact conversation with pi-vcc structured summary",
 		handler: async (_args, ctx) => {

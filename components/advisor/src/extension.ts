@@ -63,14 +63,12 @@ import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
 // executor: it cannot edit, run commands, or change session state.
 // ===========================================================================
 
-export type AdvisorSeverity = "nit" | "concern" | "blocker";
-export interface AdvisorNote {
-	note: string;
-	severity?: AdvisorSeverity;
-}
+export type { AdvisorNote, AdvisorSeverity } from "./types.js";
+import type { AdvisorNote, AdvisorSeverity } from "./types.js";
+import type { PrimaryTurnState } from "../../shared/src/types.js";
+export type { PrimaryTurnState } from "../../shared/src/types.js";
 
 const ADVISORY_TYPE = "advisory";
-export type PrimaryTurnState = "running" | "ended-terminal" | "ended-nonterminal";
 
 // ---- advise tool (agent-core tool; lives only on the advisor agent) ----
 

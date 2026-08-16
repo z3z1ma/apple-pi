@@ -47,6 +47,7 @@ describe("buildOwnCut", () => {
 		expect(r.firstKeptEntryId).toBe("m3");
 		expect(r.messages).toHaveLength(2);
 		expect(r.compactAll).toBe(false);
+		expect(r.messageRange).toEqual(["m1", "m2"]);
 	});
 
 	test("cancels with too_few_live_messages when liveMessages <= 2", () => {
@@ -88,6 +89,7 @@ describe("buildOwnCut", () => {
 		if (!r.ok) return;
 		expect(r.firstKeptEntryId).toBe("m3");
 		expect(r.messages).toHaveLength(2);
+		expect(r.messageRange).toEqual(["m1", "m2"]);
 	});
 
 	test("single user prompt + autonomous tail: cut at mid-cycle boundary", () => {
@@ -123,6 +125,7 @@ describe("buildOwnCut", () => {
 		expect(r.compactAll).toBe(true);
 		expect(r.firstKeptEntryId).toBe("");
 		expect(r.messages).toHaveLength(3);
+		expect(r.messageRange).toEqual(["m1", "m3"]);
 	});
 
 	test("compact-all then more chat: orphan recovery + normal cut", () => {
@@ -144,6 +147,7 @@ describe("buildOwnCut", () => {
 		expect(r.compactAll).toBe(false);
 		expect(r.firstKeptEntryId).toBe("u3");
 		expect(r.messages).toHaveLength(4); // u1, a1, u2, a2
+		expect(r.messageRange).toEqual(["u1", "a2"]);
 	});
 
 	test("compact-all then single user msg + autonomous: cut at mid-cycle boundary", () => {

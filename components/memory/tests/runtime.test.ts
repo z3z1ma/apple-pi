@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -215,5 +215,25 @@ describe("Runtime V3 behavior", () => {
 		runtime.compactInFlight = true;
 		expect(runtime.consolidationInFlight).toBe(false);
 		expect(runtime.consolidationPhase).toBeUndefined();
+	});
+
+	it("reloads project observational-memory settings when cwd changes", () => {
+		const first = join(agentDir, "first");
+		const second = join(agentDir, "second");
+		mkdirSync(join(first, ".pi"), { recursive: true });
+		mkdirSync(join(second, ".pi"), { recursive: true });
+		writeFileSync(
+			join(first, ".pi", "settings.json"),
+			JSON.stringify({ "observational-memory": { observeAfterTokens: 111, passive: true } }),
+		);
+		writeFileSync(
+			join(second, ".pi", "settings.json"),
+			JSON.stringify({ "observational-memory": { observeAfterTokens: 222 } }),
+		);
+
+		const runtime = new Runtime();
+		expect(runtime.ensureConfig(first)).toMatchObject({ observeAfterTokens: 111, passive: true });
+		expect(runtime.ensureConfig(first)).toMatchObject({ observeAfterTokens: 111, passive: true });
+		expect(runtime.ensureConfig(second)).toMatchObject({ observeAfterTokens: 222, passive: false });
 	});
 });

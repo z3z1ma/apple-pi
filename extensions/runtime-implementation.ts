@@ -21,6 +21,7 @@ import { ExecActivityWidget, renderExecCall, renderExecResult, type ExecActivity
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
+import type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
 
 export type {
 	ExecutionOperation,
@@ -29,6 +30,7 @@ export type {
 	ProgramHostCall,
 	WorkerResult,
 } from "./runtime-types.js";
+export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
 
 const MAX_OUTPUT_CHARS = 50_000;
 const MAX_NESTED_RESULT_CHARS = 50_000;
@@ -36,14 +38,6 @@ const MAX_TRACE_RESULT_CHARS = 4_000;
 const DEFAULT_CALL_BUDGET = 128;
 const DEFAULT_CONCURRENCY = 16;
 const DEFAULT_AGENT_BUDGET = 8;
-
-export interface ProgramEnvelope {
-	callBudget: number;
-	concurrency: number;
-	agentBudget: number;
-	memoryMb: number;
-	timeoutSeconds: number;
-}
 
 /** Package-owned bounds derived from program shape, never model-selected arithmetic. */
 export function deriveProgramEnvelope(code: string): ProgramEnvelope {
@@ -60,7 +54,7 @@ export function deriveProgramEnvelope(code: string): ProgramEnvelope {
 }
 const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
-const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const WORKER_GUIDANCE =
 	"You are a worker inside a pi_exec program. Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Do not ask follow-up questions.";

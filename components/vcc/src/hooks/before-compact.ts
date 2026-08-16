@@ -36,51 +36,29 @@ export interface VccCompactionAugmentation {
 
 export type VccCompactionAugmenter = (input: VccCompactionAugmentationInput) => VccCompactionAugmentation | undefined;
 
-let lastStats: CompactionStats | null = null;
-let lastCompactWasPiVcc = false;
-let lastCompactWasCodexRecovery = false;
-let lastCompactWasProactive = false;
-let lastCompactHandledByVcc = false;
-export const getLastCompactionStats = () => lastStats;
+interface CompactionHookState {
+	lastStats: CompactionStats | null;
+	lastCompactWasPiVcc: boolean;
+	lastCompactWasCodexRecovery: boolean;
+	lastCompactWasProactive: boolean;
+	lastCompactHandledByVcc: boolean;
+}
+
+function createCompactionHookState(): CompactionHookState {
+	return {
+		lastStats: null,
+		lastCompactWasPiVcc: false,
+		lastCompactWasCodexRecovery: false,
+		lastCompactWasProactive: false,
+		lastCompactHandledByVcc: false,
+	};
+}
+
+export type CompactionStatsGetter = () => CompactionStats | null;
 
 const formatTokens = (n: number): string => {
 	if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
 	return String(n);
-};
-
-/**
- * Compute the entry-ID range for summarized messages.
- *
- * Uses entry IDs instead of numeric indices so that vcc_recall can correctly
- * resolve the range against the full session file (not just the active branch,
- * where numeric indices would be branch-relative and wrong).
- *
- * Returns [firstSummarizedEntryId, lastSummarizedEntryId] or undefined.
- */
-const computeMessageRange = (branchEntries: any[], firstKeptEntryId: string): [string, string] | undefined => {
-	if (!firstKeptEntryId) return undefined;
-
-	// If compact-all sentinel, find the last message entry
-	if (firstKeptEntryId === "") {
-		let lastId: string | undefined;
-		for (const e of branchEntries) {
-			if (e.type === "message" && e.message && e.id) {
-				lastId = e.id;
-			}
-		}
-		return lastId
-			? ([branchEntries.find((e: any) => e.type === "message" && e.message)?.id ?? "", lastId] as [string, string])
-			: undefined;
-	}
-
-	// Find the first message entry (start of summarized range)
-	const firstMsgId = branchEntries.find((e: any) => e.type === "message" && e.message && e.id)?.id;
-	if (!firstMsgId) return undefined;
-
-	// If first kept entry IS the first message, nothing was summarized
-	if (firstMsgId === firstKeptEntryId) return undefined;
-
-	return [firstMsgId, firstKeptEntryId];
 };
 
 const dbg = (settings: PiVccSettings, data: Record<string, unknown>) => {
@@ -126,8 +104,34 @@ const isHiddenEmptyCustomMessage = (message: unknown): boolean => {
 export type OwnCutCancelReason = "no_live_messages" | "too_few_live_messages";
 
 export type OwnCutResult =
-	| { ok: true; messages: any[]; firstKeptEntryId: string; compactAll: boolean }
+	| {
+			ok: true;
+			messages: any[];
+			firstKeptEntryId: string;
+			compactAll: boolean;
+			messageRange?: [string, string];
+	  }
 	| { ok: false; reason: OwnCutCancelReason };
+
+function summarizedMessageRange(summarized: EntryWithMessage[]): [string, string] | undefined {
+	const firstId = summarized.find((entry) => entry.entry.id)?.entry.id;
+	const lastId = [...summarized].reverse().find((entry) => entry.entry.id)?.entry.id;
+	return firstId && lastId ? [firstId, lastId] : undefined;
+}
+
+function ownCutSuccess(
+	summarized: EntryWithMessage[],
+	firstKeptEntryId: string,
+	compactAll: boolean,
+): Extract<OwnCutResult, { ok: true }> {
+	return {
+		ok: true,
+		messages: summarized.map((entry) => entry.message),
+		firstKeptEntryId,
+		compactAll,
+		messageRange: summarizedMessageRange(summarized),
+	};
+}
 
 /**
  * Find a completed tool-call cycle boundary in the first half of the
@@ -367,19 +371,9 @@ export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: nu
 			const splitIdx = findSuffixSplitPoint(suffix, maxKeptTokens);
 			if (splitIdx >= 0) {
 				const globalIdx = cutIdx + splitIdx;
-				return {
-					ok: true,
-					messages: liveMessages.slice(0, globalIdx).map((e) => e.message),
-					firstKeptEntryId: liveMessages[globalIdx].entry.id,
-					compactAll: false,
-				};
+				return ownCutSuccess(liveMessages.slice(0, globalIdx), liveMessages[globalIdx].entry.id, false);
 			}
-			return {
-				ok: true,
-				messages: liveMessages.map((e) => e.message),
-				firstKeptEntryId: "",
-				compactAll: true,
-			};
+			return ownCutSuccess(liveMessages, "", true);
 		}
 	}
 
@@ -391,30 +385,15 @@ export function buildOwnCut(branchEntries: any[], options?: { maxKeptTokens?: nu
 		// tool-call cycles.
 		const cycleEndIdx = findMidCycleBoundary(liveMessages);
 		if (cycleEndIdx > 0 && cycleEndIdx < liveMessages.length - 1) {
-			return {
-				ok: true,
-				messages: liveMessages.slice(0, cycleEndIdx + 1).map((e) => e.message),
-				firstKeptEntryId: liveMessages[cycleEndIdx + 1].entry.id,
-				compactAll: false,
-			};
+			return ownCutSuccess(liveMessages.slice(0, cycleEndIdx + 1), liveMessages[cycleEndIdx + 1].entry.id, false);
 		}
 		// No completed cycle boundary found — fall back to compact-all as last resort.
 		// firstKeptEntryId="" is a sentinel: pi-core's buildSessionContext won't match it
 		// (so 0 kept from pre-compaction), and next buildOwnCut triggers orphan recovery.
-		return {
-			ok: true,
-			messages: liveMessages.map((e) => e.message),
-			firstKeptEntryId: "",
-			compactAll: true,
-		};
+		return ownCutSuccess(liveMessages, "", true);
 	}
 
-	return {
-		ok: true,
-		messages: liveMessages.slice(0, cutIdx).map((e) => e.message),
-		firstKeptEntryId: liveMessages[cutIdx].entry.id,
-		compactAll: false,
-	};
+	return ownCutSuccess(liveMessages.slice(0, cutIdx), liveMessages[cutIdx].entry.id, false);
 }
 
 const REASON_MESSAGES: Record<OwnCutCancelReason, string> = {
@@ -454,7 +433,11 @@ export function shouldTriggerResumeForCompaction(
 	return !sessionIsIdle;
 }
 
-export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: VccCompactionAugmenter) => {
+export const registerBeforeCompactHook = (
+	pi: ExtensionAPI,
+	augmentCompaction?: VccCompactionAugmenter,
+): CompactionStatsGetter => {
+	const state = createCompactionHookState();
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the hook coordinates one atomic compaction lifecycle.
 	pi.on("session_before_compact", (event, ctx) => {
 		const { preparation, branchEntries, customInstructions } = event;
@@ -602,7 +585,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 				);
 			return sum;
 		}, 0);
-		lastStats = {
+		state.lastStats = {
 			summarized: agentMessages.length,
 			kept: keptEntries.length,
 			keptTokensEst: Math.round(keptChars / 4),
@@ -610,8 +593,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 
 		const config = settings;
 
-		// Compute entry-ID range for compaction-scoped recall
-		const messageRange = computeMessageRange(branchEntries as any[], firstKeptEntryId);
+		const messageRange = ownCut.messageRange;
 
 		const compileInput: CompileInput = {
 			messages,
@@ -669,8 +651,8 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 					: undefined,
 			timestamp: new Date().toISOString(),
 			tokensBefore: preparation.tokensBefore || undefined,
-			keptCount: lastStats?.kept || undefined,
-			keptTokensEst: lastStats?.keptTokensEst || undefined,
+			keptCount: state.lastStats?.kept || undefined,
+			keptTokensEst: state.lastStats?.keptTokensEst || undefined,
 		};
 		const augmentation = augmentCompaction?.({
 			branchEntries: branchEntries as any[],
@@ -685,10 +667,10 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 		// lets each projection read the same compaction entry without a wrapper.
 		const combinedDetails = augmentation?.details ? { ...details, ...augmentation.details } : details;
 
-		lastCompactWasPiVcc = isPiVcc;
-		lastCompactWasCodexRecovery = isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
-		lastCompactWasProactive = isProactiveTriggerActive();
-		lastCompactHandledByVcc = true;
+		state.lastCompactWasPiVcc = isPiVcc;
+		state.lastCompactWasCodexRecovery = isCodexOutputLimitCompaction || isCodexContextOverflowCompaction;
+		state.lastCompactWasProactive = isProactiveTriggerActive();
+		state.lastCompactHandledByVcc = true;
 
 		// Signal to neuralwatt-mcr that pi-vcc is handling compaction
 		// so it doesn't cancel the event. Without this flag, neuralwatt-mcr
@@ -714,17 +696,17 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 	// that isn't a clean end_turn), the agent was interrupted and should
 	// continue.
 	pi.on("session_compact", (event, ctx) => {
-		if (!lastCompactHandledByVcc) return;
-		const wasCodexRecoveryCompaction = lastCompactWasCodexRecovery;
-		const wasProactiveCompaction = lastCompactWasProactive;
-		lastCompactHandledByVcc = false;
-		lastCompactWasCodexRecovery = false;
-		lastCompactWasProactive = false;
+		if (!state.lastCompactHandledByVcc) return;
+		const wasCodexRecoveryCompaction = state.lastCompactWasCodexRecovery;
+		const wasProactiveCompaction = state.lastCompactWasProactive;
+		state.lastCompactHandledByVcc = false;
+		state.lastCompactWasCodexRecovery = false;
+		state.lastCompactWasProactive = false;
 
 		// Fire success toast for pi-vcc's /compact path only (delayed to let UI
 		// settle). /pi-vcc has its own callback.
-		if (!lastCompactWasPiVcc) {
-			const stats = lastStats;
+		if (!state.lastCompactWasPiVcc) {
+			const stats = state.lastStats;
 			const count = countPiVccCompactionsFromSession(ctx?.sessionManager as any);
 			const compactionLabel = count > 0 ? ` (${count}${ordinalSuffix(count)} compaction)` : "";
 			if (stats) {
@@ -793,4 +775,5 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, augmentCompaction?: 
 			// Non-critical — if context inspection fails, don't block compaction
 		}
 	});
+	return () => state.lastStats;
 };

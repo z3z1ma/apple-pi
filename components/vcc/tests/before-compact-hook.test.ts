@@ -272,6 +272,18 @@ describe("registerBeforeCompactHook: compact-all path", () => {
 		// Single user at idx 0, completed cycle m2→m3 ends at idx 2 (midpoint=2)
 		// Cut after m3, keep from m4 onward
 		expect(result.compaction.firstKeptEntryId).toBe("m4");
+		expect(result.compaction.details.messageRange).toEqual(["m1", "m3"]);
 		expect(notifyCalls).toHaveLength(0); // no cancel notify on success
+	});
+
+	test("compact-all stores the summarized message range", () => {
+		setConfig({ debug: false, overrideDefaultCompaction: false });
+		const { pi, invoke } = createMockPi();
+		registerBeforeCompactHook(pi);
+
+		const entries = [msg("m1", "assistant"), msg("m2", "assistant"), msg("m3", "assistant")];
+		const result = invoke(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
+		expect(result.compaction.firstKeptEntryId).toBe("");
+		expect(result.compaction.details.messageRange).toEqual(["m1", "m3"]);
 	});
 });

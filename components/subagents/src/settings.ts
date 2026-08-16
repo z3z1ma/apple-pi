@@ -18,6 +18,22 @@ export interface SubagentsSettings {
 	fallbackSubagent?: string;
 }
 
+export const DEFAULT_SUBAGENT_SETTINGS: Required<Omit<SubagentsSettings, "fallbackSubagent">> & {
+	fallbackSubagent: string | undefined;
+} = {
+	maxConcurrent: 4,
+	defaultMaxTurns: 0,
+	graceTurns: 5,
+	defaultJoinMode: "smart",
+	strictAgentFiles: false,
+	disableDefaultAgents: false,
+	fleetView: true,
+	persistAgentSessions: true,
+	widgetMode: "background",
+	maxSubagentDepth: 2,
+	fallbackSubagent: undefined,
+};
+
 export interface SettingsAppliers {
 	setMaxConcurrent: (n: number) => void;
 	setDefaultMaxTurns: (n: number) => void;
@@ -121,4 +137,27 @@ export function applySettings(settings: SubagentsSettings, appliers: SettingsApp
 	if (settings.widgetMode) appliers.setWidgetMode(settings.widgetMode);
 	if (settings.maxSubagentDepth !== undefined) appliers.setMaxSubagentDepth(settings.maxSubagentDepth);
 	if (settings.fallbackSubagent !== undefined) appliers.setFallbackSubagent(settings.fallbackSubagent);
+}
+
+export function resolveCompleteSettings(settings: SubagentsSettings = {}): Required<
+	Omit<SubagentsSettings, "fallbackSubagent">
+> & {
+	fallbackSubagent: string | undefined;
+} {
+	return { ...DEFAULT_SUBAGENT_SETTINGS, ...settings };
+}
+
+export function applyCompleteSettings(settings: SubagentsSettings, appliers: SettingsAppliers): void {
+	const resolved = resolveCompleteSettings(settings);
+	appliers.setMaxConcurrent(resolved.maxConcurrent);
+	appliers.setDefaultMaxTurns(resolved.defaultMaxTurns);
+	appliers.setGraceTurns(resolved.graceTurns);
+	appliers.setDefaultJoinMode(resolved.defaultJoinMode);
+	appliers.setStrictAgentFiles(resolved.strictAgentFiles);
+	appliers.setDisableDefaultAgents(resolved.disableDefaultAgents);
+	appliers.setFleetView(resolved.fleetView);
+	appliers.setPersistAgentSessions(resolved.persistAgentSessions);
+	appliers.setWidgetMode(resolved.widgetMode);
+	appliers.setMaxSubagentDepth(resolved.maxSubagentDepth);
+	appliers.setFallbackSubagent(resolved.fallbackSubagent);
 }

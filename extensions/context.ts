@@ -43,9 +43,9 @@ export default function context(pi: ExtensionAPI): void {
 
 	scaffoldSettings();
 	registerInvisibleContinue(pi);
-	registerBeforeCompactHook(pi, createMemoryCompactionAugmenter(memory));
+	const getLastCompactionStats = registerBeforeCompactHook(pi, createMemoryCompactionAugmenter(memory));
 	registerProactiveThresholdHook(pi);
-	registerPiVccCommand(pi);
+	registerPiVccCommand(pi, getLastCompactionStats);
 	registerVccRecallCommand(pi);
 	registerVccRecallTool(pi);
 

@@ -1,6 +1,7 @@
 import { Text, type AutocompleteItem } from "@earendil-works/pi-tui";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { matchingCompletions, parseArgv } from "../../shared/src/argv.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
 import { ReviewController, summarizeReviewRun } from "./controller.js";
@@ -106,11 +107,6 @@ const RUN_OPTIONS: Array<{ name: string; description: string }> = [
 	{ name: "--background", description: "Behavioral contract or change background" },
 ];
 
-function matchingCompletions(prefix: string, items: AutocompleteItem[]): AutocompleteItem[] | null {
-	const matches = items.filter((item) => item.value.startsWith(prefix));
-	return matches.length ? matches : null;
-}
-
 export function reviewArgumentCompletions(prefix: string, runs: ReviewRunSummary[] = []): AutocompleteItem[] | null {
 	const input = prefix.replace(/^\s+/, "");
 	if (!input.includes(" ")) return matchingCompletions(input, REVIEW_ACTIONS);
@@ -199,44 +195,27 @@ interface ParsedCommand {
 }
 
 function parseCommand(input: string): ParsedCommand {
-	const tokens =
-		input.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => token.replace(/^(?:"(.*)"|'(.*)')$/, "$1$2")) ?? [];
-	const first = tokens[0];
-	const action = first && !first.startsWith("--") ? tokens.shift()! : "run";
-	const values: Record<string, string | number> = {};
-	const positional: string[] = [];
-	const numeric = new Set<string>();
-	const strings = new Set([
-		"root",
-		"profile",
-		"background",
-		"planner_mode",
-		"fast_mode",
-		"strong_mode",
-		"from",
-		"to",
-		"commit",
-	]);
-	for (let index = 0; index < tokens.length; index++) {
-		const token = tokens[index];
-		if (!token.startsWith("--")) {
-			positional.push(token);
-			continue;
-		}
-		const [raw, inline] = token.slice(2).split("=", 2);
-		const name = raw.replace(/-/g, "_");
-		const value = inline ?? tokens[++index];
-		if (value === undefined) throw new Error(`--${raw} requires a value`);
-		if (!numeric.has(name) && !strings.has(name)) throw new Error(`Unknown review option: --${raw}`);
-		if (numeric.has(name)) {
-			const number = Number(value);
-			if (!Number.isFinite(number)) throw new Error(`--${raw} requires a number`);
-			values[name] = number;
-		} else values[name] = value;
-	}
+	const parsed = parseArgv(input, {
+		defaultAction: "run",
+		actions: ["run", "preview", "status", "stop"],
+		stringOptions: [
+			"root",
+			"profile",
+			"background",
+			"planner_mode",
+			"fast_mode",
+			"strong_mode",
+			"from",
+			"to",
+			"commit",
+		],
+		unknownOption: (rawName) => `Unknown review option: --${rawName}`,
+	});
+	const values = { ...parsed.options };
+	const positional = [...parsed.positional];
 	if (positional[0] === "workspace" || positional[0] === "range" || positional[0] === "commit")
 		values.mode = positional.shift()!;
-	return { action, values, positional };
+	return { action: parsed.action, values, positional };
 }
 
 function setWidget(ctx: ExtensionCommandContext, run?: ReviewRun): void {
@@ -258,6 +237,7 @@ function setWidget(ctx: ExtensionCommandContext, run?: ReviewRun): void {
 export default function installReview(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 	let lifecycleEpoch = 0;
+	let sessionCwd: string | undefined;
 	const controller = new ReviewController({ getService: () => getManagedSubagentService(pi.events) });
 	const sourceSchema = {
 		root: Type.Optional(
@@ -279,8 +259,8 @@ export default function installReview(pi: ExtensionAPI): void {
 		planner_mode: Type.Optional(
 			Type.String({ description: "modes.json entry for semantic grouping; defaults to review-planner." }),
 		),
-		fast_mode: Type.Optional(Type.String({ description: "modes.json entry for ordinary review groups." })),
-		strong_mode: Type.Optional(Type.String({ description: "modes.json entry for high-risk review groups." })),
+		fast_mode: Type.Optional(Type.String({ description: "modes.json entry for ordinary review focuses." })),
+		strong_mode: Type.Optional(Type.String({ description: "modes.json entry for high-risk review focuses." })),
 	};
 	const tool = defineTool({
 		name: "review",
@@ -295,6 +275,7 @@ export default function installReview(pi: ExtensionAPI): void {
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			try {
+				sessionCwd = ctx.cwd;
 				if (params.action === "status") {
 					const status = controller.status(resolveReviewTargetRoot(ctx.cwd, params.root), params.run_id);
 					return textResult(Array.isArray(status) ? summariesText(status) : summarizeReviewRun(status), false, status);
@@ -335,9 +316,9 @@ export default function installReview(pi: ExtensionAPI): void {
 		description: "Preview, run, inspect, or stop a semantically grouped parallel code review",
 		getArgumentCompletions: (prefix) => {
 			let runs: ReviewRunSummary[] = [];
-			if (/^(?:status|stop)\s/.test(prefix)) {
+			if (/^(?:status|stop)\s/.test(prefix) && sessionCwd) {
 				try {
-					const status = controller.status(process.cwd());
+					const status = controller.status(sessionCwd);
 					if (Array.isArray(status)) runs = status;
 				} catch {
 					// Command/action completions remain available outside a Git repository.
@@ -347,6 +328,7 @@ export default function installReview(pi: ExtensionAPI): void {
 		},
 		handler: async (input, ctx) => {
 			try {
+				sessionCwd = ctx.cwd;
 				const parsed = parseCommand(input);
 				if (parsed.action === "status") {
 					const status = controller.status(
@@ -414,6 +396,9 @@ export default function installReview(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.on("session_start", (_event, ctx) => {
+		sessionCwd = ctx.cwd;
+	});
 	pi.on("session_before_switch", async () => {
 		lifecycleEpoch++;
 		await controller.stopAll();

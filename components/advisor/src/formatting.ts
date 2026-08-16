@@ -2,7 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import { sessionEntryToContextMessages, type SessionEntry } from "@earendil-works/pi-coding-agent";
 
-import type { AdvisorNote } from "./extension.js";
+import type { AdvisorNote } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
 
@@ -51,9 +51,6 @@ export function formatAdvisoryContent(
 	if (!opts?.finalAnswer) return body;
 	return `${body}\n\nYou had already returned a final answer to the user this turn. If you act on the advice above, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
 }
-
-/** Where the primary is in its turn lifecycle. */
-export type PrimaryTurnState = "running" | "ended-terminal" | "ended-nonterminal";
 
 // ---- transcript delta formatting (primary turn → markdown for the advisor) ----
 

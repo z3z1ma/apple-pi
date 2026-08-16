@@ -33,10 +33,4 @@ export interface ProgramExecution {
 
 export type ProgramHostCall = (ref: string, args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
 
-export interface ProgramEnvelope {
-	callBudget: number;
-	concurrency: number;
-	agentBudget: number;
-	memoryMb: number;
-	timeoutSeconds: number;
-}
+export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";

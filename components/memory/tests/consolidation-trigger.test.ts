@@ -95,7 +95,7 @@ function setup(args: {
 		lastObserverError: undefined as string | undefined,
 		lastReflectorError: undefined as string | undefined,
 		lastDropperError: undefined as string | undefined,
-		ensureConfig: vi.fn(),
+		ensureConfig: vi.fn(() => runtime.config),
 		resolveModel: vi.fn(async () => ({
 			ok: true,
 			model: { reasoning: true },
@@ -907,5 +907,39 @@ describe("observer chunk cap", () => {
 			OM_OBSERVATIONS_RECORDED,
 			expect.objectContaining({ coversUpToId: "raw-1" }),
 		);
+	});
+
+	it("keeps the launch-time config when project settings change mid-run", async () => {
+		const first = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"], tokenCount: 4 });
+		const second = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-2"], tokenCount: 4 });
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		mockAgents.runObserver.mockImplementationOnce(async () => {
+			await gate;
+			return [first];
+		});
+		const { fire, runLaunchedWork, pi, runtime } = setup({
+			entries: [textCustomMessage("raw-1", "remember this"), textCustomMessage("raw-2", "and this")],
+			observeAfterTokens: 1,
+			reflectAfterTokens: 999,
+		});
+		const launched = { ...runtime.config, observeAfterTokens: 1, agentMaxTurns: 3 };
+		runtime.ensureConfig.mockReturnValue(launched);
+		runtime.config = launched;
+
+		fire();
+		const work = runLaunchedWork();
+		runtime.config = { ...runtime.config, observeAfterTokens: 1_000_000, agentMaxTurns: 99 };
+		release?.();
+		await work;
+
+		expect(mockAgents.runObserver).toHaveBeenCalledWith(expect.objectContaining({ maxTurns: 3 }));
+		expect(pi.appendEntry).toHaveBeenCalledWith(
+			OM_OBSERVATIONS_RECORDED,
+			expect.objectContaining({ observations: [first] }),
+		);
+		expect(second.id).toBe("bbbbbbbbbbbb");
 	});
 });
