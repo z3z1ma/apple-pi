@@ -74,16 +74,18 @@ Design and implement a coherent terminal operations experience for long-running 
 - 2026-08-15: Operator selected branch-scoped task restoration, gated WI-### work items, and a unified operations hub; activated the governing decision and behavioral specifications.
 - 2026-08-15: Split gated work-item authority into a manual bootstrap dependency so legacy Ralph cannot close this root while ignoring open work items or mix new role skills with old in-memory parsers.
 - 2026-08-15: Bootstrap task `202608151843-bootstrap-gated-work-items` closed in `bc57e35`; the operator confirmed Pi reload before this task resumed.
-- 2026-08-15: Reloaded Ralph compiled this task but its inspector output did not project WI-001 through WI-007, so commissioning remains blocked pending that observable inspector behavior.
+- 2026-08-15: Reloaded Ralph initially compiled this task without projecting WI-001 through WI-007; inspector projection was added in `c6fc6f1`.
+- 2026-08-15: After the subsequent operator-confirmed Pi reload, Ralph `inspect` enumerated WI-001 through WI-007 as open; the bootstrap commissioning gate is satisfied.
 
 ## Blockers
 
-- The reloaded Ralph inspector must enumerate this task's WI-001 through WI-007 before the operations task can resume.
+None.
 
 ## Evidence
 
 - 2026-08-15: Bootstrap dependency closed in `bc57e35`; operator confirmed the required Pi reload before resuming this WI-bearing task.
-- 2026-08-15: Reloaded Ralph `inspect` compiled the task graph but did not enumerate work items.
+- 2026-08-15: Reloaded Ralph initially compiled the task graph but did not enumerate work items.
+- 2026-08-15: After reload of `c6fc6f1`, Ralph `inspect` compiled graph `a0dcd1d20435b10dda20d93bcfbe707284b8eb8423d0eddb5b8a62712d198807` and reported `7 total; 7 open; WI-001` through `WI-007`.
 
 ## Review
 
