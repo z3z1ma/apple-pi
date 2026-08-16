@@ -2,7 +2,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waitForAgentSettlement } from "../components/subagents/src/abortable.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../components/subagents/src/conversation.js";
+import { buildCompactParentHandoff, buildFullParentContext, MAX_PARENT_HANDOFF_CHARS } from "../components/subagents/src/context.js";
 import { DEFAULT_AGENTS } from "../components/subagents/src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../components/subagents/src/invocation-config.js";
 import { selectAgentModel } from "../components/subagents/src/agent-runner.js";
@@ -20,6 +22,7 @@ const temporaryRoot = (): string => {
 };
 
 afterEach(() => {
+	vi.useRealTimers();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -188,7 +191,6 @@ Review carefully.
 			thinking: "high",
 			max_turns: 8,
 			run_in_background: true,
-			inherit_context: true,
 			isolated: true,
 		});
 		expect(resolved).toMatchObject({
@@ -199,6 +201,71 @@ Review carefully.
 			isolated: false,
 		});
 		expect(resolved).not.toHaveProperty("isolation");
+	});
+
+	it("uses a bounded parent handoff by default while trusted definitions retain full and no-context modes", () => {
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {}).inheritContext).toBeUndefined();
+		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("general-purpose")!, inheritContext: true }, {}).inheritContext).toBe(true);
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {}).inheritContext).toBe(false);
+	});
+
+	it("keeps only recent decision context in an inherited handoff", () => {
+		const handoff = buildCompactParentHandoff({
+			sessionManager: {
+				getBranch: () => [
+					{ type: "message", message: { role: "user", content: [{ type: "text", text: "old request must not survive" }] } },
+					{ type: "compaction", summary: `latest summary ${"s".repeat(MAX_PARENT_HANDOFF_CHARS)}` },
+					{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "latest assistant report" }] } },
+					{ type: "message", message: { role: "user", content: [{ type: "text", text: "latest user request" }] } },
+				],
+			},
+		} as any);
+
+		expect(handoff).toContain("# Parent Handoff");
+		expect(handoff).toContain("latest summary");
+		expect(handoff).toContain("latest user request");
+		expect(handoff).toContain("latest assistant report");
+		expect(handoff).not.toContain("old request must not survive");
+		expect(handoff.length).toBeLessThanOrEqual(MAX_PARENT_HANDOFF_CHARS + 300);
+	});
+
+	it("retains the full branch only for explicit inheritance", () => {
+		const ctx = {
+			sessionManager: {
+				getBranch: () => [
+					{ type: "message", message: { role: "user", content: [{ type: "text", text: "earlier decision" }] } },
+					{ type: "message", message: { role: "user", content: [{ type: "text", text: "latest decision" }] } },
+				],
+			},
+		} as any;
+		expect(buildCompactParentHandoff(ctx)).not.toContain("earlier decision");
+		expect(buildFullParentContext(ctx)).toContain("earlier decision");
+	});
+
+	it("stops queued result polling after its bounded wait expires", async () => {
+		vi.useFakeTimers();
+		const record = { status: "queued" as const };
+		const waiting = waitForAgentSettlement(record, undefined, 10);
+		await vi.advanceTimersByTimeAsync(10);
+		expect(await waiting).toBe(false);
+		await vi.advanceTimersByTimeAsync(50);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("parses continuous advisor as explicit custom-agent opt-in", () => {
+		const root = temporaryRoot();
+		const directory = join(root, ".pi", "agents");
+		mkdirSync(directory, { recursive: true });
+		writeFileSync(join(directory, "deep-implementation.md"), `---
+name: deep-implementation
+description: correctness-critical implementation
+advisor: true
+---
+Implement carefully.
+`);
+
+		expect(loadCustomAgents(root).get("deep-implementation")?.advisor).toBe(true);
+		expect(DEFAULT_AGENTS.get("general-purpose")?.advisor).toBeUndefined();
 	});
 
 	it("sanitizes settings to the retained orchestration controls", () => {

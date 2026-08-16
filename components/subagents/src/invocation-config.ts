@@ -3,7 +3,6 @@ import type { AgentConfig, JoinMode, ThinkingLevel } from "./types.js";
 interface AgentInvocationParams {
 	thinking?: string;
 	run_in_background?: boolean;
-	inherit_context?: boolean;
 	isolated?: boolean;
 }
 
@@ -13,7 +12,8 @@ export function resolveAgentInvocationConfig(
 ): {
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
-	inheritContext: boolean;
+	/** undefined = compact handoff, true = full parent branch, false = none. */
+	inheritContext?: boolean;
 	runInBackground: boolean;
 	isolated: boolean;
 } {
@@ -21,7 +21,9 @@ export function resolveAgentInvocationConfig(
 		thinking: (params.thinking ?? agentConfig?.thinking) as ThinkingLevel | undefined,
 		// Turn ceilings are agent-definition or trusted-settings policy, never model arithmetic.
 		maxTurns: agentConfig?.maxTurns,
-		inheritContext: agentConfig?.inheritContext ?? params.inherit_context ?? false,
+		// Context breadth is trusted agent-definition policy: omitted is the
+		// bounded handoff, true retains legacy full conversation, false opts out.
+		inheritContext: agentConfig?.inheritContext,
 		runInBackground: agentConfig?.runInBackground ?? params.run_in_background ?? false,
 		isolated: agentConfig?.isolated ?? params.isolated ?? false,
 	};

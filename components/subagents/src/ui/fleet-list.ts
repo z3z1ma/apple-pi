@@ -23,8 +23,8 @@ import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.j
 const FLEET_KEY = "fleet";
 /** Max agent rows shown at once; extras collapse into a "↓ N more" indicator. */
 const MAX_AGENT_ROWS = 5;
-/** Re-render cadence so elapsed/token stats tick while agents run. */
-const TICK_MS = 200;
+/** Elapsed text changes at whole-second precision; state changes update immediately. */
+const TICK_MS = 1_000;
 /** How long a finished agent lingers in the list before it drops out. */
 const FINISHED_LINGER_MS = 4000;
 

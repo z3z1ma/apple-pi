@@ -41,3 +41,57 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
     );
   });
 }
+
+/** A wait tool yields control after this long without stopping the child. */
+export const SUBAGENT_RESULT_WAIT_TIMEOUT_MS = 10_000;
+
+type WaitableAgent = {
+  status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
+  promise?: Promise<unknown>;
+};
+
+function isPending(record: WaitableAgent): boolean {
+  return record.status === "queued" || record.status === "running";
+}
+
+/**
+ * Wait briefly for a child to settle without ever cancelling it.
+ *
+ * A bounded wait keeps the parent able to inspect, steer, or work in parallel
+ * instead of wedging on one slow child. `true` means the record settled; `false`
+ * means the wait limit elapsed and the child is still active. Caller abort still
+ * rejects exactly as {@link abortable} does.
+ */
+export async function waitForAgentSettlement(
+  record: WaitableAgent,
+  signal?: AbortSignal,
+  timeoutMs = SUBAGENT_RESULT_WAIT_TIMEOUT_MS,
+): Promise<boolean> {
+  if (!isPending(record)) return true;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+  });
+  const settled = (async (): Promise<"settled" | "cancelled"> => {
+    // Queued records have no run promise until they reach the pool. The outer
+    // race closes this poller on timeout, so it cannot keep a timer alive for a
+    // child that remains queued indefinitely.
+    while (record.status === "queued") {
+      await abortable(new Promise<void>((resolve) => setTimeout(resolve, 50)), signal);
+      if (closed) return "cancelled";
+    }
+    if (closed) return "cancelled";
+    if (record.promise) await abortable(record.promise, signal);
+    return "settled";
+  })();
+
+  try {
+    await abortable(Promise.race([settled, timeout]), signal);
+  } finally {
+    closed = true;
+    if (timer) clearTimeout(timer);
+  }
+  return !isPending(record);
+}

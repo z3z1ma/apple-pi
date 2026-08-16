@@ -27,6 +27,7 @@ export interface AgentConfig {
 	advisor?: boolean;
 	systemPrompt: string;
 	promptMode: "replace" | "append";
+	/** Omitted = bounded parent handoff; true = full parent branch; false = none. */
 	inheritContext?: boolean;
 	runInBackground?: boolean;
 	isolated?: boolean;
@@ -79,6 +80,7 @@ export interface AgentInvocation {
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;
+	/** Omitted = bounded handoff; true = full parent branch; false = none. */
 	inheritContext?: boolean;
 	runInBackground?: boolean;
 }

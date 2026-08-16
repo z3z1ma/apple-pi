@@ -7,7 +7,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { abortable } from "./abortable.js";
+import { SUBAGENT_RESULT_WAIT_TIMEOUT_MS, waitForAgentSettlement } from "./abortable.js";
 import {
 	buildAgentRegistry,
 	getAgentConfigIn,
@@ -122,7 +122,6 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			run_in_background: Type.Optional(Type.Boolean()),
 			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
 			isolated: Type.Optional(Type.Boolean()),
-			inherit_context: Type.Optional(Type.Boolean({ description: "Prepend a bounded parent handoff, not the full transcript." })),
 		}),
 		execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
 			if (params.resume) {
@@ -163,6 +162,10 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			});
 			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
+			if (config?.source === "project" && !projectTrusted && invocation.inheritContext === true) {
+				// Full conversation inheritance is trusted agent-definition policy.
+				invocation.inheritContext = undefined;
+			}
 			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
 				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
@@ -213,10 +216,10 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 	const resultTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Nested Agent Result",
-		description: "Check an owned child without blocking by default. Use transcript_tail for a bounded recent conversation slice, or wait=true only when the final result is required. transcript_tail cannot be combined with wait=true.",
+		description: `Check an owned child without blocking by default. wait=true waits at most ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s, then returns control while the child continues. Use transcript_tail for a bounded recent conversation slice. transcript_tail cannot be combined with wait=true.`,
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait: Type.Optional(Type.Boolean({ description: "Wait for the child to finish. Defaults to false." })),
+			wait: Type.Optional(Type.Boolean({ description: `Wait up to ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s for the child; it continues after the wait expires. Defaults to false.` })),
 			transcript_tail: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Append up to 12,000 characters from the most recent N conversation messages, including current streaming output." })),
 		}),
 		execute: async (_toolCallId, params, signal) => {
@@ -225,13 +228,15 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			}
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId)) return textResult("Nested agent not found or not owned by this parent.", true);
-			if (params.wait && (record.status === "queued" || record.status === "running")) {
-				while (record.status === "queued") await abortable(new Promise<void>((resolve) => setTimeout(resolve, 100)), signal);
-				if (record.promise) await abortable(record.promise, signal);
-			}
+			const waitExpired = params.wait && (record.status === "queued" || record.status === "running")
+				? !await waitForAgentSettlement(record, signal)
+				: false;
 			let output = params.transcript_tail === undefined
 				? formatRecord(record, false)
 				: `Agent ${record.id} is ${record.status}.`;
+			if (waitExpired && (record.status === "queued" || record.status === "running")) {
+				output += `\n\nWait limit (${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s) reached; it continues in the background.`;
+			}
 			if (params.transcript_tail !== undefined && record.session) {
 				const tail = Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));
 				const transcript = getAgentConversation(record.session, tail) || "(no conversation messages yet)";

@@ -418,6 +418,119 @@ Answer the task.
 		}
 	}, 30_000);
 
+	it("downgrades untrusted project full-context policy to the bounded handoff", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-trust-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-context-trust", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		const requests: string[] = [];
+		faux.setResponses([
+			(context) => { requests.push(JSON.stringify(context)); return fauxAssistantMessage([fauxText("UNTRUSTED")]); },
+			(context) => { requests.push(JSON.stringify(context)); return fauxAssistantMessage([fauxText("TRUSTED")]); },
+		]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		const run = async (projectTrusted: boolean) => {
+			registerAgents(new Map<string, AgentConfig>([["context-trust", {
+				name: "context-trust",
+				description: "context trust test",
+				builtinToolNames: ["read"],
+				extensions: false,
+				skills: false,
+				persistSession: false,
+				inheritContext: true,
+				source: "project",
+				systemPrompt: "Answer the task.",
+				promptMode: "replace",
+			}]]));
+			const result = await runAgent({
+				cwd,
+				model,
+				modelRegistry: runtime.modelRegistry,
+				getSystemPrompt: () => "parent",
+				isProjectTrusted: () => projectTrusted,
+				sessionManager: {
+					getSessionFile: () => undefined,
+					getBranch: () => [
+						{ type: "message", message: { role: "user", content: [{ type: "text", text: "earlier-secret" }] } },
+						{ type: "message", message: { role: "user", content: [{ type: "text", text: "latest-handoff" }] } },
+					],
+				},
+			} as any, "context-trust", "answer", {
+				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+				model,
+				inheritContext: true,
+			});
+			result.session.dispose();
+		};
+
+		await run(false);
+		await run(true);
+		expect(requests[0]).not.toContain("earlier-secret");
+		expect(requests[0]).toContain("latest-handoff");
+		expect(requests[1]).toContain("earlier-secret");
+	}, 30_000);
+
+	it("loads the advisor extension in child sessions only with explicit agent opt-in", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-advisor-scope-"));
+		temporaryDirectories.push(cwd);
+		const extensionPath = join(cwd, "pi-advisor.ts");
+		writeFileSync(extensionPath, `
+export default function advisorMarker(pi) {
+	pi.registerTool({
+		name: "child_advisor_marker",
+		label: "child_advisor_marker",
+		description: "marker",
+		parameters: { type: "object", properties: {}, additionalProperties: false },
+		execute: async () => ({ content: [{ type: "text", text: "marker" }] }),
+	});
+}
+`);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-advisor-scope", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([
+			() => fauxAssistantMessage([fauxText("ADVISOR-OFF")]),
+			() => fauxAssistantMessage([fauxText("ADVISOR-ON")]),
+			() => fauxAssistantMessage([fauxText("ADVISOR-UNTRUSTED")]),
+		]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+
+		const run = async (advisor: boolean | undefined, projectTrusted = true) => {
+			registerAgents(new Map<string, AgentConfig>([["advisor-scope", {
+				name: "advisor-scope",
+				description: "advisor scope test",
+				builtinToolNames: ["read"],
+				extensions: [extensionPath],
+				skills: false,
+				persistSession: false,
+				advisor,
+				source: "project",
+				systemPrompt: "Answer the task.",
+				promptMode: "replace",
+			}]]));
+			let tools: string[] = [];
+			const result = await runAgent({
+				cwd,
+				model,
+				modelRegistry: runtime.modelRegistry,
+				getSystemPrompt: () => "parent",
+				sessionManager: { getSessionFile: () => undefined },
+				isProjectTrusted: () => projectTrusted,
+			} as any, "advisor-scope", "answer", {
+				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+				model,
+				onSessionCreated: (session) => { tools = session.getAllTools().map((tool) => tool.name); },
+			});
+			result.session.dispose();
+			return tools;
+		};
+
+		expect(await run(undefined)).not.toContain("child_advisor_marker");
+		expect(await run(true)).toContain("child_advisor_marker");
+		expect(await run(true, false)).not.toContain("child_advisor_marker");
+	}, 30_000);
+
 	it("keeps pi_exec out of child sessions even when explicitly selected", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-root-only-tool-"));
 		temporaryDirectories.push(cwd);

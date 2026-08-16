@@ -16,8 +16,9 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
       displayName: "Agent",
       description: "General-purpose agent for substantial independent work that would otherwise consume a large portion of the main context: open-ended research across many sources, multi-step investigation or execution, or a required fresh-context review. Do not use it for targeted file or symbol searches, routine planning, or work the main agent can complete with a short direct-tool sequence.",
       // builtinToolNames omitted — means "all available tools" (resolved at lookup time)
-      // inheritContext / runInBackground / isolated omitted — strategy fields, callers decide per-call.
-      // Setting them to false would lock callsite intent (see resolveAgentInvocationConfig in invocation-config.ts).
+      // Unspecified inherits the compact-handoff default while still allowing
+      // callers to deliberately opt out for a self-contained task.
+      // runInBackground / isolated remain callsite strategy fields.
       extensions: true,
       skills: true,
       systemPrompt: `# Completion Contract
@@ -39,6 +40,8 @@ You own the assigned task, not an open-ended improvement program.
       displayName: "Explore",
       description: "Fast read-only search agent for broad code discovery across multiple areas, naming conventions, or hypotheses when a compact result map would be valuable. Prefer direct grep, find, and read calls for known paths, targeted symbols, and ordinary search refinement. Do NOT use it for code review, design-doc auditing, cross-file consistency checks, or open-ended analysis — it reads excerpts rather than whole files and may miss content past its read window. When calling, specify search breadth: \"quick\" for bounded but non-trivial discovery, \"medium\" for moderate exploration, or \"very thorough\" for multiple locations and naming conventions.",
       builtinToolNames: READ_ONLY_TOOLS,
+      // Search prompts are deliberately self-contained and need no parent handoff.
+      inheritContext: false,
       extensions: true,
       skills: true,
       // Fast model for read-only search. resolveModel can fall back to the same
@@ -84,6 +87,8 @@ Use Bash ONLY for read-only operations: ls, git status, git log, git diff, find,
       displayName: "Plan",
       description: "Software architect agent for non-trivial implementation planning involving cross-module dependencies, consequential trade-offs, migrations, or unclear ownership boundaries. Do not use it for routine implementation when the main agent can form the plan after local inspection. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs.",
       builtinToolNames: READ_ONLY_TOOLS,
+      // Planning prompts are deliberately self-contained and need no parent handoff.
+      inheritContext: false,
       extensions: true,
       skills: true,
       model: "openai-codex/gpt-5.6-sol",

@@ -6,7 +6,7 @@ import {
 	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { abortable } from "./abortable.js";
+import { SUBAGENT_RESULT_WAIT_TIMEOUT_MS, waitForAgentSettlement } from "./abortable.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
 import {
@@ -61,7 +61,18 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
 }
 
+const ACTIVITY_UPDATE_DEBOUNCE_MS = 250;
+
 function createActivityTracker(maxTurns?: number, onChange?: () => void) {
+	let textUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+	const notifyTextChange = () => {
+		if (!onChange || textUpdateTimer) return;
+		textUpdateTimer = setTimeout(() => {
+			textUpdateTimer = undefined;
+			onChange();
+		}, ACTIVITY_UPDATE_DEBOUNCE_MS);
+		textUpdateTimer.unref?.();
+	};
 	const state: AgentActivity = {
 		activeTools: new Map(),
 		toolUses: 0,
@@ -84,7 +95,7 @@ function createActivityTracker(maxTurns?: number, onChange?: () => void) {
 				}
 				onChange?.();
 			},
-			onTextDelta: (_delta: string, fullText: string) => { state.responseText = fullText; onChange?.(); },
+			onTextDelta: (_delta: string, fullText: string) => { state.responseText = fullText; notifyTextChange(); },
 			onTurnEnd: (turnCount: number) => { state.turnCount = turnCount; onChange?.(); },
 			onSessionCreated: (session: any) => { state.session = session; onChange?.(); },
 			onAssistantUsage: (usage: { input: number; output: number; cacheWrite: number }) => {
@@ -490,7 +501,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			run_in_background: Type.Optional(Type.Boolean()),
 			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
 			isolated: Type.Optional(Type.Boolean({ description: "Disable extension and skill inheritance." })),
-			inherit_context: Type.Optional(Type.Boolean({ description: "Prepend a bounded parent handoff (latest summary and decisions), never the full transcript." })),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -529,6 +539,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			});
 			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, undefined, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
+			if (config?.source === "project" && !projectTrusted && invocation.inheritContext === true) {
+				// Full conversation inheritance is trusted agent-definition policy.
+				invocation.inheritContext = undefined;
+			}
 			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
 				invocation.thinking = resolvedAgentModel.thinkingLevel;
 			}
@@ -629,10 +643,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	pi.registerTool(defineTool({
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Subagent Result",
-		description: "Check a subagent without blocking by default. Settled final output is returned in full. Use transcript_tail for a bounded recent conversation slice, verbose for the full conversation, or wait=true only when the final result is required. transcript_tail is mutually exclusive with verbose and wait=true.",
+		description: `Check a subagent without blocking by default. Settled final output is returned in full. wait=true waits at most ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s, then returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation. transcript_tail is mutually exclusive with verbose and wait=true.`,
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait: Type.Optional(Type.Boolean({ description: "Wait for a queued or running agent to finish. Defaults to false." })),
+			wait: Type.Optional(Type.Boolean({ description: `Wait up to ${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s for a queued or running agent; it continues after the wait expires. Defaults to false.` })),
 			verbose: Type.Optional(Type.Boolean({ description: "Append the full conversation transcript. Mutually exclusive with transcript_tail." })),
 			transcript_tail: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Append up to 12,000 characters from the most recent N conversation messages, including current streaming output. Mutually exclusive with verbose." })),
 		}),
@@ -642,10 +656,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			}
 			const record = manager.getRecord(params.agent_id);
 			if (!record || record.parentAgentId || record.internalOwner) return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
-			if (params.wait && (record.status === "queued" || record.status === "running")) {
-				while (record.status === "queued") await abortable(new Promise<void>((resolve) => setTimeout(resolve, 50)), signal);
-				if (record.promise) await abortable(record.promise, signal);
-			}
+			const waitExpired = params.wait && (record.status === "queued" || record.status === "running")
+				? !await waitForAgentSettlement(record, signal)
+				: false;
 			const settled = record.status !== "queued" && record.status !== "running";
 			if (settled && params.transcript_tail === undefined) {
 				record.resultConsumed = true;
@@ -654,6 +667,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			let output = !settled || params.transcript_tail !== undefined
 				? `Agent ${record.id} is ${record.status}.`
 				: record.result || record.error || "No output.";
+			if (waitExpired && !settled) output += ` Wait limit (${SUBAGENT_RESULT_WAIT_TIMEOUT_MS / 1000}s) reached; it continues in the background.`;
 			if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
 				const tail = params.transcript_tail === undefined ? undefined : Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));
 				const transcript = getAgentConversation(record.session, tail) || "(no conversation messages yet)";

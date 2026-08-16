@@ -16,6 +16,8 @@ import { getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type Se
 
 /** Maximum number of rendered lines before overflow collapse kicks in. */
 const MAX_WIDGET_LINES = 12;
+/** Spinner/render cadence while agents run; activity deltas are separately debounced. */
+const WIDGET_TICK_MS = 500;
 
 /** Braille spinner frames for animated running indicator. */
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -171,7 +173,8 @@ export function buildInvocationTags(
   if (!invocation) return { tags };
   if (invocation.thinking) tags.push(`thinking: ${invocation.thinking}`);
   if (invocation.isolated) tags.push("isolated");
-  if (invocation.inheritContext) tags.push("inherit context");
+  if (invocation.inheritContext === true) tags.push("full parent context");
+  else if (invocation.inheritContext === undefined) tags.push("compact handoff");
   if (invocation.runInBackground) tags.push("background");
   if (invocation.maxTurns != null) tags.push(`max turns: ${invocation.maxTurns}`);
   return { modelName: invocation.modelName, tags };
@@ -289,7 +292,7 @@ export class AgentWidget {
   /** Ensure the widget update timer is running. */
   ensureTimer() {
     if (!this.widgetInterval) {
-      this.widgetInterval = setInterval(() => this.update(), 80);
+      this.widgetInterval = setInterval(() => this.update(), WIDGET_TICK_MS);
     }
   }
 
@@ -584,5 +587,9 @@ export class AgentWidget {
     this.widgetRegistered = false;
     this.tui = undefined;
     this.lastStatusText = undefined;
+    // A trailing activity debounce may fire after teardown. Clearing the UI
+    // context makes that update a no-op instead of re-registering a widget on
+    // a closed session.
+    this.uiCtx = undefined;
   }
 }
