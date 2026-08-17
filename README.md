@@ -9,7 +9,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
-- **Review** (`/skill:review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
+- **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
 - **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
@@ -222,10 +222,10 @@ The imported implementation deliberately has **no worktree parameter or worktree
 
 ### Review
 
-Review is a skill over `pi_exec`, not an extension. Load `/skill:review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Workers return typed values through `pi_exec_return`.
+Review is a skill over `pi_exec`, not an extension. Load `/skill:pi-review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Workers return typed values through `pi_exec_return`.
 
 ```text
-/skill:review
+/skill:pi-review
 ```
 
 The default spine is plan focuses → fan-out read-only reviewers → one verifier → optional residual loop. Vary the program when the change asks for it. Findings must name a patch-introduced cause in an assigned path.
@@ -265,7 +265,7 @@ The implementation checkout must have an established Git `HEAD`. Dirty checkouts
 
 Executors cannot edit `.ledger`; the controller records structured Journal, Evidence, Blockers, Retrospective, and Distillation with compare-and-swap semantics. Judgment remains in authoritative `task.md`; `Status: done` changes only after deterministic evidence, retrospective, and distillation gates hold. Machine receipts are keyed by implementation worktree and stay user-local under `$PI_CODING_AGENT_DIR/ralph/runs/`.
 
-See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor` and `ralph-judge`. Independent review is `/skill:review`.
+See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor` and `ralph-judge`. Independent review is `/skill:pi-review`.
 
 ## Reference-repository decisions
 

@@ -26,7 +26,7 @@ Choose autonomous execution only after shaping a bounded task. Ralph does not es
 /ralph run .ledger/<task-id>/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
 ```
 
-One iteration is a fresh executor and a fresh closure judge. Roles do not inherit the parent conversation and are never resumed. Do not edit the checkout while a run is active. Use `/ralph stop <run-id>` to abort and wait for quiescence. Independent review is `/skill:review` when the parent session wants a review program.
+One iteration is a fresh executor and a fresh closure judge. Roles do not inherit the parent conversation and are never resumed. Do not edit the checkout while a run is active. Use `/ralph stop <run-id>` to abort and wait for quiescence. Independent review is `/skill:pi-review` when the parent session wants a review program.
 
 Treat terminal gates honestly:
 

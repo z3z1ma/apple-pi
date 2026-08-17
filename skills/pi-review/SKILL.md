@@ -1,5 +1,5 @@
 ---
-name: review
+name: pi-review
 description: Run an evidence-driven code review with a dynamic planner, parallel focus reviewers, and independent verification. Use for pull requests, commits, patches, and working-tree changes.
 ---
 

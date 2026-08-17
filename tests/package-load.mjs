@@ -107,7 +107,7 @@ try {
 		"ledger-distill-close-task",
 		"ralph-executor",
 		"ralph-judge",
-		"review",
+		"pi-review",
 		"pi-exec",
 	]) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
@@ -115,6 +115,7 @@ try {
 	for (const obsolete of [
 		"10x-shape-work",
 		"ralph-reviewer",
+		"review",
 		"review-planner",
 		"reviewer",
 		"review-verifier",
@@ -177,16 +178,19 @@ try {
 	for (const removed of ["isolation", "schedule", "name", "max_turns"]) {
 		assert(!(removed in agentProperties), `removed subagent field leaked into schema: ${removed}`);
 	}
-	assert(existsSync("skills/review/references/plan-review-verify.js"), "missing review plan-review-verify reference");
-	assert(existsSync("skills/review/references/targeted-review.js"), "missing review targeted-review reference");
-	assert(existsSync("skills/review/references/planner.md"), "missing review planner reference");
-	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
-	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
+	assert(
+		existsSync("skills/pi-review/references/plan-review-verify.js"),
+		"missing pi-review plan-review-verify reference",
+	);
+	assert(existsSync("skills/pi-review/references/targeted-review.js"), "missing pi-review targeted-review reference");
+	assert(existsSync("skills/pi-review/references/planner.md"), "missing pi-review planner reference");
+	assert(existsSync("skills/pi-review/references/reviewer.md"), "missing pi-review reviewer reference");
+	assert(existsSync("skills/pi-review/references/verifier.md"), "missing pi-review verifier reference");
 	for (const [program, prompts] of [
 		["plan-review-verify.js", ["planner", "reviewer", "verifier"]],
 		["targeted-review.js", ["reviewer", "verifier"]],
 	]) {
-		const source = readFileSync(`skills/review/references/${program}`, "utf8");
+		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
 		for (const prompt of prompts) {
 			const constant = prompt.toUpperCase();
 			assert(

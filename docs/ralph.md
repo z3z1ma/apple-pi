@@ -97,7 +97,7 @@ Ralph reuses apple-pi's managed subagent service; there is no second model runne
 
 The executor receives the compiled graph and one bounded objective. It cannot edit `.ledger`. It returns structured summary, criterion observations, Journal entries, Blockers, Retrospective, Distillation, and an optional next objective. The controller records owned task sections with digest compare-and-swap.
 
-The judge receives the current task graph, executor report, and bounded workspace diff. Independent review is a separate `/skill:review` program when the parent session wants it.
+The judge receives the current task graph, executor report, and bounded workspace diff. Independent review is a separate `/skill:pi-review` program when the parent session wants it.
 
 ## Closure
 

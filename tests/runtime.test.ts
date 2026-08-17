@@ -488,11 +488,12 @@ describe("pi_exec skills", () => {
 		const dir = mkdtempSync(join(tmpdir(), "apple-pi-skills-"));
 		try {
 			const names = listSkills({ cwd: dir, includeDefaults: false }).map((skill) => skill.name);
-			expect(names).toContain("review");
+			expect(names).toContain("pi-review");
+			expect(names).not.toContain("review");
 			expect(names).not.toContain("review-planner");
 			expect(names).not.toContain("reviewer");
 			expect(names).not.toContain("review-verifier");
-			const body = readSkillBody("review", { cwd: dir, includeDefaults: false });
+			const body = readSkillBody("pi-review", { cwd: dir, includeDefaults: false });
 			expect(body.startsWith("# Review")).toBe(true);
 			expect(body).not.toMatch(/^---/);
 			expect(body).toContain("pi_exec");
@@ -900,7 +901,7 @@ describe("pi_exec tool", () => {
 				{
 					code: `
 const listed = await skills.list();
-const body = await skills.body({ name: "review" });
+const body = await skills.body({ name: "pi-review" });
 return {
   names: listed.map((skill) => skill.name),
   starts: body.slice(0, 8),
@@ -912,7 +913,7 @@ return {
 				{ cwd: dir },
 			);
 			const value = JSON.parse(result.content[0].text);
-			expect(value.names).toContain("review");
+			expect(value.names).toContain("pi-review");
 			expect(value.starts).toBe("# Review");
 			expect(result.details.trace.operations.map((operation: any) => operation.ref)).toEqual([
 				"skills.list",
