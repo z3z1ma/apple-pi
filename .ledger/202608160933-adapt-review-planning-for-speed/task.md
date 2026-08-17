@@ -1,4 +1,4 @@
-Status: active
+Status: done
 Created: 2026-08-16
 Updated: 2026-08-16
 
@@ -59,6 +59,7 @@ Evolve apple-pi's first-class review controller using the proven, compatible cor
 - 2026-08-16: Implemented the focus layer without Ralph or subagents: typed coverage/focus graph validation, fair sealed planner evidence plus the bounded diff reader, complete custom-tool envelope accounting, focus-level reviewer/verifier scheduling, durable lifecycle/receipt state, and identity-certain visible finding merge. Updated role skills and public review documentation.
 - 2026-08-16: Added stable presentation ordering after canonical merge, so concurrent focus completion cannot alter persisted or visible finding order.
 - 2026-08-16: After a live planner failed closed for placing `controller.ts` in two cohesive groups, the operator ruled that group overlap is expected. Coverage groups are now cohesive units that may share items; selected-item completeness and per-group child-focus coverage remain mandatory.
+- 2026-08-16: Operator closed the task. No further work in this bundle.
 
 ## Blockers
 
@@ -71,15 +72,17 @@ None.
 - Done: `npx vitest run components/review/tests` passed (26 tests) after the final lifecycle/receipt changes.
 - Done: `npm run check` passed after the final lifecycle/receipt changes.
 - Done: `npm test` passed after the final lifecycle/receipt changes (unit, VCC, advisor, and package-loader suites).
+- Done: The review controller continued beyond this bundle's original focus-layer contract in later same-day work, including `7b63dca`.
+- Done: Operator judged the review work done after live scoped run `8edb2701-dd07-4340-bde2-7636debd33a7` and stated there will be no further work on this task.
 
 ## Review
 
-Pending after the group-overlap contract correction: reload Pi so the in-process review extension loads the new validator, then rerun the review system against the current workspace diff.
+Operator close. The operator stated this task is done by their standards and there will be no further work here. No additional Ralph iteration was requested. Live scoped self-reviews after the later cycle rewrite (`d61212ec`, `533c01ee`, `8edb2701`) were used as the operator's quality evidence, not as a gate inside this bundle.
 
 ## Retrospective
 
-Deferred until the requested independent review completes.
+The original PR-AF-inspired focus layer was a useful starting contract and then got replaced in place: overlapping groups, slim planner, cycle verifier, caller pathspecs, no review token or turn gates. Keeping one task through those reversals left this bundle's spec and ACs describing an earlier system than the code. Future review work should open a new task rather than keep extending this one.
 
 ## Distillation
 
-Pending.
+No promotion needed: the live review contract is already in `docs/review.md`, packaged review skills, README, and `components/review`. This bundle's spec and decision remain task-local history of an earlier design. Observational-memory research is a separate later task and is not leftover review scope.

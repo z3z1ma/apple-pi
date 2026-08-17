@@ -1,4 +1,4 @@
-Status: active
+Status: done
 Created: 2026-08-16
 Updated: 2026-08-16
 
@@ -62,6 +62,7 @@ If the earlier receipt finding remains after those removals, receipt validation 
 ## Journal
 
 - 2026-08-16: Opened after the live adaptive-focus review showed a 6m 46s planner and a later token-admission abort. The operator asked to slim planning, keep group/focus caps, drop review token budgets, and address leftover findings only if they survive that change.
+- 2026-08-16: Operator closed the task. No further work in this bundle.
 
 ## Blockers
 
@@ -69,16 +70,18 @@ None.
 
 ## Evidence
 
-Pending.
+- Done: Slim planner, dropped review token admission, and Ralph no longer forwarding remaining review tokens as `constraints.maxTokens` landed in `7b63dca`.
+- Done: Later same-day review work in that commit also removed review turn envelopes (`maxTurns: 0`) and required first-cycle verification for `complete`.
+- Done: Operator judged the review loop done after live scoped run `8edb2701-dd07-4340-bde2-7636debd33a7` and stated there will be no further work on this task.
 
 ## Review
 
-Pending.
+Operator close. The operator stated both this task and the same-day adaptive-review-planning task are done by their standards. No further Ralph iteration or independent review was requested.
 
 ## Retrospective
 
-Pending.
+The live abort was a long planner plus token-admission math, not missing investigation depth. Removing the sealed-diff reader and review token gates unblocked the loop. Later same-day work moved past this task's original turn-cap assumption; that belongs to the live review docs and code, not a follow-on in this bundle.
 
 ## Distillation
 
-Pending.
+No promotion needed: the live slim-planner and no-review-token-gate contract is already in `docs/review.md`, packaged review skills, README, and `components/review`. This bundle stays historical.
