@@ -17,7 +17,8 @@ describe("session-ledger V3 summary rendering", () => {
 		expect(summary).toContain("Honor current law");
 		expect(summary).toContain("Do not replay this list as a historical stack");
 		expect(summary).not.toContain("past records");
-		expect(summary).toContain("use the recall tool");
+		expect(summary).toContain("use memory_source");
+		expect(summary).toContain("use session_search");
 	});
 
 	it("renders V3 reflections with ids", () => {

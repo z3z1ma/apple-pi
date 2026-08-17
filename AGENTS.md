@@ -78,7 +78,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 - There is **one compaction owner**. VCC chooses the deterministic cut and transcript summary; observational memory projects its records to that same cut and augments the result.
 - The combined compaction metadata must remain readable by both systems. Do not introduce competing hooks or sequential independent compactions.
-- VCC recall and observational-memory recall are intentionally separate: one progressively searches transcript/file-operation history; the other resolves a known memory ID to source evidence.
+- Session-history search and memory-source lookup are intentionally separate: one progressively searches transcript/file-operation history; the other resolves a known memory ID to source evidence.
 - Observational memory is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
 - Reload, switch, fork, and shutdown paths matter. Any asynchronous work holding a Pi extension context must stop or re-prime when that context becomes stale.
 

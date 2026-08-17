@@ -14,7 +14,7 @@
  *   - Goals known (Session Goal lines)
  *   - Type catalog entries
  *   - Brief transcript size (lines after ---)
- *   - Recall recoverability: vcc_recall search for a given file/goal term
+ *   - Recall recoverability: session_search search for a given file/goal term
  */
 
 import { describe, test, expect } from "bun:test";

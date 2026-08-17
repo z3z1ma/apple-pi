@@ -69,15 +69,28 @@ const resolveCompactionMessageRange = (sessionFile: string, scopeStr: string): [
 	return [firstIdx, lastIdx];
 };
 
+export const SESSION_SEARCH_TOOL_NAME = "session_search";
+
 export const registerRecallTool = (pi: ExtensionAPI) => {
 	pi.registerTool({
-		name: "vcc_recall",
-		label: "VCC Recall",
+		name: SESSION_SEARCH_TOOL_NAME,
+		label: "Session search",
 		description:
-			"Progressively recover session history and file operations. Search text or regex, list files with mode:'touched', search only write/edit payloads with mode:'file', expand entries, or use query:'#N:path' to recover a file payload. Defaults to active lineage; scope:'all' includes branches and scope:'compaction:N' targets one compacted segment.",
+			"Search this session's compacted conversation, tool calls, and write/edit payloads. " +
+			"Use after compaction when you need prior decisions, earlier tool output, or a file version written in this session. " +
+			"This is not git history and not a repository search. " +
+			"Search text or regex, list files with mode:'touched', search only write/edit payloads with mode:'file', expand entries, or use query:'#N:path' to recover a written file. " +
+			"Defaults to the active lineage; scope:'all' includes branches and scope:'compaction:N' targets one compacted segment.",
 		promptSnippet:
-			"vcc_recall: Search history, list touched files, or drill into #N:path. " +
+			"session_search: Search this session's compacted transcript and file operations. " +
 			"Use mode:'touched' for a file inventory, mode:'file' for payload-only search, query:'#N:path[:offset[:limit]|:full]' for write/edit content, scope:'all' for branches, and expand:[indices] for full entries.",
+		promptGuidelines: [
+			"Use session_search after compaction when you need prior work, decisions, tool output, or a file version from this session that is no longer in context.",
+			"Use session_search with mode:'touched' to list files written or edited in this session, and query:'#N:path' to recover a specific write/edit payload.",
+			"Use session_search with a text or regex query to find earlier conversation or tool results; multi-word queries are OR-ranked.",
+			"Do not use session_search to search the repository — use grep, find, or read for current files.",
+			"Do not use session_search as a memory-id lookup. It searches the session transcript, not compacted observation or reflection ids.",
+		],
 		parameters: Type.Object({
 			query: Type.Optional(
 				Type.String({

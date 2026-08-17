@@ -57,8 +57,8 @@ try {
 	}
 	for (const tool of [
 		"ask_user_question",
-		"vcc_recall",
-		"recall",
+		"session_search",
+		"memory_source",
 		"pi_exec",
 		"mcp",
 		"Agent",
@@ -69,7 +69,7 @@ try {
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
-	for (const obsolete of ["ralph", "ledger"]) {
+	for (const obsolete of ["ralph", "ledger", "vcc_recall", "recall"]) {
 		assert(!tools.has(obsolete), `obsolete ${obsolete} tool remains`);
 	}
 	assert(!tools.has("mcpScript"), "mcpScript duplicates pi_exec and must stay disabled");

@@ -459,7 +459,7 @@ describe("Australian government: searchEntries", () => {
 	});
 });
 
-describe("Australian government: vcc_recall integration", () => {
+describe("Australian government: session_search integration", () => {
 	it("US-spelled query finds British content through integration", async () => {
 		const { dir, file } = makeAusSession();
 		try {

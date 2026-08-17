@@ -73,7 +73,7 @@ describe("compile", () => {
 			messages: [userMsg("check final summary wrapping")],
 		});
 		const maxLineLength = Math.max(...r.split("\n").map((line) => line.length));
-		expect(r).toContain("vcc_recall");
+		expect(r).toContain("session_search");
 		expect(maxLineLength).toBeLessThanOrEqual(120);
 	});
 });

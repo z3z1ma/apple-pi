@@ -85,7 +85,7 @@ describe("VCC file recall", () => {
 		expect(nestedPayload).toContain("new");
 	});
 
-	it("exposes mode:touched and #N:path through vcc_recall", async () => {
+	it("exposes mode:touched and #N:path through session_search", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "vcc-file-recall-"));
 		const file = join(dir, "session.jsonl");
 		try {

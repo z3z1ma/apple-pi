@@ -8,7 +8,7 @@
  * meaning the count doubles as the 1-based ordinal of the latest one.
  *
  * `getEntries()` returns the full append-only session (all lineages), which
- * matches the `compaction:N` indexing scheme used by vcc_recall — so the
+ * matches the `compaction:N` indexing scheme used by session_search — so the
  * ordinal shown in the notification lines up with `scope:"compaction:N"`.
  */
 

@@ -36,9 +36,10 @@ describe("standalone VCC extension", () => {
 		const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
 		expect(commands.has("pi-vcc")).toBe(true);
 		expect(commands.has("pi-vcc-recall")).toBe(true);
-		expect(tools.has("vcc_recall")).toBe(true);
+		expect(tools.has("session_search")).toBe(true);
 		expect(commands.has("om:status")).toBe(false);
 		expect(commands.has("om:view")).toBe(false);
+		expect(tools.has("memory_source")).toBe(false);
 		expect(tools.has("recall")).toBe(false);
 	});
 });

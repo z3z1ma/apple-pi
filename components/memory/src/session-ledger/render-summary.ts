@@ -7,7 +7,7 @@ const CONTEXT_USAGE_INSTRUCTIONS = `These records are this session's current wor
 
 Honor current law. Do not replay this list as a historical stack. When current law and a newer observation conflict, the newer observation is the latest known state until law is updated. Work that current law or a current observation marks completed must not be redone unless the user asks.
 
-When exact source context is needed for precision or traceability, use the recall tool with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently. Do not use recall as broad search or inject raw source unless it is needed.`;
+When exact source context is needed for precision or traceability, use memory_source with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently. Do not use memory_source as broad search or inject raw source unless it is needed. To search this session's transcript or recover a file written earlier, use session_search.`;
 
 export function observationToSummaryLine(observation: Observation): string {
 	return `[${observation.id}] ${observation.timestamp} [${observation.relevance}] ${observation.content}`;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-	RECALL_OBSERVATION_TOOL_NAME,
+	MEMORY_SOURCE_TOOL_NAME,
 	formatRecallCallForTui,
 	formatRecallRenderedResultForTui,
 	recallObservationTool,
@@ -41,10 +41,10 @@ describe("V3 recall tool", () => {
 		const pi = { registerTool: vi.fn() };
 		registerRecallTool(pi as any);
 
-		expect(RECALL_OBSERVATION_TOOL_NAME).toBe("recall");
-		expect(recallObservationTool.name).toBe("recall");
-		expect(recallObservationTool.label).toBe("Recall memory evidence");
-		expect(formatRecallCallForTui("aaaaaaaaaaaa")).toBe("recall aaaaaaaaaaaa");
+		expect(MEMORY_SOURCE_TOOL_NAME).toBe("memory_source");
+		expect(recallObservationTool.name).toBe("memory_source");
+		expect(recallObservationTool.label).toBe("Memory source");
+		expect(formatRecallCallForTui("aaaaaaaaaaaa")).toBe("memory_source aaaaaaaaaaaa");
 		expect(pi.registerTool).toHaveBeenCalledWith(recallObservationTool);
 	});
 

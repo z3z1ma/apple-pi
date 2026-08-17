@@ -378,7 +378,7 @@ describe("government domain: formatRecallOutput", () => {
 	});
 });
 
-describe("government domain: vcc_recall integration", () => {
+describe("government domain: session_search integration", () => {
 	it("paginates government vocabulary queries without dumping the session", async () => {
 		const { dir, file } = makeGovSession();
 		try {

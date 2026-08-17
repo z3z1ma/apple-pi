@@ -31,7 +31,7 @@ const HANDFOFF_PREAMBLE =
 	"Read it to pick up context — this is work already in progress. " +
 	"Do not recap what was done, do not ask what to do next. " +
 	"Continue directly where you left off. " +
-	"Use `vcc_recall` to search for prior work, decisions, and context from before this summary.";
+	"Use `session_search` to search for prior work, decisions, and context from before this summary.";
 
 /** Extract a named section from summary text */
 const sectionOf = (text: string, header: string): string => {

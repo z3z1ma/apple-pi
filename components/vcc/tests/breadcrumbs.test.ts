@@ -244,7 +244,7 @@ describe("breadcrumbs: determinism and idempotency", () => {
 			previousSummary: prevSummary,
 		});
 
-		const recallNoteIdx = intermediate.lastIndexOf("Use `vcc_recall`");
+		const recallNoteIdx = intermediate.lastIndexOf("Use `session_search`");
 		const stripped =
 			recallNoteIdx >= 0
 				? intermediate

@@ -13,7 +13,7 @@ import type { Observation, Reflection } from "../session-ledger/index.js";
 import { renderRecallSourceEntries, renderRecallSourceEntry } from "../serialize.js";
 import { estimateEntryTokens } from "../tokens.js";
 
-export const RECALL_OBSERVATION_TOOL_NAME = "recall";
+export const MEMORY_SOURCE_TOOL_NAME = "memory_source";
 
 const MEMORY_ID_PATTERN = /^[a-f0-9]{12}$/;
 
@@ -517,7 +517,7 @@ export function formatRecallResultForTui(
 			.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
 			.map((part) => part.text)
 			.join("\n");
-		return text || "recall";
+		return text || "memory_source";
 	}
 	const sources = sourceEntriesFromDetails(details);
 	const lines: string[] = [];
@@ -533,7 +533,7 @@ export function formatRecallResultForTui(
 }
 
 export function formatRecallCallForTui(id: string | undefined): string {
-	return `recall ${id ?? "..."}`;
+	return `memory_source ${id ?? "..."}`;
 }
 
 export function formatRecallRenderedResultForTui(
@@ -548,26 +548,28 @@ export function formatRecallRenderedResultForTui(
 }
 
 export const recallObservationTool = defineTool({
-	name: RECALL_OBSERVATION_TOOL_NAME,
-	label: "Recall memory evidence",
+	name: MEMORY_SOURCE_TOOL_NAME,
+	label: "Memory source",
 	description:
-		"Recover exact evidence and source context behind a compacted observational-memory observation or reflection id on the current branch. " +
-		"Use when compressed memory is important and original source context is needed before acting.",
+		"Recover the original session entries behind a compacted observation or reflection. " +
+		"Requires a specific 12-character lowercase hex id from compacted memory, /om:view, or a previous memory_source result. " +
+		"Use when a compressed memory claim is important and you need exact wording, paths, commands, or provenance before acting. " +
+		"This is not search and not session transcript browsing.",
 	promptSnippet:
-		"Use recall(<id>) to recover exact source context behind compacted memory observations/reflections when precision matters.",
+		"Use memory_source({ id }) to recover the original source entries behind a compacted observation or reflection id when precision matters.",
 	promptGuidelines: [
-		"Use recall before making an important decision that depends on a compacted observation or reflection whose details are unclear.",
-		"Use recall when you need exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered claim.",
-		"Use recall when a broad reflection is relevant but you need its supporting observations or raw sources to continue safely.",
-		"Use recall when the user asks why you believe something, what supports a memory, or what was decided earlier.",
-		"Do not use recall as semantic search or transcript browsing; you must already have a specific 12-character memory id.",
-		"Do not recall every id preemptively. Recall only when exact source context will materially improve the next action.",
+		"Use memory_source before making an important decision that depends on a compacted observation or reflection whose details are unclear.",
+		"Use memory_source when you need exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered claim.",
+		"Use memory_source when a broad reflection is relevant but you need its supporting observations or raw sources to continue safely.",
+		"Use memory_source when the user asks why you believe something, what supports a memory, or what was decided earlier.",
+		"Do not use memory_source as semantic search or transcript browsing; you must already have a specific 12-character memory id. Use session_search to search this session.",
+		"Do not call memory_source for every id preemptively. Use it only when exact source context will materially improve the next action.",
 	],
 	parameters: Type.Object({
 		id: Type.String({
 			pattern: "^[a-f0-9]{12}$",
 			description:
-				"12-character lowercase hex observation or reflection id shown in compacted memory, /om:view, or a previous recall result. Must be a specific id; this tool does not search by topic.",
+				"12-character lowercase hex observation or reflection id shown in compacted memory, /om:view, or a previous memory_source result. Must be a specific id; this tool does not search by topic.",
 		}),
 	}),
 	renderCall(args) {

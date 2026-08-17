@@ -5,7 +5,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Pi Advisor** (`/advisor`) — a persistent read-only peer model that reviews turns and sends sparse, severity-tagged advice.
 - **Ask User Question** (`ask_user_question`) — a structured TUI/RPC questionnaire for clarifying material decisions without guessing.
 - **Integrated context** — VCC's deterministic transcript compaction plus observational memory's model-generated observations and reflections.
-- **Recall** — `vcc_recall` progressively recovers transcript and file-operation history; `recall` resolves a specific 12-character memory ID back to source entries.
+- **Session search and memory source** — `session_search` searches this session's compacted transcript and file operations; `memory_source` resolves a known 12-character memory ID to its source entries.
 - **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
@@ -66,13 +66,13 @@ Commands and tools:
 
 - `/pi-vcc` — explicit deterministic compaction
 - `/pi-vcc-recall` — interactive history and file-operation search
-- `vcc_recall` — model-facing progressive recall:
+- `session_search` — model-facing search of this session's compacted transcript and file operations:
   - `mode:"touched"` groups write/edit operations by path and entry index.
   - `mode:"file"` searches only write/edit payloads.
   - `query:"#N:path"` recovers a file payload; append `:offset:limit` to page or `:full` for up to 50 KB.
   - `expand:[N]` returns a complete transcript entry.
 - `/om:status` and `/om:view` — observational-memory state
-- `recall` — exact source recall by observation or reflection ID
+- `memory_source` — exact source lookup by observation or reflection ID
 
 VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](components/memory/src/config.ts) for the validated operational keys and defaults.
 
@@ -233,7 +233,7 @@ Built-in agent types can also be routed through the shared `modes.json` mechanis
 }
 ```
 
-Top-level subagents persist as normal Pi child-session JSONL by default. The child loads standalone VCC, so a long run uses the same compaction owner and `vcc_recall` as the main session without observational memory or the exact `recall` tool. There is no plugin-specific memory directory and no duplicate `.output` transcript. Set `persist_session: false` only when a definition should be ephemeral. Operational defaults can be overridden globally or per project in `subagents.json`; retained settings are `maxConcurrent`, `defaultMaxTurns`, `graceTurns`, `defaultJoinMode`, `strictAgentFiles`, `disableDefaultAgents`, `fleetView`, `persistAgentSessions`, `widgetMode`, `maxSubagentDepth`, and `fallbackSubagent`.
+Top-level subagents persist as normal Pi child-session JSONL by default. The child loads standalone VCC, so a long run uses the same compaction owner and `session_search` as the main session without observational memory or the `memory_source` tool. There is no plugin-specific memory directory and no duplicate `.output` transcript. Set `persist_session: false` only when a definition should be ephemeral. Operational defaults can be overridden globally or per project in `subagents.json`; retained settings are `maxConcurrent`, `defaultMaxTurns`, `graceTurns`, `defaultJoinMode`, `strictAgentFiles`, `disableDefaultAgents`, `fleetView`, `persistAgentSessions`, `widgetMode`, `maxSubagentDepth`, and `fallbackSubagent`.
 
 A foreground result includes its agent ID. Pass that ID back through the `Agent` tool's `resume` parameter to continue the same `AgentSession`, including its prior conversation, compactions, and observational memory; `steer_subagent` and `stop_subagent` remain limited to agents that are currently running or queued. `get_subagent_result` is non-blocking by default; `wait_seconds` explicitly chooses a 0–60 second wait, after which it returns the live status without stopping the child so the parent can inspect, steer, or work in parallel. Use `transcript_tail` to inspect up to 12,000 characters from the latest 1–20 child conversation messages, including current streaming output. Ownership-scoped nested agents expose the same check-in surface. Continuation is currently in-process: completed records are retired after about ten minutes, and a parent-session reload, switch, or shutdown does not rehydrate them from the persisted child JSONL.
 
@@ -274,7 +274,7 @@ The ledger extension teaches the workbench contract wherever it loads: the root 
 | Reference | Adopted | Not adopted |
 | --- | --- | --- |
 | `rpiv-ask-user-question` | Structured 1-4 question schema, described options, custom and multi-select answers, tabbed TUI review, RPC dialog fallback, non-UI reconciliation, and structured results. | Previews, notes, localization, configuration, collapse mode, external-editor integration, lifecycle events, and upstream runtime dependencies. |
-| `pi-blackhole` and Sting8k VCC | One compaction owner, one combined VCC + memory summary, metadata readable by both systems, touched-file aggregation, file-payload search indicators, and scoped `#N:path` drill-down with paging. | Their code, unified overloaded memory/transcript tool, reverse entry-to-memory recall, manual disk buffers, model fallback/cooldown machinery, settings UI, and host/runtime patch layers. Exact memory-ID `recall` and progressive transcript/file `vcc_recall` remain separate. |
+| `pi-blackhole` and Sting8k VCC | One compaction owner, one combined VCC + memory summary, metadata readable by both systems, touched-file aggregation, file-payload search indicators, and scoped `#N:path` drill-down with paging. | Their code, unified overloaded memory/transcript tool, reverse entry-to-memory recall, manual disk buffers, model fallback/cooldown machinery, settings UI, and host/runtime patch layers. Exact memory-ID `memory_source` and progressive transcript/file `session_search` remain separate. |
 | `pi-fabric` | The full core `exec` primitive: bounded guest code; core, extension, and MCP tool bridges; discovery; configurable fan-out; structured subagents; branching, reduction, parallel and pipeline composition; timers; compact final values; usage accounting; durable traces; code previews; live call rendering; and an activity widget. | QuickJS/WASM, compile-time TypeScript checking, Fabric's own MCP/provider registry, approvals subsystem, compaction, actors/teams, mesh, full dashboard, durable workflow state, and alternate runtimes. `pi_exec` uses a disposable Node worker and delegates MCP protocol ownership to `pi-mcp-adapter`. |
 | `pi-mcp-adapter` | The complete adapter as an exact runtime dependency, including protocol transports, lazy discovery, auth, approvals, output guarding, prompts/resources, setup UI, and its single `mcp` gateway. | Its standalone `mcpScript` runtime and skill; `pi_exec` owns scripting. The dependency is not copied or patched internally. |
 | `pi-subagents` | Owned Markdown agent discovery, Pi `AgentSession` execution, foreground/background queueing, resume/steer/result tools, nested delegation, usage/compaction accounting, completion grouping, activity widget, FleetView, and conversation viewer. | Worktree isolation, scheduling, human `@agent` routing, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy. Removed features have no schema fields or dormant implementation. |
