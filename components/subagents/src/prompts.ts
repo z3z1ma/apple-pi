@@ -2,7 +2,6 @@
  * prompts.ts — System prompt builder for agents.
  */
 
-import { appendLedgerSystemPrompt } from "../../shared/src/ledger-system-prompt.js";
 import type { AgentConfig, EnvInfo } from "./types.js";
 
 /** Extra sections to inject into the system prompt. */
@@ -76,9 +75,7 @@ You are operating as a sub-agent invoked to handle a specific task.
 		// placed verbatim (no wrapper tag) so it forms an identical byte prefix
 		// with the parent session, maximising KV cache hits. The <active_agent>
 		// tag and env block vary per call and are placed after the cached prefix.
-		return appendLedgerSystemPrompt(
-			`${identity}\n\n${bridge}\n\n${activeAgentTag}${envBlock}${customSection}${extrasSuffix}`,
-		);
+		return `${identity}\n\n${bridge}\n\n${activeAgentTag}${envBlock}${customSection}${extrasSuffix}`;
 	}
 
 	// "replace" mode — env header + the config's full system prompt
@@ -87,7 +84,7 @@ You have been invoked to handle a specific task autonomously.
 
 ${envBlock}`;
 
-	return appendLedgerSystemPrompt(`${activeAgentTag + replaceHeader}\n\n${config.systemPrompt}${extrasSuffix}`);
+	return `${activeAgentTag + replaceHeader}\n\n${config.systemPrompt}${extrasSuffix}`;
 }
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */

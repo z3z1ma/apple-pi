@@ -2,11 +2,10 @@
  * agent-runner.ts — Core execution engine: creates sessions, runs agents, collects results.
  */
 
-import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, LoadExtensionsResult, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
 	type AgentSession,
 	type AgentSessionEvent,
@@ -33,6 +32,10 @@ import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { ManagedAgentToolPolicy } from "./service.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
+import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
+import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
+import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
+import { VCC_EXTENSION_PATH } from "../../../extensions/vcc.js";
 export { getAgentConversation } from "./conversation.js";
 
 /**
@@ -53,268 +56,14 @@ export { SUBAGENT_TOOL_NAMES };
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
 
-/** Continuous second-model review is expensive and must be explicitly enabled per agent. */
-const ADVISOR_EXTENSION_NAME = "pi-advisor";
-
-/**
- * Canonical name of an extension for `extensions: [...]` allowlist matching.
- * Lowercased — extension names match case-insensitively so `extensions: [Mcp]`
- * resolves the same as `[mcp]`. Tool names within `ext:foo/bar` are not affected.
- * Directory extensions (`foo/index.ts`) resolve to the parent directory name;
- * single-file extensions to the basename minus `.ts`/`.js`.
- */
-export function extensionCanonicalName(extPath: string): string {
-	const base = basename(extPath);
-	const name = base === "index.ts" || base === "index.js" ? basename(dirname(extPath)) : base.replace(/\.(ts|js)$/, "");
-	return name.toLowerCase();
-}
-
-/**
- * The unscoped, lowercased npm short name of the pi package that DECLARES
- * `extPath` as an extension entry — or undefined if the entry doesn't belong to
- * such a package.
- *
- * Climbs from the entry's directory looking for the package that owns it, and
- * stays strictly within that package's tree by stopping at two structural
- * boundaries — no hardcoded depth:
- *   - the FIRST `package.json` found (the package root); the entry's own
- *     manifest always sits at the root, above the entry, below any node_modules.
- *   - a `node_modules` directory: a package never spans one (it's where OTHER
- *     packages live), so reaching it means we've climbed out of the package —
- *     stop before reading a consumer's or parent package's manifest.
- * The name is then taken only when that root's `pi.extensions` manifest actually
- * lists this entry. That "declares this entry" check is deliberate: our own test
- * fixtures live under this repo, whose root manifest declares `./src/index.ts`
- * as `@tintinweb/pi-subagents`, so a looser rule would misattribute every
- * co-located file to `pi-subagents`.
- */
-function extensionPackageName(extPath: string): string | undefined {
-	const entry = resolve(extPath);
-	let dir = dirname(extPath);
-	for (;;) {
-		// Climbing into node_modules means we've left the owning package's tree.
-		if (basename(dir) === "node_modules") return undefined;
-		let pkg: { name?: unknown; pi?: { extensions?: unknown } };
-		try {
-			pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf-8"));
-		} catch {
-			const parent = dirname(dir);
-			if (parent === dir) return undefined; // walked to the filesystem root
-			dir = parent;
-			continue;
-		}
-		// First package.json wins — it's the package root; decide here.
-		const entries = pkg.pi?.extensions;
-		if (
-			typeof pkg.name === "string" &&
-			Array.isArray(entries) &&
-			entries.some((e) => typeof e === "string" && resolve(dir, e) === entry)
-		) {
-			const short = pkg.name.startsWith("@") ? pkg.name.slice(pkg.name.indexOf("/") + 1) : pkg.name;
-			return short.toLowerCase();
-		}
-		return undefined;
-	}
-}
-
-/**
- * All names an extension answers to for allowlist matching (lowercased): its
- * path-derived {@link extensionCanonicalName} plus, when a pi package manifest
- * declares this entry, that package's unscoped short name (`@scope/foo` → `foo`).
- * #143: an extension installed via `pi.extensions: ["./src/index.ts"]` would
- * otherwise only ever match as `src` (the source directory), never by its
- * package name. The path-derived name is preserved, so it keeps matching too.
- */
-export function extensionCanonicalNames(extPath: string): string[] {
-	const canonical = extensionCanonicalName(extPath);
-	const pkg = extensionPackageName(extPath);
-	return pkg && pkg !== canonical ? [canonical, pkg] : [canonical];
-}
-
-/**
- * Classify `extensions: string[]` frontmatter entries for the loader-level filter.
- *
- * An entry is a PATH iff it contains a path separator or starts with `~`; otherwise
- * it is a NAME. `"*"` sets the wildcard flag (keep all default-discovered extensions).
- *
- * Path entries are resolved (`~` expanded, made absolute against `cwd`) into `paths`
- * — and their canonical name is also added to `names`. The loader override matches
- * everything by canonical name, so path-loaded extensions are matched via their name
- * rather than their post-staging `Extension.path`.
- */
-export function parseExtensionsSpec(
-	entries: string[],
-	cwd: string,
-): { names: Set<string>; paths: string[]; wildcard: boolean } {
-	const names = new Set<string>();
-	const paths: string[] = [];
-	let wildcard = false;
-	for (const entry of entries) {
-		if (!entry) continue;
-		if (entry === "*") {
-			wildcard = true;
-			continue;
-		}
-		const isPathEntry = entry.includes("/") || entry.includes("\\") || entry.startsWith("~");
-		if (!isPathEntry) {
-			names.add(entry.toLowerCase());
-			continue;
-		}
-		let p = entry;
-		if (p === "~" || p.startsWith("~/") || p.startsWith("~\\")) {
-			p = homedir() + p.slice(1);
-		}
-		const abs = isAbsolute(p) ? p : resolve(cwd, p);
-		paths.push(abs);
-		names.add(extensionCanonicalName(abs));
-	}
-	return { names, paths, wildcard };
-}
-
-/**
- * Parse raw `ext:` selector strings (from the `tools:` CSV) into the set of
- * extension names to keep loaded and a per-extension tool-narrowing map.
- *
- * `ext:foo` → `extNames` has `foo`, no narrowing entry (all of foo's tools).
- * `ext:foo/bar` → `extNames` has `foo`, `narrowing.foo` has `bar` (only `bar`).
- * A name lands in `narrowing` only when a `/tool` form is seen, so a bare
- * `ext:foo` alongside `ext:foo/bar` leaves narrowing in effect (narrowing wins).
- * The split is on the first `/`; extension canonical names never contain `/`.
- */
-export function parseExtSelectors(entries: string[]): {
-	extNames: Set<string>;
-	narrowing: Map<string, Set<string>>;
+/** Child sessions: no discovery; explicit `-e` ledger, VCC, MCP, and optional advisor. */
+export function childSessionExtensions(advisor = false): {
+	noExtensions: true;
+	additionalExtensionPaths: string[];
 } {
-	const extNames = new Set<string>();
-	const narrowing = new Map<string, Set<string>>();
-	for (const raw of entries) {
-		if (!raw) continue;
-		const body = raw.slice("ext:".length);
-		const slash = body.indexOf("/");
-		// Extension name matches case-insensitively (matches the loader-side canonical
-		// name). Tool names are case-preserved — they're matched against pi-mono's
-		// registered identifiers, which are case-sensitive.
-		const name = (slash === -1 ? body : body.slice(0, slash)).trim().toLowerCase();
-		if (!name) continue;
-		extNames.add(name);
-		if (slash === -1) continue;
-		const tool = body.slice(slash + 1).trim();
-		if (!tool) continue;
-		let set = narrowing.get(name);
-		if (!set) {
-			set = new Set();
-			narrowing.set(name, set);
-		}
-		set.add(tool);
-	}
-	return { extNames, narrowing };
-}
-
-/**
- * Keep a subagent's tool scope correct as extensions register tools over time.
- *
- * Extensions may call `registerTool` long after load — pi-mcp from `session_start`,
- * context-mode from `before_agent_start` — so scope has to be re-derived rather than
- * snapshotted. `registerTool` writes into the very `extension.tools` maps this reads,
- * so `inScope()` sees late arrivals on the next call.
- *
- * Two enforcement points, because neither covers the whole picture:
- *
- *   - `turn_end` re-narrows the ACTIVE set. pi emits `turn_end` immediately before
- *     `prepareNextTurn` re-snapshots `agent.state.tools`, and session listeners run
- *     synchronously, so the narrow lands in time for turns 2..N.
- *   - `beforeToolCall` blocks out-of-scope calls. Turn 1 cannot be narrowed at all:
- *     `before_agent_start` fires INSIDE `prompt()` and may widen the tool set, but
- *     `createContextSnapshot()` freezes that turn's tools immediately after — there
- *     is no hook in between. A call-time check is the only correct guard there.
- *
- * Both are installed on the session and deliberately NOT unsubscribed: they must
- * outlive the `runAgent` call so resumed/steered turns stay scoped. pi's `dispose()`
- * clears `_eventListeners`, so they die with the session rather than leaking.
- *
- * Only meaningful when extensions are loaded — under `noExtensions`/`isolated` the
- * static `allowedToolNames` allowlist already gates the registry itself.
- */
-export function installExtensionToolScope(
-	session: AgentSession,
-	ctx: {
-		loader: DefaultResourceLoader;
-		toolNames: string[];
-		disallowedSet: Set<string> | undefined;
-		extNames: Set<string>;
-		narrowing: Map<string, Set<string>>;
-		/** Opt-in nested-delegation tool names to keep active despite the child denylist. */
-		nestedToolNames: Set<string>;
-		/** Controller-supplied SDK tools that do not belong to a loaded extension. */
-		customToolNames: Set<string>;
-	},
-): void {
-	const { loader, toolNames, disallowedSet, extNames, narrowing, nestedToolNames, customToolNames } = ctx;
-
-	// The names allowed right now. Mirrors the `ext:` opt-in flip: when any `ext:`
-	// selector is present, extension tools become an explicit allowlist — a loaded
-	// extension not named by a selector contributes nothing (its handlers still ran),
-	// and `ext:foo/bar` narrows `foo` to just `bar`.
-	const inScope = (): Set<string> => {
-		const keep = new Set(toolNames.filter((t) => !disallowedSet?.has(t)));
-		const optInActive = extNames.size > 0;
-		for (const extension of loader.getExtensions().extensions) {
-			const canons = extensionCanonicalNames(extension.path);
-			if (optInActive && !canons.some((c) => extNames.has(c))) continue;
-			// First alias that carries a narrowing set — a user won't narrow one
-			// extension under two different names, so first-match is correct.
-			const narrowed = canons.map((c) => narrowing.get(c)).find(Boolean);
-			for (const name of extension.tools.keys()) {
-				if (narrowed && !narrowed.has(name)) continue;
-				if (disallowedSet?.has(name)) continue;
-				keep.add(name);
-			}
-		}
-		for (const name of CHILD_DENIED_TOOL_NAMES) keep.delete(name);
-		// Opt-in nested delegation tools share names with the child denylist but
-		// are legitimately active for this agent — re-admit them so the renarrow keeps
-		// them in the active set and beforeToolCall doesn't block them.
-		for (const name of nestedToolNames) {
-			if (!disallowedSet?.has(name)) keep.add(name);
-		}
-		for (const name of customToolNames) {
-			if (!disallowedSet?.has(name)) keep.add(name);
-		}
-		return keep;
-	};
-
-	const renarrow = () => {
-		const allowed = inScope();
-		const next = session
-			.getAllTools()
-			.map((t) => t.name)
-			.filter((n) => allowed.has(n));
-		const current = session.getActiveToolNames();
-		// setActiveToolsByName unconditionally rebuilds the system prompt, so skip
-		// the no-op that steady-state turns would otherwise pay for every turn.
-		if (next.length !== current.length || next.some((n, i) => n !== current[i])) {
-			session.setActiveToolsByName(next);
-		}
-	};
-
-	// Activate what registered during session_start (eager MCP servers); pi would
-	// otherwise leave only its four default built-ins active at turn 1.
-	renarrow();
-
-	session.subscribe((event: AgentSessionEvent) => {
-		if (event.type === "turn_end") renarrow();
-	});
-
-	const priorBeforeToolCall = session.agent.beforeToolCall;
-	session.agent.beforeToolCall = async (context, signal) => {
-		if (!inScope().has(context.toolCall.name)) {
-			return {
-				block: true,
-				reason: `Tool "${context.toolCall.name}" is not available to this subagent.`,
-			};
-		}
-		return priorBeforeToolCall?.(context, signal);
-	};
+	const additionalExtensionPaths = [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH];
+	if (advisor) additionalExtensionPaths.push(ADVISOR_EXTENSION_PATH);
+	return { noExtensions: true, additionalExtensionPaths };
 }
 
 /** Default max turns. undefined = unlimited (no turn limit). */
@@ -337,8 +86,8 @@ export function setDefaultMaxTurns(n: number | undefined): void {
 
 /**
  * Project default for `persist_session`. Persisted Pi session JSONL is the
- * authoritative subagent transcript and carries apple-pi VCC/observational
- * memory across resumed turns. Per-agent frontmatter may opt out.
+ * authoritative subagent transcript and carries apple-pi VCC compaction
+ * across resumed turns. Per-agent frontmatter may opt out.
  */
 let persistAgentSessions = true;
 
@@ -597,11 +346,7 @@ export async function runAgent(
 	// Build prompt extras (skill preloading only; durable memory is session-owned).
 	const extras: PromptExtras = {};
 
-	// Resolve extensions/skills: isolated overrides to false
-	const extensions = options.isolated ? false : config.extensions;
-	// Nulling excludes under isolated also suppresses the orphaned-exclude warning —
-	// isolation is an intentional override, not a misconfiguration.
-	const excludeExtensions = options.isolated ? undefined : config.excludeExtensions;
+	// Skills: isolated turns them off. Extensions never inherit from the package.
 	const skills = options.isolated ? false : config.skills;
 
 	// Skill preloading: when skills is string[], preload their content into prompt
@@ -634,67 +379,19 @@ export async function runAgent(
 
 	const agentDir = getAgentDir();
 
-	// Extension loading:
-	// - true  → all default-discovered extensions
-	// - false → none (noExtensions)
-	// - string[] → loader-level allowlist. Bare names keep the matching
-	//   default-discovered extension; path entries load that extension fresh;
-	//   "*" keeps all default-discovered extensions. Excluded extensions never
-	//   bind handlers or register tools (their factory still runs once).
-	//
-	// Suppress AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's
-	// buildSystemPrompt() re-appends both AFTER systemPromptOverride, which
-	// would defeat prompt_mode: replace and isolated: true. Parent context, when
-	// requested, is prepended to the task prompt below.
-	// `ext:` selectors from the `tools:` CSV narrow which extension tools surface to
-	// the LLM. They do NOT control loading — `extensions:` is the sole authority for
-	// which extensions load. `ext:foo` against an extension that `extensions:` excluded
-	// is an orphan and warns after reload. `isolated` means no extension tools at all.
-	const { extNames, narrowing } = parseExtSelectors(options.isolated ? [] : (agentConfig?.extSelectors ?? []));
-	const noExtensions = extensions === false;
-
-	const extensionsSpec = Array.isArray(extensions) ? parseExtensionsSpec(extensions, configCwd) : undefined;
-	const keepNames = extensionsSpec?.names ?? new Set<string>();
-	// `exclude_extensions:` is a denylist applied AFTER the include set — exclude wins.
-	// Plain canonical names only (case-insensitive). Note: excluded extensions'
-	// factories still run once during reload() (see comment above) — exclusion
-	// suppresses handler binding and tool registration; it is not a sandbox.
-	const excludeNames = new Set((excludeExtensions ?? []).map((n) => n.toLowerCase()));
-	// Generic extension inheritance must not silently create a second-model
-	// review loop in every child. This per-invocation boolean is false by default;
-	// explicit extension exclusions still win below.
-	if (options.advisor !== true) excludeNames.add(ADVISOR_EXTENSION_NAME);
-	const hasExcludes = excludeNames.size > 0;
-	// The override filters loaded extensions down to `keepNames` minus `excludeNames`.
-	// It's only needed when we're neither loading everything without excludes
-	// (`extensions: true` or a `"*"` wildcard) nor nothing (`noExtensions`).
-	const loadAll = extensions === true || extensionsSpec?.wildcard === true;
-	const additionalExtensionPaths = extensionsSpec?.paths.length ? extensionsSpec.paths : undefined;
-	// Pre-filter discovered set, captured by the override — the exclude-typo warning
-	// must compare against this, not the surviving set (absence from survivors is
-	// an exclude *succeeding*).
-	let discoveredNames: Set<string> | undefined;
-	const extensionsOverride: ((base: LoadExtensionsResult) => LoadExtensionsResult) | undefined =
-		noExtensions || (loadAll && !hasExcludes)
-			? undefined
-			: (base) => {
-					discoveredNames = new Set(base.extensions.flatMap((e) => extensionCanonicalNames(e.path)));
-					return {
-						...base,
-						extensions: base.extensions.filter((e) => {
-							const canons = extensionCanonicalNames(e.path);
-							if (canons.some((n) => excludeNames.has(n))) return false; // exclude wins
-							return loadAll || canons.some((n) => keepNames.has(n));
-						}),
-					};
-				};
+	// Same `--no-extensions` plus `-e` contract as pi_exec workers. Children
+	// also load MCP, and the advisor sidecar when requested. Suppress
+	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
+	// re-appends both AFTER systemPromptOverride, which would defeat
+	// prompt_mode: replace. Parent context, when requested, is prepended to
+	// the task prompt below. Agent-definition `extensions:` is ignored.
+	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(options.advisor === true);
 
 	const loader = new DefaultResourceLoader({
 		cwd: configCwd,
 		agentDir,
 		noExtensions,
 		additionalExtensionPaths,
-		extensionsOverride,
 		noSkills,
 		noPromptTemplates: true,
 		noThemes: true,
@@ -715,57 +412,6 @@ export async function runAgent(
 				options.onToolActivity?.({
 					type: "end",
 					toolName: `tools-error:tool "${name}" requested by agent "${type}" is not a known built-in`,
-				});
-			}
-		}
-	}
-
-	// A subagent spawns mid-task, so a bad `extensions:`/`ext:` entry warns rather
-	// than aborts. Two distinct misconfigurations to catch:
-	//   - `extensions: [foo]` but no extension named foo was discovered (typo or
-	//     path that failed to load — path entries fold their canonical name into
-	//     `keepNames`, so this covers them too).
-	//   - `tools: ext:foo` but foo isn't in the loaded set (because `extensions:`
-	//     didn't include it). Since v0.9, `ext:` no longer pulls extensions in;
-	//     loading is `extensions:`-authoritative.
-	// An exclude_extensions: alongside extensions: false is contradictory — nothing
-	// loads, so there is nothing to exclude.
-	if (hasExcludes && noExtensions) {
-		options.onToolActivity?.({
-			type: "end",
-			toolName: `extension-error:exclude_extensions has no effect for agent "${type}" — extensions: false loads nothing`,
-		});
-	}
-	// Exclude typo check: compares against the PRE-filter discovered set (an excluded
-	// name absent from the surviving set is the exclude working as intended). Also
-	// flags path-like and "*" entries — excludes are plain names only.
-	if (hasExcludes && discoveredNames) {
-		for (const name of excludeNames) {
-			if (!discoveredNames.has(name)) {
-				options.onToolActivity?.({
-					type: "end",
-					toolName: `extension-error:exclude_extensions: "${name}" for agent "${type}" did not match any discovered extension`,
-				});
-			}
-		}
-	}
-	if (keepNames.size > 0 || extNames.size > 0) {
-		const survivingNames = new Set(loader.getExtensions().extensions.flatMap((e) => extensionCanonicalNames(e.path)));
-		for (const name of keepNames) {
-			if (!survivingNames.has(name)) {
-				options.onToolActivity?.({
-					type: "end",
-					toolName: excludeNames.has(name)
-						? `extension-error:extension "${name}" is in both extensions: and exclude_extensions: for agent "${type}" — exclude wins`
-						: `extension-error:extension "${name}" requested by agent "${type}" was not loaded`,
-				});
-			}
-		}
-		for (const name of extNames) {
-			if (!survivingNames.has(name)) {
-				options.onToolActivity?.({
-					type: "end",
-					toolName: `extension-error:ext:${name} referenced by agent "${type}" but extension "${name}" is not loaded (check extensions:/exclude_extensions:)`,
 				});
 			}
 		}
@@ -820,64 +466,25 @@ export async function runAgent(
 	if (customToolNames.size !== customTools.length)
 		throw new Error(`Agent "${type}" received duplicate custom tool names`);
 
-	// ─── Tool scoping ───────────────────────────────────────────────────────
-	//
-	// Some extensions register their tools ASYNCHRONOUSLY, long after the
-	// `loader.reload()` above: pi-mcp calls registerTool from `session_start`
-	// (once its MCP servers connect), context-mode from `before_agent_start`.
-	// That is deliberate on their part — eagerly spawning an MCP bridge during
-	// extension discovery orphans child processes on pi's non-agent code paths
-	// (--help, config, trust probing).
-	//
-	// So the tool set cannot be snapshotted here. pi's `allowedToolNames` gates
-	// tool *registration* (`_refreshToolRegistry`'s `isAllowedTool`), not merely
-	// the active set, and is frozen at construction — a name absent from the
-	// snapshot is dropped forever, even once the tool actually registers (#125).
-	//
-	// Whenever extensions are in play we therefore:
-	//   - leave `allowedToolNames` unset, so pi's live gate admits tools whenever
-	//     they register;
-	//   - express the name-stable, permanent part of the scope (our own
-	//     orchestration tools, built-ins the agent didn't ask for, and
-	//     `disallowedTools`) as `excludeTools`, which pi re-applies on every
-	//     registry refresh;
-	//   - enforce `ext:` narrowing on the ACTIVE set via the live `inScope()`
-	//     predicate installed after bind — the active set is what the LLM sees,
-	//     so a registry tool that is never activated is invisible and uncallable.
-	//
-	// `noExtensions`/`isolated` keeps the historical static allowlist: nothing
-	// async can appear there, and a hard registry gate is the correct boundary.
+	// Ledger (and optional advisor) load via explicit `-e`, so their tools must
+	// be able to register. Leave `allowedToolNames` unset and deny the stable
+	// names that must never appear: orchestration tools the agent did not opt
+	// into, built-ins it did not ask for, and `disallowedTools`.
 	const builtinToolNameSet = new Set(toolNames);
-
-	let sessionTools: string[] | undefined;
-	let sessionExcludeTools: string[] | undefined;
-	if (noExtensions) {
-		// Strict allowlist: built-ins the agent asked for, plus any opt-in nested
-		// tools (whose names would otherwise be dropped by the child denylist).
-		sessionTools = [
-			...toolNames.filter((t) => !CHILD_DENIED_TOOL_NAMES.includes(t) && !disallowedSet?.has(t)),
-			...[...customToolNames].filter((t) => !disallowedSet?.has(t)),
-		];
-	} else {
-		// Deny the orchestration tools EXCEPT the nested ones this agent opted into —
-		// those are injected as customTools and must survive the registry gate.
-		const denyTools = new Set<string>(CHILD_DENIED_TOOL_NAMES.filter((t) => !nestedToolNames.has(t)));
-		// Keep only the built-ins the agent asked for — deny the rest.
-		for (const name of BUILTIN_TOOL_NAMES) {
-			if (!builtinToolNameSet.has(name)) denyTools.add(name);
-		}
-		if (disallowedSet) {
-			// disallowed_tools wins even over an opt-in nested tool of the same name.
-			for (const name of disallowedSet) denyTools.add(name);
-		}
-		sessionExcludeTools = [...denyTools];
+	const denyTools = new Set<string>(CHILD_DENIED_TOOL_NAMES.filter((t) => !nestedToolNames.has(t)));
+	for (const name of BUILTIN_TOOL_NAMES) {
+		if (!builtinToolNameSet.has(name)) denyTools.add(name);
 	}
+	if (disallowedSet) {
+		for (const name of disallowedSet) denyTools.add(name);
+	}
+	const sessionExcludeTools = [...denyTools];
 
 	const settingsManager = SettingsManager.create(configCwd, agentDir);
 	const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
 	const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
-	// Frontmatter wins; top-level sessions persist by default so VCC and
-	// observational memory share Pi's authoritative child-session JSONL.
+	// Frontmatter wins; top-level sessions persist by default so VCC can
+	// compact against Pi's authoritative child-session JSONL.
 	// Nested children stay in memory unless explicitly persisted by their own
 	// definition: their result is already recorded in the owning agent session.
 	const persistSession = agentConfig?.persistSession ?? (options.nested ? false : persistAgentSessions);
@@ -906,13 +513,10 @@ export async function runAgent(
 		// `unknown` read off the private facade field can never satisfy.
 		...(parentModelRuntime !== undefined && { modelRuntime: parentModelRuntime as never }),
 		model,
-		tools: sessionTools,
+		excludeTools: sessionExcludeTools,
 		customTools,
 		resourceLoader: loader,
 	};
-	if (sessionExcludeTools) {
-		sessionOpts.excludeTools = sessionExcludeTools;
-	}
 	if (thinkingLevel) {
 		sessionOpts.thinkingLevel = thinkingLevel;
 	}
@@ -922,10 +526,8 @@ export async function runAgent(
 	const baseSessionName = agentConfig?.name ?? type;
 	session.setSessionName(options.agentId ? `${baseSessionName}#${options.agentId.slice(0, 8)}` : baseSessionName);
 
-	// Bind extensions so that session_start fires and extensions can initialize
-	// (e.g. loading credentials, setting up state). Tool gating already happened
-	// at session construction via the `tools:` allowlist above — no separate
-	// post-bind filter is needed. All ExtensionBindings fields are optional.
+	// Bind the explicit `-e` extensions so session_start fires. Registry scope
+	// is `excludeTools` from session construction.
 	await session.bindExtensions({
 		onError: (err) => {
 			options.onToolActivity?.({
@@ -935,23 +537,15 @@ export async function runAgent(
 		},
 	});
 
-	// With `allowedToolNames` unset, the registry is scoped by `excludeTools` but
-	// the ACTIVE set still needs managing: pi activates only its four default
-	// built-ins at turn 1, and `ext:` narrowing has no registry-level expression
-	// (we can't deny the name of a tool that hasn't registered yet). Both are
-	// handled below by re-deriving scope from the loader's live extension maps —
-	// `registerTool` writes into those same maps, so late arrivals are judged too.
-	if (!noExtensions) {
-		installExtensionToolScope(session, {
-			loader,
-			toolNames,
-			disallowedSet,
-			extNames,
-			narrowing,
-			nestedToolNames,
-			customToolNames,
-		});
-	}
+	// Pi activates a small built-in default at turn 1. Promote every registered
+	// tool that excludeTools did not deny, including ledger_add / ledger_close.
+	const denied = new Set(sessionExcludeTools);
+	session.setActiveToolsByName(
+		session
+			.getAllTools()
+			.map((tool) => tool.name)
+			.filter((name) => !denied.has(name)),
+	);
 
 	if (options.toolExecution) session.agent.toolExecution = options.toolExecution;
 

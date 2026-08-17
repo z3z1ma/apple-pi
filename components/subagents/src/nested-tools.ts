@@ -141,7 +141,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
 			isolated: Type.Boolean({
 				default: false,
-				description: "Disable extension and skill inheritance for a new agent session.",
+				description: "Disable skill inheritance for a new agent session.",
 			}),
 			inherit_context: Type.Boolean({
 				default: false,

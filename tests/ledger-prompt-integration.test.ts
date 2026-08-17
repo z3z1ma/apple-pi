@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { loadSystemPrompt as loadAdvisorSystemPrompt } from "../components/advisor/src/config.js";
 import { appendLedgerSystemPrompt, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
+import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
+import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
+import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
+import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
+import { VCC_EXTENSION_PATH } from "../extensions/vcc.js";
 
 const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
 const env: EnvInfo = { isGitRepo: true, branch: "main", platform: "test" };
@@ -21,32 +26,51 @@ function occurrences(value: string, needle: string): number {
 }
 
 describe("ledger system prompt distribution", () => {
-	it("appends the root prompt idempotently", () => {
+	it("appends the contract idempotently", () => {
 		const once = appendLedgerSystemPrompt("Root system prompt");
 		const twice = appendLedgerSystemPrompt(once);
 		expect(occurrences(twice, marker)).toBe(1);
-		expect(twice).toContain("ledger_scaffold");
+		expect(twice).toContain("ledger_add");
 		expect(twice).toContain("ledger_close");
 	});
 
-	it("teaches replace-mode and inherited subagents", () => {
+	it("does not copy the contract into subagent prompt text", () => {
 		const replaced = buildAgentPrompt(config, "/repo", env);
 		const inherited = buildAgentPrompt({ ...config, promptMode: "append" }, "/repo", env, replaced);
-		expect(occurrences(replaced, marker)).toBe(1);
-		expect(occurrences(inherited, marker)).toBe(1);
+		expect(replaced).not.toContain(marker);
+		expect(inherited).not.toContain(marker);
 	});
 
-	it("teaches pi_exec workers once without enabling extensions", () => {
+	it("loads the ledger extension on workers instead of pasting the contract", () => {
 		const args = buildAgentCliArgs(
-			{ task: "Inspect the task", systemPrompt: appendLedgerSystemPrompt("Custom worker guidance") },
+			{ task: "Inspect the task", systemPrompt: "Custom worker guidance" },
 			{ tools: ["read"], model: "provider/model", thinking: "high" },
 		);
 		const guidance = args[args.indexOf("--append-system-prompt") + 1];
-		expect(occurrences(guidance, marker)).toBe(1);
+		expect(guidance).not.toContain(marker);
 		expect(args).toContain("--no-extensions");
+		expect(args).toContain("--extension");
+		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
+			LEDGER_EXTENSION_PATH,
+			VCC_EXTENSION_PATH,
+		]);
 	});
 
-	it("teaches the advisor's independent model", () => {
-		expect(loadAdvisorSystemPrompt(process.cwd(), false)).toContain(marker);
+	it("does not copy the contract into the advisor prompt", () => {
+		expect(loadAdvisorSystemPrompt(process.cwd(), false)).not.toContain(marker);
+	});
+
+	it("loads children with ledger, VCC, and MCP", () => {
+		expect(childSessionExtensions()).toEqual({
+			noExtensions: true,
+			additionalExtensionPaths: [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH],
+		});
+	});
+
+	it("adds the advisor sidecar only when requested", () => {
+		expect(childSessionExtensions(true)).toEqual({
+			noExtensions: true,
+			additionalExtensionPaths: [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH, ADVISOR_EXTENSION_PATH],
+		});
 	});
 });

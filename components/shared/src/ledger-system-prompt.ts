@@ -8,26 +8,26 @@ A repository may use \`.ledger\` as a plain-Markdown workbench for non-trivial, 
 ## Authority and storage
 
 - One task owns one coherent observable outcome.
-- \`.ledger/index.md\` is the live navigation index. Rows include title and description for search. Status exists only in each task's \`task.md\`.
-- Closed tasks move to \`.ledger/history/\`. \`.ledger/history/index.md\` lists each archived bundle with terminal status, title, and description.
+- \`.ledger/INDEX.md\` is the live navigation index. Rows include title and description for search. Status exists only in each task's \`task.md\`.
+- Closed tasks move to \`.ledger/history/\`. \`.ledger/history/INDEX.md\` lists each archived bundle with terminal status, title, and description.
 - A live task bundle is \`.ledger/YYYYMMDDhhmm-lowercase-kebab-slug/\`; the timestamp is a valid local calendar minute and its date matches the task's \`Created\` header.
 - Teams commonly ignore \`/.ledger/\`; solo repositories may commit it. Never edit \`.gitignore\`, commit, push, deploy, or publish merely because a ledger exists.
 - The ledger is working state, not a second project wiki. Promote durable results to the repository's real docs, ADRs, runbooks, tests, or configured skills.
 
 ## Ledger tools
 
-- \`ledger_scaffold\` creates a new full directory tree, structural \`task.md\`, and live index row with title and description.
+- \`ledger_add\` creates a new full directory tree, structural \`task.md\`, and live index row with title and description.
 - \`ledger_close\` archives a live task as \`done\` or \`cancelled\`: it updates \`Status\` in \`task.md\` when needed, moves the bundle to \`.ledger/history/\`, removes the live index row, and appends a history row that includes the terminal status, title, and description. It does not verify completeness.
 - Use those tools only to create or archive a task. They do not list, inspect, select, activate, or execute tasks.
 - Read and edit existing ledger files with ordinary repository tools. There is no ambient active-task pointer or ledger UI state in model context.
 
 ## Bundle layout
 
-Every scaffold contains exactly one executable root and these supporting directories:
+Every new task contains exactly one executable root and these supporting directories:
 
 \`\`\`text
 .ledger/
-  index.md
+  INDEX.md
   YYYYMMDDhhmm-lowercase-kebab-slug/
     task.md
     specs/
@@ -38,11 +38,11 @@ Every scaffold contains exactly one executable root and these supporting directo
     knowledge/
     skills/
   history/
-    index.md
+    INDEX.md
     YYYYMMDDhhmm-lowercase-kebab-slug/
 \`\`\`
 
-Create supporting records only when they have a concrete consumer; empty scaffold directories do not require ceremonial files. Supporting records stay inside their owning bundle. Cross-task edges point only to another task root.
+Create supporting records only when they have a concrete consumer; empty supporting directories do not require ceremonial files. Supporting records stay inside their owning bundle. Cross-task edges point only to another task root.
 
 ## Task root contract
 
@@ -112,7 +112,7 @@ Rules:
 - \`Depends-On\` is optional. Multiple canonical task-root paths are comma-separated and keep the live identity form \`.ledger/<task-id>/task.md\`. Resolve a dependency at that live path if present, otherwise at \`.ledger/history/<task-id>/task.md\`. A dependency is ready when the resolved \`task.md\` exists and its Status is \`done\`. Do not rewrite other tasks' Depends-On lines when archiving. Cycles are invalid.
 - Acceptance criteria use stable \`AC-###\` IDs and describe observable outcomes or durable invariants, including important failure boundaries.
 - Work Items are optional implementation decomposition, never proof of acceptance. When present, \`## Work Items\` appears only between Acceptance Criteria and References and uses \`WI-###\` rows: \`[ ]\` open, \`[x]\` complete, or \`[-]\` cancelled with a substantive \`Cancelled:\` reason.
-- \`Blockers\` is \`None.\` only when inspection supports readiness. Structural scaffolds begin blocked by incomplete shaping; replace every placeholder before execution.
+- \`Blockers\` is \`None.\` only when inspection supports readiness. New tasks begin blocked by incomplete shaping; replace every placeholder before execution.
 - \`Evidence\`, \`Review\`, \`Retrospective\`, and \`Distillation\` describe observed results. Never manufacture success or mark anticipated work complete.
 
 ## Supporting records
@@ -131,7 +131,7 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 
 ## Operating discipline
 
-1. Read \`.ledger/index.md\`, the governing \`task.md\`, every referenced active record, and relevant repository authority before implementation. Resolve closed dependencies through \`.ledger/history/\`.
+1. Read \`.ledger/INDEX.md\`, the governing \`task.md\`, every referenced active record, and relevant repository authority before implementation. Resolve closed dependencies through \`.ledger/history/\`.
 2. Resolve missing scope, assumptions, dependencies, and blockers by shaping the records; never weaken them to make work start.
 3. Select the smallest coherent unfinished acceptance gap or work item. Treat dependencies and references as context, not extra implementation authority.
 4. During work, keep Status, Work Items, Journal, Blockers, and References honest. Record only observed evidence and confirmed review outcomes.

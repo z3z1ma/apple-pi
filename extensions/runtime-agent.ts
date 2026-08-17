@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Value } from "typebox/value";
-import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
 import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
@@ -15,6 +14,8 @@ import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
 import { resolveAgentModel } from "../components/subagents/src/model-routing.js";
 import type { AgentConfig } from "../components/subagents/src/types.js";
 
+import { LEDGER_EXTENSION_PATH } from "./ledger.js";
+import { VCC_EXTENSION_PATH } from "./vcc.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
@@ -28,6 +29,8 @@ export const CONTEXT_GUIDANCE =
 export const OUTPUT_SCHEMA_GUIDANCE = `You must finish by calling ${PI_EXEC_RETURN_TOOL} with arguments that match its parameter schema. That call is this worker's return value. Do not put the result in assistant text.`;
 
 export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./runtime-worker-return.ts", import.meta.url));
+export { LEDGER_EXTENSION_PATH };
+export { VCC_EXTENSION_PATH };
 
 export interface AgentRequest {
 	task: string;
@@ -286,7 +289,7 @@ export function buildAgentCliArgs(
 		extensionPath?: string;
 	},
 ): string[] {
-	const workerGuidance = [
+	const guidance = [
 		WORKER_GUIDANCE,
 		options.contextPath ? CONTEXT_GUIDANCE : "",
 		request.outputSchema ? OUTPUT_SCHEMA_GUIDANCE : "",
@@ -294,7 +297,6 @@ export function buildAgentCliArgs(
 	]
 		.filter(Boolean)
 		.join("\n\n");
-	const guidance = appendLedgerSystemPrompt(workerGuidance);
 	const args = [
 		"--mode",
 		"json",
@@ -306,6 +308,10 @@ export function buildAgentCliArgs(
 		options.tools.join(","),
 		"--append-system-prompt",
 		guidance,
+		"--extension",
+		LEDGER_EXTENSION_PATH,
+		"--extension",
+		VCC_EXTENSION_PATH,
 	];
 	if (options.extensionPath) args.push("--extension", options.extensionPath);
 	if (request.name) args.push("--name", request.name);

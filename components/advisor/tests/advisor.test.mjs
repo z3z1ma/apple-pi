@@ -625,12 +625,12 @@ test("project advisor mode and WATCHDOG are honored only when the project is tru
 		assert.equal(resolved.explicitModel, true);
 		const untrustedPrompt = A.loadSystemPrompt(cwd, false);
 		assert.match(untrustedPrompt, /^GLOBAL-ADVISOR-PROMPT/);
-		assert.match(untrustedPrompt, /<ledger-workbench>/);
+		assert.doesNotMatch(untrustedPrompt, /<ledger-workbench>/);
 		assert.doesNotMatch(untrustedPrompt, /PROJECT-WATCHDOG-GUIDANCE/);
 		const trustedPrompt = A.loadSystemPrompt(cwd, true);
 		assert.match(trustedPrompt, /^GLOBAL-ADVISOR-PROMPT/);
 		assert.match(trustedPrompt, /PROJECT-WATCHDOG-GUIDANCE/);
-		assert.match(trustedPrompt, /<ledger-workbench>/);
+		assert.doesNotMatch(trustedPrompt, /<ledger-workbench>/);
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;

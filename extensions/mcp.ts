@@ -1,5 +1,8 @@
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import mcpAdapter from "pi-mcp-adapter";
+
+export const MCP_EXTENSION_PATH = fileURLToPath(import.meta.url);
 
 /**
  * Install the full MCP adapter while keeping pi_exec as apple-pi's only

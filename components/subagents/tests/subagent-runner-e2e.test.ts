@@ -5,7 +5,7 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import installSubagents from "../src/index.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
@@ -15,11 +15,31 @@ import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 
 const temporaryDirectories: string[] = [];
 const fauxProviders: Array<{ unregister(): void }> = [];
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
+process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
+const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "vcc_recall", "mcp"];
+const FORBIDDEN_CHILD_TOOLS = ["recall", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
+
+function expectActiveTools(actual: string[], expected: string[]): void {
+	for (const name of [...expected, ...CHILD_EXTENSION_TOOLS]) {
+		expect(actual).toContain(name);
+	}
+	for (const name of FORBIDDEN_CHILD_TOOLS) {
+		if (!expected.includes(name)) expect(actual).not.toContain(name);
+	}
+}
 
 afterEach(() => {
 	for (const provider of fauxProviders.splice(0)) provider.unregister();
 	for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
 	delete process.env.PI_VCC_CONFIG_PATH;
+});
+
+afterAll(() => {
+	if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	rmSync(isolatedAgentDir, { recursive: true, force: true });
 });
 
 describe("subagent runner with Pi's real AgentSession", () => {
@@ -72,7 +92,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 
 		expect(result.responseText).toBe("SUBAGENT-OK");
 		expect(result.failure).toBeUndefined();
-		expect(activeTools).toEqual(["read"]);
+		expectActiveTools(activeTools, ["read"]);
 		result.session.dispose();
 	}, 30_000);
 
@@ -175,7 +195,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 			},
 		);
 		expect(submitted).toBe("accepted");
-		expect(activeTools).toEqual(["read", "submit_result"]);
+		expectActiveTools(activeTools, ["read", "submit_result"]);
 		result.session.dispose();
 	}, 30_000);
 
@@ -226,7 +246,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 			},
 		);
 		expect(result.responseText).toBe("POLICY-OK");
-		expect(activeTools).toEqual(["ls"]);
+		expectActiveTools(activeTools, ["ls"]);
 		expect(policyCalls).toEqual(["ls"]);
 		result.session.dispose();
 	}, 30_000);
@@ -673,7 +693,7 @@ Answer the task.
 		expect(requests[1]).toContain("latest-handoff");
 	}, 30_000);
 
-	it("loads the advisor extension only when the invocation opts in", async () => {
+	it("loads the advisor sidecar only when requested", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-advisor-scope-"));
 		temporaryDirectories.push(cwd);
 		const extensionPath = join(cwd, "pi-advisor.ts");
@@ -744,16 +764,23 @@ export default function advisorMarker(pi) {
 					},
 				},
 			);
+			const systemPrompt = result.session.systemPrompt;
 			result.session.dispose();
-			return tools;
+			return { tools, systemPrompt };
 		};
 
-		expect(await run(false)).not.toContain("child_advisor_marker");
-		expect(await run(true)).toContain("child_advisor_marker");
-		expect(await run(true, false)).toContain("child_advisor_marker");
+		const off = await run(false);
+		expect(off.tools).not.toContain("child_advisor_marker");
+		expect(off.systemPrompt).not.toContain("<advisor-protocol>");
+		const on = await run(true);
+		expect(on.tools).not.toContain("child_advisor_marker");
+		expect(on.systemPrompt).toContain("<advisor-protocol>");
+		const untrusted = await run(true, false);
+		expect(untrusted.tools).not.toContain("child_advisor_marker");
+		expect(untrusted.systemPrompt).toContain("<advisor-protocol>");
 	}, 30_000);
 
-	it("keeps pi_exec out of child sessions even when explicitly selected", async () => {
+	it("does not load a custom extensions path and keeps pi_exec out of child sessions", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-root-only-tool-"));
 		temporaryDirectories.push(cwd);
 		const extensionPath = join(cwd, "child-tools.ts");
@@ -832,8 +859,12 @@ export default function childTools(pi) {
 		);
 
 		expect(result.responseText).toBe("ROOT-ONLY-TOOL-OK");
-		expect(registeredTools).toContain("safe_extension_tool");
-		expect(activeTools).toContain("safe_extension_tool");
+		expect(registeredTools).not.toContain("safe_extension_tool");
+		expect(activeTools).not.toContain("safe_extension_tool");
+		expectActiveTools(
+			activeTools.filter((name) => !Object.values(SUBAGENT_TOOL_NAMES).includes(name)),
+			["read"],
+		);
 		for (const name of Object.values(SUBAGENT_TOOL_NAMES)) {
 			expect(registeredTools).toContain(name);
 			expect(activeTools).toContain(name);
@@ -843,7 +874,7 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("loads apple-pi recall into a persisted child session", async () => {
+	it("persists a child session with VCC and without observational memory", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
 		process.env.PI_VCC_CONFIG_PATH = join(cwd, "vcc.json");
@@ -893,7 +924,9 @@ export default function childTools(pi) {
 		);
 
 		expect(result.responseText).toBe("MEMORY-READY");
-		expect(activeTools).toEqual(expect.arrayContaining(["read", "recall", "vcc_recall"]));
+		expectActiveTools(activeTools, ["read"]);
+		expect(activeTools).toContain("vcc_recall");
+		expect(activeTools).not.toContain("recall");
 		expect(result.session.sessionManager.getSessionFile()).toBeTruthy();
 		expect(existsSync(result.session.sessionManager.getSessionFile()!)).toBe(true);
 		result.session.dispose();

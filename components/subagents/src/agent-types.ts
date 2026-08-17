@@ -313,7 +313,7 @@ export function getConfig(type: string): {
 		displayName: "Agent",
 		description: "General-purpose agent for complex, multi-step tasks",
 		builtinToolNames: BUILTIN_TOOL_NAMES,
-		extensions: true,
+		extensions: false,
 		skills: true,
 		promptMode: "append",
 	};

@@ -36,7 +36,7 @@ After the program returns, the calling session runs `/skill:pi-review`, records 
   },
   inputs: {
     goal: "Implement the task. Choose the single most important unfinished increment.",
-    stack: ".ledger/index.md\n.ledger/<task-id>/task.md",
+    stack: ".ledger/INDEX.md\n.ledger/<task-id>/task.md",
     iterations: "4",
   },
   limits: {
@@ -56,4 +56,4 @@ The increment prompt is the `RALPH` constant in the reference. Pass repository p
 
 `references/ralph-reviewed.js` inlines the pi-review spine after every increment. That is an example of a tighter coupling, not the default. Prefer the separate skills: this loop, then `/skill:pi-review`.
 
-Ralph reads and updates ledger files with ordinary repository tools; `ledger_scaffold` is only for creating a new task and `ledger_close` is only for archiving one. After a run, distill then close the task with the ledger skills when the operator authorizes it.
+Ralph reads and updates ledger files with ordinary repository tools; `ledger_add` is only for creating a new task and `ledger_close` is only for archiving one. After a run, distill then close the task with the ledger skills when the operator authorizes it.

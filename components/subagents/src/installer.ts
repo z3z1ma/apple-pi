@@ -58,8 +58,8 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
-	// Child sessions load apple-pi's other extensions, including VCC/memory/MCP,
-	// but never create a second manager. Nested tools are injected explicitly.
+	// Child sessions load ledger, VCC, and MCP via explicit `-e` and never create
+	// a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 
 	let strictAgentFiles = false;
@@ -405,7 +405,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"The parent session is a senior engineer who may implement. Delegate when a specialist isolates context, uses a better model class, or enables non-overlapping parallelism — not because a type exists. One isolated, known-path, low-risk action stays here.",
 			"Broad or uncertain repo discovery → background Explore. External or version-sensitive docs → Research. Cross-module how-to-implement → Plan. Costly should, root-cause, or YAGNI judgment → Counsel. Bounded specified writes → Implement. User-visible layout, interaction, or polish → Design. Do not use general-purpose when a lane fits. Do not launch overlapping writers. Do not retry an unchanged rejected task.",
 			"Use the Agent tool when you need collaboration: backgrounding, FleetView, steer/stop, resume, or a durable child session. Use pi_exec agents.run when you need a dynamic graph that composes specialists with core tools, MCP, or bound context. They share the same type catalog. Review planner/reviewer/verifier are program roles via custom systemPrompt, not catalog types. Ralph increments use type general-purpose.",
-			"Set advisor: false for exploration, search, planning, and routine work. Set it true only for correctness-critical implementation where a continuous second-model review loop justifies its substantial cost and latency.",
+			"The persistent Advisor reviews the root session. Child sessions do not load it; leave advisor false.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
@@ -428,7 +428,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
 			isolated: Type.Boolean({
 				default: false,
-				description: "Disable extension and skill inheritance for a new agent session.",
+				description: "Disable skill inheritance for a new agent session.",
 			}),
 			inherit_context: Type.Boolean({
 				default: false,

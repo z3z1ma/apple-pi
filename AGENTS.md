@@ -9,7 +9,7 @@ Before changing anything:
 1. Run `git status --short --branch` and preserve all existing work. This repository is often developed through multi-file architectural changes; do not assume a dirty tree is disposable.
 2. Read the relevant part of `README.md` for product behavior and intentional feature boundaries.
 3. Read `docs/development.md` for module and formatting conventions.
-4. If the work is governed by `.ledger`, read `.ledger/index.md`, the selected task's `task.md`, and every active record it references. Resolve closed dependencies through `.ledger/history/`. See `docs/ledger.md` for the workbench model.
+4. If the work is governed by `.ledger`, read `.ledger/INDEX.md`, the selected task's `task.md`, and every active record it references. Resolve closed dependencies through `.ledger/history/`. See `docs/ledger.md` for the workbench model.
 5. Inspect the manifest and test configuration before adding a new path. Packaging, TypeScript, Vitest, and the extension loader each have explicit inclusion boundaries.
 
 Authority is split deliberately:
@@ -37,13 +37,13 @@ The design goal is an integrated Pi environment with one implementation of each 
 
 ## Runtime mental model
 
-Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. The composition-heavy exec runtime stays in named `extensions/runtime-*` modules because those modules share one extension lifecycle and worker protocol. Ledger is another deliberate exception: its small scaffold/prompt integration lives in `extensions/ledger.ts`, while the shared prompt text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
+Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. The composition-heavy exec runtime stays in named `extensions/runtime-*` modules because those modules share one extension lifecycle and worker protocol. Ledger is another deliberate exception: its small add/close/prompt integration lives in `extensions/ledger.ts`, while the shared contract text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
 
 There are three execution contexts to keep distinct:
 
-- **Root Pi session** — owns the normal extension surface, interactive subagent manager, `pi_exec`, and root-only mutation tools such as ledger scaffolding.
-- **Interactive child session** — is a real Pi session with its own context and persistence. It may inherit selected extensions and skills, but it must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
-- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context.
+- **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
+- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. It loads ledger, VCC, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Advisor sidecar when `advisor: true`. It may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
+- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context. They load the ledger and VCC extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
 
@@ -59,7 +59,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, and TUI views | Serves both the interactive `Agent` surface and managed workers used by `pi_exec`, while keeping ownership and depth boundaries explicit. |
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
-| Ledger implementation | Scaffold and prompt wiring in `extensions/ledger.ts`; injected contract in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | The scaffold and close tools are root-only, while the prompt contract reaches the root, child sessions, advisor, and exec workers through their integration points. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | Review and Ralph are skills that author `pi_exec` programs, not hidden runtime engines. Ledger skills each own a specific lifecycle phase. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Maintainer-facing detail beyond the README | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
@@ -88,6 +88,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
 - `Agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
+- Child sessions and `pi_exec` workers do not discover package extensions. Children load ledger, VCC, and MCP via explicit paths under `--no-extensions`; `advisor: true` adds the Advisor sidecar. Workers load ledger and VCC the same way. Recursion is prevented because they do not load `pi_exec` or the subagent manager. Observational memory stays on the root context extension.
 - Child sessions must not bypass manager ownership, nesting depth, tool policy, or root-only capabilities. Avoid global registries unless they are explicitly process-scoped integration points with lifecycle cleanup.
 - Nested `pi_exec` operations are not separate top-level Pi tool calls. Policy extensions that gate only top-level `tool_call` events see the outer `pi_exec`, not every bridged operation; deployments needing an outer per-call gate must treat `pi_exec` itself as the capability boundary.
 - Persisted child sessions are Pi sessions. Do not add a second transcript or memory store merely for the subagent feature.
@@ -95,8 +96,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 ### Ledger, review, and Ralph
 
 - `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. It is not required ceremony for small changes.
-- `ledger_scaffold` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
-- Task status and evidence live in each task's `task.md`; `.ledger/index.md` is live navigation with title and description, and `.ledger/history/index.md` records terminal status plus that same search text.
+- `ledger_add` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
+- Task status and evidence live in each task's `task.md`; `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
 - Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and ledger reconciliation.
 - Durable lessons leave the task bundle for their real owner: normal docs, tests, an ADR convention, a runbook, or a reusable skill.
@@ -120,7 +121,7 @@ Use the narrowest production owner:
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: `README.md`.
 - Stable maintainer conventions or architecture rationale: `docs/`.
-- Ledger behavior: keep scaffold/prompt wiring in `extensions/ledger.ts`, shared injected text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedure in `skills/ledger-*`, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
+- Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedure in `skills/ledger-*`, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.
 - Task-specific investigation, decisions, or evidence: the governing `.ledger` bundle, not production code.
 

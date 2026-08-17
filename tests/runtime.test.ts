@@ -25,6 +25,8 @@ import {
 	resolveExecWorker,
 	resolveStructuredOutput,
 	serializeAgentContext,
+	LEDGER_EXTENSION_PATH,
+	VCC_EXTENSION_PATH,
 	WORKER_RETURN_EXTENSION_PATH,
 } from "../extensions/runtime-agent.js";
 import {
@@ -706,8 +708,11 @@ describe("pi_exec agent binding", () => {
 			const toolsFlag = prepared.args.indexOf("--tools");
 			expect(prepared.args[toolsFlag + 1]).toBe(`read,grep,${PI_EXEC_RETURN_TOOL}`);
 			expect(prepared.args).toContain("--no-extensions");
-			expect(prepared.args).toContain("--extension");
-			expect(prepared.args[prepared.args.indexOf("--extension") + 1]).toBe(WORKER_RETURN_EXTENSION_PATH);
+			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
+				LEDGER_EXTENSION_PATH,
+				VCC_EXTENSION_PATH,
+				WORKER_RETURN_EXTENSION_PATH,
+			]);
 			expect(prepared.args.join("\0")).toContain(OUTPUT_SCHEMA_GUIDANCE);
 			expect(prepared.env?.[PI_EXEC_OUTPUT_SCHEMA_ENV]).toBeDefined();
 			expect(JSON.parse(readFileSync(prepared.env![PI_EXEC_OUTPUT_SCHEMA_ENV]!, "utf8"))).toEqual(schema);

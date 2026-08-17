@@ -4,7 +4,7 @@
 
 ```text
 .ledger/
-  index.md
+  INDEX.md
   202608151430-implement-bounded-behavior/
     task.md
     specs/
@@ -15,7 +15,7 @@
     knowledge/
     skills/
   history/
-    index.md
+    INDEX.md
     202608141100-establish-prerequisite/
 ```
 
@@ -39,7 +39,7 @@ Each session reads and edits the `.ledger` in its own working directory. Linked 
 
 ## Top-level task ledger
 
-`.ledger/index.md` is required. It is the live navigation index, not a second status database:
+`.ledger/INDEX.md` is required. It is the live navigation index, not a second status database:
 
 ```markdown
 # Task Ledger
@@ -47,7 +47,7 @@ Each session reads and edits the `.ledger` in its own working directory. Linked 
 - `.ledger/202608151430-implement-bounded-behavior/task.md` — Implement bounded behavior — Keep one production owner for the requested outcome
 ```
 
-Closed tasks move to `.ledger/history/` and are listed in `.ledger/history/index.md` with their terminal status, title, and description:
+Closed tasks move to `.ledger/history/` and are listed in `.ledger/history/INDEX.md` with their terminal status, title, and description:
 
 ```markdown
 # Task History
@@ -171,11 +171,11 @@ A task-local candidate procedure with precise trigger, prerequisites, procedure,
 
 Review, routine evidence, Journal, Blockers, Retrospective, and Distillation remain in `task.md`; standalone duplicate review records are unnecessary.
 
-## Agent guidance and scaffolding
+## Agent guidance
 
-Apple-pi injects the complete ledger contract into the system prompts of main agents, interactive subagents, the Advisor, and `pi_exec` workers. Workers do not need full extension access to receive the contract, so recursion and tool-scope boundaries remain intact.
+The ledger extension appends the workbench contract on `before_agent_start`. Interactive children and `pi_exec` workers load that same file via `--no-extensions` plus `-e`; they do not discover other package extensions, and they do not load `pi_exec` or the subagent manager. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract.
 
-`ledger_scaffold` creates `.ledger/index.md` when absent, a timestamped task directory, structural `task.md`, every standard supporting directory, and one live index row with title and description. The scaffold begins with explicit shaping placeholders and a blocker; it is not execution-ready.
+`ledger_add` creates `.ledger/INDEX.md` when absent, a timestamped task directory, structural `task.md`, every standard supporting directory, and one live index row with title and description. A new task begins with explicit shaping placeholders and a blocker; it is not execution-ready.
 
 `ledger_close` archives a live task as `done` or `cancelled`. It updates `Status` in `task.md` when needed, moves the bundle to `.ledger/history/`, removes the live index row, and appends a history row that includes the terminal status, title, and description. It does not inspect work items or judge completeness.
 

@@ -40,7 +40,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 			description:
 				"General-purpose agent for substantial independent work that would otherwise consume a large portion of the main context: open-ended research across many sources, multi-step investigation or execution, or a required fresh-context review. Do not use it when a specialist lane fits (Explore, Research, Plan, Counsel, Implement, Design). Do not use it for targeted file or symbol searches, routine planning, or work the main agent can complete with a short direct-tool sequence.",
 			// builtinToolNames omitted — means "all available tools" (resolved at lookup time)
-			extensions: true,
+			extensions: false,
 			skills: true,
 			systemPrompt: `# Completion Contract
 You own the assigned task, not an open-ended improvement program.
@@ -62,7 +62,7 @@ You own the assigned task, not an open-ended improvement program.
 			description:
 				'Fast read-only search agent for broad local code discovery across multiple areas, naming conventions, or hypotheses when a compact result map would be valuable. Prefer direct grep, find, and read calls for known paths, targeted symbols, and ordinary search refinement. Do NOT use it for external docs (Research), architecture or costly judgment (Counsel), implementation planning (Plan), code review, design-doc auditing, or open-ended analysis — it reads excerpts rather than whole files and may miss content past its read window. When calling, specify search breadth: "quick" for bounded but non-trivial discovery, "medium" for moderate exploration, or "very thorough" for multiple locations and naming conventions.',
 			builtinToolNames: READ_ONLY_TOOLS,
-			extensions: true,
+			extensions: false,
 			skills: true,
 			// Fast model for read-only search. resolveModel can fall back to the same
 			// model under another provider when the Codex provider is unavailable.
@@ -95,7 +95,7 @@ Your role is EXCLUSIVELY to search and analyze existing local code.
 			description:
 				"Software architect agent for non-trivial implementation planning involving cross-module dependencies, consequential trade-offs, migrations, or unclear ownership boundaries. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs. Do not use it for routine implementation when the main agent can form the plan after local inspection, for high-stakes should/root-cause/YAGNI judgment (Counsel), or to implement the plan.",
 			builtinToolNames: READ_ONLY_TOOLS,
-			extensions: true,
+			extensions: false,
 			skills: true,
 			model: "openai-codex/gpt-5.6-sol",
 			thinking: "xhigh",
@@ -136,7 +136,7 @@ List 3-5 files most critical for implementing this plan:
 			description:
 				"External documentation and library research via session extensions (MCP) and cited sources. Use for current official docs, version-specific APIs, GitHub examples, and unfamiliar libraries. Do not use for local codebase maps (Explore), architecture or costly trade-offs (Counsel), or implementation. If the session has no docs tools, the parent or a pi_exec program must gather sources and bind them; this lane does not invent version-specific APIs.",
 			builtinToolNames: READ_ONLY_TOOLS,
-			extensions: true,
+			extensions: false,
 			skills: false,
 			model: "openai-codex/gpt-5.6-luna",
 			thinking: "medium",
@@ -169,7 +169,7 @@ Official docs, current API behavior, implementation examples, and version-specif
 			description:
 				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Advisor (live parent-turn peer) and pi-review (structured change review).",
 			builtinToolNames: READ_ONLY_TOOLS,
-			extensions: true,
+			extensions: false,
 			skills: false,
 			model: "openai-codex/gpt-5.6-sol",
 			thinking: "xhigh",

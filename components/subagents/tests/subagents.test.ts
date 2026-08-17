@@ -61,7 +61,7 @@ describe("owned subagent surface", () => {
 			model: "openai-codex/gpt-5.6-luna",
 			thinking: "medium",
 			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
-			extensions: true,
+			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
@@ -88,7 +88,7 @@ describe("owned subagent surface", () => {
 		});
 		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/Not local reconnaissance/);
 		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/no docs tools/);
-		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/MCP/);
+		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/session extensions \(MCP\)/);
 		expect(DEFAULT_AGENTS.get("Counsel")?.systemPrompt).toMatch(/You advise; you do not implement/);
 		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
 		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);

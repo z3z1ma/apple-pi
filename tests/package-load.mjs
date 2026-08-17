@@ -64,7 +64,7 @@ try {
 		"Agent",
 		"get_subagent_result",
 		"steer_subagent",
-		"ledger_scaffold",
+		"ledger_add",
 		"ledger_close",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
@@ -184,12 +184,12 @@ try {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),
 	};
-	assert(docs.ledger.includes("ledger_scaffold"), "ledger docs omit the scaffold tool");
+	assert(docs.ledger.includes("ledger_add"), "ledger docs omit the add tool");
 	assert(docs.ledger.includes("ledger_close"), "ledger docs omit the close tool");
 	assert(docs.ledger.includes(".ledger/history/"), "ledger docs omit history archival");
 	assert(!docs.ledger.includes("/harness"), "obsolete /harness docs remain");
 	assert(!docs.ledger.includes("last-valid-entry-wins"), "obsolete active-task pointer docs remain");
-	assert(docs.readme.includes("ledger_scaffold"), "README omits the scaffold-only tool");
+	assert(docs.readme.includes("ledger_add"), "README omits the add tool");
 	assert(docs.readme.includes("/skill:pi-ralph"), "README omits /skill:pi-ralph");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {

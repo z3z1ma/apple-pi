@@ -10,7 +10,7 @@ Confirm the operator authorized implementation of the named task. Read `task.md`
 The calling session is the controller. It does not inline review into Ralph, and it does not start an unbounded loop.
 
 1. Choose a bounded iteration count for this batch.
-2. Load `/skill:pi-ralph`. Author the program from `skills/pi-ralph/references/ralph.js` with `goal`, a newline-separated `stack` that includes `.ledger/index.md` and `.ledger/<task-id>/task.md`, and `iterations`.
+2. Load `/skill:pi-ralph`. Author the program from `skills/pi-ralph/references/ralph.js` with `goal`, a newline-separated `stack` that includes `.ledger/INDEX.md` and `.ledger/<task-id>/task.md`, and `iterations`.
 3. Load `/skill:pi-review` and review the working tree against the task contract.
 4. Record confirmed findings, evidence, blockers, and work-item honesty in the ledger.
 5. Start another bounded Ralph batch if work remains, or stop.

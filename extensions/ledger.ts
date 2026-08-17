@@ -12,22 +12,24 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
-import { inChildSessionContext } from "../components/subagents/src/child-context.js";
 
 const SUPPORTING_DIRECTORIES = ["specs", "plans", "research", "decisions", "evidence", "knowledge", "skills"] as const;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CLOSED_STATUSES = ["done", "cancelled"] as const;
-const LIVE_INDEX = ".ledger/index.md";
-const HISTORY_INDEX = ".ledger/history/index.md";
+const LIVE_INDEX = ".ledger/INDEX.md";
+const HISTORY_INDEX = ".ledger/history/INDEX.md";
+
+export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
 
 export type ClosedLedgerStatus = (typeof CLOSED_STATUSES)[number];
 
-export interface ScaffoldedLedgerTask {
+export interface AddedLedgerTask {
 	taskId: string;
 	bundlePath: string;
 	taskPath: string;
@@ -133,11 +135,11 @@ Pending shaping.
 
 ## Journal
 
-- ${date}: Scaffolded the task bundle; shaping remains incomplete.
+- ${date}: Created the task bundle; shaping remains incomplete.
 
 ## Blockers
 
-Shaping is incomplete; replace every scaffold placeholder before execution.
+Shaping is incomplete; replace every placeholder before execution.
 
 ## Evidence
 
@@ -177,7 +179,7 @@ function ensureIndex(indexPath: string, directory: string, heading: string, labe
 function validateLiveIndex(indexPath: string, taskPath: string): void {
 	const current = readFileSync(indexPath, "utf8");
 	if (!/^#\s+Task Ledger\s*$/m.test(current)) {
-		throw new Error(".ledger/index.md must contain a '# Task Ledger' heading");
+		throw new Error(".ledger/INDEX.md must contain a '# Task Ledger' heading");
 	}
 	if (current.includes(`\`${taskPath}\``)) throw new Error(`Ledger index already contains ${taskPath}`);
 }
@@ -185,7 +187,7 @@ function validateLiveIndex(indexPath: string, taskPath: string): void {
 function validateHistoryIndex(indexPath: string, taskPath: string): void {
 	const current = readFileSync(indexPath, "utf8");
 	if (!/^#\s+Task History\s*$/m.test(current)) {
-		throw new Error(".ledger/history/index.md must contain a '# Task History' heading");
+		throw new Error(".ledger/history/INDEX.md must contain a '# Task History' heading");
 	}
 	if (current.includes(`\`${taskPath}\``)) throw new Error(`History index already contains ${taskPath}`);
 }
@@ -230,13 +232,13 @@ function parseClosedStatus(value: string): ClosedLedgerStatus {
 	throw new Error("status must be done or cancelled");
 }
 
-export async function scaffoldLedgerTask(
+export async function addLedgerTask(
 	rootInput: string,
 	titleInput: string,
 	descriptionInput: string,
 	slugInput?: string,
 	now = new Date(),
-): Promise<ScaffoldedLedgerTask> {
+): Promise<AddedLedgerTask> {
 	const root = realpathSync(rootInput);
 	const title = normalizedLine(titleInput, "title", 160);
 	const description = normalizedLine(descriptionInput, "description", 400);
@@ -244,7 +246,7 @@ export async function scaffoldLedgerTask(
 	const { stamp, date } = localStamp(now);
 	const taskId = `${stamp}-${slug}`;
 	const ledgerPath = join(root, ".ledger");
-	const indexAbsolute = join(ledgerPath, "index.md");
+	const indexAbsolute = join(ledgerPath, "INDEX.md");
 	const bundleAbsolute = join(ledgerPath, taskId);
 	const historyBundleAbsolute = join(ledgerPath, "history", taskId);
 	const taskAbsolute = join(bundleAbsolute, "task.md");
@@ -284,8 +286,8 @@ export async function closeLedgerTask(
 	const status = parseClosedStatus(statusInput);
 	const ledgerPath = join(root, ".ledger");
 	const historyPath = join(ledgerPath, "history");
-	const liveIndexAbsolute = join(ledgerPath, "index.md");
-	const historyIndexAbsolute = join(historyPath, "index.md");
+	const liveIndexAbsolute = join(ledgerPath, "INDEX.md");
+	const historyIndexAbsolute = join(historyPath, "INDEX.md");
 	const liveBundleAbsolute = join(ledgerPath, taskId);
 	const liveTaskAbsolute = join(liveBundleAbsolute, "task.md");
 	const historyBundleAbsolute = join(historyPath, taskId);
@@ -331,15 +333,15 @@ export async function closeLedgerTask(
 	};
 }
 
-function createLedgerScaffoldTool() {
+function createLedgerAddTool() {
 	return defineTool({
-		name: "ledger_scaffold",
-		label: "Ledger Scaffold",
+		name: "ledger_add",
+		label: "Ledger Add",
 		description:
 			"Create one new timestamped .ledger task bundle, its full supporting directory tree, structural task.md, and live index row with title and description. Not for listing, inspecting, selecting, updating, closing, or executing existing tasks.",
-		promptSnippet: "Scaffold a new .ledger task bundle when the user asks to create one",
+		promptSnippet: "Add a new .ledger task bundle when the user asks to create one",
 		promptGuidelines: [
-			"Use ledger_scaffold only to create a new ledger task; read and edit existing .ledger files with ordinary repository tools.",
+			"Use ledger_add only to create a new ledger task; read and edit existing .ledger files with ordinary repository tools.",
 		],
 		parameters: Type.Object({
 			title: Type.String({ description: "One-line task title, 1-160 characters." }),
@@ -352,19 +354,15 @@ function createLedgerScaffoldTool() {
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			if (!ctx.isProjectTrusted()) throw new Error("Ledger scaffolding requires a trusted session repository");
-			const result = await scaffoldLedgerTask(ctx.cwd, params.title, params.description, params.slug);
+			if (!ctx.isProjectTrusted()) throw new Error("Adding a ledger task requires a trusted session repository");
+			const result = await addLedgerTask(ctx.cwd, params.title, params.description, params.slug);
 			return {
-				content: [{ type: "text" as const, text: `Scaffolded ${result.taskPath}` }],
+				content: [{ type: "text" as const, text: `Added ${result.taskPath}` }],
 				details: result,
 			};
 		},
 		renderCall(args, theme) {
-			return new Text(
-				`${theme.fg("toolTitle", theme.bold("Ledger Scaffold "))}${theme.fg("accent", args.title)}`,
-				0,
-				0,
-			);
+			return new Text(`${theme.fg("toolTitle", theme.bold("Ledger Add "))}${theme.fg("accent", args.title)}`, 0, 0);
 		},
 		renderResult(result, _options, theme) {
 			const content = result.content[0]?.type === "text" ? result.content[0].text : "No output";
@@ -415,7 +413,6 @@ function createLedgerCloseTool() {
 
 export default function installLedger(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event) => ({ systemPrompt: appendLedgerSystemPrompt(event.systemPrompt ?? "") }));
-	if (inChildSessionContext()) return;
-	pi.registerTool(createLedgerScaffoldTool());
+	pi.registerTool(createLedgerAddTool());
 	pi.registerTool(createLedgerCloseTool());
 }
