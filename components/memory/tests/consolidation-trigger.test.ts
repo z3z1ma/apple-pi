@@ -15,6 +15,7 @@ vi.mock("../src/agents/dropper/agent.js", () => ({ runDropper: mockAgents.runDro
 
 import { ObserverStreamError } from "../src/agents/observer/agent.js";
 import { registerConsolidationTrigger } from "../src/hooks/consolidation-trigger.js";
+import { isStaleExtensionCtxError } from "../src/runtime.js";
 import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
@@ -90,6 +91,10 @@ function setup(args: {
 				args.observationsPoolTargetTokens ?? Math.floor((args.observationsPoolMaxTokens ?? 100) / 2),
 			agentMaxTurns: 9,
 		},
+		disposed: false,
+		dispose: vi.fn(() => {
+			runtime.disposed = true;
+		}),
 		consolidationInFlight: args.consolidationInFlight ?? false,
 		consolidationPhase: undefined as "observer" | "reflector" | "dropper" | undefined,
 		resolveFailureNotified: false,
@@ -129,6 +134,7 @@ function setup(args: {
 		}),
 		recordConsolidationStageError: vi.fn((ctx, phase: "observer" | "reflector" | "dropper", error: unknown) => {
 			const message = error instanceof Error ? error.message : String(error);
+			if (isStaleExtensionCtxError(error)) return message;
 			if (phase === "observer") runtime.lastObserverError = message;
 			if (phase === "reflector") runtime.lastReflectorError = message;
 			if (phase === "dropper") runtime.lastDropperError = message;
@@ -157,6 +163,7 @@ function setup(args: {
 		fire: (eventName = "turn_end") => handlers[eventName]!(undefined, ctx),
 		fireAgentStart: () => handlers.agent_start!(undefined, ctx),
 		fireTurnEnd: () => handlers.turn_end!(undefined, ctx),
+		fireSessionShutdown: () => handlers.session_shutdown!(undefined, ctx),
 		runLaunchedWork: async () => launchedWork?.(),
 		addEntries: (...more: TestEntry[]) => {
 			entries = [...entries, ...more];
@@ -179,6 +186,7 @@ describe("V3 consolidation trigger", () => {
 
 		expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
 		expect(pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
+		expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
 	});
 
 	it("does not launch below all thresholds from either entrypoint", () => {
@@ -597,6 +605,67 @@ describe("V3 consolidation trigger", () => {
 			observationIds: ["aaaaaaaaaaaa"],
 			coversUpToId: "raw-1",
 		});
+	});
+
+	it("aborts dropper writes after session shutdown without warning", async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		mockAgents.runDropper.mockImplementationOnce(async () => {
+			await gate;
+			return ["aaaaaaaaaaaa"];
+		});
+		const entries = [
+			textCustomMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
+		];
+		const { fire, fireSessionShutdown, runLaunchedWork, pi, runtime, ctx } = setup({
+			entries,
+			observeAfterTokens: 999,
+			reflectAfterTokens: 999,
+			observationsPoolTargetTokens: 5,
+		});
+
+		fire();
+		const running = runLaunchedWork();
+		fireSessionShutdown();
+		release();
+		await running;
+
+		expect(runtime.disposed).toBe(true);
+		expect(pi.appendEntry).not.toHaveBeenCalled();
+		expect(runtime.lastDropperError).toBeUndefined();
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("dropper failed"), "warning");
+	});
+
+	it("does not treat a stale extension ctx as a dropper failure", async () => {
+		const stale = new Error(
+			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.reload().",
+		);
+		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
+		const entries = [
+			textCustomMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
+		];
+		const { fire, runLaunchedWork, pi, runtime, ctx } = setup({
+			entries,
+			observeAfterTokens: 999,
+			reflectAfterTokens: 999,
+			observationsPoolTargetTokens: 5,
+		});
+		pi.appendEntry.mockImplementation(() => {
+			throw stale;
+		});
+
+		fire();
+		await runLaunchedWork();
+
+		expect(runtime.lastDropperError).toBeUndefined();
+		expect(runtime.disposed).toBe(true);
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("dropper failed"), "warning");
 	});
 
 	it("runs dropper when reflector emits nothing and the pool is over target", async () => {

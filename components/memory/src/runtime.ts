@@ -29,6 +29,13 @@ type NotifyLevel = "warning" | "info" | "error";
 type Notify = (message: string, type?: NotifyLevel) => void;
 export type ConsolidationPhase = "observer" | "reflector" | "dropper";
 
+const STALE_EXTENSION_CTX_MESSAGE = "This extension ctx is stale after session replacement or reload";
+
+export function isStaleExtensionCtxError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes(STALE_EXTENSION_CTX_MESSAGE);
+}
+
 export interface ResolveCtx {
 	/** Omit only for direct programmatic callers; normal Pi contexts always provide this. */
 	cwd?: string;
@@ -48,6 +55,8 @@ export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;
 	configCwd: string | undefined;
+	/** True after session_shutdown / replacement; in-flight work must not use captured pi/ctx. */
+	disposed = false;
 	consolidationInFlight = false;
 	consolidationPromise: Promise<void> | null = null;
 	consolidationPhase: ConsolidationPhase | undefined;
@@ -81,6 +90,10 @@ export class Runtime {
 				tokensAtEmpty: number;
 		  }
 		| undefined;
+
+	dispose(): void {
+		this.disposed = true;
+	}
 
 	ensureConfig(cwd: string): Config {
 		if (this.configLoaded && (this.configCwd === cwd || this.configCwd === undefined)) {
@@ -148,6 +161,7 @@ export class Runtime {
 
 	recordConsolidationStageError(ctx: LaunchCtx, phase: ConsolidationPhase, error: unknown): string {
 		const message = error instanceof Error ? error.message : String(error);
+		if (isStaleExtensionCtxError(error)) return message;
 		if (phase === "observer") this.lastObserverError = message;
 		if (phase === "reflector") this.lastReflectorError = message;
 		if (phase === "dropper") this.lastDropperError = message;
@@ -169,7 +183,9 @@ export class Runtime {
 				await work();
 			} catch (error) {
 				errorMessage = error instanceof Error ? error.message : String(error);
-				if (hasUI && ui) ui.notify(`Observational memory: ${label} failed: ${errorMessage}`, "warning");
+				if (hasUI && ui && !isStaleExtensionCtxError(error)) {
+					ui.notify(`Observational memory: ${label} failed: ${errorMessage}`, "warning");
+				}
 			} finally {
 				onFinally(errorMessage);
 			}

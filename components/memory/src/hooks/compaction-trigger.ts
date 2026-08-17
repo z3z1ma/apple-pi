@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveCompactAfterTokens } from "../config.js";
-import { rawTokensSinceLastCompaction, type Entry } from "../session-ledger/index.js";
-import type { Runtime } from "../runtime.js";
+import { isStaleExtensionCtxError, type Runtime } from "../runtime.js";
+import { type Entry, rawTokensSinceLastCompaction } from "../session-ledger/index.js";
 
 export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): void {
 	// Pi emits agent_settled only after retries, automatic compaction, and queued
@@ -69,6 +69,7 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 				});
 			} catch (error) {
 				runtime.compactInFlight = false;
+				if (isStaleExtensionCtxError(error)) return;
 				const msg = error instanceof Error ? error.message : String(error);
 				if (hasUI) ui?.notify(`Observational memory: compact threw: ${msg}`, "error");
 			}

@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Runtime } from "../src/runtime.js";
+import { isStaleExtensionCtxError, Runtime } from "../src/runtime.js";
+
+const STALE_CTX_ERROR = new Error(
+	"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.reload().",
+);
 
 function modelRegistry(args: { found?: unknown; auth?: unknown } = {}) {
 	return {
@@ -208,6 +212,30 @@ describe("Runtime V3 behavior", () => {
 		expect(notify).toHaveBeenCalledWith("Observational memory: observer failed: observe failed", "warning");
 		expect(notify).toHaveBeenCalledWith("Observational memory: reflector failed: reflect failed", "warning");
 		expect(notify).toHaveBeenCalledWith("Observational memory: dropper failed: drop failed", "warning");
+	});
+
+	it("does not record or notify stale extension ctx errors", () => {
+		const runtime = new Runtime();
+		const notify = vi.fn();
+
+		expect(isStaleExtensionCtxError(STALE_CTX_ERROR)).toBe(true);
+		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "dropper", STALE_CTX_ERROR)).toBe(
+			STALE_CTX_ERROR.message,
+		);
+		expect(runtime.lastDropperError).toBeUndefined();
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	it("does not notify when in-flight consolidation hits a stale extension ctx", async () => {
+		const runtime = new Runtime();
+		const notify = vi.fn();
+
+		await runtime.launchConsolidationTask({ hasUI: true, ui: { notify } }, async () => {
+			throw STALE_CTX_ERROR;
+		});
+
+		expect(notify).not.toHaveBeenCalled();
+		expect(runtime.consolidationInFlight).toBe(false);
 	});
 
 	it("keeps auto-compaction state independent from consolidation", () => {

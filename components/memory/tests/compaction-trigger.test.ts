@@ -141,6 +141,24 @@ describe("V3 compaction trigger", () => {
 		);
 	});
 
+	it("does not report a stale extension ctx as a compaction failure", async () => {
+		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
+		const ctx = fakeCtx([dueBranch], {
+			isIdle: vi.fn(() => {
+				throw new Error(
+					"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.reload().",
+				);
+			}),
+		});
+
+		handler(agentSettled(), ctx);
+		await vi.runAllTimersAsync();
+
+		expect(ctx.compact).not.toHaveBeenCalled();
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("compact threw"), "error");
+	});
+
 	it("re-checks threshold after deferral and skips if another compaction already reduced pressure", async () => {
 		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
 		const ctx = fakeCtx([dueBranch, belowBranch]);
