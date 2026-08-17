@@ -1,6 +1,6 @@
 ---
 name: ledger-research-task
-description: "Use when a ledger task needs an investigation whose sources, findings, null results, and limits must survive the session."
+description: "Research a .ledger task and preserve a reproducible investigation record. Use when asked to investigate or verify a task assumption, compare authoritative sources, test a hypothesis, or capture versions, contradictions, null results, confidence, and limits before specification or planning. Not for deciding product semantics or implementing the task."
 ---
 
 # Research a Ledger Task
@@ -34,4 +34,4 @@ Updated: YYYY-MM-DD
 
 Store task-specific captured material under a clearly named `research/.storage/` child only when the record needs it and the material is safe to retain. Prefer durable links and compact excerpts over copied corpora.
 
-Research may challenge an assumption, open a blocker, support a decision, or inform a spec. It never ratifies a semantic choice by itself. Link the result from the task or a task-local decision/spec, and update the task Journal with the concrete implication.
+Research may challenge an assumption, open a blocker, support a decision, or inform a spec. It never ratifies a semantic choice by itself. If a finding invalidates an Assumption or prevents safe planning or execution, update the corresponding Assumptions or Blockers entry. Link the result from the task or its governing task-local decision/spec, and update the Journal with the concrete implication.

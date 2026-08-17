@@ -12,13 +12,10 @@ const theme: Theme = {
 const actions = {
 	selectTask() {},
 	clearTask() {},
-	startRalph() {},
-	runRalph() {},
-	stopRalph() {},
 };
 
 describe("operations hub", () => {
-	it("clamps narrow widths and switches views without losing ledger selection", () => {
+	it("clamps narrow widths and keeps ledger selection on escape", () => {
 		const model = createHubModel({}, [
 			{
 				taskId: "202608151200-alpha-task",
@@ -33,10 +30,9 @@ describe("operations hub", () => {
 		]);
 		const narrow = renderHub(model, theme, 20, 8);
 		expect(narrow.every((line) => visibleWidth(line) <= 20)).toBe(true);
-		const next = handleHubInput(model, Key.right, actions);
-		expect(next.model.view).toBe("ralph");
-		expect(next.model.ledger.selectedId).toBe(model.ledger.selectedId);
-		const back = handleHubInput(next.model, Key.escape, actions);
+		expect(model.view).toBe("ledger");
+		expect(model.ledger.selectedId).toBe("202608151200-alpha-task");
+		const back = handleHubInput(model, Key.escape, actions);
 		expect(back.close).toBe(true);
 	});
 

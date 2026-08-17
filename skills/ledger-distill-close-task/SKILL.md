@@ -1,13 +1,13 @@
 ---
 name: ledger-distill-close-task
-description: "Use when closing or pausing a ledger task and routing its durable lessons into the repository's real documentation, decisions, or reusable skills."
+description: "Distill and hand off durable outcomes from a ledger iteration or task. Use when asked to close out, finish, pause, block, or stop a .ledger task; promote lessons into repository docs, decisions, runbooks, or reusable skills; create an independent follow-up task; or record why no promotion is warranted. Not for ordinary code cleanup."
 ---
 
 # Distill and Close a Ledger Task
 
 The task bundle is a self-contained workbench, not automatically permanent project authority. Distill only conclusions with a real future consumer.
 
-1. Read the task Evidence, independent Review, Judgment, Retrospective, research limits, decisions, knowledge, and candidate skills.
+1. Read the task Evidence, Review, Retrospective, and existing Distillation; then inspect research Limits, decisions, knowledge, and candidate skills that bear on durable ownership.
 2. Classify each durable outcome:
    - product or system contract → the repository's normal documentation/spec location;
    - consequential architectural choice → the repository's ADR/decision location;
@@ -23,4 +23,4 @@ A valid no-promotion rationale names the lasting owners, for example: implementa
 
 Task-local candidate skills live under `skills/<slug>/SKILL.md` with `name`, a precise `description: "Use when ..."`, Objective, Prerequisites, Procedure, and Validation. They do not become ambient merely by existing in the ignored ledger; promote them to the repository's configured skill directory only when repeated toil justifies it.
 
-Closure still requires Ralph's evidence, retrospective, and distillation gates. For a blocked or stopped task, preserve crystallized findings and explicit next ownership without manufacturing `done`. Keep `.ledger/README.md` as a path index, not a duplicate status dashboard.
+Set `Status: done` only when every acceptance criterion has observed evidence within its limits, dependencies remain done, Blockers is `None.`, all work items are complete or substantively cancelled, review findings are resolved or explicitly bounded, and Retrospective and Distillation are substantive. For a blocked, cancelled, or paused task, preserve crystallized findings and explicit next ownership without manufacturing `done`. Keep `.ledger/README.md` as a path index, not a duplicate status dashboard.

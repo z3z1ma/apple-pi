@@ -15,8 +15,6 @@ const TOOL_LABELS: Record<string, string> = {
 	open_review: "opening reviews",
 	report: "reporting",
 	submit_meta_review: "verifying",
-	submit_ralph_executor: "submitting result",
-	submit_ralph_judge: "submitting judgment",
 };
 
 export function sanitizeHarnessActivity(input: {

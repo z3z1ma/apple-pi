@@ -22,7 +22,6 @@ try {
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
-			"extensions/ralph.ts",
 			"extensions/harness.ts",
 			"extensions/xai-hosted-tools.ts",
 		],
@@ -31,7 +30,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 9);
+	assert.equal(result.extensions.length, 8);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -52,12 +51,12 @@ try {
 		"mcp",
 		"mcp-auth",
 		"agents",
-		"ralph",
 		"harness",
 		"ledger",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
+	assert(!commands.has("ralph"), "obsolete /ralph command remains");
 	for (const tool of [
 		"ask_user_question",
 		"vcc_recall",
@@ -67,11 +66,11 @@ try {
 		"Agent",
 		"get_subagent_result",
 		"steer_subagent",
-		"ralph",
 		"ledger",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
+	assert(!tools.has("ralph"), "obsolete ralph tool remains");
 	assert(!tools.has("mcpScript"), "mcpScript duplicates pi_exec and must stay disabled");
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
@@ -89,7 +88,7 @@ try {
 		managedService ??= service;
 	});
 	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
-	for (const channel of ["apple-pi:ralph-operations-service:request", "apple-pi:operations-runtime:request"]) {
+	for (const channel of ["apple-pi:operations-runtime:request"]) {
 		let discovered;
 		eventBus.emit(channel, (service) => {
 			discovered ??= service;
@@ -105,8 +104,7 @@ try {
 		"ledger-plan-task",
 		"ledger-execute-task",
 		"ledger-distill-close-task",
-		"ralph-executor",
-		"ralph-judge",
+		"pi-ralph",
 		"pi-review",
 		"pi-exec",
 	]) {
@@ -114,6 +112,8 @@ try {
 	}
 	for (const obsolete of [
 		"10x-shape-work",
+		"ralph-executor",
+		"ralph-judge",
 		"ralph-reviewer",
 		"review",
 		"review-planner",
@@ -132,44 +132,6 @@ try {
 	const optionSchema = questionSchema.properties.options.items;
 	assert(!("preview" in optionSchema.properties), "deferred preview field leaked into ask_user_question schema");
 	assert(!("notes" in questionSchema.properties), "deferred notes field leaked into ask_user_question schema");
-	const ralphTool = result.extensions
-		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "ralph");
-	assert(ralphTool.definition.parameters.properties.task, "ralph task parameter missing");
-	assert(ralphTool.definition.parameters.properties.root, "ralph worktree root parameter missing");
-	assert(ralphTool.definition.parameters.properties.ledger_root, "ralph ledger root parameter missing");
-	assert(!ralphTool.definition.parameters.properties.ticket, "legacy ralph ticket parameter remains");
-	for (const leaked of [
-		"max_iterations",
-		"max_tokens",
-		"timeout_seconds",
-		"executor_max_turns",
-		"reviewer_max_turns",
-		"judge_max_turns",
-	])
-		assert(!(leaked in ralphTool.definition.parameters.properties), `ralph caller budget leaked: ${leaked}`);
-	const ralphCommand = result.extensions
-		.flatMap((extension) => [...extension.commands.values()])
-		.find((command) => command.name === "ralph");
-	assert(ralphCommand?.getArgumentCompletions, "ralph command is missing argument completions");
-	const ralphActions = await ralphCommand.getArgumentCompletions("");
-	assert.deepEqual(
-		ralphActions.map(({ label }) => label),
-		["inspect", "start", "step", "run", "status", "stop"],
-	);
-	const ralphOptions = await ralphCommand.getArgumentCompletions("run .ledger/tasks/example/task.md ");
-	assert(
-		!ralphOptions.some(({ label }) => label === "--max-iterations"),
-		"ralph caller budget hint leaked into normal command UX",
-	);
-	assert(
-		ralphOptions.some(({ label, description }) => label === "--root" && description),
-		"ralph worktree hints are missing",
-	);
-	assert(
-		ralphOptions.some(({ label, description }) => label === "--ledger-root" && description),
-		"ralph ledger hints are missing",
-	);
 	const agentTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "Agent");
@@ -186,6 +148,7 @@ try {
 	assert(existsSync("skills/pi-review/references/planner.md"), "missing pi-review planner reference");
 	assert(existsSync("skills/pi-review/references/reviewer.md"), "missing pi-review reviewer reference");
 	assert(existsSync("skills/pi-review/references/verifier.md"), "missing pi-review verifier reference");
+	assert(existsSync("skills/pi-ralph/references/ralph.js"), "missing pi-ralph reference");
 	for (const [program, prompts] of [
 		["plan-review-verify.js", ["planner", "reviewer", "verifier"]],
 		["targeted-review.js", ["reviewer", "verifier"]],
@@ -201,17 +164,27 @@ try {
 		assert(!source.includes("skills.body"), `${program} must not load role prompts via skills.body`);
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
 	}
+	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
+	assert(ralphSource.includes('type: "general-purpose"'), "pi-ralph must use a general-purpose increment worker");
+	assert(
+		/agents\.run\(\{\s*type: "general-purpose",\s*name: `ralph-\$\{iteration\}`/.test(ralphSource),
+		"pi-ralph increment must be an unprompted general-purpose worker",
+	);
+	assert(
+		!/type: "general-purpose"[\s\S]{0,200}systemPrompt:/.test(ralphSource),
+		"pi-ralph must not override the increment system prompt",
+	);
+	assert(!/type: "general-purpose"[\s\S]{0,200}tools:/.test(ralphSource), "pi-ralph must not restrict increment tools");
+	assert(ralphSource.includes("const PLANNER"), "pi-ralph must inline the review planner prompt");
 	const docs = {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
-		ralph: readFileSync("docs/ralph.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),
 	};
 	assert(docs.ledger.includes("/harness"), "ledger docs omit /harness");
 	assert(docs.ledger.includes("last-valid-entry-wins"), "ledger docs omit pointer folding");
 	assert(docs.ledger.includes("mutateTaskWorkItems"), "ledger docs omit WI mutation authority");
-	assert(docs.ralph.includes("Argument-less `/ralph`"), "ralph docs omit hub entrypoint");
-	assert(docs.ralph.includes("work-item"), "ralph docs omit work-item widget semantics");
 	assert(docs.readme.includes("/harness"), "README omits /harness");
+	assert(docs.readme.includes("/skill:pi-ralph"), "README omits /skill:pi-ralph");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
 	delete process.env.PI_VCC_CONFIG_PATH;

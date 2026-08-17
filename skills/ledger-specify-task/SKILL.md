@@ -1,6 +1,6 @@
 ---
 name: ledger-specify-task
-description: "Use when a ledger task needs behavioral specifications, explicit decisions, or shared task vocabulary before planning."
+description: "Specify behavior and decisions for a .ledger task before implementation planning. Use when asked to write or refine a task-local spec, define required and failure behavior or scenarios, record a consequential product or architecture decision with alternatives, or establish shared vocabulary and constraints. Not for unresolved research or implementation mechanics."
 ---
 
 # Specify a Ledger Task
@@ -29,7 +29,7 @@ Updated: YYYY-MM-DD
 ## Related Records
 ```
 
-Use RFC 2119 terms deliberately. Specify observable outcomes, lifecycle, side effects, permissions, empty/error states, and invariants—not implementation trivia. Split independent workflows or side-effect families rather than producing one feature-wide omnibus spec. Ralph follows only `active` specs.
+Use RFC 2119 terms deliberately. Specify observable outcomes, lifecycle, side effects, permissions, empty/error states, and invariants—not implementation trivia. Split independent workflows or side-effect families rather than producing one feature-wide omnibus spec. Only `active` specs govern execution.
 
 ## Decisions
 

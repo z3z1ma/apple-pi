@@ -10,10 +10,10 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
-- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
+- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `/skill:pi-ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, and a fresh-context Ralph loop whose acceptance is an inlined pi-review.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
-apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, Ralph, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
+apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, ledger, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
 
 ## Install
 
@@ -107,7 +107,7 @@ Available globals:
 
 `display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
 
-Agent options include `task`, `type`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `Agent` tool and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier and Ralph executor/judge roles, which are program prompts, not catalog types. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
+Agent options include `task`, `type`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `Agent` tool and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier roles, which are program prompts, not catalog types. Ralph increments use `type: "general-purpose"` with instructions in the task. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
 
 `context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: a worker-only `pi_exec_return` tool is injected via explicit `-e` under `--no-extensions`. The typed arguments become `agents.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agents.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
 
@@ -192,7 +192,7 @@ Built-in types:
 | `Design` | User-visible layout, interaction, polish | write |
 | `general-purpose` | Substantial mixed work that does not fit a lane | write |
 
-One isolated, known-path, low-risk action stays in the parent. Do not use `general-purpose` when a lane fits. Review and Ralph keep their own `systemPrompt` roles and must not be retargeted onto these types.
+One isolated, known-path, low-risk action stays in the parent. Do not use `general-purpose` when a lane fits. Review keeps its own `systemPrompt` roles and must not be retargeted onto these types. Ralph increments use `type: "general-purpose"` with instructions in the task.
 
 Agent definitions are Markdown with YAML frontmatter, discovered in this order:
 
@@ -252,7 +252,7 @@ The default spine is plan focuses → fan-out read-only reviewers → one verifi
 
 ### Ledger task workflows and Ralph loops
 
-One task is one self-contained `.ledger/YYYYMMDDhhmm-slug/` bundle with an executable `task.md` plus only the specs, plans, research, decisions, evidence, knowledge, and candidate skills that task needs. `.ledger/README.md` indexes task paths without duplicating status. Tasks may depend on completed task roots; supporting records stay private to their owning bundle. Teams normally ignore `/.ledger/`, while solo developers may commit it. Ralph seals ledger authority in either mode.
+One task is one self-contained `.ledger/YYYYMMDDhhmm-slug/` bundle with an executable `task.md` plus only the specs, plans, research, decisions, evidence, knowledge, and candidate skills that task needs. `.ledger/README.md` indexes task paths without duplicating status. Tasks may depend on completed task roots; supporting records stay private to their owning bundle. Teams normally ignore `/.ledger/`, while solo developers may commit it.
 
 The packaged lifecycle skills make shaping first-class:
 
@@ -263,29 +263,12 @@ The packaged lifecycle skills make shaping first-class:
 /skill:ledger-plan-task
 /skill:ledger-execute-task
 /skill:ledger-distill-close-task
+/skill:pi-ralph
 ```
 
-Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, then a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
+Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a program from the packaged reference. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The program then inlines `/skill:pi-review`; confirmed findings become the next iteration's work. There is no judge, no `/ralph` command, and no iteration budget. Raise the `pi_exec` envelope for long-horizon work.
 
-The live harness widget above the editor shows the active task, Ralph iteration and work items, and accumulating runs. `/harness` and `/ledger` open the same operations hub. Exact controls are in [`docs/ledger.md`](docs/ledger.md) and [`docs/ralph.md`](docs/ralph.md).
-
-```text
-/ralph inspect .ledger/202608151430-example/task.md
-/ralph start .ledger/202608151430-example/task.md
-/ralph step <run-id>
-/ralph run .ledger/202608151430-example/task.md
-/ralph run .ledger/202608151430-example/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
-/ralph status [run-id]
-/ralph stop <run-id>
-```
-
-`step` performs one complete executor → judge iteration. `run` repeats only when judgment says `iterate`. Ralph does not abort for token spend, role-turn count, or elapsed time. Compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
-
-The implementation checkout must have an established Git `HEAD`. Dirty checkouts are allowed. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory and leases the implementation workspace and task bundle. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
-
-Executors cannot edit `.ledger`; the controller records structured Journal, Evidence, Blockers, Retrospective, and Distillation with compare-and-swap semantics. Judgment remains in authoritative `task.md`; `Status: done` changes only after deterministic evidence, retrospective, and distillation gates hold. Machine receipts are keyed by implementation worktree and stay user-local under `$PI_CODING_AGENT_DIR/ralph/runs/`.
-
-See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor` and `ralph-judge`. Independent review is `/skill:pi-review`.
+`/harness` and `/ledger` open the ledger operations hub. The `ledger` tool lists, inspects, selects, and mutates work items. Exact controls are in [`docs/ledger.md`](docs/ledger.md). Independent review outside the loop remains `/skill:pi-review`.
 
 ## Reference-repository decisions
 

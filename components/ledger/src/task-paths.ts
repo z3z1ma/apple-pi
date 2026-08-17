@@ -1,8 +1,9 @@
 import { posix } from "node:path";
-import type { RecordKind } from "./types.js";
 
 export const LEDGER_ROOT = ".ledger";
 export const LEDGER_INDEX_PATH = ".ledger/README.md";
+
+export type RecordKind = "task" | "spec" | "plan" | "decision" | "research" | "evidence" | "knowledge" | "skill";
 
 const TASK_ID = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)$/;
 

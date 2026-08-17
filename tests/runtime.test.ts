@@ -493,6 +493,9 @@ describe("pi_exec skills", () => {
 		try {
 			const names = listSkills({ cwd: dir, includeDefaults: false }).map((skill) => skill.name);
 			expect(names).toContain("pi-review");
+			expect(names).toContain("pi-ralph");
+			expect(names).not.toContain("ralph-executor");
+			expect(names).not.toContain("ralph-judge");
 			expect(names).not.toContain("review");
 			expect(names).not.toContain("review-planner");
 			expect(names).not.toContain("reviewer");

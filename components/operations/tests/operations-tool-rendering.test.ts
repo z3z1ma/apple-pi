@@ -1,65 +1,35 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
-import type { RalphProgressSnapshot } from "../../ralph/src/types.js";
 import { CompactOperationsWidget, renderCompactLines } from "../src/ui/compact-widget.js";
 import type { Theme } from "../src/ui/format.js";
-import { renderRalphProgressCard, throttleUpdates } from "../src/ui/tool-renderers.js";
+import { throttleUpdates } from "../src/ui/tool-renderers.js";
 
 const theme: Theme = { fg: (_c, text) => text, bold: (text) => text };
 
-const ralph: RalphProgressSnapshot = {
-	runId: "ralph",
-	projectRoot: "/repo",
-	ledgerRoot: "/repo",
-	taskPath: ".ledger/202608151813-build-harness-operations-ui/task.md",
-	sequence: 5,
-	startedAt: new Date(Date.now() - 4000).toISOString(),
-	updatedAt: new Date().toISOString(),
-	state: "executing",
-	iteration: 2,
-	mode: "auto",
-	usage: { totalTokens: 12000 },
-	policy: { mode: "auto" },
-	activity: { phase: "tool", toolName: "read", turnCount: 3, toolCount: 4, label: "reading…" },
-	workItems: {
-		open: 5,
-		complete: 2,
-		cancelled: 0,
-		total: 7,
-		items: [{ id: "WI-003", state: "open", description: "Integrate the work-item parser now." }],
-	},
-	nextObjective: "Keep the widget live.",
-};
+const taskPath = ".ledger/202608151813-build-harness-operations-ui/task.md";
 
 describe("operations tool rendering", () => {
-	it("renders partial and final cards and clamps the compact widget", () => {
-		const finalRalph = renderRalphProgressCard(
-			{ ...ralph, state: "done", terminalOutcome: { state: "done", lastOutcome: "closed" } },
-			theme,
-			false,
-		).render(80);
-		expect(finalRalph.join("\n")).toMatch(/WI 2\/7/);
+	it("clamps the compact widget to the active task", () => {
 		const widget = renderCompactLines(
 			{
 				activeTask: {
-					pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath: ralph.taskPath },
+					pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath },
 				},
 				catalogTask: {
 					taskId: "202608151813-build-harness-operations-ui",
-					taskPath: ralph.taskPath,
-					title: "Build interactive Ralph and ledger-task operations UI",
+					taskPath,
+					title: "Build interactive ledger-task operations UI",
 					status: "active",
 					digest: "b".repeat(64),
 					acceptance: ["AC-001"],
 					workItems: { open: 5, complete: 2, cancelled: 0, total: 7 },
 					issues: 0,
 				},
-				ralph: [ralph],
 			},
 			theme,
 			28,
 		);
-		expect(widget.some((line) => /Ralph|Harness|WI/.test(line))).toBe(true);
+		expect(widget.some((line) => /Harness|WI/.test(line))).toBe(true);
 		expect(widget.every((line) => visibleWidth(line) <= 28)).toBe(true);
 		expect(widget.join("\n")).not.toContain("agent-");
 	});
@@ -92,11 +62,11 @@ describe("operations tool rendering", () => {
 		const widget = new CompactOperationsWidget();
 		widget.setUICtx(ui);
 		widget.setActiveTask({
-			pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath: ralph.taskPath },
+			pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath },
 		});
 		expect(() => widget.setActiveTask({})).not.toThrow();
 		widget.setActiveTask({
-			pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath: ralph.taskPath },
+			pointer: { schemaVersion: 1, ledgerRoot: "/repo", taskPath },
 		});
 		expect(() => widget.dispose()).not.toThrow();
 	});

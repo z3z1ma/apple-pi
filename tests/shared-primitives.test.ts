@@ -17,11 +17,11 @@ afterEach(() => {
 });
 
 describe("shared argv", () => {
-	const ralph = {
+	const statusCommand = {
 		defaultAction: "status",
 		actions: ["inspect", "start", "step", "run", "status", "stop"],
 		stringOptions: ["root", "ledger_root"],
-		unknownOption: (rawName: string) => `Unknown Ralph option: --${rawName}`,
+		unknownOption: (rawName: string) => `Unknown option: --${rawName}`,
 	};
 	const review = {
 		defaultAction: "run",
@@ -30,8 +30,8 @@ describe("shared argv", () => {
 		unknownOption: (rawName: string) => `Unknown review option: --${rawName}`,
 	};
 
-	it("parses --root the same way for Ralph and Review", () => {
-		expect(parseArgv("--root /tmp", ralph)).toEqual({
+	it("parses --root the same way across command fixtures", () => {
+		expect(parseArgv("--root /tmp", statusCommand)).toEqual({
 			action: "status",
 			positional: [],
 			options: { root: "/tmp" },
@@ -41,7 +41,7 @@ describe("shared argv", () => {
 			positional: [],
 			options: { root: "/tmp" },
 		});
-		expect(parseArgv("--root /workspace run task.md", ralph)).toEqual({
+		expect(parseArgv("--root /workspace run task.md", statusCommand)).toEqual({
 			action: "run",
 			positional: ["task.md"],
 			options: { root: "/workspace" },
@@ -54,9 +54,9 @@ describe("shared argv", () => {
 	});
 
 	it("rejects empty option values and unknown flags", () => {
-		expect(() => parseArgv("run --root=", ralph)).toThrow("--root requires a value");
+		expect(() => parseArgv("run --root=", statusCommand)).toThrow("--root requires a value");
 		expect(() => parseArgv("preview --background=", review)).toThrow("--background requires a value");
-		expect(() => parseArgv("status --unknown x", ralph)).toThrow("Unknown Ralph option: --unknown");
+		expect(() => parseArgv("status --unknown x", statusCommand)).toThrow("Unknown option: --unknown");
 	});
 });
 

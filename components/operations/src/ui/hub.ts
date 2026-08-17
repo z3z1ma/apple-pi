@@ -1,28 +1,21 @@
 import { Key, matchesKey } from "@earendil-works/pi-tui";
-import type { CatalogTask } from "../../../ralph/src/catalog.js";
+import type { CatalogTask } from "../../../ledger/src/catalog.js";
 import type { ActiveTaskProjection } from "../session-state.js";
 import { clampLines } from "./bounded-lines.js";
 import { type DetailViewState, renderDetailView, scrollDetail } from "./detail-view.js";
 import type { Theme } from "./format.js";
 import { filterLedgerTasks, type LedgerViewModel, renderLedgerView, selectedLedgerTask } from "./ledger-view.js";
-import type { RalphViewRow } from "./ralph-view.js";
-import { renderRalphDetail, renderRalphView } from "./ralph-view.js";
 
-export type HubView = "ledger" | "ralph";
+export type HubView = "ledger";
 
 export interface HubActions {
 	selectTask(taskPath: string): void;
 	clearTask(): void;
-	startRalph(taskPath: string): void;
-	runRalph(taskPath: string): void;
-	stopRalph(projectRoot: string, runId: string): Promise<void> | void;
 }
 
 export interface HubModel {
 	view: HubView;
 	ledger: LedgerViewModel;
-	ralph: RalphViewRow[];
-	selectedRalphId?: string;
 	detail?: DetailViewState;
 }
 
@@ -30,23 +23,15 @@ export function createHubModel(active: ActiveTaskProjection, tasks: CatalogTask[
 	return {
 		view: "ledger",
 		ledger: { tasks, query: "", selectedId: tasks[0]?.taskId, active, searchFocused: false },
-		ralph: [],
 	};
 }
 
 export function renderHub(model: HubModel, theme: Theme, width: number, height = 18): string[] {
-	const tabs = (["ledger", "ralph"] as const)
-		.map((view) => (view === model.view ? theme.fg("accent", theme.bold(view)) : theme.fg("dim", view)))
-		.join("  ");
-	const header = ` ${tabs}`;
+	const header = ` ${theme.fg("accent", theme.bold("ledger"))}`;
 	if (model.detail) {
 		return clampLines([header, ...renderDetailView(model.detail, theme, width, height - 1)], width, height);
 	}
-	const body =
-		model.view === "ledger"
-			? renderLedgerView(model.ledger, theme, width, height - 1)
-			: renderRalphView(model.ralph, model.selectedRalphId, theme, width, height - 1);
-	return clampLines([header, ...body], width, height);
+	return clampLines([header, ...renderLedgerView(model.ledger, theme, width, height - 1)], width, height);
 }
 
 export function handleHubInput(
@@ -76,8 +61,6 @@ export function handleHubInput(
 	};
 	if (model.detail) {
 		if (matches("tui.select.cancel", () => matchesKey(data, Key.escape))) {
-			if (model.detail.confirmingStop)
-				return { model: { ...model, detail: { ...model.detail, confirmingStop: false } } };
 			return { model: { ...model, detail: undefined } };
 		}
 		if (matches("tui.select.up", () => matchesKey(data, Key.up))) {
@@ -86,16 +69,9 @@ export function handleHubInput(
 		if (matches("tui.select.down", () => matchesKey(data, Key.down))) {
 			return { model: { ...model, detail: scrollDetail(model.detail, 1, 16) } };
 		}
-		if (data === "s" || data === "S") {
-			if (!model.detail.canStop) return { model };
-			if (!model.detail.confirmingStop)
-				return { model: { ...model, detail: { ...model.detail, confirmingStop: true } } };
-			void confirmStop(model, actions);
-			return { model: { ...model, detail: { ...model.detail, confirmingStop: false } } };
-		}
 		return { model };
 	}
-	if (model.view === "ledger" && model.ledger.searchFocused) {
+	if (model.ledger.searchFocused) {
 		if (matches("tui.select.cancel", () => matchesKey(data, Key.escape))) {
 			return { model: { ...model, ledger: { ...model.ledger, searchFocused: false, query: "" } } };
 		}
@@ -107,17 +83,10 @@ export function handleHubInput(
 		}
 	}
 	if (matches("tui.select.cancel", () => matchesKey(data, Key.escape))) return { model, close: true };
-	if (matches("tui.input.tab", () => matchesKey(data, Key.tab)) || matchesKey(data, Key.right) || named === "right") {
-		return { model: { ...model, view: nextView(model.view, 1) } };
-	}
-	if (matchesKey(data, Key.left) || named === "left" || matchesKey(data, Key.shift("tab"))) {
-		return { model: { ...model, view: nextView(model.view, -1) } };
-	}
-	if (data === "/" && model.view === "ledger") {
+	if (data === "/") {
 		return { model: { ...model, ledger: { ...model.ledger, searchFocused: true } } };
 	}
-	if (model.view === "ledger") return handleLedgerKeys(model, data, actions, matches);
-	return handleRalphKeys(model, data, matches);
+	return handleLedgerKeys(model, data, actions, matches);
 }
 
 function handleLedgerKeys(
@@ -165,83 +134,5 @@ function handleLedgerKeys(
 		actions.clearTask();
 		return { model };
 	}
-	if (data === "r") {
-		actions.startRalph(selected.taskPath);
-		return { model };
-	}
-	if (data === "R") {
-		actions.runRalph(selected.taskPath);
-		return { model };
-	}
 	return { model };
-}
-
-function handleRalphKeys(
-	model: HubModel,
-	data: string,
-	matches: (id: string, fallback: () => boolean) => boolean,
-): { model: HubModel } {
-	if (matches("tui.select.down", () => matchesKey(data, Key.down))) {
-		return {
-			model: {
-				...model,
-				selectedRalphId: moveId(
-					model.ralph.map((row) => row.runId),
-					model.selectedRalphId,
-					1,
-				),
-			},
-		};
-	}
-	if (matches("tui.select.up", () => matchesKey(data, Key.up))) {
-		return {
-			model: {
-				...model,
-				selectedRalphId: moveId(
-					model.ralph.map((row) => row.runId),
-					model.selectedRalphId,
-					-1,
-				),
-			},
-		};
-	}
-	const row = model.ralph.find((entry) => entry.runId === model.selectedRalphId) ?? model.ralph[0];
-	if (row && matches("tui.select.confirm", () => matchesKey(data, Key.enter))) {
-		const lines = row.live
-			? ["Ralph detail"].concat(Object.entries(row.live).map(([key, value]) => `${key} ${String(value).slice(0, 80)}`))
-			: [`${row.runId}`];
-		return {
-			model: {
-				...model,
-				selectedRalphId: row.runId,
-				detail: {
-					lines: row.live ? renderRalphDetail(row.live, { fg: (_c, text) => text, bold: (text) => text }, 120) : lines,
-					offset: 0,
-					confirmingStop: false,
-					canStop: row.ownership.kind === "owned",
-					stopBlockedReason:
-						row.ownership.kind === "foreign" ? `Owned by process ${row.ownership.pid}` : "Not a live owned run",
-				},
-			},
-		};
-	}
-	return { model };
-}
-
-function confirmStop(model: HubModel, actions: HubActions): void {
-	if (model.view !== "ralph") return;
-	const row = model.ralph.find((entry) => entry.runId === model.selectedRalphId);
-	if (row?.ownership.kind === "owned") void actions.stopRalph(row.workspaceRoot, row.runId);
-}
-
-function nextView(view: HubView, delta: number): HubView {
-	const order: HubView[] = ["ledger", "ralph"];
-	const index = order.indexOf(view);
-	return order[(index + delta + order.length) % order.length]!;
-}
-
-function moveId(ids: string[], current: string | undefined, delta: number): string | undefined {
-	if (ids.length === 0) return current;
-	const index = Math.max(0, ids.indexOf(current ?? ids[0]!));
-	return ids[Math.min(ids.length - 1, Math.max(0, index + delta))];
 }

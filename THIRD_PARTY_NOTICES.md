@@ -84,7 +84,7 @@ SOFTWARE.
 - Source: <https://github.com/z3z1ma/10x>
 - Reviewed commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
 - Author and copyright holder: Alexander M. Butler
-- Local paths: `skills/`, `components/ralph/`, `extensions/ralph.ts`, `docs/ledger.md`, `docs/ralph.md`
+- Local paths: `skills/`, `components/ledger/`, `docs/ledger.md`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Alexander M. Butler`
 - The local lifecycle and role skills adapt 10x's typed-record ontology, cold-start execution, evidence discipline, independent review, closure judgment, and retrospective-learning procedure. Apple-pi's task-local `.ledger` bundle model, plan records, distillation gate, TypeScript graph compiler, workspace gates, agent orchestration, receipt store, command/tool integration, and tests are new implementations; no 10x runtime source existed to copy.
@@ -95,4 +95,4 @@ No source code was copied from these projects:
 
 - `pi-blackhole` (`49ab560`) and Sting8k's `pi-vcc` (`09c4a74`) informed the single compaction owner and progressive touched-file / `#N:path` recall design. Their unified and reverse-recall implementations were not adopted.
 - `pi-fabric` (`843dadb`) informed `pi_exec`'s guest program, host-tool and registered-extension bridge, programmable subagents, durable nested traces, code preview, live-call rendering, and activity-widget concepts. apple-pi independently implements the execution-focused runtime with Node's standard worker and VM modules.
-- Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-bounded-iteration, deterministic-stack, backpressure, and orchestrator-loop model. No source code was copied.
+- Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-increment-per-loop, deterministic-stack, backpressure, and outer-harness model. No source code was copied.

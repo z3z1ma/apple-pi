@@ -1,38 +1,20 @@
 ---
 name: ledger-execute-task
-description: "Use when an authorized, shaped .ledger task is ready for bounded Ralph execution and monitoring."
+description: "Operate a shaped .ledger task through /skill:pi-ralph. Use when asked to run Ralph, execute a ledger task, or continue work from review findings. Not for task shaping or review-only work."
 ---
 
 # Execute a Ledger Task
 
-Confirm the operator authorized implementation of the named task. Run `ralph inspect` first and resolve graph errors in shaping, not by weakening the records.
+Confirm the operator authorized implementation of the named task. Inspect the task with the `ledger` tool and read the bundle before starting. Resolve missing scope, blockers, or dependency problems in shaping, not by weakening the records.
 
-Ralph requires a trusted session repository, active model, and a Git worktree with `HEAD`. Dirty checkouts are allowed. Refuse merge/rebase in progress and Git submodules. The model-facing `ralph` tool is the primary orchestration interface. Its optional `root` targets a linked implementation worktree; `ledger_root` selects the linked checkout containing authoritative `.ledger` and defaults to `root`. Teams may ignore `/.ledger/`; solo developers may commit it.
+Ralph is `/skill:pi-ralph`: a `pi_exec` loop around a fresh `general-purpose` agent. The ledger is durable memory. After each increment the program inlines `/skill:pi-review` and feeds confirmed findings into the next fresh window. There is no `/ralph` command, no judge role, and no iteration budget. Raise the `pi_exec` envelope for long-horizon work.
 
-When the ledger is committed and current in the worktree, use that worktree as `root` and omit `ledger_root`. When the ledger is ignored and remains in the main checkout, pass the worktree as `root` and the main checkout as `ledger_root`. Ralph creates neither worktrees nor commits; those remain explicit orchestrator decisions.
-
-Choose supervised execution when learning or risk is high:
+Typical invocation:
 
 ```text
-/ralph start .ledger/<task-id>/task.md
-/ralph step <run-id>
-/ralph status <run-id>
+/skill:pi-ralph
 ```
 
-Choose autonomous execution only after shaping a bounded task. Ralph does not estimate or enforce token, turn, or timeout arithmetic:
+Author a program from `skills/pi-ralph/references/ralph.js`. Required inputs are `goal` and a newline-separated `stack` that includes `.ledger/README.md` and `.ledger/<task-id>/task.md`. Copy planner, reviewer, and verifier prompt bodies from `skills/pi-review/references/` into the program.
 
-```text
-/ralph run .ledger/<task-id>/task.md
-/ralph run .ledger/<task-id>/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
-```
-
-One iteration is a fresh executor and a fresh closure judge. Roles do not inherit the parent conversation and are never resumed. Do not edit the checkout while a run is active. Use `/ralph stop <run-id>` to abort and wait for quiescence. Independent review is `/skill:pi-review` when the parent session wants a review program.
-
-Treat terminal gates honestly:
-
-- `done`: deterministic evidence, retrospective, and distillation gates passed;
-- `blocked`: shaping, authority, or dependency input is required;
-- `evidence_failed`: inspect the recorded reason before another run;
-- `authority_required`, `workspace_conflict`, or `compacted`: reconcile the workspace and task deliberately; never route around the gate.
-
-Ralph never commits, stages, pushes, deploys, resets, cleans, stashes, publishes, or updates remote systems. The human owns final inspection and integration.
+The increment worker updates ledger task records as it works. Do not add a loop cap to the program. The operator owns commits, pushes, deploys, and final integration. Independent review outside the loop remains `/skill:pi-review`.

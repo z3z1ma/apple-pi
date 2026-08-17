@@ -1,6 +1,6 @@
 ---
 name: ledger-plan-task
-description: "Use when converting a specified ledger task into a cold-start executable plan and stable acceptance contract."
+description: "Plan implementation for a shaped .ledger task whose semantics are settled. Use when asked to write an implementation plan, identify source-backed change surfaces and sequence, map acceptance criteria to falsifying checks, assess risks and integration or recovery, or check whether a task is ready for /skill:pi-ralph. Not for inventing behavior or executing the task."
 ---
 
 # Plan a Ledger Task
@@ -27,7 +27,7 @@ Updated: YYYY-MM-DD
 ## Related Records
 ```
 
-Plan from inspected source. Name concrete owner files and interfaces only when evidence establishes them. Map every task acceptance criterion to production behavior and a falsifying check. Separate implementation behavior from deployment, external action, and documentation/process evidence; the latter remain human-owned unless explicitly authorized.
+Plan from inspected source. Name concrete owner files and interfaces only when evidence establishes them. Classify every acceptance criterion as production behavior, an invariant, runtime or deployment evidence, or documentation or process evidence. Map production behavior and invariants to concrete change surfaces and falsifying checks; keep runtime, deployment, documentation, and process evidence human-owned unless explicitly authorized.
 
 Use one task for one coherent outcome. If a plan reveals independent outcomes with different authority or acceptance, create separate timestamped tasks and connect them with `Depends-On`. Do not create child tickets or a second task list inside the bundle.
 
@@ -35,10 +35,10 @@ Before declaring readiness, ensure:
 
 - every execution-changing assumption is record-backed or user-ratified;
 - dependencies name canonical task roots and are `done`;
-- References are task-local and active under their record lifecycle;
+- every referenced task-local record is in an accepted lifecycle state, while ordinary repository source references are concrete and current;
 - Scope and Non-goals establish a reviewable perimeter;
 - stable `AC-###` criteria cover success and important failure boundaries;
 - Blockers is honestly `None.`;
 - a fresh executor can choose implementation mechanics without re-deriving product meaning.
 
-Link the active plan from `task.md`, then run `ralph inspect .ledger/<task>/task.md`. Do not start Ralph merely because the graph compiles; implementation still requires operator authorization.
+Link the active plan from `task.md`, then inspect the task with the `ledger` tool. Do not start `/skill:pi-ralph` merely because the records look complete; implementation still requires operator authorization.

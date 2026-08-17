@@ -1,5 +1,5 @@
 import { fuzzyFilter } from "@earendil-works/pi-tui";
-import { type CatalogTask, catalogSearchText } from "../../../ralph/src/catalog.js";
+import { type CatalogTask, catalogSearchText } from "../../../ledger/src/catalog.js";
 import type { ActiveTaskProjection } from "../session-state.js";
 import { clampLine } from "./bounded-lines.js";
 import { oneLine, type Theme } from "./format.js";

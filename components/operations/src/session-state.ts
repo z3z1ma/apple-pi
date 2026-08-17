@@ -1,9 +1,9 @@
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { inspectLedgerTask, LedgerCatalogError } from "../../ralph/src/catalog.js";
-import { containedProjectPath } from "../../ralph/src/path-boundary.js";
-import { isLinkedCheckout } from "../../ralph/src/roots.js";
-import { taskLocation } from "../../ralph/src/task-paths.js";
+import { inspectLedgerTask, LedgerCatalogError } from "../../ledger/src/catalog.js";
+import { containedProjectPath } from "../../ledger/src/path-boundary.js";
+import { isLinkedCheckout } from "../../ledger/src/roots.js";
+import { taskLocation } from "../../ledger/src/task-paths.js";
 
 export const ACTIVE_TASK_ENTRY = "apple-pi.ledger.active-task";
 export const ACTIVE_TASK_TOMBSTONE = "apple-pi.ledger.active-task.tombstone";

@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { type CatalogTask, filterCatalogTasks, inspectLedgerTask, listLedgerTasks } from "../../ralph/src/catalog.js";
-import { resolveRalphRoots } from "../../ralph/src/roots.js";
-import { mutateTaskWorkItems, type WorkItemMutation } from "../../ralph/src/task.js";
-import { parseTaskDocument } from "../../ralph/src/task-document.js";
-import { taskLocation } from "../../ralph/src/task-paths.js";
+import { type CatalogTask, filterCatalogTasks, inspectLedgerTask, listLedgerTasks } from "../../ledger/src/catalog.js";
+import { resolveLedgerRoots } from "../../ledger/src/roots.js";
+import { mutateTaskWorkItems, type WorkItemMutation } from "../../ledger/src/task.js";
+import { parseTaskDocument } from "../../ledger/src/task-document.js";
+import { taskLocation } from "../../ledger/src/task-paths.js";
 import { ACTIVE_TASK_ENTRY, ACTIVE_TASK_TOMBSTONE, type ActiveTaskPointer } from "./session-state.js";
 
 function textResult(text: string, isError = false, details?: unknown) {
@@ -46,7 +46,7 @@ export function createLedgerTool(options: {
 		name: "ledger",
 		label: "Ledger",
 		description:
-			"List, inspect, select, or clear the session's active ledger task, and mutate WI-### work items through the canonical Ralph parser. Does not close tasks or start Ralph.",
+			"List, inspect, select, or clear the session's active ledger task, and mutate WI-### work items through the canonical ledger parser. Does not close tasks.",
 		parameters: Type.Object({
 			action: Type.Union([
 				Type.Literal("list"),
@@ -147,5 +147,5 @@ export function createLedgerTool(options: {
 }
 
 export function resolveLedgerRoot(cwd: string, ledgerRoot?: string): string {
-	return resolveRalphRoots(cwd, undefined, ledgerRoot).ledgerRoot;
+	return resolveLedgerRoots(cwd, undefined, ledgerRoot).ledgerRoot;
 }

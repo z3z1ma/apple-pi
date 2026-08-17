@@ -21,7 +21,7 @@ Write the program from the **live signatures on the `pi_exec` `code` parameter**
 }
 ```
 
-Inside `code`, read `inputs.root`. Never write `display.name = ...` or `display.description = ...`. Never assign `limits` inside the program. Omitted limit fields keep the shape-derived default; values clamp to package maxima.
+Inside `code`, read `inputs.root`; every supplied input value is a string, and a missing key is `undefined`. Never write `display.name = ...` or `display.description = ...`. Never assign `limits` inside the program. Omitted limit fields keep the shape-derived default; values clamp to package maxima.
 
 ## Core tools
 
@@ -54,9 +54,9 @@ The live `code` parameter lists every host signature, including web methods and 
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
 - `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, `general-purpose`, …) and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
-- Review planner/reviewer/verifier and Ralph executor/judge stay custom `systemPrompt` workers. Do not set `type` to those roles.
-- `context` is a JSON-serializable value bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
-- `outputSchema` is a JSON Schema object. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
+- Review planner/reviewer/verifier stay custom `systemPrompt` workers. Do not set `type` to those roles. Ralph increments use `type: "general-purpose"` with Ralph instructions in the task.
+- `context` must be JSON-serializable and is bound as an `@file` attachment, with a 50,000-character serialized limit. Keep `task` short. Do not interpolate payloads into `task`.
+- `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Structured results also have a 50,000-character serialized limit. Never `JSON.parse` assistant text.
 - Workers have no extensions or MCP. Call those here, then bind the compact result as `context`.
 - Prefer `agents.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
 - Pass file paths in `context` or `task`. The worker already has `read`; do not dump file bodies into the task.
@@ -66,6 +66,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - `print(...)` / `console.log|info|warn|error(...)`
 - `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `queueMicrotask`
 - `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, `TextEncoder`, `TextDecoder`, `DOMException`, `atob`, `btoa`, `structuredClone`
+- No `process`, `require`, `Buffer`, direct filesystem API, or shell global is available. Use `pi.*`, `fetch`, or captured extension tools for host effects.
 
 `agent` / `agents.run` are pi_exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. `extensions.Agent({...})` is the interactive subagent tool for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog. They are not the same API.
 
@@ -122,7 +123,7 @@ return parallel(files, async (name) => {
 
 The worker reads `context.path`. Do not `pi.read` the file in the parent just to stuff the body into `task`.
 
-Select a catalog lane when the worker should follow that role. Untyped workers stay generic and read-only — that is the review/Ralph pattern.
+Select a catalog lane when the worker should follow that role. Untyped workers stay generic and read-only — that is the review pattern. Ralph increments are typed `general-purpose` workers.
 
 ```javascript
 const map = await agents.run({

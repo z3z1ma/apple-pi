@@ -7,7 +7,7 @@ export default defineConfig({
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/memory/tests/**/*.test.ts",
 			"components/operations/tests/**/*.test.ts",
-			"components/ralph/tests/**/*.test.ts",
+			"components/ledger/tests/**/*.test.ts",
 			"components/xai-hosted-tools/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",
 			"tests/**/*.test.ts",

@@ -1,20 +1,14 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type CatalogTask, inspectLedgerTask, listLedgerTasks } from "../../ralph/src/catalog.js";
-import type { RalphOperationsService } from "../../ralph/src/operations-service.js";
-import { resolveRalphRoots } from "../../ralph/src/roots.js";
+import { type CatalogTask, inspectLedgerTask, listLedgerTasks } from "../../ledger/src/catalog.js";
+import { resolveLedgerRoots } from "../../ledger/src/roots.js";
 import {
 	type ActiveTaskProjection,
-	knownProjectRoots,
-	OPERATION_POINTER_ENTRY,
-	OPERATION_POINTER_TOMBSTONE,
-	type OperationKind,
 	type OperationsSessionProjection,
 	projectOperationsSession,
 	type SessionEntryLike,
 } from "./session-state.js";
 import { CompactOperationsWidget, type WidgetUICtx } from "./ui/compact-widget.js";
-import { createHubModel, type HubView, handleHubInput, renderHub } from "./ui/hub.js";
-import type { RalphViewRow } from "./ui/ralph-view.js";
+import { createHubModel, handleHubInput, renderHub } from "./ui/hub.js";
 
 const RUNTIME_CHANNEL = "apple-pi:operations-runtime:request";
 let installedRuntime: OperationsRuntime | undefined;
@@ -28,12 +22,7 @@ export class OperationsRuntime {
 	projection: OperationsSessionProjection = { activeTask: {}, operationRoots: [] };
 	catalogTask?: CatalogTask;
 
-	constructor(
-		private readonly pi: ExtensionAPI,
-		readonly ralph: RalphOperationsService,
-	) {
-		ralph.subscribeProgress((snapshot) => this.widget.applyRalph(snapshot));
-	}
+	constructor(private readonly pi: ExtensionAPI) {}
 
 	reconstruct(ctx: ExtensionContext): void {
 		const entries = ((ctx.sessionManager as { getBranch?: () => SessionEntryLike[] }).getBranch?.() ??
@@ -52,32 +41,13 @@ export class OperationsRuntime {
 		if (isTuiContext(ctx)) this.widget.setUICtx(ctx.ui as WidgetUICtx);
 	}
 
-	recordOperationPointer(ctx: ExtensionContext, kind: OperationKind, projectRoot: string, runId?: string): void {
-		this.pi.appendEntry(OPERATION_POINTER_ENTRY, {
-			schemaVersion: 1,
-			kind,
-			projectRoot,
-			...(runId && { runId }),
-		});
-		this.reconstruct(ctx);
-	}
-
-	clearOperationRoot(kind: OperationKind, projectRoot: string): void {
-		this.pi.appendEntry(OPERATION_POINTER_TOMBSTONE, { schemaVersion: 1, kind, projectRoot, removed: true });
-	}
-
-	knownRoots(sessionRoot: string): string[] {
-		return knownProjectRoots(sessionRoot, this.projection);
-	}
-
-	async openHub(ctx: ExtensionCommandContext, view: HubView = "ledger"): Promise<void> {
+	async openHub(ctx: ExtensionCommandContext): Promise<void> {
 		if (!isTuiContext(ctx)) {
-			ctx.ui.notify(this.nonTuiSummary(ctx.cwd, view), "info");
+			ctx.ui.notify(this.nonTuiSummary(), "info");
 			return;
 		}
 		this.reconstruct(ctx);
 		let model = createHubModel(this.projection.activeTask, this.loadTasks(ctx.cwd));
-		model = { ...model, view, ralph: this.ralphRows(ctx.cwd) };
 		await ctx.ui.custom((tui, theme, keybindings, done) => {
 			const component = {
 				render: (width: number) =>
@@ -97,7 +67,7 @@ export class OperationsRuntime {
 	private hubActions(ctx: ExtensionCommandContext) {
 		return {
 			selectTask: (taskPath: string) => {
-				const ledgerRoot = resolveRalphRoots(ctx.cwd).ledgerRoot;
+				const ledgerRoot = resolveLedgerRoots(ctx.cwd).ledgerRoot;
 				this.pi.appendEntry("apple-pi.ledger.active-task", { schemaVersion: 1, ledgerRoot, taskPath });
 				this.reconstruct(ctx);
 			},
@@ -105,90 +75,25 @@ export class OperationsRuntime {
 				this.pi.appendEntry("apple-pi.ledger.active-task.tombstone", { schemaVersion: 1, cleared: true });
 				this.reconstruct(ctx);
 			},
-			startRalph: (taskPath: string) => {
-				void this.launchRalph(ctx, taskPath, false);
-			},
-			runRalph: (taskPath: string) => {
-				void this.launchRalph(ctx, taskPath, true);
-			},
-			stopRalph: async (projectRoot: string, runId: string) => {
-				const ownership = this.ralph.classifyOwnership(projectRoot, runId);
-				if (ownership.kind !== "owned") return;
-				await this.ralph.stop(projectRoot, runId);
-			},
 		};
-	}
-
-	private async launchRalph(ctx: ExtensionCommandContext, taskPath: string, autonomous: boolean): Promise<void> {
-		try {
-			const run = (await this.ralph.start(ctx, taskPath, { mode: autonomous ? "auto" : "step" })) as {
-				projectRoot: string;
-				runId: string;
-			};
-			this.recordOperationPointer(ctx, "ralph", run.projectRoot, run.runId);
-			ctx.ui.notify(autonomous ? `Ralph run ${taskPath} started.` : `Ralph started ${taskPath}`, "info");
-			if (autonomous) void this.ralph.continue(ctx, run.runId, Number.POSITIVE_INFINITY, undefined, run.projectRoot);
-		} catch (error) {
-			ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-		}
 	}
 
 	private loadTasks(cwd: string): CatalogTask[] {
 		try {
-			return listLedgerTasks(resolveRalphRoots(cwd).ledgerRoot);
+			return listLedgerTasks(resolveLedgerRoots(cwd).ledgerRoot);
 		} catch {
 			return [];
 		}
 	}
 
-	ralphRows(cwd: string): RalphViewRow[] {
-		const live = new Map(this.ralph.liveSnapshots().map((snapshot) => [snapshot.runId, snapshot]));
-		const rows: RalphViewRow[] = [];
-		for (const root of this.knownRoots(cwd)) {
-			for (const receipt of this.ralph.listReceipts(root)) {
-				const runId = receipt.kind === "summary" ? receipt.summary.runId : receipt.runId;
-				rows.push({
-					runId,
-					workspaceRoot: root,
-					live: live.get(runId),
-					receipt,
-					ownership: this.ralph.classifyOwnership(root, runId),
-				});
-			}
-		}
-		for (const snapshot of live.values()) {
-			if (!rows.some((row) => row.runId === snapshot.runId)) {
-				rows.unshift({
-					runId: snapshot.runId,
-					workspaceRoot: snapshot.projectRoot,
-					live: snapshot,
-					ownership: this.ralph.classifyOwnership(snapshot.projectRoot, snapshot.runId),
-				});
-			}
-		}
-		return rows;
-	}
-
-	private nonTuiSummary(cwd: string, view: HubView): string {
-		if (view === "ledger") {
-			const pointer = this.projection.activeTask.pointer;
-			return pointer
-				? `Active task ${pointer.taskPath}${this.projection.activeTask.stale ? ` (${this.projection.activeTask.stale})` : ""}`
-				: "No active ledger task.";
-		}
-		if (view === "ralph") {
-			return (
-				this.ralphRows(cwd)
-					.slice(0, 10)
-					.map((row) => `${row.runId} ${row.live?.state ?? row.receipt?.kind}`)
-					.join("\n") || "No Ralph runs."
-			);
-		}
-		return "No Ralph runs.";
+	private nonTuiSummary(): string {
+		const pointer = this.projection.activeTask.pointer;
+		return pointer
+			? `Active task ${pointer.taskPath}${this.projection.activeTask.stale ? ` (${this.projection.activeTask.stale})` : ""}`
+			: "No active ledger task.";
 	}
 
 	async dispose(): Promise<void> {
-		await this.ralph.stopAll();
 		this.widget.dispose();
 	}
 }

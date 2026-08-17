@@ -28,7 +28,7 @@ For a team, the usual policy is:
 /.ledger/
 ```
 
-The workbench can then hold local context without entering every pull request. Ignored means local: it is not shared, backed up, or recoverable through Git. Ralph still hashes ignored ledger files so an executor cannot silently rewrite its authority.
+The workbench can then hold local context without entering every pull request. Ignored means local: it is not shared, backed up, or recoverable through Git.
 
 A solo developer may omit the ignore rule and commit `.ledger`. The same graph and runtime work in both modes. Committed task records will appear in ordinary Git review alongside implementation changes.
 
@@ -37,7 +37,7 @@ This determines worktree behavior:
 - When `.ledger` is committed and current in a linked worktree, that worktree's own ledger is authoritative; use `root` and omit `ledger_root`.
 - When `.ledger` is ignored and remains only in the main checkout, target implementation with `root` and pass the main checkout as `ledger_root`.
 
-Ralph allows only roots sharing the trusted session repository's Git common directory. It does not create, update, commit, or remove worktrees. The human and orchestrating model own those choices. Apple-pi never edits `.gitignore` automatically; storage policy belongs to the repository owner.
+The ledger tool allows only roots sharing the trusted session repository's Git common directory. It does not create, update, commit, or remove worktrees. The human and orchestrating model own those choices. Apple-pi never edits `.gitignore` automatically; storage policy belongs to the repository owner.
 
 ## Top-level task ledger
 
@@ -114,11 +114,11 @@ Pending.
 Pending.
 ```
 
-Canonical headers and exactly one level-one title are required. Acceptance criteria use stable `AC-###` IDs. Ralph can execute only `open` or `active` tasks whose Blockers section is `None.`.
+Canonical headers and exactly one level-one title are required. Acceptance criteria use stable `AC-###` IDs. Prefer executing `open` or `active` tasks whose Blockers section is `None.`.
 
-Task status is `open | active | blocked | done | cancelled`. Ralph owns activation, blocked outcomes, and closure while a run is active.
+Task status is `open | active | blocked | done | cancelled`. The implementing agent updates those records in the ledger as it works.
 
-Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. Executors propose known open-item completion with evidence; judges confirm or reject exactly it; the controller alone applies confirmed completion under the task-bundle lease. Any open or malformed item independently blocks closure.
+Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. The `ledger` tool mutates those rows through `parseTaskDocument` and `mutateTaskWorkItems`. They do not close the task or satisfy acceptance criteria.
 
 ## Task dependencies
 
@@ -138,7 +138,7 @@ Create records only when a concrete consumer needs them. Every Markdown record e
 
 ### Specification — `specs/**/*.md`
 
-A shared behavioral contract: actors, boundaries, required and error behavior, scenarios, exclusions, assumptions, and acceptance mapping. Status: `draft | active | superseded`; Ralph follows only `active` specs.
+A shared behavioral contract: actors, boundaries, required and error behavior, scenarios, exclusions, assumptions, and acceptance mapping. Status: `draft | active | superseded`; follow only `active` specs.
 
 ### Plan — `plans/**/*.md`
 
@@ -146,7 +146,7 @@ Implementation sequence, source-backed change surfaces, criterion-to-check mappi
 
 ### Decision — `decisions/**/*.md`
 
-A consequential choice with context, authority, steelmanned alternatives, consequences, and revisit conditions. Status: `active | superseded`; Ralph follows only `active` decisions.
+A consequential choice with context, authority, steelmanned alternatives, consequences, and revisit conditions. Status: `active | superseded`; follow only `active` decisions.
 
 ### Research — `research/**/*.md`
 
@@ -170,11 +170,9 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 
 ## Operations hub and active task
 
-`/harness` opens one overlay with Ledger, Ralph, and Review views. `/ledger` opens the Ledger view. Left/right or Tab switch views while preserving each view's selection. `/` focuses the Ledger fuzzy query (non-prefix title and path fragments match). Enter inspects. `s` selects the active task. `c` clears it. `r` starts Ralph. `R` runs Ralph. Escape clears search, then closes detail, then closes the hub. Stop requires two `s` presses on an owned live run.
+`/harness` and `/ledger` open the ledger task picker. `/` focuses the fuzzy query (non-prefix title and path fragments match). Enter inspects. `s` selects the active task. `c` clears it. Escape clears search, then closes detail, then closes the hub.
 
-The `ledger` model tool supports `list`, `inspect`, `select`, `clear`, and `mutate_work_items`. Selection appends a branch-local pointer `{schemaVersion:1, ledgerRoot, taskPath}` only. Clearing appends a tombstone. Reconstruction folds `sessionManager.getBranch()` last-valid-entry-wins, including tombstones, and ignores malformed records individually. A stale latest pointer stays visible with its exact reason (`missing`, `moved`, `unindexed`, `malformed`, `unrelated`, `not_regular_file`, `symlink`) and is never replaced by an older pointer.
-
-Work-item display and mutation call `parseTaskDocument` and `mutateTaskWorkItems`. They do not close the task or satisfy acceptance criteria. Foreign Ralph leases fail without partial writes. Print/RPC modes keep the tool and skip overlays.
+The `ledger` model tool supports `list`, `inspect`, `select`, `clear`, and `mutate_work_items`. Selection appends a branch-local pointer `{schemaVersion:1, ledgerRoot, taskPath}` only. Clearing appends a tombstone. Reconstruction folds `sessionManager.getBranch()` last-valid-entry-wins, including tombstones, and ignores malformed records individually. A stale latest pointer stays visible with its exact reason (`missing`, `moved`, `unindexed`, `malformed`, `unrelated`, `not_regular_file`, `symlink`) and is never replaced by an older pointer. Print/RPC modes keep the tool and skip overlays.
 
 Apple-pi packages the complete lifecycle as on-demand Pi skills:
 
@@ -184,13 +182,14 @@ Apple-pi packages the complete lifecycle as on-demand Pi skills:
 /skill:ledger-specify-task
 /skill:ledger-plan-task
 /skill:ledger-execute-task
+/skill:pi-ralph
 /skill:ledger-distill-close-task
 ```
 
 Typical flow:
 
 ```text
-shape → research as needed → specify/decide → plan → inspect → execute/judge → distill
+shape → research as needed → specify/decide → plan → inspect → /skill:pi-ralph → distill
 ```
 
 Not every task needs every record. The skills separate procedures; they do not require ceremony. A small but non-trivial task may need only `task.md`. Research, specs, decisions, plans, evidence records, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
@@ -212,4 +211,4 @@ A substantive no-promotion rationale is valid: for example, tests and implementa
 
 ## Migration from `.10x`
 
-The runtime deliberately has no dual parser. `.10x` inputs return a migration error. Move each executable outcome into one timestamped task bundle, keep only task-specific supporting records with it, convert parent plans into task-local plans or separate tasks, rewrite dependencies, promote globally reusable authority to normal repository documentation, add every task to `.ledger/README.md`, and validate with `ralph inspect`.
+The runtime deliberately has no dual parser. `.10x` inputs return a migration error. Move each executable outcome into one timestamped task bundle, keep only task-specific supporting records with it, convert parent plans into task-local plans or separate tasks, rewrite dependencies, promote globally reusable authority to normal repository documentation, add every task to `.ledger/README.md`, and inspect the task with the `ledger` tool.

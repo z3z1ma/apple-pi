@@ -1,16 +1,11 @@
-import type { CatalogTask } from "../../../ralph/src/catalog.js";
-import { ralphProgressIdentity } from "../../../ralph/src/progress.js";
-import type { RalphProgressSnapshot } from "../../../ralph/src/types.js";
-import { SnapshotProjection } from "../progress-channel.js";
+import type { CatalogTask } from "../../../ledger/src/catalog.js";
 import type { ActiveTaskProjection } from "../session-state.js";
 import { clampLines } from "./bounded-lines.js";
-import { formatDuration, formatTokens, isLiveState, oneLine, SPINNER, type Theme, terminalGlyph } from "./format.js";
+import { oneLine, type Theme } from "./format.js";
 
 const WIDGET_ID = "harness";
 const STATUS_KEY = "harness";
 const MAX_LINES = 14;
-const TICK_MS = 400;
-const LINGER_MS = 8_000;
 
 export type WidgetUICtx = {
 	setStatus(key: string, text: string | undefined): void;
@@ -26,24 +21,14 @@ export type WidgetUICtx = {
 export interface CompactWidgetModel {
 	activeTask: ActiveTaskProjection;
 	catalogTask?: CatalogTask;
-	ralph: RalphProgressSnapshot[];
-}
-
-interface Linger {
-	ralph: Map<string, number>;
 }
 
 export class CompactOperationsWidget {
 	private ui: WidgetUICtx | undefined;
 	private tui: { terminal?: { columns?: number }; requestRender?: () => void } | undefined;
 	private registered = false;
-	private timer: ReturnType<typeof setInterval> | undefined;
-	private frame = 0;
 	private lastStatus: string | undefined;
-	private model: CompactWidgetModel = { activeTask: {}, ralph: [] };
-	private readonly linger: Linger = { ralph: new Map() };
-	private readonly ralphProjection = new SnapshotProjection(ralphProgressIdentity);
-	private projectionError: string | undefined;
+	private model: CompactWidgetModel = { activeTask: {} };
 
 	setUICtx(ctx: WidgetUICtx | undefined): void {
 		if (ctx === this.ui) return;
@@ -54,54 +39,21 @@ export class CompactOperationsWidget {
 		if (ctx) this.update();
 	}
 
-	applyRalph(snapshot: RalphProgressSnapshot): void {
-		const result = this.ralphProjection.apply(snapshot);
-		if (!result.ok) this.projectionError = result.error;
-		else if (this.projectionError?.includes(snapshot.runId)) this.projectionError = undefined;
-		if (!isLiveState(snapshot.state)) this.linger.ralph.set(snapshot.runId, Date.now());
-		else this.linger.ralph.delete(snapshot.runId);
-		this.refreshModel();
-	}
-
 	setActiveTask(activeTask: ActiveTaskProjection, catalogTask?: CatalogTask): void {
-		this.model = { ...this.model, activeTask, catalogTask };
+		this.model = { activeTask, catalogTask };
 		this.update();
-	}
-
-	private refreshModel(): void {
-		const now = Date.now();
-		const ralph = this.ralphProjection
-			.list()
-			.filter((snapshot) => this.visible(snapshot.state, this.linger.ralph.get(snapshot.runId), now));
-		this.model = { ...this.model, ralph };
-		this.update();
-	}
-
-	private visible(state: string, lingeredAt: number | undefined, now: number): boolean {
-		if (isLiveState(state)) return true;
-		return lingeredAt !== undefined && now - lingeredAt < LINGER_MS;
-	}
-
-	ensureTimer(): void {
-		if (!this.timer) this.timer = setInterval(() => this.tick(), TICK_MS);
-	}
-
-	private tick(): void {
-		this.frame++;
-		this.refreshModel();
 	}
 
 	update(): void {
 		if (!this.ui) return;
-		const liveRalph = this.model.ralph.filter((snapshot) => isLiveState(snapshot.state));
 		const hasTask = Boolean(this.model.activeTask.pointer);
-		const hasFinished = this.model.ralph.length > liveRalph.length;
-		if (!hasTask && liveRalph.length === 0 && !hasFinished) {
+		if (!hasTask) {
 			this.clear();
 			return;
 		}
-		this.ensureTimer();
-		const status = liveStatus(liveRalph);
+		const status = this.model.catalogTask
+			? `${this.model.catalogTask.status} ${this.model.catalogTask.title}`
+			: this.model.activeTask.pointer?.taskPath;
 		if (status !== this.lastStatus) {
 			this.ui.setStatus(STATUS_KEY, status);
 			this.lastStatus = status;
@@ -127,19 +79,13 @@ export class CompactOperationsWidget {
 		}
 	}
 
-	renderForTest(theme: Theme, width: number, frame = 0): string[] {
-		this.frame = frame;
+	renderForTest(theme: Theme, width: number): string[] {
 		return this.render(theme, width);
 	}
 
 	private render(theme: Theme, width: number): string[] {
-		const live = this.model.ralph.some((snapshot) => isLiveState(snapshot.state));
-		const heading = `${theme.fg(live ? "accent" : "dim", live ? "●" : "○")} ${theme.fg(live ? "accent" : "dim", "Harness")}`;
-		const body: string[] = [];
-		if (this.projectionError) body.push(theme.fg("error", `progress error: ${oneLine(this.projectionError, 72)}`));
-		if (this.model.activeTask.pointer) body.push(...this.renderTask(theme));
-		const ralph = [...this.model.ralph].sort(compareRalph);
-		for (const snapshot of ralph) body.push(...this.renderRalph(theme, snapshot));
+		const heading = `${theme.fg("dim", "○")} ${theme.fg("dim", "Harness")}`;
+		const body = this.model.activeTask.pointer ? this.renderTask(theme) : [];
 		return clampLines([heading, ...body], width, MAX_LINES);
 	}
 
@@ -155,40 +101,6 @@ export class CompactOperationsWidget {
 		];
 	}
 
-	private renderRalph(theme: Theme, snapshot: RalphProgressSnapshot): string[] {
-		const live = isLiveState(snapshot.state);
-		const glyph = live
-			? theme.fg("accent", SPINNER[this.frame % SPINNER.length]!)
-			: terminalGlyph(theme, snapshot.state);
-		const wi = snapshot.workItems;
-		const open = wi.items.find((item) => item.state === "open");
-		const header = [
-			`${theme.fg("dim", "├─")} ${glyph} ${theme.bold("Ralph")} ${theme.fg("muted", snapshot.state)}`,
-			theme.fg("dim", `· iter ${snapshot.iteration}`),
-			theme.fg("dim", `· ${formatTokens(snapshot.usage.totalTokens)}`),
-			theme.fg(
-				"dim",
-				`· ${formatDuration(snapshot.startedAt, snapshot.terminalOutcome ? snapshot.updatedAt : undefined)}`,
-			),
-		].join(" ");
-		const lines = [header];
-		lines.push(
-			`${theme.fg("dim", "│  ")} ${theme.fg("dim", `⎿  WI ${wi.complete}/${wi.total} complete${open ? ` · ${open.id} ${oneLine(open.description, 42)}` : wi.open ? ` · ${wi.open} open` : ""}`)}`,
-		);
-		if (snapshot.activity) {
-			lines.push(`${theme.fg("dim", "│  ")} ${theme.fg("dim", `⎿  ${snapshot.activity.label}`)}`);
-		}
-		if (snapshot.nextObjective) {
-			lines.push(`${theme.fg("dim", "│  ")} ${theme.fg("dim", `⎿  next: ${oneLine(snapshot.nextObjective, 64)}`)}`);
-		}
-		if (snapshot.gate) {
-			lines.push(
-				`${theme.fg("dim", "│  ")} ${theme.fg("warning", `⎿  gate: ${snapshot.gate.kind} — ${oneLine(snapshot.gate.reason, 56)}`)}`,
-			);
-		}
-		return lines;
-	}
-
 	private clear(): void {
 		const ui = this.ui;
 		const wasRegistered = this.registered;
@@ -196,10 +108,6 @@ export class CompactOperationsWidget {
 		this.registered = false;
 		this.tui = undefined;
 		this.lastStatus = undefined;
-		if (this.timer) {
-			clearInterval(this.timer);
-			this.timer = undefined;
-		}
 		// Pi's setWidget(undefined) disposes the current component first. Drop local
 		// registration before that call so a factory dispose cannot re-enter setWidget.
 		if (wasRegistered && ui) ui.setWidget(WIDGET_ID, undefined);
@@ -212,21 +120,8 @@ export class CompactOperationsWidget {
 	}
 }
 
-function liveStatus(ralph: RalphProgressSnapshot[]): string | undefined {
-	if (!ralph.length) return undefined;
-	const first = ralph[0]!;
-	return `Ralph ${first.state} iter ${first.iteration} WI ${first.workItems.complete}/${first.workItems.total}`;
-}
-
-function compareRalph(left: RalphProgressSnapshot, right: RalphProgressSnapshot): number {
-	const live = Number(isLiveState(right.state)) - Number(isLiveState(left.state));
-	if (live !== 0) return live;
-	return right.updatedAt.localeCompare(left.updatedAt);
-}
-
-export function renderCompactLines(model: CompactWidgetModel, theme: Theme, width: number, frame = 0): string[] {
+export function renderCompactLines(model: CompactWidgetModel, theme: Theme, width: number): string[] {
 	const widget = new CompactOperationsWidget();
 	widget.setActiveTask(model.activeTask, model.catalogTask);
-	for (const snapshot of model.ralph) widget.applyRalph(snapshot);
-	return widget.renderForTest(theme, width, frame);
+	return widget.renderForTest(theme, width);
 }
