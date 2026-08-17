@@ -189,7 +189,7 @@ Apple-pi packages the complete lifecycle as on-demand Pi skills:
 Typical flow:
 
 ```text
-shape → research as needed → specify/decide → plan → inspect → /skill:pi-ralph → distill
+shape → research as needed → specify/decide → plan → inspect → /skill:pi-ralph → /skill:pi-review → distill
 ```
 
 Not every task needs every record. The skills separate procedures; they do not require ceremony. A small but non-trivial task may need only `task.md`. Research, specs, decisions, plans, evidence records, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.

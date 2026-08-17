@@ -10,7 +10,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
-- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `/skill:pi-ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, and a fresh-context Ralph loop whose acceptance is an inlined pi-review.
+- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `/skill:pi-ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, and a fresh-context Ralph loop whose calling session bounds iterations and reviews with `/skill:pi-review`.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
 apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, ledger, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
@@ -266,9 +266,9 @@ The packaged lifecycle skills make shaping first-class:
 /skill:pi-ralph
 ```
 
-Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a program from the packaged reference. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The program then inlines `/skill:pi-review`; confirmed findings become the next iteration's work. There is no judge, no `/ralph` command, and no iteration budget. Raise the `pi_exec` envelope for long-horizon work.
+Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a program from the packaged reference. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
 
-`/harness` and `/ledger` open the ledger operations hub. The `ledger` tool lists, inspects, selects, and mutates work items. Exact controls are in [`docs/ledger.md`](docs/ledger.md). Independent review outside the loop remains `/skill:pi-review`.
+`/harness` and `/ledger` open the ledger operations hub. The `ledger` tool lists, inspects, selects, and mutates work items. Exact controls are in [`docs/ledger.md`](docs/ledger.md).
 
 ## Reference-repository decisions
 

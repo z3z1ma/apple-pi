@@ -149,6 +149,10 @@ try {
 	assert(existsSync("skills/pi-review/references/reviewer.md"), "missing pi-review reviewer reference");
 	assert(existsSync("skills/pi-review/references/verifier.md"), "missing pi-review verifier reference");
 	assert(existsSync("skills/pi-ralph/references/ralph.js"), "missing pi-ralph reference");
+	assert(
+		existsSync("skills/pi-ralph/references/ralph-reviewed.js"),
+		"missing advanced pi-ralph review composition reference",
+	);
 	for (const [program, prompts] of [
 		["plan-review-verify.js", ["planner", "reviewer", "verifier"]],
 		["targeted-review.js", ["reviewer", "verifier"]],
@@ -175,10 +179,11 @@ try {
 		"pi-ralph must not override the increment system prompt",
 	);
 	assert(!/type: "general-purpose"[\s\S]{0,200}tools:/.test(ralphSource), "pi-ralph must not restrict increment tools");
-	assert(ralphSource.includes("const PLANNER"), "pi-ralph must inline the review planner prompt");
-	assert(ralphSource.includes("workspaceSnapshot"), "pi-ralph must snapshot the workspace before each increment");
-	assert(ralphSource.includes("isLedgerPath"), "pi-ralph must separate ledger memory from product deltas");
-	assert(/Leave the increment uncommitted/.test(ralphSource), "pi-ralph must leave increments uncommitted for review");
+	assert(ralphSource.includes("inputs.iterations"), "pi-ralph must take a caller-chosen iteration bound");
+	assert(!ralphSource.includes("const PLANNER"), "default pi-ralph must not inline the review planner");
+	assert(!ralphSource.includes("reviewChange"), "default pi-ralph must not inline the review workflow");
+	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
+	assert(reviewedSource.includes("const PLANNER"), "ralph-reviewed.js must keep the inlined review planner");
 	const docs = {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),
