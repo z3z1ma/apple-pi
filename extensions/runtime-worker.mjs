@@ -191,6 +191,13 @@ const setup = new vm.Script(
   }
   globalThis.pi = Object.freeze(piApi);
   globalThis.inputs = Object.freeze(providedInputs);
+  const displayError = () => {
+    throw new Error("display is a pi_exec tool parameter, not a program global. Pass display: { name, description } on the pi_exec call.");
+  };
+  globalThis.display = new Proxy(Object.create(null), {
+    get: displayError,
+    set: displayError,
+  });
   const genericCall = (nameOrRequest, args = {}) => {
     const request = typeof nameOrRequest === "string"
       ? { name: nameOrRequest, args }
@@ -219,7 +226,7 @@ const setup = new vm.Script(
     if (!result || result.status !== "completed") {
       throw new Error(result && result.error ? result.error : "agent did not complete");
     }
-    return result.text;
+    return result.value !== undefined ? result.value : result.text;
   };
   globalThis.print = (...values) => emitLog(...values);
   globalThis.console = Object.freeze({ log: print, info: print, warn: print, error: print });

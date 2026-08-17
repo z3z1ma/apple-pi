@@ -1,14 +1,42 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { Type } from "typebox";
 import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
-
-import runtime, { aggregateUsage, deriveProgramEnvelope, executeProgram } from "../extensions/runtime.js";
-import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
+import { Type } from "typebox";
+import { describe, expect, it } from "vitest";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
+import runtime, { aggregateUsage, deriveProgramEnvelope, executeProgram } from "../extensions/runtime.js";
+import {
+	agentOperationArgs,
+	CONTEXT_GUIDANCE,
+	MAX_AGENT_CONTEXT_CHARS,
+	OUTPUT_SCHEMA_GUIDANCE,
+	PI_EXEC_OUTPUT_SCHEMA_ENV,
+	PI_EXEC_RETURN_TOOL,
+	parseAgentRequest,
+	prepareAgentSpawn,
+	resolveStructuredOutput,
+	serializeAgentContext,
+	WORKER_RETURN_EXTENSION_PATH,
+} from "../extensions/runtime-agent.js";
+import {
+	CORE_GUEST_TOOL_NAMES,
+	coreGuestSignatures,
+	coreToolDefinitions,
+	ECMASCRIPT_GUEST_GLOBALS,
+	formatObjectSignature,
+	PI_EXEC_DESCRIPTION,
+	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
+	PI_EXEC_PROMPT_GUIDELINES,
+	piExecGuestApiContract,
+} from "../extensions/runtime-api.js";
+import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
+import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
+import {
+	createExtensionRuntime,
+	loadExtensions,
+} from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
 const theme = {
 	fg: (_color: string, value: string) => value,
@@ -80,6 +108,37 @@ return { structured, text };
 			structured: { status: "completed", text: "INSPECT", ref: "agents.run" },
 			text: "SUMMARIZE",
 		});
+	});
+
+	it("forwards bound agent context without interpolating it into the task", async () => {
+		const seen: Record<string, unknown>[] = [];
+		const result = await execute(
+			`return agents.run({ task: "judge these rows", name: "judge", context: { ids: [1, 2] } });`,
+			async (_ref, args) => {
+				seen.push(args);
+				return { status: "completed", text: "ok" };
+			},
+		);
+		expect(result.outcome).toBe("succeeded");
+		expect(seen[0]).toEqual({
+			task: "judge these rows",
+			name: "judge",
+			context: { ids: [1, 2] },
+		});
+	});
+
+	it("returns a structured outputSchema value from agent() without parsing text", async () => {
+		const result = await execute(
+			`
+const verdict = await agent({
+  task: "judge",
+  outputSchema: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+});
+return verdict;
+`,
+			async () => ({ status: "completed", text: "ignore me", value: { id: 7 } }),
+		);
+		expect(result).toEqual({ outcome: "succeeded", value: { id: 7 } });
 	});
 
 	it("supports timers without exposing Node globals", async () => {
@@ -305,6 +364,253 @@ return value.text;
 		expect(result.outcome).toBe("failed");
 		expect(result.error).toMatch(/returned before .* host call|Unawaited/);
 	});
+
+	it("rejects display as a program global with a tool-parameter error", async () => {
+		const result = await execute('display.name = "Audit"; return 1;', async () => undefined);
+		expect(result.outcome).toBe("failed");
+		expect(result.error).toMatch(/display is a pi_exec tool parameter/);
+	});
+});
+
+describe("pi_exec guest API documentation", () => {
+	it("formats core tool calls as one object argument from the live parent schemas", () => {
+		const definitions = coreToolDefinitions();
+		expect(formatObjectSignature(definitions.read.parameters)).toBe(
+			"{ path: string, offset?: number, limit?: number }",
+		);
+		expect(formatObjectSignature(definitions.edit.parameters)).toBe(
+			"{ path: string, edits: [{ oldText: string, newText: string }] }",
+		);
+		for (const signature of coreGuestSignatures()) {
+			expect(signature).toMatch(/^pi\.[a-z]+\(\{ /);
+			expect(signature).toMatch(/ → Promise</);
+			expect(signature).not.toMatch(/^pi\.[a-z]+\([a-z]/);
+		}
+	});
+
+	it("includes primitive types and literal unions from JSON schemas", () => {
+		const schema = Type.Object({
+			action: Type.Union([Type.Literal("preview"), Type.Literal("run")]),
+			path: Type.String(),
+			limit: Type.Optional(Type.Number()),
+			tags: Type.Array(Type.String()),
+			modes: Type.Array(Type.Union([Type.Literal("fast"), Type.Literal("thorough")])),
+			meta: Type.Record(Type.String(), Type.String()),
+		});
+		expect(formatObjectSignature(schema)).toBe(
+			'{ action: "preview"|"run", path: string, limit?: number, tags: string[], modes: ("fast"|"thorough")[], meta: { [key: string]: string } }',
+		);
+	});
+
+	it("embeds live object signatures in the tool contract and keeps the skill in sync", () => {
+		const guidelines = PI_EXEC_PROMPT_GUIDELINES.join("\n");
+		const contract = piExecGuestApiContract();
+		expect(guidelines).toContain("never a positional string");
+		expect(guidelines).toContain("pi.read({ path })");
+		expect(guidelines).toContain("display is a pi_exec tool parameter");
+		expect(guidelines).not.toMatch(/Set display\.name/);
+		expect(guidelines).not.toMatch(/await tools\.describe/);
+		expect(PI_EXEC_DESCRIPTION).toContain("never a positional string");
+		expect(PI_EXEC_DESCRIPTION).toContain("outputSchema?");
+		expect(PI_EXEC_DESCRIPTION).toContain("value?");
+		expect(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION).toMatch(/not a program global/i);
+		expect(contract).toContain("agent(request: AgentRequest)");
+		expect(contract).toContain("agents.run(request: AgentRequest)");
+		expect(contract).toContain("context?: JSONValue");
+		expect(contract).toContain("outputSchema?: object");
+		expect(contract).toContain("value?: JSONValue");
+		expect(contract).toContain("bind the compact result as context");
+		expect(contract).toContain("Never JSON.parse assistant text");
+		expect(contract).toContain("fetch(input: string | URL | Request, init?: RequestInit)");
+		expect(contract).toContain("parallel(");
+		expect(contract).toContain("sleep(ms: number)");
+		expect(contract).toContain("URL.parse(");
+		expect(contract).toContain("URL.canParse(");
+		expect(contract).toContain("AbortSignal.timeout(");
+		expect(contract).toContain("AbortSignal.any(");
+		expect(contract).toContain("AbortSignal.abort(");
+		expect(contract).toContain("Response.error(");
+		expect(contract).toContain("Response.redirect(");
+		expect(contract).toContain("encodeInto(");
+		expect(contract).toContain("getSetCookie(");
+		expect(contract).toContain("DOMException");
+		expect(contract).not.toContain("_fromFetch");
+
+		const skill = readFileSync(new URL("../skills/pi-exec/SKILL.md", import.meta.url), "utf8");
+		expect(skill).toContain("context?");
+		expect(skill).toContain("outputSchema?");
+		expect(skill).toContain("agent(request: AgentRequest)");
+		expect(skill).toContain("agents.run(request: AgentRequest)");
+		expect(skill).toContain("value?: JSONValue");
+		expect(skill).toContain("bind the compact result as `context`");
+		expect(skill).toContain("Never `JSON.parse` assistant text");
+		expect(skill).toContain("const verdict = await agent({");
+		expect(skill).toContain("const result = await agents.run({");
+		expect(skill).toContain("context: first");
+		expect(skill).not.toMatch(/Before calling an unfamiliar extension tool/);
+		const definitions = coreToolDefinitions();
+		for (const name of CORE_GUEST_TOOL_NAMES) {
+			const signature = `pi.${name}({`;
+			expect(contract).toContain(signature);
+			expect(skill).toContain(signature);
+			for (const field of Object.keys(definitions[name]?.parameters.properties ?? {})) {
+				expect(contract).toContain(field);
+				expect(skill).toContain(field);
+			}
+		}
+	});
+
+	it("documents every host-provided guest global", async () => {
+		const result = await execute("return Reflect.ownKeys(globalThis).map(String).sort();", async () => undefined);
+		expect(result.outcome).toBe("succeeded");
+		const contract = piExecGuestApiContract();
+		const ecma = new Set<string>(ECMASCRIPT_GUEST_GLOBALS);
+		for (const name of result.value as string[]) {
+			if (ecma.has(name)) continue;
+			expect(contract, name).toContain(name);
+		}
+	});
+});
+
+describe("pi_exec agent binding", () => {
+	it("parses a bound request and trims name", () => {
+		expect(
+			parseAgentRequest({
+				task: "judge",
+				name: "  reviewer  ",
+				context: { ids: [1] },
+			}),
+		).toEqual({
+			task: "judge",
+			name: "reviewer",
+			context: { ids: [1] },
+		});
+	});
+
+	it("rejects an empty task", () => {
+		expect(() => parseAgentRequest({ task: "   " })).toThrow(/non-empty task/);
+	});
+
+	it("rejects oversized or non-serializable context", () => {
+		expect(() => serializeAgentContext(undefined)).toThrow(/JSON-serializable/);
+		const cycle: Record<string, unknown> = {};
+		cycle.self = cycle;
+		expect(() => serializeAgentContext(cycle)).toThrow(/JSON-serializable/);
+		expect(() => serializeAgentContext("x".repeat(MAX_AGENT_CONTEXT_CHARS))).toThrow(/exceeds/);
+	});
+
+	it("normalizes outputSchema and rejects a non-object schema", () => {
+		expect(
+			parseAgentRequest({
+				task: "judge",
+				outputSchema: { properties: { id: { type: "number" } }, required: ["id"] },
+			}).outputSchema,
+		).toEqual({
+			type: "object",
+			properties: { id: { type: "number" } },
+			required: ["id"],
+			additionalProperties: false,
+		});
+		expect(() => parseAgentRequest({ task: "judge", outputSchema: { type: "string" } })).toThrow(
+			/must describe an object/,
+		);
+	});
+
+	it("accepts a matching structured return and rejects a missing or invalid one", () => {
+		const schema = {
+			type: "object",
+			properties: { id: { type: "number" } },
+			required: ["id"],
+			additionalProperties: false,
+		};
+		expect(resolveStructuredOutput(schema, { id: 7 })).toEqual({ value: { id: 7 } });
+		expect(resolveStructuredOutput(schema, undefined).error).toMatch(new RegExp(PI_EXEC_RETURN_TOOL));
+		expect(resolveStructuredOutput(schema, { id: "nope" }).error).toMatch(/validation failed/);
+		expect(resolveStructuredOutput(undefined, { id: 7 })).toEqual({});
+	});
+
+	it("injects the worker-only return extension without host extensions", () => {
+		const schema = {
+			type: "object",
+			properties: { id: { type: "number" } },
+			required: ["id"],
+			additionalProperties: false,
+		};
+		const prepared = prepareAgentSpawn({ task: "judge", outputSchema: schema }, { tools: ["read", "grep"] });
+		try {
+			const toolsFlag = prepared.args.indexOf("--tools");
+			expect(prepared.args[toolsFlag + 1]).toBe(`read,grep,${PI_EXEC_RETURN_TOOL}`);
+			expect(prepared.args).toContain("--no-extensions");
+			expect(prepared.args).toContain("--extension");
+			expect(prepared.args[prepared.args.indexOf("--extension") + 1]).toBe(WORKER_RETURN_EXTENSION_PATH);
+			expect(prepared.args.join("\0")).toContain(OUTPUT_SCHEMA_GUIDANCE);
+			expect(prepared.env?.[PI_EXEC_OUTPUT_SCHEMA_ENV]).toBeDefined();
+			expect(JSON.parse(readFileSync(prepared.env![PI_EXEC_OUTPUT_SCHEMA_ENV]!, "utf8"))).toEqual(schema);
+			expect(agentOperationArgs({ task: "judge", outputSchema: schema })).toEqual({
+				task: "judge",
+				outputSchema: { bound: true, chars: JSON.stringify(schema).length },
+			});
+		} finally {
+			prepared.cleanup();
+		}
+		expect(existsSync(prepared.env![PI_EXEC_OUTPUT_SCHEMA_ENV]!)).toBe(false);
+	});
+
+	it("registers the worker-only return tool from the explicit extension", async () => {
+		const schema = {
+			type: "object",
+			properties: { id: { type: "number" } },
+			required: ["id"],
+			additionalProperties: false,
+		};
+		const prepared = prepareAgentSpawn({ task: "judge", outputSchema: schema }, { tools: ["read"] });
+		const previous = process.env[PI_EXEC_OUTPUT_SCHEMA_ENV];
+		process.env[PI_EXEC_OUTPUT_SCHEMA_ENV] = prepared.env?.[PI_EXEC_OUTPUT_SCHEMA_ENV];
+		try {
+			const loaded = await loadExtensions(
+				[WORKER_RETURN_EXTENSION_PATH],
+				process.cwd(),
+				createEventBus(),
+				createExtensionRuntime(),
+			);
+			expect(loaded.errors).toEqual([]);
+			expect([...loaded.extensions.flatMap((extension) => [...extension.tools.keys()])]).toEqual([PI_EXEC_RETURN_TOOL]);
+		} finally {
+			if (previous === undefined) delete process.env[PI_EXEC_OUTPUT_SCHEMA_ENV];
+			else process.env[PI_EXEC_OUTPUT_SCHEMA_ENV] = previous;
+			prepared.cleanup();
+		}
+	});
+
+	it("writes context under tmpdir and redacts it from traces", () => {
+		const payload = { ids: [1, 2], note: "bound" };
+		const prepared = prepareAgentSpawn(
+			{ task: "judge these rows", name: "judge", context: payload },
+			{ tools: ["read", "grep"], model: "xai/test", thinking: "low" },
+		);
+		try {
+			const attached = prepared.args.find((arg) => arg.startsWith("@"));
+			expect(attached).toBeDefined();
+			const path = attached!.slice(1);
+			expect(path.startsWith(tmpdir())).toBe(true);
+			expect(path.startsWith(process.cwd())).toBe(false);
+			expect(readFileSync(path, "utf8")).toBe(JSON.stringify(payload));
+			expect(statSync(path).mode & 0o077).toBe(0);
+			expect(prepared.args).toContain("--name");
+			expect(prepared.args).toContain("judge");
+			expect(prepared.args.at(-1)).toBe("judge these rows");
+			expect(prepared.args.join("\0")).toContain(CONTEXT_GUIDANCE);
+			expect(agentOperationArgs({ task: "judge these rows", name: "judge", context: payload })).toEqual({
+				task: "judge these rows",
+				name: "judge",
+				context: { bound: true, chars: JSON.stringify(payload).length },
+			});
+		} finally {
+			prepared.cleanup();
+		}
+		const attached = prepared.args.find((arg) => arg.startsWith("@"));
+		expect(existsSync(attached!.slice(1))).toBe(false);
+	});
 });
 
 describe("pi_exec tool", () => {
@@ -321,6 +627,36 @@ describe("pi_exec tool", () => {
 		} as any);
 		return { tool, resultHandler };
 	};
+
+	it("publishes a live guest catalog on the registered tool", () => {
+		const { tool } = register();
+		expect(tool.promptGuidelines).toEqual([...PI_EXEC_PROMPT_GUIDELINES]);
+		expect(tool.parameters.properties.display.description).toBe(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION);
+		expect(tool.description).toContain(PI_EXEC_DESCRIPTION);
+		expect(tool.description).toContain("pi.read({");
+		expect(tool.description).toContain("outputSchema?");
+		expect(tool.description).toContain("agent(request: AgentRequest)");
+		expect(tool.parameters.properties.code.description).toBe(piExecGuestApiContract());
+		expect(tool.parameters.properties.code.description).toContain("agents.run(");
+		expect(tool.parameters.properties.code.description).toContain("outputSchema?: object");
+		expect(tool.parameters.properties.code.description).toContain("value?: JSONValue");
+
+		const echo = {
+			name: "echo_value",
+			label: "Echo",
+			description: "Echo a supplied value",
+			parameters: Type.Object({ value: Type.String() }),
+			async execute() {
+				return { content: [{ type: "text", text: "ok" }] };
+			},
+		};
+		const runner = Object.create(ExtensionRunner.prototype) as any;
+		runner.extensions = [{ tools: new Map([["echo_value", { definition: echo }]]) }];
+		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+
+		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
+		expect(tool.description).toContain("extensions.echo_value({ value: string })");
+	});
 
 	it("bounds broad Promise.all fan-out through the harness-owned envelope", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-"));
@@ -638,5 +974,34 @@ describe("pi_exec TUI rendering", () => {
 		expect(text).toContain("Pi Exec Release map · 1/2 calls · 1 running");
 		expect(text).toContain("agent inspect runtime · thinking");
 		expect(text).toContain("read README.md");
+	});
+
+	it("labels workers by name when present", () => {
+		const component = renderExecResult(
+			{
+				content: [{ type: "text", text: "working" }],
+				details: {
+					activity: {
+						name: "Release map",
+						startedAt: Date.now() - 1_000,
+						calls: [
+							{
+								sequence: 0,
+								ref: "agents.run",
+								args: { task: "inspect runtime", name: "reviewer" },
+								status: "running",
+								activity: "thinking",
+							},
+						],
+					},
+				},
+			},
+			{ expanded: false, isPartial: true },
+			theme,
+			{ expanded: false, isError: false },
+		);
+		const text = component.render(120).join("\n");
+		expect(text).toContain("agent reviewer · thinking");
+		expect(text).not.toContain("agent inspect runtime");
 	});
 });

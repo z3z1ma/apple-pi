@@ -96,40 +96,50 @@ apple-pi intentionally does not create a `.pi/memory` mirror. A mirror would int
 
 Available globals:
 
-- `pi.read`, `pi.grep`, `pi.find`, `pi.ls`, `pi.bash`, `pi.edit`, and `pi.write`
-- `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, and `AbortSignal`
-- `TextEncoder`, `TextDecoder`, `atob`, `btoa`, and `structuredClone`
-- `tools.list/search/describe/call` and `extensions.<tool>(args)` for registered Pi extension tools
-- `agent(taskOrOptions)` for worker text and `agents.run(options)` for structured status, text, errors, and usage
+- `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
+- `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, and `DOMException`
+- `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `structuredClone`, and `queueMicrotask`
+- `tools.list/search/describe/call` and `extensions.<tool>(args)` for registered Pi extension tools only. The `pi_exec` `code` parameter lists every guest signature, including captured extension tools such as the MCP gateway, before the program is written.
+- `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agents.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
 - ordinary JavaScript branching, loops, `reduce`, and `Promise.all`, plus `parallel(items, mapper, concurrency)` and `pipeline(items, ...stages)`
-- `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `queueMicrotask`, and `sleep`
+- `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
 - `inputs.<key>` for separately supplied strings, and `print(...)`/`console.log(...)`
 
-Agent options include `task`, `name`, `model`, `thinking`, `tools`, and `systemPrompt`. Agents default to read-only core tools, but a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`.
+`display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
+
+Agent options include `task`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. Agents default to read-only core tools, but a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
+
+`context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: a worker-only `pi_exec_return` tool is injected via explicit `-e` under `--no-extensions`. The typed arguments become `agents.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agents.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
 
 Example:
 
 ```javascript
-const tracks = [
-  ["runtime", "Inspect extensions/runtime.ts and identify execution risks."],
-  ["recall", "Inspect VCC recall and identify context-recovery gaps."],
-  ["ux", "Inspect pi_exec rendering and identify missing operator feedback."],
-];
-const reports = await parallel(tracks, async ([name, task]) => ({
-  name,
-  report: await agent({ task, name }),
-}), 3);
-return reports.reduce((summary, report) => ({
-  ...summary,
-  [report.name]: report.report,
-}), {});
+const dir = "extensions";
+const listing = await pi.ls({ path: dir });
+const files = listing.split("\n").filter((name) => name.endsWith(".ts"));
+return parallel(files, async (name) => {
+  const result = await agents.run({
+    task: "Name the riskiest export and quote the evidence.",
+    name,
+    context: { path: `${dir}/${name}` },
+    outputSchema: {
+      type: "object",
+      properties: {
+        export: { type: "string" },
+        evidence: { type: "string" },
+      },
+      required: ["export", "evidence"],
+    },
+  });
+  return { file: name, status: result.status, ...(result.value ?? {}), ...(result.error ? { error: result.error } : {}) };
+}, 3);
 ```
 
 Pi Exec derives a package-owned envelope from program shape: bounded host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Normal model calls never choose those numbers. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
 
 `fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
 
-`bash`, `edit`, and `write` return `{ ok, output }`; read/search tools and `agent` return text. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so VCC compaction, search, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
+`bash`, `edit`, and `write` return `{ ok, output }`; read/search tools return text. `agent` returns text, or the structured `outputSchema` value. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so VCC compaction, search, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
 
 In TUI mode, `pi_exec` has a bounded code-preview card, live queued/running/completed call rows, elapsed time, agent activity, expandable results, and a temporary activity widget above the editor. This deliberately replaces Fabric's much larger activity store/dashboard with one execution-local view.
 

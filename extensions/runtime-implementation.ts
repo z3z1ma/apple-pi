@@ -1,9 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-
-import { Type } from "typebox";
-import { Value } from "typebox/value";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
 	createBashToolDefinition,
@@ -17,12 +14,29 @@ import {
 	type ExtensionContext,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { ExecActivityWidget, renderExecCall, renderExecResult, type ExecActivitySnapshot } from "./runtime-ui.js";
-import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
-
-import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
 import type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
+import {
+	agentOperationArgs,
+	PI_EXEC_RETURN_TOOL,
+	parseAgentRequest,
+	prepareAgentSpawn,
+	resolveStructuredOutput,
+} from "./runtime-agent.js";
+import {
+	attachLiveDescription,
+	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
+	PI_EXEC_PROMPT_GUIDELINES,
+	PI_EXEC_PROMPT_SNIPPET,
+	piExecGuestApiContract,
+	piExecToolDescription,
+} from "./runtime-api.js";
+import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
+import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
+import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./runtime-ui.js";
 
+export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
 export type {
 	ExecutionOperation,
 	ExecutionOutcome,
@@ -30,7 +44,6 @@ export type {
 	ProgramHostCall,
 	WorkerResult,
 } from "./runtime-types.js";
-export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
 
 const MAX_OUTPUT_CHARS = 50_000;
 const MAX_NESTED_RESULT_CHARS = 50_000;
@@ -56,8 +69,6 @@ const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] a
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
-const WORKER_GUIDANCE =
-	"You are a worker inside a pi_exec program. Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Do not ask follow-up questions.";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
 
@@ -130,18 +141,9 @@ function bounded(value: string, max: number, marker: string): { value: string; t
 	};
 }
 
-interface AgentRequest {
-	task: string;
-	name?: string;
-	model?: string;
-	thinking?: string;
-	tools?: string[];
-	systemPrompt?: string;
-}
-
 async function runAgent(
 	index: number,
-	request: AgentRequest,
+	request: ReturnType<typeof parseAgentRequest>,
 	ctx: ExtensionContext,
 	signal: AbortSignal | undefined,
 	onActivity?: (activity: string) => void,
@@ -153,141 +155,149 @@ async function runAgent(
 	if (request.thinking && !THINKING_LEVELS.has(request.thinking)) {
 		throw new Error(`agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
 	}
-	const guidance = request.systemPrompt
-		? `${WORKER_GUIDANCE}\n\nAdditional program guidance:\n${request.systemPrompt}`
-		: WORKER_GUIDANCE;
-	const args = [
-		"--mode",
-		"json",
-		"--print",
-		"--no-session",
-		"--no-extensions",
-		"--no-skills",
-		"--tools",
-		requestedTools.join(","),
-		"--append-system-prompt",
-		guidance,
-	];
-	if (request.model) args.push("--model", request.model);
-	else if (ctx.model) args.push("--model", `${ctx.model.provider}/${ctx.model.id}`);
-	if (request.thinking) args.push("--thinking", request.thinking);
-	else if (ctx.thinkingLevel) args.push("--thinking", ctx.thinkingLevel);
-	args.push(request.task);
+	const model = request.model ?? (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined);
+	const thinking = request.thinking ?? ctx.thinkingLevel;
+	const prepared = prepareAgentSpawn(request, {
+		tools: requestedTools,
+		...(model ? { model } : {}),
+		...(thinking ? { thinking } : {}),
+	});
 
 	const pi = invocation();
-	return await new Promise((resolve) => {
-		const child = spawn(pi.command, [...pi.prefix, ...args], {
-			cwd: ctx.cwd,
-			shell: false,
-			stdio: ["ignore", "pipe", "pipe"],
-		});
-		let stdout = "";
-		let stderr = "";
-		let buffered = "";
-		let stopReason: string | undefined;
-		let error: string | undefined;
-		const usages: Usage[] = [];
-		const operations: ExecutionOperation[] = [];
-		const operationByCallId = new Map<string, ExecutionOperation>();
-		let aborted = false;
+	try {
+		return await new Promise((resolve) => {
+			const child = spawn(pi.command, [...pi.prefix, ...prepared.args], {
+				cwd: ctx.cwd,
+				shell: false,
+				stdio: ["ignore", "pipe", "pipe"],
+				...(prepared.env ? { env: { ...process.env, ...prepared.env } } : {}),
+			});
+			let stdout = "";
+			let stderr = "";
+			let buffered = "";
+			let stopReason: string | undefined;
+			let error: string | undefined;
+			const usages: Usage[] = [];
+			const operations: ExecutionOperation[] = [];
+			const operationByCallId = new Map<string, ExecutionOperation>();
+			let aborted = false;
+			let pendingReturn: unknown;
+			let acceptedReturn: unknown;
 
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one JSON event decoder owns child-process operation correlation.
-		const consume = (line: string) => {
-			if (!line.trim()) return;
-			try {
-				const event = JSON.parse(line);
-				if (event.type === "tool_execution_start") {
-					onActivity?.(`using ${String(event.toolName ?? "tool")}`);
-					return;
-				}
-				if (event.type === "message_start" && event.message?.role === "assistant") {
-					onActivity?.("thinking");
-					return;
-				}
-				if (event.type !== "message_end" || !event.message) return;
-				const text = textFromAssistant(event.message);
-				if (text) stdout = text;
-				if (event.message.role === "assistant") {
-					stopReason = event.message.stopReason;
-					if (event.message.usage) usages.push(event.message.usage as Usage);
-					if (typeof event.message.errorMessage === "string") error = event.message.errorMessage;
-					if (Array.isArray(event.message.content)) {
-						for (const part of event.message.content) {
-							if (part?.type !== "toolCall" || typeof part.name !== "string") continue;
-							const operation: ExecutionOperation = {
-								sequence: operations.length,
-								ref: `pi.${part.name}`,
-								args: part.arguments && typeof part.arguments === "object" ? part.arguments : {},
-								outcome: "aborted",
-							};
-							operations.push(operation);
-							if (typeof part.id === "string") operationByCallId.set(part.id, operation);
+			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one JSON event decoder owns child-process operation correlation.
+			const consume = (line: string) => {
+				if (!line.trim()) return;
+				try {
+					const event = JSON.parse(line);
+					if (event.type === "tool_execution_start") {
+						onActivity?.(`using ${String(event.toolName ?? "tool")}`);
+						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
+						return;
+					}
+					if (event.type === "tool_execution_end") {
+						if (event.toolName === PI_EXEC_RETURN_TOOL) {
+							if (event.isError) pendingReturn = undefined;
+							else acceptedReturn = pendingReturn;
+						}
+						return;
+					}
+					if (event.type === "message_start" && event.message?.role === "assistant") {
+						onActivity?.("thinking");
+						return;
+					}
+					if (event.type !== "message_end" || !event.message) return;
+					const text = textFromAssistant(event.message);
+					if (text) stdout = text;
+					if (event.message.role === "assistant") {
+						stopReason = event.message.stopReason;
+						if (event.message.usage) usages.push(event.message.usage as Usage);
+						if (typeof event.message.errorMessage === "string") error = event.message.errorMessage;
+						if (Array.isArray(event.message.content)) {
+							for (const part of event.message.content) {
+								if (part?.type !== "toolCall" || typeof part.name !== "string") continue;
+								const operation: ExecutionOperation = {
+									sequence: operations.length,
+									ref: part.name === PI_EXEC_RETURN_TOOL ? PI_EXEC_RETURN_TOOL : `pi.${part.name}`,
+									args: part.arguments && typeof part.arguments === "object" ? part.arguments : {},
+									outcome: "aborted",
+								};
+								operations.push(operation);
+								if (typeof part.id === "string") operationByCallId.set(part.id, operation);
+							}
+						}
+						onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
+					} else if (event.message.role === "toolResult") {
+						const operation = operationByCallId.get(event.message.toolCallId);
+						if (operation) {
+							operation.outcome = event.message.isError ? "failed" : "succeeded";
+							operation.result = traceValue(resultText(event.message));
+							if (event.message.isError) operation.error = resultText(event.message).slice(0, 500);
 						}
 					}
-					onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
-				} else if (event.message.role === "toolResult") {
-					const operation = operationByCallId.get(event.message.toolCallId);
-					if (operation) {
-						operation.outcome = event.message.isError ? "failed" : "succeeded";
-						operation.result = traceValue(resultText(event.message));
-						if (event.message.isError) operation.error = resultText(event.message).slice(0, 500);
-					}
+				} catch {
+					// Pi JSON mode is line-delimited; diagnostics remain on stderr.
 				}
-			} catch {
-				// Pi JSON mode is line-delimited; diagnostics remain on stderr.
-			}
-		};
+			};
 
-		child.stdout.on("data", (chunk) => {
-			buffered += chunk.toString();
-			const lines = buffered.split("\n");
-			buffered = lines.pop() ?? "";
-			for (const line of lines) consume(line);
-		});
-		child.stderr.on("data", (chunk) => {
-			stderr += chunk.toString();
-		});
+			child.stdout.on("data", (chunk) => {
+				buffered += chunk.toString();
+				const lines = buffered.split("\n");
+				buffered = lines.pop() ?? "";
+				for (const line of lines) consume(line);
+			});
+			child.stderr.on("data", (chunk) => {
+				stderr += chunk.toString();
+			});
 
-		const abort = () => {
-			aborted = true;
-			child.kill("SIGTERM");
-		};
-		if (signal?.aborted) abort();
-		else signal?.addEventListener("abort", abort, { once: true });
+			const abort = () => {
+				aborted = true;
+				child.kill("SIGTERM");
+			};
+			if (signal?.aborted) abort();
+			else signal?.addEventListener("abort", abort, { once: true });
 
-		child.on("error", (cause) => {
-			error = cause.message;
-		});
-		child.on("close", (code) => {
-			signal?.removeEventListener("abort", abort);
-			if (buffered.trim()) consume(buffered);
-			const exitCode = code ?? 1;
-			if (aborted) error = "agent aborted";
-			if (!error && exitCode !== 0) error = stderr.trim() || `agent exited with code ${exitCode}`;
-			if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
-				error = stderr.trim() || `agent stopped with ${stopReason}`;
-			}
-			const output = bounded(
-				stdout || error || "(agent returned no text)",
-				MAX_NESTED_RESULT_CHARS,
-				"pi_exec agent output",
-			);
-			resolve({
-				index,
-				task: request.task,
-				output: output.value,
-				truncated: output.truncated,
-				exitCode,
-				stopReason,
-				error,
-				...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
-				operations,
+			child.on("error", (cause) => {
+				error = cause.message;
+			});
+			child.on("close", (code) => {
+				signal?.removeEventListener("abort", abort);
+				if (buffered.trim()) consume(buffered);
+				const exitCode = code ?? 1;
+				if (aborted) error = "agent aborted";
+				if (!error && exitCode !== 0) error = stderr.trim() || `agent exited with code ${exitCode}`;
+				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
+					error = stderr.trim() || `agent stopped with ${stopReason}`;
+				}
+				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
+				if (!error && structured.error) error = structured.error;
+				const output = bounded(
+					structured.value !== undefined && !error
+						? JSON.stringify(structured.value)
+						: stdout || error || "(agent returned no text)",
+					MAX_NESTED_RESULT_CHARS,
+					"pi_exec agent output",
+				);
+				resolve({
+					index,
+					task: request.task,
+					output: output.value,
+					truncated: output.truncated,
+					exitCode,
+					stopReason,
+					error,
+					...(structured.value !== undefined && !error ? { value: structured.value } : {}),
+					...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
+					operations,
+				});
 			});
 		});
-	});
+	} finally {
+		prepared.cleanup();
+	}
 }
 
 import { executeProgram } from "./runtime-program.js";
+
 export { executeProgram } from "./runtime-program.js";
 
 import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./runtime-fetch.js";
@@ -358,34 +368,28 @@ export default function runtime(pi: ExtensionAPI): void {
 		name: "pi_exec",
 		label: "Pi Exec",
 		executionMode: "sequential",
-		description:
-			"Execute a bounded JavaScript async-function body that composes Pi's read, grep, find, ls, bash, edit, and write tools, HTTP fetch, and programmable Pi workers. Supports familiar web APIs, ordinary branching, loops, reduction, Promise.all, parallel(items, mapper, concurrency), pipeline(items, ...stages), timers, agent(task) for text, and agents.run(options) for structured status/usage. Intermediate results stay inside the worker; return only the compact value needed in main context.",
-		promptSnippet:
-			"pi_exec: compose core Pi tools, fetch, and subagents with branching, fan-out, pipelines, and reduction",
-		promptGuidelines: [
-			"Use pi_exec when programmatic composition materially reduces intermediate context or coordinates already-justified parallel work. Use direct tools for straightforward sequential inspection, regardless of the exact number of calls.",
-			"The code parameter is a JavaScript async-function body. Core calls are pi.read/grep/find/ls/bash/edit/write; fetch and common web globals are available directly. agent(taskOrOptions) returns text and throws on worker failure; agents.run(options) returns structured {status,text,error,usage}. Agent options may include task, name, model, thinking, tools, and systemPrompt.",
-			"Use Promise.all or parallel(items, mapper, concurrency) for independent work and pipeline(items, ...stages) for staged transforms. Keep dependent search→read and edit→verify calls sequential; never perform concurrent edits to the same file.",
-			"Set display.name and display.description for multi-step programs so the live tool card and activity widget communicate intent.",
-		],
+		get description() {
+			return piExecToolDescription();
+		},
+		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
+		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES],
 		parameters: Type.Object({
-			code: Type.String({
-				minLength: 1,
-				maxLength: 100_000,
-				description: "JavaScript async-function body. Top-level await and return are supported.",
-			}),
+			code: attachLiveDescription(Type.String({ minLength: 1, maxLength: 100_000 }), piExecGuestApiContract),
 			inputs: Type.Optional(
 				Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
 					description: "Named strings available to the program as inputs.<key>.",
 				}),
 			),
 			display: Type.Optional(
-				Type.Object({
-					name: Type.Optional(Type.String({ maxLength: 120, description: "Concise program milestone." })),
-					description: Type.Optional(
-						Type.String({ maxLength: 300, description: "Program objective or acceptance criterion." }),
-					),
-				}),
+				Type.Object(
+					{
+						name: Type.Optional(Type.String({ maxLength: 120, description: "Concise program milestone." })),
+						description: Type.Optional(
+							Type.String({ maxLength: 300, description: "Program objective or acceptance criterion." }),
+						),
+					},
+					{ description: PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION },
+				),
 			),
 		}),
 		renderCall(args, theme, context) {
@@ -530,7 +534,12 @@ export default function runtime(pi: ExtensionAPI): void {
 				const operation: ExecutionOperation = {
 					sequence: calls - 1,
 					ref,
-					args: ref === "fetch" ? fetchOperationArgs(rawArgs) : rawArgs,
+					args:
+						ref === "fetch"
+							? fetchOperationArgs(rawArgs)
+							: ref === "agents.run"
+								? agentOperationArgs(rawArgs)
+								: rawArgs,
 					outcome: "succeeded",
 				};
 				operations.push(operation);
@@ -584,23 +593,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					} else if (ref === "agents.run") {
 						agentCalls++;
 						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);
-						if (typeof rawArgs.task !== "string" || rawArgs.task.trim() === "") {
-							throw new Error("agents.run requires a non-empty task string");
-						}
-						if (
-							rawArgs.tools !== undefined &&
-							(!Array.isArray(rawArgs.tools) || rawArgs.tools.some((tool) => typeof tool !== "string"))
-						) {
-							throw new Error("agents.run tools must be an array of Pi core tool names");
-						}
-						const request: AgentRequest = {
-							task: rawArgs.task,
-							...(typeof rawArgs.name === "string" ? { name: rawArgs.name } : {}),
-							...(typeof rawArgs.model === "string" ? { model: rawArgs.model } : {}),
-							...(typeof rawArgs.thinking === "string" ? { thinking: rawArgs.thinking } : {}),
-							...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools as string[] } : {}),
-							...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
-						};
+						const request = parseAgentRequest(rawArgs);
 						const result = await runAgent(agentCalls - 1, request, ctx, runtimeSignal, (nextActivity) => {
 							operation.activity = nextActivity;
 							emit();
@@ -619,6 +612,7 @@ export default function runtime(pi: ExtensionAPI): void {
 									status: "completed",
 									text: result.output,
 									toolCalls: result.operations.length,
+									...(result.value !== undefined ? { value: result.value } : {}),
 									...(result.usage ? { usage: result.usage } : {}),
 								};
 						if (result.error) {

@@ -1,5 +1,5 @@
 import type { Theme, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
+import { type Component, truncateToWidth } from "@earendil-works/pi-tui";
 
 export type ExecCallStatus = "queued" | "running" | "succeeded" | "failed" | "aborted" | "timed_out";
 
@@ -66,7 +66,7 @@ const statusGlyph = (theme: Theme, status: ExecCallStatus): string => {
 
 const callTarget = (call: ExecActivityCall): string => {
 	const args = call.args;
-	for (const key of ["path", "pattern", "command", "task"]) {
+	for (const key of ["path", "pattern", "command", "name", "task"]) {
 		const value = oneLine(args[key], key === "task" ? 64 : 80);
 		if (value) return value;
 	}

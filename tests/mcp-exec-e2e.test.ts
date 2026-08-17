@@ -72,6 +72,11 @@ describe("MCP through pi_exec", () => {
 
 		expect(session.getAllTools().map((tool) => tool.name)).toEqual(expect.arrayContaining(["pi_exec", "mcp"]));
 		expect(session.getAllTools().map((tool) => tool.name)).not.toContain("mcpScript");
+		const execInfo = session.getAllTools().find((tool) => tool.name === "pi_exec");
+		const codeDescription = String(execInfo?.parameters.properties.code.description ?? "");
+		expect(codeDescription).toContain("extensions.mcp({");
+		expect(codeDescription).toContain("tool?");
+		expect(codeDescription).toContain("search?");
 		session.setActiveToolsByName(["pi_exec"]);
 		const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
 		expect(exec).toBeDefined();

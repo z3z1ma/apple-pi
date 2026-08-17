@@ -7,6 +7,7 @@ export interface WorkerResult {
 	exitCode: number;
 	stopReason?: string;
 	error?: string;
+	value?: unknown;
 	truncated: boolean;
 	usage?: Usage;
 	operations: ExecutionOperation[];

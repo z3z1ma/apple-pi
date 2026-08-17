@@ -1,0 +1,152 @@
+---
+name: pi-exec
+description: Write or debug a pi_exec JavaScript program using the correct guest APIs. Use when composing pi.read, grep, find, ls, bash, edit, write, fetch, extension tools, MCP, or agents inside pi_exec, when binding agent outputSchema values, or when a program fails with invalid arguments or "display is not defined".
+---
+
+# Pi Exec Guest API
+
+`pi_exec` runs a JavaScript async-function body. Intermediate tool output stays inside the worker; only the returned value enters the main context.
+
+Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway. Do not plan to discover schemas inside the program.
+
+`display` and `inputs` are parameters on the `pi_exec` tool call, not program assignments.
+
+```javascript
+// Tool arguments — not guest code
+{
+  code: "...",
+  display: { name: "Audit review surfaces", description: "Collect sealed-file matches." },
+  inputs: { root: "components/review" },
+}
+```
+
+Inside `code`, read `inputs.root`. Never write `display.name = ...` or `display.description = ...`.
+
+## Core tools
+
+Each `pi.*` function takes **one object** matching the parent Pi tool. Never pass a positional string.
+
+- `await pi.read({ path: string, offset?: number, limit?: number })` → string
+- `await pi.grep({ pattern: string, path?: string, glob?: string, ignoreCase?: boolean, literal?: boolean, context?: number, limit?: number })` → string
+- `await pi.find({ pattern: string, path?: string, limit?: number })` → string
+- `await pi.ls({ path?: string, limit?: number })` → string
+- `await pi.bash({ command: string, timeout?: number })` → `{ ok: boolean, output: string }`
+- `await pi.edit({ path: string, edits: [{ oldText: string, newText: string }] })` → `{ ok: boolean, output: string }`
+- `await pi.write({ path: string, content: string })` → `{ ok: boolean, output: string }`
+
+Wrong: `pi.read(path)`, `pi.read("file.ts")`, `pi.grep(pattern, path)`.
+
+```javascript
+const text = await pi.read({ path: "extensions/runtime.ts" });
+const matches = await pi.grep({ pattern: "pi\\.read", glob: "*.ts" });
+```
+
+## Other guest APIs
+
+The live `code` parameter lists every host signature, including web methods and captured `extensions.*` tools.
+
+- `await fetch(input: string | URL | Request, init?: RequestInit)` → `Response` (10 MiB body cap)
+- `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — captured extension tools only, not `pi.*`
+- `await extensions.<name>(args)` → `{ text, content, details, usage? }`
+- `type AgentRequest = string | { task: string, name?, model?, thinking?, tools?, systemPrompt?, context?, outputSchema? }`
+- `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
+- `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
+- `context` is a JSON-serializable value bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
+- `outputSchema` is a JSON Schema object. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
+- Workers have no extensions or MCP. Call those here, then bind the compact result as `context`.
+- Prefer `agents.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
+- Pass file paths in `context` or `task`. The worker already has `read`; do not dump file bodies into the task.
+- `await parallel(items, mapper, concurrency?)` or `await parallel(jobs, concurrency?)` → `T[]`
+- `await pipeline(items, ...stages)` → `unknown[]`
+- `await sleep(ms)` → `void`
+- `print(...)` / `console.log|info|warn|error(...)`
+- `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `queueMicrotask`
+- `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, `TextEncoder`, `TextDecoder`, `DOMException`, `atob`, `btoa`, `structuredClone`
+
+`agent` / `agents.run` are pi_exec workers. `extensions.Agent({...})` is the interactive subagent tool; they are not the same API.
+
+## Gather, bind, then run workers
+
+Compose results in the program. Bind them as `context`. Keep `task` as the instruction.
+
+Judge bound tool/MCP results:
+
+```javascript
+const rows = await parallel(ids, async (id) => {
+  const hit = await extensions.mcp({ tool: "issues.get", args: { id } });
+  return { id, text: hit.text };
+});
+const verdict = await agent({
+  task: "Which row is a real regression?",
+  name: "judge",
+  context: rows,
+  outputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "number" },
+      reason: { type: "string" },
+    },
+    required: ["id", "reason"],
+  },
+});
+return verdict.id;
+```
+
+List, filter in JavaScript, then fan-out one worker per path:
+
+```javascript
+const dir = inputs.root;
+const listing = await pi.ls({ path: dir });
+const files = listing.split("\n").filter((name) => name.endsWith(".ts"));
+return parallel(files, async (name) => {
+  const result = await agents.run({
+    task: "Name the riskiest export and quote the evidence.",
+    name,
+    context: { path: `${dir}/${name}` },
+    outputSchema: {
+      type: "object",
+      properties: {
+        export: { type: "string" },
+        evidence: { type: "string" },
+      },
+      required: ["export", "evidence"],
+    },
+  });
+  return { name, status: result.status, ...(result.value ?? {}), ...(result.error ? { error: result.error } : {}) };
+});
+```
+
+The worker reads `context.path`. Do not `pi.read` the file in the parent just to stuff the body into `task`.
+
+Feed one typed worker result into the next. `first` is `{ path }`, not prose:
+
+```javascript
+const first = await agent({
+  task: "Pick the file that owns the bug.",
+  context: { files },
+  outputSchema: {
+    type: "object",
+    properties: { path: { type: "string" } },
+    required: ["path"],
+  },
+});
+return agent({
+  task: "Explain the bug and the smallest fix.",
+  context: first,
+  outputSchema: {
+    type: "object",
+    properties: {
+      cause: { type: "string" },
+      fix: { type: "string" },
+    },
+    required: ["cause", "fix"],
+  },
+});
+```
+
+## Authoring rules
+
+- Use `pi_exec` for branching, reduction, or already-justified fan-out. Use direct tools for straightforward sequential inspection.
+- Await every host call. Do not start a call and return before it settles.
+- Keep dependent search → read and edit → verify steps sequential. Never concurrently edit the same file.
+- Return a compact value. Do not dump raw file bodies back into the main context.

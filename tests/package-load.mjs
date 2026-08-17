@@ -125,6 +125,7 @@ try {
 		"review-planner",
 		"reviewer",
 		"review-verifier",
+		"pi-exec",
 	]) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
 	}
