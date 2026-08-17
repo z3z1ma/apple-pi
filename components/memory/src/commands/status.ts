@@ -56,7 +56,7 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 				[addedSuffix(drift.observationsOnlyInFull.length), removedSuffix(drift.droppedOnlyInFull.length)],
 			);
 			const reflectionLine = appendSuffixes(
-				`Reflections:  ${folded.reflections.length} recorded / ${visible.reflections.length} visible`,
+				`Reflections:  ${folded.reflections.length} recorded / ${folded.retiredReflectionIds.size} retired / ${folded.currentReflections.length} current / ${visible.reflections.length} visible`,
 				[addedSuffix(drift.reflectionsOnlyInFull.length)],
 			);
 			const obsProgress = rawTokensSinceObservationCoverage(entries);

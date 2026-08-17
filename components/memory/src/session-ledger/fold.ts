@@ -2,9 +2,11 @@ import {
 	isObservationsDroppedData,
 	isObservationsRecordedData,
 	isReflectionsRecordedData,
+	isReflectionsRetiredData,
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -22,8 +24,12 @@ export type FoldedLedger = {
 	activeObservations: Observation[];
 	/** Tombstoned observation ids, including ids that may not have a corresponding folded observation. */
 	droppedObservationIds: Set<string>;
-	/** All first-valid reflection records encountered through the fold boundary. */
+	/** All first-valid reflection records encountered through the fold boundary, including retired reflections. */
 	reflections: Reflection[];
+	/** Reflection records not tombstoned by a folded retirement entry. */
+	currentReflections: Reflection[];
+	/** Tombstoned reflection ids, including ids that may not have a corresponding folded reflection. */
+	retiredReflectionIds: Set<string>;
 	/** All first-valid observation records by id, including dropped observations. */
 	observationsById: Map<string, Observation>;
 	/** All first-valid reflection records by id. */
@@ -44,13 +50,14 @@ function isCustomEntry(entry: Entry, customType: string): boolean {
  * Fold valid V3 memory ledger entries from the branch root through the target entry.
  *
  * Unknown custom entries, old V2 entries, invalid V3-shaped data, and compaction details are ignored.
- * Observations and reflections use first-valid-record-wins semantics. Drops are tombstones and are
- * retained even when the dropped id is unknown at the time of folding.
+ * Observations and reflections use first-valid-record-wins semantics. Drops and retirements are
+ * tombstones and are retained even when the id is unknown at the time of folding.
  */
 export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): FoldedLedger {
 	const observationsById = new Map<string, Observation>();
 	const reflectionsById = new Map<string, Reflection>();
 	const droppedObservationIds = new Set<string>();
+	const retiredReflectionIds = new Set<string>();
 	const endIdx = foldEndIndex(entries, options.upToEntryId);
 
 	for (let i = 0; i <= endIdx; i++) {
@@ -82,18 +89,29 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 			for (const observationId of entry.data.observationIds) {
 				droppedObservationIds.add(observationId);
 			}
+			continue;
+		}
+
+		if (isCustomEntry(entry, OM_REFLECTIONS_RETIRED)) {
+			if (!isReflectionsRetiredData(entry.data)) continue;
+			for (const reflectionId of entry.data.reflectionIds) {
+				retiredReflectionIds.add(reflectionId);
+			}
 		}
 	}
 
 	const observations = Array.from(observationsById.values());
 	const activeObservations = observations.filter((observation) => !droppedObservationIds.has(observation.id));
 	const reflections = Array.from(reflectionsById.values());
+	const currentReflections = reflections.filter((reflection) => !retiredReflectionIds.has(reflection.id));
 
 	return {
 		observations,
 		activeObservations,
 		droppedObservationIds,
 		reflections,
+		currentReflections,
+		retiredReflectionIds,
 		observationsById,
 		reflectionsById,
 	};

@@ -4,6 +4,7 @@ import {
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
+	isReflectionsRetiredEntry,
 	type Entry,
 	type MemoryDetails,
 	type Observation,
@@ -30,13 +31,7 @@ export type CompactionProjection = Projection & {
 	details: MemoryDetails;
 };
 
-type ProjectionBoundary = { kind: "entry"; entryId: string } | { kind: "tip" } | { kind: "none" };
-
-type ProjectionFoldOptions = {
-	observationsBoundary: ProjectionBoundary;
-	reflectionsBoundary: ProjectionBoundary;
-	dropsBoundary: ProjectionBoundary;
-};
+type ProjectionBoundary = { kind: "entry"; entryId: string } | { kind: "tip" };
 
 function entryIndexById(entries: Entry[]): Map<string, number> {
 	const indexes = new Map<string, number>();
@@ -52,13 +47,8 @@ function tipBoundary(): ProjectionBoundary {
 	return { kind: "tip" };
 }
 
-function noneBoundary(): ProjectionBoundary {
-	return { kind: "none" };
-}
-
 function boundaryIndex(entries: Entry[], indexes: Map<string, number>, boundary: ProjectionBoundary): number {
 	if (boundary.kind === "tip") return entries.length - 1;
-	if (boundary.kind === "none") return -1;
 	return indexes.get(boundary.entryId) ?? -1;
 }
 
@@ -78,19 +68,18 @@ function isCoveredAtOrBefore(
 	return isAtOrBefore(coverageIndex(entry, indexes), boundaryIndex);
 }
 
-function foldProjection(entries: Entry[], options: ProjectionFoldOptions): Projection {
+function foldProjection(entries: Entry[], boundary: ProjectionBoundary): Projection {
 	const indexes = entryIndexById(entries);
-	const observationsBoundary = boundaryIndex(entries, indexes, options.observationsBoundary);
-	const reflectionsBoundary = boundaryIndex(entries, indexes, options.reflectionsBoundary);
-	const dropsBoundary = boundaryIndex(entries, indexes, options.dropsBoundary);
+	const cut = boundaryIndex(entries, indexes, boundary);
 	const observations: Observation[] = [];
 	const reflections: Reflection[] = [];
 	const observationsById = new Set<string>();
 	const reflectionsById = new Set<string>();
 	const droppedObservationIds = new Set<string>();
+	const retiredReflectionIds = new Set<string>();
 
 	for (const entry of entries) {
-		if (isObservationsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, observationsBoundary)) {
+		if (isObservationsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
 			for (const observation of entry.data.observations) {
 				if (observationsById.has(observation.id)) continue;
 				observationsById.add(observation.id);
@@ -99,7 +88,7 @@ function foldProjection(entries: Entry[], options: ProjectionFoldOptions): Proje
 			continue;
 		}
 
-		if (isReflectionsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, reflectionsBoundary)) {
+		if (isReflectionsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
 			for (const reflection of entry.data.reflections) {
 				if (reflectionsById.has(reflection.id)) continue;
 				reflectionsById.add(reflection.id);
@@ -108,14 +97,19 @@ function foldProjection(entries: Entry[], options: ProjectionFoldOptions): Proje
 			continue;
 		}
 
-		if (isObservationsDroppedEntry(entry) && isCoveredAtOrBefore(entry, indexes, dropsBoundary)) {
+		if (isObservationsDroppedEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
 			for (const observationId of entry.data.observationIds) droppedObservationIds.add(observationId);
+			continue;
+		}
+
+		if (isReflectionsRetiredEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
+			for (const reflectionId of entry.data.reflectionIds) retiredReflectionIds.add(reflectionId);
 		}
 	}
 
 	return {
 		observations: observations.filter((observation) => !droppedObservationIds.has(observation.id)),
-		reflections,
+		reflections: reflections.filter((reflection) => !retiredReflectionIds.has(reflection.id)),
 	};
 }
 
@@ -136,12 +130,7 @@ function latestV3CompactionDetails(entries: Entry[]): MemoryDetails | undefined 
 }
 
 export function fullProjection(entries: Entry[], upToEntryId?: string): Projection {
-	const boundary = upToEntryId ? entryBoundary(upToEntryId) : tipBoundary();
-	return foldProjection(entries, {
-		observationsBoundary: boundary,
-		reflectionsBoundary: boundary,
-		dropsBoundary: boundary,
-	});
+	return foldProjection(entries, upToEntryId ? entryBoundary(upToEntryId) : tipBoundary());
 }
 
 export function visibleProjection(entries: Entry[], upToEntryId?: string): Projection {
@@ -150,7 +139,7 @@ export function visibleProjection(entries: Entry[], upToEntryId?: string): Proje
 		return details ? projectionFromMemoryDetails(details) : { observations: [], reflections: [] };
 	}
 
-	return buildCompactionProjection(entries, upToEntryId, { observationsPoolMaxTokens: Number.POSITIVE_INFINITY });
+	return fullProjection(entries, upToEntryId);
 }
 
 export function latestFullFoldBoundaryId(entries: Entry[]): string | undefined {
@@ -172,19 +161,12 @@ export function buildCompactionProjection(
 	firstKeptEntryId: string,
 	config: CompactionProjectionConfig,
 ): CompactionProjection {
-	const fullFoldBoundaryId = latestFullFoldBoundaryId(entries);
-	const maintenanceBoundary = fullFoldBoundaryId ? entryBoundary(fullFoldBoundaryId) : noneBoundary();
-	const normalProjection = foldProjection(entries, {
-		observationsBoundary: entryBoundary(firstKeptEntryId),
-		reflectionsBoundary: maintenanceBoundary,
-		dropsBoundary: maintenanceBoundary,
-	});
-	const observationTokens = normalProjection.observations.reduce(
+	const projection = fullProjection(entries, firstKeptEntryId);
+	const observationTokens = projection.observations.reduce(
 		(total, observation) => total + observation.tokenCount,
 		0,
 	);
 	const fullFold = observationTokens >= config.observationsPoolMaxTokens;
-	const projection = fullFold ? fullProjection(entries, firstKeptEntryId) : normalProjection;
 
 	const details: MemoryDetails = {
 		type: OM_FOLDED,

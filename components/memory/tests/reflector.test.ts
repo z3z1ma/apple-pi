@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	normalizeRetiredReflectionIds,
 	normalizeSupportingObservationIds,
 	observationToReflectorLine,
 	runReflector,
@@ -187,14 +188,17 @@ describe("V3 reflector agent", () => {
 
 		const result = await runReflector({ ...baseArgs, agentLoop: loop });
 
-		expect(result).toEqual([
-			{
-				id: hashId(content),
-				content,
-				supportingObservationIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"],
-				tokenCount: estimateStringTokens(content),
-			},
-		]);
+		expect(result).toEqual({
+			reflections: [
+				{
+					id: hashId(content),
+					content,
+					supportingObservationIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"],
+					tokenCount: estimateStringTokens(content),
+				},
+			],
+			retiredIds: [],
+		});
 	});
 
 	it("rejects invented support ids and multiline content", async () => {
@@ -225,11 +229,68 @@ describe("V3 reflector agent", () => {
 
 		const result = await runReflector({ ...baseArgs, reflections: [existing], agentLoop: loop });
 
-		expect(result?.map((item) => item.content)).toEqual(["New durable fact."]);
+		expect(result?.reflections.map((item) => item.content)).toEqual(["New durable fact."]);
+		expect(result?.retiredIds).toEqual([]);
 	});
 
 	it("returns undefined when no tool call records reflections", async () => {
 		const loop = fakeAgentLoop(() => {});
 		await expect(runReflector({ ...baseArgs, agentLoop: loop })).resolves.toBeUndefined();
+	});
+
+	it("rejects unknown retirement ids and does not tombstone law", () => {
+		expect(normalizeRetiredReflectionIds(["eeeeeeeeeeee"], new Set(["ffffffffffff"]))).toBeUndefined();
+		expect(normalizeRetiredReflectionIds([], new Set(["eeeeeeeeeeee"]))).toBeUndefined();
+		expect(normalizeRetiredReflectionIds(["eeeeeeeeeeee"], new Set(["eeeeeeeeeeee"]))).toEqual(["eeeeeeeeeeee"]);
+	});
+
+	it("records a successor and retires superseded current law", async () => {
+		const existing = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"], { content: "Old planning contract." });
+		const content = "Chose path B after abandoning path A because tests failed.";
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			await context.tools[0].execute("tool-1", {
+				reflections: [
+					{
+						content,
+						supportingObservationIds: ["aaaaaaaaaaaa"],
+						supersedes: ["eeeeeeeeeeee"],
+					},
+				],
+			});
+		});
+
+		const result = await runReflector({ ...baseArgs, reflections: [existing], agentLoop: loop });
+
+		expect(result).toEqual({
+			reflections: [
+				{
+					id: hashId(content),
+					content,
+					supportingObservationIds: ["aaaaaaaaaaaa"],
+					tokenCount: estimateStringTokens(content),
+				},
+			],
+			retiredIds: ["eeeeeeeeeeee"],
+		});
+	});
+
+	it("retires current law with no successor", async () => {
+		const existing = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			await context.tools[1].execute("tool-1", { reflectionIds: ["eeeeeeeeeeee"] });
+		});
+
+		const result = await runReflector({ ...baseArgs, reflections: [existing], agentLoop: loop });
+
+		expect(result).toEqual({ reflections: [], retiredIds: ["eeeeeeeeeeee"] });
+	});
+
+	it("rejects retirements of unknown reflection ids", async () => {
+		const existing = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			await context.tools[1].execute("tool-1", { reflectionIds: ["ffffffffffff"] });
+		});
+
+		await expect(runReflector({ ...baseArgs, reflections: [existing], agentLoop: loop })).resolves.toBeUndefined();
 	});
 });

@@ -11,9 +11,11 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 	buildObservationsDroppedData,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
+	buildReflectionsRetiredData,
 	earlierCoverageMarkerId,
 	foldLedger,
 	fullProjection,
@@ -22,10 +24,13 @@ import {
 	latestCoverageMarkerId,
 	observationToSummaryLine,
 	realTokensSinceAnchor,
+	realTokensSinceCoverageIndex,
+	latestReflectionCoverageIndex,
 	rawTokensSinceObservationCoverage,
 	rawTokensSinceReflectionCoverage,
 	reflectionToSummaryLine,
 	type Entry,
+	type FoldedLedger,
 	type Observation,
 	type Reflection,
 	type V3MemoryCustomType,
@@ -54,6 +59,7 @@ type StageOutcome = "continue" | "abort";
 type ReflectorStageResult = {
 	outcome: StageOutcome;
 	sameRunReflections: Reflection[];
+	sameRunRetiredIds: string[];
 	effectiveReflectionCoverageId?: string;
 };
 
@@ -65,15 +71,93 @@ function appendEntry(pi: ExtensionAPI, customType: string, data: unknown): void 
 	pi.appendEntry(customType, data);
 }
 
-function mergeReflections(existing: Reflection[], additional: Reflection[]): Reflection[] {
-	const seen = new Set(existing.map((reflection) => reflection.id));
-	const merged = [...existing];
-	for (const reflection of additional) {
-		if (seen.has(reflection.id)) continue;
-		seen.add(reflection.id);
-		merged.push(reflection);
+function memoryIdFingerprint(ids: readonly string[]): string {
+	return [...ids].sort().join(",");
+}
+
+function tokensSinceObservationCoverage(entries: Entry[], currentTokens: number | undefined): number {
+	const real =
+		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_OBSERVATIONS_RECORDED, currentTokens) : undefined;
+	return real !== undefined ? real : rawTokensSinceObservationCoverage(entries);
+}
+
+function dropperNoDropBackoffActive(
+	runtime: Runtime,
+	sessionIdentity: string | undefined,
+	folded: FoldedLedger,
+	tokens: number,
+	observeAfterTokens: number,
+): boolean {
+	const backoff = runtime.dropperNoDropBackoff;
+	if (!backoff) return false;
+	const lawFingerprint = memoryIdFingerprint(folded.currentReflections.map((reflection) => reflection.id));
+	const observationFingerprint = memoryIdFingerprint(folded.activeObservations.map((observation) => observation.id));
+	if (
+		sessionIdentity !== backoff.sessionIdentity ||
+		lawFingerprint !== backoff.lawFingerprint ||
+		observationFingerprint !== backoff.observationFingerprint ||
+		tokens >= backoff.tokensAtEmpty + observeAfterTokens
+	) {
+		runtime.dropperNoDropBackoff = undefined;
+		return false;
 	}
-	return merged;
+	return true;
+}
+
+function setDropperNoDropBackoff(
+	runtime: Runtime,
+	sessionIdentity: string | undefined,
+	folded: FoldedLedger,
+	tokens: number,
+): void {
+	runtime.dropperNoDropBackoff = {
+		sessionIdentity,
+		lawFingerprint: memoryIdFingerprint(folded.currentReflections.map((reflection) => reflection.id)),
+		observationFingerprint: memoryIdFingerprint(folded.activeObservations.map((observation) => observation.id)),
+		tokensAtEmpty: tokens,
+	};
+}
+
+function tokensSinceReflectionCoverage(entries: Entry[], currentTokens: number | undefined): number {
+	const real =
+		currentTokens !== undefined
+			? realTokensSinceCoverageIndex(entries, latestReflectionCoverageIndex(entries), currentTokens)
+			: undefined;
+	return real !== undefined ? real : rawTokensSinceReflectionCoverage(entries);
+}
+
+function reflectorMaintenanceBackoffActive(
+	runtime: Runtime,
+	sessionIdentity: string | undefined,
+	observationCoverageId: string | undefined,
+	tokens: number,
+	reflectAfterTokens: number,
+): boolean {
+	const backoff = runtime.reflectorMaintenanceBackoff;
+	if (!backoff) return false;
+	if (
+		sessionIdentity !== backoff.sessionIdentity ||
+		observationCoverageId !== backoff.observationCoverageId ||
+		tokens >= backoff.tokensAtEmpty + reflectAfterTokens
+	) {
+		runtime.reflectorMaintenanceBackoff = undefined;
+		return false;
+	}
+	return true;
+}
+
+function dropperLaunchDue(
+	entries: Entry[],
+	config: Config,
+	runtime: Runtime,
+	sessionIdentity: string | undefined,
+	currentTokens: number | undefined,
+): boolean {
+	const folded = foldLedger(entries);
+	const metrics = observationPoolMetrics(folded.activeObservations, config.observationsPoolTargetTokens);
+	if (!metrics.ready) return false;
+	const tokens = tokensSinceObservationCoverage(entries, currentTokens);
+	return !dropperNoDropBackoffActive(runtime, sessionIdentity, folded, tokens, config.observeAfterTokens);
 }
 
 /**
@@ -88,6 +172,11 @@ function realContextTokens(ctx: ConsolidationCtx): number | undefined {
 	return typeof tokens === "number" && Number.isFinite(tokens) ? tokens : undefined;
 }
 
+function coverageIndexForStage(entries: Entry[], customType: V3MemoryCustomType): number {
+	if (customType === OM_REFLECTIONS_RECORDED) return latestReflectionCoverageIndex(entries);
+	return latestCoverageIndex(entries, customType);
+}
+
 function stageDue(
 	entries: Entry[],
 	currentTokens: number | undefined,
@@ -96,7 +185,11 @@ function stageDue(
 	threshold: number,
 ): boolean {
 	if (currentTokens !== undefined) {
-		const real = realTokensSinceAnchor(entries, customType, currentTokens);
+		const real = realTokensSinceCoverageIndex(
+			entries,
+			coverageIndexForStage(entries, customType),
+			currentTokens,
+		);
 		if (real !== undefined) return real >= threshold;
 	}
 	// Real delta unmeasurable (no usage baseline, or accounting basis changed) or
@@ -105,7 +198,30 @@ function stageDue(
 	return rawEstimateFn(entries) >= threshold;
 }
 
-function anyStageDue(entries: Entry[], config: Config, currentTokens: number | undefined): boolean {
+function anyStageDue(
+	entries: Entry[],
+	config: Config,
+	runtime: Runtime,
+	sessionIdentity: string | undefined,
+	currentTokens: number | undefined,
+): boolean {
+	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
+	const reflectionTokens = tokensSinceReflectionCoverage(entries, currentTokens);
+	const reflectorDue =
+		stageDue(
+			entries,
+			currentTokens,
+			OM_REFLECTIONS_RECORDED,
+			rawTokensSinceReflectionCoverage,
+			config.reflectAfterTokens,
+		) &&
+		!reflectorMaintenanceBackoffActive(
+			runtime,
+			sessionIdentity,
+			observationCoverageId,
+			reflectionTokens,
+			config.reflectAfterTokens,
+		);
 	return (
 		stageDue(
 			entries,
@@ -114,13 +230,8 @@ function anyStageDue(entries: Entry[], config: Config, currentTokens: number | u
 			rawTokensSinceObservationCoverage,
 			config.observeAfterTokens,
 		) ||
-		stageDue(
-			entries,
-			currentTokens,
-			OM_REFLECTIONS_RECORDED,
-			rawTokensSinceReflectionCoverage,
-			config.reflectAfterTokens,
-		)
+		reflectorDue ||
+		dropperLaunchDue(entries, config, runtime, sessionIdentity, currentTokens)
 	);
 }
 
@@ -180,7 +291,9 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 	if (runtime.consolidationInFlight) return;
 
 	const entries = ctx.sessionManager.getBranch() as Entry[];
-	if (!anyStageDue(entries, config, realContextTokens(ctx))) return;
+	const sessionMetadata = debugSessionMetadata(ctx);
+	const sessionIdentity = sessionMetadata.sessionId ?? sessionMetadata.sessionFile;
+	if (!anyStageDue(entries, config, runtime, sessionIdentity, realContextTokens(ctx))) return;
 
 	const runId = `consolidation-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 	const consolidationCtx: ConsolidationCtx = {
@@ -193,8 +306,6 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 		getContextUsage: ctx.getContextUsage,
 		sessionManager: ctx.sessionManager,
 	};
-
-	const sessionMetadata = debugSessionMetadata(ctx);
 	void runtime.launchConsolidationTask(ctx, async () =>
 		withDebugLogContext(
 			{
@@ -398,62 +509,102 @@ async function runObserverStage(
 
 async function runReflectorStage(
 	pi: ExtensionAPI,
-	_runtime: Runtime,
+	runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "reflector") => Promise<ResolvedModel | undefined>,
 	config: Config,
 ): Promise<ReflectorStageResult> {
+	const empty: ReflectorStageResult = { outcome: "continue", sameRunReflections: [], sameRunRetiredIds: [] };
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const currentTokens = realContextTokens(ctx);
-	const real =
-		currentTokens !== undefined ? realTokensSinceAnchor(entries, OM_REFLECTIONS_RECORDED, currentTokens) : undefined;
-	const reflectionTokens = real !== undefined ? real : rawTokensSinceReflectionCoverage(entries); // fallback: no usage baseline / basis change
-	if (reflectionTokens < config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
+	const reflectionTokens = tokensSinceReflectionCoverage(entries, currentTokens);
+	if (reflectionTokens < config.reflectAfterTokens) return empty;
 
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
-	if (!observationCoverageId) return { outcome: "continue", sameRunReflections: [] };
+	if (!observationCoverageId) return empty;
+
+	const sessionMetadata = debugSessionMetadata(ctx);
+	const sessionIdentity = sessionMetadata.sessionId ?? sessionMetadata.sessionFile;
+	if (
+		reflectorMaintenanceBackoffActive(
+			runtime,
+			sessionIdentity,
+			observationCoverageId,
+			reflectionTokens,
+			config.reflectAfterTokens,
+		)
+	) {
+		debugLog("reflector.maintenance_backoff", {
+			reflectionTokens,
+			resumeAtTokens:
+				(runtime.reflectorMaintenanceBackoff?.tokensAtEmpty ?? reflectionTokens) + config.reflectAfterTokens,
+		});
+		return empty;
+	}
 
 	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(`Observational memory: reflector running (~${reflectionTokens.toLocaleString()} tokens)`, "info");
 	const resolved = await resolveModel("reflector");
-	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
+	if (!resolved) return { ...empty, outcome: "abort" };
 
 	const folded = foldLedger(entries);
-	const reflections = await runReflector({
+	const coverageBefore = latestReflectionCoverageIndex(entries);
+	const result = await runReflector({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,
 		headers: resolved.headers,
-		reflections: folded.reflections,
+		reflections: folded.currentReflections,
 		observations: folded.activeObservations,
 		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
-	if (!reflections) return { outcome: "continue", sameRunReflections: [] };
+	const armReflectorBackoff = () => {
+		runtime.reflectorMaintenanceBackoff = {
+			sessionIdentity,
+			observationCoverageId,
+			tokensAtEmpty: reflectionTokens,
+		};
+	};
+	if (!result) {
+		armReflectorBackoff();
+		return empty;
+	}
 
-	const data = buildReflectionsRecordedData(reflections, observationCoverageId);
-	if (!data) return { outcome: "continue", sameRunReflections: [] };
-	appendEntry(pi, OM_REFLECTIONS_RECORDED, data);
+	const recorded = buildReflectionsRecordedData(result.reflections, observationCoverageId);
+	if (recorded) appendEntry(pi, OM_REFLECTIONS_RECORDED, recorded);
+	const currentIds = new Set(folded.currentReflections.map((reflection) => reflection.id));
+	const retiredIds = result.retiredIds.filter((id) => currentIds.has(id));
+	const successorIds = result.reflections.map((reflection) => reflection.id);
+	const retired = buildReflectionsRetiredData(
+		retiredIds,
+		observationCoverageId,
+		successorIds.length > 0 ? successorIds : undefined,
+	);
+	if (retired) appendEntry(pi, OM_REFLECTIONS_RETIRED, retired);
+	if (!recorded && !retired) {
+		armReflectorBackoff();
+		return empty;
+	}
+	const coverageAfter = latestReflectionCoverageIndex(ctx.sessionManager.getBranch() as Entry[]);
+	if (coverageAfter <= coverageBefore) armReflectorBackoff();
+	else runtime.reflectorMaintenanceBackoff = undefined;
 	return {
 		outcome: "continue",
-		sameRunReflections: reflections,
-		effectiveReflectionCoverageId: data.coversUpToId,
+		sameRunReflections: result.reflections,
+		sameRunRetiredIds: retiredIds,
+		effectiveReflectionCoverageId: observationCoverageId,
 	};
 }
 
 async function runDropperStage(
 	pi: ExtensionAPI,
-	_runtime: Runtime,
+	runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "dropper") => Promise<ResolvedModel | undefined>,
 	sameRunReflections: Reflection[],
 	sameRunReflectionCoverageId: string | undefined,
 	config: Config,
 ): Promise<StageOutcome> {
-	if (!sameRunReflectionCoverageId || sameRunReflections.length === 0) {
-		debugLog("dropper.waiting_for_reflection", { sameRunReflections: sameRunReflections.length });
-		return "continue";
-	}
-
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
 	if (!observationCoverageId) return "continue";
@@ -472,6 +623,18 @@ async function runDropperStage(
 		});
 		return "continue";
 	}
+
+	const sessionMetadata = debugSessionMetadata(ctx);
+	const sessionIdentity = sessionMetadata.sessionId ?? sessionMetadata.sessionFile;
+	const tokens = tokensSinceObservationCoverage(entries, realContextTokens(ctx));
+	if (dropperNoDropBackoffActive(runtime, sessionIdentity, folded, tokens, config.observeAfterTokens)) {
+		debugLog("dropper.empty_backoff", {
+			tokens,
+			resumeAtTokens: (runtime.dropperNoDropBackoff?.tokensAtEmpty ?? tokens) + config.observeAfterTokens,
+		});
+		return "continue";
+	}
+
 	debugLog("dropper.stage_start", {
 		observationCoverageId,
 		sameRunReflectionCoverageId,
@@ -486,18 +649,17 @@ async function runDropperStage(
 
 	if (shouldNotifyWorker(config, ctx))
 		ctx.ui?.notify(
-			`Observational memory: dropper running after reflection — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
+			`Observational memory: dropper running — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
 			"info",
 		);
 	const resolved = await resolveModel("dropper");
 	if (!resolved) return "abort";
 
-	const reflectionsForDropper = mergeReflections(folded.reflections, sameRunReflections);
 	const droppedIds = await runDropper({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,
 		headers: resolved.headers,
-		reflections: reflectionsForDropper,
+		reflections: folded.currentReflections,
 		observations: folded.activeObservations,
 		targetTokens: config.observationsPoolTargetTokens,
 		maxTurns: config.agentMaxTurns,
@@ -511,6 +673,11 @@ async function runDropperStage(
 		dataBuilt: data !== undefined,
 		appended: data !== undefined,
 	});
-	if (data) appendEntry(pi, OM_OBSERVATIONS_DROPPED, data);
+	if (data) {
+		appendEntry(pi, OM_OBSERVATIONS_DROPPED, data);
+		runtime.dropperNoDropBackoff = undefined;
+	} else {
+		setDropperNoDropBackoff(runtime, sessionIdentity, folded, tokens);
+	}
 	return "continue";
 }

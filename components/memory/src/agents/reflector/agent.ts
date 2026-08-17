@@ -36,12 +36,23 @@ const RecordReflectionsSchema = Type.Object({
 		Type.Object({
 			content: Type.String({ minLength: 1 }),
 			supportingObservationIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+			supersedes: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })),
 		}),
 		{ minItems: 1 },
 	),
 });
 
+const RetireReflectionsSchema = Type.Object({
+	reflectionIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+});
+
 type RecordReflectionsArgs = Static<typeof RecordReflectionsSchema>;
+type RetireReflectionsArgs = Static<typeof RetireReflectionsSchema>;
+
+export type ReflectorPassResult = {
+	reflections: Reflection[];
+	retiredIds: string[];
+};
 
 function joinOrEmpty(items: string[]): string {
 	return items.length ? items.join("\n") : "(none yet)";
@@ -83,6 +94,23 @@ export function summarizeSupportIdCounts(reflections: readonly Reflection[]): {
 	};
 }
 
+export function normalizeRetiredReflectionIds(
+	reflectionIds: readonly string[] | undefined,
+	currentReflectionIds: ReadonlySet<string>,
+	alreadyRetiredIds: ReadonlySet<string> = new Set(),
+): string[] | undefined {
+	if (!reflectionIds || reflectionIds.length === 0) return undefined;
+	const result: string[] = [];
+	const seen = new Set<string>();
+	for (const id of reflectionIds) {
+		if (!currentReflectionIds.has(id)) return undefined;
+		if (alreadyRetiredIds.has(id) || seen.has(id)) continue;
+		seen.add(id);
+		result.push(id);
+	}
+	return result.length > 0 ? result : undefined;
+}
+
 export function normalizeSupportingObservationIds(
 	supportingObservationIds: readonly string[] | undefined,
 	allowedObservationIds: readonly string[],
@@ -108,7 +136,7 @@ function normalizeReflectionContent(content: string): string | undefined {
 	return normalized;
 }
 
-export async function runReflector(args: RunReflectorArgs): Promise<Reflection[] | undefined> {
+export async function runReflector(args: RunReflectorArgs): Promise<ReflectorPassResult | undefined> {
 	const { model, apiKey, headers, reflections, observations, signal } = args;
 	if (observations.length === 0) return undefined;
 
@@ -120,18 +148,24 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 	});
 
 	const allowedObservationIds = observations.map((observation) => observation.id);
-	const existingReflectionIds = new Set(reflections.map((reflection) => reflection.id));
+	const currentReflectionIds = new Set(reflections.map((reflection) => reflection.id));
+	const existingReflectionIds = new Set(currentReflectionIds);
 	const accumulated = new Map<string, Reflection>();
+	const retiredIds: string[] = [];
+	const retired = new Set<string>();
 	let toolCallCount = 0;
 	let rawProposedReflectionCount = 0;
 	let acceptedReflectionCount = 0;
 	let duplicateReflectionCount = 0;
 	let rejectedReflectionCount = 0;
+	let acceptedRetirementCount = 0;
+	let rejectedRetirementCount = 0;
 
 	const recordReflections: AgentTool<typeof RecordReflectionsSchema> = {
 		name: "record_reflections",
 		label: "Record reflections",
-		description: "Record new durable reflections with supporting observation ids.",
+		description:
+			"Record new durable current-law reflections with supporting observation ids. Optionally supersede current reflection ids.",
 		parameters: RecordReflectionsSchema,
 		execute: async (_id, params: RecordReflectionsArgs) => {
 			toolCallCount++;
@@ -139,13 +173,18 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 			let added = 0;
 			let duplicates = 0;
 			let rejected = 0;
+			let retiredNow = 0;
 			for (const proposal of params.reflections) {
 				const content = normalizeReflectionContent(proposal.content);
 				const supportingObservationIds = normalizeSupportingObservationIds(
 					proposal.supportingObservationIds,
 					allowedObservationIds,
 				);
-				if (!content || !supportingObservationIds) {
+				const supersedesInvalid = proposal.supersedes?.some((id) => !currentReflectionIds.has(id));
+				const supersedes = proposal.supersedes
+					? (normalizeRetiredReflectionIds(proposal.supersedes, currentReflectionIds, retired) ?? [])
+					: [];
+				if (!content || !supportingObservationIds || supersedesInvalid) {
 					rejected++;
 					continue;
 				}
@@ -161,28 +200,73 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 					tokenCount: estimateStringTokens(content),
 				});
 				added++;
+				if (supersedes) {
+					for (const retiredId of supersedes) {
+						retired.add(retiredId);
+						retiredIds.push(retiredId);
+						retiredNow++;
+					}
+				}
 			}
 			acceptedReflectionCount += added;
 			duplicateReflectionCount += duplicates;
 			rejectedReflectionCount += rejected;
+			acceptedRetirementCount += retiredNow;
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Recorded ${added} reflection${added === 1 ? "" : "s"}; ${duplicates} duplicate${duplicates === 1 ? "" : "s"}; ${rejected} rejected. Total this run: ${accumulated.size}.`,
+						text: `Recorded ${added} reflection${added === 1 ? "" : "s"}; ${duplicates} duplicate${duplicates === 1 ? "" : "s"}; ${rejected} rejected; retired ${retiredNow}. Total this run: ${accumulated.size} new, ${retired.size} retired.`,
 					},
 				],
-				details: { added, duplicates, rejected, total: accumulated.size },
+				details: { added, duplicates, rejected, retired: retiredNow, total: accumulated.size },
 			};
 		},
 	};
 
-	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map((observation) => observationToReflectorLine(observation, coverageTierForObservation(observation, coverageById))))}\n\nCrystallize any missing durable facts or patterns into new reflections. If nothing is stable enough, do not call the tool.`;
+	const retireReflections: AgentTool<typeof RetireReflectionsSchema> = {
+		name: "retire_reflections",
+		label: "Retire reflections",
+		description: "Retire current-law reflection ids that are no longer current. Does not erase ledger history.",
+		parameters: RetireReflectionsSchema,
+		execute: async (_id, params: RetireReflectionsArgs) => {
+			toolCallCount++;
+			const normalized = normalizeRetiredReflectionIds(params.reflectionIds, currentReflectionIds, retired);
+			if (!normalized) {
+				rejectedRetirementCount += params.reflectionIds.length;
+				return {
+					content: [
+						{
+							type: "text",
+							text: "Rejected retirement batch. Every id must be current law and the batch must not be empty.",
+						},
+					],
+					details: { added: 0, rejected: params.reflectionIds.length, total: retired.size },
+				};
+			}
+			for (const retiredId of normalized) {
+				retired.add(retiredId);
+				retiredIds.push(retiredId);
+			}
+			acceptedRetirementCount += normalized.length;
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Retired ${normalized.length} reflection${normalized.length === 1 ? "" : "s"}. Total retired this run: ${retired.size}.`,
+					},
+				],
+				details: { added: normalized.length, rejected: 0, total: retired.size },
+			};
+		},
+	};
+
+	const userText = `CURRENT LAW:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT WORKING EVIDENCE:\n${joinOrEmpty(observations.map((observation) => observationToReflectorLine(observation, coverageTierForObservation(observation, coverageById))))}\n\nMaintain current law in this one pass: emit missing durable facts, supersede outdated law, or retire law that is no longer current. If a pivot still constrains later work, leave that residue on the successor. If nothing should change, do not call a tool.`;
 	const prompts: Message[] = [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }];
 	const context: AgentContext = {
 		systemPrompt: REFLECTOR_SYSTEM,
 		messages: [],
-		tools: [recordReflections as AgentTool<any>],
+		tools: [recordReflections as AgentTool<any>, retireReflections as AgentTool<any>],
 	};
 	const reasoning = (model as { reasoning?: unknown }).reasoning;
 	const thinkingLevel = args.thinkingLevel ?? "low";
@@ -207,15 +291,22 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 	}
 	await stream.result();
 	const acceptedReflections = Array.from(accumulated.values());
-	const afterCoverageById = reflectionCoverageMap(observations, [...reflections, ...acceptedReflections]);
+	const currentLaw = [...reflections.filter((reflection) => !retired.has(reflection.id)), ...acceptedReflections];
+	const afterCoverageById = reflectionCoverageMap(observations, currentLaw);
 	debugLog("reflector.result", {
 		reason:
-			acceptedReflections.length > 0 ? "accepted_nonempty" : toolCallCount === 0 ? "no_tool_call" : "all_filtered",
+			acceptedReflections.length > 0 || retiredIds.length > 0
+				? "accepted_nonempty"
+				: toolCallCount === 0
+					? "no_tool_call"
+					: "all_filtered",
 		toolCallCount,
 		rawProposedReflectionCount,
 		acceptedReflectionCount,
 		duplicateReflectionCount,
 		rejectedReflectionCount,
+		acceptedRetirementCount,
+		rejectedRetirementCount,
 		acceptedSupportIdCounts: summarizeSupportIdCounts(acceptedReflections),
 		coverageTransitionsByRelevance: summarizeCoverageTransitionsByRelevance(
 			observations,
@@ -223,5 +314,6 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 			afterCoverageById,
 		),
 	});
-	return acceptedReflections.length > 0 ? acceptedReflections : undefined;
+	if (acceptedReflections.length === 0 && retiredIds.length === 0) return undefined;
+	return { reflections: acceptedReflections, retiredIds };
 }

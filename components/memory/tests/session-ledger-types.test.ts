@@ -5,9 +5,11 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 	buildObservationsDroppedData,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
+	buildReflectionsRetiredData,
 	isMemoryDetails,
 	isObservationsDroppedData,
 	isObservationsDroppedEntry,
@@ -17,6 +19,8 @@ import {
 	isReflection,
 	isReflectionsRecordedData,
 	isReflectionsRecordedEntry,
+	isReflectionsRetiredData,
+	isReflectionsRetiredEntry,
 } from "../src/session-ledger/index.js";
 import {
 	memoryDetails,
@@ -27,6 +31,7 @@ import {
 	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
+	reflectionsRetiredEntry,
 } from "./fixtures/session.js";
 
 describe("session-ledger V3 type guards and builders", () => {
@@ -34,6 +39,7 @@ describe("session-ledger V3 type guards and builders", () => {
 		expect(OM_OBSERVATIONS_RECORDED).toBe("om.observations.recorded");
 		expect(OM_REFLECTIONS_RECORDED).toBe("om.reflections.recorded");
 		expect(OM_OBSERVATIONS_DROPPED).toBe("om.observations.dropped");
+		expect(OM_REFLECTIONS_RETIRED).toBe("om.reflections.retired");
 		expect(OM_FOLDED).toBe("om.folded");
 	});
 
@@ -54,22 +60,26 @@ describe("session-ledger V3 type guards and builders", () => {
 		const obsData = { observations: [observation("aaaaaaaaaaaa")], coversUpToId: "raw-1" };
 		const refData = { reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])], coversUpToId: "raw-2" };
 		const dropData = { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "ref-entry-1" };
+		const retireData = { reflectionIds: ["eeeeeeeeeeee"], coversUpToId: "raw-2", successorIds: ["ffffffffffff"] };
 
 		expect(isObservationsRecordedData(obsData)).toBe(true);
 		expect(isReflectionsRecordedData(refData)).toBe(true);
 		expect(isObservationsDroppedData(dropData)).toBe(true);
+		expect(isReflectionsRetiredData(retireData)).toBe(true);
 	});
 
 	it("rejects empty ledger entry data so no empty progress entries can be appended", () => {
 		expect(isObservationsRecordedData({ observations: [], coversUpToId: "raw-1" })).toBe(false);
 		expect(isReflectionsRecordedData({ reflections: [], coversUpToId: "raw-1" })).toBe(false);
 		expect(isObservationsDroppedData({ observationIds: [], coversUpToId: "raw-1" })).toBe(false);
+		expect(isReflectionsRetiredData({ reflectionIds: [], coversUpToId: "raw-1" })).toBe(false);
 	});
 
 	it("builders return undefined for empty arrays and data for non-empty arrays", () => {
 		expect(buildObservationsRecordedData([], "raw-1")).toBeUndefined();
 		expect(buildReflectionsRecordedData([], "raw-1")).toBeUndefined();
 		expect(buildObservationsDroppedData([], "raw-1")).toBeUndefined();
+		expect(buildReflectionsRetiredData([], "raw-1")).toBeUndefined();
 
 		expect(buildObservationsRecordedData([observation("aaaaaaaaaaaa")], "raw-1")).toEqual({
 			observations: [observation("aaaaaaaaaaaa")],
@@ -82,6 +92,11 @@ describe("session-ledger V3 type guards and builders", () => {
 		expect(buildObservationsDroppedData(["aaaaaaaaaaaa"], "ref-entry-1")).toEqual({
 			observationIds: ["aaaaaaaaaaaa"],
 			coversUpToId: "ref-entry-1",
+		});
+		expect(buildReflectionsRetiredData(["eeeeeeeeeeee"], "raw-1", ["ffffffffffff"])).toEqual({
+			reflectionIds: ["eeeeeeeeeeee"],
+			coversUpToId: "raw-1",
+			successorIds: ["ffffffffffff"],
 		});
 	});
 
@@ -107,6 +122,14 @@ describe("session-ledger V3 type guards and builders", () => {
 				observationsDroppedEntry("om-drop-1", {
 					observationIds: ["aaaaaaaaaaaa"],
 					coversUpToId: "om-eeeeeeeeeeee",
+				}),
+			),
+		).toBe(true);
+		expect(
+			isReflectionsRetiredEntry(
+				reflectionsRetiredEntry("om-retire-1", {
+					reflectionIds: ["eeeeeeeeeeee"],
+					coversUpToId: "raw-1",
 				}),
 			),
 		).toBe(true);

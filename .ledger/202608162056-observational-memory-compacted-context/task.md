@@ -47,6 +47,7 @@ Record how observational memory is produced, pruned, and injected into compacted
 
 - 2026-08-16: Opened after a long review-system session whose compacted prompt carried stacked superseded reflections and a chronological observation changelog. The operator asked how the dropper decides today and whether it should be more aggressive, then asked that those thoughts be written as research only.
 - 2026-08-16: Wrote `research/compacted-memory-fidelity.md`. `ralph inspect` compiled the open task and research record with AC-001 through AC-004.
+- 2026-08-16: Follow-up shaping opened as `.ledger/202608162324-distill-observational-memory-current-state/task.md`. This research task remains research-only.
 
 ## Blockers
 

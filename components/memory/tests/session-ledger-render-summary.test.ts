@@ -13,7 +13,10 @@ describe("session-ledger V3 summary rendering", () => {
 
 		const summary = renderSummary([ref], []);
 
-		expect(summary).toContain("These are condensed memories from earlier in this session.");
+		expect(summary).toContain("These records are this session's current working memory after compaction.");
+		expect(summary).toContain("Honor current law");
+		expect(summary).toContain("Do not replay this list as a historical stack");
+		expect(summary).not.toContain("past records");
 		expect(summary).toContain("use the recall tool");
 	});
 

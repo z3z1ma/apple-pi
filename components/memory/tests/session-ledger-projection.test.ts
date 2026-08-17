@@ -16,6 +16,7 @@ import {
 	oldV2CompactionDetails,
 	reflection,
 	reflectionsRecordedEntry,
+	reflectionsRetiredEntry,
 	textCustomMessage,
 } from "./fixtures/session.js";
 
@@ -91,7 +92,7 @@ describe("session-ledger V3 projections", () => {
 		expect(latestFullFoldBoundaryId(entries)).toBe("raw-3");
 	});
 
-	it("first normal compaction includes observations by coverage and excludes maintenance streams", () => {
+	it("first compaction applies reflections and drops through the cut", () => {
 		const obs1 = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-2"], tokenCount: 10 });
 		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
 		const entries = [
@@ -105,12 +106,12 @@ describe("session-ledger V3 projections", () => {
 		const result = buildCompactionProjection(entries, "raw-2", { observationsPoolMaxTokens: 100 });
 
 		expect(result.fullFold).toBe(false);
-		expect(result.observations.map((obs) => obs.id)).toEqual(["aaaaaaaaaaaa"]);
-		expect(result.reflections).toEqual([]);
+		expect(result.observations.map((obs) => obs.id)).toEqual([]);
+		expect(result.reflections.map((ref) => ref.id)).toEqual(["eeeeeeeeeeee"]);
 		expect(result.details).toMatchObject({ type: "om.folded", version: 1, fullFold: false });
 	});
 
-	it("normal compaction projection includes current observations but keeps reflections and drops at latest full-fold boundary", () => {
+	it("compaction projection applies later reflections, retirements, and drops before overflow", () => {
 		const obs1 = observation("aaaaaaaaaaaa", { tokenCount: 5 });
 		const obs2 = observation("bbbbbbbbbbbb", { tokenCount: 5 });
 		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
@@ -126,20 +127,25 @@ describe("session-ledger V3 projections", () => {
 			textCustomMessage("raw-2", "bbbb"),
 			observationsRecordedEntry("om-bbbbbbbbbbbb", { observations: [obs2], coversUpToId: "raw-2" }),
 			reflectionsRecordedEntry("om-ffffffffffff", { reflections: [ref2], coversUpToId: "raw-2" }),
+			reflectionsRetiredEntry("om-retire-1", {
+				reflectionIds: ["eeeeeeeeeeee"],
+				successorIds: ["ffffffffffff"],
+				coversUpToId: "raw-2",
+			}),
 			observationsDroppedEntry("om-drop-2", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "raw-2" }),
 		];
 
 		const result = buildCompactionProjection(entries, "raw-2", { observationsPoolMaxTokens: 100 });
 
 		expect(result.fullFold).toBe(false);
-		expect(result.observations.map((obs) => obs.id)).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
-		expect(result.reflections.map((ref) => ref.id)).toEqual(["eeeeeeeeeeee"]);
+		expect(result.observations.map((obs) => obs.id)).toEqual(["bbbbbbbbbbbb"]);
+		expect(result.reflections.map((ref) => ref.id)).toEqual(["ffffffffffff"]);
 		expect(result.details).toMatchObject({ type: "om.folded", version: 1, fullFold: false });
 	});
 
-	it("full compaction projection applies reflections and drops through current boundary by coverage", () => {
+	it("full compaction projection applies reflections and drops through the cut", () => {
 		const obs1 = observation("aaaaaaaaaaaa", { tokenCount: 80 });
-		const obs2 = observation("bbbbbbbbbbbb", { tokenCount: 30 });
+		const obs2 = observation("bbbbbbbbbbbb", { tokenCount: 120 });
 		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
 		const ref2 = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
 		const entries = [

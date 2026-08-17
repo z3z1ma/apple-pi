@@ -3,6 +3,7 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 	type Entry,
 	type V3MemoryCustomType,
 } from "./types.js";
@@ -42,7 +43,15 @@ function isValidCoverageEntry(
 
 	if (customType === OM_OBSERVATIONS_RECORDED) return isNonEmptyArray(entry.data.observations);
 	if (customType === OM_REFLECTIONS_RECORDED) return isNonEmptyArray(entry.data.reflections);
+	if (customType === OM_REFLECTIONS_RETIRED) return isNonEmptyArray(entry.data.reflectionIds);
 	return isNonEmptyArray(entry.data.observationIds);
+}
+
+export function latestReflectionCoverageIndex(entries: Entry[]): number {
+	return Math.max(
+		latestCoverageIndex(entries, OM_REFLECTIONS_RECORDED),
+		latestCoverageIndex(entries, OM_REFLECTIONS_RETIRED),
+	);
 }
 
 export function latestCoverageIndex(entries: Entry[], customType: V3MemoryCustomType): number {
@@ -110,7 +119,7 @@ export function rawTokensSinceObservationCoverage(entries: Entry[]): number {
 }
 
 export function rawTokensSinceReflectionCoverage(entries: Entry[]): number {
-	return rawTokensSinceCoverage(entries, OM_REFLECTIONS_RECORDED);
+	return rawTokensAfterIndex(entries, latestReflectionCoverageIndex(entries));
 }
 
 export function rawTokensSinceDropCoverage(entries: Entry[]): number {
@@ -205,12 +214,11 @@ export function realContextTokensAtCoverage(entries: Entry[], coverageIdx: numbe
  * that case; clamping a stale baseline to 0 would starve the stage forever,
  * and measuring from zero would over-fire it.
  */
-export function realTokensSinceAnchor(
+export function realTokensSinceCoverageIndex(
 	entries: Entry[],
-	customType: V3MemoryCustomType | undefined,
+	coverageIdx: number,
 	currentContextTokens: number,
 ): number | undefined {
-	const coverageIdx = customType ? latestCoverageIndex(entries, customType) : -1;
 	const compactionIdx = findLastCompactionIndex(entries);
 	if (compactionIdx > coverageIdx) {
 		const baseline = realContextTokensAfterCompaction(entries, compactionIdx);
@@ -225,6 +233,18 @@ export function realTokensSinceAnchor(
 		return delta >= 0 ? delta : undefined;
 	}
 	return Math.max(0, currentContextTokens);
+}
+
+export function realTokensSinceAnchor(
+	entries: Entry[],
+	customType: V3MemoryCustomType | undefined,
+	currentContextTokens: number,
+): number | undefined {
+	return realTokensSinceCoverageIndex(
+		entries,
+		customType ? latestCoverageIndex(entries, customType) : -1,
+		currentContextTokens,
+	);
 }
 
 export function rawTokensSinceLastCompaction(entries: Entry[]): number {

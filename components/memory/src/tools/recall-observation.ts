@@ -22,7 +22,10 @@ type RecallObservationToolStatus = "ok" | "partial" | "invalid_id" | "not_found"
 type ObservationDetails = Pick<Observation, "id" | "content" | "timestamp" | "relevance"> & {
 	status?: "active" | "dropped";
 };
-type ReflectionDetails = Pick<Reflection, "id" | "content" | "supportingObservationIds"> & { reflectionIndex: number };
+type ReflectionDetails = Pick<Reflection, "id" | "content" | "supportingObservationIds"> & {
+	reflectionIndex: number;
+	status?: "current" | "retired";
+};
 
 export type RecallSourceEntryDetails = {
 	id: string;
@@ -158,12 +161,17 @@ function observationDetails(observation: Observation, status?: "active" | "dropp
 	};
 }
 
-function reflectionDetails(reflection: Reflection, reflectionIndex: number): ReflectionDetails {
+function reflectionDetails(
+	reflection: Reflection,
+	reflectionIndex: number,
+	status?: "current" | "retired",
+): ReflectionDetails {
 	return {
 		id: reflection.id,
 		content: reflection.content,
 		supportingObservationIds: reflection.supportingObservationIds,
 		reflectionIndex,
+		...(status ? { status } : {}),
 	};
 }
 
@@ -245,7 +253,8 @@ function friendlySourceUnavailableMessage(match: RecallObservationMatchDetails):
 }
 
 function reflectionLineText(reflection: ReflectionDetails): string {
-	return `[${reflection.id}] ${reflection.content}`;
+	const status = reflection.status === "retired" ? " [retired]" : "";
+	return `[${reflection.id}]${status} ${reflection.content}`;
 }
 
 function observationLineText(observation: ObservationDetails): string {
@@ -296,7 +305,7 @@ function renderMemoryText(result: Extract<RecallResult, { status: "found" }>): s
 		);
 	if (result.reflections.length > 0)
 		sections.push(
-			`Reflections:\n${result.reflections.map((match) => reflectionLineText(reflectionDetails(match.reflection, match.reflectionRecordIndex))).join("\n")}`,
+			`Reflections:\n${result.reflections.map((match) => reflectionLineText(reflectionDetails(match.reflection, match.reflectionRecordIndex, match.status))).join("\n")}`,
 		);
 	if (result.observations.length > 0)
 		sections.push(
@@ -323,7 +332,7 @@ function resultDetails(
 	includeSourceContent = true,
 ): RecallObservationToolDetails {
 	const reflections = result.reflections.map((match) =>
-		reflectionDetails(match.reflection, match.reflectionRecordIndex),
+		reflectionDetails(match.reflection, match.reflectionRecordIndex, match.status),
 	);
 	const observations = result.observations.map((match) => observationMatchDetails(match, includeSourceContent));
 	const directMatches = directObservationMatches(result).map((match) =>
@@ -426,7 +435,8 @@ function observationLine(observation: ObservationDetails): string {
 }
 
 function reflectionLine(reflection: ReflectionDetails): string {
-	return alignedRow("✓ reflection", "", reflection.content);
+	const status = reflection.status === "retired" ? " retired" : "";
+	return alignedRow("✓ reflection", status.trim(), reflection.content);
 }
 
 function noteLine(kind: string, text: string): string {
@@ -477,6 +487,8 @@ function noteRows(details: RecallObservationToolDetails, sources: RecallSourceEn
 	if (details.collision) notes.push(noteLine("id collision", `multiple memory items share ${details.memoryId}`));
 	if (details.observations.some((match) => match.observation.status === "dropped"))
 		notes.push(noteLine("dropped", "one or more observations are dropped from active memory but remain recallable"));
+	if (details.reflections.some((reflection) => reflection.status === "retired"))
+		notes.push(noteLine("retired", "one or more reflections are retired from current law but remain recallable"));
 	if (details.unavailableSupportingObservations.length > 0)
 		notes.push(
 			noteLine(

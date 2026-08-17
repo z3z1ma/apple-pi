@@ -4,6 +4,7 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 } from "../src/session-ledger/types.js";
 
 const OBS_1 = "aaaaaaaaaaaa";
@@ -75,6 +76,15 @@ function dropsEntry(id: string, observationIds: string[], coversUpToId = "src-1"
 	};
 }
 
+function retireEntry(id: string, reflectionIds: string[], coversUpToId = "src-1"): Entry {
+	return {
+		type: "custom",
+		id,
+		customType: OM_REFLECTIONS_RETIRED,
+		data: { reflectionIds, coversUpToId },
+	};
+}
+
 describe("session-ledger recall", () => {
 	it("recalls an active observation with source entries", () => {
 		const entries = [
@@ -127,6 +137,7 @@ describe("session-ledger recall", () => {
 		if (result.status !== "found") return;
 		expect(result.kind).toBe("reflection");
 		expect(result.reflections.map((match) => match.reflection.id)).toEqual([REF_1]);
+		expect(result.reflections[0].status).toBe("current");
 		expect(result.observations.map((match) => match.observation.id)).toEqual([OBS_1, OBS_2]);
 		expect(result.sourceEntries.map((entry) => entry.id)).toEqual(["src-1", "src-2"]);
 		expect(result.partial).toBe(false);
@@ -162,6 +173,23 @@ describe("session-ledger recall", () => {
 		expect(result.missingSourceEntryIds).toEqual(["missing-src"]);
 		expect(result.nonSourceEntryIds).toEqual(["custom-1"]);
 		expect(result.observations[0].sourceEntries).toEqual([]);
+	});
+
+	it("recalls a retired reflection", () => {
+		const entries = [
+			sourceEntry("src-1"),
+			observationsEntry("obs-entry-1", [observation({ id: OBS_1, sourceEntryIds: ["src-1"] })]),
+			reflectionsEntry("ref-entry-1", [reflection({ id: REF_1, supportingObservationIds: [OBS_1] })]),
+			retireEntry("retire-entry-1", [REF_1]),
+		];
+
+		const result = recallMemorySources(entries, REF_1);
+
+		expect(result.status).toBe("found");
+		if (result.status !== "found") return;
+		expect(result.kind).toBe("reflection");
+		expect(result.reflections).toHaveLength(1);
+		expect(result.reflections[0].status).toBe("retired");
 	});
 
 	it("reports missing supporting observations as partial reflection recall", () => {

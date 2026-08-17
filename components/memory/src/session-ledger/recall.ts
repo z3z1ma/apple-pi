@@ -2,6 +2,7 @@ import {
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
+	isReflectionsRetiredEntry,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -38,6 +39,7 @@ export type RecalledReflection = {
 	reflection: Reflection;
 	reflectionEntryId: string;
 	reflectionRecordIndex: number;
+	status: "current" | "retired";
 };
 
 export type RecallResult =
@@ -94,10 +96,12 @@ function indexLedger(entries: Entry[]): {
 	observations: IndexedObservation[];
 	reflections: IndexedReflection[];
 	droppedIds: Set<string>;
+	retiredIds: Set<string>;
 } {
 	const observations: IndexedObservation[] = [];
 	const reflections: IndexedReflection[] = [];
 	const droppedIds = new Set<string>();
+	const retiredIds = new Set<string>();
 
 	for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
 		const entry = entries[entryIndex];
@@ -117,10 +121,16 @@ function indexLedger(entries: Entry[]): {
 			entry.data.observationIds.forEach((id) => {
 				droppedIds.add(id);
 			});
+			continue;
+		}
+		if (isReflectionsRetiredEntry(entry)) {
+			entry.data.reflectionIds.forEach((id) => {
+				retiredIds.add(id);
+			});
 		}
 	}
 
-	return { observations, reflections, droppedIds };
+	return { observations, reflections, droppedIds, retiredIds };
 }
 
 function resolveObservationSources(
@@ -176,7 +186,12 @@ function notFound(memoryId: string): RecallResult {
 }
 
 export function recallMemorySources(entries: Entry[], memoryId: string): RecallResult {
-	const { observations: indexedObservations, reflections: indexedReflections, droppedIds } = indexLedger(entries);
+	const {
+		observations: indexedObservations,
+		reflections: indexedReflections,
+		droppedIds,
+		retiredIds,
+	} = indexLedger(entries);
 	const directObservationMatches = indexedObservations.filter(({ observation }) => observation.id === memoryId);
 	const reflectionMatches = indexedReflections.filter(({ reflection }) => reflection.id === memoryId);
 
@@ -216,6 +231,7 @@ export function recallMemorySources(entries: Entry[], memoryId: string): RecallR
 		reflection,
 		reflectionEntryId: entryId,
 		reflectionRecordIndex: recordIndex,
+		status: retiredIds.has(reflection.id) ? "retired" : "current",
 	}));
 	const sourceEntries = uniqueById(recalledObservations.flatMap((match) => match.sourceEntries));
 	const missingSourceEntryIds = uniqueStrings(recalledObservations.flatMap((match) => match.missingSourceEntryIds));

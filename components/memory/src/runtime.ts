@@ -64,6 +64,23 @@ export class Runtime {
 				tokensAtEmpty: number;
 		  }
 		| undefined;
+	/** Skip reflector re-fires over the same observation coverage after a completed pass. */
+	reflectorMaintenanceBackoff:
+		| {
+				sessionIdentity: string | undefined;
+				observationCoverageId: string | undefined;
+				tokensAtEmpty: number;
+		  }
+		| undefined;
+	/** Deliberate no-drop backoff: skip dropper re-fires over the same law and working set. */
+	dropperNoDropBackoff:
+		| {
+				sessionIdentity: string | undefined;
+				lawFingerprint: string;
+				observationFingerprint: string;
+				tokensAtEmpty: number;
+		  }
+		| undefined;
 
 	ensureConfig(cwd: string): Config {
 		if (this.configLoaded && (this.configCwd === cwd || this.configCwd === undefined)) {

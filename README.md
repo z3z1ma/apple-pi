@@ -57,7 +57,7 @@ Every xAI request that uses Pi's `openai-responses` API receives xAI's built-in 
 Normal `/compact`, automatic compaction, overflow recovery, and explicit `/pi-vcc` all pass through one `session_before_compact` owner:
 
 1. VCC selects a conversational cut and builds a deterministic summary without a model call.
-2. Observational memory folds ledger records up to the same cut.
+2. Observational memory folds ledger records up to the same cut and injects current law plus remaining working evidence.
 3. The two summaries and their metadata are returned as one compaction result.
 
 The metadata is intentionally flat: `details.compactor === "pi-vcc"` and `details.type === "om.folded"` coexist so both recall systems recognize the same compaction.
@@ -78,7 +78,7 @@ VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory op
 
 ### Where memory persists
 
-Observations, reflections, and drop records are custom entries in Pi's append-only session JSONL. With Pi's default session directory, files are grouped by working directory under:
+Observations, reflections, drop records, and reflection retirements are custom entries in Pi's append-only session JSONL. With Pi's default session directory, files are grouped by working directory under:
 
 ```text
 ~/.pi/agent/sessions/--<cwd>--/*.jsonl

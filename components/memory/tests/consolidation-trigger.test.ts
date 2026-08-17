@@ -19,6 +19,7 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 } from "../src/session-ledger/index.js";
 import {
 	observation,
@@ -95,6 +96,24 @@ function setup(args: {
 		lastObserverError: undefined as string | undefined,
 		lastReflectorError: undefined as string | undefined,
 		lastDropperError: undefined as string | undefined,
+		observerEmptyBackoff: undefined as
+			| { sessionIdentity: string | undefined; coverageId: string | undefined; tokensAtEmpty: number }
+			| undefined,
+		reflectorMaintenanceBackoff: undefined as
+			| {
+					sessionIdentity: string | undefined;
+					observationCoverageId: string | undefined;
+					tokensAtEmpty: number;
+			  }
+			| undefined,
+		dropperNoDropBackoff: undefined as
+			| {
+					sessionIdentity: string | undefined;
+					lawFingerprint: string;
+					observationFingerprint: string;
+					tokensAtEmpty: number;
+			  }
+			| undefined,
 		ensureConfig: vi.fn(() => runtime.config),
 		resolveModel: vi.fn(async () => ({
 			ok: true,
@@ -315,7 +334,7 @@ describe("V3 consolidation trigger", () => {
 	it("shows routine worker notifications by default", async () => {
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
 		mockAgents.runObserver.mockResolvedValueOnce([obsA]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { fire, runLaunchedWork, ctx } = setup({ entries, observationsPoolTargetTokens: 5 });
@@ -328,7 +347,7 @@ describe("V3 consolidation trigger", () => {
 			["Observational memory: 1 observation recorded", "info"],
 			["Observational memory: reflector running (~2 tokens)", "info"],
 			[
-				"Observational memory: dropper running after reflection — active observation pool ~19 / 5 target tokens (380%)",
+				"Observational memory: dropper running — active observation pool ~19 / 5 target tokens (380%)",
 				"info",
 			],
 		]);
@@ -337,7 +356,7 @@ describe("V3 consolidation trigger", () => {
 	it("suppresses routine worker notifications without hiding warnings", async () => {
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
 		mockAgents.runObserver.mockResolvedValueOnce([obsA]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const quiet = setup({ entries, observationsPoolTargetTokens: 5, showWorkerNotifications: false });
@@ -477,7 +496,7 @@ describe("V3 consolidation trigger", () => {
 	it("re-reads branch so observer append can unblock reflector in the same consolidation run", async () => {
 		mockAgents.runObserver.mockResolvedValueOnce([obsA]);
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { fire, runLaunchedWork, pi } = setup({ entries });
 
@@ -501,7 +520,7 @@ describe("V3 consolidation trigger", () => {
 
 	it("runs reflector-only and appends non-empty reflections", async () => {
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
@@ -525,7 +544,7 @@ describe("V3 consolidation trigger", () => {
 
 	it("runs dropper after same-run non-empty reflector output and appends non-empty drops", async () => {
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
@@ -551,13 +570,14 @@ describe("V3 consolidation trigger", () => {
 		]);
 	});
 
-	it("does not launch dropper-only work when active pool is over target", () => {
+	it("launches dropper-only work when active pool is over target", async () => {
+		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
 		];
-		const { fire, runtime } = setup({
+		const { fire, runLaunchedWork, runtime, pi } = setup({
 			entries,
 			observeAfterTokens: 999,
 			reflectAfterTokens: 999,
@@ -565,17 +585,28 @@ describe("V3 consolidation trigger", () => {
 		});
 
 		fire();
+		await runLaunchedWork();
 
-		expect(runtime.launchConsolidationTask).not.toHaveBeenCalled();
+		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+		expect(mockAgents.runObserver).not.toHaveBeenCalled();
+		expect(mockAgents.runReflector).not.toHaveBeenCalled();
+		expect(mockAgents.runDropper).toHaveBeenCalledWith(
+			expect.objectContaining({ reflections: [refA], observations: [obsA] }),
+		);
+		expect(pi.appendEntry).toHaveBeenCalledWith(OM_OBSERVATIONS_DROPPED, {
+			observationIds: ["aaaaaaaaaaaa"],
+			coversUpToId: "raw-1",
+		});
 	});
 
-	it("waits for successful reflection even when active observation pool is over target", async () => {
+	it("runs dropper when reflector emits nothing and the pool is over target", async () => {
+		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
 			textCustomMessage("raw-2", "bbbbbbbb"),
 		];
-		const { fire, runLaunchedWork, runtime } = setup({
+		const { fire, runLaunchedWork, runtime, pi } = setup({
 			entries,
 			observeAfterTokens: 999,
 			reflectAfterTokens: 1,
@@ -587,7 +618,11 @@ describe("V3 consolidation trigger", () => {
 
 		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
 		expect(mockAgents.runReflector).toHaveBeenCalled();
-		expect(mockAgents.runDropper).not.toHaveBeenCalled();
+		expect(mockAgents.runDropper).toHaveBeenCalledWith(expect.objectContaining({ observations: [obsA] }));
+		expect(pi.appendEntry).toHaveBeenCalledWith(OM_OBSERVATIONS_DROPPED, {
+			observationIds: ["aaaaaaaaaaaa"],
+			coversUpToId: "raw-1",
+		});
 	});
 
 	it("does not launch dropper-only work when dropped tombstones reduce active pool below budget", () => {
@@ -613,7 +648,7 @@ describe("V3 consolidation trigger", () => {
 
 	it("uses same-run reflection coverage for drop coverage", async () => {
 		const newRef = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["bbbbbbbbbbbb"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
@@ -636,25 +671,133 @@ describe("V3 consolidation trigger", () => {
 		]);
 	});
 
-	it("does not bootstrap dropper without same-run reflection output", async () => {
-		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
+	it("does not relaunch dropper after a no-drop verdict over an unchanged set", async () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
+		];
+		const { fire, runLaunchedWork, runtime } = setup({
+			entries,
+			observeAfterTokens: 999,
+			reflectAfterTokens: 999,
+			observationsPoolTargetTokens: 5,
+		});
+
+		fire();
+		await runLaunchedWork();
+		expect(mockAgents.runDropper).toHaveBeenCalledTimes(1);
+
+		runtime.consolidationInFlight = false;
+		fire();
+
+		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+	});
+
+	it("appends reflection retirements from the same reflector pass", async () => {
+		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
+		mockAgents.runReflector.mockResolvedValueOnce({
+			reflections: [newRef],
+			retiredIds: ["eeeeeeeeeeee"],
+		});
+		const entries = [
+			textCustomMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
 			textCustomMessage("raw-2", "bbbbbbbb"),
 		];
-		const { fire, runLaunchedWork, pi } = setup({ entries, observeAfterTokens: 999, observationsPoolMaxTokens: 10 });
+		const { fire, runLaunchedWork, pi } = setup({
+			entries,
+			observeAfterTokens: 999,
+			observationsPoolTargetTokens: 1000,
+		});
 
 		fire();
 		await runLaunchedWork();
 
-		expect(mockAgents.runReflector).toHaveBeenCalled();
+		expect(pi.appendEntry.mock.calls[0]).toEqual([
+			OM_REFLECTIONS_RECORDED,
+			{ reflections: [newRef], coversUpToId: "raw-1" },
+		]);
+		expect(pi.appendEntry.mock.calls[1]).toEqual([
+			OM_REFLECTIONS_RETIRED,
+			{
+				reflectionIds: ["eeeeeeeeeeee"],
+				coversUpToId: "raw-1",
+				successorIds: ["ffffffffffff"],
+			},
+		]);
 		expect(mockAgents.runDropper).not.toHaveBeenCalled();
-		expect(pi.appendEntry).not.toHaveBeenCalled();
+	});
+
+	it("does not relaunch reflector after retire-only coverage on the current observation span", async () => {
+		mockAgents.runReflector.mockResolvedValueOnce({
+			reflections: [],
+			retiredIds: ["eeeeeeeeeeee"],
+		});
+		const entries = [
+			textCustomMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs-1", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
+			textCustomMessage("raw-2", "bbbbbbbb"),
+			observationsRecordedEntry("om-obs-2", { observations: [obsB], coversUpToId: "raw-2" }),
+		];
+		const { fire, runLaunchedWork, runtime, pi } = setup({
+			entries,
+			observeAfterTokens: 999,
+			observationsPoolTargetTokens: 1000,
+		});
+
+		fire();
+		await runLaunchedWork();
+		expect(pi.appendEntry).toHaveBeenCalledWith(OM_REFLECTIONS_RETIRED, {
+			reflectionIds: ["eeeeeeeeeeee"],
+			coversUpToId: "raw-2",
+		});
+
+		runtime.consolidationInFlight = false;
+		fire();
+
+		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+		expect(mockAgents.runReflector).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not relaunch reflector after a same-marker retire-only write", async () => {
+		mockAgents.runReflector.mockResolvedValueOnce({
+			reflections: [],
+			retiredIds: ["eeeeeeeeeeee"],
+		});
+		const entries = [
+			textCustomMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
+			textCustomMessage("raw-2", "bbbbbbbb"),
+		];
+		const { fire, runLaunchedWork, runtime, pi } = setup({
+			entries,
+			observeAfterTokens: 999,
+			observationsPoolTargetTokens: 1000,
+		});
+
+		fire();
+		await runLaunchedWork();
+		expect(pi.appendEntry).toHaveBeenCalledWith(OM_REFLECTIONS_RETIRED, {
+			reflectionIds: ["eeeeeeeeeeee"],
+			coversUpToId: "raw-1",
+		});
+
+		runtime.consolidationInFlight = false;
+		fire();
+
+		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+		expect(mockAgents.runReflector).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not append reflect/drop entries without observation coverage", async () => {
-		mockAgents.runReflector.mockResolvedValueOnce([reflection("ffffffffffff", ["aaaaaaaaaaaa"])]);
+		mockAgents.runReflector.mockResolvedValueOnce({
+			reflections: [reflection("ffffffffffff", ["aaaaaaaaaaaa"])],
+			retiredIds: [],
+		});
 		mockAgents.runDropper.mockResolvedValueOnce(["aaaaaaaaaaaa"]);
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { fire, runLaunchedWork, pi } = setup({ entries, observeAfterTokens: 999 });
@@ -669,7 +812,7 @@ describe("V3 consolidation trigger", () => {
 
 	it("runs reflector before dropper and covers drops through same-run reflection coverage", async () => {
 		const newRef = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["bbbbbbbbbbbb"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
@@ -695,7 +838,7 @@ describe("V3 consolidation trigger", () => {
 
 	it("does not use appended reflection entry id for drop coverage when appendEntry returns no id", async () => {
 		const newRef = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockResolvedValueOnce(["bbbbbbbbbbbb"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
@@ -762,7 +905,7 @@ describe("V3 consolidation trigger", () => {
 
 		mockAgents.runReflector.mockReset();
 		const newRef = reflection("ffffffffffff", ["aaaaaaaaaaaa"]);
-		mockAgents.runReflector.mockResolvedValueOnce([newRef]);
+		mockAgents.runReflector.mockResolvedValueOnce({ reflections: [newRef], retiredIds: [] });
 		mockAgents.runDropper.mockReset();
 		mockAgents.runDropper.mockRejectedValueOnce(new Error("drop failed"));
 		const dropperFailure = setup({

@@ -1,11 +1,11 @@
 import type { Observation, Reflection } from "./types.js";
 
-const CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in this session.
+const CONTEXT_USAGE_INSTRUCTIONS = `These records are this session's current working memory after compaction.
 
-- Reflections: stable, long-lived facts about the user, project, decisions, and constraints. New reflection lines may include ids in brackets.
-- Observations: timestamped events from the conversation history, in chronological order. Observation lines include ids in brackets.
+- Reflections: current law. Binding facts about the user, project, decisions, constraints, completed outcomes, and still-constraining pivots. Reflection lines include ids in brackets.
+- Observations: working evidence still needed as detail. Timestamped, in chronological order, with ids in brackets.
 
-Treat these as past records. When entries conflict, the most recent observation reflects the latest known state. Work that prior observations describe as completed should not be redone unless the user explicitly asks to revisit it.
+Honor current law. Do not replay this list as a historical stack. When current law and a newer observation conflict, the newer observation is the latest known state until law is updated. Work that current law or a current observation marks completed must not be redone unless the user asks.
 
 When exact source context is needed for precision or traceability, use the recall tool with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently. Do not use recall as broad search or inject raw source unless it is needed.`;
 

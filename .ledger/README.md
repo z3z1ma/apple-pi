@@ -1,5 +1,6 @@
 # Task Ledger
 
+- `.ledger/202608162324-distill-observational-memory-current-state/task.md` — Distill observational memory into current working state
 - `.ledger/202608162056-observational-memory-compacted-context/task.md` — Research observational memory in compacted context
 - `.ledger/202608162041-slim-review-planner-drop-token-gates/task.md` — Slim review planning and drop review token gates
 - `.ledger/202608160933-adapt-review-planning-for-speed/task.md` — Adapt review planning for focused, fast semantic coverage

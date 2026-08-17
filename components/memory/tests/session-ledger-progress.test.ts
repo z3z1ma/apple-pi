@@ -16,6 +16,7 @@ import {
 	V3_OBSERVATIONS_DROPPED,
 	V3_OBSERVATIONS_RECORDED,
 	V3_REFLECTIONS_RECORDED,
+	V3_REFLECTIONS_RETIRED,
 	branchSummary,
 	compactionEntry,
 	observation,
@@ -24,6 +25,7 @@ import {
 	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
+	reflectionsRetiredEntry,
 	textCustomMessage,
 } from "./fixtures/session.js";
 
@@ -82,6 +84,26 @@ describe("session-ledger V3 progress helpers", () => {
 		expect(rawTokensSinceObservationCoverage(entries)).toBe(9); // raw-2 + raw-3 + raw-4
 		expect(rawTokensSinceReflectionCoverage(entries)).toBe(7); // raw-3 + raw-4
 		expect(rawTokensSinceDropCoverage(entries)).toBe(7); // covers ledger entry om-eeeeeeeeeeee, raw after it
+	});
+
+	it("advances the reflection clock from later retirements", () => {
+		const entries = [
+			textCustomMessage("raw-1", "aaaa"),
+			reflectionsRecordedEntry("om-eeeeeeeeeeee", {
+				reflections: [reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"])],
+				coversUpToId: "raw-1",
+			}),
+			textCustomMessage("raw-2", "bbbbbbbb"),
+			reflectionsRetiredEntry("om-retire-1", {
+				reflectionIds: ["eeeeeeeeeeee"],
+				coversUpToId: "raw-2",
+			}),
+			textCustomMessage("raw-3", "cccccccccccc"),
+		];
+
+		expect(latestCoverageIndex(entries, V3_REFLECTIONS_RECORDED)).toBe(0);
+		expect(latestCoverageIndex(entries, V3_REFLECTIONS_RETIRED)).toBe(2);
+		expect(rawTokensSinceReflectionCoverage(entries)).toBe(3);
 	});
 
 	it("lets coversUpToId point to a memory ledger entry", () => {

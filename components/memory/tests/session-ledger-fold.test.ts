@@ -9,6 +9,7 @@ import {
 	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
+	reflectionsRetiredEntry,
 	textCustomMessage,
 } from "./fixtures/session.js";
 
@@ -31,6 +32,28 @@ describe("session-ledger V3 folding", () => {
 		expect(folded.activeObservations.map((obs) => obs.id)).toEqual(["aaaaaaaaaaaa"]);
 		expect(folded.reflections.map((ref) => ref.id)).toEqual(["eeeeeeeeeeee"]);
 		expect(folded.observationsById.get("bbbbbbbbbbbb")).toBeUndefined();
+	});
+
+	it("applies reflection retirements as tombstones while preserving reflection history", () => {
+		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+		const ref2 = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
+		const entries = [
+			textCustomMessage("raw-1", "aaaa"),
+			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [ref1], coversUpToId: "raw-1" }),
+			reflectionsRecordedEntry("om-ffffffffffff", { reflections: [ref2], coversUpToId: "raw-1" }),
+			reflectionsRetiredEntry("om-retire-1", {
+				reflectionIds: ["eeeeeeeeeeee"],
+				successorIds: ["ffffffffffff"],
+				coversUpToId: "raw-1",
+			}),
+		];
+
+		const folded = foldLedger(entries);
+
+		expect(folded.reflections.map((ref) => ref.id)).toEqual(["eeeeeeeeeeee", "ffffffffffff"]);
+		expect(folded.currentReflections.map((ref) => ref.id)).toEqual(["ffffffffffff"]);
+		expect(folded.retiredReflectionIds.has("eeeeeeeeeeee")).toBe(true);
+		expect(folded.reflectionsById.get("eeeeeeeeeeee")).toEqual(ref1);
 	});
 
 	it("applies drops as tombstones while preserving observation history", () => {
