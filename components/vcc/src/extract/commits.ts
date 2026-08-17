@@ -16,44 +16,55 @@ const firstLineOf = (text: string): string => {
 
 const cleanMessage = (msg: string): string => msg.replace(/\\"/g, '"').replace(/\\'/g, "'").trim();
 
+const isBashTool = (name: string | undefined): boolean => !!name && name.toLowerCase() === "bash";
+
+const hashFromText = (text: string): string | undefined => {
+	// Common git commit output: `[branch <hash>] message` or `<branch> <hash>..<hash>`
+	const bracket = text.match(/\[\S+\s+([0-9a-f]{7,12})\]/);
+	if (bracket) return bracket[1];
+	const range = text.match(/\b([0-9a-f]{7,12})\.\.([0-9a-f]{7,12})\b/);
+	if (range) return range[2];
+	const plain = text.match(HASH_RE);
+	return plain?.[1];
+};
+
+const hashFromFollowingResult = (blocks: NormalizedBlock[], start: number): string | undefined => {
+	for (let j = start; j < Math.min(blocks.length, start + 3); j++) {
+		const r = blocks[j];
+		if (r.kind !== "tool_result") continue;
+		const hash = hashFromText(r.text);
+		if (hash) return hash;
+	}
+	return undefined;
+};
+
 /**
- * Extract git commits from bash tool calls (`git commit -m "..."`) and pair
- * with hash from the immediately following tool_result.
+ * Extract git commits from bash tool calls and bashExecution blocks
+ * (`git commit -m "..."`) and pair with hash from output / next tool_result.
  */
 export const extractCommits = (blocks: NormalizedBlock[]): CommitInfo[] => {
 	const commits: CommitInfo[] = [];
 
 	for (let i = 0; i < blocks.length; i++) {
 		const b = blocks[i];
-		if (b.kind !== "tool_call" || b.name !== "bash") continue;
-		const cmd = typeof b.args.command === "string" ? b.args.command : "";
+		let cmd = "";
+		let hash: string | undefined;
+		if (b.kind === "bash") {
+			cmd = b.command;
+			hash = hashFromText(b.output);
+		} else if (b.kind === "tool_call" && isBashTool(b.name)) {
+			cmd = typeof b.args.command === "string" ? b.args.command : "";
+		} else {
+			continue;
+		}
 		if (!/\bgit\s+commit\b/.test(cmd)) continue;
 		const m = cmd.match(COMMIT_MSG_RE);
 		if (!m) continue;
 		const message = firstLineOf(cleanMessage(m[1] ?? m[2] ?? m[3] ?? ""));
 		if (!message) continue;
 
-		let hash: string | undefined;
-		// Look at next tool_result for hash
-		for (let j = i + 1; j < Math.min(blocks.length, i + 3); j++) {
-			const r = blocks[j];
-			if (r.kind !== "tool_result") continue;
-			// Common git commit output: `[branch <hash>] message` or `<branch> <hash>..<hash>`
-			const bracket = r.text.match(/\[\S+\s+([0-9a-f]{7,12})\]/);
-			if (bracket) {
-				hash = bracket[1];
-				break;
-			}
-			const range = r.text.match(/\b([0-9a-f]{7,12})\.\.([0-9a-f]{7,12})\b/);
-			if (range) {
-				hash = range[2];
-				break;
-			}
-			const plain = r.text.match(HASH_RE);
-			if (plain) {
-				hash = plain[1];
-				break;
-			}
+		if (!hash && b.kind === "tool_call") {
+			hash = hashFromFollowingResult(blocks, i + 1);
 		}
 
 		// Dedup by message+hash

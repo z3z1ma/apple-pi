@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { buildSections } from "../src/core/build-sections.js";
 import { formatSummary } from "../src/core/format.js";
 import { compile } from "../src/core/summarize.js";
@@ -63,27 +63,114 @@ describe("outstanding context: deep error extraction", () => {
 		expect(hasExitCode || hasTests).toBe(true);
 	});
 
-	it("captures empty grep results", () => {
+	it("does not treat empty grep results as outstanding work", () => {
 		const blocks: NormalizedBlock[] = [
 			{ kind: "tool_call", name: "grep", args: { pattern: "verifyToken", path: "src/" } },
 			{ kind: "tool_result", name: "grep", text: "No matches found", isError: false },
 		];
 		const r = buildSections({ blocks });
-		expect(r.outstandingContext.length).toBeGreaterThan(0);
-		expect(r.outstandingContext[0]).toContain("[no matches]");
-		expect(r.outstandingContext[0]).toContain("grep");
-		expect(r.outstandingContext[0]).toContain("verifyToken");
+		expect(r.outstandingContext.every((c) => !c.includes("[no matches]"))).toBe(true);
 	});
 
-	it("captures empty glob results", () => {
+	it("does not treat empty glob results as outstanding work", () => {
 		const blocks: NormalizedBlock[] = [
 			{ kind: "tool_call", name: "glob", args: { pattern: "**/*.proto" } },
 			{ kind: "tool_result", name: "glob", text: "No files matched.", isError: false },
 		];
 		const r = buildSections({ blocks });
-		expect(r.outstandingContext.length).toBeGreaterThan(0);
-		expect(r.outstandingContext[0]).toContain("[no matches]");
-		expect(r.outstandingContext[0]).toContain("glob");
+		expect(r.outstandingContext.every((c) => !c.includes("[no matches]"))).toBe(true);
+	});
+
+	it("clears a bash failure when the same command later succeeds", () => {
+		const blocks: NormalizedBlock[] = [
+			{ kind: "bash", command: "npm test", output: "1 failed", exitCode: 1 },
+			{ kind: "bash", command: "npm test", output: "all passed", exitCode: 0 },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.every((c) => !c.includes("bash:exit"))).toBe(true);
+	});
+
+	it("clears a test failure when the same command later succeeds", () => {
+		const blocks: NormalizedBlock[] = [
+			{
+				kind: "tool_call",
+				name: "bash",
+				args: { command: "bun test" },
+			},
+			{ kind: "tool_result", name: "bash", text: "FAIL auth.test.ts", isError: true },
+			{ kind: "tool_call", name: "bash", args: { command: "bun test" } },
+			{ kind: "tool_result", name: "bash", text: "2 pass", isError: false },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.every((c) => !c.includes("[tests]") && !c.includes("FAIL"))).toBe(true);
+	});
+
+	it("keeps a re-failure after an intermediate success", () => {
+		const blocks: NormalizedBlock[] = [
+			{ kind: "bash", command: "npm test", output: "1 failed", exitCode: 1 },
+			{ kind: "bash", command: "npm test", output: "all passed", exitCode: 0 },
+			{ kind: "bash", command: "npm test", output: "1 failed", exitCode: 1 },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.some((c) => c.includes("bash:exit 1"))).toBe(true);
+	});
+
+	it("does not let a later different command share a cd wrapper key", () => {
+		const blocks: NormalizedBlock[] = [
+			{ kind: "bash", command: "cd pkg\nbun test", output: "1 failed", exitCode: 1 },
+			{ kind: "bash", command: "cd pkg\ntsc --noEmit", output: "", exitCode: 0 },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.some((c) => c.includes("bash:exit 1") || c.includes("[tests]"))).toBe(true);
+	});
+
+	it("keeps a bash failure when no later success exists", () => {
+		const blocks: NormalizedBlock[] = [{ kind: "bash", command: "npm test", output: "1 failed", exitCode: 1 }];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.some((c) => c.includes("bash:exit 1"))).toBe(true);
+	});
+
+	it("marks a nonzero tsc exit as tsc so a later edit can resolve it", () => {
+		const blocks: NormalizedBlock[] = [
+			{
+				kind: "bash",
+				command: "tsc --noEmit",
+				output: "src/auth.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+				exitCode: 1,
+			},
+			{ kind: "tool_call", name: "Edit", args: { path: "src/auth.ts", newText: "export const x = 1;" } },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.some((c) => c.includes("[RESOLVED]") && c.includes("[tsc]"))).toBe(true);
+		expect(r.outstandingContext.every((c) => !c.includes("bash:exit"))).toBe(true);
+	});
+
+	it("marks a tsc error resolved when that file is edited later", () => {
+		const blocks: NormalizedBlock[] = [
+			{
+				kind: "bash",
+				command: "tsc --noEmit",
+				output: "src/auth.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+				exitCode: 0,
+			},
+			{ kind: "tool_call", name: "Edit", args: { path: "src/auth.ts", newText: "export const x = 1;" } },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.some((c) => c.includes("[RESOLVED]") && c.includes("[tsc]"))).toBe(true);
+	});
+
+	it("clears a tsc error when the same command later succeeds without TS errors", () => {
+		const blocks: NormalizedBlock[] = [
+			{
+				kind: "bash",
+				command: "tsc --noEmit",
+				output: "src/auth.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+				exitCode: 0,
+			},
+			{ kind: "bash", command: "tsc --noEmit", output: "", exitCode: 0 },
+		];
+		const r = buildSections({ blocks });
+		expect(r.outstandingContext.every((c) => !c.includes("[tsc]"))).toBe(true);
 	});
 
 	it("captures tsc errors from tool_result with bash error", () => {
@@ -107,6 +194,14 @@ describe("outstanding context: deep error extraction", () => {
 		const r = buildSections({ blocks });
 		expect(r.outstandingContext.length).toBeGreaterThan(0);
 		expect(r.outstandingContext[0]).toContain("still failing");
+	});
+
+	it("ignores malformed tool calls with empty names", () => {
+		const blocks: NormalizedBlock[] = [
+			{ kind: "tool_call", name: "", args: {} },
+			{ kind: "tool_result", name: "", text: "", isError: false },
+		];
+		expect(() => buildSections({ blocks })).not.toThrow();
 	});
 
 	it("deduplicates error items", () => {

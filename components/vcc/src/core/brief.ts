@@ -1,8 +1,8 @@
 import type { NormalizedBlock } from "../types.js";
-import { clip, firstLine } from "./content.js";
-import { extractPath } from "./tool-args.js";
-import { collapseSkillText } from "./skill-collapse.js";
 import { refineBreadcrumbKey } from "./causal-keys.js";
+import { clip, firstLine } from "./content.js";
+import { collapseSkillText } from "./skill-collapse.js";
+import { extractPath } from "./tool-args.js";
 
 const TRUNCATE_USER = 256;
 const TRUNCATE_ASSISTANT = 200;
@@ -486,7 +486,7 @@ export const compileBrief = (blocks: NormalizedBlock[]): string => stringifyBrie
 
 // ── turn identification (HCA zone) ──
 
-const WRITE_TOOLS = new Set(["Edit", "Write", "edit", "write", "MultiEdit"]);
+const WRITE_TOOLS = new Set(["Edit", "Write", "edit", "write", "edit_file", "write_file", "MultiEdit"]);
 
 export interface TurnInfo {
 	/** Per-turn one-line summary */
@@ -532,28 +532,6 @@ const CAUSE_MARKERS: readonly string[] = [
 	"breaks because",
 	"breaks when",
 	"breaks due to",
-	"because ",
-	"since ",
-	"due to ",
-	"missing ",
-	"lacking ",
-	"lack of ",
-	"absence of ",
-	"can't ",
-	"cannot ",
-	"not properly ",
-	"not correctly ",
-	"not validating ",
-	"not returning ",
-	"not handling ",
-	"not releasing ",
-	"not checking ",
-	"wrong ",
-	"incorrect ",
-	"stale ",
-	"outdated ",
-	"unhandled ",
-	"uncaught ",
 ];
 
 // Resolution markers: phrases that signal "here comes the fix/action".
@@ -769,13 +747,17 @@ export const identifyTurns = (blocks: NormalizedBlock[]): TurnInfo[] => {
 	let currentUserText: string | null = null;
 	const toolActions: string[] = [];
 	const assistantTexts: string[] = [];
+	let hasWrite = false;
+	let hasFailure = false;
 
 	const flush = () => {
 		if (currentUserText === null && toolActions.length === 0) return;
 
-		// Extract causal chain from collected assistant text in this turn
+		// Causal fragments are only trustworthy when the turn also did a write
+		// or hit a failing tool. Bare "because" chatter is not a turn summary.
 		const combinedAssistant = assistantTexts.join(" ");
-		const causalChain = extractCausalChain(combinedAssistant);
+		const causalChain =
+			hasWrite || hasFailure ? extractCausalChain(combinedAssistant) : { cause: null, resolution: null };
 
 		turns.push({
 			summary: synthesizeTurnSummary(currentUserText, toolActions, causalChain),
@@ -783,6 +765,8 @@ export const identifyTurns = (blocks: NormalizedBlock[]): TurnInfo[] => {
 		currentUserText = null;
 		toolActions.length = 0;
 		assistantTexts.length = 0;
+		hasWrite = false;
+		hasFailure = false;
 	};
 
 	for (const b of blocks) {
@@ -790,6 +774,9 @@ export const identifyTurns = (blocks: NormalizedBlock[]): TurnInfo[] => {
 			flush();
 			currentUserText =
 				b.kind === "user" ? truncateTokens(collapseSkillText(b.text), 12) : `$ ${compressBash(b.command)}`;
+			if (b.kind === "bash" && b.exitCode !== undefined && b.exitCode !== 0) {
+				hasFailure = true;
+			}
 			continue;
 		}
 		if (b.kind === "assistant") {
@@ -798,10 +785,14 @@ export const identifyTurns = (blocks: NormalizedBlock[]): TurnInfo[] => {
 				assistantTexts.push(b.text.trim());
 			}
 		}
+		if (b.kind === "tool_result" && b.isError) {
+			hasFailure = true;
+		}
 		if (b.kind === "tool_call") {
 			if (!b.name || b.name.trim() === "") continue;
 			const path = extractPath(b.args);
 			const isWrite = WRITE_TOOLS.has(b.name);
+			if (isWrite) hasWrite = true;
 			if (isWrite && path) {
 				toolActions.push(`edited ${shortenPath(path)}`);
 			} else if (path) {

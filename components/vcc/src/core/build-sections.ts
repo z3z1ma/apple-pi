@@ -1,12 +1,12 @@
-import type { NormalizedBlock, ToolResultIndex } from "../types.js";
-import { clip, clipSentence, firstLine, nonEmptyLines } from "./content.js";
-import type { SectionData } from "../sections.js";
-import { extractGoals } from "../extract/goals.js";
-import { extractPath } from "./tool-args.js";
-import { extractFileAndSymbolData } from "../extract/shared-symbols.js";
-import { extractPreferences, dedupPreferencesAgainstGoals } from "../extract/preferences.js";
 import { extractCommits, formatCommits } from "../extract/commits.js";
+import { extractGoals } from "../extract/goals.js";
+import { dedupPreferencesAgainstGoals, extractPreferences } from "../extract/preferences.js";
+import { extractFileAndSymbolData } from "../extract/shared-symbols.js";
+import type { SectionData } from "../sections.js";
+import type { NormalizedBlock, ToolResultIndex } from "../types.js";
 import { buildBriefSections, identifyTurns, sectionsToTranscript, stringifyBrief } from "./brief.js";
+import { clip, clipSentence, firstLine, nonEmptyLines } from "./content.js";
+import { extractPath } from "./tool-args.js";
 
 /**
  * Build a one-time look-ahead index: for each tool_call block, find the
@@ -47,9 +47,6 @@ const TSC_ERROR_RE = /error TS\d+:.+/;
 // Test failure indicators
 const TEST_FAIL_RE = /(?:FAIL|✗|✘|×)\s|(\d+)\s+(?:failed|failure|failing)/i;
 
-// Empty grep/search result indicators
-const EMPTY_RESULT_RE = /^(?:No matches? found\.?|No files? matched\.?|0 results?|No results?\.?)$/i;
-
 // Maximum characters of bash output to scan for error patterns.
 // Compiler/test errors almost always appear near the start of output;
 // scanning the full output (potentially megabytes) is unnecessary.
@@ -58,14 +55,12 @@ const BASH_OUTPUT_SCAN_LIMIT = 8_000;
 // Priority tags for outstanding context items
 const PRIORITY_ERROR = "[ERROR]";
 const PRIORITY_WARN = "[WARN]";
-const PRIORITY_INFO = "[INFO]";
 
 /** Prepend a priority tag based on the error type and exit code. */
 const priorityTag = (item: string): string => {
 	if (/^\[tsc\]/.test(item)) return `${PRIORITY_ERROR} ${item}`;
 	if (/^\[bash:exit [1-9]\d*\]/.test(item)) return `${PRIORITY_ERROR} ${item}`;
 	if (/^\[tests\]/.test(item)) return `${PRIORITY_WARN} ${item}`;
-	if (/^\[no matches\]/.test(item)) return `${PRIORITY_INFO} ${item}`;
 	if (/^\[user\]/.test(item)) return `${PRIORITY_WARN} ${item}`;
 	// Generic tool errors
 	if (/^\[\w+\]/.test(item)) return `${PRIORITY_ERROR} ${item}`;
@@ -89,41 +84,127 @@ const isTscResolved = (file: string, tailIdx: number, editPositions: Map<number,
 	return false;
 };
 
+const isBashToolName = (name: string | undefined): boolean => !!name && name.toLowerCase() === "bash";
+
+const commandKeyOf = (cmd: string): string => {
+	const lines = cmd
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+	let i = 0;
+	// Bare `cd dir` lines are wrappers, not the command being compared.
+	while (i < lines.length && /^cd\s+\S+$/.test(lines[i])) i++;
+	const first = lines[i] ?? lines[0] ?? cmd;
+	return first
+		.replace(/^cd\s+\S+\s*&&\s*/, "")
+		.replace(/\s+/g, " ")
+		.trim();
+};
+
+interface CommandEvent {
+	idx: number;
+	key: string;
+	ok: boolean;
+	hasTscError: boolean;
+}
+
+interface OutstandingItem {
+	text: string;
+	tailIdx: number;
+	commandKey?: string;
+	kind: "bash" | "tests" | "tsc" | "other";
+}
+
+const collectCommandEvents = (tail: NormalizedBlock[]): CommandEvent[] => {
+	const events: CommandEvent[] = [];
+	let lastBashCall: { key: string } | null = null;
+	for (let i = 0; i < tail.length; i++) {
+		const b = tail[i];
+		if (b.kind === "bash") {
+			const key = commandKeyOf(b.command);
+			if (!key) continue;
+			const outputHead = (b.output ?? "").slice(0, BASH_OUTPUT_SCAN_LIMIT);
+			events.push({
+				idx: i,
+				key,
+				ok: b.exitCode === 0,
+				hasTscError: TSC_ERROR_RE.test(outputHead),
+			});
+			continue;
+		}
+		if (b.kind === "tool_call" && isBashToolName(b.name)) {
+			const cmd = typeof b.args.command === "string" ? b.args.command : "";
+			const key = commandKeyOf(cmd);
+			lastBashCall = key ? { key } : null;
+			continue;
+		}
+		if (b.kind === "tool_result" && isBashToolName(b.name) && lastBashCall) {
+			const outputHead = b.text.slice(0, BASH_OUTPUT_SCAN_LIMIT);
+			events.push({
+				idx: i,
+				key: lastBashCall.key,
+				ok: !b.isError,
+				hasTscError: TSC_ERROR_RE.test(outputHead),
+			});
+			lastBashCall = null;
+		}
+	}
+	return events;
+};
+
+const laterCommandCleared = (
+	events: CommandEvent[],
+	key: string | undefined,
+	afterIdx: number,
+	requireNoTsc = false,
+): boolean => {
+	if (!key) return false;
+	const later = events.filter((e) => e.idx > afterIdx && e.key === key);
+	if (later.length === 0) return false;
+	const last = later[later.length - 1];
+	return last.ok && (!requireNoTsc || !last.hasTscError);
+};
+
+const precedingBashCommandKey = (tail: NormalizedBlock[], before: number): string | undefined => {
+	for (let i = before - 1; i >= 0; i--) {
+		const b = tail[i];
+		if (b.kind === "tool_call" && isBashToolName(b.name)) {
+			const cmd = typeof b.args.command === "string" ? b.args.command : "";
+			const key = commandKeyOf(cmd);
+			return key || undefined;
+		}
+		if (b.kind === "bash") return commandKeyOf(b.command) || undefined;
+	}
+	return undefined;
+};
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: VCC's extraction pass intentionally preserves all ordered context cases.
 const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
-	const items: string[] = [];
-	const itemTailIndices: number[] = [];
-	const seen = new Set<string>();
+	const items: OutstandingItem[] = [];
 	const tail = blocks.slice(-25);
+	const commandEvents = collectCommandEvents(tail);
 
-	const push = (item: string, tailIndex?: number) => {
-		if (!seen.has(item)) {
-			seen.add(item);
-			items.push(item);
-			itemTailIndices.push(tailIndex ?? -1);
+	const push = (item: Omit<OutstandingItem, "tailIdx"> & { tailIdx?: number }) => {
+		const next: OutstandingItem = {
+			text: item.text,
+			tailIdx: item.tailIdx ?? -1,
+			commandKey: item.commandKey,
+			kind: item.kind,
+		};
+		const existing = items.findIndex((it) => it.text === item.text);
+		if (existing >= 0) {
+			items[existing] = next;
+			return;
 		}
+		items.push(next);
 	};
 
 	for (let bi = 0; bi < tail.length; bi++) {
 		const b = tail[bi];
 
-		// 1. Bash non-zero exit codes (the exitCode field is already captured but was unused)
-		if (b.kind === "bash" && b.exitCode !== undefined && b.exitCode !== 0) {
-			const cmd =
-				b.command
-					.split("\n")
-					.map((l) => l.trim())
-					.filter(Boolean)[0] ?? b.command;
-			const cmdDisplay = cmd.length > 80 ? `${cmd.slice(0, 77)}...` : cmd;
-			const outLine = firstLine(b.output, 120);
-			const errTag = `exit ${b.exitCode}`;
-			push(`[bash:${errTag}] ${cmdDisplay}${outLine && outLine !== cmdDisplay ? ` → ${outLine}` : ""}`);
-			continue;
-		}
-
-		// 2. TypeScript compiler errors in bash output
-		// Scan only the first BASH_OUTPUT_SCAN_LIMIT chars — errors appear at start of output
-		// Now includes file path (e.g., src/auth.ts(5,18): error TS2304:) for resolution detection
+		// 1. TypeScript compiler errors in bash output (including nonzero exits).
+		// Real tsc failures usually exit 1; those must still be tsc items so a
+		// later edit can mark them [RESOLVED] instead of a generic bash:exit.
 		if (b.kind === "bash" && b.output) {
 			const outputHead = b.output.slice(0, BASH_OUTPUT_SCAN_LIMIT);
 			if (TSC_ERROR_RE.test(outputHead)) {
@@ -131,70 +212,73 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
 					.split("\n")
 					.filter((l) => TSC_ERROR_RE.test(l.trim()))
 					.slice(0, 3);
+				const key = commandKeyOf(b.command);
 				for (const line of tsLines) {
-					push(`[tsc] ${clip(line.trim(), 150)}`, bi);
+					push({ text: `[tsc] ${clip(line.trim(), 150)}`, kind: "tsc", commandKey: key, tailIdx: bi });
 				}
 				continue;
 			}
+		}
+
+		// 2. Bash non-zero exit codes (after tsc so compiler failures stay typed)
+		if (b.kind === "bash" && b.exitCode !== undefined && b.exitCode !== 0) {
+			const cmd = commandKeyOf(b.command) || b.command;
+			const cmdDisplay = cmd.length > 80 ? `${cmd.slice(0, 77)}...` : cmd;
+			const outLine = firstLine(b.output, 120);
+			const errTag = `exit ${b.exitCode}`;
+			push({
+				text: `[bash:${errTag}] ${cmdDisplay}${outLine && outLine !== cmdDisplay ? ` → ${outLine}` : ""}`,
+				kind: "bash",
+				commandKey: cmd,
+				tailIdx: bi,
+			});
+			continue;
 		}
 
 		// 3. Test failures in bash output
 		if (b.kind === "bash" && b.output && TEST_FAIL_RE.test(b.output.slice(0, BASH_OUTPUT_SCAN_LIMIT))) {
-			push(`[tests] ${firstLine(b.output, 150)}`);
+			push({
+				text: `[tests] ${firstLine(b.output, 150)}`,
+				kind: "tests",
+				commandKey: commandKeyOf(b.command),
+				tailIdx: bi,
+			});
 			continue;
 		}
 
-		// 4. Empty grep/search results (searched for something that wasn't found = signal)
-		if (
-			b.kind === "tool_result" &&
-			(b.name === "grep" || b.name === "Grep" || b.name === "Glob" || b.name === "glob")
-		) {
-			const trimmed = b.text.trim();
-			if (EMPTY_RESULT_RE.test(trimmed) || trimmed === "") {
-				const prevIdx = tail
-					.slice(0, bi)
-					.findLastIndex(
-						(p) =>
-							p.kind === "tool_call" &&
-							(p.name === "grep" || p.name === "Grep" || p.name === "Glob" || p.name === "glob"),
-					);
-				let pattern = "";
-				if (prevIdx >= 0) {
-					const pc = tail[prevIdx];
-					if (pc.kind === "tool_call") {
-						pattern = (pc.args.pattern ?? pc.args.query ?? pc.args.glob ?? "") as string;
-						if (pattern) pattern = ` "${clip(pattern, 60)}"`;
-					}
-				}
-				push(`[no matches] ${b.name}${pattern}`);
-				continue;
-			}
-		}
-
-		// 5. Tool errors — classify tsc/test failures before generic catch
+		// 4. Tool errors — classify tsc/test failures before generic catch.
+		// Empty grep/glob results are exploration, not outstanding work.
 		if (b.kind === "tool_result" && b.isError) {
-			// Check for tsc errors in tool result text first
+			const bashKey = isBashToolName(b.name) ? precedingBashCommandKey(tail, bi) : undefined;
 			if (TSC_ERROR_RE.test(b.text)) {
 				const tsLines = b.text
 					.split("\n")
 					.filter((l) => TSC_ERROR_RE.test(l.trim()))
 					.slice(0, 3);
 				for (const line of tsLines) {
-					push(`[tsc] ${clip(line.trim(), 150)}`, bi);
+					push({ text: `[tsc] ${clip(line.trim(), 150)}`, kind: "tsc", commandKey: bashKey, tailIdx: bi });
 				}
 				continue;
 			}
-			// Check for test failures
 			if (TEST_FAIL_RE.test(b.text)) {
-				push(`[tests] ${firstLine(b.text, 150)}`);
+				push({
+					text: `[tests] ${firstLine(b.text, 150)}`,
+					kind: "tests",
+					commandKey: bashKey,
+					tailIdx: bi,
+				});
 				continue;
 			}
-			// Generic error fallback
-			push(`[${b.name}] ${firstLine(b.text, 150)}`);
+			push({
+				text: `[${b.name}] ${firstLine(b.text, 150)}`,
+				kind: bashKey ? "bash" : "other",
+				commandKey: bashKey,
+				tailIdx: bi,
+			});
 			continue;
 		}
 
-		// 6. BLOCKER_RE text matching (user/assistant mentions of problems)
+		// 5. BLOCKER_RE text matching (user/assistant mentions of problems)
 		if (b.kind === "assistant" || b.kind === "user") {
 			for (const line of nonEmptyLines(b.text)) {
 				if (!BLOCKER_RE.test(line)) continue;
@@ -203,11 +287,21 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
 				if (/^\s*\(/.test(line)) continue;
 				if (!/^\s*["'`*_]?[A-Z`]/.test(line)) continue;
 				const clipped = b.kind === "user" ? `[user] ${clipSentence(line, 150)}` : clipSentence(line, 150);
-				push(clipped);
+				push({ text: clipped, kind: "other", tailIdx: bi });
 				break;
 			}
 		}
 	}
+
+	const live = items.filter((item) => {
+		if (item.kind === "bash" || item.kind === "tests") {
+			return !laterCommandCleared(commandEvents, item.commandKey, item.tailIdx);
+		}
+		if (item.kind === "tsc") {
+			return !laterCommandCleared(commandEvents, item.commandKey, item.tailIdx, true);
+		}
+		return true;
+	});
 
 	// Resolution detection: pre-compute edit positions in the tail so we can
 	// check whether tsc errors were subsequently fixed by an edit to the same file.
@@ -223,14 +317,11 @@ const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
 		}
 	}
 
-	// Apply priority tags, marking resolved tsc errors as [RESOLVED]
-	return items.slice(0, 8).map((item, idx) => {
-		const tailIdx = itemTailIndices[idx] ?? -1;
-		const file = extractTscFile(item);
-		const resolved = tailIdx >= 0 && file !== null && isTscResolved(file, tailIdx, editPositions);
-		if (!resolved) return priorityTag(item);
-		const tagged = priorityTag(item);
-		return tagged.replace(/^\[(ERROR|WARN)\]/, "[RESOLVED]");
+	return live.slice(0, 8).map((item) => {
+		const file = extractTscFile(item.text);
+		const resolved = item.tailIdx >= 0 && file !== null && isTscResolved(file, item.tailIdx, editPositions);
+		if (!resolved) return priorityTag(item.text);
+		return priorityTag(item.text).replace(/^\[(ERROR|WARN)\]/, "[RESOLVED]");
 	});
 };
 

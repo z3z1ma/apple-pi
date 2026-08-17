@@ -1,5 +1,6 @@
-import type { NormalizedBlock, ToolResultIndex } from "../types.js";
 import { extractPath } from "../core/tool-args.js";
+import type { NormalizedBlock, ToolResultIndex } from "../types.js";
+import { applyBashFileActivity } from "./bash-files.js";
 
 const FILE_WRITE_TOOLS = new Set(["Edit", "Write", "edit", "write", "edit_file", "write_file", "MultiEdit"]);
 
@@ -207,7 +208,15 @@ export const extractFileAndSymbolData = (blocks: NormalizedBlock[], tri?: ToolRe
 
 	for (let i = 0; i < blocks.length; i++) {
 		const b = blocks[i];
+		if (b.kind === "bash") {
+			applyBashFileActivity(b.command, modified);
+			continue;
+		}
 		if (b.kind !== "tool_call") continue;
+		if (b.name && b.name.toLowerCase() === "bash") {
+			const cmd = typeof b.args.command === "string" ? b.args.command : "";
+			if (cmd) applyBashFileActivity(cmd, modified);
+		}
 		const p = extractPath(b.args);
 		if (!p) continue;
 
