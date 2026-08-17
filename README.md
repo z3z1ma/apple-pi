@@ -222,7 +222,7 @@ The imported implementation deliberately has **no worktree parameter or worktree
 
 ### Review
 
-Review is a skill over `pi_exec`, not an extension. Load `/skill:review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in `review-planner`, `reviewer`, and `review-verifier`. Workers return typed values through `pi_exec_return`.
+Review is a skill over `pi_exec`, not an extension. Load `/skill:review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Workers return typed values through `pi_exec_return`.
 
 ```text
 /skill:review

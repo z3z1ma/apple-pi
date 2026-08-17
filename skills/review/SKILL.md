@@ -37,7 +37,7 @@ JavaScript owns scheduling, coverage, and whether to loop. Models only emit type
 ## Workers
 
 - Tools: `read`, `grep`, `find`, `ls` only.
-- Role prompts: read `skills/review-planner/SKILL.md`, `skills/reviewer/SKILL.md`, `skills/review-verifier/SKILL.md` and pass the bodies as `systemPrompt`.
+- Role prompts live in [planner.md](references/planner.md), [reviewer.md](references/reviewer.md), and [verifier.md](references/verifier.md). They are not skills. Copy those bodies into `systemPrompt` constants. Do not load them with `skills.body` or `pi.read`.
 - Bind **paths**, not file bodies. Context is capped.
 - Workers have no extensions or skills. They return through `pi_exec_return` / `outputSchema`.
 
@@ -45,6 +45,7 @@ JavaScript owns scheduling, coverage, and whether to loop. Models only emit type
 
 - [Plan, review, verify](references/plan-review-verify.js) — default cycle for an unknown change.
 - [Targeted review](references/targeted-review.js) — skip the planner when the question is already known.
+- [Planner](references/planner.md), [reviewer](references/reviewer.md), [verifier](references/verifier.md) — role prompts to copy into `systemPrompt` constants.
 
 Write a variation when the change asks for one: a second residual pass, a tests-only lens, a security pass, a wider concurrency cap. Do not grow a second review product. Do not reintroduce sealing, leases, receipts stores, or coverage machinery in TypeScript.
 

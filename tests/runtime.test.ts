@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,9 @@ import runtime, {
 	aggregateUsage,
 	deriveProgramEnvelope,
 	executeProgram,
+	listSkills,
 	PROGRAM_ENVELOPE_MAXIMA,
+	readSkillBody,
 } from "../extensions/runtime.js";
 import {
 	agentOperationArgs,
@@ -426,6 +428,8 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("value?: JSONValue");
 		expect(contract).toContain("bind the compact result as context");
 		expect(contract).toContain("Never JSON.parse assistant text");
+		expect(contract).toContain("skills.list()");
+		expect(contract).toContain("skills.body({ name: string })");
 		expect(contract).toContain("fetch(input: string | URL | Request, init?: RequestInit)");
 		expect(contract).toContain("parallel(");
 		expect(contract).toContain("sleep(ms: number)");
@@ -451,6 +455,8 @@ describe("pi_exec guest API documentation", () => {
 		expect(skill).toContain("Never `JSON.parse` assistant text");
 		expect(skill).toContain("const verdict = await agent({");
 		expect(skill).toContain("const result = await agents.run({");
+		expect(skill).toContain("skills.list()");
+		expect(skill).toContain("skills.body({ name })");
 		expect(skill).toContain("context: first");
 		expect(skill).not.toMatch(/Before calling an unfamiliar extension tool/);
 		const definitions = coreToolDefinitions();
@@ -473,6 +479,47 @@ describe("pi_exec guest API documentation", () => {
 		for (const name of result.value as string[]) {
 			if (ecma.has(name)) continue;
 			expect(contract, name).toContain(name);
+		}
+	});
+});
+
+describe("pi_exec skills", () => {
+	it("lists packaged skills and returns a stripped body", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-skills-"));
+		try {
+			const names = listSkills({ cwd: dir, includeDefaults: false }).map((skill) => skill.name);
+			expect(names).toContain("review");
+			expect(names).not.toContain("review-planner");
+			expect(names).not.toContain("reviewer");
+			expect(names).not.toContain("review-verifier");
+			const body = readSkillBody("review", { cwd: dir, includeDefaults: false });
+			expect(body.startsWith("# Review")).toBe(true);
+			expect(body).not.toMatch(/^---/);
+			expect(body).toContain("pi_exec");
+			expect(() => readSkillBody("review-planner", { cwd: dir, includeDefaults: false })).toThrow(
+				/Unknown skill: review-planner/,
+			);
+			expect(() => readSkillBody("", { cwd: dir, includeDefaults: false })).toThrow(/requires a skill name/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("prefers a fixture catalog over package skills when skillPaths are set", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-skill-fixture-"));
+		try {
+			const root = join(dir, "skills", "demo");
+			mkdirSync(root, { recursive: true });
+			writeFileSync(
+				join(root, "SKILL.md"),
+				"---\nname: demo\ndescription: Demo skill for catalog tests.\n---\n\n# Demo\n\nBody only.\n",
+				"utf8",
+			);
+			const options = { cwd: dir, skillPaths: [join(dir, "skills")], includeDefaults: false };
+			expect(listSkills(options)).toEqual([{ name: "demo", description: "Demo skill for catalog tests." }]);
+			expect(readSkillBody("demo", options)).toBe("# Demo\n\nBody only.");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 });
@@ -841,6 +888,47 @@ describe("pi_exec tool", () => {
 			).rejects.toThrow("fetch request exceeds 10,485,760 bytes");
 		} finally {
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		}
+	});
+
+	it("reads session skills through the guest skills API", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-skills-"));
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"skills",
+				{
+					code: `
+const listed = await skills.list();
+const body = await skills.body({ name: "review" });
+return {
+  names: listed.map((skill) => skill.name),
+  starts: body.slice(0, 8),
+};
+`,
+				},
+				undefined,
+				undefined,
+				{ cwd: dir },
+			);
+			const value = JSON.parse(result.content[0].text);
+			expect(value.names).toContain("review");
+			expect(value.starts).toBe("# Review");
+			expect(result.details.trace.operations.map((operation: any) => operation.ref)).toEqual([
+				"skills.list",
+				"skills.body",
+			]);
+			await expect(
+				tool.execute(
+					"missing-skill",
+					{ code: `return skills.body({ name: "no-such-apple-pi-skill" });` },
+					undefined,
+					undefined,
+					{ cwd: dir },
+				),
+			).rejects.toThrow(/Unknown skill: no-such-apple-pi-skill/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 

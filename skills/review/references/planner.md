@@ -1,8 +1,3 @@
----
-name: review-planner
-description: "Cut a change into file partitions and concrete review focuses."
----
-
 # Review Planner
 
 Create the review partitions. Do not perform the review.

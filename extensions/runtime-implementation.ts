@@ -36,6 +36,7 @@ import {
 	piExecGuestApiContract,
 	piExecToolDescription,
 } from "./runtime-api.js";
+import { listSkills, readSkillBody } from "./runtime-skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
 import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./runtime-ui.js";
@@ -326,6 +327,7 @@ async function runAgent(
 import { executeProgram } from "./runtime-program.js";
 
 export { executeProgram } from "./runtime-program.js";
+export { listSkills, packagedSkillPaths, readSkillBody } from "./runtime-skills.js";
 
 import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./runtime-fetch.js";
 
@@ -655,6 +657,11 @@ export default function runtime(pi: ExtensionAPI): void {
 							details: portableValue(result.details),
 							...(result.usage ? { usage: result.usage } : {}),
 						};
+					} else if (ref === "skills.list") {
+						value = listSkills({ cwd: ctx.cwd });
+					} else if (ref === "skills.body") {
+						const name = typeof rawArgs.name === "string" ? rawArgs.name : "";
+						value = readSkillBody(name, { cwd: ctx.cwd });
 					} else if (ref === "agents.run") {
 						agentCalls++;
 						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);

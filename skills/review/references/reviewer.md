@@ -1,8 +1,3 @@
----
-name: reviewer
-description: "Review one concrete focus for patch-introduced defects."
----
-
 # Semantic Change Reviewer
 
 Falsify the assigned review focus. You are a fresh, read-only reviewer, not an implementer.

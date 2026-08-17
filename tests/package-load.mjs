@@ -108,9 +108,6 @@ try {
 		"ralph-executor",
 		"ralph-judge",
 		"review",
-		"review-planner",
-		"reviewer",
-		"review-verifier",
 		"pi-exec",
 	]) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
@@ -118,6 +115,9 @@ try {
 	for (const obsolete of [
 		"10x-shape-work",
 		"ralph-reviewer",
+		"review-planner",
+		"reviewer",
+		"review-verifier",
 		"apple-pi-review-planner",
 		"apple-pi-reviewer",
 		"apple-pi-review-verifier",
@@ -179,6 +179,16 @@ try {
 	}
 	assert(existsSync("skills/review/references/plan-review-verify.js"), "missing review plan-review-verify reference");
 	assert(existsSync("skills/review/references/targeted-review.js"), "missing review targeted-review reference");
+	assert(existsSync("skills/review/references/planner.md"), "missing review planner reference");
+	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
+	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
+	for (const program of ["plan-review-verify.js", "targeted-review.js"]) {
+		const source = readFileSync(`skills/review/references/${program}`, "utf8");
+		assert(source.includes("const REVIEWER = "), `${program} must inline REVIEWER`);
+		assert(source.includes("const VERIFIER = "), `${program} must inline VERIFIER`);
+		assert(!source.includes("skills.body"), `${program} must not load role prompts via skills.body`);
+		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
+	}
 	const docs = {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		ralph: readFileSync("docs/ralph.md", "utf8"),

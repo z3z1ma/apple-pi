@@ -221,6 +221,10 @@ const setup = new vm.Script(
     typeof request === "string" ? { task: request } : request,
   );
   globalThis.agents = Object.freeze({ run: runAgent });
+  globalThis.skills = Object.freeze({
+    list: () => call("skills.list", {}),
+    body: (request = {}) => call("skills.body", request),
+  });
   globalThis.agent = async (request) => {
     const result = await runAgent(request);
     if (!result || result.status !== "completed") {
