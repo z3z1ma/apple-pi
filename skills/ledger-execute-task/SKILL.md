@@ -1,6 +1,6 @@
 ---
 name: ledger-execute-task
-description: "Operate a shaped .ledger task through /skill:pi-ralph. Use when asked to run Ralph, execute a ledger task, or continue work from review findings. Not for task shaping or review-only work."
+description: "Interpret and maintain the execution contract for a .ledger task. Use when asked to inspect task readiness, choose or reconcile work items, map work to acceptance criteria, resolve blockers or dependencies, or update task status and evidence from observed results. Not for implementing code or running the Ralph control loop; pi-ralph owns fresh-context execution through pi_exec."
 ---
 
 # Execute a Ledger Task

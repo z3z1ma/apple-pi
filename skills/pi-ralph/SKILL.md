@@ -1,6 +1,6 @@
 ---
 name: pi-ralph
-description: "Run a fresh-context Ralph loop over a prepared .ledger task. Use when asked to run or continue Ralph, execute a ledger task through iterative coding and checks, or feed pi-review findings into the next implementation increment. Not for shaping or planning a task, one-off direct edits, or review-only requests."
+description: "Run the fresh-context Ralph loop over a prepared .ledger task. Use only when the user explicitly asks to run Ralph, continue Ralph, start a Ralph loop, or invoke pi-ralph for that task. Not for ordinary ledger task execution or readiness, shaping or planning, one-off implementation, or review-only work; ledger-execute-task owns ledger execution semantics."
 ---
 
 # Ralph
