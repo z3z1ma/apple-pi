@@ -41,4 +41,4 @@ Before declaring readiness, ensure:
 - Blockers is honestly `None.`;
 - a fresh executor can choose implementation mechanics without re-deriving product meaning.
 
-Link the active plan from `task.md`, then inspect the task with the `ledger` tool. Do not start `/skill:pi-ralph` merely because the records look complete; implementation still requires operator authorization.
+Link the active plan from `task.md`, then read the task and governing records with ordinary repository tools. Do not start `/skill:pi-ralph` merely because the records look complete; implementation still requires operator authorization.

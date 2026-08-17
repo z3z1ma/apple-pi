@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { appendLedgerSystemPrompt } from "../../shared/src/ledger-system-prompt.js";
 
 export const DEFAULT_ADVISOR_PROVIDER = "openrouter";
 export const DEFAULT_ADVISOR_MODEL = "z-ai/glm-5.2";
@@ -123,7 +124,7 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 			if (wd) prompt += `\n\nEspecially pay attention to:\n<attention>\n${wd}\n</attention>`;
 		} catch {}
 	}
-	return prompt;
+	return appendLedgerSystemPrompt(prompt);
 }
 
 /** Distinctive wrapper so the primary prompt is appended at most once. */

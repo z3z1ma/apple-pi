@@ -4,7 +4,7 @@
 
 ```text
 .ledger/
-  README.md
+  index.md
   202608151430-implement-bounded-behavior/
     task.md
     specs/
@@ -14,6 +14,9 @@
     evidence/
     knowledge/
     skills/
+  history/
+    index.md
+    202608141100-establish-prerequisite/
 ```
 
 The exact task ID form is `YYYYMMDDhhmm-lowercase-kebab-slug`. The timestamp must be a valid calendar minute, and its date must match the `Created` header in `task.md`. A bundle contains exactly one executable root, `task.md`.
@@ -30,27 +33,29 @@ For a team, the usual policy is:
 
 The workbench can then hold local context without entering every pull request. Ignored means local: it is not shared, backed up, or recoverable through Git.
 
-A solo developer may omit the ignore rule and commit `.ledger`. The same graph and runtime work in both modes. Committed task records will appear in ordinary Git review alongside implementation changes.
+A solo developer may omit the ignore rule and commit `.ledger`. The same Markdown task format and workflow apply in both modes. Committed task records will appear in ordinary Git review alongside implementation changes.
 
-This determines worktree behavior:
-
-- When `.ledger` is committed and current in a linked worktree, that worktree's own ledger is authoritative; use `root` and omit `ledger_root`.
-- When `.ledger` is ignored and remains only in the main checkout, target implementation with `root` and pass the main checkout as `ledger_root`.
-
-The ledger tool allows only roots sharing the trusted session repository's Git common directory. It does not create, update, commit, or remove worktrees. The human and orchestrating model own those choices. Apple-pi never edits `.gitignore` automatically; storage policy belongs to the repository owner.
+Each session reads and edits the `.ledger` in its own working directory. Linked worktrees therefore use their own committed ledger unless the operator deliberately supplies another task path as ordinary context. Apple-pi does not create, update, commit, or remove worktrees and never edits `.gitignore` automatically; storage policy belongs to the repository owner.
 
 ## Top-level task ledger
 
-`.ledger/README.md` is required. It is a navigation index, not a second status database:
+`.ledger/index.md` is required. It is the live navigation index, not a second status database:
 
 ```markdown
 # Task Ledger
 
-- `.ledger/202608151430-implement-bounded-behavior/task.md` — Implement bounded behavior
-- `.ledger/202608141100-establish-prerequisite/task.md` — Establish prerequisite
+- `.ledger/202608151430-implement-bounded-behavior/task.md` — Implement bounded behavior — Keep one production owner for the requested outcome
 ```
 
-Every executable or dependency task must be listed. Status lives only in that bundle's `task.md`, so activation and closure cannot leave two status copies inconsistent.
+Closed tasks move to `.ledger/history/` and are listed in `.ledger/history/index.md` with their terminal status, title, and description:
+
+```markdown
+# Task History
+
+- `.ledger/history/202608141100-establish-prerequisite/task.md` — done — Establish prerequisite — Record the shared precondition other tasks depend on
+```
+
+Live status still lives only in that bundle's `task.md`. The history index is the greppable record of how a closed task ended.
 
 ## Task root
 
@@ -118,7 +123,7 @@ Canonical headers and exactly one level-one title are required. Acceptance crite
 
 Task status is `open | active | blocked | done | cancelled`. The implementing agent updates those records in the ledger as it works.
 
-Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. The `ledger` tool mutates those rows through `parseTaskDocument` and `mutateTaskWorkItems`. They do not close the task or satisfy acceptance criteria.
+Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. Agents update those rows with ordinary file edits and must preserve their canonical form. They do not close the task or satisfy acceptance criteria.
 
 ## Task dependencies
 
@@ -128,7 +133,7 @@ A task can depend on another task:
 Depends-On: .ledger/202608141100-establish-prerequisite/task.md
 ```
 
-Dependencies must use canonical task-root paths and must be `done` before execution. Multiple paths are comma-separated. Dependency cycles are rejected.
+Dependencies keep the live identity form `.ledger/<task-id>/task.md`. Resolve that identity at the live path if present, otherwise at `.ledger/history/<task-id>/task.md`. A dependency is ready when the resolved `task.md` exists and its Status is `done`. Do not rewrite other tasks' `Depends-On` lines when archiving. Multiple paths are comma-separated. Dependency cycles are rejected.
 
 This is the only cross-task graph edge. Supporting records cannot reach into another task's private artifacts. When another outcome has independent authority or acceptance, give it another task and connect the task roots. Plans replace parent-ticket hierarchies inside a bundle.
 
@@ -162,17 +167,21 @@ Task-local vocabulary, conventions, or hard-won boundaries needed across iterati
 
 ### Skill — `skills/<slug>/SKILL.md`
 
-A task-local candidate procedure with precise trigger, prerequisites, procedure, and validation. It enters the compiled graph when referenced, but it is not ambient or host-discoverable merely because it exists. Promote proven recurring procedures to the repository's configured skill directory.
+A task-local candidate procedure with precise trigger, prerequisites, procedure, and validation. When referenced, an agent must read it explicitly as an ordinary task record; it is not ambient or host-discoverable merely because it exists. Promote proven recurring procedures to the repository's configured skill directory.
 
 Review, routine evidence, Journal, Blockers, Retrospective, and Distillation remain in `task.md`; standalone duplicate review records are unnecessary.
 
+## Agent guidance and scaffolding
+
+Apple-pi injects the complete ledger contract into the system prompts of main agents, interactive subagents, the Advisor, and `pi_exec` workers. Workers do not need full extension access to receive the contract, so recursion and tool-scope boundaries remain intact.
+
+`ledger_scaffold` creates `.ledger/index.md` when absent, a timestamped task directory, structural `task.md`, every standard supporting directory, and one live index row with title and description. The scaffold begins with explicit shaping placeholders and a blocker; it is not execution-ready.
+
+`ledger_close` archives a live task as `done` or `cancelled`. It updates `Status` in `task.md` when needed, moves the bundle to `.ledger/history/`, removes the live index row, and appends a history row that includes the terminal status, title, and description. It does not inspect work items or judge completeness.
+
+Those tools refuse collisions and do not list, inspect, select, or execute existing tasks. Agents use ordinary read and edit tools after creation and before close.
+
 ## Workflow skills
-
-## Operations hub and active task
-
-`/harness` and `/ledger` open the ledger task picker. `/` focuses the fuzzy query (non-prefix title and path fragments match). Enter inspects. `s` selects the active task. `c` clears it. Escape clears search, then closes detail, then closes the hub.
-
-The `ledger` model tool supports `list`, `inspect`, `select`, `clear`, and `mutate_work_items`. Selection appends a branch-local pointer `{schemaVersion:1, ledgerRoot, taskPath}` only. Clearing appends a tombstone. Reconstruction folds `sessionManager.getBranch()` last-valid-entry-wins, including tombstones, and ignores malformed records individually. A stale latest pointer stays visible with its exact reason (`missing`, `moved`, `unindexed`, `malformed`, `unrelated`, `not_regular_file`, `symlink`) and is never replaced by an older pointer. Print/RPC modes keep the tool and skip overlays.
 
 Apple-pi packages the complete lifecycle as on-demand Pi skills:
 
@@ -208,7 +217,3 @@ Distillation prevents an ignored workbench from becoming a knowledge graveyard. 
 External wiki, issue-tracker, or service writes remain human-authorized external actions. The task can name a pending promotion or hold a safe draft, but must not claim publication without observed evidence.
 
 A substantive no-promotion rationale is valid: for example, tests and implementation own a bounded invariant and no reusable operational knowledge emerged. `None`, `N/A`, and `Pending` are not valid distillation.
-
-## Migration from `.10x`
-
-The runtime deliberately has no dual parser. `.10x` inputs return a migration error. Move each executable outcome into one timestamped task bundle, keep only task-specific supporting records with it, convert parent plans into task-local plans or separate tasks, rewrite dependencies, promote globally reusable authority to normal repository documentation, add every task to `.ledger/README.md`, and inspect the task with the `ledger` tool.

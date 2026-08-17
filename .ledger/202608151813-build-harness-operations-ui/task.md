@@ -1,4 +1,4 @@
-Status: active
+Status: cancelled
 Created: 2026-08-15
 Updated: 2026-08-17
 Depends-On: .ledger/202608151843-bootstrap-gated-work-items/task.md
@@ -32,13 +32,13 @@ Design and implement a coherent terminal operations experience for long-running 
 
 ## Work Items
 
-- [ ] WI-001: Add typed, monotonic Review and Ralph progress subscriptions plus bounded internal-agent activity callbacks.
-- [ ] WI-002: Implement canonical ledger catalog parsing, branch-scoped active-task entries, stale-pointer behavior, and model/human ledger actions.
-- [ ] WI-003: Integrate the dependency's canonical WI-### parser, mutation, receipt, and closure state into ledger actions, progress snapshots, and hub projections without duplicating authority.
-- [ ] WI-004: Build shared bounded operations-hub components, navigation, detail overlays, lifecycle disposal, and compact status projection.
-- [ ] WI-005: Integrate live and persisted review cycle, partition, focus, finding, verification, meta-review, usage, and stop behavior into the hub and tool updates.
-- [ ] WI-006: Integrate multi-root Ralph fleet, nested review progress, iteration detail, usage, objectives, gates, and stop behavior into the hub.
-- [ ] WI-007: Complete TUI, controller, parser, session-branch, authority, closure, mode, package-loader, and documentation coverage.
+- [-] WI-001: Add typed, monotonic Review and Ralph progress subscriptions plus bounded internal-agent activity callbacks. — Cancelled: The operator explicitly removed the unified operations runtime and its progress surface.
+- [-] WI-002: Implement canonical ledger catalog parsing, branch-scoped active-task entries, stale-pointer behavior, and model/human ledger actions. — Cancelled: The operator explicitly replaced catalog and active-task machinery with a scaffold-only tool.
+- [-] WI-003: Integrate the dependency's canonical WI-### parser, mutation, receipt, and closure state into ledger actions, progress snapshots, and hub projections without duplicating authority. — Cancelled: Existing ledger records now use ordinary repository reads and edits rather than a parser-backed model tool.
+- [-] WI-004: Build shared bounded operations-hub components, navigation, detail overlays, lifecycle disposal, and compact status projection. — Cancelled: The operator explicitly deleted the ledger operations hub and commands.
+- [-] WI-005: Integrate live and persisted review cycle, partition, focus, finding, verification, meta-review, usage, and stop behavior into the hub and tool updates. — Cancelled: Review remains an independent skill and no shared operations hub remains.
+- [-] WI-006: Integrate multi-root Ralph fleet, nested review progress, iteration detail, usage, objectives, gates, and stop behavior into the hub. — Cancelled: Ralph remains a skill-driven pi_exec loop rather than an operations-hub runtime.
+- [-] WI-007: Complete TUI, controller, parser, session-branch, authority, closure, mode, package-loader, and documentation coverage. — Cancelled: The replacement architecture intentionally has no ledger TUI, controller, parser, or active-task session state.
 
 ## References
 
@@ -78,25 +78,27 @@ Design and implement a coherent terminal operations experience for long-running 
 - 2026-08-15: Reloaded Ralph initially compiled this task without projecting WI-001 through WI-007; inspector projection was added in `c6fc6f1`.
 - 2026-08-15: After the subsequent operator-confirmed Pi reload, Ralph `inspect` enumerated WI-001 through WI-007 as open; the bootstrap commissioning gate is satisfied.
 - 2026-08-16: Replanned against the current cycle/partition/focus review controller, shipped work-item APIs, component-local tests, and in-repo rich TUI patterns. Remapped AC-001, AC-002, and WI-005 from semantic groups to the live review domain.
+- 2026-08-17: Operator superseded this outcome: delete the ledger catalog, parser, active-task state, operations UI, and commands; retain only a scaffold tool and inject the complete ledger contract into every agent class.
 
 ## Blockers
 
-None.
+Cancelled by explicit operator decision; this task no longer governs implementation.
 
 ## Evidence
 
 - 2026-08-15: Bootstrap dependency closed in `bc57e35`; operator confirmed the required Pi reload before resuming this WI-bearing task.
 - 2026-08-15: Reloaded Ralph initially compiled the task graph but did not enumerate work items.
 - 2026-08-15: After reload of `c6fc6f1`, Ralph `inspect` compiled graph `a0dcd1d20435b10dda20d93bcfbe707284b8eb8423d0eddb5b8a62712d198807` and reported `7 total; 7 open; WI-001` through `WI-007`.
+- 2026-08-17: Replacement change deletes `components/ledger/`, `components/operations/`, `extensions/harness.ts`, `/ledger`, and `/harness`; package loading, type checking, lint, unit, VCC, Advisor, loader, and package dry-run checks passed.
 
 ## Review
 
-Pending.
+Cancelled by operator decision before acceptance review; the replacement scaffold-and-prompt architecture was independently reviewed instead.
 
 ## Retrospective
 
-Pending.
+A UI/session projection did not teach models the ledger contract and created a large second runtime surface. Model understanding belongs in one shared system-prompt contract, while task creation needs only a narrow scaffold boundary.
 
 ## Distillation
 
-Pending.
+The replacement contract lives in `components/shared/src/ledger-system-prompt.ts`, creation lives in `extensions/ledger.ts`, and maintainer-facing semantics remain in `docs/ledger.md`. This cancelled bundle remains historical and must not be treated as active authority.

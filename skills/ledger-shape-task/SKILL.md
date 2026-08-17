@@ -9,11 +9,11 @@ Stay in shaping: inspect source and existing `.ledger` tasks, clarify execution-
 
 ## Find the owner
 
-Search `.ledger/README.md`, all indexed task roots—especially `open`, `active`, and `blocked` tasks—and relevant repository authority. Extend an existing owner when it already covers the outcome. Create a task only for real non-trivial work with an observable consequence.
+Search `.ledger/index.md`, live task roots—especially `open`, `active`, and `blocked` tasks—and relevant repository authority. Check `.ledger/history/index.md` before recreating a closed outcome. Extend an existing owner when it already covers the outcome. Create a task only for real non-trivial work with an observable consequence.
 
-A new task directory is `.ledger/YYYYMMDDhhmm-lowercase-kebab-slug/`. Use a valid current calendar minute; if it collides, choose a more specific slug. Create exactly one executable root named `task.md` and add its project-relative path to `.ledger/README.md`. The index is navigation only and must not duplicate status.
+For a new task, call `ledger_scaffold` with a title, a one-line description, and optional lowercase kebab slug. It creates `.ledger/YYYYMMDDhhmm-lowercase-kebab-slug/`, exactly one executable root named `task.md`, the standard supporting directories, and the project-relative index row in `.ledger/index.md`. If the timestamped slug collides, choose a more specific slug and call it again. The live index stores title and description for search and must not duplicate status.
 
-Use task-local directories only when consumed by this task:
+The scaffold creates these directories, but add records only when consumed by this task:
 
 ```text
 specs/       behavioral contracts
@@ -25,7 +25,7 @@ knowledge/   task-local vocabulary and reusable findings
 skills/      task-local candidate procedures
 ```
 
-Do not create empty category directories or ceremonial records. Task-local supporting records stay inside their owning bundle; `task.md` References may also name ordinary repository source paths. Cross-task edges use only `Depends-On: .ledger/<other-task>/task.md`; every dependency must be indexed and `done` before execution.
+Do not create ceremonial records merely because their scaffold directories exist. Task-local supporting records stay inside their owning bundle; `task.md` References may also name ordinary repository source paths. Cross-task edges use only `Depends-On: .ledger/<other-task>/task.md`. Resolve that identity at the live path if present, otherwise at `.ledger/history/<other-task>/task.md`. A dependency is ready when the resolved task exists and its Status is `done`.
 
 ## Root task contract
 
@@ -46,4 +46,4 @@ For a new bundle, `task.md` begins with `Status: open`, canonical `Created` and 
 
 Use `None.` for Blockers only after inspection supports it. Leave Evidence, Review, Retrospective, and Distillation as `Pending.` until observed work supplies them. A cold-start executor must be able to proceed without inventing behavior, authority, side effects, or acceptance.
 
-Use `ledger-research-task`, `ledger-specify-task`, and `ledger-plan-task` for the corresponding shaping phases. Validate readiness by inspecting the task with the `ledger` tool; inspection is not implementation authorization.
+Use `ledger-research-task`, `ledger-specify-task`, and `ledger-plan-task` for the corresponding shaping phases. Validate readiness by reading the completed task and its governing records with ordinary repository tools; inspection is not implementation authorization.

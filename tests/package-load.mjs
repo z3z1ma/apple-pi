@@ -22,7 +22,7 @@ try {
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
-			"extensions/harness.ts",
+			"extensions/ledger.ts",
 			"extensions/xai-hosted-tools.ts",
 		],
 		process.cwd(),
@@ -39,24 +39,22 @@ try {
 		),
 		"missing xAI hosted tools before_provider_request hook",
 	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("ledger.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
+		),
+		"missing ledger system-prompt injection",
+	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
-	for (const command of [
-		"advisor",
-		"pi-vcc",
-		"pi-vcc-recall",
-		"om:status",
-		"om:view",
-		"mcp",
-		"mcp-auth",
-		"agents",
-		"harness",
-		"ledger",
-	]) {
+	for (const command of ["advisor", "pi-vcc", "pi-vcc-recall", "om:status", "om:view", "mcp", "mcp-auth", "agents"]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
-	assert(!commands.has("ralph"), "obsolete /ralph command remains");
+	for (const obsolete of ["ralph", "harness", "ledger"]) {
+		assert(!commands.has(obsolete), `obsolete /${obsolete} command remains`);
+	}
 	for (const tool of [
 		"ask_user_question",
 		"vcc_recall",
@@ -66,11 +64,14 @@ try {
 		"Agent",
 		"get_subagent_result",
 		"steer_subagent",
-		"ledger",
+		"ledger_scaffold",
+		"ledger_close",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
-	assert(!tools.has("ralph"), "obsolete ralph tool remains");
+	for (const obsolete of ["ralph", "ledger"]) {
+		assert(!tools.has(obsolete), `obsolete ${obsolete} tool remains`);
+	}
 	assert(!tools.has("mcpScript"), "mcpScript duplicates pi_exec and must stay disabled");
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
@@ -88,13 +89,6 @@ try {
 		managedService ??= service;
 	});
 	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
-	for (const channel of ["apple-pi:operations-runtime:request"]) {
-		let discovered;
-		eventBus.emit(channel, (service) => {
-			discovered ??= service;
-		});
-		assert(discovered, `missing operations channel ${channel}`);
-	}
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	for (const skill of [
@@ -110,8 +104,10 @@ try {
 	]) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
 	}
+	for (const obsoletePath of ["components/ledger", "components/operations", "extensions/harness.ts"]) {
+		assert(!existsSync(obsoletePath), `obsolete ledger runtime remains: ${obsoletePath}`);
+	}
 	for (const obsolete of [
-		"10x-shape-work",
 		"ralph-executor",
 		"ralph-judge",
 		"ralph-reviewer",
@@ -188,10 +184,12 @@ try {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),
 	};
-	assert(docs.ledger.includes("/harness"), "ledger docs omit /harness");
-	assert(docs.ledger.includes("last-valid-entry-wins"), "ledger docs omit pointer folding");
-	assert(docs.ledger.includes("mutateTaskWorkItems"), "ledger docs omit WI mutation authority");
-	assert(docs.readme.includes("/harness"), "README omits /harness");
+	assert(docs.ledger.includes("ledger_scaffold"), "ledger docs omit the scaffold tool");
+	assert(docs.ledger.includes("ledger_close"), "ledger docs omit the close tool");
+	assert(docs.ledger.includes(".ledger/history/"), "ledger docs omit history archival");
+	assert(!docs.ledger.includes("/harness"), "obsolete /harness docs remain");
+	assert(!docs.ledger.includes("last-valid-entry-wins"), "obsolete active-task pointer docs remain");
+	assert(docs.readme.includes("ledger_scaffold"), "README omits the scaffold-only tool");
 	assert(docs.readme.includes("/skill:pi-ralph"), "README omits /skill:pi-ralph");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {

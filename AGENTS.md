@@ -9,7 +9,7 @@ Before changing anything:
 1. Run `git status --short --branch` and preserve all existing work. This repository is often developed through multi-file architectural changes; do not assume a dirty tree is disposable.
 2. Read the relevant part of `README.md` for product behavior and intentional feature boundaries.
 3. Read `docs/development.md` for module and formatting conventions.
-4. If the work is governed by `.ledger`, read `.ledger/README.md`, the selected task's `task.md`, and every active record it references. See `docs/ledger.md` for the workbench model.
+4. If the work is governed by `.ledger`, read `.ledger/index.md`, the selected task's `task.md`, and every active record it references. Resolve closed dependencies through `.ledger/history/`. See `docs/ledger.md` for the workbench model.
 5. Inspect the manifest and test configuration before adding a new path. Packaging, TypeScript, Vitest, and the extension loader each have explicit inclusion boundaries.
 
 Authority is split deliberately:
@@ -59,7 +59,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, and TUI views | Serves both the interactive `Agent` surface and managed workers used by `pi_exec`, while keeping ownership and depth boundaries explicit. |
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
-| Ledger implementation | Scaffold and prompt wiring in `extensions/ledger.ts`; injected contract in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | The scaffold tool is root-only, while the prompt contract reaches the root, child sessions, advisor, and exec workers through their integration points. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| Ledger implementation | Scaffold and prompt wiring in `extensions/ledger.ts`; injected contract in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | The scaffold and close tools are root-only, while the prompt contract reaches the root, child sessions, advisor, and exec workers through their integration points. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | Review and Ralph are skills that author `pi_exec` programs, not hidden runtime engines. Ledger skills each own a specific lifecycle phase. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Maintainer-facing detail beyond the README | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
@@ -95,8 +95,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 ### Ledger, review, and Ralph
 
 - `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. It is not required ceremony for small changes.
-- `ledger_scaffold` creates new structure only. Existing tasks are inspected and edited with ordinary repository tools.
-- Task status and evidence live in each task's `task.md`; `.ledger/README.md` is navigation, not a duplicate status database.
+- `ledger_scaffold` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
+- Task status and evidence live in each task's `task.md`; `.ledger/index.md` is live navigation with title and description, and `.ledger/history/index.md` records terminal status plus that same search text.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
 - Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and ledger reconciliation.
 - Durable lessons leave the task bundle for their real owner: normal docs, tests, an ADR convention, a runbook, or a reusable skill.

@@ -10,7 +10,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
-- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `/skill:pi-ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, and a fresh-context Ralph loop whose calling session bounds iterations and reviews with `/skill:pi-review`.
+- **Ledger task workflows and Ralph loops** (`ledger_scaffold`, `ledger_close`, `/skill:ledger-*`, `/skill:pi-ralph`) — an always-injected `.ledger` contract, scaffold-only task creation, history archival, lifecycle skills, and a fresh-context Ralph loop whose calling session bounds iterations and reviews with `/skill:pi-review`.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
 apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, ledger, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
@@ -252,7 +252,7 @@ The default spine is plan focuses → fan-out read-only reviewers → one verifi
 
 ### Ledger task workflows and Ralph loops
 
-One task is one self-contained `.ledger/YYYYMMDDhhmm-slug/` bundle with an executable `task.md` plus only the specs, plans, research, decisions, evidence, knowledge, and candidate skills that task needs. `.ledger/README.md` indexes task paths without duplicating status. Tasks may depend on completed task roots; supporting records stay private to their owning bundle. Teams normally ignore `/.ledger/`, while solo developers may commit it.
+One task is one self-contained `.ledger/YYYYMMDDhhmm-slug/` bundle with an executable `task.md` plus only the specs, plans, research, decisions, evidence, knowledge, and candidate skills that task needs. `.ledger/index.md` indexes live task paths with title and description, without duplicating status. Closed tasks move to `.ledger/history/` and are listed with their terminal status, title, and description in `.ledger/history/index.md`. Tasks may depend on completed task roots, resolved live first and then in history; supporting records stay private to their owning bundle. Teams normally ignore `/.ledger/`, while solo developers may commit it.
 
 The packaged lifecycle skills make shaping first-class:
 
@@ -268,7 +268,7 @@ The packaged lifecycle skills make shaping first-class:
 
 Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a program from the packaged reference. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
 
-`/harness` and `/ledger` open the ledger operations hub. The `ledger` tool lists, inspects, selects, and mutates work items. Exact controls are in [`docs/ledger.md`](docs/ledger.md).
+The complete ledger contract is injected into main agents, interactive subagents, the Advisor, and `pi_exec` workers. `ledger_scaffold` only creates a new full task tree, structural `task.md`, and live index row with title and description. `ledger_close` archives a live task as `done` or `cancelled` without judging completeness. Existing tasks are otherwise read and edited with ordinary repository tools. Exact semantics are in [`docs/ledger.md`](docs/ledger.md).
 
 ## Reference-repository decisions
 
@@ -279,7 +279,7 @@ Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a
 | `pi-fabric` | The full core `exec` primitive: bounded guest code; core, extension, and MCP tool bridges; discovery; configurable fan-out; structured subagents; branching, reduction, parallel and pipeline composition; timers; compact final values; usage accounting; durable traces; code previews; live call rendering; and an activity widget. | QuickJS/WASM, compile-time TypeScript checking, Fabric's own MCP/provider registry, approvals subsystem, compaction, actors/teams, mesh, full dashboard, durable workflow state, and alternate runtimes. `pi_exec` uses a disposable Node worker and delegates MCP protocol ownership to `pi-mcp-adapter`. |
 | `pi-mcp-adapter` | The complete adapter as an exact runtime dependency, including protocol transports, lazy discovery, auth, approvals, output guarding, prompts/resources, setup UI, and its single `mcp` gateway. | Its standalone `mcpScript` runtime and skill; `pi_exec` owns scripting. The dependency is not copied or patched internally. |
 | `pi-subagents` | Owned Markdown agent discovery, Pi `AgentSession` execution, foreground/background queueing, resume/steer/result tools, nested delegation, usage/compaction accounting, completion grouping, activity widget, FleetView, and conversation viewer. | Worktree isolation, scheduling, human `@agent` routing, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy. Removed features have no schema fields or dormant implementation. |
-| `10x` | Conceptual foundations: typed engineering records, cold-start execution, evidence-gated closure, independent review, and retrospective learning. Apple-pi adapts those ideas into task-local `.ledger` bundles and on-demand lifecycle skills. | The `.10x` global ontology and name, always-on instruction injection, a second task database, unbounded loops, automatic promotion, static answer-key harnesses, or external/destructive autonomy. Machine receipts remain operational and user-local. |
+| `10x` | Inspiration for typed engineering records, cold-start execution, evidence-gated closure, independent review, and retrospective learning. | No migration or compatibility relationship; apple-pi's `.ledger` workbench is an independent system. |
 
 Additional boundaries:
 

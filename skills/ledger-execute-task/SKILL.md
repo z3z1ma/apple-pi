@@ -5,12 +5,12 @@ description: "Interpret and maintain the execution contract for a .ledger task. 
 
 # Execute a Ledger Task
 
-Confirm the operator authorized implementation of the named task. Inspect the task with the `ledger` tool and read the bundle before starting. Resolve missing scope, blockers, or dependency problems in shaping, not by weakening the records.
+Confirm the operator authorized implementation of the named task. Read `task.md`, every governing record, and relevant repository authority with ordinary repository tools before starting. Resolve missing scope, blockers, or dependency problems in shaping, not by weakening the records.
 
 The calling session is the controller. It does not inline review into Ralph, and it does not start an unbounded loop.
 
 1. Choose a bounded iteration count for this batch.
-2. Load `/skill:pi-ralph`. Author the program from `skills/pi-ralph/references/ralph.js` with `goal`, a newline-separated `stack` that includes `.ledger/README.md` and `.ledger/<task-id>/task.md`, and `iterations`.
+2. Load `/skill:pi-ralph`. Author the program from `skills/pi-ralph/references/ralph.js` with `goal`, a newline-separated `stack` that includes `.ledger/index.md` and `.ledger/<task-id>/task.md`, and `iterations`.
 3. Load `/skill:pi-review` and review the working tree against the task contract.
 4. Record confirmed findings, evidence, blockers, and work-item honesty in the ledger.
 5. Start another bounded Ralph batch if work remains, or stop.

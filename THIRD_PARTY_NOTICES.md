@@ -79,16 +79,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## 10x → ledger task workflow and Ralph procedure
-
-- Source: <https://github.com/z3z1ma/10x>
-- Reviewed commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
-- Author and copyright holder: Alexander M. Butler
-- Local paths: `skills/`, `components/ledger/`, `docs/ledger.md`
-- License: MIT
-- Original notice: `Copyright (c) 2026 Alexander M. Butler`
-- The local lifecycle and role skills adapt 10x's typed-record ontology, cold-start execution, evidence discipline, independent review, closure judgment, and retrospective-learning procedure. Apple-pi's task-local `.ledger` bundle model, plan records, distillation gate, TypeScript graph compiler, workspace gates, agent orchestration, receipt store, command/tool integration, and tests are new implementations; no 10x runtime source existed to copy.
-
 ## Conceptual references only
 
 No source code was copied from these projects:

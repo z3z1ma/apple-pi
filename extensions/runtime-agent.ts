@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Value } from "typebox/value";
+import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
 import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
@@ -285,7 +286,7 @@ export function buildAgentCliArgs(
 		extensionPath?: string;
 	},
 ): string[] {
-	const guidance = [
+	const workerGuidance = [
 		WORKER_GUIDANCE,
 		options.contextPath ? CONTEXT_GUIDANCE : "",
 		request.outputSchema ? OUTPUT_SCHEMA_GUIDANCE : "",
@@ -293,6 +294,7 @@ export function buildAgentCliArgs(
 	]
 		.filter(Boolean)
 		.join("\n\n");
+	const guidance = appendLedgerSystemPrompt(workerGuidance);
 	const args = [
 		"--mode",
 		"json",
