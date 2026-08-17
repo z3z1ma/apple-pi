@@ -176,6 +176,9 @@ try {
 	);
 	assert(!/type: "general-purpose"[\s\S]{0,200}tools:/.test(ralphSource), "pi-ralph must not restrict increment tools");
 	assert(ralphSource.includes("const PLANNER"), "pi-ralph must inline the review planner prompt");
+	assert(ralphSource.includes("workspaceSnapshot"), "pi-ralph must snapshot the workspace before each increment");
+	assert(ralphSource.includes("isLedgerPath"), "pi-ralph must separate ledger memory from product deltas");
+	assert(/Leave the increment uncommitted/.test(ralphSource), "pi-ralph must leave increments uncommitted for review");
 	const docs = {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),

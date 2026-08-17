@@ -14,6 +14,8 @@ If the goal is already satisfied in the repository, do not invent more implement
 
 If review findings are supplied, address those findings before starting new work.
 
+Leave the increment uncommitted in the working tree. Do not commit, push, reset, or otherwise hide the change. The next step reviews that working tree.
+
 Stop after one coherent increment. The next iteration will receive a fresh context window, the updated repository, and any new review findings.`;
 
 const goal = (inputs.goal || "").trim();
@@ -68,6 +70,10 @@ function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
 	return best;
 }
 
+function isLedgerPath(path) {
+	return path === ".ledger" || path.startsWith(".ledger/");
+}
+
 async function changedPaths() {
 	const [status, diffNames, untracked] = await Promise.all([
 		gitOutput("git status --short --untracked-files=all"),
@@ -84,6 +90,25 @@ async function changedPaths() {
 	for (const path of diffNames.split("\n").map((line) => line.trim()).filter(Boolean)) names.add(path);
 	for (const path of untracked.split("\0").filter(Boolean)) names.add(path);
 	return [...names];
+}
+
+async function fingerprintPath(path) {
+	const result = await pi.bash({
+		command: `if [ -f ${shellQuote(path)} ]; then git hash-object -- ${shellQuote(path)}; else printf MISSING; fi`,
+	});
+	return (result.ok ? result.output : "MISSING").trim();
+}
+
+async function workspaceSnapshot() {
+	const paths = await changedPaths();
+	const entries = await parallel(paths, async (path) => [path, await fingerprintPath(path)]);
+	return Object.fromEntries(entries);
+}
+
+function incrementPaths(before, after) {
+	return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+		(path) => before[path] !== after[path],
+	);
 }
 
 async function reviewChange(files, background) {
@@ -408,10 +433,11 @@ function incrementTask(findings) {
 }
 
 let findings = [];
-let progressed = false;
 const failures = [];
 
 for (let iteration = 1; ; iteration++) {
+	const headBefore = (await gitOutput("git rev-parse HEAD")).trim();
+	const before = await workspaceSnapshot();
 	const result = await agents.run({
 		type: "general-purpose",
 		name: `ralph-${iteration}`,
@@ -423,16 +449,30 @@ for (let iteration = 1; ; iteration++) {
 		return { status: "failed", iteration, findings, failures };
 	}
 
-	const changed = await changedPaths();
-	if (changed.length === 0) {
-		if (findings.length > 0) return { status: "stuck", iteration, findings, failures };
-		return { status: progressed ? "accepted" : "idle", iteration, findings, failures };
+	const headAfter = (await gitOutput("git rev-parse HEAD")).trim();
+	if (headBefore !== headAfter) {
+		failures.push({
+			iteration,
+			error: "increment committed; review needs the uncommitted working tree",
+		});
+		return { status: "failed", iteration, findings, failures };
 	}
 
-	progressed = true;
+	const changed = incrementPaths(before, await workspaceSnapshot());
+	const product = changed.filter((path) => !isLedgerPath(path));
+	if (product.length === 0) {
+		if (findings.length > 0) return { status: "stuck", iteration, findings, failures };
+		return {
+			status: iteration > 1 || changed.length > 0 ? "accepted" : "idle",
+			iteration,
+			findings,
+			failures,
+		};
+	}
+
 	let review;
 	try {
-		review = await reviewChange(changed, `${goal}\n\nPrior findings: ${findings.length}`);
+		review = await reviewChange(product, `${goal}\n\nPrior findings: ${findings.length}`);
 	} catch (error) {
 		failures.push({ iteration, error: String(error) });
 		return { status: "review_failed", iteration, findings, failures };

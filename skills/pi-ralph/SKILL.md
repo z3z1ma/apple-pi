@@ -20,13 +20,14 @@ Workers spawn without skills or extensions. They cannot invoke `/skill:pi-review
 ## Loop
 
 1. **Increment** — spawn `type: "general-purpose"` with no `tools` or `systemPrompt` override. Put Ralph instructions, the goal, and any prior findings in the task. Bind the stack and compact findings as `context`.
-2. **Remember** — the agent updates ledger task records as it works. Journal, evidence, blockers, retrospective, distillation, and work items are the memory the next window will read.
-3. **Review** — collect the working-tree change and run the inlined pi-review spine (partition, parallel review, independent verify). Copy planner, reviewer, and verifier prompt bodies from `skills/pi-review/references/`.
+2. **Remember** — the agent updates ledger task records as it works. Journal, evidence, blockers, retrospective, distillation, and work items are the memory the next window will read. Leave the increment uncommitted so review can see the working tree.
+3. **Review** — snapshot the workspace before the increment. Diff that snapshot afterward. Review the non-ledger product paths through the inlined pi-review spine (partition, parallel review, independent verify). Copy planner, reviewer, and verifier prompt bodies from `skills/pi-review/references/`.
 4. **Accept or continue**
-   - Confirmed or unresolved findings become the next iteration's context.
-   - A clean review continues so the next fresh agent can take another increment.
-   - No repository or ledger change after a clean increment means the goal is satisfied.
-   - No change while findings remain is stuck, not success.
+   - Product change + confirmed or unresolved findings: feed those findings into the next increment.
+   - Product change + clean review: continue so the next fresh agent can take another increment.
+   - No product change + empty findings: accept. Ledger-only writes are memory, not unfinished work.
+   - No product change while findings remain: stuck, not success.
+   - An increment that commits fails. Review reads the working tree, not `HEAD`.
 
 ## Program shape
 
