@@ -1,16 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
-import { DEFAULT_RALPH_BUDGETS, RalphController } from "../src/controller.js";
-import { roleProfile } from "../src/roles.js";
-import { readReceiptEvents } from "../src/receipts.js";
-import type { ReviewerOutput } from "../src/types.js";
 import type { ReviewRun } from "../../review/src/types.js";
 import type { ManagedAgentRequest, ManagedSubagentService } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
+import { DEFAULT_RALPH_BUDGETS, RalphController } from "../src/controller.js";
+import { readReceiptEvents } from "../src/receipts.js";
+import { roleProfile } from "../src/roles.js";
+import type { ReviewerOutput } from "../src/types.js";
 
 const roots: string[] = [];
 const TASK = ".ledger/202608151200-work/task.md";
@@ -193,7 +193,9 @@ function testController(mock: ManagedSubagentService): RalphController {
 					failures: [],
 					findings: output.findings.map((finding, index) => ({
 						id: `finding-${index}`,
-						groupId: "test",
+						cycle: 1,
+						partitionId: "test",
+						focusId: "test",
 						severity: finding.severity,
 						category: "bug",
 						summary: finding.summary,
@@ -209,14 +211,10 @@ function testController(mock: ManagedSubagentService): RalphController {
 					residualRisk: output.residualRisk,
 					totalTokens: record.lifetimeUsage.input + record.lifetimeUsage.output,
 					budgets: {
-						maxTokens: 10000,
 						timeoutSeconds: 60,
 						maxConcurrency: 1,
-						plannerMaxTurns: 1,
-						reviewerMaxTurns: 1,
-						verifierMaxTurns: 1,
-						maxGroups: 1,
-						maxPromptBytes: 32768,
+						maxFocuses: 1,
+						maxCycles: 1,
 					},
 					routing: { plannerMode: "test", fastMode: "test", strongMode: "test" },
 					agents: [],

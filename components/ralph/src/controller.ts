@@ -1,22 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
-import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { ReviewController, summarizeReviewRun } from "../../review/src/controller.js";
 import type { ReviewRun } from "../../review/src/types.js";
-import { createExecutorAuthorityPolicy, type AuthorityDenial } from "./authority-policy.js";
+import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
+import { getLifetimeTotal } from "../../subagents/src/usage.js";
+import { type AuthorityDenial, createExecutorAuthorityPolicy } from "./authority-policy.js";
 import { acquireRalphRunLeases } from "./lease.js";
 import { appendReceipt, listRunSummaries, loadRun, receiptPath } from "./receipts.js";
-import { resolveRalphRoots } from "./roots.js";
 import {
+	createRalphResultTool,
 	executorPrompt,
 	judgePrompt,
-	createRalphResultTool,
 	parseExecutorOutput,
 	parseJudgeOutput,
 	roleProfile,
 } from "./roles.js";
+import { resolveRalphRoots } from "./roots.js";
 import {
 	activateTask,
 	appendIndependentReview,
@@ -30,8 +30,6 @@ import {
 import type {
 	JudgeOutput,
 	RalphAgentRole,
-	WorkItemCompletionProposal,
-	WorkItemJudgment,
 	RalphBudgets,
 	RalphMode,
 	RalphRole,
@@ -41,6 +39,8 @@ import type {
 	RalphTerminalState,
 	ReviewerOutput,
 	RunSummary,
+	WorkItemCompletionProposal,
+	WorkItemJudgment,
 } from "./types.js";
 import {
 	compileWorkGraph,
@@ -447,9 +447,7 @@ export class RalphController {
 				profile: "balanced",
 				background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
 				authorityPacket: graph.bundle,
-				// Parent safety capacity is controller-owned; Ralph never exposes or forwards caller arithmetic.
 				constraints: {
-					maxTokens: remainingReviewTokens,
 					timeoutSeconds: Math.max(1, Math.ceil(remainingSeconds)),
 				},
 			},

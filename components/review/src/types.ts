@@ -30,6 +30,8 @@ export interface ReviewInput {
 	resolvedHead?: string;
 	items: ReviewItem[];
 	inputHash: string;
+	/** Normalized repository-relative files, folders, or globs that limited the seal. */
+	paths?: string[];
 }
 
 export interface ReviewPreview {
@@ -40,21 +42,43 @@ export interface ReviewPreview {
 	inputHash: string;
 	reviewable: ReviewItem[];
 	waived: { item: ReviewItem; reason: string }[];
+	paths?: string[];
 }
 
-export interface ReviewGroup {
+export interface ReviewPartition {
 	id: string;
+	cycle: number;
 	title: string;
-	objective: string;
 	itemIds: string[];
-	contextPaths: string[];
-	tier: ReviewModelTier;
-	rationale: string;
+}
+
+export interface ReviewFocus {
+	id: string;
+	partitionId: string;
+	cycle: number;
+	title: string;
+	question: string;
+	checks: string[];
+	itemIds: string[];
+}
+
+export interface ReviewMetaReview {
+	cycle: number;
+	sentiment: string;
+	compoundRisks: string[];
+	residuals: string[];
+	coverageGaps: string[];
+}
+
+export interface ReviewCycleRecord {
+	index: number;
+	partitions: ReviewPartition[];
+	focuses: ReviewFocus[];
+	metaReview?: ReviewMetaReview;
 }
 
 export interface ReviewWorkGraph {
-	summary: string;
-	groups: ReviewGroup[];
+	cycles: ReviewCycleRecord[];
 	graphHash: string;
 }
 
@@ -71,7 +95,34 @@ export type ReviewAnchorSide = "new" | "old";
 export type ReviewAnchorProvenance = "exact_hunk" | "exact_file" | "ambiguous" | "unresolved";
 export type ReviewValidationStatus = "confirmed" | "rejected" | "retained_unresolved";
 
-export interface ProposedReviewFinding {
+export interface OpenReviewCall {
+	title?: string;
+	files: string[];
+	focuses: Array<{
+		title: string;
+		question: string;
+		checks: string[];
+	}>;
+}
+
+export interface ReviewReport {
+	kind: "finding" | "note";
+	severity?: ReviewSeverity;
+	path?: string;
+	startLine?: number;
+	endLine?: number;
+	side?: ReviewAnchorSide;
+	what: string;
+	why?: string;
+	evidence?: string;
+	suggestion?: string;
+}
+
+export interface ReviewFinding {
+	id: string;
+	cycle: number;
+	partitionId: string;
+	focusId: string;
 	severity: ReviewSeverity;
 	category: ReviewCategory;
 	summary: string;
@@ -81,11 +132,6 @@ export interface ProposedReviewFinding {
 	anchor: string;
 	side: ReviewAnchorSide;
 	suggestion?: string;
-}
-
-export interface ReviewFinding extends ProposedReviewFinding {
-	id: string;
-	groupId: string;
 	startLine?: number;
 	endLine?: number;
 	anchorProvenance: ReviewAnchorProvenance;
@@ -94,27 +140,17 @@ export interface ReviewFinding extends ProposedReviewFinding {
 		status: ReviewValidationStatus;
 		reason: string;
 		evidence: string;
+		invitedByAmbiguity?: boolean;
 	};
 }
 
-export interface PlannerOutput {
+export interface ReviewNote {
+	id: string;
+	cycle: number;
+	partitionId: string;
+	focusId: string;
 	summary: string;
-	groups: Array<{
-		id: string;
-		title: string;
-		objective: string;
-		itemIds: string[];
-		contextPaths: string[];
-		tier: ReviewModelTier;
-		rationale: string;
-	}>;
-}
-
-export interface ReviewerOutput {
-	summary: string;
-	reviewedItemIds: string[];
-	findings: ProposedReviewFinding[];
-	residualRisk: string[];
+	evidence: string;
 }
 
 export interface VerifierOutput {
@@ -123,8 +159,12 @@ export interface VerifierOutput {
 		status: ReviewValidationStatus;
 		reason: string;
 		evidence: string;
+		invitedByAmbiguity?: boolean;
 	}>;
-	residualRisk: string[];
+	sentiment: string;
+	compoundRisks: string[];
+	residuals: string[];
+	coverageGaps: string[];
 }
 
 export type ReviewTerminalState =
@@ -142,14 +182,10 @@ export type ReviewRunState = "planning" | "reviewing" | "verifying" | ReviewTerm
  * input; tests and trusted package policy may use them to establish a boundary.
  */
 export interface ReviewBudgets {
-	maxTokens: number;
 	timeoutSeconds: number;
 	maxConcurrency: number;
-	plannerMaxTurns: number;
-	reviewerMaxTurns: number;
-	verifierMaxTurns: number;
-	maxGroups: number;
-	maxPromptBytes: number;
+	maxFocuses: number;
+	maxCycles: number;
 }
 
 export type ReviewTerminalCause =
@@ -168,20 +204,19 @@ export type ReviewTerminalCause =
 
 export interface ReviewRoleEnvelope {
 	stage: "planner" | "reviewer" | "verifier";
-	groupId?: string;
+	partitionId?: string;
+	focusId?: string;
+	cycle?: number;
 	mode: string;
 	model: string;
 	contextWindow: number;
 	modelMaxOutputTokens: number;
 	promptBytes: number;
 	resultToolBytes: number;
+	customToolBytes: number;
 	builtinToolBytes: number;
 	estimatedInputTokens: number;
 	reservedOutputTokens: number;
-	expectedRequests: number;
-	reservationTokens: number;
-	maxTokens: number;
-	maxTurns: number;
 	timeoutSeconds: number;
 }
 
@@ -204,7 +239,9 @@ export interface ReviewModelRouting {
 
 export interface ReviewAgentReceipt {
 	stage: "planner" | "reviewer" | "verifier";
-	groupId?: string;
+	partitionId?: string;
+	focusId?: string;
+	cycle?: number;
 	tier: ReviewModelTier;
 	mode: string;
 	skillHash: string;
@@ -254,10 +291,12 @@ export interface ReviewRun {
 	failures: ReviewCoverageFailure[];
 	workGraph?: ReviewWorkGraph;
 	findings: ReviewFinding[];
+	rawFindings?: ReviewFinding[];
+	notes?: ReviewNote[];
+	metaReviews?: ReviewMetaReview[];
 	residualRisk: string[];
 	totalTokens: number;
 	budgets: ReviewBudgets;
-	/** Resolved package policy, additive so schema-v1 receipts remain readable. */
 	policy?: ReviewResolvedPolicy;
 	terminalCause?: ReviewTerminalCause;
 	routing: ReviewModelRouting;
@@ -272,7 +311,9 @@ export interface ReviewReceiptEvent {
 	runId: string;
 	state: ReviewRunState;
 	stage?: "input" | "planner" | "reviewer" | "verifier" | "finalize";
-	groupId?: string;
+	partitionId?: string;
+	focusId?: string;
+	cycle?: number;
 	outcome: string;
 	details?: unknown;
 	run: ReviewRun;
@@ -281,11 +322,14 @@ export interface ReviewReceiptEvent {
 export interface StartReviewOptions {
 	/** Agent-selected Git working tree. Relative paths resolve from the caller cwd. */
 	root?: string;
+	/** Repository-relative files, folders, or globs that limit the sealed change. Omitted or empty reviews the whole change. */
+	paths?: string[];
 	profile?: ReviewProfile;
 	background?: string;
 	authorityPacket?: string;
 	/** Internal parent/controller safety constraints; never populated by normal tool or command input. */
-	constraints?: Partial<Pick<ReviewBudgets, "maxTokens" | "timeoutSeconds">>;
+	constraints?: Partial<Pick<ReviewBudgets, "timeoutSeconds">>;
+
 	routing?: Partial<ReviewModelRouting>;
 }
 

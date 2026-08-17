@@ -107,6 +107,70 @@ function findInCurrentFile(
 	return matches;
 }
 
+export function fileLinesAt(projectRoot: string, path: string): string[] | undefined {
+	const file = safeCurrentFile(projectRoot, path);
+	if (!file) return undefined;
+	const content = readFileSync(file);
+	if (content.includes(0)) return undefined;
+	const lines = content.toString("utf8").replace(/\r\n/g, "\n").split("\n");
+	if (lines[lines.length - 1] === "") lines.pop();
+	return lines;
+}
+
+export function sealedSideLines(item: Pick<ReviewItem, "diff">, side: ReviewAnchorSide): Map<number, string> {
+	const byLine = new Map<number, string>();
+	for (const hunk of sideLines(item.diff, side)) {
+		for (const line of hunk) byLine.set(line.line, line.text);
+	}
+	return byLine;
+}
+
+function claimedDiffWindow(
+	item: ReviewItem,
+	side: ReviewAnchorSide,
+	startLine: number,
+	endLine: number,
+): string[] | undefined {
+	const byLine = sealedSideLines(item, side);
+	const window: string[] = [];
+	for (let line = startLine; line <= endLine; line++) {
+		if (!byLine.has(line)) return undefined;
+		window.push(byLine.get(line)!);
+	}
+	return window;
+}
+
+/** Lined reports are exact when those line numbers exist. The controller attaches the text; the verifier screens the claim. */
+export function groundReportedAnchor(
+	projectRoot: string,
+	item: ReviewItem,
+	anchor: string,
+	side: ReviewAnchorSide,
+	claimed: { startLine?: number; endLine?: number } = {},
+	options: { allowCurrentFile?: boolean } = {},
+): ResolvedReviewAnchor {
+	if (claimed.startLine === undefined) {
+		return anchor.trim()
+			? resolveReviewAnchor(projectRoot, item, anchor, side, options)
+			: { provenance: "unresolved", matchCount: 0 };
+	}
+	const startLine = claimed.startLine;
+	const endLine = claimed.endLine ?? claimed.startLine;
+	if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
+		return { provenance: "unresolved", matchCount: 0 };
+	}
+	if (side === "new") {
+		const lines = fileLinesAt(projectRoot, item.path);
+		if (lines && endLine <= lines.length) {
+			return { startLine, endLine, provenance: "exact_file", matchCount: 1 };
+		}
+	}
+	if (claimedDiffWindow(item, side, startLine, endLine)) {
+		return { startLine, endLine, provenance: "exact_hunk", matchCount: 1 };
+	}
+	return { startLine, endLine, provenance: "unresolved", matchCount: 0 };
+}
+
 export function resolveReviewAnchor(
 	projectRoot: string,
 	item: ReviewItem,

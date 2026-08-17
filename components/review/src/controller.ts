@@ -1,53 +1,63 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
-import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
 import { buildAgentPrompt } from "../../subagents/src/prompts.js";
+import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { createReviewAuthorityPolicy } from "./authority-policy.js";
-import { deriveReviewBudgets, deriveRoleEnvelope, reviewShapeFrom } from "./policy.js";
+import { clusterFindings, extractSealedHunk } from "./evidence.js";
 import {
 	assertReviewInputUnchanged,
 	materializeReviewTree,
 	previewReviewInput,
+	ReviewInputError,
 	resolveReviewTargetRoot,
 	reviewRepositoryRoot,
-	ReviewInputError,
 } from "./git.js";
-import { activeReviewLease, acquireReviewLease } from "./lease.js";
-import { resolveReviewAnchor } from "./location.js";
+import { acquireReviewLease, activeReviewLease } from "./lease.js";
+import { groundReportedAnchor } from "./location.js";
+import { deriveReviewBudgets, deriveRoleEnvelope, reviewShapeFrom } from "./policy.js";
 import { appendReviewReceipt, listReviewRunSummaries, loadReviewRun, reviewReceiptPath } from "./receipts.js";
 import {
-	createReviewResultTool,
-	parsePlannerOutput,
-	parseReviewerOutput,
-	parseVerifierOutput,
+	createMetaReviewTool,
+	createOpenReviewTool,
+	createReportTool,
 	plannerPrompt,
+	type ReviewToolCapture,
 	reviewerPrompt,
 	reviewRoleProfile,
 	verifierPrompt,
 } from "./roles.js";
 import type {
-	ProposedReviewFinding,
 	ReviewAgentReceipt,
 	ReviewBudgets,
 	ReviewCoverageFailure,
 	ReviewFinding,
+	ReviewFocus,
 	ReviewInput,
+	ReviewItem,
+	ReviewMetaReview,
 	ReviewModelRouting,
 	ReviewModelTier,
+	ReviewPartition,
+	ReviewReport,
 	ReviewRoleEnvelope,
 	ReviewRun,
-	ReviewTerminalCause,
 	ReviewRunSummary,
 	ReviewSource,
+	ReviewTerminalCause,
 	StartReviewOptions,
 } from "./types.js";
-import { compileReviewWorkGraph, ReviewGraphError } from "./work-graph.js";
+import {
+	compileReviewCycle,
+	focusIdentityKey,
+	ReviewGraphError,
+	reviewItemAliases,
+	workGraphHash,
+} from "./work-graph.js";
 
-/** Balanced package policy retained for internal tests and status rendering. */
 export const DEFAULT_REVIEW_BUDGETS: ReviewBudgets = deriveReviewBudgets("balanced", {
 	selectedItems: 3,
 	diffBytes: 0,
@@ -56,13 +66,12 @@ export const DEFAULT_REVIEW_BUDGETS: ReviewBudgets = deriveReviewBudgets("balanc
 
 export const DEFAULT_REVIEW_ROUTING: ReviewModelRouting = {
 	plannerMode: "review-planner",
-	fastMode: "review-fast",
-	strongMode: "review-strong",
+	fastMode: "review-routine",
+	strongMode: "review-rigorous",
 };
 
 const TERMINAL = new Set(["complete", "partial", "failed", "skipped", "stopped", "workspace_conflict", "error"]);
 
-/** Mirrors the managed runner's complete replace-mode system-prompt rendering. */
 function renderReviewRoleSystemPrompt(config: Parameters<typeof buildAgentPrompt>[0], cwd: string): string {
 	let isGitRepo = false;
 	let branch = "";
@@ -106,11 +115,10 @@ interface ActiveReview {
 	abort: AbortController;
 	activeAgentIds: Set<string>;
 	stopRequested: boolean;
-	budgetExceeded: boolean;
 	externalCancelled: boolean;
 	inflightTokens: number;
-	/** Capacity atomically reserved for roles that have been admitted but not settled. */
-	reservedTokens: number;
+	failedFocusIds: Set<string>;
+	succeededFocusIds: Set<string>;
 	run: ReviewRun;
 	reviewRoot: string;
 	cleanupReviewRoot: () => void;
@@ -142,36 +150,22 @@ function safeReason(value: unknown): string {
 		.slice(0, 500);
 }
 
-function exactIds(actual: string[], expected: string[], label: string): void {
-	const left = [...actual].sort();
-	const right = [...expected].sort();
-	if (left.length !== right.length || left.some((id, index) => id !== right[index])) {
-		throw new ReviewStageError(`${label} did not account for exactly its assigned review items`, "invalid_output");
-	}
-}
-
-async function parallelLimit<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
-	const results = new Array<R>(items.length);
-	let next = 0;
-	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-		for (;;) {
-			const index = next++;
-			if (index >= items.length) return;
-			results[index] = await work(items[index]);
-		}
-	});
-	await Promise.all(workers);
-	return results;
-}
-
 function normalizeRouting(input: Partial<ReviewModelRouting> = {}): ReviewModelRouting {
 	const route = { ...DEFAULT_REVIEW_ROUTING, ...input };
 	for (const [name, value] of Object.entries(route)) if (!value.trim()) throw new Error(`${name} must be non-empty`);
 	return route;
 }
 
-function proposedFindingId(runId: string, groupId: string, index: number, finding: ProposedReviewFinding): string {
-	return sha256([runId, groupId, String(index), finding.path, finding.summary, finding.anchor].join("\0")).slice(0, 24);
+function reportId(runId: string, focusId: string, index: number, report: ReviewReport): string {
+	return sha256([runId, focusId, String(index), report.kind, report.path ?? "", report.what].join("\0")).slice(0, 24);
+}
+
+function itemsForReportedPath(items: Iterable<ReviewItem>, path: string, side: ReviewFinding["side"]): ReviewItem[] {
+	return [...items].filter(
+		(item) =>
+			item.path === path &&
+			(side === "old" ? item.status === "deleted" || item.status === "renamed" : item.status !== "deleted"),
+	);
 }
 
 export class ReviewController {
@@ -184,8 +178,8 @@ export class ReviewController {
 		this.resolveModelOverride = dependencies.resolveModel;
 	}
 
-	preview(projectRoot: string, source: ReviewSource) {
-		return previewReviewInput(projectRoot, source);
+	preview(projectRoot: string, source: ReviewSource, options: StartReviewOptions = {}) {
+		return previewReviewInput(projectRoot, source, options.paths);
 	}
 
 	async run(
@@ -195,7 +189,7 @@ export class ReviewController {
 		signal?: AbortSignal,
 	): Promise<ReviewRun> {
 		this.assertExecutionContext(ctx);
-		const preview = previewReviewInput(resolveReviewTargetRoot(ctx.cwd, options.root), source);
+		const preview = previewReviewInput(resolveReviewTargetRoot(ctx.cwd, options.root), source, options.paths);
 		const now = new Date().toISOString();
 		const profile = options.profile ?? "balanced";
 		const budgets = deriveReviewBudgets(
@@ -220,6 +214,9 @@ export class ReviewController {
 			completedItemIds: [],
 			failures: [],
 			findings: [],
+			rawFindings: [],
+			notes: [],
+			metaReviews: [],
 			residualRisk: [],
 			totalTokens: 0,
 			budgets,
@@ -269,10 +266,10 @@ export class ReviewController {
 			abort: new AbortController(),
 			activeAgentIds: new Set(),
 			stopRequested: false,
-			budgetExceeded: false,
 			externalCancelled: false,
 			inflightTokens: 0,
-			reservedTokens: 0,
+			failedFocusIds: new Set(),
+			succeededFocusIds: new Set(),
 			run,
 			reviewRoot: run.projectRoot,
 			cleanupReviewRoot: () => {},
@@ -297,46 +294,23 @@ export class ReviewController {
 			...(preview.resolvedHead && { resolvedHead: preview.resolvedHead }),
 			items: [...preview.reviewable, ...preview.waived.map(({ item }) => item)],
 			inputHash: preview.inputHash,
+			...(preview.paths?.length ? { paths: preview.paths } : {}),
 		};
 		try {
 			const tree = materializeReviewTree(input);
 			control.reviewRoot = tree.root;
 			control.cleanupReviewRoot = tree.cleanup;
-			await this.plan(ctx, run, input, preview.reviewable, control, options);
-			if (control.stopRequested || control.abort.signal.aborted)
-				throw new ReviewStageError("Review stopped", "cancelled");
-			assertReviewInputUnchanged(input);
-			await this.reviewGroups(ctx, run, input, preview.reviewable, control, options);
+			await this.runCycles(ctx, run, input, preview.reviewable, control, options);
 			if (control.stopRequested) throw new ReviewStageError("Review stopped", "cancelled");
+			// Reseal is cycle-start plus this post-drain check. Reviewers may read a moving workspace during a cycle.
 			assertReviewInputUnchanged(input);
-			await this.verifyGroups(ctx, run, input, preview.reviewable, control, options);
-			assertReviewInputUnchanged(input);
+			this.publishVisibleFindings(run);
 			if (control.stopRequested) {
 				run.state = "stopped";
 				run.terminalCause = "operator_stop";
 			} else this.deriveTerminalState(run);
 		} catch (error) {
-			const cause = this.terminalCause(error, control);
-			run.terminalCause = cause;
-			if (cause === "aggregate_token_ceiling") {
-				run.state = run.completedItemIds.length > 0 ? "partial" : "failed";
-				run.lastOutcome = `Review aggregate token ceiling reached: ${run.totalTokens}/${run.budgets.maxTokens}`;
-			} else if (cause === "operator_stop" || cause === "external_cancellation") {
-				run.state = "stopped";
-				run.lastOutcome = cause === "operator_stop" ? "Stopped by the operator" : "Cancelled by the caller";
-			} else if (cause === "workspace_conflict") {
-				run.state = "workspace_conflict";
-				run.lastOutcome = safeReason(error);
-			} else {
-				const reason = safeReason(error);
-				if (!run.workGraph) {
-					const classification: ReviewCoverageFailure["classification"] =
-						error instanceof ReviewGraphError ? "planner" : this.failureClassification(cause);
-					for (const selected of run.selected) this.addFailure(run, selected.id, selected.path, classification, reason);
-				}
-				run.state = run.completedItemIds.length > 0 ? "partial" : "failed";
-				run.lastOutcome = reason;
-			}
+			this.settleCaughtRun(run, error, control);
 		} finally {
 			signal?.removeEventListener("abort", onExternalAbort);
 		}
@@ -401,248 +375,532 @@ export class ReviewController {
 		await Promise.all(controls.map((control) => control.settled));
 	}
 
-	private async plan(
+	private async runCycles(
 		ctx: ExtensionContext,
 		run: ReviewRun,
 		input: ReviewInput,
-		items: ReviewInput["items"],
+		items: ReviewItem[],
 		control: ActiveReview,
 		options: StartReviewOptions,
 	): Promise<void> {
+		run.workGraph = { cycles: [], graphHash: workGraphHash([]) };
+		const aliases = reviewItemAliases(items);
+		for (let cycle = 1; cycle <= run.budgets.maxCycles; cycle++) {
+			this.assertActive(control);
+			// Next cycle starts only if this seal still matches. Mid-cycle workspace reads are live.
+			assertReviewInputUnchanged(input);
+			let opened: { partitions: ReviewPartition[]; focuses: ReviewFocus[] } | undefined;
+			try {
+				opened = await this.planCycle(ctx, run, input, items, control, options, cycle, aliases);
+				if (opened.focuses.length === 0) {
+					if (cycle === 1) throw new ReviewGraphError("Planner opened no reviews", "empty_graph");
+					break;
+				}
+				await this.reviewCycle(ctx, run, input, items, control, options, opened.partitions, opened.focuses);
+			} catch (error) {
+				this.settleCycleCoverage(run, cycle, control);
+				this.failUncovered(run);
+				if (cycle > 1 && run.completedItemIds.length === run.selected.length && run.failures.length === 0) {
+					run.residualRisk.push(`Later cycle stopped: ${safeReason(error)}`);
+					break;
+				}
+				throw error;
+			}
+			this.settleCycleCoverage(run, cycle, control);
+			run.workGraph.graphHash = workGraphHash(run.workGraph.cycles);
+			const uncovered = run.selected.filter(
+				(item) =>
+					!run.completedItemIds.includes(item.id) && !run.failures.some((failure) => failure.itemId === item.id),
+			);
+			const lastMeta = run.metaReviews?.at(-1);
+			const moreWork =
+				uncovered.length > 0 || (lastMeta?.residuals.length ?? 0) > 0 || (lastMeta?.coverageGaps.length ?? 0) > 0;
+			if (!moreWork) break;
+		}
+		this.failUncovered(run);
+	}
+
+	private async planCycle(
+		ctx: ExtensionContext,
+		run: ReviewRun,
+		input: ReviewInput,
+		items: ReviewItem[],
+		control: ActiveReview,
+		options: StartReviewOptions,
+		cycle: number,
+		aliases: Map<string, string>,
+	): Promise<{ partitions: ReviewPartition[]; focuses: ReviewFocus[] }> {
+		run.state = "planning";
+		run.updatedAt = new Date().toISOString();
 		const route = await this.resolveModel(ctx, run.routing.plannerMode, "fast");
 		this.assertActive(control);
-		const profile = reviewRoleProfile("planner");
+		const covered = new Set<string>();
+		for (const record of run.workGraph?.cycles ?? []) {
+			for (const partition of record.partitions) for (const id of partition.itemIds) covered.add(id);
+		}
+		const uncoveredAliases = items
+			.filter((item) => run.selected.some((selected) => selected.id === item.id) && !covered.has(item.id))
+			.map((item) => aliases.get(item.id) ?? item.path);
+		const priorFocuses = (run.workGraph?.cycles ?? []).flatMap((record) =>
+			record.focuses.map((focus) => ({
+				cycle: record.index,
+				title: focus.title,
+				question: focus.question,
+				files: focus.itemIds.map((id) => aliases.get(id) ?? id),
+			})),
+		);
+		const priorKeys = new Set(
+			(run.workGraph?.cycles ?? []).flatMap((record) =>
+				record.focuses.map((focus) => focusIdentityKey(focus.itemIds, focus.question)),
+			),
+		);
 		const prompt = plannerPrompt(input, items, {
 			background: options.background,
 			authorityPacket: options.authorityPacket,
 			reviewRoot: control.reviewRoot,
-			maxGroups: run.budgets.maxGroups,
-			maxGroupPromptBytes: run.budgets.maxPromptBytes,
-			excerptBytes: Math.floor(run.budgets.maxPromptBytes * 0.6),
+			cycle,
+			maxCycles: run.budgets.maxCycles,
+			maxFocuses: run.budgets.maxFocuses,
+			uncoveredAliases,
+			priorFocuses,
+			priorFindings: (run.rawFindings ?? [])
+				.map((finding) => `- [${finding.severity}] ${finding.path}: ${finding.summary}`)
+				.join("\n"),
+			metaReview: run.metaReviews?.at(-1),
 		});
-		const roleRun = await this.runRole(ctx, run, control, "planner", undefined, route, profile, prompt);
-		const parsed = parsePlannerOutput(roleRun.submission);
-		run.workGraph = compileReviewWorkGraph(parsed, items, run.profile, run.budgets.maxGroups);
-		run.updatedAt = new Date().toISOString();
-		await appendReviewReceipt(run, { stage: "planner", outcome: "graph_sealed", details: run.workGraph });
+		const opener = createOpenReviewTool();
+		await this.runRole(
+			ctx,
+			run,
+			control,
+			"planner",
+			undefined,
+			undefined,
+			cycle,
+			route,
+			reviewRoleProfile("planner"),
+			prompt,
+			opener,
+			{
+				requireCalls: cycle === 1,
+			},
+		);
+		if (opener.calls() === 0) return { partitions: [], focuses: [] };
+		const compiled = compileReviewCycle(
+			opener.values(),
+			items,
+			cycle,
+			{ maxFocuses: run.budgets.maxFocuses },
+			priorKeys,
+		);
+		run.workGraph ??= { cycles: [], graphHash: workGraphHash([]) };
+		run.workGraph.cycles.push(compiled);
+		run.workGraph.graphHash = workGraphHash(run.workGraph.cycles);
+		await appendReviewReceipt(run, {
+			stage: "planner",
+			cycle,
+			outcome: "graph_sealed",
+			details: compiled,
+		});
+		return compiled;
 	}
 
-	private async reviewGroups(
+	private async reviewCycle(
 		ctx: ExtensionContext,
 		run: ReviewRun,
 		input: ReviewInput,
-		items: ReviewInput["items"],
+		items: ReviewItem[],
 		control: ActiveReview,
 		options: StartReviewOptions,
+		partitions: ReviewPartition[],
+		focuses: ReviewFocus[],
 	): Promise<void> {
-		if (!run.workGraph) throw new ReviewStageError("Review graph is missing", "planner");
 		run.state = "reviewing";
 		run.updatedAt = new Date().toISOString();
+		const itemById = new Map(items.map((item) => [item.id, item]));
+		const partitionById = new Map(partitions.map((partition) => [partition.id, partition]));
 		await appendReviewReceipt(run, {
 			stage: "reviewer",
-			outcome: "stage_started",
-			details: { groups: run.workGraph.groups.length },
+			outcome: "focus_scheduler_started",
+			details: {
+				focuses: focuses.map((focus) => ({ id: focus.id, partitionId: focus.partitionId, itemIds: focus.itemIds })),
+			},
 		});
-		const itemById = new Map(items.map((item) => [item.id, item]));
-		await parallelLimit(run.workGraph.groups, run.budgets.maxConcurrency, async (group) => {
-			const focus = group.itemIds.map((id) => itemById.get(id)!).filter(Boolean);
+		const pending = [...focuses];
+		const running = new Map<string, Promise<void>>();
+		const launch = async (focus: ReviewFocus): Promise<void> => {
 			try {
-				if (control.abort.signal.aborted) throw new ReviewStageError("Review cancelled", "cancelled");
-				const mode = group.tier === "strong" ? run.routing.strongMode : run.routing.fastMode;
-				const route = await this.resolveModel(ctx, mode, group.tier);
-				this.assertActive(control);
-				const profile = reviewRoleProfile("reviewer");
-				const prompt = reviewerPrompt(input, group, focus, items, {
-					background: options.background,
-					authorityPacket: options.authorityPacket,
-					reviewRoot: control.reviewRoot,
-				});
-				const roleRun = await this.runRole(ctx, run, control, "reviewer", group.id, route, profile, prompt);
-				const parsed = parseReviewerOutput(roleRun.submission);
-				exactIds(parsed.reviewedItemIds, group.itemIds, `Reviewer ${group.id}`);
-				const focusPaths = new Set(focus.map((item) => item.path));
-				for (const [index, proposed] of parsed.findings.entries()) {
-					if (!focusPaths.has(proposed.path))
-						throw new ReviewStageError(
-							`Reviewer ${group.id} filed a finding outside its focus: ${proposed.path}`,
-							"invalid_output",
-						);
-					const candidates = focus.filter(
-						(entry) =>
-							entry.path === proposed.path &&
-							(proposed.side === "old"
-								? entry.status === "deleted" || entry.status === "renamed"
-								: entry.status !== "deleted"),
-					);
-					if (candidates.length !== 1)
-						throw new ReviewStageError(
-							`Finding anchor path is not unique in group ${group.id}: ${proposed.path}`,
-							"invalid_output",
-						);
-					const located = resolveReviewAnchor(run.projectRoot, candidates[0], proposed.anchor, proposed.side, {
-						allowCurrentFile: input.source.mode === "workspace",
-					});
-					const finding: ReviewFinding = {
-						...proposed,
-						id: proposedFindingId(run.runId, group.id, index, proposed),
-						groupId: group.id,
-						...(located.startLine !== undefined && { startLine: located.startLine }),
-						...(located.endLine !== undefined && { endLine: located.endLine }),
-						anchorProvenance: located.provenance,
-						anchorMatchCount: located.matchCount,
-						validation: {
-							status: "retained_unresolved",
-							reason: "Awaiting independent verification",
-							evidence: "Not yet verified",
-						},
-					};
-					run.findings.push(finding);
-				}
-				run.residualRisk.push(...parsed.residualRisk.map((risk) => `${group.id}: ${risk}`));
-				for (const id of group.itemIds) if (!run.completedItemIds.includes(id)) run.completedItemIds.push(id);
-				await appendReviewReceipt(run, {
-					stage: "reviewer",
-					groupId: group.id,
-					outcome: "group_completed",
-					details: { summary: parsed.summary, findings: parsed.findings.length, residualRisk: parsed.residualRisk },
-				});
+				await this.reviewFocus(
+					ctx,
+					run,
+					input,
+					control,
+					options,
+					itemById,
+					partitionById.get(focus.partitionId)!,
+					focus,
+				);
 			} catch (error) {
-				const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
-				const reason = safeReason(error);
-				for (const item of focus) this.addFailure(run, item.id, item.path, classification, reason);
-				await appendReviewReceipt(run, {
-					stage: "reviewer",
-					groupId: group.id,
-					outcome: "group_failed",
-					details: { classification, reason },
-				});
+				await this.failFocus(run, control, focus, error);
+			} finally {
+				running.delete(focus.id);
 			}
-		});
-		this.assertActive(control);
+		};
+		const pump = (): void => {
+			while (running.size < Math.min(run.budgets.maxConcurrency, focuses.length) && pending.length > 0) {
+				const focus = pending.shift()!;
+				running.set(focus.id, launch(focus));
+			}
+		};
+		pump();
+		while (running.size > 0) {
+			await Promise.race(running.values());
+			pump();
+		}
+		await this.verifyCycle(ctx, run, input, control, options, focuses[0]?.cycle ?? 1, focuses);
 	}
 
-	private async verifyGroups(
+	private async reviewFocus(
 		ctx: ExtensionContext,
 		run: ReviewRun,
 		input: ReviewInput,
-		items: ReviewInput["items"],
 		control: ActiveReview,
 		options: StartReviewOptions,
+		itemById: Map<string, ReviewItem>,
+		partition: ReviewPartition,
+		focus: ReviewFocus,
 	): Promise<void> {
-		if (!run.workGraph) return;
+		this.assertActive(control);
+		const focusItems = focus.itemIds.map((id) => itemById.get(id)!);
+		const allItems = [...itemById.values()];
+		const route = await this.resolveModel(ctx, run.routing.fastMode, "fast");
+		const prompt = reviewerPrompt(input, partition, focus, focusItems, allItems, {
+			background: options.background,
+			authorityPacket: options.authorityPacket,
+			reviewRoot: control.reviewRoot,
+		});
+		const reporter = createReportTool(focusItems.map((item) => item.path));
+		await this.runRole(
+			ctx,
+			run,
+			control,
+			"reviewer",
+			partition.id,
+			focus.id,
+			focus.cycle,
+			route,
+			reviewRoleProfile("reviewer"),
+			prompt,
+			reporter,
+			{ requireCalls: false },
+		);
+		const focusPaths = new Set(focusItems.map((item) => item.path));
+		for (const [index, report] of reporter.values().entries()) {
+			if (report.kind === "note") {
+				run.notes ??= [];
+				run.notes.push({
+					id: reportId(run.runId, focus.id, index, report),
+					cycle: focus.cycle,
+					partitionId: partition.id,
+					focusId: focus.id,
+					summary: report.what,
+					evidence: report.evidence ?? "",
+				});
+				continue;
+			}
+			if (!report.path || !focusPaths.has(report.path))
+				throw new ReviewStageError(
+					`Reviewer ${focus.id} filed a finding outside its focus: ${report.path}`,
+					"invalid_output",
+				);
+			const candidates = itemsForReportedPath(focusItems, report.path, report.side ?? "new");
+			if (candidates.length !== 1)
+				throw new ReviewStageError(`Finding path is not unique in focus ${focus.id}: ${report.path}`, "invalid_output");
+			const side = report.side ?? "new";
+			const located = groundReportedAnchor(
+				control.reviewRoot,
+				candidates[0],
+				report.evidence ?? "",
+				side,
+				{ startLine: report.startLine, endLine: report.endLine },
+				{ allowCurrentFile: input.source.mode === "workspace" },
+			);
+			const extracted =
+				located.provenance === "exact_file" || located.provenance === "exact_hunk"
+					? extractSealedHunk(control.reviewRoot, candidates[0], side, located.startLine, located.endLine)
+					: "";
+			const evidence = extracted || report.evidence || report.what;
+			run.rawFindings ??= [];
+			run.rawFindings.push({
+				id: reportId(run.runId, focus.id, index, report),
+				cycle: focus.cycle,
+				partitionId: partition.id,
+				focusId: focus.id,
+				severity: report.severity!,
+				category: "other",
+				summary: report.what,
+				impact: report.why ?? report.what,
+				evidence,
+				path: report.path,
+				anchor: evidence,
+				side,
+				...(report.suggestion && { suggestion: report.suggestion }),
+				...(located.startLine !== undefined && { startLine: located.startLine }),
+				...(located.endLine !== undefined && { endLine: located.endLine }),
+				anchorProvenance: located.provenance,
+				anchorMatchCount: located.matchCount,
+				validation: { status: "retained_unresolved", reason: "Awaiting verification", evidence: "" },
+			});
+		}
+		await appendReviewReceipt(run, {
+			stage: "reviewer",
+			partitionId: partition.id,
+			focusId: focus.id,
+			cycle: focus.cycle,
+			outcome: "focus_reviewed",
+			details: { reports: reporter.calls() },
+		});
+		control.succeededFocusIds.add(focus.id);
+	}
+
+	private async verifyCycle(
+		ctx: ExtensionContext,
+		run: ReviewRun,
+		input: ReviewInput,
+		control: ActiveReview,
+		options: StartReviewOptions,
+		cycle: number,
+		focuses: ReviewFocus[],
+	): Promise<void> {
 		run.state = "verifying";
 		run.updatedAt = new Date().toISOString();
-		const itemById = new Map(items.map((item) => [item.id, item]));
-		const groups = run.workGraph.groups.filter((group) => run.findings.some((finding) => finding.groupId === group.id));
-		await appendReviewReceipt(run, { stage: "verifier", outcome: "stage_started", details: { groups: groups.length } });
-		await parallelLimit(groups, run.budgets.maxConcurrency, async (group) => {
-			const focus = group.itemIds.map((id) => itemById.get(id)!).filter(Boolean);
-			const findings = run.findings.filter((finding) => finding.groupId === group.id);
-			try {
-				if (control.abort.signal.aborted) throw new ReviewStageError("Review cancelled", "cancelled");
-				const severe = findings.some(
-					(finding) => finding.severity === "critical" || finding.severity === "significant",
-				);
-				const tier: ReviewModelTier =
-					run.profile === "fast"
-						? "fast"
-						: run.profile === "thorough" || group.tier === "strong" || severe
-							? "strong"
-							: "fast";
-				const mode = tier === "strong" ? run.routing.strongMode : run.routing.fastMode;
-				const route = await this.resolveModel(ctx, mode, tier);
-				this.assertActive(control);
-				const profile = reviewRoleProfile("verifier");
-				const prompt = verifierPrompt(input, group, focus, findings, {
-					background: options.background,
-					authorityPacket: options.authorityPacket,
-					reviewRoot: control.reviewRoot,
-				});
-				const roleRun = await this.runRole(ctx, run, control, "verifier", group.id, route, profile, prompt);
-				const parsed = parseVerifierOutput(roleRun.submission);
-				exactIds(
-					parsed.decisions.map((decision) => decision.findingId),
-					findings.map((finding) => finding.id),
-					`Verifier ${group.id}`,
-				);
-				const decisionById = new Map(parsed.decisions.map((decision) => [decision.findingId, decision]));
-				for (const finding of findings) finding.validation = decisionById.get(finding.id)!;
-				run.residualRisk.push(...parsed.residualRisk.map((risk) => `${group.id} verification: ${risk}`));
-				await appendReviewReceipt(run, {
-					stage: "verifier",
-					groupId: group.id,
-					outcome: "group_verified",
-					details: { decisions: parsed.decisions, residualRisk: parsed.residualRisk },
-				});
-			} catch (error) {
-				const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
-				const reason = safeReason(error);
-				for (const finding of findings)
-					finding.validation = {
-						status: "retained_unresolved",
-						reason: "Verification did not complete",
-						evidence: reason,
-					};
-				for (const item of focus) {
-					run.completedItemIds = run.completedItemIds.filter((id) => id !== item.id);
-					this.addFailure(run, item.id, item.path, classification, `Verification failed: ${reason}`);
-				}
-				await appendReviewReceipt(run, {
-					stage: "verifier",
-					groupId: group.id,
-					outcome: "group_failed",
-					details: { classification, reason },
-				});
-			}
+		const findings = (run.rawFindings ?? []).filter((finding) => finding.cycle === cycle);
+		const notes = (run.notes ?? []).filter((note) => note.cycle === cycle);
+		const clusters = clusterFindings(findings);
+		const clusterByFinding = new Map(clusters.flatMap((cluster) => cluster.findingIds.map((id) => [id, cluster.id])));
+		const route = await this.resolveModel(ctx, run.routing.strongMode, "strong");
+		const prompt = verifierPrompt(
+			input,
+			cycle,
+			focuses,
+			findings.map((finding) => {
+				const [item, extra] = itemsForReportedPath(input.items, finding.path, finding.side);
+				return {
+					id: finding.id,
+					focusId: finding.focusId,
+					path: finding.path,
+					summary: finding.summary,
+					impact: finding.impact,
+					evidence: finding.evidence,
+					...(finding.startLine !== undefined && { startLine: finding.startLine }),
+					...(finding.endLine !== undefined && { endLine: finding.endLine }),
+					provenance: finding.anchorProvenance,
+					clusterId: clusterByFinding.get(finding.id),
+					...(item && !extra
+						? {
+								hunk: extractSealedHunk(control.reviewRoot, item, finding.side, finding.startLine, finding.endLine),
+							}
+						: {}),
+				};
+			}),
+			notes,
+			clusters,
+			{
+				background: options.background,
+				authorityPacket: options.authorityPacket,
+				reviewRoot: control.reviewRoot,
+			},
+		);
+		const meta = createMetaReviewTool();
+		try {
+			await this.runRole(
+				ctx,
+				run,
+				control,
+				"verifier",
+				undefined,
+				undefined,
+				cycle,
+				route,
+				reviewRoleProfile("verifier"),
+				prompt,
+				meta,
+				{ requireCalls: true },
+			);
+		} catch (error) {
+			for (const finding of findings)
+				finding.validation = {
+					status: "retained_unresolved",
+					reason: "Verification did not complete",
+					evidence: safeReason(error),
+				};
+			throw error;
+		}
+		const parsed = meta.values()[0];
+		const decided = new Set<string>();
+		for (const decision of parsed.decisions) {
+			const finding = findings.find((candidate) => candidate.id === decision.findingId);
+			if (!finding)
+				throw new ReviewStageError(`Verifier cited unknown finding ${decision.findingId}`, "invalid_output");
+			if (decided.has(decision.findingId))
+				throw new ReviewStageError(`Verifier repeated finding ${decision.findingId}`, "invalid_output");
+			decided.add(decision.findingId);
+			finding.validation = {
+				status: decision.status,
+				reason: decision.reason,
+				evidence: decision.evidence,
+				...(decision.invitedByAmbiguity && { invitedByAmbiguity: true }),
+			};
+		}
+		if (findings.some((finding) => !decided.has(finding.id)))
+			throw new ReviewStageError("Verifier did not decide every finding", "invalid_output");
+		const clarityResiduals = parsed.decisions.flatMap((decision) => {
+			if (decision.status !== "rejected" || !decision.invitedByAmbiguity) return [];
+			const finding = findings.find((candidate) => candidate.id === decision.findingId);
+			return finding ? [`Clarity: ${finding.path}: ${decision.reason}`] : [];
 		});
-		this.assertActive(control);
+		const residuals = [
+			...parsed.residuals,
+			...clarityResiduals.filter((residual) => !parsed.residuals.includes(residual)),
+		];
+		const metaReview: ReviewMetaReview = {
+			cycle,
+			sentiment: parsed.sentiment,
+			compoundRisks: parsed.compoundRisks,
+			residuals,
+			coverageGaps: parsed.coverageGaps,
+		};
+		run.metaReviews ??= [];
+		run.metaReviews.push(metaReview);
+		const cycleRecord = run.workGraph?.cycles.find((record) => record.index === cycle);
+		if (cycleRecord) cycleRecord.metaReview = metaReview;
+		run.residualRisk.push(
+			...residuals.map((risk) => `c${cycle}: ${risk}`),
+			...parsed.coverageGaps.map((gap) => `c${cycle} gap: ${gap}`),
+			...parsed.compoundRisks.map((risk) => `c${cycle} compound: ${risk}`),
+		);
+		await appendReviewReceipt(run, {
+			stage: "verifier",
+			cycle,
+			outcome: "focus_verified",
+			details: metaReview,
+		});
+	}
+
+	private async failFocus(run: ReviewRun, control: ActiveReview, focus: ReviewFocus, error: unknown): Promise<void> {
+		const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
+		const reason = safeReason(error);
+		control.failedFocusIds.add(focus.id);
+		await appendReviewReceipt(run, {
+			stage: "reviewer",
+			partitionId: focus.partitionId,
+			focusId: focus.id,
+			cycle: focus.cycle,
+			outcome: "focus_failed",
+			details: { classification, reason },
+		});
+	}
+
+	private settleCycleCoverage(run: ReviewRun, cycle: number, control: ActiveReview): void {
+		const sealed = run.workGraph?.cycles.find((record) => record.index === cycle);
+		if (sealed) this.markCycleCoverage(run, sealed.focuses, control);
+	}
+
+	private markCycleCoverage(run: ReviewRun, focuses: ReviewFocus[], control: ActiveReview): void {
+		const covering = new Map<string, ReviewFocus[]>();
+		for (const focus of focuses) {
+			for (const id of focus.itemIds) {
+				const current = covering.get(id) ?? [];
+				current.push(focus);
+				covering.set(id, current);
+			}
+		}
+		for (const [id, focusesForItem] of covering) {
+			const anySucceeded = focusesForItem.some((focus) => control.succeededFocusIds.has(focus.id));
+			if (anySucceeded) {
+				if (!run.completedItemIds.includes(id)) run.completedItemIds.push(id);
+				continue;
+			}
+			if (run.completedItemIds.includes(id)) {
+				const failed = focusesForItem.filter((focus) => control.failedFocusIds.has(focus.id)).map((focus) => focus.id);
+				if (failed.length) run.residualRisk.push(`Later focus ${failed.join(", ")} failed after coverage already held`);
+				continue;
+			}
+			const selected = run.selected.find((item) => item.id === id);
+			if (selected) this.addFailure(run, id, selected.path, "invalid_output", "Every covering focus failed");
+		}
+	}
+
+	private failUncovered(run: ReviewRun): void {
+		const assigned = new Set<string>();
+		for (const cycle of run.workGraph?.cycles ?? []) {
+			for (const partition of cycle.partitions) for (const id of partition.itemIds) assigned.add(id);
+		}
+		for (const selected of run.selected) {
+			if (assigned.has(selected.id)) continue;
+			if (run.completedItemIds.includes(selected.id) || run.failures.some((failure) => failure.itemId === selected.id))
+				continue;
+			this.addFailure(run, selected.id, selected.path, "planner", "Planner never opened a review covering this file");
+		}
+	}
+
+	private publishVisibleFindings(run: ReviewRun): void {
+		run.findings = [...(run.rawFindings ?? [])].sort((left, right) => {
+			const path = left.path.localeCompare(right.path);
+			if (path !== 0) return path;
+			const line = (left.startLine ?? 0) - (right.startLine ?? 0);
+			if (line !== 0) return line;
+			return left.id.localeCompare(right.id);
+		});
 	}
 
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one receipt-backed role lifecycle owns its cancellation and evidence transitions.
-	private async runRole(
+	private async runRole<T>(
 		ctx: ExtensionContext,
 		run: ReviewRun,
 		control: ActiveReview,
 		stage: ReviewAgentReceipt["stage"],
-		groupId: string | undefined,
+		partitionId: string | undefined,
+		focusId: string | undefined,
+		cycle: number | undefined,
 		route: ResolvedReviewModel,
 		profile: ReturnType<typeof reviewRoleProfile>,
 		prompt: string,
+		capture: ReviewToolCapture<T>,
+		policy: { requireCalls: boolean },
 	) {
 		this.assertActive(control);
 		const service = this.getService();
 		if (!service)
 			throw new ReviewStageError("Review requires apple-pi's subagent extension to be loaded first", "provider");
-		const resultTool = createReviewResultTool(stage);
+		const customTools: ToolDefinition[] = [capture.tool];
 		let envelope: ReviewRoleEnvelope;
 		try {
 			envelope = deriveRoleEnvelope({
 				stage,
-				...(groupId && { groupId }),
+				...(partitionId && { partitionId }),
+				...(focusId && { focusId }),
+				...(cycle !== undefined && { cycle }),
 				mode: route.mode,
 				model: route.model,
 				profile: run.profile,
 				budgets: run.budgets,
 				prompt,
 				systemPrompt: renderReviewRoleSystemPrompt(profile.config, control.reviewRoot),
-				resultTool: resultTool.tool,
+				resultTool: capture.tool,
+				customTools,
 				builtinToolNames: profile.config.builtinToolNames,
 				elapsedSeconds: this.elapsedSeconds(run),
-				// Actual settled/live usage determines a role's hard run-wide ceiling;
-				// admission reservations only decide whether another launch fits.
-				totalTokens: run.totalTokens + control.inflightTokens,
-				reservedTokens: control.reservedTokens,
 			});
 		} catch (error) {
 			throw new ReviewStageError(safeReason(error), "policy_input");
 		}
-		// Reserve expected request capacity before launch. The role itself receives
-		// the remaining run-wide ceiling; live usage enforces that ceiling.
-		control.reservedTokens += envelope.reservationTokens;
 		run.policy?.envelopes.push(envelope);
 		await appendReviewReceipt(run, {
 			stage,
-			...(groupId && { groupId }),
+			...(partitionId && { partitionId }),
+			...(focusId && { focusId }),
+			...(cycle !== undefined && { cycle }),
 			outcome: "role_policy_resolved",
 			details: envelope,
 		});
@@ -658,25 +916,23 @@ export class ReviewController {
 		const signal = AbortSignal.any([control.abort.signal, timeout]);
 		let activeId: string | undefined;
 		let roleLiveTokens = 0;
-		let roleReservationRemaining = envelope.reservationTokens;
 		let authorityDenied = false;
 		let record: Awaited<ReturnType<ManagedSubagentService["runFresh"]>>;
 		try {
 			record = await service.runFresh(ctx, {
 				type: profile.config.name,
-				description: groupId ? `Review ${stage}: ${groupId}` : `Review ${stage}: ${run.runId.slice(0, 8)}`,
+				description: focusId ? `Review ${stage}: ${focusId}` : `Review ${stage}: ${run.runId.slice(0, 8)}`,
 				prompt,
 				agentConfig: profile.config,
 				model: route.model,
-				maxTurns: envelope.maxTurns,
-				maxTokens: envelope.maxTokens,
-				thinkingLevel: route.thinkingLevel as never,
+				maxTurns: 0,
+				thinkingLevel: (stage === "planner" || stage === "reviewer" ? "low" : route.thinkingLevel) as never,
 				cwd: control.reviewRoot,
 				signal,
 				toolPolicy: createReviewAuthorityPolicy(control.reviewRoot, () => {
 					authorityDenied = true;
 				}),
-				customTools: [resultTool.tool],
+				customTools,
 				toolExecution: "sequential",
 				onStarted: (agentId) => {
 					activeId = agentId;
@@ -686,28 +942,19 @@ export class ReviewController {
 					const tokens = usage.input + usage.output + usage.cacheWrite;
 					roleLiveTokens += tokens;
 					control.inflightTokens += tokens;
-					// Consume this role's admission reservation as real usage arrives;
-					// later launches must not count the same tokens twice.
-					const reservedUsage = Math.min(roleReservationRemaining, tokens);
-					roleReservationRemaining -= reservedUsage;
-					control.reservedTokens = Math.max(0, control.reservedTokens - reservedUsage);
-					if (run.totalTokens + control.inflightTokens >= run.budgets.maxTokens) {
-						control.budgetExceeded = true;
-						control.abort.abort();
-						for (const agentId of control.activeAgentIds) service.abort(agentId);
-					}
 				},
 			});
 		} finally {
 			if (activeId) control.activeAgentIds.delete(activeId);
 			control.inflightTokens = Math.max(0, control.inflightTokens - roleLiveTokens);
-			control.reservedTokens = Math.max(0, control.reservedTokens - roleReservationRemaining);
 		}
 		const tokens = getLifetimeTotal(record.lifetimeUsage);
 		run.totalTokens += tokens;
 		const agent: ReviewAgentReceipt = {
 			stage,
-			...(groupId && { groupId }),
+			...(partitionId && { partitionId }),
+			...(focusId && { focusId }),
+			...(cycle !== undefined && { cycle }),
 			tier: route.tier,
 			mode: route.mode,
 			skillHash: profile.skillHash,
@@ -722,14 +969,16 @@ export class ReviewController {
 		};
 		run.agents.push(agent);
 		run.updatedAt = new Date().toISOString();
-		await appendReviewReceipt(run, { stage, ...(groupId && { groupId }), outcome: record.status, details: agent });
+		await appendReviewReceipt(run, {
+			stage,
+			...(partitionId && { partitionId }),
+			...(focusId && { focusId }),
+			...(cycle !== undefined && { cycle }),
+			outcome: record.status,
+			details: agent,
+		});
 		if (authorityDenied)
 			throw new ReviewStageError(`${stage} attempted to escape read-only review authority`, "authority");
-		if (control.budgetExceeded || run.totalTokens >= run.budgets.maxTokens) {
-			control.abort.abort();
-			for (const agentId of control.activeAgentIds) service.abort(agentId);
-			throw new ReviewStageError(`Review token budget exceeded: ${run.totalTokens}/${run.budgets.maxTokens}`, "budget");
-		}
 		if (record.compactionCount > 0)
 			throw new ReviewStageError(`${stage} compacted and lost its curated fresh context`, "compacted");
 		if (record.status === "steered" || record.status === "aborted") {
@@ -741,29 +990,25 @@ export class ReviewController {
 						? "Review cancelled by the caller"
 						: timedOut
 							? `${stage} exceeded its elapsed-time envelope`
-							: cause === "token_ceiling"
-								? `${stage} reached its token envelope`
-								: cause === "compaction"
-									? `${stage} compacted`
-									: `${stage} exceeded its turn envelope`,
+							: cause === "compaction"
+								? `${stage} compacted`
+								: `${stage} was aborted`,
 				control.stopRequested || control.externalCancelled
 					? "cancelled"
 					: timedOut
 						? "timeout"
 						: cause === "compaction"
 							? "compacted"
-							: "budget",
+							: "provider",
 				control.stopRequested
 					? "operator_stop"
 					: control.externalCancelled
 						? "external_cancellation"
 						: timedOut
 							? "elapsed_time_ceiling"
-							: cause === "token_ceiling"
-								? "aggregate_token_ceiling"
-								: cause === "compaction"
-									? "compaction"
-									: "role_turn_ceiling",
+							: cause === "compaction"
+								? "compaction"
+								: "provider_error",
 			);
 		}
 		if (record.status === "stopped") {
@@ -773,43 +1018,35 @@ export class ReviewController {
 					? "Review stopped"
 					: control.externalCancelled
 						? "Review cancelled by the caller"
-						: cause === "token_ceiling"
-							? `${stage} reached its token envelope`
-							: cause === "compaction"
-								? `${stage} compacted`
-								: timedOut
-									? `${stage} exceeded its elapsed-time envelope`
-									: "Review agent stopped",
+						: cause === "compaction"
+							? `${stage} compacted`
+							: timedOut
+								? `${stage} exceeded its elapsed-time envelope`
+								: "Review agent stopped",
 				control.stopRequested || control.externalCancelled
 					? "cancelled"
 					: cause === "compaction"
 						? "compacted"
-						: cause === "token_ceiling"
-							? "budget"
-							: "timeout",
+						: "timeout",
 				control.stopRequested
 					? "operator_stop"
 					: control.externalCancelled
 						? "external_cancellation"
-						: cause === "token_ceiling"
-							? "aggregate_token_ceiling"
-							: cause === "compaction"
-								? "compaction"
-								: timedOut
-									? "elapsed_time_ceiling"
-									: "internal_error",
+						: cause === "compaction"
+							? "compaction"
+							: timedOut
+								? "elapsed_time_ceiling"
+								: "internal_error",
 			);
 		}
 		if (record.status === "error")
 			throw new ReviewStageError(`${stage} failed: ${record.error ?? "unknown error"}`, "provider");
-		if (resultTool.calls() !== 1 || resultTool.value() === undefined) {
-			throw new ReviewStageError(`${stage} did not submit exactly one typed result`, "invalid_output");
-		}
-		return { record, submission: resultTool.value() };
+		if (policy.requireCalls && capture.calls() < 1)
+			throw new ReviewStageError(`${stage} did not submit a typed result`, "invalid_output");
+		return { record };
 	}
 
 	private terminalCause(error: unknown, control: ActiveReview): ReviewTerminalCause {
-		if (control.budgetExceeded) return "aggregate_token_ceiling";
 		if (control.stopRequested) return "operator_stop";
 		if (control.externalCancelled) return "external_cancellation";
 		if (error instanceof ReviewInputError) return "workspace_conflict";
@@ -883,7 +1120,6 @@ export class ReviewController {
 	}
 
 	private assertActive(control: ActiveReview): void {
-		if (control.budgetExceeded) throw new ReviewStageError("Review token budget reached", "budget");
 		if (control.stopRequested || control.abort.signal.aborted)
 			throw new ReviewStageError("Review stopped", "cancelled");
 	}
@@ -917,13 +1153,53 @@ export class ReviewController {
 		return (Date.now() - Date.parse(run.startedAt)) / 1000;
 	}
 
+	private settleCaughtRun(run: ReviewRun, error: unknown, control: ActiveReview): void {
+		this.publishVisibleFindings(run);
+		const cause = this.terminalCause(error, control);
+		run.terminalCause = cause;
+		if (cause === "operator_stop" || cause === "external_cancellation") {
+			run.state = "stopped";
+			run.lastOutcome = cause === "operator_stop" ? "Stopped by the operator" : "Cancelled by the caller";
+			return;
+		}
+		if (cause === "workspace_conflict") {
+			run.state = "workspace_conflict";
+			run.lastOutcome = safeReason(error);
+			return;
+		}
+		const reason = safeReason(error);
+		if (!run.workGraph?.cycles.length) {
+			const classification: ReviewCoverageFailure["classification"] =
+				error instanceof ReviewGraphError ? "planner" : this.failureClassification(cause);
+			for (const selected of run.selected) this.addFailure(run, selected.id, selected.path, classification, reason);
+		}
+		const covered = run.completedItemIds.length === run.selected.length && run.failures.length === 0;
+		const firstCycleVerified = run.metaReviews?.some((meta) => meta.cycle === 1);
+		if (covered && firstCycleVerified) {
+			run.state = "complete";
+			run.terminalCause = undefined;
+			run.residualRisk.push(`Coverage held after a later stage stopped: ${reason}`);
+			run.lastOutcome = run.metaReviews?.at(-1)?.sentiment ?? "Review complete.";
+			return;
+		}
+		if (covered) {
+			run.state = "error";
+			run.lastOutcome = reason;
+			return;
+		}
+		run.state = run.completedItemIds.length > 0 ? "partial" : "failed";
+		run.lastOutcome = reason;
+	}
+
 	private deriveTerminalState(run: ReviewRun): void {
 		const completed = new Set(run.completedItemIds);
 		for (const failure of run.failures) completed.delete(failure.itemId);
 		run.completedItemIds = [...completed];
 		if (run.completedItemIds.length === run.selected.length && run.failures.length === 0) {
 			run.state = "complete";
-			run.lastOutcome = "Every selected review item completed and every emitted finding was verified";
+			run.lastOutcome = run.metaReviews?.at(-1)?.sentiment
+				? `Review complete. ${run.metaReviews.at(-1)!.sentiment}`
+				: "Every selected review item completed and every emitted finding was verified";
 			return;
 		}
 		run.terminalCause = this.causeFromFailures(run.failures);
@@ -945,24 +1221,33 @@ export class ReviewController {
 export function summarizeReviewRun(run: ReviewRun): string {
 	const visible = run.findings.filter((finding) => finding.validation.status !== "rejected");
 	const severity = (value: string) => visible.filter((finding) => finding.severity === value).length;
+	const grouped = new Map<string, typeof visible>();
+	for (const finding of visible) {
+		const bucket = grouped.get(finding.path) ?? [];
+		bucket.push(finding);
+		grouped.set(finding.path, bucket);
+	}
+	const meta = run.metaReviews?.at(-1);
 	return [
 		`Run: ${run.runId}`,
 		`Root: ${run.projectRoot}`,
 		`State: ${run.state}`,
 		`Source: ${run.source.mode}`,
 		`Profile: ${run.profile}`,
+		`Cycles: ${run.workGraph?.cycles.length ?? 0}/${run.budgets.maxCycles}`,
 		`Coverage: ${run.completedItemIds.length}/${run.selected.length} completed, ${run.failures.length} failed, ${run.waived.length} waived`,
 		`Findings: ${visible.length} (critical ${severity("critical")}, significant ${severity("significant")}, minor ${severity("minor")}, nit ${severity("nit")})`,
-		`Tokens: ${run.totalTokens}/${run.budgets.maxTokens}`,
+		`Tokens: ${run.totalTokens}`,
+		...(meta ? [`Meta: ${meta.sentiment}`] : []),
 		...(run.terminalCause ? [`Cause: ${run.terminalCause}`] : []),
 		...(run.lastOutcome ? [`Outcome: ${run.lastOutcome}`] : []),
-		...visible
-			.slice(0, 20)
-			.flatMap((finding) => [
-				`- [${finding.severity}/${finding.validation.status}] ${finding.path}${finding.startLine ? `:${finding.startLine}` : ""} — ${finding.summary}`,
-				`  ${finding.impact}`,
-			]),
-		...(visible.length > 20 ? [`- … ${visible.length - 20} more finding(s) in the structured result`] : []),
+		...[...grouped.entries()].flatMap(([path, findings]) => [
+			`${path}:`,
+			...findings.map(
+				(finding) =>
+					`  - [${finding.severity}/${finding.validation.status}]${finding.startLine ? `:${finding.startLine}` : ""} ${finding.summary}`,
+			),
+		]),
 		`Receipt: ${reviewReceiptPath(run.projectRoot, run.runId)}`,
 	].join("\n");
 }

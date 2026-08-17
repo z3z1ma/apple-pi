@@ -1,15 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { ReviewController, type ResolvedReviewModel } from "../src/controller.js";
-import { previewReviewInput, reviewRepositoryRoot } from "../src/git.js";
-import { loadReviewRun, readReviewReceiptEvents, reviewReceiptPath } from "../src/receipts.js";
-import type { ReviewRun } from "../src/types.js";
 import type { ManagedAgentRequest, ManagedSubagentService } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
+import { type ResolvedReviewModel, ReviewController } from "../src/controller.js";
+import { previewReviewInput } from "../src/git.js";
 
 const roots: string[] = [];
 const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -53,16 +51,20 @@ function context(cwd: string) {
 	} as any;
 }
 
-function record(request: ManagedAgentRequest, result: unknown, sequence: number, submit = true): AgentRecord {
-	const output = request.customTools?.[0];
-	if (submit && output) void output.execute("test-result", result as never, undefined, undefined, {} as never);
+async function invoke(request: ManagedAgentRequest, name: string, params: unknown): Promise<void> {
+	const tool = request.customTools?.find((entry) => entry.name === name);
+	if (!tool) throw new Error(`missing tool ${name}`);
+	await tool.execute("test-result", params as never, undefined, undefined, {} as never);
+}
+
+function record(request: ManagedAgentRequest, sequence: number): AgentRecord {
 	return {
 		id: `agent-${sequence}`,
 		type: request.type,
 		description: request.description,
 		status: "completed",
-		result: JSON.stringify(result),
-		toolUses: 2,
+		result: "ok",
+		toolUses: 1,
 		startedAt: Date.now() - 20,
 		completedAt: Date.now(),
 		lifetimeUsage: { input: 100, output: 50, cacheWrite: 0 },
@@ -83,533 +85,600 @@ function modelRoute(calls: Array<{ mode: string; tier: string }>) {
 }
 
 describe("ReviewController", () => {
-	it("plans semantic groups, reviews them in parallel, routes models, verifies findings, and closes complete", async () => {
+	it("opens partitions, reviews them in parallel, verifies once, and keeps same-line findings distinct", async () => {
 		const root = repository();
 		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
-		const byPath = new Map(items.map((item) => [item.path, item.id]));
 		const requests: ManagedAgentRequest[] = [];
 		let sequence = 0;
-		let runningReviewers = 0;
-		let peakReviewers = 0;
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				requests.push(request);
-				request.onStarted?.(`agent-${sequence + 1}`);
-				sequence++;
-				expect(request.model?.id).toMatch(/^review-/);
+				request.onStarted?.(`agent-${++sequence}`);
 				if (request.type === "review-planner") {
-					return record(
-						request,
-						{
-							summary: "Implementation and test share a contract; documentation is independent.",
-							groups: [
-								{
-									id: "value-contract",
-									title: "Value contract",
-									objective: "Trace the changed exported value into its test consumer.",
-									itemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
-									contextPaths: [],
-									tier: "strong",
-									rationale: "The test directly consumes the changed value contract.",
-								},
-								{
-									id: "value-doc",
-									title: "Value documentation",
-									objective: "Check that the documentation agrees with the new value.",
-									itemIds: [byPath.get("docs/value.md")],
-									contextPaths: ["src/value.ts"],
-									tier: "fast",
-									rationale: "This is a small documentation synchronization change.",
-								},
-							],
-						},
-						sequence,
-					);
+					await invoke(request, "open_review", {
+						title: "Value contract",
+						files: ["src/value.ts", "src/value.test.ts"],
+						focuses: [
+							{
+								title: "Export",
+								question: "Can the export break callers?",
+								checks: ["Trace consumers."],
+							},
+						],
+					});
+					await invoke(request, "open_review", {
+						title: "Docs",
+						files: ["docs/value.md"],
+						focuses: [{ title: "Docs", question: "Do the docs agree?", checks: ["Compare stated value."] }],
+					});
+					return record(request, sequence);
 				}
 				if (request.type === "reviewer") {
-					runningReviewers++;
-					peakReviewers = Math.max(peakReviewers, runningReviewers);
-					await new Promise((resolve) => setTimeout(resolve, 15));
-					runningReviewers--;
-					if (request.prompt.includes("Group: value-contract")) {
-						return record(
-							request,
-							{
-								summary: "The changed implementation and test agree, but the exported contract may break callers.",
-								reviewedItemIds: [byPath.get("src/value.ts"), byPath.get("src/value.test.ts")],
-								findings: [
-									{
-										severity: "significant",
-										category: "bug",
-										summary: "Preserve callers expecting the old exported value",
-										impact: "Existing consumers receive a changed sentinel and take the wrong branch.",
-										evidence: "The patch changes the exported value from 1 to 2.",
-										path: "src/value.ts",
-										anchor: "export const value = 2;",
-										side: "new",
-									},
-								],
-								residualRisk: [],
-							},
-							sequence,
-						);
+					if (request.prompt.includes("Focus: c1-p1-f1")) {
+						await invoke(request, "report", {
+							kind: "finding",
+							severity: "significant",
+							path: "src/value.ts",
+							startLine: 1,
+							endLine: 1,
+							side: "new",
+							what: "Exported value changed",
+							why: "Callers may take the wrong branch.",
+							evidence: "export const value = 2;",
+						});
+						await invoke(request, "report", {
+							kind: "finding",
+							severity: "minor",
+							path: "src/value.ts",
+							startLine: 1,
+							endLine: 1,
+							side: "new",
+							what: "No compatibility comment",
+							why: "A caller cannot tell the change is intentional.",
+							evidence: "export const value = 2;",
+						});
+					} else {
+						await invoke(request, "report", {
+							kind: "note",
+							what: "Documentation agrees.",
+							evidence: "Value is two.",
+						});
 					}
-					return record(
-						request,
-						{
-							summary: "Documentation agrees with the change.",
-							reviewedItemIds: [byPath.get("docs/value.md")],
-							findings: [],
-							residualRisk: [],
-						},
-						sequence,
-					);
+					return record(request, sequence);
 				}
-				if (request.type === "review-verifier") {
-					const findingId = request.prompt.match(/"id": "([a-f0-9]+)"/)?.[1];
-					return record(
-						request,
-						{
-							decisions: [
-								{
-									findingId,
-									status: "confirmed",
-									reason: "The changed export is observable outside the module.",
-									evidence: "The exact changed line exports the new value.",
-								},
-							],
-							residualRisk: [],
-						},
-						sequence,
-					);
-				}
-				throw new Error(`unexpected role ${request.type}`);
+				const block = request.prompt.split("<candidate-findings>")[1]?.split("</candidate-findings>")[0] ?? "[]";
+				const findingIds = (JSON.parse(block) as Array<{ id: string }>).map((finding) => finding.id);
+				await invoke(request, "submit_meta_review", {
+					decisions: findingIds.map((findingId) => ({
+						findingId,
+						status: "confirmed",
+						reason: "The changed export is observable.",
+						evidence: "The exact changed line exports the new value.",
+					})),
+					sentiment: "The value contract changed; documentation kept up.",
+					compoundRisks: [],
+					residuals: [],
+					coverageGaps: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
 		const routes: Array<{ mode: string; tier: string }> = [];
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute(routes) });
-		const run = await controller.run(
-			context(tmpdir()),
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute(routes) }).run(
+			context(root),
 			{ mode: "workspace" },
-			{ root, profile: "balanced", background: "Changing the public value contract." },
+			{ root, profile: "fast", background: "Changing the public value contract." },
 		);
 		expect(run.state).toBe("complete");
 		expect(run.completedItemIds).toHaveLength(3);
 		expect(run.failures).toEqual([]);
-		expect(run.workGraph?.groups.map((group) => [group.id, group.tier])).toEqual([
-			["value-contract", "strong"],
-			["value-doc", "fast"],
+		expect(run.workGraph?.cycles).toHaveLength(1);
+		expect(run.workGraph?.cycles[0].focuses.map((focus) => focus.id)).toEqual(["c1-p1-f1", "c1-p2-f1"]);
+		expect(run.findings).toHaveLength(2);
+		expect(run.findings.map((finding) => finding.summary).sort()).toEqual([
+			"Exported value changed",
+			"No compatibility comment",
 		]);
-		expect(peakReviewers).toBe(2);
-		expect(run.findings).toHaveLength(1);
-		expect(run.findings[0]).toMatchObject({
-			path: "src/value.ts",
-			startLine: 1,
-			endLine: 1,
-			anchorProvenance: "exact_hunk",
-			validation: { status: "confirmed" },
-		});
-		expect(routes).toEqual([
-			{ mode: "review-planner", tier: "fast" },
-			{ mode: "review-strong", tier: "strong" },
-			{ mode: "review-fast", tier: "fast" },
-			{ mode: "review-strong", tier: "strong" },
-		]);
-		expect(run.totalTokens).toBe(600);
-		expect(requests.every((request) => request.agentConfig.builtinToolNames?.join(",") === "read,grep,find,ls")).toBe(
-			true,
+		expect(run.notes).toHaveLength(1);
+		expect(run.metaReviews?.[0].sentiment).toContain("value contract");
+		expect(requests.find((request) => request.type === "review-planner")?.prompt).toContain("id: src/value.ts");
+		expect(requests.find((request) => request.type === "review-planner")?.prompt).not.toMatch(/id: [a-f0-9]{64}/);
+		expect(requests.filter((request) => request.type === "review-planner")).toHaveLength(1);
+		expect(requests.filter((request) => request.type === "review-verifier")).toHaveLength(1);
+		expect(run.findings.every((finding) => finding.anchorProvenance === "exact_file")).toBe(true);
+		expect(run.findings.every((finding) => finding.evidence.includes("1| export const value = 2;"))).toBe(true);
+		expect(requests.find((request) => request.type === "review-verifier")?.prompt).toContain("<finding-clusters>");
+		expect(requests.find((request) => request.type === "review-verifier")?.prompt).toContain(
+			"1| export const value = 2;",
 		);
-		expect(run.projectRoot).toBe(reviewRepositoryRoot(root));
-		expect(requests.every((request) => request.cwd === run.projectRoot)).toBe(true);
-		expect(requests.every((request) => request.toolPolicy)).toBe(true);
-		const receipts = readReviewReceiptEvents(root, run.runId);
-		expect(receipts.at(-1)?.state).toBe("complete");
-		expect((controller.status(join(root, "src"), run.runId) as ReviewRun).state).toBe("complete");
-		expect(run.policy?.envelopes).toHaveLength(4);
-		expect(receipts.some((event) => event.outcome === "role_policy_resolved")).toBe(true);
-		expect(receipts[0].run.selected.every((item) => !("diff" in item))).toBe(true);
-		// Additive policy/cause fields leave pre-policy schema-v1 review receipts readable.
-		const path = reviewReceiptPath(root, run.runId);
-		writeFileSync(
-			path,
-			`${readFileSync(path, "utf8")
-				.split(/\n/)
-				.filter(Boolean)
-				.map((line) => {
-					const event = JSON.parse(line);
-					delete event.run.policy;
-					delete event.run.terminalCause;
-					return JSON.stringify(event);
-				})
-				.join("\n")}\n`,
-		);
-		expect(loadReviewRun(root, run.runId).state).toBe("complete");
+		expect(routes.some((route) => route.mode === "review-rigorous" && route.tier === "strong")).toBe(true);
+		expect(requests.find((request) => request.type === "review-verifier")?.model.id).toBe("review-rigorous");
+		expect(
+			requests
+				.filter((request) => request.type === "reviewer")
+				.every((request) => request.model.id === "review-routine"),
+		).toBe(true);
+		expect(requests.every((request) => request.maxTurns === 0)).toBe(true);
+		expect(items).toHaveLength(3);
 	});
 
-	it("aborts managed review work at the live aggregate token ceiling", async () => {
+	it("marks a selected file incomplete when the planner never opens it", async () => {
 		const root = repository();
-		let aborted = false;
-		const service: ManagedSubagentService = {
-			async runFresh(_ctx, request) {
-				request.onStarted?.("budget-agent");
-				request.onAssistantUsage?.({ input: 59_000, output: 1_000, cacheWrite: 0 });
-				return {
-					...record(request, {}, 1),
-					status: "stopped",
-					result: "",
-					lifetimeUsage: { input: 59_000, output: 1_000, cacheWrite: 0 },
-				};
-			},
-			abort: () => {
-				aborted = true;
-				return true;
-			},
-		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" }, { constraints: { maxTokens: 60_000 } });
-		expect(aborted).toBe(true);
-		expect(run.state).toBe("failed");
-		expect(run.lastOutcome).toMatch(/token ceiling reached/i);
-		expect(run.terminalCause).toBe("aggregate_token_ceiling");
-	});
-
-	it("waits for active review agents to quiesce before returning an operator stop", async () => {
-		const root = repository();
-		let request: ManagedAgentRequest | undefined;
-		let release: (() => void) | undefined;
-		const service: ManagedSubagentService = {
-			async runFresh(_ctx, next) {
-				request = next;
-				next.onStarted?.("active-planner");
-				await new Promise<void>((resolve) => {
-					release = resolve;
-				});
-				return {
-					...record(next, {}, 1),
-					status: "stopped",
-					result: "",
-				};
-			},
-			abort: (agentId) => {
-				expect(agentId).toBe("active-planner");
-				release?.();
-				return true;
-			},
-		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const running = controller.run(context(root), { mode: "workspace" });
-		for (let attempt = 0; attempt < 50 && !request; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
-		const summary = controller.status(root) as Array<{ runId: string }>;
-		expect(summary).toHaveLength(1);
-		const otherController = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		await expect(otherController.run(context(root), { mode: "workspace" })).rejects.toThrow(
-			/already owns this project/,
-		);
-		await expect(otherController.stop(root, summary[0].runId)).rejects.toThrow(/owning Pi session/);
-		const stopped = await controller.stop(root, summary[0].runId);
-		const final = await running;
-		expect(stopped.state).toBe("stopped");
-		expect(stopped.terminalCause).toBe("operator_stop");
-		expect(final.state).toBe("stopped");
-		expect(readReviewReceiptEvents(root, final.runId).at(-1)?.state).toBe("stopped");
-	});
-
-	it("does not launch an agent when stopped during model resolution", async () => {
-		const root = repository();
-		let releaseRoute: (() => void) | undefined;
-		let serviceCalls = 0;
-		const service: ManagedSubagentService = {
-			async runFresh() {
-				serviceCalls++;
-				throw new Error("agent must not launch after cancellation");
-			},
-			abort: () => true,
-		};
-		const controller = new ReviewController({
-			getService: () => service,
-			resolveModel: async (_ctx, mode, tier) => {
-				await new Promise<void>((resolve) => {
-					releaseRoute = resolve;
-				});
-				return { model: { provider: "test", id: mode } as Model<any>, thinkingLevel: "high", mode, tier };
-			},
-		});
-		const running = controller.run(context(root), { mode: "workspace" });
-		let runId: string | undefined;
-		for (let attempt = 0; attempt < 50 && !runId; attempt++) {
-			await new Promise((resolve) => setTimeout(resolve, 5));
-			runId = (controller.status(root) as Array<{ runId: string }>)[0]?.runId;
-		}
-		expect(runId).toBeTruthy();
-		const stopping = controller.stop(root, runId!);
-		releaseRoute?.();
-		const [stopped, final] = await Promise.all([stopping, running]);
-		expect(stopped.state).toBe("stopped");
-		expect(final.state).toBe("stopped");
-		expect(serviceCalls).toBe(0);
-	});
-
-	it("fails closed when the planner omits a selected item", async () => {
-		const root = repository();
-		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
-		const service: ManagedSubagentService = {
-			async runFresh(_ctx, request) {
-				request.onStarted?.("planner");
-				return record(
-					request,
-					{
-						summary: "Incomplete partition.",
-						groups: [
-							{
-								id: "partial",
-								title: "Partial",
-								objective: "Review one file.",
-								itemIds: [items[0].id],
-								contextPaths: [],
-								tier: "fast",
-								rationale: "Incomplete on purpose for the test.",
-							},
-						],
-					},
-					1,
-				);
-			},
-			abort: () => true,
-		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" });
-		expect(run.state).toBe("failed");
-		expect(run.completedItemIds).toEqual([]);
-		expect(run.failures).toHaveLength(3);
-		expect(run.failures.every((failure) => failure.classification === "planner")).toBe(true);
-		expect(run.lastOutcome).toMatch(/omitted review items/);
-	});
-
-	it("retains candidates but marks coverage incomplete when verification fails", async () => {
-		const root = repository();
-		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
 		let sequence = 0;
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
 				request.onStarted?.(`agent-${++sequence}`);
-				if (request.type === "review-planner")
-					return record(
-						request,
-						{
-							summary: "One semantic group.",
-							groups: [
-								{
-									id: "all",
-									title: "All",
-									objective: "Review all changed behavior.",
-									itemIds: items.map((item) => item.id),
-									contextPaths: [],
-									tier: "fast",
-									rationale: "Small cohesive change.",
-								},
-							],
-						},
-						sequence,
-					);
-				if (request.type === "reviewer")
-					return record(
-						request,
-						{
-							summary: "Candidate found.",
-							reviewedItemIds: items.map((item) => item.id),
-							findings: [
-								{
-									severity: "minor",
-									category: "bug",
-									summary: "Check changed value",
-									impact: "Consumer behavior may change.",
-									evidence: "Export changed.",
-									path: "src/value.ts",
-									anchor: "export const value = 2;",
-									side: "new",
-								},
-							],
-							residualRisk: [],
-						},
-						sequence,
-					);
-				return record(request, { decisions: [], residualRisk: [] }, sequence);
-			},
-			abort: () => true,
-		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" });
-		expect(run.state).toBe("failed");
-		expect(run.completedItemIds).toEqual([]);
-		expect(run.failures).toHaveLength(3);
-		expect(run.findings[0].validation).toMatchObject({
-			status: "retained_unresolved",
-			reason: "Verification did not complete",
-		});
-	});
-
-	it("fails closed when a role omits its typed result submission", async () => {
-		const root = repository();
-		const service: ManagedSubagentService = {
-			async runFresh(_ctx, request) {
-				request.onStarted?.("planner");
-				return record(request, {}, 1, false);
-			},
-			abort: () => true,
-		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" });
-		expect(run.state).toBe("failed");
-		expect(run.lastOutcome).toMatch(/did not submit exactly one typed result/);
-		expect(run.terminalCause).toBe("invalid_output");
-	});
-
-	it("records explicit provider, turn, compaction, and authority causes", async () => {
-		const cases = [
-			{ name: "provider", record: { status: "error", error: "provider unavailable" }, cause: "provider_error" },
-			{ name: "turn", record: { status: "aborted", terminationCause: "turn_ceiling" }, cause: "role_turn_ceiling" },
-			{
-				name: "compaction",
-				record: { status: "aborted", terminationCause: "compaction", compactionCount: 1 },
-				cause: "compaction",
-			},
-		] as const;
-		for (const testCase of cases) {
-			const root = repository();
-			const service: ManagedSubagentService = {
-				async runFresh(_ctx, request) {
-					request.onStarted?.(testCase.name);
-					return { ...record(request, {}, 1, false), ...testCase.record } as AgentRecord;
-				},
-				abort: () => true,
-			};
-			const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
-				context(root),
-				{ mode: "workspace" },
-			);
-			expect(run.terminalCause, testCase.name).toBe(testCase.cause);
-		}
-		const root = repository();
-		const service: ManagedSubagentService = {
-			async runFresh(_ctx, request) {
-				await request.toolPolicy?.({ toolName: "read", args: { path: "/tmp/outside" } }, new AbortController().signal);
-				return record(request, {}, 1, false);
+				if (request.type === "review-planner") {
+					await invoke(request, "open_review", {
+						files: ["src/value.ts"],
+						focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") return record(request, sequence);
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: "Only the export was reviewed.",
+					residuals: [],
+					coverageGaps: ["tests and docs were skipped"],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
 		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
 			context(root),
 			{ mode: "workspace" },
+			{ root, profile: "fast" },
 		);
-		expect(run.terminalCause).toBe("authority_denial");
+		expect(run.state).toBe("partial");
+		expect(run.completedItemIds).toHaveLength(1);
+		expect(run.failures.some((failure) => failure.path === "docs/value.md")).toBe(true);
+		expect(run.failures.some((failure) => failure.classification === "planner")).toBe(true);
 	});
 
-	it("records external cancellation before a role launches", async () => {
+	it("runs a second thorough cycle from verifier residuals", async () => {
 		const root = repository();
-		const abort = new AbortController();
-		abort.abort();
+		let planners = 0;
+		let sequence = 0;
 		const service: ManagedSubagentService = {
-			async runFresh() {
-				throw new Error("must not launch");
+			async runFresh(_ctx, request) {
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					planners++;
+					if (planners === 1) {
+						await invoke(request, "open_review", {
+							files: ["src/value.ts", "src/value.test.ts", "docs/value.md"],
+							focuses: [{ title: "First look", question: "Does the value change hold?", checks: ["Read the export."] }],
+						});
+					} else {
+						expect(request.prompt).toContain("<prior-meta-review>");
+						await invoke(request, "open_review", {
+							files: ["src/value.ts"],
+							focuses: [
+								{
+									title: "Callers",
+									question: "Did any caller of the old sentinel get missed?",
+									checks: ["Search for the old value."],
+								},
+							],
+						});
+					}
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") return record(request, sequence);
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: planners === 1 ? "Need a caller pass." : "Caller pass found nothing new.",
+					residuals: planners === 1 ? ["Check remaining callers of the old value."] : [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
 		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
 			context(root),
 			{ mode: "workspace" },
-			{},
-			abort.signal,
+			{ root, profile: "thorough" },
 		);
-		expect(run.state).toBe("stopped");
-		expect(run.terminalCause).toBe("external_cancellation");
+		expect(run.state).toBe("complete");
+		expect(planners).toBe(2);
+		expect(run.workGraph?.cycles).toHaveLength(2);
+		expect(run.budgets.maxCycles).toBe(3);
 	});
 
-	it("records elapsed-time and workspace-conflict causes", async () => {
-		const timeoutRoot = repository();
-		const timeoutService: ManagedSubagentService = {
+	it("keeps a file complete when a sibling focus fails", async () => {
+		const root = repository();
+		let sequence = 0;
+		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
-				request.onStarted?.("timeout");
-				await new Promise<void>((resolve) =>
-					request.signal?.addEventListener("abort", () => resolve(), { once: true }),
-				);
-				return { ...record(request, {}, 1, false), status: "stopped" } as AgentRecord;
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					await invoke(request, "open_review", {
+						files: ["src/value.ts"],
+						focuses: [
+							{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] },
+							{ title: "Callers", question: "Did callers break?", checks: ["Search callers."] },
+						],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") {
+					if (request.prompt.includes("Focus: c1-p1-f2")) throw new Error("sibling reviewer crashed");
+					return record(request, sequence);
+				}
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: "One focus failed; the file was still covered.",
+					residuals: [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
-		const timedOut = await new ReviewController({ getService: () => timeoutService, resolveModel: modelRoute([]) }).run(
-			context(timeoutRoot),
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
 			{ mode: "workspace" },
-			{ constraints: { timeoutSeconds: 2 } },
+			{ root, profile: "fast" },
 		);
-		expect(timedOut.terminalCause).toBe("elapsed_time_ceiling");
+		const valueId = run.selected.find((item) => item.path === "src/value.ts")?.id;
+		expect(run.state).toBe("partial");
+		expect(valueId).toBeDefined();
+		expect(run.completedItemIds).toContain(valueId);
+		expect(run.failures.some((failure) => failure.path === "src/value.ts")).toBe(false);
+		expect(run.failures.some((failure) => failure.classification === "planner")).toBe(true);
+	});
 
-		const workspaceRoot = repository();
-		const items = previewReviewInput(workspaceRoot, { mode: "workspace" }).reviewable;
-		const workspaceService: ManagedSubagentService = {
+	it("does not un-complete a first pass when a later-cycle focus fails", async () => {
+		const root = repository();
+		let planners = 0;
+		let sequence = 0;
+		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
-				request.onStarted?.("planner");
-				writeFileSync(join(workspaceRoot, "src", "value.ts"), "export const value = 3;\n");
-				return record(
-					request,
-					{
-						summary: "One group.",
-						groups: [
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					planners++;
+					await invoke(request, "open_review", {
+						files: planners === 1 ? ["src/value.ts", "src/value.test.ts", "docs/value.md"] : ["src/value.ts"],
+						focuses: [
 							{
-								id: "all",
-								title: "All",
-								objective: "Review all.",
-								itemIds: items.map((item) => item.id),
-								contextPaths: [],
-								tier: "fast",
-								rationale: "Small change.",
+								title: planners === 1 ? "First look" : "Callers",
+								question: planners === 1 ? "Does the value change hold?" : "Did any caller get missed?",
+								checks: ["Read the export."],
 							},
 						],
-					},
-					1,
-				);
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") {
+					if (planners > 1) throw new Error("residual reviewer crashed");
+					return record(request, sequence);
+				}
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: planners === 1 ? "Need a caller pass." : "Should not be required after a crash.",
+					residuals: planners === 1 ? ["Check remaining callers of the old value."] : [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
-		const conflicted = await new ReviewController({
-			getService: () => workspaceService,
+		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
+		const run = await controller.run(context(root), { mode: "workspace" }, { root, profile: "thorough" });
+		expect(run.state).toBe("complete");
+		expect(run.completedItemIds).toHaveLength(3);
+		expect(run.failures).toHaveLength(0);
+		expect(run.residualRisk.some((risk) => /failed after coverage already held/.test(risk))).toBe(true);
+		expect(controller.status(root, run.runId)).toMatchObject({ runId: run.runId, state: "complete" });
+	});
+
+	it("accounts every selected file when the verifier throws after successful reviews", async () => {
+		const root = repository();
+		let sequence = 0;
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					await invoke(request, "open_review", {
+						files: ["src/value.ts"],
+						focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") return record(request, sequence);
+				throw new Error("verifier boom");
+			},
+			abort: () => true,
+		};
+		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
+		const run = await controller.run(context(root), { mode: "workspace" }, { root, profile: "fast" });
+		expect(run.state).toBe("partial");
+		expect(run.completedItemIds).toHaveLength(1);
+		expect(run.failures).toHaveLength(2);
+		expect(run.failures.every((failure) => failure.classification === "planner")).toBe(true);
+		expect(controller.status(root, run.runId)).toMatchObject({ runId: run.runId, state: "partial" });
+	});
+
+	it("does not publish complete when first-cycle verification misses after full coverage", async () => {
+		const root = repository();
+		let sequence = 0;
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					await invoke(request, "open_review", {
+						files: ["src/value.ts", "src/value.test.ts", "docs/value.md"],
+						focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") return record(request, sequence);
+				throw new Error("verifier boom");
+			},
+			abort: () => true,
+		};
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+			{ root, profile: "fast" },
+		);
+		expect(run.state).toBe("error");
+		expect(run.completedItemIds).toHaveLength(3);
+		expect(run.failures).toHaveLength(0);
+		expect(run.metaReviews ?? []).toHaveLength(0);
+		expect(run.terminalCause).toBe("internal_error");
+	});
+
+	it("stops on operator stop, caller cancel, and workspace mutation", async () => {
+		const stopRoot = repository();
+		const cancelRoot = repository();
+		const conflictRoot = repository();
+		const abort = new AbortController();
+		const stopController = new ReviewController({
+			getService: () => ({
+				async runFresh(_ctx, request) {
+					request.onStarted?.("agent-stop");
+					if (request.type === "review-planner") {
+						await invoke(request, "open_review", {
+							files: ["src/value.ts", "src/value.test.ts", "docs/value.md"],
+							focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+						});
+						return record(request, 1);
+					}
+					if (request.type === "reviewer") return record(request, 2);
+					const listed = stopController.status(stopRoot);
+					const live = Array.isArray(listed) ? listed[0] : listed;
+					void stopController.stop(stopRoot, live.runId);
+					return { ...record(request, 3), status: "aborted" };
+				},
+				abort: () => true,
+			}),
 			resolveModel: modelRoute([]),
-		}).run(context(workspaceRoot), { mode: "workspace" });
+		});
+		const stopped = await stopController.run(
+			context(stopRoot),
+			{ mode: "workspace" },
+			{ root: stopRoot, profile: "fast" },
+		);
+		expect(stopped.state).toBe("stopped");
+		expect(stopped.terminalCause).toBe("operator_stop");
+
+		const cancelled = await new ReviewController({
+			getService: () => ({
+				async runFresh(_ctx, request) {
+					request.onStarted?.("agent-cancel");
+					if (request.type === "review-planner") {
+						await invoke(request, "open_review", {
+							files: ["src/value.ts", "src/value.test.ts", "docs/value.md"],
+							focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+						});
+						return record(request, 1);
+					}
+					if (request.type === "reviewer") return record(request, 2);
+					abort.abort();
+					return { ...record(request, 3), status: "aborted" };
+				},
+				abort: () => true,
+			}),
+			resolveModel: modelRoute([]),
+		}).run(context(cancelRoot), { mode: "workspace" }, { root: cancelRoot, profile: "fast" }, abort.signal);
+		expect(cancelled.state).toBe("stopped");
+		expect(cancelled.terminalCause).toBe("external_cancellation");
+
+		const conflicted = await new ReviewController({
+			getService: () => ({
+				async runFresh(_ctx, request) {
+					request.onStarted?.("agent-conflict");
+					if (request.type === "review-planner") {
+						await invoke(request, "open_review", {
+							files: ["src/value.ts", "src/value.test.ts", "docs/value.md"],
+							focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+						});
+						return record(request, 1);
+					}
+					if (request.type === "reviewer") return record(request, 2);
+					writeFileSync(join(conflictRoot, "src", "value.ts"), "export const value = 99;\n");
+					await invoke(request, "submit_meta_review", {
+						decisions: [],
+						sentiment: "Workspace moved under the verifier.",
+						residuals: [],
+						coverageGaps: [],
+						compoundRisks: [],
+					});
+					return record(request, 3);
+				},
+				abort: () => true,
+			}),
+			resolveModel: modelRoute([]),
+		}).run(context(conflictRoot), { mode: "workspace" }, { root: conflictRoot, profile: "fast" });
 		expect(conflicted.state).toBe("workspace_conflict");
 		expect(conflicted.terminalCause).toBe("workspace_conflict");
 	});
 
-	it("fails closed when a role submits its typed result more than once", async () => {
+	it("turns invited false positives into clarity residuals for later cycles", async () => {
 		const root = repository();
-		const items = previewReviewInput(root, { mode: "workspace" }).reviewable;
+		let planners = 0;
+		let sequence = 0;
 		const service: ManagedSubagentService = {
 			async runFresh(_ctx, request) {
-				request.onStarted?.("planner");
-				const output = request.customTools?.[0];
-				const value = {
-					summary: "One group.",
-					groups: [
-						{
-							id: "all",
-							title: "All",
-							objective: "Review all items.",
-							itemIds: items.map((item) => item.id),
-							tier: "fast",
-							rationale: "One change.",
-						},
-					],
-				};
-				if (output) {
-					void output.execute("first", value as never, undefined, undefined, {} as never);
-					void output.execute("second", value as never, undefined, undefined, {} as never);
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					planners++;
+					if (planners > 1) expect(request.prompt).toContain("Clarity: src/value.ts:");
+					await invoke(request, "open_review", {
+						files: planners === 1 ? ["src/value.ts", "src/value.test.ts", "docs/value.md"] : ["src/value.ts"],
+						focuses: [
+							{
+								title: planners === 1 ? "Export" : "Document the invariant",
+								question: planners === 1 ? "Is the export safe?" : "Did the last reject leave the rule unstated?",
+								checks: ["Read the export."],
+							},
+						],
+					});
+					return record(request, sequence);
 				}
-				return record(request, value, 1, false);
+				if (request.type === "reviewer") {
+					if (planners === 1) {
+						await invoke(request, "report", {
+							kind: "finding",
+							severity: "significant",
+							path: "src/value.ts",
+							startLine: 1,
+							endLine: 1,
+							what: "Mid-cycle reseal is missing",
+							why: "A mutation after planning can be read for the rest of the cycle.",
+						});
+					}
+					return record(request, sequence);
+				}
+				const block = request.prompt.split("<candidate-findings>")[1]?.split("</candidate-findings>")[0] ?? "[]";
+				const findingIds = (JSON.parse(block) as Array<{ id: string }>).map((finding) => finding.id);
+				await invoke(request, "submit_meta_review", {
+					decisions: findingIds.map((findingId) => ({
+						findingId,
+						status: "rejected",
+						reason: "Reseal is cycle-start plus post-drain, not mid-cycle.",
+						evidence: "assertReviewInputUnchanged runs at those two points.",
+						invitedByAmbiguity: true,
+					})),
+					sentiment: planners === 1 ? "One invited false positive." : "Clarity follow-up done.",
+					residuals: [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
 			},
 			abort: () => true,
 		};
-		const controller = new ReviewController({ getService: () => service, resolveModel: modelRoute([]) });
-		const run = await controller.run(context(root), { mode: "workspace" });
-		expect(run.state).toBe("failed");
-		expect(run.lastOutcome).toMatch(/did not submit exactly one typed result/);
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+			{ root, profile: "thorough" },
+		);
+		expect(planners).toBeGreaterThan(1);
+		expect(run.findings).toHaveLength(1);
+		expect(run.findings[0].validation).toMatchObject({
+			status: "rejected",
+			invitedByAmbiguity: true,
+		});
+		expect(run.metaReviews?.[0].residuals.some((residual) => residual.startsWith("Clarity: src/value.ts:"))).toBe(true);
+		expect(run.residualRisk.some((risk) => /Clarity: src\/value\.ts:/.test(risk))).toBe(true);
+	});
+
+	it("reviews only caller-scoped paths", async () => {
+		const root = repository();
+		let sequence = 0;
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					expect(request.prompt).toContain("src/value.ts");
+					expect(request.prompt).not.toContain("docs/value.md");
+					await invoke(request, "open_review", {
+						files: ["src/value.ts", "src/value.test.ts"],
+						focuses: [{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] }],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") return record(request, sequence);
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: "Scoped review covered src only.",
+					residuals: [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
+			},
+			abort: () => true,
+		};
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+			{ root, profile: "fast", paths: ["src"] },
+		);
+		expect(run.state).toBe("complete");
+		expect(run.selected.map((item) => item.path).sort()).toEqual(["src/value.test.ts", "src/value.ts"]);
+		expect(run.selected.some((item) => item.path.startsWith("docs/"))).toBe(false);
+	});
+
+	it("runs same-file focuses in parallel and keeps ledger history out of coverage", async () => {
+		const root = repository();
+		mkdirSync(join(root, ".ledger"));
+		writeFileSync(join(root, ".ledger", "task.md"), "# shaping history\n");
+		const events: Array<{ focus: string; at: "start" | "end"; time: number }> = [];
+		let sequence = 0;
+		const service: ManagedSubagentService = {
+			async runFresh(_ctx, request) {
+				request.onStarted?.(`agent-${++sequence}`);
+				if (request.type === "review-planner") {
+					expect(request.prompt).not.toContain("id: .ledger/task.md");
+					await invoke(request, "open_review", {
+						files: ["src/value.ts"],
+						focuses: [
+							{ title: "Export", question: "Is the export safe?", checks: ["Read the export."] },
+							{ title: "Callers", question: "Did callers break?", checks: ["Search callers."] },
+						],
+					});
+					return record(request, sequence);
+				}
+				if (request.type === "reviewer") {
+					const focus = /Focus: (\S+)/.exec(request.prompt)?.[1] ?? "unknown";
+					events.push({ focus, at: "start", time: Date.now() });
+					await new Promise((resolve) => setTimeout(resolve, 30));
+					events.push({ focus, at: "end", time: Date.now() });
+					return record(request, sequence);
+				}
+				await invoke(request, "submit_meta_review", {
+					decisions: [],
+					sentiment: "Same-file focuses ran together.",
+					residuals: [],
+					coverageGaps: [],
+					compoundRisks: [],
+				});
+				return record(request, sequence);
+			},
+			abort: () => true,
+		};
+		const run = await new ReviewController({ getService: () => service, resolveModel: modelRoute([]) }).run(
+			context(root),
+			{ mode: "workspace" },
+			{ root, profile: "fast" },
+		);
+		const starts = events.filter((event) => event.at === "start");
+		const firstEnd = events.find((event) => event.at === "end");
+		expect(run.waived.some((entry) => entry.path === ".ledger/task.md")).toBe(true);
+		expect(run.selected.some((item) => item.path === ".ledger/task.md")).toBe(false);
+		expect(starts).toHaveLength(2);
+		expect(firstEnd).toBeDefined();
+		expect(starts[1].time).toBeLessThan(firstEnd!.time);
 	});
 });

@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, normalize, sep } from "node:path";
-import type { PlannerOutput, ReviewItem, ReviewProfile, ReviewWorkGraph } from "./types.js";
+import type { OpenReviewCall, ReviewCycleRecord, ReviewFocus, ReviewItem, ReviewPartition } from "./types.js";
 
 export class ReviewGraphError extends Error {
 	constructor(
@@ -16,61 +15,105 @@ function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
 }
 
-function safeRelativePath(path: string): boolean {
-	if (isAbsolute(path)) return false;
-	const clean = normalize(path).split(sep).join("/");
-	return clean !== ".." && !clean.startsWith("../") && clean !== ".git" && !clean.startsWith(".git/");
+export function reviewItemAliases(items: ReviewItem[]): Map<string, string> {
+	const pathCounts = new Map<string, number>();
+	for (const item of items) pathCounts.set(item.path, (pathCounts.get(item.path) ?? 0) + 1);
+	const ids = new Set(items.map((item) => item.id));
+	return new Map(
+		items.map((item) => {
+			let alias = (pathCounts.get(item.path) ?? 0) > 1 ? `${item.path} (${item.status})` : item.path;
+			if (alias !== item.id && ids.has(alias)) alias = `${item.path} (${item.status})`;
+			return [item.id, alias];
+		}),
+	);
 }
 
-export function compileReviewWorkGraph(
-	output: PlannerOutput,
+export function resolveReviewItemRef(ref: string, items: ReviewItem[]): string {
+	const aliases = reviewItemAliases(items);
+	const matches = items.filter((item) => item.id === ref || aliases.get(item.id) === ref);
+	if (matches.length === 1) return matches[0].id;
+	if (matches.length > 1) throw new ReviewGraphError(`Ambiguous item reference: ${ref}`, "ambiguous_item");
+	throw new ReviewGraphError(`Unknown item ID: ${ref}`, "unknown_item");
+}
+
+export function focusIdentityKey(itemIds: string[], question: string): string {
+	return `${[...itemIds].sort().join("\0")}\0${question.trim().replace(/\s+/g, " ").toLowerCase()}`;
+}
+
+export function compileReviewCycle(
+	calls: OpenReviewCall[],
 	items: ReviewItem[],
-	profile: ReviewProfile,
-	maxGroups: number,
-): ReviewWorkGraph {
-	if (output.groups.length === 0) throw new ReviewGraphError("Planner returned no review groups", "empty_graph");
-	if (output.groups.length > maxGroups)
-		throw new ReviewGraphError(
-			`Planner returned ${output.groups.length} groups; maximum is ${maxGroups}`,
-			"too_many_groups",
-		);
-	const expected = new Set(items.map((item) => item.id));
-	const assigned = new Map<string, string>();
-	const groupIds = new Set<string>();
-	const groups = output.groups.map((group, index) => {
-		if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(group.id)) {
-			throw new ReviewGraphError(`Invalid group ID at groups[${index}]: ${group.id}`, "invalid_group_id");
+	cycle: number,
+	limits: { maxFocuses: number },
+	priorKeys: Set<string>,
+): ReviewCycleRecord {
+	if (calls.length === 0) throw new ReviewGraphError("Planner opened no reviews", "empty_graph");
+	const partitions: ReviewPartition[] = [];
+	const focuses: ReviewFocus[] = [];
+	const seenKeys = new Set(priorKeys);
+	let focusCount = 0;
+	for (const [partitionIndex, call] of calls.entries()) {
+		if (call.focuses.length === 0)
+			throw new ReviewGraphError(`open_review[${partitionIndex}] has no focuses`, "empty_focuses");
+		if (call.files.length === 0)
+			throw new ReviewGraphError(`open_review[${partitionIndex}] has no files`, "empty_partition");
+		const itemIds: string[] = [];
+		const seenItems = new Set<string>();
+		for (const ref of call.files) {
+			const id = resolveReviewItemRef(ref, items);
+			if (seenItems.has(id))
+				throw new ReviewGraphError(`open_review[${partitionIndex}] repeats ${ref}`, "duplicate_partition_item");
+			seenItems.add(id);
+			itemIds.push(id);
 		}
-		if (groupIds.has(group.id)) throw new ReviewGraphError(`Duplicate group ID: ${group.id}`, "duplicate_group_id");
-		groupIds.add(group.id);
-		if (group.itemIds.length === 0)
-			throw new ReviewGraphError(`Review group ${group.id} has no focus items`, "empty_group");
-		for (const id of group.itemIds) {
-			if (!expected.has(id))
-				throw new ReviewGraphError(`Review group ${group.id} invented item ID ${id}`, "unknown_item");
-			const prior = assigned.get(id);
-			if (prior)
-				throw new ReviewGraphError(`Review item ${id} appears in both ${prior} and ${group.id}`, "duplicate_item");
-			assigned.set(id, group.id);
-		}
-		for (const path of group.contextPaths) {
-			if (!safeRelativePath(path))
-				throw new ReviewGraphError(`Review group ${group.id} has unsafe context path: ${path}`, "unsafe_context_path");
-		}
-		return {
-			...group,
-			itemIds: [...group.itemIds],
-			contextPaths: [...new Set(group.contextPaths)],
-			tier: profile === "fast" ? ("fast" as const) : profile === "thorough" ? ("strong" as const) : group.tier,
+		const partitionId = `c${cycle}-p${partitionIndex + 1}`;
+		const partition: ReviewPartition = {
+			id: partitionId,
+			cycle,
+			title: call.title?.trim() || `Partition ${partitionIndex + 1}`,
+			itemIds,
 		};
-	});
-	const missing = items.filter((item) => !assigned.has(item.id));
-	if (missing.length > 0) {
-		throw new ReviewGraphError(
-			`Planner omitted review items: ${missing.map((item) => item.path).join(", ")}`,
-			"missing_items",
-		);
+		partitions.push(partition);
+		for (const [focusIndex, proposed] of call.focuses.entries()) {
+			focusCount++;
+			if (focusCount > limits.maxFocuses)
+				throw new ReviewGraphError(
+					`Planner opened ${focusCount} focuses; maximum is ${limits.maxFocuses}`,
+					"too_many_focuses",
+				);
+			if (!proposed.title.trim() || !proposed.question.trim())
+				throw new ReviewGraphError(`Focus ${partitionId}/${focusIndex} is missing a title or question`, "empty_focus");
+			if (proposed.checks.length === 0 || proposed.checks.some((check) => !check.trim()))
+				throw new ReviewGraphError(`Focus ${partitionId}/${focusIndex} has empty checks`, "empty_checks");
+			const key = focusIdentityKey(itemIds, proposed.question);
+			if (seenKeys.has(key))
+				throw new ReviewGraphError(
+					`Focus repeats a previous investigation of the same files: ${proposed.title}`,
+					"duplicate_focus",
+				);
+			seenKeys.add(key);
+			focuses.push({
+				id: `${partitionId}-f${focusIndex + 1}`,
+				partitionId,
+				cycle,
+				title: proposed.title.trim(),
+				question: proposed.question.trim(),
+				checks: proposed.checks.map((check) => check.trim()),
+				itemIds: [...itemIds],
+			});
+		}
 	}
-	const canonical = JSON.stringify({ summary: output.summary, groups });
-	return { summary: output.summary, groups, graphHash: sha256(canonical) };
+	return { index: cycle, partitions, focuses };
+}
+
+export function workGraphHash(cycles: ReviewCycleRecord[]): string {
+	return sha256(
+		JSON.stringify(
+			cycles.map((cycle) => ({
+				index: cycle.index,
+				partitions: cycle.partitions,
+				focuses: cycle.focuses,
+			})),
+		),
+	);
 }

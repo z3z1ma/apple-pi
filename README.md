@@ -9,7 +9,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
-- **First-class review** (`review`, `/review`) — sealed Git scope, model-planned semantic change groups, parallel fresh read-only reviewers, conservative finding verification, exact source anchoring, model-tier routing, and coverage receipts.
+- **First-class review** (`review`, `/review`) — sealed Git scope, optional caller files/folders/globs, planner-opened file partitions and concrete focuses, parallel fresh read-only reviewers, one cycle verifier with a meta-review, and coverage receipts.
 - **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, shared review, closure judgment, and user-local run receipts.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
@@ -212,7 +212,7 @@ The imported implementation deliberately has **no worktree parameter or worktree
 
 ### First-class review
 
-`review` is designed primarily for model-driven use and defaults to the current workspace. The tool's optional `root` lets an agent select a repository beneath its current directory or a linked worktree elsewhere; relative roots resolve from the caller cwd. It seals the selected Git input, asks the dedicated `review-planner` route to build semantically related review groups, mechanically verifies that every text change is assigned exactly once, runs fresh groups in parallel, and conservatively verifies every emitted finding.
+`review` is designed primarily for model-driven use and defaults to the current workspace. The tool's optional `root` lets an agent select a repository beneath its current directory or a linked worktree elsewhere; relative roots resolve from the caller cwd. It seals the selected Git input, asks the dedicated `review-planner` route to open file partitions with concrete focuses, runs those focuses as fresh read-only agents in parallel, then has one verifier decide the pile and write a meta-review. Distinct findings that share a path stay distinct and are grouped for presentation. `thorough` may repeat the cycle against residuals.
 
 ```text
 /review preview
@@ -224,11 +224,11 @@ The imported implementation deliberately has **no worktree parameter or worktree
 /review stop <run-id>
 ```
 
-Semantic grouping uses `review-planner`; ordinary review groups use `review-fast`; high-risk groups use `review-strong`. These entries come from trusted project or global `modes.json`, and missing entries defer to the caller's active model. Profiles can force all-fast or all-strong review routing without changing the planner route. Reviewers may read outside their assigned changed files to trace dependencies, but findings must anchor the patch-introduced cause in their focus group.
+Planning uses `review-planner`; reviewers use `review-routine`; the verifier uses `review-rigorous`. A selected file is covered once a successful focus reviewed it. A run is complete only after first-cycle verification also finishes. These entries come from trusted project or global `modes.json`, and missing entries defer to the caller's active model. Reviewers may read outside their assigned files to trace dependencies, but findings must name a patch-introduced cause in an assigned path.
 
-Workspace review supports dirty and unborn repositories. Binary changes are visible waivers, ambiguous anchors remain unresolved, and incomplete verification produces partial/failed coverage rather than a clean result. Receipts are stored outside the repository under `$PI_CODING_AGENT_DIR/reviews/runs/`.
+Workspace review supports dirty and unborn repositories. Binary changes are visible waivers, and a file stays complete if any covering focus succeeded. Receipts are stored outside the repository under `$PI_CODING_AGENT_DIR/reviews/runs/`.
 
-See [`docs/review.md`](docs/review.md) for pipeline invariants, model routing, finding schema, trust boundaries, budgets, and Ralph integration.
+See [`docs/review.md`](docs/review.md) for pipeline invariants, model routing, finding schema, trust boundaries, cycle/focus caps, and Ralph integration.
 
 ### Ledger task workflows and Ralph loops
 
@@ -245,7 +245,7 @@ The packaged lifecycle skills make shaping first-class:
 /skill:ledger-distill-close-task
 ```
 
-Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, invokes the shared semantically grouped review controller, and launches a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
+Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, invokes the shared review controller, and launches a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
 
 ```text
 /ralph inspect .ledger/202608151430-example/task.md
@@ -257,7 +257,7 @@ Ralph compiles the shaped task graph, launches a fresh executor for one bounded 
 /ralph stop <run-id>
 ```
 
-`step` performs one complete executor → grouped review → judge iteration. `run` repeats only when judgment says `iterate`, under harness-owned iteration, lifetime-token, review-concurrency, per-agent-turn, and elapsed-time ceilings. Normal model and slash-command calls do not configure the numeric arithmetic; compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
+`step` performs one complete executor → review → judge iteration. `run` repeats only when judgment says `iterate`, under harness-owned iteration, lifetime-token, review-concurrency, per-agent-turn, and elapsed-time ceilings. Normal model and slash-command calls do not configure the numeric arithmetic; compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
 
 The implementation checkout must have an established Git `HEAD` and be clean at start. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory, leases the implementation workspace and task bundle, and reviews the targeted worktree. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
 
@@ -279,7 +279,7 @@ See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill
 Additional boundaries:
 
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
-- **One review engine.** Standalone review and Ralph use the same scope, semantic grouping, parallel review, verification, anchoring, coverage, and receipt controller.
+- **One review engine.** Standalone review and Ralph use the same scope, planner-opened partitions, parallel review, verification, anchoring, coverage, and receipt controller.
 - **One compaction hook.** Observational memory does not register its upstream compaction hook independently.
 - **Session ledger is authoritative.** Compaction projects memory but does not relocate it.
 - **No compatibility implementation.** There is one current path, not old/new variants.

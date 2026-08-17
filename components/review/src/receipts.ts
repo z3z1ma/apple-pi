@@ -33,7 +33,16 @@ const TERMINAL_CAUSES = new Set([
 const TRANSITIONS: Record<string, Set<string>> = {
 	planning: new Set(["planning", "reviewing", "failed", "skipped", "stopped", "workspace_conflict", "error"]),
 	reviewing: new Set(["reviewing", "verifying", "partial", "failed", "stopped", "workspace_conflict", "error"]),
-	verifying: new Set(["verifying", "complete", "partial", "failed", "stopped", "workspace_conflict", "error"]),
+	verifying: new Set([
+		"verifying",
+		"planning",
+		"complete",
+		"partial",
+		"failed",
+		"stopped",
+		"workspace_conflict",
+		"error",
+	]),
 };
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: receipt validation deliberately enumerates every persisted run-state invariant.
@@ -79,21 +88,46 @@ function validateRun(
 		failed.add(failure.itemId);
 	}
 	if (run.workGraph) {
-		const graphed = new Set<string>();
-		for (const group of run.workGraph.groups)
-			for (const id of group.itemIds) {
-				if (!selected.has(id) || graphed.has(id))
+		const partitionIds = new Set<string>();
+		const focusIds = new Set<string>();
+		for (const cycle of run.workGraph.cycles) {
+			for (const partition of cycle.partitions) {
+				if (!partition.id || partitionIds.has(partition.id))
 					throw new Error(`Review receipt event ${event.sequence} has invalid work-graph coverage`);
-				graphed.add(id);
+				partitionIds.add(partition.id);
+				const partitionItems = new Set<string>();
+				for (const id of partition.itemIds) {
+					if (!selected.has(id) || partitionItems.has(id))
+						throw new Error(`Review receipt event ${event.sequence} has invalid work-graph coverage`);
+					partitionItems.add(id);
+				}
 			}
-		if (graphed.size !== selected.size)
-			throw new Error(`Review receipt event ${event.sequence} has incomplete work-graph coverage`);
+			const partitionsById = new Map(cycle.partitions.map((partition) => [partition.id, partition]));
+			for (const focus of cycle.focuses) {
+				const parent = partitionsById.get(focus.partitionId);
+				if (!focus.id || focusIds.has(focus.id) || !parent)
+					throw new Error(`Review receipt event ${event.sequence} has invalid review focus`);
+				focusIds.add(focus.id);
+				for (const id of focus.itemIds) {
+					if (!selected.has(id) || !parent.itemIds.includes(id))
+						throw new Error(`Review receipt event ${event.sequence} has invalid focus coverage`);
+				}
+			}
+		}
 	}
 	const findingIds = new Set<string>();
 	for (const finding of run.findings) {
 		if (!finding.id || findingIds.has(finding.id))
 			throw new Error(`Review receipt event ${event.sequence} has duplicate finding IDs`);
 		findingIds.add(finding.id);
+	}
+	if (run.rawFindings !== undefined) {
+		const rawIds = new Set<string>();
+		for (const finding of run.rawFindings) {
+			if (!finding.id || !finding.focusId || rawIds.has(finding.id))
+				throw new Error(`Review receipt event ${event.sequence} has invalid raw finding provenance`);
+			rawIds.add(finding.id);
+		}
 	}
 	if (run.state === "complete" && (completed.size !== selected.size || failed.size !== 0))
 		throw new Error("Complete review receipt has incomplete coverage");

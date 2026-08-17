@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	lstatSync,
-	mkdtempSync,
 	mkdirSync,
+	mkdtempSync,
 	readFileSync,
 	readlinkSync,
 	realpathSync,
@@ -61,6 +61,73 @@ export function reviewRepositoryRoot(input: string): string {
 function isWithin(base: string, target: string): boolean {
 	const rel = relative(base, target);
 	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+const REVIEW_GLOB_CHARS = /[*?[]/;
+
+function globToRegExp(pattern: string): RegExp {
+	let source = "^";
+	for (let index = 0; index < pattern.length; index++) {
+		const char = pattern[index];
+		if (char === "*") {
+			if (pattern[index + 1] === "*") {
+				index++;
+				if (pattern[index + 1] === "/") {
+					index++;
+					source += "(?:.*/)?";
+				} else source += ".*";
+			} else source += "[^/]*";
+		} else if (char === "?") source += "[^/]";
+		else if (char === "[") {
+			const end = pattern.indexOf("]", index + 1);
+			if (end === -1) source += "\\[";
+			else {
+				source += pattern.slice(index, end + 1);
+				index = end;
+			}
+		} else if (/[.+^${}()|\\]/.test(char)) source += `\\${char}`;
+		else source += char;
+	}
+	return new RegExp(`${source}$`);
+}
+
+function normalizeReviewPath(root: string, raw: string): string {
+	const trimmed = raw.trim().replaceAll("\\", "/");
+	if (!trimmed) throw new ReviewInputError("Review path cannot be empty", "invalid_path");
+	if (trimmed.includes("\0")) throw new ReviewInputError("Review path cannot contain a NUL byte", "invalid_path");
+	if (trimmed.startsWith(":") || trimmed.startsWith("-"))
+		throw new ReviewInputError(`Review path is not a repository path: ${raw}`, "invalid_path");
+	const absolute = resolve(root, trimmed);
+	if (!isWithin(root, absolute))
+		throw new ReviewInputError(`Review path is outside the repository: ${raw}`, "invalid_path");
+	return relative(root, absolute).split(sep).join("/") || ".";
+}
+
+function normalizeReviewPaths(root: string, paths: string[] | undefined): string[] | undefined {
+	if (!paths?.length) return undefined;
+	const seen = new Set<string>();
+	const normalized: string[] = [];
+	for (const raw of paths) {
+		const spec = normalizeReviewPath(root, raw);
+		if (seen.has(spec)) continue;
+		seen.add(spec);
+		normalized.push(spec);
+	}
+	return normalized.length ? normalized : undefined;
+}
+
+function pathMatchesSpec(path: string, spec: string): boolean {
+	if (spec === ".") return true;
+	if (REVIEW_GLOB_CHARS.test(spec)) return globToRegExp(spec).test(path);
+	return path === spec || path.startsWith(`${spec}/`);
+}
+
+function itemMatchesPaths(entry: { path: string; oldPath?: string }, paths: string[] | undefined): boolean {
+	if (!paths?.length) return true;
+	return paths.some(
+		(spec) =>
+			pathMatchesSpec(entry.path, spec) || (entry.oldPath !== undefined && pathMatchesSpec(entry.oldPath, spec)),
+	);
 }
 
 function gitCommonDirectory(root: string): string {
@@ -298,15 +365,36 @@ function inputHash(
 	base: string | undefined,
 	head: string | undefined,
 	items: ReviewItem[],
+	paths?: string[],
 ): string {
 	const identities = [...items]
 		.sort((left, right) => left.id.localeCompare(right.id))
 		.map((entry) => [entry.id, entry.fingerprint]);
-	return sha256(JSON.stringify({ source, base, head, identities }));
+	return sha256(JSON.stringify({ source, base, head, identities, ...(paths?.length ? { paths } : {}) }));
 }
 
-export function resolveReviewInput(projectRootInput: string, source: ReviewSource): ReviewInput {
+function scopedInput(
+	projectRoot: string,
+	source: ReviewSource,
+	items: ReviewItem[],
+	paths: string[] | undefined,
+	resolvedBase?: string,
+	resolvedHead?: string,
+): ReviewInput {
+	return {
+		projectRoot,
+		source,
+		...(resolvedBase && { resolvedBase }),
+		...(resolvedHead && { resolvedHead }),
+		items,
+		inputHash: inputHash(source, resolvedBase, resolvedHead, items, paths),
+		...(paths?.length ? { paths } : {}),
+	};
+}
+
+export function resolveReviewInput(projectRootInput: string, source: ReviewSource, paths?: string[]): ReviewInput {
 	const projectRoot = reviewRepositoryRoot(projectRootInput);
+	const scopedPaths = normalizeReviewPaths(projectRoot, paths);
 	let resolvedBase: string | undefined;
 	let resolvedHead: string | undefined;
 	let entries: NameStatus[] = [];
@@ -324,12 +412,12 @@ export function resolveReviewInput(projectRootInput: string, source: ReviewSourc
 				runGit(projectRoot, ["diff", "--name-status", "-z", "--find-renames", resolvedHead, "--", "."]),
 			);
 		} else {
-			const paths = runGit(projectRoot, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
+			const listed = runGit(projectRoot, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
 				.toString("utf8")
 				.split("\0")
-				.filter(Boolean);
-			const items = paths.map((path) => untrackedItem(projectRoot, source, path));
-			return { projectRoot, source, items, inputHash: inputHash(source, undefined, undefined, items) };
+				.filter((path) => path && itemMatchesPaths({ path }, scopedPaths));
+			const items = listed.map((path) => untrackedItem(projectRoot, source, path));
+			return scopedInput(projectRoot, source, items, scopedPaths);
 		}
 	} else if (source.mode === "range") {
 		const from = resolveCommit(projectRoot, source.from, "from");
@@ -355,25 +443,31 @@ export function resolveReviewInput(projectRootInput: string, source: ReviewSourc
 		);
 	}
 
-	const items = entries.map((entry) => item(source, entry, diffForPaths(projectRoot, diffBase!, diffHead, entry)));
+	const items = entries
+		.filter((entry) => itemMatchesPaths(entry, scopedPaths))
+		.map((entry) => item(source, entry, diffForPaths(projectRoot, diffBase!, diffHead, entry)));
 	if (includeUntracked)
-		items.push(...untrackedPaths(projectRoot).map((path) => untrackedItem(projectRoot, source, path)));
-	return {
-		projectRoot,
-		source,
-		...(resolvedBase && { resolvedBase }),
-		...(resolvedHead && { resolvedHead }),
-		items,
-		inputHash: inputHash(source, resolvedBase, resolvedHead, items),
-	};
+		items.push(
+			...untrackedPaths(projectRoot)
+				.filter((path) => itemMatchesPaths({ path }, scopedPaths))
+				.map((path) => untrackedItem(projectRoot, source, path)),
+		);
+	return scopedInput(projectRoot, source, items, scopedPaths, resolvedBase, resolvedHead);
 }
 
-export function previewReviewInput(projectRoot: string, source: ReviewSource): ReviewPreview {
-	const input = resolveReviewInput(projectRoot, source);
-	const reviewable = input.items.filter((entry) => !entry.binary);
+export function isLedgerHistoryPath(path: string): boolean {
+	return path === ".ledger" || path.startsWith(".ledger/");
+}
+
+export function previewReviewInput(projectRoot: string, source: ReviewSource, paths?: string[]): ReviewPreview {
+	const input = resolveReviewInput(projectRoot, source, paths);
+	const reviewable = input.items.filter((entry) => !entry.binary && !isLedgerHistoryPath(entry.path));
 	const waived = input.items
-		.filter((entry) => entry.binary)
-		.map((entry) => ({ item: entry, reason: "binary or non-text change" }));
+		.filter((entry) => entry.binary || isLedgerHistoryPath(entry.path))
+		.map((entry) => ({
+			item: entry,
+			reason: entry.binary ? "binary or non-text change" : "ledger history",
+		}));
 	return { ...input, reviewable, waived };
 }
 
@@ -408,7 +502,7 @@ export function materializeReviewTree(input: ReviewInput): MaterializedReviewTre
 }
 
 export function assertReviewInputUnchanged(expected: ReviewInput): void {
-	const actual = resolveReviewInput(expected.projectRoot, expected.source);
+	const actual = resolveReviewInput(expected.projectRoot, expected.source, expected.paths);
 	if (actual.inputHash !== expected.inputHash) {
 		throw new ReviewInputError("Review input changed while the run was active", "workspace_conflict");
 	}

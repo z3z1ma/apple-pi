@@ -4,46 +4,30 @@ import type { ReviewBudgets, ReviewProfile, ReviewRoleEnvelope, ReviewSource } f
 
 /** Package-owned ceilings. Ordinary callers never configure these values. */
 export const REVIEW_PACKAGE_MAXIMA: Readonly<ReviewBudgets> = {
-	maxTokens: 1_000_000,
 	timeoutSeconds: 7_200,
 	maxConcurrency: 8,
-	plannerMaxTurns: 24,
-	reviewerMaxTurns: 48,
-	verifierMaxTurns: 32,
-	maxGroups: 32,
-	maxPromptBytes: 512 * 1024,
+	maxFocuses: 34,
+	maxCycles: 3,
 };
 
 const PROFILE_BUDGETS: Record<ReviewProfile, ReviewBudgets> = {
 	fast: {
-		maxTokens: 300_000,
 		timeoutSeconds: 1_800,
-		maxConcurrency: 4,
-		plannerMaxTurns: 8,
-		reviewerMaxTurns: 16,
-		verifierMaxTurns: 10,
-		maxGroups: 12,
-		maxPromptBytes: 256 * 1024,
+		maxConcurrency: 6,
+		maxFocuses: 14,
+		maxCycles: 1,
 	},
 	balanced: {
-		maxTokens: 600_000,
 		timeoutSeconds: 3_600,
-		maxConcurrency: 4,
-		plannerMaxTurns: 12,
-		reviewerMaxTurns: 25,
-		verifierMaxTurns: 15,
-		maxGroups: 24,
-		maxPromptBytes: 384 * 1024,
+		maxConcurrency: 6,
+		maxFocuses: 26,
+		maxCycles: 1,
 	},
 	thorough: {
-		maxTokens: 1_000_000,
 		timeoutSeconds: 7_200,
-		maxConcurrency: 2,
-		plannerMaxTurns: 20,
-		reviewerMaxTurns: 40,
-		verifierMaxTurns: 24,
-		maxGroups: 32,
-		maxPromptBytes: 512 * 1024,
+		maxConcurrency: 6,
+		maxFocuses: 34,
+		maxCycles: 3,
 	},
 };
 
@@ -67,21 +51,21 @@ function whole(value: number | undefined, fallback: number, maximum: number): nu
 /**
  * Shape can safely affect how much parallel semantic work is useful. It never
  * decides prompt or role capacity: that requires the fully rendered stage.
+ * Profile selects cycle count; shape only bounds focuses and concurrency.
  */
 export function deriveReviewBudgets(
 	profile: ReviewProfile,
 	shape: SealedReviewShape,
-	constraints: Partial<Pick<ReviewBudgets, "maxTokens" | "timeoutSeconds">> = {},
+	constraints: Partial<Pick<ReviewBudgets, "timeoutSeconds">> = {},
 ): ReviewBudgets {
 	const base = PROFILE_BUDGETS[profile];
 	const density = Math.max(1, Math.ceil(shape.diffBytes / (48 * 1024)));
-	const maxGroups = clamp(Math.max(1, Math.min(shape.selectedItems, density * 4)), 1, base.maxGroups);
-	const maxConcurrency = clamp(Math.min(base.maxConcurrency, maxGroups), 1, REVIEW_PACKAGE_MAXIMA.maxConcurrency);
+	const maxFocuses = clamp(Math.max(3, Math.min(shape.selectedItems + 2, density * 4 + 2)), 1, base.maxFocuses);
+	const maxConcurrency = clamp(Math.min(base.maxConcurrency, maxFocuses), 1, REVIEW_PACKAGE_MAXIMA.maxConcurrency);
 	return {
 		...base,
-		maxTokens: whole(constraints.maxTokens, base.maxTokens, REVIEW_PACKAGE_MAXIMA.maxTokens),
 		timeoutSeconds: whole(constraints.timeoutSeconds, base.timeoutSeconds, REVIEW_PACKAGE_MAXIMA.timeoutSeconds),
-		maxGroups,
+		maxFocuses,
 		maxConcurrency,
 	};
 }
@@ -95,7 +79,7 @@ function outputReserve(
 	profile: ReviewProfile,
 	modelMaxOutputTokens: number,
 ): number {
-	const base = stage === "reviewer" ? (profile === "thorough" ? 12_000 : 8_000) : 4_000;
+	const base = stage === "reviewer" ? (profile === "thorough" ? 6_000 : 4_000) : 3_000;
 	return Math.max(1_024, Math.min(base, modelMaxOutputTokens));
 }
 
@@ -105,7 +89,7 @@ export function estimatePromptTokens(text: string): number {
 }
 
 /** The auditable, non-executable part of a controller-supplied tool contract. */
-export function serializedResultToolSignature(tool: ToolDefinition): string {
+export function serializedToolSignature(tool: ToolDefinition): string {
 	return JSON.stringify({
 		name: tool.name,
 		label: tool.label,
@@ -119,7 +103,9 @@ export function serializedResultToolSignature(tool: ToolDefinition): string {
 
 export function deriveRoleEnvelope(input: {
 	stage: ReviewRoleEnvelope["stage"];
-	groupId?: string;
+	partitionId?: string;
+	focusId?: string;
+	cycle?: number;
 	mode: string;
 	model: Model<any>;
 	profile: ReviewProfile;
@@ -127,72 +113,44 @@ export function deriveRoleEnvelope(input: {
 	prompt: string;
 	systemPrompt: string;
 	resultTool: ToolDefinition;
+	customTools: readonly ToolDefinition[];
 	builtinToolNames?: readonly string[];
 	elapsedSeconds: number;
-	/** Settled plus live usage; controls the role's actual run-wide ceiling. */
-	totalTokens: number;
-	/** Prior launch reservations; used only to decide whether another role fits. */
-	reservedTokens?: number;
 }): ReviewRoleEnvelope {
 	const contextWindow = modelNumber(input.model.contextWindow, 200_000);
 	const modelMaxOutputTokens = modelNumber(input.model.maxTokens, 16_384);
-	const toolSignature = serializedResultToolSignature(input.resultTool);
-	// Pi serializes the selected core-tool schemas provider-side. The public core
-	// API has no schema accessor at controller time, so reserve a conservative
-	// 4 KiB envelope for each fixed read-only schema rather than undercount it.
+	const resultToolSignature = serializedToolSignature(input.resultTool);
+	const customToolSignature = (input.customTools ?? [input.resultTool]).map(serializedToolSignature).join("\n");
 	const builtinToolBytes = (input.builtinToolNames?.length ?? 0) * 4_096;
-	const rendered = `${input.systemPrompt}\n\n${input.prompt}\n\n${toolSignature}${" ".repeat(builtinToolBytes)}`;
+	const rendered = `${input.systemPrompt}\n\n${input.prompt}\n\n${customToolSignature}${" ".repeat(builtinToolBytes)}`;
 	const promptBytes = Buffer.byteLength(rendered);
-	const resultToolBytes = Buffer.byteLength(toolSignature);
+	const resultToolBytes = Buffer.byteLength(resultToolSignature);
+	const customToolBytes = Buffer.byteLength(customToolSignature);
 	const estimatedInputTokens = estimatePromptTokens(rendered);
 	const reservedOutputTokens = outputReserve(input.stage, input.profile, modelMaxOutputTokens);
 	const contextSafe = contextWindow - estimatedInputTokens - reservedOutputTokens;
-	if (promptBytes > input.budgets.maxPromptBytes) {
-		throw new Error(
-			`${input.stage} rendered prompt is ${promptBytes} bytes; policy maximum is ${input.budgets.maxPromptBytes}`,
-		);
-	}
 	if (contextSafe < 1) {
 		throw new Error(
 			`${input.stage} rendered prompt needs ${estimatedInputTokens} input tokens plus ${reservedOutputTokens} reserved output tokens, exceeding model context window ${contextWindow}`,
 		);
 	}
-	const remainingTokens = input.budgets.maxTokens - input.totalTokens;
-	// Context capacity is per request. A fresh role normally needs at least an
-	// evidence/tool round and a terminating submission, each of which can carry
-	// the prompt again. Do not reuse a one-request context calculation as a
-	// lifetime usage ceiling.
-	const expectedRequests = input.stage === "reviewer" ? 3 : 2;
-	const reservationTokens = expectedRequests * (estimatedInputTokens + reservedOutputTokens);
-	if (remainingTokens - (input.reservedTokens ?? 0) < reservationTokens) {
-		throw new Error(`${input.stage} has insufficient aggregate policy capacity after rendered prompt measurement`);
-	}
 	const remainingSeconds = input.budgets.timeoutSeconds - input.elapsedSeconds;
 	if (remainingSeconds < 1) throw new Error(`${input.stage} cannot start because the elapsed-time policy is exhausted`);
-	const maxTurns =
-		input.stage === "planner"
-			? input.budgets.plannerMaxTurns
-			: input.stage === "reviewer"
-				? input.budgets.reviewerMaxTurns
-				: input.budgets.verifierMaxTurns;
 	return {
 		stage: input.stage,
-		...(input.groupId && { groupId: input.groupId }),
+		...(input.partitionId && { partitionId: input.partitionId }),
+		...(input.focusId && { focusId: input.focusId }),
+		...(input.cycle !== undefined && { cycle: input.cycle }),
 		mode: input.mode,
 		model: `${input.model.provider}/${input.model.id}`,
 		contextWindow,
 		modelMaxOutputTokens,
 		promptBytes,
 		resultToolBytes,
+		customToolBytes,
 		builtinToolBytes,
 		estimatedInputTokens,
 		reservedOutputTokens,
-		expectedRequests,
-		reservationTokens,
-		// A reservation admits concurrent work; it is not a guessed per-role
-		// lifetime cap. Live usage remains subject to the run-wide ceiling.
-		maxTokens: remainingTokens,
-		maxTurns,
 		timeoutSeconds: Math.max(1, Math.floor(remainingSeconds)),
 	};
 }
