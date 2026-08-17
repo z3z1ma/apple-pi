@@ -182,10 +182,18 @@ try {
 	assert(existsSync("skills/review/references/planner.md"), "missing review planner reference");
 	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
 	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
-	for (const program of ["plan-review-verify.js", "targeted-review.js"]) {
+	for (const [program, prompts] of [
+		["plan-review-verify.js", ["planner", "reviewer", "verifier"]],
+		["targeted-review.js", ["reviewer", "verifier"]],
+	]) {
 		const source = readFileSync(`skills/review/references/${program}`, "utf8");
-		assert(source.includes("const REVIEWER = "), `${program} must inline REVIEWER`);
-		assert(source.includes("const VERIFIER = "), `${program} must inline VERIFIER`);
+		for (const prompt of prompts) {
+			const constant = prompt.toUpperCase();
+			assert(
+				source.includes(`const ${constant} = "<copy references/${prompt}.md>";`),
+				`${program} must declare the ${constant} prompt placeholder`,
+			);
+		}
 		assert(!source.includes("skills.body"), `${program} must not load role prompts via skills.body`);
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
 	}
