@@ -7,7 +7,7 @@ This file applies to the entire repository. It is a durable map and operating gu
 Before changing anything:
 
 1. Run `git status --short --branch` and preserve all existing work. This repository is often developed through multi-file architectural changes; do not assume a dirty tree is disposable.
-2. Read the relevant part of `README.md` for product behavior and intentional feature boundaries.
+2. Read `README.md` for the package catalog and install path, then the relevant `docs/` page for product behavior and feature boundaries.
 3. Read `docs/development.md` for module and formatting conventions.
 4. If the work is governed by `.ledger`, read `.ledger/INDEX.md`, the selected task's `task.md`, and every active record it references. Resolve closed dependencies through `.ledger/history/`. See `docs/ledger.md` for the workbench model.
 5. Inspect the manifest and test configuration before adding a new path. Packaging, TypeScript, Vitest, and the extension loader each have explicit inclusion boundaries.
@@ -15,7 +15,8 @@ Before changing anything:
 Authority is split deliberately:
 
 - `package.json` is the machine-readable package, extension, skill, script, engine, and dependency contract.
-- `README.md` is the user-facing behavior and architecture overview.
+- `README.md` is the human catalog and install path.
+- `docs/` owns user-facing feature contracts. `docs/boundaries.md` records adopted and deliberately rejected ideas.
 - `docs/development.md` owns coding and module conventions.
 - `docs/ledger.md` owns the durable `.ledger` workflow.
 - Tests own executable invariants, but a test can still encode an obsolete contract; compare it with current product documentation and instructions.
@@ -62,7 +63,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | Review and Ralph are skills that author `pi_exec` programs, not hidden runtime engines. Ledger skills each own a specific lifecycle phase. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
-| `docs/` | Maintainer-facing detail beyond the README | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
+| `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
 | `.ledger/` | Optional task-local workbench for non-trivial work | It is execution state and evidence, not product runtime state. Storage/commit policy belongs to the repository owner. |
 
 ## Core flows and invariants
@@ -109,7 +110,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - Provider-specific payload hooks must be narrowly gated by provider/API and idempotent when a caller already supplied the capability.
 - Third-party provenance and licensing belong in `THIRD_PARTY_NOTICES.md`; do not edit vendored `node_modules/` source.
 
-The README's reference-repository decision table records adopted and deliberately rejected ideas. Consult it before restoring an absent feature: absence is often an architectural choice, not unfinished work.
+`docs/boundaries.md` records adopted and deliberately rejected ideas. Consult it before restoring an absent feature: absence is often an architectural choice, not unfinished work.
 
 ## Where a change should go
 
@@ -119,7 +120,7 @@ Use the narrowest production owner:
 - Domain behavior with independent tests: the owning `components/<domain>/src/` tree.
 - Terminal rendering for a component: that component's `ui/` modules.
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
-- User-facing package behavior and configuration: `README.md`.
+- User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedure in `skills/ledger-*`, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.
@@ -238,7 +239,7 @@ Never move credentials, private transcript content, or memory records into repos
 1. Adopt behavior intentionally rather than copying an entire upstream architecture.
 2. Keep one local implementation of each responsibility.
 3. Record source and license provenance.
-4. Update the README's boundary/rationale only when the durable architectural decision changes.
+4. Update `docs/boundaries.md` only when the durable architectural decision changes. Update the README catalog only when the public surface changes.
 
 ## Documentation discipline
 
@@ -246,7 +247,8 @@ Do not expand this file with every command, tool parameter, configuration key, o
 
 When behavior changes, update the closest authority:
 
-- Exact user workflow or feature contract: `README.md`.
+- Exact user workflow or feature contract: the relevant `docs/` page.
+- Human catalog and install path: `README.md`.
 - Maintainer/module convention: `docs/development.md`.
 - Ledger semantics: `docs/ledger.md` and the injected ledger prompt source together.
 - Machine-discovered surface: manifest and executable loader tests.

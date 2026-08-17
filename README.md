@@ -1,19 +1,13 @@
 # apple-pi
 
-One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's integrated Pi environment:
+Alex's [Pi](https://github.com/badlogic/pi-mono) package: advisor, questions, context, exec, subagents, and the workflow skills I actually use.
 
-- **Pi Advisor** (`/advisor`) — a persistent read-only peer model that reviews turns and sends sparse, severity-tagged advice.
-- **Ask User Question** (`ask_user_question`) — a structured TUI/RPC questionnaire for clarifying material decisions without guessing.
-- **Integrated context** — VCC's deterministic transcript compaction plus observational memory's model-generated observations and reflections.
-- **Session search and memory source** — `session_search` searches this session's compacted transcript and file operations; `memory_source` resolves a known 12-character memory ID to its source entries.
-- **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
-- **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
-- **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
-- **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
-- **Ledger task workflows and Ralph loops** (`ledger_add`, `ledger_close`, `/skill:ledger-*`, `/skill:pi-ralph`) — the ledger extension teaches the `.ledger` contract, `ledger_add` creates a task, `ledger_close` archives it, and `/skill:pi-ralph` runs a fresh-context loop whose calling session bounds iterations and reviews with `/skill:pi-review`.
-- **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
+The Pi package manifest in [`package.json`](package.json) exports:
 
-apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, ledger, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
+- [`extensions`](extensions) as Pi extensions
+- [`skills`](skills) as agent skills
+
+MCP protocol and UI stay in the pinned `pi-mcp-adapter` dependency. Everything else is owned here. Feature contracts live in [`docs`](docs); adopted and rejected ideas are in [`docs/boundaries.md`](docs/boundaries.md).
 
 ## Install
 
@@ -24,272 +18,37 @@ npm install
 pi install /absolute/path/to/apple-pi
 ```
 
-For project-local activation, add `-l` to `pi install`. Pi loads all extension entrypoints from this one package; no second Pi package or Git submodule is required.
-
-## Usage
-
-### Advisor
-
-The advisor is enabled unless explicitly disabled:
-
-```text
-/advisor status
-/advisor off
-/advisor on
-```
-
-It uses the `advisor` entry from a trusted project's `.pi/modes.json`, then global `~/.pi/agent/modes.json` when present. Otherwise it tries `openrouter/z-ai/glm-5.2`. An optional project `WATCHDOG.md` supplies advisor-only review guidance only when Pi trusts the project. While enabled, it appends a short protocol to the main agent's system prompt so nits, concerns, and blockers are treated as a peer review rather than optional commentary. After compaction, resume, fork, reload, or tree navigation, the advisor passively re-primes from Pi's active session context before reviewing new work.
-
-The advisor makes additional model calls. Its status and accumulated cost are visible through `/advisor status` and the footer.
-
-### Ask User Question
-
-The `ask_user_question` tool lets the model group up to four related decisions into one questionnaire. Each question presents two to four described options, always includes a custom free-text answer, and can opt into multi-select. Multiple questions use tabs and a final review step in the terminal.
-
-In the TUI, use `↑`/`↓` to move, `Enter` to select, `Space` or `Enter` to toggle multi-select choices, `Tab`/`←`/`→` to change questions, and `Esc` to cancel. Custom answers use Pi's multiline editor. RPC/ACP hosts receive the same questions through native select/input dialogs; multi-select accepts comma-separated option numbers or free text. The tool removes itself from non-interactive runs so the model falls back to ordinary chat questions instead of calling an unusable UI.
-
-### xAI hosted tools
-
-Every xAI request that uses Pi's `openai-responses` API receives xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` tools unless the payload already includes that tool. Completions-routed Grok models are left unchanged: switch those models to `openai-responses` against `https://api.x.ai/v1` if they should search. Domain filters, handle filters, and image-search flags are not configured; xAI bills each tool when the model uses it.
-
-### Context and memory
-
-Normal `/compact`, automatic compaction, overflow recovery, and explicit `/pi-vcc` all pass through one `session_before_compact` owner:
-
-1. VCC selects a conversational cut and builds a deterministic summary without a model call.
-2. Observational memory folds ledger records up to the same cut and injects current law plus remaining working evidence.
-3. The two summaries and their metadata are returned as one compaction result.
-
-The metadata is intentionally flat: `details.compactor === "pi-vcc"` and `details.type === "om.folded"` coexist so both recall systems recognize the same compaction.
-
-Commands and tools:
-
-- `/pi-vcc` — explicit deterministic compaction
-- `/pi-vcc-recall` — interactive history and file-operation search
-- `session_search` — model-facing search of this session's compacted transcript and file operations:
-  - `mode:"touched"` groups write/edit operations by path and entry index.
-  - `mode:"file"` searches only write/edit payloads.
-  - `query:"#N:path"` recovers a file payload; append `:offset:limit` to page or `:full` for up to 50 KB.
-  - `expand:[N]` returns a complete transcript entry.
-- `/om:status` and `/om:view` — observational-memory state
-- `memory_source` — exact source lookup by observation or reflection ID
-
-VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](components/memory/src/config.ts) for the validated operational keys and defaults.
-
-### Where memory persists
-
-Observations, reflections, drop records, and reflection retirements are custom entries in Pi's append-only session JSONL. With Pi's default session directory, files are grouped by working directory under:
-
-```text
-~/.pi/agent/sessions/--<cwd>--/*.jsonl
-```
-
-Thus memory is durable and project-associated through Pi's session location, but it is **not project-local repository state** and is not shared through Git.
-
-apple-pi intentionally does not create a `.pi/memory` mirror. A mirror would introduce a second source of truth, merge semantics, generated repository noise, and a privacy decision without improving current runtime behavior. If cross-session or team-shared memory becomes a concrete requirement, it should be designed as an explicit store and migration rather than an automatic copy.
-
-### Pi Exec
-
-`pi_exec` executes a JavaScript async-function body in a disposable worker. Intermediate tool output remains inside the program; only its returned value enters the main model context.
-
-`pi_exec` is deliberately available only to the root session. Interactive subagents do not receive it, even when their extension configuration explicitly selects the runtime; nested delegation must use their ownership- and depth-scoped `Agent` tools. This prevents child sessions from bypassing those limits through `agents.run` or the captured root extension-tool catalog.
-
-Available globals:
-
-- `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
-- `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, and `DOMException`
-- `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `structuredClone`, and `queueMicrotask`
-- `tools.list/search/describe/call` and `extensions.<tool>(args)` for registered Pi extension tools only. The `pi_exec` `code` parameter lists every guest signature, including captured extension tools such as the MCP gateway, before the program is written.
-- `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agents.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
-- ordinary JavaScript branching, loops, `reduce`, and `Promise.all`, plus `parallel(items, mapper, concurrency)` and `pipeline(items, ...stages)`
-- `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
-- `inputs.<key>` for separately supplied strings, and `print(...)`/`console.log(...)`
-
-`display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
-
-Agent options include `task`, `type`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `Agent` tool and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier roles, which are program prompts, not catalog types. Ralph increments use `type: "general-purpose"` with instructions in the task. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers load the ledger and VCC extensions via `--no-extensions` plus `-e`. They cannot call MCP or other host extension tools; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
-
-`context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: the worker loads the ledger and VCC extensions, plus a worker-only `pi_exec_return` tool when a schema is set, via explicit `-e` under `--no-extensions`. The typed arguments become `agents.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agents.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
-
-Example:
-
-```javascript
-const dir = "extensions";
-const listing = await pi.ls({ path: dir });
-const files = listing.split("\n").filter((name) => name.endsWith(".ts"));
-return parallel(files, async (name) => {
-  const result = await agents.run({
-    task: "Name the riskiest export and quote the evidence.",
-    name,
-    context: { path: `${dir}/${name}` },
-    outputSchema: {
-      type: "object",
-      properties: {
-        export: { type: "string" },
-        evidence: { type: "string" },
-      },
-      required: ["export", "evidence"],
-    },
-  });
-  return { file: name, status: result.status, ...(result.value ?? {}), ...(result.error ? { error: result.error } : {}) };
-}, 3);
-```
-
-Pi Exec derives a default envelope from program shape: host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Pass optional `limits` on the tool call to raise or lower agent, call, concurrency, or timeout capacity up to package maxima. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
-
-`fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
-
-`bash`, `edit`, and `write` return `{ ok, output }`; read/search tools return text. `agent` returns text, or the structured `outputSchema` value. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so VCC compaction, search, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
-
-In TUI mode, `pi_exec` has a bounded code-preview card, live queued/running/completed call rows, elapsed time, agent activity, expandable results, and a temporary activity widget above the editor. This deliberately replaces Fabric's much larger activity store/dashboard with one execution-local view.
-
-Registered extension tools are captured at Pi's registered-tool assembly point. apple-pi's MCP adapter registers its token-efficient `mcp` gateway there, so `pi_exec` can discover and invoke MCP calls with the same loops, branching, pipelines, and fan-out used for core tools. Provider-private capabilities that are not represented as Pi tools remain outside the bridge because Pi 0.84 has no public nested provider-tool execution API.
-
-Nested operations are not separate top-level Pi tool calls, so policy extensions driven solely by `tool_call` events see the outer `pi_exec` call rather than each nested operation. Captured tool definitions and core overrides still execute their own enforcement behavior; installations requiring an outer per-call gate should gate or disable `pi_exec` as one capability.
-
-### MCP
-
-apple-pi installs `pi-mcp-adapter` 2.26.0 and exposes its normal `mcp` tool, `/mcp` setup/status panel, `/mcp-auth`, lazy server lifecycle, metadata cache, stdio/HTTP/SSE/socket transports, OAuth/keyring integration, approvals, output guards, prompts/resources, and MCP UI support. It reads the adapter's standard `.mcp.json`, shared global, and Pi override locations.
-
-Run `/mcp setup` for guided configuration or create `.mcp.json` directly. Single calls use the ordinary gateway:
-
-```javascript
-await extensions.mcp({ search: "issues" });
-await extensions.mcp({ tool: "github_search_issues", args: { query: "is:open" } });
-```
-
-Inside `pi_exec`, the same gateway becomes a programmable capability:
-
-```javascript
-const candidates = await extensions.mcp({ search: "fetch issue", server: "github" });
-const ids = [101, 102, 103];
-return Promise.all(ids.map(async (id) => {
-  const result = await extensions.mcp({
-    tool: "github_get_issue",
-    args: { owner: "acme", repo: "app", issue_number: id },
-  });
-  return { id, text: result.text };
-}));
-```
-
-The adapter's separate `mcpScript` VM is intentionally filtered out: `pi_exec` is the one programmable runtime and can compose MCP with Pi core tools, extension tools, and model agents. Direct MCP tools configured by the adapter remain available to ordinary Pi turns and are also discoverable through `pi_exec`'s extension catalog.
-
-### Interactive subagents
-
-The `Agent` tool launches named agent *types* in foreground or background. `get_subagent_result` waits for or inspects background work, `steer_subagent` redirects a running agent after its current tool, and `stop_subagent` terminates queued or running work. `/agents` lists the live roster and discovered types. In TUI mode, active work appears in the above-editor widget and the navigable below-editor FleetView; the conversation viewer supports live scrolling, steering, and explicit stopping.
-
-`Agent` and `pi_exec` `agents.run` share the type catalog and serve different jobs. Use `Agent` for collaboration: background specialists, FleetView, steer/stop, resume, and a durable child session. Use `pi_exec` for composition: a program graph that fans out typed workers, binds MCP or tool results as `context`, and reduces to a compact value. The parent session remains a senior engineer who may implement; specialists exist to isolate context, pick a model class, or run non-overlapping parallel work.
-
-Built-in types:
-
-| Type | Lane | Default tools |
-| --- | --- | --- |
-| `Explore` | Local recon: where is X? | read-only |
-| `Research` | External docs via MCP and cited sources; not local recon | read-only |
-| `Plan` | How-to-implement across modules | read-only |
-| `Counsel` | Should we / root cause / YAGNI. Not Advisor, not pi-review | read-only |
-| `Implement` | Bounded specified writes. No research, no UI taste | write |
-| `Design` | User-visible layout, interaction, polish | write |
-| `general-purpose` | Substantial mixed work that does not fit a lane | write |
-
-One isolated, known-path, low-risk action stays in the parent. Do not use `general-purpose` when a lane fits. Review keeps its own `systemPrompt` roles and must not be retargeted onto these types. Ralph increments use `type: "general-purpose"` with instructions in the task.
-
-Agent definitions are Markdown with YAML frontmatter, discovered in this order:
-
-1. `.pi/agents/*.md`
-2. `.agents/agents/*.md`
-3. `$PI_CODING_AGENT_DIR/agents/*.md` (normally `~/.pi/agent/agents/*.md`)
-
-```markdown
----
-name: reviewer
-description: Reviews changes for correctness and missing evidence
-model: anthropic/claude-opus-4-6
-thinking: high
-tools: read, grep, find, bash
-skills: true
-max_turns: 30
-allowed_subagents: scout
----
-
-Review the requested change. Report concrete findings with file paths and evidence.
-```
-
-Trusted agent definitions and settings control tool scope, skills, model/thinking, turn limits with graceful wrap-up, session persistence, and explicit nested-agent allowlists. Interactive children do not discover package extensions. They load ledger, VCC, and MCP via `--no-extensions` plus `-e`; `advisor: true` also loads the Advisor sidecar for correctness-critical implementation. Agent-definition `extensions:` is ignored. Each `Agent` invocation explicitly chooses `inherit_context`, `false` by default: without inherited context, the task prompt is the complete handoff; setting `inherit_context: true` prepends the full parent conversation. Keep `advisor` false for exploration, search, planning, and routine work. `max_turns` is a trusted definition-level run-length cutoff, not a model-facing output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
-
-Built-in agent types can also be routed through the shared `modes.json` mechanism without editing TypeScript. Named entries such as `Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, and `general-purpose` override the embedded built-in default for those agent types when the project is trusted or when the global mode is used. `provider` and `modelId` select a model together; `thinkingLevel` is independent, so a route may set only thinking. Custom Markdown agent files still win: a file's frontmatter `model:`/`thinking:` override the route, and an explicit `model` argument passed to the Agent tool or `agents.run` remains highest precedence.
-
-```json
-{
-  "modes": {
-    "general-purpose": { "provider": "anthropic", "modelId": "claude-3-7-sonnet-20250219", "thinkingLevel": "medium" },
-    "Explore": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" },
-    "Research": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" },
-    "Plan": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" },
-    "Counsel": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" },
-    "Implement": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "high" },
-    "Design": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" }
-  }
-}
-```
-
-Top-level subagents persist as normal Pi child-session JSONL by default. The child loads standalone VCC, so a long run uses the same compaction owner and `session_search` as the main session without observational memory or the `memory_source` tool. There is no plugin-specific memory directory and no duplicate `.output` transcript. Set `persist_session: false` only when a definition should be ephemeral. Operational defaults can be overridden globally or per project in `subagents.json`; retained settings are `maxConcurrent`, `defaultMaxTurns`, `graceTurns`, `defaultJoinMode`, `strictAgentFiles`, `disableDefaultAgents`, `fleetView`, `persistAgentSessions`, `widgetMode`, `maxSubagentDepth`, and `fallbackSubagent`.
-
-A foreground result includes its agent ID. Pass that ID back through the `Agent` tool's `resume` parameter to continue the same `AgentSession`, including its prior conversation, compactions, and observational memory; `steer_subagent` and `stop_subagent` remain limited to agents that are currently running or queued. `get_subagent_result` is non-blocking by default; `wait_seconds` explicitly chooses a 0–60 second wait, after which it returns the live status without stopping the child so the parent can inspect, steer, or work in parallel. Use `transcript_tail` to inspect up to 12,000 characters from the latest 1–20 child conversation messages, including current streaming output. Ownership-scoped nested agents expose the same check-in surface. Continuation is currently in-process: completed records are retired after about ten minutes, and a parent-session reload, switch, or shutdown does not rehydrate them from the persisted child JSONL.
-
-The imported implementation deliberately has **no worktree parameter or worktree code**, **no scheduled agents**, **no human `@agent` input interception**, **no plugin-local agent memory**, and **no duplicate output-transcript store**. Agents can still use ordinary `bash` when they intentionally need Git or worktrees. Agent-to-agent coordination remains available through explicit `allowed_subagents`, result retrieval, steering, and stopping.
-
-### Review
-
-Review is a skill over `pi_exec`, not an extension. Load `/skill:pi-review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Leave those workers untyped; do not set `type` to `Counsel` or `Plan`. Workers return typed values through `pi_exec_return`.
-
-```text
-/skill:pi-review
-```
-
-The default spine is plan focuses → fan-out read-only reviewers → one verifier → optional residual loop. Vary the program when the change asks for it. Findings must name a patch-introduced cause in an assigned path.
-
-### Ledger task workflows and Ralph loops
-
-One task is one self-contained `.ledger/YYYYMMDDhhmm-slug/` bundle with an executable `task.md` plus only the specs, plans, research, decisions, evidence, knowledge, and candidate skills that task needs. `.ledger/INDEX.md` indexes live task paths with title and description, without duplicating status. Closed tasks move to `.ledger/history/` and are listed with their terminal status, title, and description in `.ledger/history/INDEX.md`. Tasks may depend on completed task roots, resolved live first and then in history; supporting records stay private to their owning bundle. Teams normally ignore `/.ledger/`, while solo developers may commit it.
-
-The packaged lifecycle skills make shaping first-class:
-
-```text
-/skill:ledger-shape-task
-/skill:ledger-research-task
-/skill:ledger-specify-task
-/skill:ledger-plan-task
-/skill:ledger-execute-task
-/skill:ledger-distill-close-task
-/skill:pi-ralph
-```
-
-Ralph is a `pi_exec` skill, not an extension. Load `/skill:pi-ralph` and write a program from the packaged reference. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
-
-The ledger extension teaches the workbench contract wherever it loads: the root session, interactive children, and `pi_exec` workers. Children and workers load that file via `--no-extensions` plus `-e` and do not load `pi_exec` or the subagent manager. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract. `ledger_add` only creates a new full task tree, structural `task.md`, and live index row with title and description. `ledger_close` archives a live task as `done` or `cancelled` without judging completeness. Existing tasks are otherwise read and edited with ordinary repository tools. Exact semantics are in [`docs/ledger.md`](docs/ledger.md).
-
-## Reference-repository decisions
-
-| Reference | Adopted | Not adopted |
-| --- | --- | --- |
-| `rpiv-ask-user-question` | Structured 1-4 question schema, described options, custom and multi-select answers, tabbed TUI review, RPC dialog fallback, non-UI reconciliation, and structured results. | Previews, notes, localization, configuration, collapse mode, external-editor integration, lifecycle events, and upstream runtime dependencies. |
-| `pi-blackhole` and Sting8k VCC | One compaction owner, one combined VCC + memory summary, metadata readable by both systems, touched-file aggregation, file-payload search indicators, and scoped `#N:path` drill-down with paging. | Their code, unified overloaded memory/transcript tool, reverse entry-to-memory recall, manual disk buffers, model fallback/cooldown machinery, settings UI, and host/runtime patch layers. Exact memory-ID `memory_source` and progressive transcript/file `session_search` remain separate. |
-| `pi-fabric` | The full core `exec` primitive: bounded guest code; core, extension, and MCP tool bridges; discovery; configurable fan-out; structured subagents; branching, reduction, parallel and pipeline composition; timers; compact final values; usage accounting; durable traces; code previews; live call rendering; and an activity widget. | QuickJS/WASM, compile-time TypeScript checking, Fabric's own MCP/provider registry, approvals subsystem, compaction, actors/teams, mesh, full dashboard, durable workflow state, and alternate runtimes. `pi_exec` uses a disposable Node worker and delegates MCP protocol ownership to `pi-mcp-adapter`. |
-| `pi-mcp-adapter` | The complete adapter as an exact runtime dependency, including protocol transports, lazy discovery, auth, approvals, output guarding, prompts/resources, setup UI, and its single `mcp` gateway. | Its standalone `mcpScript` runtime and skill; `pi_exec` owns scripting. The dependency is not copied or patched internally. |
-| `pi-subagents` | Owned Markdown agent discovery, Pi `AgentSession` execution, foreground/background queueing, resume/steer/result tools, nested delegation, usage/compaction accounting, completion grouping, activity widget, FleetView, and conversation viewer. | Worktree isolation, scheduling, human `@agent` routing, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy. Removed features have no schema fields or dormant implementation. |
-| `10x` | Inspiration for typed engineering records, cold-start execution, evidence-gated closure, independent review, and retrospective learning. | No migration or compatibility relationship; apple-pi's `.ledger` workbench is an independent system. |
-
-Additional boundaries:
-
-- **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
-- **One compaction hook.** Observational memory does not register its upstream compaction hook independently.
-- **Session ledger is authoritative.** Compaction projects memory but does not relocate it.
-- **No compatibility implementation.** There is one current path, not old/new variants.
+Add `-l` for project-local activation. Pi loads every extension from this one package.
+
+## Extensions
+
+- [`/advisor`](docs/advisor.md) — persistent read-only peer review
+- [`ask_user_question`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
+- [Context](docs/context.md) — VCC compaction, observational memory, `session_search`, and `memory_source`
+- [`pi_exec`](docs/exec.md) — JavaScript composition runtime
+- [`mcp`](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
+- [`Agent`](docs/subagents.md) — `/agents`, FleetView, and specialist lanes
+- [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` contract
+- [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
+
+## Skills
+
+Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs.
+
+- [`/skill:pi-review`](skills/pi-review) — plan focuses, fan out reviewers, verify findings
+- [`/skill:pi-ralph`](skills/pi-ralph) — fresh-context implementation loop over a ledger task
+- [`/skill:pi-exec`](skills/pi-exec) — how to write `pi_exec` programs
+- [`/skill:ledger-shape-task`](skills/ledger-shape-task) — create or refine a task bundle
+- [`/skill:ledger-research-task`](skills/ledger-research-task) — investigate before specifying
+- [`/skill:ledger-specify-task`](skills/ledger-specify-task) — write the behavioral contract
+- [`/skill:ledger-plan-task`](skills/ledger-plan-task) — source-backed implementation plan
+- [`/skill:ledger-execute-task`](skills/ledger-execute-task) — run and reconcile the task
+- [`/skill:ledger-distill-close-task`](skills/ledger-distill-close-task) — promote lessons and close
 
 ## Development
 
 ```bash
+npm install
 npm run format:check
 npm run lint
 npm run typecheck
@@ -297,10 +56,8 @@ npm test
 npm run pack:check
 ```
 
-See [`docs/development.md`](docs/development.md) for module conventions, formatting, linting, and the rationale for retained cohesive modules.
-
-The VCC suite runs under Bun because its upstream tests use `bun:test`; memory and apple-pi integration tests run under Vitest. The advisor's offline harness uses the locally installed Pi distribution. Networked advisor E2E remains opt-in with `ADVISOR_E2E=1 npm run test:advisor`.
+See [`docs/development.md`](docs/development.md) for module conventions. The VCC suite needs Bun. Networked advisor E2E is opt-in: `ADVISOR_E2E=1 npm run test:advisor`.
 
 ## Provenance
 
-The imported source commits and license notices are recorded in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). New apple-pi code and the combined work are MIT licensed.
+Imported source and licenses: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). New apple-pi code is MIT.
