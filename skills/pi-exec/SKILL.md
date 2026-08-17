@@ -55,8 +55,8 @@ The live `code` parameter lists every host signature, including web methods and 
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
 - `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, `general-purpose`, …) and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
 - Review planner/reviewer/verifier stay custom `systemPrompt` workers. Do not set `type` to those roles. Ralph increments use `type: "general-purpose"` with Ralph instructions in the task.
-- `context` must be JSON-serializable and is bound as an `@file` attachment, with a 50,000-character serialized limit. Keep `task` short. Do not interpolate payloads into `task`.
-- `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Structured results also have a 50,000-character serialized limit. Never `JSON.parse` assistant text.
+- `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
+- `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
 - Workers have no extensions or MCP. Call those here, then bind the compact result as `context`.
 - Prefer `agents.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
 - Pass file paths in `context` or `task`. The worker already has `read`; do not dump file bodies into the task.

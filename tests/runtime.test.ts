@@ -17,7 +17,6 @@ import runtime, {
 import {
 	agentOperationArgs,
 	CONTEXT_GUIDANCE,
-	MAX_AGENT_CONTEXT_CHARS,
 	OUTPUT_SCHEMA_GUIDANCE,
 	PI_EXEC_OUTPUT_SCHEMA_ENV,
 	PI_EXEC_RETURN_TOOL,
@@ -456,6 +455,8 @@ describe("pi_exec guest API documentation", () => {
 		expect(skill).toContain("agents.run(request: AgentRequest)");
 		expect(skill).toContain("value?: JSONValue");
 		expect(skill).toContain("bind the compact result as `context`");
+		expect(skill).not.toContain("50,000-character");
+		expect(contract).not.toContain("max 50000 chars");
 		expect(skill).toContain("Never `JSON.parse` assistant text");
 		expect(skill).toContain("const verdict = await agent({");
 		expect(skill).toContain("const result = await agents.run({");
@@ -648,12 +649,11 @@ describe("pi_exec agent binding", () => {
 		}
 	});
 
-	it("rejects oversized or non-serializable context", () => {
+	it("rejects non-serializable context", () => {
 		expect(() => serializeAgentContext(undefined)).toThrow(/JSON-serializable/);
 		const cycle: Record<string, unknown> = {};
 		cycle.self = cycle;
 		expect(() => serializeAgentContext(cycle)).toThrow(/JSON-serializable/);
-		expect(() => serializeAgentContext("x".repeat(MAX_AGENT_CONTEXT_CHARS))).toThrow(/exceeds/);
 	});
 
 	it("normalizes outputSchema and rejects a non-object schema", () => {
@@ -673,7 +673,7 @@ describe("pi_exec agent binding", () => {
 		);
 	});
 
-	it("accepts a matching structured return and rejects a missing or invalid one", () => {
+	it("accepts a matching structured return of any serialized length and rejects a missing or invalid one", () => {
 		const schema = {
 			type: "object",
 			properties: { id: { type: "number" } },
@@ -681,6 +681,14 @@ describe("pi_exec agent binding", () => {
 			additionalProperties: false,
 		};
 		expect(resolveStructuredOutput(schema, { id: 7 })).toEqual({ value: { id: 7 } });
+		const largeSchema = {
+			type: "object",
+			properties: { text: { type: "string" } },
+			required: ["text"],
+			additionalProperties: false,
+		};
+		const largeValue = { text: "x".repeat(75_000) };
+		expect(resolveStructuredOutput(largeSchema, largeValue)).toEqual({ value: largeValue });
 		expect(resolveStructuredOutput(schema, undefined).error).toMatch(new RegExp(PI_EXEC_RETURN_TOOL));
 		expect(resolveStructuredOutput(schema, { id: "nope" }).error).toMatch(/validation failed/);
 		expect(resolveStructuredOutput(undefined, { id: 7 })).toEqual({});
@@ -739,8 +747,8 @@ describe("pi_exec agent binding", () => {
 		}
 	});
 
-	it("writes context under tmpdir and redacts it from traces", () => {
-		const payload = { ids: [1, 2], note: "bound" };
+	it("writes context larger than 50,000 characters under tmpdir and redacts it from traces", () => {
+		const payload = { ids: [1, 2], note: "x".repeat(75_000) };
 		const prepared = prepareAgentSpawn(
 			{ task: "judge these rows", name: "judge", context: payload },
 			{ tools: ["read", "grep"], model: "xai/test", thinking: "low" },
@@ -843,6 +851,40 @@ describe("pi_exec tool", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("returns program output larger than 50,000 characters without truncation", async () => {
+		const { tool } = register();
+		const result = await tool.execute("large-output", { code: `return "x".repeat(75_000);` }, undefined, undefined, {
+			cwd: process.cwd(),
+		});
+		expect(result.content[0].text).toBe("x".repeat(75_000));
+	});
+
+	it("preserves full Agent tool results across the extension bridge", async () => {
+		const output = "x".repeat(75_000);
+		const definition = {
+			name: "get_subagent_result",
+			label: "Get Subagent Result",
+			description: "Return a completed subagent result.",
+			parameters: Type.Object({}),
+			async execute() {
+				return { content: [{ type: "text", text: output }], details: {} };
+			},
+		};
+		const runner = Object.create(ExtensionRunner.prototype) as any;
+		runner.extensions = [{ tools: new Map([[definition.name, { definition }]]) }];
+		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+
+		const { tool } = register();
+		const result = await tool.execute(
+			"large-agent-result",
+			{ code: `return (await extensions.get_subagent_result({})).text;` },
+			undefined,
+			undefined,
+			{ cwd: process.cwd() },
+		);
+		expect(result.content[0].text).toBe(output);
 	});
 
 	it("scales the envelope from optional tool-call limits and clamps to package maxima", () => {

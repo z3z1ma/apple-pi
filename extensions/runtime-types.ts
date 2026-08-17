@@ -8,7 +8,6 @@ export interface WorkerResult {
 	stopReason?: string;
 	error?: string;
 	value?: unknown;
-	truncated: boolean;
 	usage?: Usage;
 	operations: ExecutionOperation[];
 }

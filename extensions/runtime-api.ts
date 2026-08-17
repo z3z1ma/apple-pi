@@ -238,7 +238,7 @@ export const GUEST_HELPER_SIGNATURES: string[] = [
 	"Review planner/reviewer/verifier stay custom systemPrompt workers — do not set type to those roles. Ralph increments use type general-purpose with instructions in the task",
 	"agent(...) is a pi_exec worker for composition. extensions.Agent(...) is the interactive subagent tool for collaboration (background, steer, resume).",
 	"Workers have no extensions or MCP. Call those in the program, then bind the compact result as context.",
-	"context is JSON-cloned to a temp file and attached as @file (max 50000 chars; not stuffed into task/argv). Prefer agents.run for fan-out (does not throw).",
+	"context is JSON-cloned to a temp file and attached as @file (not stuffed into task/argv). Prefer agents.run for fan-out (does not throw).",
 	"Pass file paths in context or task; the worker already has read. Do not dump file bodies into task.",
 	"outputSchema is a JSON Schema object. The worker must call pi_exec_return; agents.run.value / agent() receive those arguments. Never JSON.parse assistant text.",
 	"parallel(jobs: Array<() => Promise<T>|T>, concurrency?: number) → Promise<T[]>",

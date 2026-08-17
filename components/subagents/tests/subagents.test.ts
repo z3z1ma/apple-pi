@@ -10,6 +10,7 @@ import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentModel } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
+import { formatNotification } from "../src/notifications.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
 import type { AgentConfig } from "../src/types.js";
 import { DEFAULT_AGENT_NAMES } from "../src/types.js";
@@ -27,6 +28,23 @@ afterEach(() => {
 });
 
 describe("owned subagent surface", () => {
+	it("includes full background-agent output in parent notifications", () => {
+		const output = "x".repeat(75_000);
+		const notification = formatNotification({
+			id: "agent-1",
+			type: "Explore",
+			description: "large result",
+			status: "completed",
+			result: output,
+			toolUses: 0,
+			startedAt: Date.now(),
+			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+			compactionCount: 0,
+		});
+		expect(notification).toContain(`<result>${output}</result>`);
+		expect(notification).not.toContain("truncated");
+	});
+
 	it("uses Luna for the built-in read-only explorer", () => {
 		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({
 			model: "openai-codex/gpt-5.6-luna",
@@ -403,6 +421,11 @@ describe("owned subagent surface", () => {
 		const settledOutput = settledResult.content[0].text as string;
 		expect(settledOutput).toContain("Agent child-1 is completed.");
 		expect(settledOutput).not.toContain("FULL-FINAL-RESULT-MUST-NOT-LEAK-INTO-A-TAIL-CHECK");
+
+		const fullOutput = "x".repeat(75_000);
+		(record as any).result = fullOutput;
+		const fullResult = await resultTool.execute("get-settled-child", { agent_id: "child-1" }, undefined);
+		expect(fullResult.content[0].text).toContain(fullOutput);
 	});
 
 	it("lets a nested orchestrator stop only a running child it owns", async () => {

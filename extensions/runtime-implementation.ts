@@ -21,6 +21,7 @@ import {
 	type ProgramEnvelope,
 	type ProgramEnvelopeLimits,
 } from "../components/shared/src/runtime-envelope.js";
+import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
 import {
 	agentOperationArgs,
 	PI_EXEC_RETURN_TOOL,
@@ -55,8 +56,7 @@ export type {
 	WorkerResult,
 } from "./runtime-types.js";
 
-const MAX_OUTPUT_CHARS = 50_000;
-const MAX_NESTED_RESULT_CHARS = 50_000;
+const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 const MAX_TRACE_RESULT_CHARS = 4_000;
 const DEFAULT_CALL_BUDGET = 128;
 const DEFAULT_CONCURRENCY = 16;
@@ -99,6 +99,7 @@ const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhi
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
+const FULL_EXTENSION_RESULT_TOOLS = new Set<string>([SUBAGENT_TOOL_NAMES.AGENT, SUBAGENT_TOOL_NAMES.GET_RESULT]);
 
 export const aggregateUsage = (usages: Usage[]): Usage => ({
 	input: usages.reduce((total, usage) => total + usage.input, 0),
@@ -306,18 +307,14 @@ async function runAgent(
 				}
 				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
 				if (!error && structured.error) error = structured.error;
-				const output = bounded(
+				const output =
 					structured.value !== undefined && !error
 						? JSON.stringify(structured.value)
-						: stdout || error || "(agent returned no text)",
-					MAX_NESTED_RESULT_CHARS,
-					"pi_exec agent output",
-				);
+						: stdout || error || "(agent returned no text)";
 				resolve({
 					index,
 					task: request.task,
-					output: output.value,
-					truncated: output.truncated,
+					output,
 					exitCode,
 					stopReason,
 					error,
@@ -359,7 +356,7 @@ function traceValue(value: unknown): unknown {
 	}
 }
 
-function portableValue(value: unknown, maxChars = MAX_NESTED_RESULT_CHARS): unknown {
+function portableValue(value: unknown, maxChars = MAX_GUEST_TOOL_RESULT_CHARS): unknown {
 	if (value === undefined) return undefined;
 	try {
 		const json = JSON.stringify(value, (_key, nested) => (typeof nested === "bigint" ? String(nested) : nested));
@@ -658,10 +655,14 @@ export default function runtime(pi: ExtensionAPI): void {
 						operation.args = args;
 						emit();
 						const result = await invokeDefinition(tool.definition, args, operation, runtimeSignal);
-						const text = bounded(resultText(result), MAX_NESTED_RESULT_CHARS, `${operation.ref} output`).value;
+						const fullResult = FULL_EXTENSION_RESULT_TOOLS.has(name);
+						const rawText = resultText(result);
+						const text = fullResult
+							? rawText
+							: bounded(rawText, MAX_GUEST_TOOL_RESULT_CHARS, `${operation.ref} output`).value;
 						value = {
 							text,
-							content: portableValue(result.content),
+							content: portableValue(result.content, fullResult ? Number.POSITIVE_INFINITY : undefined),
 							details: portableValue(result.details),
 							...(result.usage ? { usage: result.usage } : {}),
 						};
@@ -705,7 +706,7 @@ export default function runtime(pi: ExtensionAPI): void {
 						if (!name || !CORE_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
 						const definition = capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!;
 						const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
-						const text = bounded(resultText(result), MAX_NESTED_RESULT_CHARS, `${ref} output`).value;
+						const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
 						value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
 					}
 					operation.result =
@@ -764,11 +765,9 @@ export default function runtime(pi: ExtensionAPI): void {
 					});
 					throw new Error(result.error ?? `pi_exec ${result.outcome}`);
 				}
-				const output = bounded(
-					[logs.length > 0 ? `Logs:\n${logs.join("\n")}` : "", displayValue(result.value)].filter(Boolean).join("\n\n"),
-					MAX_OUTPUT_CHARS,
-					"pi_exec output",
-				).value;
+				const output = [logs.length > 0 ? `Logs:\n${logs.join("\n")}` : "", displayValue(result.value)]
+					.filter(Boolean)
+					.join("\n\n");
 				return {
 					content: [{ type: "text", text: output }],
 					details: { trace, logs, activity: finalActivity, policy: envelope },

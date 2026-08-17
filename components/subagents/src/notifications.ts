@@ -1,9 +1,9 @@
 import { getStatusNote } from "./status-note.js";
 import type { AgentRecord, NotificationDetails } from "./types.js";
 import {
-	buildInvocationTags,
 	type AgentActivity,
 	type AgentDetails,
+	buildInvocationTags,
 	formatTokens,
 	getDisplayName,
 } from "./ui/agent-widget.js";
@@ -36,12 +36,8 @@ function escapeXml(text: string): string {
 	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function formatNotification(record: AgentRecord, maxLength: number): string {
+export function formatNotification(record: AgentRecord): string {
 	const output = record.result || record.error || "No output.";
-	const preview =
-		output.length > maxLength
-			? `${output.slice(0, maxLength)}\n...(truncated; use get_subagent_result for full output)`
-			: output;
 	return [
 		"<task-notification>",
 		`<task-id>${record.id}</task-id>`,
@@ -49,7 +45,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		record.sessionFile ? `<session-file>${escapeXml(record.sessionFile)}</session-file>` : undefined,
 		`<status>${escapeXml(statusLabel(record))}</status>`,
 		`<summary>Agent "${escapeXml(record.description)}" ${record.status}${getStatusNote(record.status)}</summary>`,
-		`<result>${escapeXml(preview)}</result>`,
+		`<result>${escapeXml(output)}</result>`,
 		`<usage><total_tokens>${getLifetimeTotal(record.lifetimeUsage)}</total_tokens><tool_uses>${record.toolUses}</tool_uses><compactions>${record.compactionCount}</compactions></usage>`,
 		"</task-notification>",
 	]

@@ -18,9 +18,6 @@ import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 
-/** Matches the nested-result bound: fail instead of silently truncating a bound argument. */
-export const MAX_AGENT_CONTEXT_CHARS = 50_000;
-
 export const WORKER_GUIDANCE =
 	"You are a worker inside a pi_exec program. Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Do not ask follow-up questions.";
 
@@ -179,11 +176,6 @@ export function serializeAgentContext(context: unknown): string {
 	if (json === undefined) {
 		throw new Error("agents.run context must be JSON-serializable");
 	}
-	if (json.length > MAX_AGENT_CONTEXT_CHARS) {
-		throw new Error(
-			`agents.run context exceeds ${MAX_AGENT_CONTEXT_CHARS} characters (${json.length.toLocaleString()})`,
-		);
-	}
 	return json;
 }
 
@@ -222,12 +214,7 @@ export function resolveStructuredOutput(
 		return { error: `agents.run outputSchema validation failed: ${issues || "value does not match schema"}` };
 	}
 	try {
-		const json = JSON.stringify(value);
-		if (json !== undefined && json.length > MAX_AGENT_CONTEXT_CHARS) {
-			return {
-				error: `agents.run outputSchema result exceeds ${MAX_AGENT_CONTEXT_CHARS} characters (${json.length.toLocaleString()})`,
-			};
-		}
+		JSON.stringify(value);
 	} catch (error) {
 		return {
 			error: `agents.run outputSchema result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
