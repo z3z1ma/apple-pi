@@ -50,7 +50,7 @@ Included record lifecycles are checked before a model call:
 
 Missing, superseded, blocked, cyclic, symlinked, non-canonical, unindexed, path-escaping, or cross-task records fail visibly. Ralph does not recursively harvest paths from Journal, Blockers, Evidence, Review, Retrospective, Distillation, source files, or arbitrary prose.
 
-The context packet is root-first, then deterministically ordered by record kind and bytewise path. Every record carries its path and SHA-256 digest. Default limits are 64 records and 256 KiB. Overflow is a gate, never silent truncation.
+The context packet is root-first, then deterministically ordered by record kind and bytewise path. Every record carries its path and SHA-256 digest.
 
 ## Commands
 
@@ -65,7 +65,7 @@ The context packet is root-first, then deterministically ordered by record kind 
 ```
 
 - `inspect` validates and describes the graph without a model call or mutation.
-- `start` requires a trusted project, active model, established Git `HEAD`, and clean Git checkout. It records receipt metadata before changing an open task to active.
+- `start` requires a trusted project, active model, and a Git worktree with `HEAD`. Dirty checkouts are allowed. It records receipt metadata before changing an open task to active.
 - `step` performs one complete fresh executor → shared independent review → fresh judge iteration.
 - `run` continues autonomous iterations only while judgment says `iterate`. Ralph does not abort a run or its shared review for token spend, elapsed time, or role-turn count. `step` is one iteration because that is the command, not a resource ceiling. Operator stop, judge close/block/stop, and concrete faults remain the terminal paths.
 - `status` validates and replays the user-local receipt.
@@ -122,7 +122,7 @@ Only then does the controller set `Status: done`. The bundle is not moved or del
 
 ## Workspace and authority boundaries
 
-Ralph uses one clean implementation checkout and runs roles sequentially. It may target a linked worktree supplied by the orchestrating model or human, but never creates, updates, commits, removes, or otherwise manages worktrees. Those lifecycle choices remain outside Ralph. It also never commits, stages, pushes, deploys, publishes, resets, cleans, stashes, or repairs a failed workspace.
+Ralph uses one implementation checkout and runs roles sequentially. The checkout may already be dirty. It may target a linked worktree supplied by the orchestrating model or human, but never creates, updates, commits, removes, or otherwise manages worktrees. Those lifecycle choices remain outside Ralph. It also never commits, stages, pushes, deploys, publishes, resets, cleans, stashes, or repairs a failed workspace.
 
 When `.ledger` is committed and current in the implementation worktree, omit `ledger_root` and Ralph uses that copy. When `/.ledger/` is ignored and remains in the main checkout, pass the main checkout as `ledger_root`. Executors and shared review always run against `root`; controller task mutations always target `ledger_root`. Read tools may inspect the external `.ledger` subtree, but writes there remain controller-only and other files in the ledger checkout remain outside role authority.
 
@@ -136,11 +136,11 @@ The executor policy blocks common forms of:
 
 This is a workflow guard, not an OS sandbox. Trusted local scripts and dependencies can conceal side effects. External, destructive, privileged, irreversible, or materially costly actions remain human-owned.
 
-Workspace snapshots hash tracked and non-ignored files, symlink targets, Git index and status, plus ignored files and symlinks under `.ledger` when the ledger is inside the implementation worktree. An external ledger is protected separately by a task-bundle lease, graph-hash checks before every controller mutation, and root-task digest compare-and-swap. Ledger drift during a role becomes `workspace_conflict`; it is never silently adopted.
+An external or in-tree ledger is protected by a task-bundle lease, graph-hash checks before controller mutations, and root-task digest compare-and-swap. Executor writes that change compiled ledger authority become `authority_required`. Concurrent ledger mutation during a controller write becomes `workspace_conflict`; it is never silently adopted.
 
-Review diffs compare the targeted implementation worktree with its `HEAD`, including staged content. Untracked symlinks are rendered as link metadata and never dereferenced. Nested Git repositories and submodules are rejected. Leases cover both the implementation workspace and authoritative task bundle: different tasks in different worktrees may proceed independently, while the same workspace or same authoritative task cannot execute concurrently.
+Review diffs the targeted implementation worktree against `HEAD`, including staged content. The judge receives a `git status` plus `git diff HEAD` preview, truncated if large. Submodules and in-progress merge/rebase/cherry-pick are refused at start. Leases cover both the implementation workspace and authoritative task bundle: different tasks in different worktrees may proceed independently, while the same workspace or same authoritative task cannot execute concurrently.
 
-Human changes during the executor stage cannot be attributed and would enter that iteration's review input. Do not edit the checkout during a run. Drift before, between, or after roles is a visible workspace conflict.
+Human edits in the implementation checkout are ordinary dirty work. They do not abort the run.
 
 ## Receipts and recovery
 
@@ -150,7 +150,7 @@ Receipts live outside the repository:
 $PI_CODING_AGENT_DIR/ralph/runs/<project-hash>/<run-id>.jsonl
 ```
 
-The default agent directory is `~/.pi/agent`. Receipts are keyed by canonical implementation worktree. Schema v2 stores both the absolute implementation `projectRoot` and absolute `ledgerRoot` plus `taskPath`. Events are append-only and sequence-numbered. Replay validates schema, structurally valid roots, task path, immutable metadata, legal state transitions, iteration progression, monotonic token usage, recorded budget fields, and embedded workspace snapshot hashes before trusting state. Recorded budget fields are receipt compatibility, not runtime abort thresholds. Status and audit replay do not require the ledger checkout to still exist; continuing execution does.
+The default agent directory is `~/.pi/agent`. Receipts are keyed by canonical implementation worktree. Schema v2 stores both the absolute implementation `projectRoot` and absolute `ledgerRoot` plus `taskPath`. Events are append-only and sequence-numbered. Replay validates schema, structurally valid roots, task path, immutable metadata, legal state transitions, iteration progression, monotonic token usage, and recorded budget fields before trusting state. Recorded budget fields and any historical workspace snapshots are receipt compatibility, not runtime abort thresholds. Status and audit replay do not require the ledger checkout to still exist; continuing execution does.
 
 Schema-v1 `.10x` receipts are retained as audit files but are not resumable and are omitted from current run listings. Addressing one directly returns an explicit legacy error; there is no dual execution runtime.
 

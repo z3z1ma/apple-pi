@@ -4,14 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createExecutorAuthorityPolicy, explainBashDenial } from "../src/authority-policy.js";
-import {
-	assertCleanWorkspace,
-	assertWorkspaceMatches,
-	captureWorkspace,
-	changedPaths,
-	renderWorkspaceChanges,
-	WorkspaceError,
-} from "../src/workspace.js";
+import { assertWorkspaceReady, renderWorkspaceChanges, WorkspaceError } from "../src/workspace.js";
 
 const roots: string[] = [];
 
@@ -31,87 +24,29 @@ function repository(): string {
 	return root;
 }
 
-describe("Ralph workspace snapshots", () => {
-	it("requires a clean established repository and detects exact drift", () => {
+describe("Ralph workspace readiness", () => {
+	it("allows a dirty checkout and renders status plus diff", () => {
 		const root = repository();
-		expect(() => assertCleanWorkspace(root)).not.toThrow();
-		const before = captureWorkspace(root);
+		expect(() => assertWorkspaceReady(root)).not.toThrow();
 		writeFileSync(join(root, "source.txt"), "after\n");
 		writeFileSync(join(root, "new.txt"), "new\n");
-		expect(() => assertCleanWorkspace(root)).toThrowError(/must be clean/);
-		const after = captureWorkspace(root);
-		expect(changedPaths(before, after).map((change) => [change.change, change.path])).toEqual([
-			["added", "new.txt"],
-			["modified", "source.txt"],
-		]);
-		expect(() => assertWorkspaceMatches(before, after)).toThrowError(/changed outside/);
+		expect(() => assertWorkspaceReady(root)).not.toThrow();
+		const rendered = renderWorkspaceChanges(root);
+		expect(rendered).toContain("source.txt");
+		expect(rendered).toContain("new.txt");
+		expect(rendered).toContain("+after");
 	});
 
-	it("seals ignored ledger authority without making the Git workspace dirty", () => {
-		const root = repository();
-		writeFileSync(join(root, ".gitignore"), "/.ledger/\n");
-		execFileSync("git", ["-C", root, "add", ".gitignore"]);
-		execFileSync("git", ["-C", root, "commit", "-qm", "ignore ledger"]);
-		mkdirSync(join(root, ".ledger", "202608151200-local-task"), { recursive: true });
-		writeFileSync(join(root, ".ledger", "README.md"), "# Task Ledger\n");
-		writeFileSync(join(root, ".ledger", "202608151200-local-task", "task.md"), "Status: active\n");
-		expect(() => assertCleanWorkspace(root)).not.toThrow();
-		const before = captureWorkspace(root);
-		expect(before.entries.map((entry) => entry.path)).toContain(".ledger/202608151200-local-task/task.md");
-		writeFileSync(join(root, ".ledger", "202608151200-local-task", "task.md"), "Status: done\n");
-		const after = captureWorkspace(root);
-		expect(changedPaths(before, after)).toContainEqual(
-			expect.objectContaining({ change: "modified", path: ".ledger/202608151200-local-task/task.md" }),
-		);
-	});
-
-	it("includes staged changes and tracked symlinks in the sealed review state", () => {
-		const root = repository();
-		const outside = mkdtempSync(join(tmpdir(), "ralph-outside-"));
-		roots.push(outside);
-		writeFileSync(join(outside, "target.txt"), "TOP-SECRET-CONTENT\n");
-		symlinkSync(join(outside, "target.txt"), join(root, "linked.txt"));
-		execFileSync("git", ["-C", root, "add", "linked.txt"]);
-		execFileSync("git", ["-C", root, "commit", "-qm", "track symlink"]);
-		const baseline = captureWorkspace(root);
-		expect(baseline.entries.find((entry) => entry.path === "linked.txt")?.kind).toBe("symlink");
-		writeFileSync(join(root, "source.txt"), "staged\n");
-		execFileSync("git", ["-C", root, "add", "source.txt"]);
-		symlinkSync(join(outside, "target.txt"), join(root, "untracked-link.txt"));
-		const current = captureWorkspace(root);
-		expect(current.indexHash).not.toBe(baseline.indexHash);
-		const rendered = renderWorkspaceChanges(root, baseline, current).text;
-		expect(rendered).toContain("+staged");
-		expect(rendered).toContain("Untracked symlink: untracked-link.txt");
-		expect(rendered).not.toContain("TOP-SECRET-CONTENT");
-	});
-
-	it("rejects nested repositories and Gitlinks from the Ralph workspace", () => {
-		const nested = repository();
-		mkdirSync(join(nested, "vendor", ".git"), { recursive: true });
-		writeFileSync(join(nested, "vendor", "file.ts"), "nested\n");
-		expect(() => captureWorkspace(nested)).toThrowError(/nested Git repository/);
+	it("refuses merge-in-progress and Git submodules", () => {
+		const merging = repository();
+		writeFileSync(join(merging, ".git", "MERGE_HEAD"), "a".repeat(40));
+		expect(() => assertWorkspaceReady(merging)).toThrow(WorkspaceError);
+		expect(() => assertWorkspaceReady(merging)).toThrowError(/MERGE_HEAD/);
 
 		const submodule = repository();
 		const head = execFileSync("git", ["-C", submodule, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 		execFileSync("git", ["-C", submodule, "update-index", "--add", "--cacheinfo", `160000,${head},vendor/submodule`]);
-		expect(() => captureWorkspace(submodule)).toThrowError(/Git submodules/);
-	});
-
-	it("treats commits and branch changes as conflicts", () => {
-		const root = repository();
-		const before = captureWorkspace(root);
-		writeFileSync(join(root, "source.txt"), "committed\n");
-		execFileSync("git", ["-C", root, "add", "."]);
-		execFileSync("git", ["-C", root, "commit", "-qm", "unexpected"]);
-		const after = captureWorkspace(root);
-		try {
-			changedPaths(before, after);
-			throw new Error("expected HEAD conflict");
-		} catch (error) {
-			expect(error).toBeInstanceOf(WorkspaceError);
-			expect((error as WorkspaceError).code).toBe("head_changed");
-		}
+		expect(() => assertWorkspaceReady(submodule)).toThrowError(/Git submodules/);
 	});
 });
 

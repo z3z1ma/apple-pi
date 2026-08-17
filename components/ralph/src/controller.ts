@@ -49,14 +49,7 @@ import {
 	missingCriterionEvidence,
 	WorkGraphError,
 } from "./work-graph.js";
-import {
-	assertCleanWorkspace,
-	assertWorkspaceMatches,
-	captureWorkspace,
-	changedPaths,
-	renderWorkspaceChanges,
-	WorkspaceError,
-} from "./workspace.js";
+import { assertWorkspaceReady, renderWorkspaceChanges, WorkspaceError } from "./workspace.js";
 
 export const DEFAULT_RALPH_BUDGETS: RalphBudgets = {
 	maxIterations: 10,
@@ -119,19 +112,17 @@ export class RalphController {
 		const mode = options.mode ?? "step";
 		if (mode !== "step" && mode !== "auto") throw new Error(`Invalid Ralph mode: ${String(mode)}`);
 		const roots = resolveRalphRoots(ctx.cwd, options.root, options.ledgerRoot);
-		const preflight = compileWorkGraph(roots.workspaceRoot, taskPath, {}, roots.ledgerRoot);
+		const preflight = compileWorkGraph(roots.workspaceRoot, taskPath, roots.ledgerRoot);
 		const budgets = normalizeBudgets(options.budgets, deriveRalphBudgets(mode));
 		const runId = randomUUID();
 		const releaseLeases = acquireRalphRunLeases(roots.workspaceRoot, roots.ledgerRoot, preflight.task.path, runId);
 		try {
-			assertCleanWorkspace(roots.workspaceRoot);
-			const baselineWorkspace = captureWorkspace(roots.workspaceRoot);
-			let graph = compileWorkGraph(roots.workspaceRoot, preflight.task.path, {}, roots.ledgerRoot);
+			assertWorkspaceReady(roots.workspaceRoot);
+			let graph = compileWorkGraph(roots.workspaceRoot, preflight.task.path, roots.ledgerRoot);
 			if (graph.task.status === "open") {
 				await activateTask(graph.task.absolutePath, graph.task.digest);
-				graph = compileWorkGraph(roots.workspaceRoot, graph.task.path, {}, roots.ledgerRoot);
+				graph = compileWorkGraph(roots.workspaceRoot, graph.task.path, roots.ledgerRoot);
 			}
-			const expectedWorkspace = captureWorkspace(roots.workspaceRoot);
 			const now = new Date().toISOString();
 			const run: RalphRun = {
 				schemaVersion: 2,
@@ -147,14 +138,11 @@ export class RalphController {
 				startedAt: now,
 				updatedAt: now,
 				graphHash: graph.graphHash,
-				baselineWorkspace,
-				expectedWorkspace,
 				totalTokens: 0,
 			};
 			await appendReceipt(run, {
 				outcome: "run_started",
 				graphHash: graph.graphHash,
-				workspaceHashAfter: expectedWorkspace.hash,
 			});
 			return run;
 		} finally {
@@ -212,15 +200,6 @@ export class RalphController {
 					"A prior process ended during an agent stage; Ralph never resumes that context",
 				);
 				return run;
-			} finally {
-				releaseLeases();
-			}
-		}
-		try {
-			assertWorkspaceMatches(run.expectedWorkspace, captureWorkspace(run.projectRoot));
-		} catch (error) {
-			try {
-				return await this.handleFailure(run, error);
 			} finally {
 				releaseLeases();
 			}
@@ -312,10 +291,8 @@ export class RalphController {
 	}
 
 	private async runIteration(ctx: ExtensionContext, run: RalphRun, control: ActiveRunControl): Promise<RalphRun> {
-		let graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		let graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		this.assertGraphUnchanged(run, graph.graphHash);
-		assertWorkspaceMatches(run.expectedWorkspace, captureWorkspace(run.projectRoot));
-		const beforeExecutor = run.expectedWorkspace;
 
 		run.state = "executing";
 		run.updatedAt = new Date().toISOString();
@@ -325,7 +302,6 @@ export class RalphController {
 			outcome: "stage_started",
 			graphHash: graph.graphHash,
 			roleSkillHash: executorProfile.skillHash,
-			workspaceHashBefore: run.expectedWorkspace.hash,
 		});
 		const denials: AuthorityDenial[] = [];
 		const executorStageAbort = new AbortController();
@@ -354,47 +330,39 @@ export class RalphController {
 			control,
 			denials.length > 0,
 		);
-		const afterExecutorTools = captureWorkspace(run.projectRoot);
-		run.expectedWorkspace = afterExecutorTools;
 		if (denials.length > 0)
 			return this.gate(run, "authority_required", denials.map((denial) => denial.reason).join("; "));
-		const semanticChanges = changedPaths(beforeExecutor, afterExecutorTools).filter(
-			(change) => change.path === ".ledger" || change.path.startsWith(".ledger/"),
-		);
-		if (semanticChanges.length > 0) {
-			return this.gate(
-				run,
-				"authority_required",
-				`Executor changed semantic authority directly: ${semanticChanges.map((change) => change.path).join(", ")}`,
-			);
+		try {
+			const afterExecutorTools = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
+			if (afterExecutorTools.graphHash !== run.graphHash) {
+				return this.gateLedgerDrift(run, "Executor changed semantic authority directly");
+			}
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			return this.gateLedgerDrift(run, `Executor changed semantic authority directly: ${reason}`);
 		}
-		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
 		if (executorRole.submissionCount !== 1 || executorRole.output === undefined) {
 			throw new RalphGateError("error", "Ralph executor did not submit exactly one typed result", "invalid_output");
 		}
 		const executor = parseExecutorOutput(executorRole.output);
 		const workItemProposals = validateWorkItemProposals(graph, executor.workItemCompletions);
 		await recordExecutorOutcome(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, executor);
-		const afterExecutor = captureWorkspace(run.projectRoot);
-		run.expectedWorkspace = afterExecutor;
 		if (executor.status === "blocked") {
 			await appendReceipt(run, {
 				stage: "executor",
 				outcome: executor.status,
 				structuredOutput: executor,
 				workItems: { proposals: workItemProposals },
-				workspaceHashAfter: afterExecutor.hash,
 			});
 			return this.gate(run, "blocked", executor.blockers.join("; ") || executor.summary);
 		}
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
 		await appendReceipt(run, {
 			stage: "executor",
 			outcome: executor.status,
 			structuredOutput: executor,
 			workItems: { proposals: workItemProposals },
-			workspaceHashAfter: afterExecutor.hash,
 		});
 		if (executor.status === "failed") return this.gate(run, "error", executor.summary);
 		run.state = "reviewing";
@@ -403,7 +371,6 @@ export class RalphController {
 			stage: "reviewer",
 			outcome: "stage_started",
 			graphHash: graph.graphHash,
-			workspaceHashBefore: afterExecutor.hash,
 		});
 		const reviewRun = await this.reviewController.run(
 			ctx,
@@ -425,24 +392,20 @@ export class RalphController {
 				"Independent review was cancelled by the caller",
 				"external_cancellation",
 			);
-		const afterReviewer = captureWorkspace(run.projectRoot);
-		assertWorkspaceMatches(afterExecutor, afterReviewer);
 		const review = ralphReviewOutput(reviewRun);
 		await appendReceipt(run, {
 			stage: "reviewer",
 			outcome: review.verdict,
 			structuredOutput: { reviewRunId: reviewRun.runId, review },
-			workspaceHashAfter: afterReviewer.hash,
 		});
 		if (reviewRun.state !== "complete" && reviewRun.state !== "skipped") {
 			return this.gate(run, "review_failed", `Shared review did not complete: ${summarizeReviewRun(reviewRun)}`);
 		}
-		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
+		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot).graphHash);
 		await appendIndependentReview(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, review);
-		run.expectedWorkspace = captureWorkspace(run.projectRoot);
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
-		const judgedChanges = renderWorkspaceChanges(run.projectRoot, run.baselineWorkspace, run.expectedWorkspace);
+		const judgedChanges = renderWorkspaceChanges(run.projectRoot);
 
 		run.state = "judging";
 		run.updatedAt = new Date().toISOString();
@@ -452,9 +415,7 @@ export class RalphController {
 			outcome: "stage_started",
 			graphHash: graph.graphHash,
 			roleSkillHash: judgeProfileValue.skillHash,
-			workspaceHashBefore: run.expectedWorkspace.hash,
 		});
-		const beforeJudge = run.expectedWorkspace;
 		const judgeDenials: AuthorityDenial[] = [];
 		const judgeStageAbort = new AbortController();
 		const judgeRole = await this.runRole(
@@ -462,7 +423,7 @@ export class RalphController {
 			run,
 			control,
 			"judge",
-			judgePrompt(graph, judgedChanges.text, executor, review),
+			judgePrompt(graph, judgedChanges, executor, review),
 			judgeProfileValue,
 			createExecutorAuthorityPolicy(
 				run.projectRoot,
@@ -484,8 +445,6 @@ export class RalphController {
 		);
 		if (judgeDenials.length > 0)
 			return this.gate(run, "authority_required", judgeDenials.map((denial) => denial.reason).join("; "));
-		const afterJudge = captureWorkspace(run.projectRoot);
-		assertWorkspaceMatches(beforeJudge, afterJudge);
 		if (judgeRole.submissionCount !== 1 || judgeRole.output === undefined) {
 			throw new RalphGateError("error", "Ralph judge did not submit exactly one typed result", "invalid_output");
 		}
@@ -496,9 +455,8 @@ export class RalphController {
 			outcome: judgment.decision,
 			structuredOutput: judgment,
 			workItems: { judgments: workItemJudgments },
-			workspaceHashAfter: afterJudge.hash,
 		});
-		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot).graphHash);
+		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot).graphHash);
 		const judgmentMutation = await appendJudgment(
 			graph.task.absolutePath,
 			graph.task.digest,
@@ -506,7 +464,7 @@ export class RalphController {
 			run.iteration,
 			judgment,
 		);
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		if (graph.task.digest !== judgmentMutation.digest) {
 			throw new WorkGraphError("Ledger authority changed after judgment", "semantic_authority_changed");
 		}
@@ -518,8 +476,7 @@ export class RalphController {
 				: `Rejected work items: ${rejectedWorkItems.map((item) => `${item.id} (${item.reason})`).join(", ")}`;
 		if (confirmedWorkItems.length > 0)
 			await completeTaskWorkItemsUnderLease(graph.task.absolutePath, graph.task.digest, run.runId, confirmedWorkItems);
-		run.expectedWorkspace = captureWorkspace(run.projectRoot);
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
 		await appendReceipt(run, {
 			stage: "judge",
@@ -529,14 +486,12 @@ export class RalphController {
 				rejectedIds: rejectedWorkItems.map((item) => item.id),
 				taskDigest: graph.task.digest,
 			},
-			workspaceHashAfter: run.expectedWorkspace.hash,
 		});
 
 		if (judgment.decision === "close") return this.closeIfSupported(run, graph, review, judgment);
 		if (judgment.decision === "blocked") {
 			const reason = [judgment.reason, rejectedSummary].filter(Boolean).join("; ");
 			await blockTask(graph.task.absolutePath, graph.task.digest, reason);
-			run.expectedWorkspace = captureWorkspace(run.projectRoot);
 			return this.gate(run, "blocked", reason);
 		}
 		if (judgment.decision === "stop")
@@ -553,13 +508,11 @@ export class RalphController {
 			run.iteration,
 			`Judgment requested another fresh iteration: ${judgment.reason}`,
 		);
-		run.expectedWorkspace = captureWorkspace(run.projectRoot);
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, {}, run.ledgerRoot);
+		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
 		await appendReceipt(run, {
 			outcome: "iteration_complete",
 			structuredOutput: judgment,
-			workspaceHashAfter: run.expectedWorkspace.hash,
 		});
 		return run;
 	}
@@ -704,7 +657,6 @@ export class RalphController {
 		];
 		if (failures.length > 0) return this.gate(run, "evidence_failed", failures.join("; "));
 		await closeTask(graph.task.absolutePath, graph.task.digest);
-		run.expectedWorkspace = captureWorkspace(run.projectRoot);
 		run.state = "done";
 		run.lastOutcome = judgment.reason;
 		run.nextObjective = undefined;
@@ -712,7 +664,6 @@ export class RalphController {
 		await appendReceipt(run, {
 			outcome: "task_closed",
 			structuredOutput: judgment,
-			workspaceHashAfter: run.expectedWorkspace.hash,
 		});
 		return run;
 	}
@@ -748,15 +699,7 @@ export class RalphController {
 
 	private async handleFailure(run: RalphRun, error: unknown): Promise<RalphRun> {
 		if (error instanceof RalphGateError) return this.gate(run, error.state, error.message, error.cause);
-		if (error instanceof WorkspaceError) {
-			return this.gate(
-				run,
-				error.code === "workspace_conflict" || error.code === "head_changed" || error.code === "branch_changed"
-					? "workspace_conflict"
-					: "error",
-				error.message,
-			);
-		}
+		if (error instanceof WorkspaceError) return this.gate(run, "error", error.message);
 		if (error instanceof WorkGraphError) {
 			const state: RalphTerminalState =
 				error.code === "task_blocked" || error.code === "inactive_authority"
@@ -767,6 +710,15 @@ export class RalphController {
 			return this.gate(run, state, error.message);
 		}
 		return this.gate(run, "error", error instanceof Error ? error.message : String(error));
+	}
+
+	private gateLedgerDrift(run: RalphRun, executorReason: string): Promise<RalphRun> {
+		const inTreeLedger = run.projectRoot === run.ledgerRoot;
+		return this.gate(
+			run,
+			inTreeLedger ? "authority_required" : "workspace_conflict",
+			inTreeLedger ? executorReason : "Ledger authority changed outside the Ralph controller",
+		);
 	}
 
 	private assertGraphUnchanged(run: RalphRun, actualHash: string): void {

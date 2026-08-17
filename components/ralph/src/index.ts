@@ -56,7 +56,7 @@ export function inspectionText(graph: ReturnType<typeof compileWorkGraph>): stri
 
 function inspectText(cwd: string, task: string, root?: string, ledgerRoot?: string): string {
 	const roots = resolveRalphRoots(cwd, root, ledgerRoot);
-	return inspectionText(compileWorkGraph(roots.workspaceRoot, task, {}, roots.ledgerRoot));
+	return inspectionText(compileWorkGraph(roots.workspaceRoot, task, roots.ledgerRoot));
 }
 
 function optionsFromParams(params: Record<string, unknown>): StartRunOptions {

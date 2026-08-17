@@ -15,7 +15,6 @@ import {
 } from "../src/task.js";
 import type { RalphRun } from "../src/types.js";
 import { compileWorkGraph } from "../src/work-graph.js";
-import { captureWorkspace } from "../src/workspace.js";
 
 const roots: string[] = [];
 const TASK = ".ledger/202608151200-work/task.md";
@@ -322,7 +321,6 @@ describe("task recording and receipts", () => {
 		const agentDir = mkdtempSync(join(tmpdir(), "ralph-agent-dir-"));
 		roots.push(agentDir);
 		process.env.PI_CODING_AGENT_DIR = agentDir;
-		const snapshot = captureWorkspace(root);
 		const auditLedger = mkdtempSync(join(tmpdir(), "ralph-removed-ledger-"));
 		roots.push(auditLedger);
 		const storedLedgerRoot = realpathSync(auditLedger);
@@ -346,8 +344,6 @@ describe("task recording and receipts", () => {
 			startedAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString(),
 			graphHash: "a".repeat(64),
-			baselineWorkspace: snapshot,
-			expectedWorkspace: snapshot,
 			totalTokens: 0,
 		};
 		await expect(appendReceipt(run, { outcome: "malformed", workItems: null as never })).rejects.toThrow(

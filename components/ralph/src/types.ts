@@ -50,13 +50,6 @@ export interface WorkspaceSnapshot {
 	hash: string;
 }
 
-export interface ChangedPath {
-	path: string;
-	change: "added" | "modified" | "deleted";
-	before?: string;
-	after?: string;
-}
-
 export type RalphRole = "executor" | "reviewer" | "judge";
 export type RalphAgentRole = "executor" | "judge";
 export type RalphMode = "step" | "auto";
@@ -124,8 +117,8 @@ export interface RalphRun {
 	startedAt: string;
 	updatedAt: string;
 	graphHash: string;
-	baselineWorkspace: WorkspaceSnapshot;
-	expectedWorkspace: WorkspaceSnapshot;
+	baselineWorkspace?: WorkspaceSnapshot;
+	expectedWorkspace?: WorkspaceSnapshot;
 	totalTokens: number;
 	activeAgentId?: string;
 	lastOutcome?: string;

@@ -32,11 +32,6 @@ const KIND_ORDER: Record<RecordKind, number> = {
 	evidence: 7,
 };
 
-export interface WorkGraphLimits {
-	maxRecords?: number;
-	maxBytes?: number;
-}
-
 export class WorkGraphError extends Error {
 	constructor(
 		message: string,
@@ -273,7 +268,6 @@ function assertIndexed(index: string, taskPath: string): void {
 export function compileWorkGraph(
 	projectRootInput: string,
 	taskInput: string,
-	limits: WorkGraphLimits = {},
 	ledgerRootInput = projectRootInput,
 ): CompiledWorkGraph {
 	const projectRoot = realpathSync(projectRootInput);
@@ -297,16 +291,12 @@ export function compileWorkGraph(
 	const sourcePointers = new Set<string>();
 	const visiting = new Set<string>();
 	const visited = new Set<string>();
-	const maxRecords = limits.maxRecords ?? 64;
-	const maxBytes = limits.maxBytes ?? 256 * 1024;
 
 	const addRecord = (path: string): WorkRecord => {
 		let record = records.get(path);
 		if (!record) {
 			record = loadRecord(ledgerRoot, path);
 			records.set(path, record);
-			if (records.size > maxRecords)
-				throw new WorkGraphError(`Work graph exceeds ${maxRecords} records`, "graph_record_budget");
 		}
 		return record;
 	};
@@ -382,8 +372,6 @@ export function compileWorkGraph(
 		);
 	const bundle = `${bundleParts.join("\n\n---\n\n")}\n`;
 	const byteLength = Buffer.byteLength(bundle);
-	if (byteLength > maxBytes)
-		throw new WorkGraphError(`Compiled context is ${byteLength} bytes; limit is ${maxBytes}`, "graph_byte_budget");
 	const graphHash = sha256(ordered.map((record) => `${record.path}\0${record.digest}`).join("\n"));
 	return {
 		projectRoot,

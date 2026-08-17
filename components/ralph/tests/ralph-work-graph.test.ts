@@ -162,7 +162,7 @@ describe("compileWorkGraph", () => {
 		expect(first.bundle.indexOf(TASK)).toBeLessThan(first.bundle.indexOf(`${BUNDLE}/specs/behavior.md`));
 	});
 
-	it("rejects missing records, blockers, stale authority, and context overflow", () => {
+	it("rejects missing records, blockers, and stale authority", () => {
 		const missing = project();
 		put(missing, TASK, task({ references: `- \`${BUNDLE}/specs/missing.md\`` }));
 		expect(() => compileWorkGraph(missing, TASK)).toThrowError(/does not exist/);
@@ -175,10 +175,6 @@ describe("compileWorkGraph", () => {
 		put(stale, `${BUNDLE}/specs/old.md`, record("superseded", "Old"));
 		put(stale, TASK, task({ references: `- \`${BUNDLE}/specs/old.md\`` }));
 		expect(() => compileWorkGraph(stale, TASK)).toThrowError(/expected active/);
-
-		const large = project();
-		put(large, TASK, task());
-		expect(() => compileWorkGraph(large, TASK, { maxBytes: 100 })).toThrowError(/limit is 100/);
 	});
 
 	it("enforces canonical task bundles, index membership, and local record ownership", () => {

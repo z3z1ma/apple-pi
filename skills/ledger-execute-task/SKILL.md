@@ -7,7 +7,7 @@ description: "Use when an authorized, shaped .ledger task is ready for bounded R
 
 Confirm the operator authorized implementation of the named task. Run `ralph inspect` first and resolve graph errors in shaping, not by weakening the records.
 
-Ralph requires a trusted session repository, active model, established Git `HEAD`, clean implementation checkout, and no nested repositories or submodules. The model-facing `ralph` tool is the primary orchestration interface. Its optional `root` targets a linked implementation worktree; `ledger_root` selects the linked checkout containing authoritative `.ledger` and defaults to `root`. Teams may ignore `/.ledger/`; solo developers may commit it.
+Ralph requires a trusted session repository, active model, and a Git worktree with `HEAD`. Dirty checkouts are allowed. Refuse merge/rebase in progress and Git submodules. The model-facing `ralph` tool is the primary orchestration interface. Its optional `root` targets a linked implementation worktree; `ledger_root` selects the linked checkout containing authoritative `.ledger` and defaults to `root`. Teams may ignore `/.ledger/`; solo developers may commit it.
 
 When the ledger is committed and current in the worktree, use that worktree as `root` and omit `ledger_root`. When the ledger is ignored and remains in the main checkout, pass the worktree as `root` and the main checkout as `ledger_root`. Ralph creates neither worktrees nor commits; those remain explicit orchestrator decisions.
 

@@ -264,6 +264,7 @@ describe("Ralph state machine", () => {
 
 	it("runs three distinct fresh roles, records review/judgment, and closes only after all gates", async () => {
 		const root = repository();
+		writeFileSync(join(root, "source.txt"), "dirty before ralph\n");
 		const seen: ManagedAgentRequest[] = [];
 		const mock = service(
 			[
@@ -582,7 +583,10 @@ describe("Ralph state machine", () => {
 				{
 					role: "ralph-executor",
 					output: executorDone,
-					mutate: () => writeFileSync(join(root, ".ledger", "README.md"), "# Compromised ledger\n"),
+					mutate: () => {
+						const path = join(root, TASK);
+						writeFileSync(path, readFileSync(path, "utf8").replace("Status: active", "Status: done"));
+					},
 				},
 			],
 			[],
@@ -591,27 +595,7 @@ describe("Ralph state machine", () => {
 		const started = await controller.start(context(root), TASK);
 		const result = await controller.step(context(root), started.runId);
 		expect(result.state).toBe("authority_required");
-		expect(result.lastOutcome).toMatch(/\.ledger\/README\.md/);
-	});
-
-	it("stops when a read-only reviewer mutates the workspace", async () => {
-		const root = repository();
-		const mock = service(
-			[
-				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-				{
-					role: "shared-review-test",
-					output: reviewPass,
-					mutate: () => writeFileSync(join(root, "reviewer-write.txt"), "not allowed\n"),
-				},
-			],
-			[],
-		);
-		const controller = testController(mock);
-		const started = await controller.start(context(root), TASK);
-		const result = await controller.step(context(root), started.runId);
-		expect(result.state).toBe("workspace_conflict");
-		expect(readFileSync(join(root, TASK), "utf8")).not.toContain("Ralph independent review");
+		expect(result.lastOutcome).toMatch(/semantic authority directly/);
 	});
 
 	it("refuses a judge close decision when task evidence, retrospective, and distillation gates are unmet", async () => {
@@ -636,17 +620,23 @@ describe("Ralph state machine", () => {
 		expect(readFileSync(join(root, TASK), "utf8")).not.toContain("Status: done");
 	});
 
-	it("records between-step workspace drift as a terminal conflict without launching an agent", async () => {
+	it("continues when the workspace is dirty between start and step", async () => {
 		const root = repository();
 		const seen: ManagedAgentRequest[] = [];
-		const mock = service([], seen);
+		const mock = service(
+			[
+				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
+				{ role: "shared-review-test", output: reviewPass },
+				{ role: "ralph-judge", output: judgeClose },
+			],
+			seen,
+		);
 		const controller = testController(mock);
 		const started = await controller.start(context(root), TASK);
 		writeFileSync(join(root, "source.txt"), "external edit\n");
 		const result = await controller.step(context(root), started.runId);
-		expect(result.state).toBe("workspace_conflict");
-		expect(seen).toHaveLength(0);
-		expect((controller.status(root, started.runId) as any).state).toBe("workspace_conflict");
+		expect(result.state).toBe("done");
+		expect(seen.some((request) => request.type === "ralph-executor")).toBe(true);
 	});
 
 	it("waits for the active role to quiesce before returning an operator stop", async () => {

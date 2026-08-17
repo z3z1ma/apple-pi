@@ -255,12 +255,8 @@ function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun
 		if (!Number.isInteger(value) || value < minimum || value > maximum)
 			throw new Error(`Receipt event ${event.sequence} has invalid budget ${key}`);
 	}
-	validateSnapshot(run.baselineWorkspace, "baselineWorkspace");
-	validateSnapshot(run.expectedWorkspace, "expectedWorkspace");
-	if (event.workspaceHashBefore !== undefined && event.workspaceHashBefore !== run.expectedWorkspace.hash)
-		throw new Error(`Receipt event ${event.sequence} has inconsistent workspaceHashBefore`);
-	if (event.workspaceHashAfter !== undefined && event.workspaceHashAfter !== run.expectedWorkspace.hash)
-		throw new Error(`Receipt event ${event.sequence} has inconsistent workspaceHashAfter`);
+	if (run.baselineWorkspace !== undefined) validateSnapshot(run.baselineWorkspace, "baselineWorkspace");
+	if (run.expectedWorkspace !== undefined) validateSnapshot(run.expectedWorkspace, "expectedWorkspace");
 	if (
 		genesis &&
 		(run.projectRoot !== genesis.projectRoot ||
@@ -269,7 +265,7 @@ function validateRunState(run: RalphRun, event: ReceiptEvent, genesis?: RalphRun
 			run.mode !== genesis.mode ||
 			run.startedAt !== genesis.startedAt ||
 			JSON.stringify(run.budgets) !== JSON.stringify(genesis.budgets) ||
-			run.baselineWorkspace.hash !== genesis.baselineWorkspace.hash)
+			run.baselineWorkspace?.hash !== genesis.baselineWorkspace?.hash)
 	)
 		throw new Error(`Receipt event ${event.sequence} changed immutable run metadata`);
 	if (previous) {
