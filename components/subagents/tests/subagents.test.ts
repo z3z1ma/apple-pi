@@ -28,21 +28,24 @@ afterEach(() => {
 });
 
 describe("owned subagent surface", () => {
-	it("includes full background-agent output in parent notifications", () => {
-		const output = "x".repeat(75_000);
-		const notification = formatNotification({
-			id: "agent-1",
-			type: "Explore",
-			description: "large result",
-			status: "completed",
-			result: output,
-			toolUses: 0,
-			startedAt: Date.now(),
-			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
-			compactionCount: 0,
-		});
-		expect(notification).toContain(`<result>${output}</result>`);
-		expect(notification).not.toContain("truncated");
+	it("keeps automatic completion notifications to a preview", () => {
+		const output = "x".repeat(750);
+		const notification = formatNotification(
+			{
+				id: "agent-1",
+				type: "Explore",
+				description: "large result",
+				status: "completed",
+				result: output,
+				toolUses: 0,
+				startedAt: Date.now(),
+				lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+				compactionCount: 0,
+			},
+			500,
+		);
+		expect(notification).toContain(`${"x".repeat(500)}\n...(truncated; use get_subagent_result for full output)`);
+		expect(notification).not.toContain(output);
 	});
 
 	it("uses Luna for the built-in read-only explorer", () => {

@@ -104,7 +104,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		pi.sendMessage<NotificationDetails>(
 			{
 				customType: "subagent-notification",
-				content: formatNotification(record),
+				content: formatNotification(record, 500),
 				display: true,
 				details: notificationDetails(record, 500, activityById.get(record.id)),
 			},
@@ -125,7 +125,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			pi.sendMessage<NotificationDetails>(
 				{
 					customType: "subagent-notification",
-					content: `${partial ? "Partial background agent group" : "Background agent group completed"}\n\n${unconsumed.map((record) => formatNotification(record)).join("\n\n")}`,
+					content: `${partial ? "Partial background agent group" : "Background agent group completed"}\n\n${unconsumed.map((record) => formatNotification(record, 300)).join("\n\n")}`,
 					display: true,
 					details,
 				},
