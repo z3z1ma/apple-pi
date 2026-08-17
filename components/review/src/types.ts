@@ -1,3 +1,4 @@
+import type { HarnessBoundedActivity } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
 
 export type ReviewSource =
@@ -331,6 +332,8 @@ export interface StartReviewOptions {
 	constraints?: Partial<Pick<ReviewBudgets, "timeoutSeconds">>;
 
 	routing?: Partial<ReviewModelRouting>;
+	/** Called after the run is durable and live, before cycles execute. */
+	onStarted?: (run: ReviewRun) => void;
 }
 
 export interface ReviewRunSummary {
@@ -345,4 +348,65 @@ export interface ReviewRunSummary {
 	totalTokens: number;
 	updatedAt: string;
 	receiptPath: string;
+}
+
+export type ReviewFocusProgressState = "queued" | "running" | "completed" | "failed";
+export type ReviewRoleProgressStatus = "idle" | "running" | "completed" | "failed";
+export type ReviewReceiptStage = "input" | "planner" | "reviewer" | "verifier" | "finalize";
+
+export interface ReviewPartitionProgress {
+	id: string;
+	title: string;
+	itemCount: number;
+	completedItemCount: number;
+}
+
+export interface ReviewFocusProgress {
+	id: string;
+	partitionId: string;
+	title: string;
+	state: ReviewFocusProgressState;
+	findingCount: number;
+	activity?: HarnessBoundedActivity;
+}
+
+export interface ReviewProgressSnapshot {
+	runId: string;
+	projectRoot: string;
+	source: ReviewSource;
+	profile: ReviewProfile;
+	sequence: number;
+	startedAt: string;
+	updatedAt: string;
+	state: ReviewRunState;
+	stage?: ReviewReceiptStage;
+	cycleIndex: number;
+	cycleCap: number;
+	policy: {
+		profile: ReviewProfile;
+		selectedItems: number;
+		maxCycles: number;
+		maxFocuses: number;
+		maxConcurrency: number;
+	};
+	usage: { totalTokens: number };
+	planner: { status: ReviewRoleProgressStatus; activity?: HarnessBoundedActivity };
+	verifier: { status: ReviewRoleProgressStatus; activity?: HarnessBoundedActivity };
+	partitions: ReviewPartitionProgress[];
+	focuses: ReviewFocusProgress[];
+	findings: Array<{
+		id: string;
+		cycle: number;
+		severity: ReviewSeverity;
+		path: string;
+		summary: string;
+		validation: ReviewValidationStatus;
+	}>;
+	notes: Array<{ id: string; cycle: number; summary: string }>;
+	verifierDecisions: Array<{ findingId: string; status: ReviewValidationStatus }>;
+	metaReview?: ReviewMetaReview;
+	failures: ReviewCoverageFailure[];
+	residualRisk: string[];
+	coverage: { selected: number; completed: number; failed: number; waived: number };
+	terminalOutcome?: { state: ReviewTerminalState; cause?: ReviewTerminalCause; lastOutcome?: string };
 }

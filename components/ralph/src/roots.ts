@@ -24,9 +24,19 @@ export function gitWorktreeRoot(input: string): string {
 	return realpathSync(gitOutput(path, ["rev-parse", "--show-toplevel"]));
 }
 
-function gitCommonDirectory(worktreeRoot: string): string {
+export function gitCommonDirectory(worktreeRoot: string): string {
 	const common = gitOutput(worktreeRoot, ["rev-parse", "--git-common-dir"]);
 	return realpathSync(isAbsolute(common) ? common : resolve(worktreeRoot, common));
+}
+
+export function isLinkedCheckout(sessionRootInput: string, targetRootInput: string): boolean {
+	try {
+		const sessionRoot = gitWorktreeRoot(realpathSync(sessionRootInput));
+		const targetRoot = gitWorktreeRoot(realpathSync(targetRootInput));
+		return gitCommonDirectory(sessionRoot) === gitCommonDirectory(targetRoot);
+	} catch {
+		return false;
+	}
 }
 
 export function resolveRalphRoots(sessionRootInput: string, workspaceInput?: string, ledgerInput?: string): RalphRoots {

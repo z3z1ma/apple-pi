@@ -5,7 +5,7 @@ apple-pi's `review` extension seals a Git change, asks one planner to cut it int
 ## Commands
 
 ```text
-/review                         # run a workspace review
+/review                         # open the Review operations hub (TUI) or a text summary (print/RPC)
 /review preview                 # inspect workspace scope without model calls
 /review preview components/review
 /review run workspace components/review "**/*.ts"
@@ -18,6 +18,8 @@ apple-pi's `review` extension seals a Git change, asks one planner to cut it int
 /review status [run-id]
 /review stop <run-id>
 ```
+
+Argument-less `/review` opens the Review view of the operations hub. `/review run` remains the explicit launch path. Live TUI widgets show cycle, planner status, queued/running/completed/failed focuses, coverage, findings, elapsed time, and usage without exposing internal agent IDs. Enter opens a scrollable detail overlay; `s` then `s` stops an owned standalone run after confirmation. Ralph-owned reviews appear nested under Ralph and cannot be stopped from the Review view. Print/RPC modes never mount overlays or widgets; tools still stream structured `onUpdate` snapshots.
 
 The `review` tool exposes the same `preview`, `run`, `status`, and `stop` actions. Normal tool and command calls accept semantic source, profile, routing, background intent, and optional `paths`. `paths` are repository-relative files, folders, or globs that limit which changes are sealed. Omitted or empty `paths` reviews the whole workspace, range, or commit. Leftover `/review` arguments and `--path` are the command form of the same list. Its optional `root` selects the Git repository or linked worktree to review; relative paths resolve from the caller's cwd. Tool results include the full structured run; the text result is a bounded summary grouped by path. A completed human `/review run` sends that summary back to the current model as a displayed follow-up.
 

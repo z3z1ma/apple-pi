@@ -1,14 +1,16 @@
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { getOperationsRuntime, isTuiContext } from "../../operations/src/runtime.js";
+import { renderReviewProgressCard, throttleUpdates } from "../../operations/src/ui/tool-renderers.js";
 import { matchingCompletions, parseArgv } from "../../shared/src/argv.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
 import { ReviewController, summarizeReviewRun } from "./controller.js";
 import { resolveReviewTargetRoot } from "./git.js";
+import { installReviewOperationsService, reviewOperationsService } from "./operations-service.js";
 import type { ReviewProfile, ReviewRun, ReviewRunSummary, ReviewSource, StartReviewOptions } from "./types.js";
 
-const WIDGET_ID = "review-run";
 const REVIEW_COMPLETION_TYPE = "review-complete";
 
 function reviewCompletionText(run: ReviewRun): string {
@@ -254,20 +256,9 @@ function parseCommand(input: string): ParsedCommand {
 	return { action: parsed.action, values, positional };
 }
 
-function setWidget(ctx: ExtensionCommandContext, run?: ReviewRun): void {
-	if (!ctx.hasUI) return;
-	if (!run) {
-		ctx.ui.setWidget(WIDGET_ID, undefined);
-		return;
-	}
-	ctx.ui.setWidget(
-		WIDGET_ID,
-		[
-			`Review ${run.state} · ${run.source.mode}/${run.profile} · coverage ${run.completedItemIds.length}/${run.selected.length}`,
-			`Findings ${run.findings.filter((finding) => finding.validation.status !== "rejected").length} · tokens ${run.totalTokens} · ${run.terminalCause ?? "running"}`,
-		],
-		{ placement: "aboveEditor" },
-	);
+function attachTui(ctx: ExtensionCommandContext): void {
+	const runtime = getOperationsRuntime();
+	if (runtime && isTuiContext(ctx)) runtime.widget.setUICtx(ctx.ui);
 }
 
 export default function installReview(pi: ExtensionAPI): void {
@@ -275,6 +266,7 @@ export default function installReview(pi: ExtensionAPI): void {
 	let lifecycleEpoch = 0;
 	let sessionCwd: string | undefined;
 	const controller = new ReviewController({ getService: () => getManagedSubagentService(pi.events) });
+	installReviewOperationsService(reviewOperationsService(controller), pi.events);
 	const sourceSchema = {
 		root: Type.Optional(
 			Type.String({
@@ -321,28 +313,53 @@ export default function installReview(pi: ExtensionAPI): void {
 			...optionSchema,
 			run_id: Type.Optional(Type.String()),
 		}),
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			try {
 				sessionCwd = ctx.cwd;
+				const root = resolveReviewTargetRoot(ctx.cwd, params.root);
+				getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "review", root, params.run_id);
 				if (params.action === "status") {
-					const status = controller.status(resolveReviewTargetRoot(ctx.cwd, params.root), params.run_id);
+					const status = controller.status(root, params.run_id);
 					return textResult(Array.isArray(status) ? summariesText(status) : summarizeReviewRun(status), false, status);
 				}
 				if (params.action === "stop") {
-					const run = await controller.stop(
-						resolveReviewTargetRoot(ctx.cwd, params.root),
-						required(params.run_id, "run_id"),
-					);
+					const run = await controller.stop(root, required(params.run_id, "run_id"));
 					return textResult(summarizeReviewRun(run), false, run);
 				}
 				const source = sourceFrom(params);
 				const options = optionsFrom(params);
 				if (params.action === "preview") {
-					const preview = controller.preview(resolveReviewTargetRoot(ctx.cwd, params.root), source, options);
+					const preview = controller.preview(root, source, options);
 					return textResult(previewText(preview), false, preview);
 				}
-				const run = await controller.run(ctx, source, options, signal);
-				return textResult(summarizeReviewRun(run), run.state === "failed" || run.state === "error", run);
+				const push = onUpdate ? throttleUpdates(onUpdate, 200) : undefined;
+				let runId: string | undefined;
+				const unsub = controller.subscribeProgress((snapshot) => {
+					if (!runId || snapshot.runId !== runId) return;
+					push?.({ content: [{ type: "text", text: `Review ${snapshot.state}` }], details: { progress: snapshot } });
+				});
+				try {
+					const run = await controller.run(
+						ctx,
+						source,
+						{
+							...options,
+							onStarted: (started) => {
+								runId = started.runId;
+								getOperationsRuntime(pi.events)?.recordOperationPointer(
+									ctx,
+									"review",
+									started.projectRoot,
+									started.runId,
+								);
+							},
+						},
+						signal,
+					);
+					return textResult(summarizeReviewRun(run), run.state === "failed" || run.state === "error", run);
+				} finally {
+					unsub();
+				}
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), true);
 			}
@@ -354,7 +371,9 @@ export default function installReview(pi: ExtensionAPI): void {
 				0,
 			);
 		},
-		renderResult(result, _options, theme) {
+		renderResult(result, options, theme) {
+			const details = result.details as { progress?: import("./types.js").ReviewProgressSnapshot } | undefined;
+			if (details?.progress) return renderReviewProgressCard(details.progress, theme, options.isPartial) as never;
 			const content = result.content[0]?.type === "text" ? result.content[0].text : "No output";
 			return new Text(theme.fg("dim", content), 0, 0);
 		},
@@ -378,6 +397,13 @@ export default function installReview(pi: ExtensionAPI): void {
 		handler: async (input, ctx) => {
 			try {
 				sessionCwd = ctx.cwd;
+				attachTui(ctx);
+				if (!input.trim()) {
+					const runtime = getOperationsRuntime(pi.events);
+					if (runtime) await runtime.openHub(ctx, "review");
+					else ctx.ui.notify("Harness hub is not available.", "error");
+					return;
+				}
 				const parsed = parseCommand(input);
 				if (parsed.action === "status") {
 					const status = controller.status(
@@ -392,7 +418,6 @@ export default function installReview(pi: ExtensionAPI): void {
 						resolveReviewTargetRoot(ctx.cwd, typeof parsed.values.root === "string" ? parsed.values.root : undefined),
 						required(parsed.positional[0], "run-id"),
 					);
-					setWidget(ctx, run);
 					ctx.ui.notify(summarizeReviewRun(run), "warning");
 					return;
 				}
@@ -408,22 +433,30 @@ export default function installReview(pi: ExtensionAPI): void {
 						ctx.cwd,
 						typeof parsed.values.root === "string" ? parsed.values.root : undefined,
 					);
+					getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "review", root);
 					ctx.ui.notify(previewText(controller.preview(root, source, options)), "info");
 					return;
 				}
-				ctx.ui.setWidget(
-					WIDGET_ID,
-					[`Review planning · ${source.mode}`, "Sealing input and opening review partitions…"],
-					{ placement: "aboveEditor" },
-				);
 				ctx.ui.notify(
 					"Review started. Changes to the selected input before completion will invalidate the run.",
 					"info",
 				);
 				const launchEpoch = lifecycleEpoch;
-				void controller.run(ctx, source, options).then(
+				let resolveStarted: () => void = () => {};
+				const started = new Promise<void>((resolve) => {
+					resolveStarted = resolve;
+				});
+				const pending = controller.run(ctx, source, {
+					...options,
+					onStarted: (run) => {
+						getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "review", run.projectRoot, run.runId);
+						resolveStarted();
+					},
+				});
+				void pending.catch(() => resolveStarted());
+				await Promise.race([pending, started]);
+				void pending.then(
 					(run) => {
-						setWidget(ctx, run);
 						ctx.ui.notify(
 							summarizeReviewRun(run),
 							run.state === "complete" || run.state === "skipped" ? "info" : "warning",
@@ -436,7 +469,6 @@ export default function installReview(pi: ExtensionAPI): void {
 						}
 					},
 					(error) => {
-						setWidget(ctx, undefined);
 						ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 					},
 				);

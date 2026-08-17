@@ -24,6 +24,7 @@ try {
 			"extensions/subagents.ts",
 			"extensions/review.ts",
 			"extensions/ralph.ts",
+			"extensions/harness.ts",
 			"extensions/xai-hosted-tools.ts",
 		],
 		process.cwd(),
@@ -31,7 +32,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 9);
+	assert.equal(result.extensions.length, 10);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -54,6 +55,8 @@ try {
 		"agents",
 		"review",
 		"ralph",
+		"harness",
+		"ledger",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
@@ -68,6 +71,7 @@ try {
 		"steer_subagent",
 		"review",
 		"ralph",
+		"ledger",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
@@ -82,6 +86,17 @@ try {
 		managedService ??= service;
 	});
 	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
+	for (const channel of [
+		"apple-pi:review-operations-service:request",
+		"apple-pi:ralph-operations-service:request",
+		"apple-pi:operations-runtime:request",
+	]) {
+		let discovered;
+		eventBus.emit(channel, (service) => {
+			discovered ??= service;
+		});
+		assert(discovered, `missing operations channel ${channel}`);
+	}
 	const reviewTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "review");
@@ -191,6 +206,20 @@ try {
 	for (const removed of ["isolation", "schedule", "name", "max_turns"]) {
 		assert(!(removed in agentProperties), `removed subagent field leaked into schema: ${removed}`);
 	}
+	const docs = {
+		ledger: readFileSync("docs/ledger.md", "utf8"),
+		review: readFileSync("docs/review.md", "utf8"),
+		ralph: readFileSync("docs/ralph.md", "utf8"),
+		readme: readFileSync("README.md", "utf8"),
+	};
+	assert(docs.ledger.includes("/harness"), "ledger docs omit /harness");
+	assert(docs.ledger.includes("last-valid-entry-wins"), "ledger docs omit pointer folding");
+	assert(docs.ledger.includes("mutateTaskWorkItems"), "ledger docs omit WI mutation authority");
+	assert(docs.review.includes("Argument-less `/review`"), "review docs omit hub entrypoint");
+	assert(docs.review.includes("internal agent IDs"), "review docs omit privacy control");
+	assert(docs.ralph.includes("Argument-less `/ralph`"), "ralph docs omit hub entrypoint");
+	assert(docs.ralph.includes("work-item"), "ralph docs omit work-item widget semantics");
+	assert(docs.readme.includes("/harness"), "README omits /harness");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
 	delete process.env.PI_VCC_CONFIG_PATH;

@@ -10,7 +10,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **First-class review** (`review`, `/review`) — sealed Git scope, optional caller files/folders/globs, planner-opened file partitions and concrete focuses, parallel fresh read-only reviewers, one cycle verifier with a meta-review, and coverage receipts.
-- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, shared review, closure judgment, and user-local run receipts.
+- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, shared review, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
 apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, review, Ralph, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
@@ -225,6 +225,7 @@ The imported implementation deliberately has **no worktree parameter or worktree
 `review` is designed primarily for model-driven use and defaults to the current workspace. The tool's optional `root` lets an agent select a repository beneath its current directory or a linked worktree elsewhere; relative roots resolve from the caller cwd. It seals the selected Git input, asks the dedicated `review-planner` route to open file partitions with concrete focuses, runs those focuses as fresh read-only agents in parallel, then has one verifier decide the pile and write a meta-review. Distinct findings that share a path stay distinct and are grouped for presentation. `thorough` may repeat the cycle against residuals.
 
 ```text
+/review
 /review preview
 /review run
 /review run workspace --root ../feature-worktree
@@ -256,6 +257,8 @@ The packaged lifecycle skills make shaping first-class:
 ```
 
 Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, invokes the shared review controller, and launches a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
+
+The live harness widget above the editor shows the active task, Ralph iteration and work items, nested Review cycle/focus counts, and accumulating runs. `/harness` and `/ledger` open the same operations hub. Exact controls are in [`docs/ledger.md`](docs/ledger.md), [`docs/review.md`](docs/review.md), and [`docs/ralph.md`](docs/ralph.md).
 
 ```text
 /ralph inspect .ledger/202608151430-example/task.md

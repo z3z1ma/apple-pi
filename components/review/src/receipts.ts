@@ -233,31 +233,52 @@ export async function appendReviewReceipt(
 }
 
 export function listReviewRunSummaries(projectRoot: string): ReviewRunSummary[] {
+	return listReviewReceiptRows(projectRoot).flatMap((row) => (row.kind === "summary" ? [row.summary] : []));
+}
+
+export type ReviewReceiptRow =
+	| { kind: "summary"; summary: ReviewRunSummary }
+	| { kind: "load_error"; runId: string; receiptPath: string; reason: string };
+
+export function listReviewReceiptRows(projectRoot: string): ReviewReceiptRow[] {
 	const directory = reviewRunDirectory(projectRoot);
 	if (!existsSync(directory)) return [];
-	const summaries: ReviewRunSummary[] = [];
+	const rows: ReviewReceiptRow[] = [];
 	for (const file of readdirSync(directory)
 		.filter((name) => name.endsWith(".jsonl"))
 		.sort()) {
 		const runId = file.slice(0, -".jsonl".length);
+		const path = reviewReceiptPath(projectRoot, runId);
 		try {
 			const run = loadReviewRun(projectRoot, runId);
-			summaries.push({
-				runId,
-				state: run.state,
-				profile: run.profile,
-				source: run.source,
-				selected: run.selected.length,
-				completed: run.completedItemIds.length,
-				failed: run.failures.length,
-				findings: run.findings.filter((finding) => finding.validation.status !== "rejected").length,
-				totalTokens: run.totalTokens,
-				updatedAt: run.updatedAt,
-				receiptPath: reviewReceiptPath(projectRoot, runId),
+			rows.push({
+				kind: "summary",
+				summary: {
+					runId,
+					state: run.state,
+					profile: run.profile,
+					source: run.source,
+					selected: run.selected.length,
+					completed: run.completedItemIds.length,
+					failed: run.failures.length,
+					findings: run.findings.filter((finding) => finding.validation.status !== "rejected").length,
+					totalTokens: run.totalTokens,
+					updatedAt: run.updatedAt,
+					receiptPath: path,
+				},
 			});
-		} catch {
-			// Direct status reports a corrupt receipt; summaries omit it.
+		} catch (error) {
+			rows.push({
+				kind: "load_error",
+				runId,
+				receiptPath: path,
+				reason: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
-	return summaries.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+	return rows.sort((left, right) => {
+		const leftKey = left.kind === "summary" ? left.summary.updatedAt : left.runId;
+		const rightKey = right.kind === "summary" ? right.summary.updatedAt : right.runId;
+		return rightKey.localeCompare(leftKey);
+	});
 }

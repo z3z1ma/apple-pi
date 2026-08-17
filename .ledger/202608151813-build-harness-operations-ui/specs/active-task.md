@@ -1,6 +1,6 @@
 Status: active
 Created: 2026-08-15
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 # Branch-scoped active ledger task
 
@@ -70,8 +70,10 @@ RFC 2119 terms are normative.
 - User-ratified: active-task selection is session-branch scoped.
 - Decision-backed: `.ledger/202608151813-build-harness-operations-ui/decisions/interaction-model.md`.
 - Repository-backed: task, receipt, root, and lease authority described in `docs/ledger.md` and `docs/ralph.md`.
+- Research-backed: `.ledger/202608151813-build-harness-operations-ui/research/current-state-2026-08-16.md` confirms `parseTaskDocument` and `mutateTaskWorkItems` already exist and must be consumed.
 
 ## Related Records
 
 - `.ledger/202608151813-build-harness-operations-ui/decisions/interaction-model.md`
 - `.ledger/202608151813-build-harness-operations-ui/research/current-state.md`
+- `.ledger/202608151813-build-harness-operations-ui/research/current-state-2026-08-16.md`

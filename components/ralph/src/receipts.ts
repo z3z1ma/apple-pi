@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 import { getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import type { RalphRun, ReceiptEvent, RunSummary } from "./types.js";
 import { taskLocation } from "./task-paths.js";
+import type { RalphRun, ReceiptEvent, RunSummary } from "./types.js";
 
 const STATES = new Set([
 	"ready",
@@ -464,4 +464,87 @@ export function listRunSummaries(projectRoot: string): RunSummary[] {
 		});
 	}
 	return summaries.sort((a, b) => b.runId.localeCompare(a.runId));
+}
+
+export type RalphReceiptRow =
+	| { kind: "summary"; summary: RunSummary; nestedReviewRunId?: string }
+	| { kind: "load_error"; runId: string; receiptPath: string; reason: string }
+	| { kind: "legacy_audit"; runId: string; receiptPath: string };
+
+function nestedReviewRunIdFromEvents(projectRoot: string, runId: string): string | undefined {
+	try {
+		for (const event of [...readReceiptEvents(projectRoot, runId)].reverse()) {
+			const details = event.structuredOutput;
+			if (details && typeof details === "object" && !Array.isArray(details)) {
+				const reviewRunId = (details as { reviewRunId?: unknown }).reviewRunId;
+				if (typeof reviewRunId === "string" && reviewRunId.trim()) return reviewRunId;
+			}
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
+}
+
+export function listRalphReceiptRows(projectRoot: string): RalphReceiptRow[] {
+	const directory = runDirectory(projectRoot);
+	if (!existsSync(directory)) return [];
+	const rows: RalphReceiptRow[] = [];
+	for (const file of readdirSync(directory)
+		.filter((name) => name.endsWith(".jsonl"))
+		.sort()) {
+		const runId = file.slice(0, -".jsonl".length);
+		const path = receiptPath(projectRoot, runId);
+		const firstLine = readFileSync(join(directory, file), "utf8")
+			.split(/\r?\n/)
+			.find((line) => line.trim());
+		if (firstLine) {
+			try {
+				const first = JSON.parse(firstLine) as { schemaVersion?: unknown; runId?: unknown };
+				if (first.schemaVersion === 1 && first.runId === runId) {
+					rows.push({ kind: "legacy_audit", runId, receiptPath: path });
+					continue;
+				}
+			} catch (error) {
+				rows.push({
+					kind: "load_error",
+					runId,
+					receiptPath: path,
+					reason: error instanceof Error ? error.message : String(error),
+				});
+				continue;
+			}
+		}
+		try {
+			const run = loadRun(projectRoot, runId);
+			const nestedReviewRunId = nestedReviewRunIdFromEvents(projectRoot, runId);
+			rows.push({
+				kind: "summary",
+				summary: {
+					runId,
+					state: run.state,
+					iteration: run.iteration,
+					ledgerRoot: run.ledgerRoot,
+					taskPath: run.taskPath,
+					lastOutcome: run.lastOutcome,
+					nextObjective: run.nextObjective,
+					totalTokens: run.totalTokens,
+					receiptPath: path,
+				},
+				...(nestedReviewRunId && { nestedReviewRunId }),
+			});
+		} catch (error) {
+			rows.push({
+				kind: "load_error",
+				runId,
+				receiptPath: path,
+				reason: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	return rows.sort((left, right) => ralphReceiptRowId(right).localeCompare(ralphReceiptRowId(left)));
+}
+
+function ralphReceiptRowId(row: RalphReceiptRow): string {
+	return row.kind === "summary" ? row.summary.runId : row.runId;
 }

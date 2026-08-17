@@ -168,6 +168,14 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 
 ## Workflow skills
 
+## Operations hub and active task
+
+`/harness` opens one overlay with Ledger, Ralph, and Review views. `/ledger` opens the Ledger view. Left/right or Tab switch views while preserving each view's selection. `/` focuses the Ledger fuzzy query (non-prefix title and path fragments match). Enter inspects. `s` selects the active task. `c` clears it. `r` starts Ralph. `R` runs Ralph. Escape clears search, then closes detail, then closes the hub. Stop requires two `s` presses on an owned live run.
+
+The `ledger` model tool supports `list`, `inspect`, `select`, `clear`, and `mutate_work_items`. Selection appends a branch-local pointer `{schemaVersion:1, ledgerRoot, taskPath}` only. Clearing appends a tombstone. Reconstruction folds `sessionManager.getBranch()` last-valid-entry-wins, including tombstones, and ignores malformed records individually. A stale latest pointer stays visible with its exact reason (`missing`, `moved`, `unindexed`, `malformed`, `unrelated`, `not_regular_file`, `symlink`) and is never replaced by an older pointer.
+
+Work-item display and mutation call `parseTaskDocument` and `mutateTaskWorkItems`. They do not close the task or satisfy acceptance criteria. Foreign Ralph leases fail without partial writes. Print/RPC modes keep the tool and skip overlays.
+
 Apple-pi packages the complete lifecycle as on-demand Pi skills:
 
 ```text

@@ -1,12 +1,12 @@
 Status: active
 Created: 2026-08-15
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 # Unified ledger, Ralph, and review operations hub
 
 ## Purpose And Authority
 
-The operations hub makes long-running harness work observable and controllable without exposing internal role agents or replacing task and receipt authority. It is a TUI projection over ledger records, controller progress, and validated receipts.
+The operations hub makes long-running harness work observable and controllable without exposing internal role agents or replacing task and receipt authority. It is a TUI projection over ledger records, controller progress, and validated receipts. Its live surfaces MUST match the richness of the existing apple-pi subagent, Pi Exec, and questionnaire TUIs, applied to harness domain state rather than public agent sessions.
 
 RFC 2119 terms are normative.
 
@@ -31,11 +31,12 @@ RFC 2119 terms are normative.
 
 - ReviewController and RalphController MUST expose read-only subscriptions or an equivalent typed event stream; UI code MUST NOT inspect private active maps.
 - Every progress snapshot MUST include run ID, immutable roots/source identity, monotonic sequence, state/stage, start/update times, resolved internal policy summary, usage, and terminal outcome when present.
-- Review progress MUST include planner status; every semantic group's tier, item coverage, queued/running/completed/failed state, current bounded activity, finding count; and verifier state and decisions.
-- Ralph progress MUST include task path, workspace and ledger roots, iteration, executor/review/judge stage, current bounded activity, work-item progress, next objective, and gate reason.
+- Review progress MUST include the current cycle index and budgeted cycle cap; planner status for that cycle; every partition's title and item coverage; every focus's queued/running/completed/failed state, title, bounded activity, and finding count; verifier state and per-finding decisions; and the cycle meta-review when present.
+- Ralph progress MUST include task path, workspace and ledger roots, iteration, executor/review/judge stage, current bounded activity, work-item progress, nested Review projection, next objective, and gate reason.
 - ManagedSubagentService MUST supply only the bounded activity callbacks needed by owning controllers. This MUST NOT make internal records publicly discoverable or resumable.
 - A new subscriber MUST receive a current snapshot immediately, and unsubscription MUST stop updates and timers.
 - Receipt append and task mutation remain authoritative side effects; progress delivery failure MUST NOT fail or alter a run.
+- Progress snapshots, tool cards, widgets, and hub rows MUST NOT include internal agent IDs, session paths, prompts, transcripts, raw tool arguments, or raw model text.
 
 ### Hub views
 
@@ -44,13 +45,15 @@ RFC 2119 terms are normative.
 - The hub MUST derive “roots known to the session” only from valid pointers on the active Pi branch and the current trusted session root. It MUST NOT scan global receipt directories to discover projects or worktrees.
 - Every restored root MUST be canonicalized and revalidated as a linked checkout sharing the trusted session repository's Git common directory before any receipt is read. Missing or no-longer-related roots remain visible as stale pointers with clear/remove actions and MUST NOT be traversed.
 - Ralph view MUST load active and recent receipt-backed runs separately from each validated known workspace root, with task, stage/state, iteration, elapsed time, usage, next objective or gate, and ownership.
-- Review view MUST load active and recent runs separately from each validated known project root with source/profile, stage, group coverage, findings, elapsed time, usage, and ownership.
-- Detail views MUST be scrollable and render source/task identity, stage timeline, groups or iterations, failures, retained findings and verification, residual risk, child activity summaries, usage, and receipt path as applicable.
+- Review view MUST load active and recent runs separately from each validated known project root with source/profile, stage, current cycle, partition/focus coverage, findings, elapsed time, usage, and ownership.
+- Detail views MUST be scrollable and render source/task identity, stage or cycle timeline, partitions and focuses or iterations, failures, retained findings and verification, meta-review residuals, child activity summaries, usage, and receipt path as applicable.
 - Active owned runs MUST offer a two-step or explicit-confirmation stop action. Non-owning live runs MUST explain where they are owned rather than claiming to stop them.
+- A Ralph-owned Review MUST appear nested under that Ralph iteration. It MUST NOT appear as a standalone stoppable Review row, and its stop authority remains the parent Ralph run.
 - Internal model text or tool activity shown in the hub MUST be bounded and local-only. It MUST NOT be appended to the parent model context.
 
 ### Rendering and input
 
+- Live widgets and hub views MUST use factory TUI components with theme, spinner or equivalent activity, elapsed time, and `requestRender` updates. Static two-line string widgets are not sufficient for an active run.
 - Every rendered line MUST fit the supplied terminal width, and overlays MUST cap height with visible scroll state.
 - The hub MUST use injected theme and keybindings, rebuild themed content on invalidation, and request rendering only after state changes or bounded animation ticks.
 - Global terminal handlers MUST remain inactive while the editor contains text or another dialog/component owns focus.
@@ -73,9 +76,9 @@ RFC 2119 terms are normative.
 
 ## Given-When-Then Scenarios
 
-- Given a review planner creates six groups, when two reviewers run concurrently, then the widget and Review view show two running, four queued, and update each group without exposing public agent IDs.
-- Given a reviewer files findings, when verification starts, then the Review detail view preserves group coverage and shows each finding's pending then final verification state.
-- Given Ralph enters shared review, when the user opens the Ralph run, then the detail view shows the nested review stage and its progress under the Ralph iteration rather than as an unrelated public run.
+- Given a review planner opens six focuses, when two reviewers run concurrently, then the widget and Review view show two running, four queued, the current cycle, and update each focus without exposing public agent IDs.
+- Given reviewers file findings, when verification starts, then the Review detail view preserves partition and focus coverage and shows each finding's pending then final verification state plus the cycle meta-review when it arrives.
+- Given Ralph enters independent review, when the user opens the Ralph run, then the detail view shows the nested review cycle/focus progress under that Ralph iteration rather than as an unrelated public run.
 - Given two Ralph tasks run in different authorized worktrees through actions on the active session branch, when the hub opens, then their validated root pointers load both receipt sets with distinct roots and stages and neither can claim the other's workspace lease.
 - Given a receipt exists for an unrelated repository in the global agent directory, when the hub opens, then it is not discovered or read because no validated branch-local root pointer authorizes it.
 - Given an active run is selected and the user requests stop, when confirmation succeeds, then the owning controller aborts, waits for quiescence, records terminal state, and the view settles to stopped.
@@ -101,11 +104,12 @@ RFC 2119 terms are normative.
 ## Assumptions And Provenance
 
 - User-ratified: use one unified operations hub.
+- User-ratified: review and Ralph require rich interactive terminal visibility comparable to the subagent and Pi Exec experiences.
 - Decision-backed: `.ledger/202608151813-build-harness-operations-ui/decisions/interaction-model.md`.
-- Research-backed: existing subagent and Pi Exec UI components establish reusable rendering and lifecycle patterns.
+- Research-backed: `.ledger/202608151813-build-harness-operations-ui/research/current-state-2026-08-16.md` establishes the current review domain and in-repo TUI patterns.
 - Pi-documentation-backed: overlays, widgets, status, partial tool rendering, focus, and mode gates are current in Pi 0.84.2.
 
 ## Related Records
 
 - `.ledger/202608151813-build-harness-operations-ui/decisions/interaction-model.md`
-- `.ledger/202608151813-build-harness-operations-ui/research/current-state.md`
+- `.ledger/202608151813-build-harness-operations-ui/research/current-state-2026-08-16.md`

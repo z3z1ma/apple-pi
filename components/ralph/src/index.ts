@@ -1,15 +1,16 @@
-import { Text, type AutocompleteItem } from "@earendil-works/pi-tui";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { type AutocompleteItem, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { getOperationsRuntime, isTuiContext } from "../../operations/src/runtime.js";
+import { renderRalphProgressCard, throttleUpdates } from "../../operations/src/ui/tool-renderers.js";
 import { completeUnusedFlags, matchingCompletions, parseArgv } from "../../shared/src/argv.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
-import { RalphController, summarizeRun, type StartRunOptions } from "./controller.js";
-import type { RalphRun, RunSummary } from "./types.js";
-import { compileWorkGraph } from "./work-graph.js";
+import { RalphController, type StartRunOptions, summarizeRun } from "./controller.js";
+import { installRalphOperationsService, ralphOperationsService } from "./operations-service.js";
 import { resolveRalphRoots } from "./roots.js";
-
-const WIDGET_ID = "ralph-loop";
+import type { RunSummary } from "./types.js";
+import { compileWorkGraph } from "./work-graph.js";
 
 function textResult(text: string, isError = false, details?: unknown) {
 	return { content: [{ type: "text" as const, text }], isError, details };
@@ -137,26 +138,16 @@ export function ralphArgumentCompletions(prefix: string, runs: RunSummary[] = []
 	);
 }
 
-function setRunWidget(ctx: ExtensionCommandContext, run: RalphRun | undefined): void {
-	if (!ctx.hasUI) return;
-	if (!run) {
-		ctx.ui.setWidget(WIDGET_ID, undefined);
-		return;
-	}
-	ctx.ui.setWidget(
-		WIDGET_ID,
-		[
-			`Ralph ${run.state} · iteration ${run.iteration} · ${run.taskPath}`,
-			...(run.nextObjective ? [`Next: ${run.nextObjective}`] : []),
-		],
-		{ placement: "aboveEditor" },
-	);
+function attachTui(ctx: ExtensionCommandContext): void {
+	const runtime = getOperationsRuntime();
+	if (runtime && isTuiContext(ctx)) runtime.widget.setUICtx(ctx.ui);
 }
 
 export default function installRalph(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 	let sessionCwd: string | undefined;
 	const controller = new RalphController({ getService: () => getManagedSubagentService(pi.events) });
+	installRalphOperationsService(ralphOperationsService(controller), pi.events);
 
 	const tool = defineTool({
 		name: "ralph",
@@ -186,7 +177,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 				Type.String({ description: "Linked checkout root containing the authoritative .ledger. Defaults to root." }),
 			),
 		}),
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			try {
 				sessionCwd = ctx.cwd;
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
@@ -195,6 +186,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 				if (params.action === "inspect")
 					return textResult(inspectText(ctx.cwd, requireString(params.task, "task"), params.root, params.ledger_root));
 				const workspaceRoot = resolveRalphRoots(ctx.cwd, params.root).workspaceRoot;
+				getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "ralph", workspaceRoot, params.run_id);
 				if (params.action === "status") {
 					const status = controller.status(workspaceRoot, params.run_id);
 					return textResult(Array.isArray(status) ? summariesText(status) : summarizeRun(status));
@@ -203,16 +195,40 @@ export default function installRalph(pi: ExtensionAPI): void {
 					const run = await controller.stop(workspaceRoot, requireString(params.run_id, "run_id"));
 					return textResult(summarizeRun(run));
 				}
-				if (params.action === "start") {
-					const run = await controller.start(ctx, requireString(params.task, "task"), optionsFromParams(params));
+				const push = onUpdate ? throttleUpdates(onUpdate, 200) : undefined;
+				let runId = params.run_id;
+				const unsub = controller.subscribeProgress((snapshot) => {
+					if (!runId || snapshot.runId !== runId) return;
+					push?.({ content: [{ type: "text", text: `Ralph ${snapshot.state}` }], details: { progress: snapshot } });
+				});
+				try {
+					if (params.action === "start") {
+						const run = await controller.start(ctx, requireString(params.task, "task"), optionsFromParams(params));
+						runId = run.runId;
+						getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "ralph", run.projectRoot, run.runId);
+						return textResult(summarizeRun(run));
+					}
+					if (params.action === "step") {
+						const run = await controller.step(ctx, requireString(params.run_id, "run_id"), signal, workspaceRoot);
+						return textResult(summarizeRun(run));
+					}
+					const started = await controller.start(ctx, requireString(params.task, "task"), {
+						...optionsFromParams(params),
+						mode: "auto",
+					});
+					runId = started.runId;
+					getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "ralph", started.projectRoot, started.runId);
+					const run = await controller.continue(
+						ctx,
+						started.runId,
+						Number.POSITIVE_INFINITY,
+						signal,
+						started.projectRoot,
+					);
 					return textResult(summarizeRun(run));
+				} finally {
+					unsub();
 				}
-				if (params.action === "step") {
-					const run = await controller.step(ctx, requireString(params.run_id, "run_id"), signal, workspaceRoot);
-					return textResult(summarizeRun(run));
-				}
-				const run = await controller.run(ctx, requireString(params.task, "task"), optionsFromParams(params), signal);
-				return textResult(summarizeRun(run));
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), true);
 			}
@@ -224,7 +240,9 @@ export default function installRalph(pi: ExtensionAPI): void {
 				0,
 			);
 		},
-		renderResult(result, _options, theme) {
+		renderResult(result, options, theme) {
+			const details = result.details as { progress?: import("./types.js").RalphProgressSnapshot } | undefined;
+			if (details?.progress) return renderRalphProgressCard(details.progress, theme, options.isPartial) as never;
 			const content = result.content[0]?.type === "text" ? result.content[0].text : "No output";
 			return new Text(theme.fg("dim", content), 0, 0);
 		},
@@ -248,6 +266,13 @@ export default function installRalph(pi: ExtensionAPI): void {
 		handler: async (input, ctx) => {
 			try {
 				sessionCwd = ctx.cwd;
+				attachTui(ctx);
+				if (!input.trim()) {
+					const runtime = getOperationsRuntime(pi.events);
+					if (runtime) await runtime.openHub(ctx, "ralph");
+					else ctx.ui.notify("Harness hub is not available.", "error");
+					return;
+				}
 				if (!ctx.isProjectTrusted()) throw new Error("Ralph requires a trusted session repository");
 				const parsed = parseCommandArgs(input);
 				const expectedPositionals =
@@ -284,7 +309,6 @@ export default function installRalph(pi: ExtensionAPI): void {
 				}
 				if (parsed.action === "stop") {
 					const run = await controller.stop(workspaceRoot, requireString(parsed.positional[0], "run-id"));
-					setRunWidget(ctx, run);
 					ctx.ui.notify(summarizeRun(run), "warning");
 					return;
 				}
@@ -294,7 +318,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 						requireString(parsed.positional[0], "task"),
 						optionsFromParams(params),
 					);
-					setRunWidget(ctx, run);
+					getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "ralph", run.projectRoot, run.runId);
 					ctx.ui.notify(summarizeRun(run), "info");
 					return;
 				}
@@ -303,18 +327,23 @@ export default function installRalph(pi: ExtensionAPI): void {
 						"Usage: /ralph inspect <task.md> | start <task.md> | step <run-id> | run <task.md> [--root PATH] [--ledger-root PATH] | status [run-id] | stop <run-id>",
 					);
 				}
+				ctx.ui.notify(`Ralph ${parsed.action} started. Do not mutate this checkout until it finishes.`, "info");
 				const operation =
 					parsed.action === "step"
 						? controller.step(ctx, requireString(parsed.positional[0], "run-id"), undefined, workspaceRoot)
-						: controller.run(ctx, requireString(parsed.positional[0], "task"), optionsFromParams(params));
-				ctx.ui.notify(`Ralph ${parsed.action} started. Do not mutate this checkout until it finishes.`, "info");
+						: (async () => {
+								const run = await controller.start(ctx, requireString(parsed.positional[0], "task"), {
+									...optionsFromParams(params),
+									mode: "auto",
+								});
+								getOperationsRuntime(pi.events)?.recordOperationPointer(ctx, "ralph", run.projectRoot, run.runId);
+								return controller.continue(ctx, run.runId, Number.POSITIVE_INFINITY, undefined, run.projectRoot);
+							})();
 				void operation.then(
 					(run) => {
-						setRunWidget(ctx, run);
 						ctx.ui.notify(summarizeRun(run), run.state === "done" ? "info" : "warning");
 					},
 					(error) => {
-						setRunWidget(ctx, undefined);
 						ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 					},
 				);

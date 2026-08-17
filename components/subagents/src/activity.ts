@@ -1,10 +1,48 @@
-import { addUsage } from "./usage.js";
+import type { HarnessBoundedActivity } from "./service.js";
 import type { AgentActivity } from "./ui/agent-widget.js";
+import { addUsage } from "./usage.js";
 
 const ACTIVITY_UPDATE_DEBOUNCE_MS = 250;
 
+const TOOL_LABELS: Record<string, string> = {
+	read: "reading",
+	bash: "running command",
+	edit: "editing",
+	write: "writing",
+	grep: "searching",
+	find: "finding files",
+	ls: "listing",
+	open_review: "opening reviews",
+	report: "reporting",
+	submit_meta_review: "verifying",
+	submit_ralph_executor: "submitting result",
+	submit_ralph_judge: "submitting judgment",
+};
+
+export function sanitizeHarnessActivity(input: {
+	toolName?: string;
+	turnCount: number;
+	toolCount: number;
+	activeToolCount: number;
+}): HarnessBoundedActivity {
+	const toolName = input.toolName && TOOL_LABELS[input.toolName] ? input.toolName : undefined;
+	const usingTools = input.activeToolCount > 0;
+	const label = usingTools ? (toolName ? TOOL_LABELS[toolName] : "using tools") : "thinking";
+	return {
+		phase: usingTools ? "tool" : "thinking",
+		...(toolName && { toolName }),
+		turnCount: Math.max(0, input.turnCount),
+		toolCount: Math.max(0, input.toolCount),
+		label: `${label}…`,
+	};
+}
+
 /** Tracks one agent's live tool, text, session, turn, and usage state for UI consumers. */
-export function createActivityTracker(maxTurns?: number, onChange?: () => void) {
+export function createActivityTracker(
+	maxTurns?: number,
+	onChange?: () => void,
+	onHarnessActivity?: (activity: HarnessBoundedActivity) => void,
+) {
 	let textUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 	const notifyTextChange = () => {
 		if (!onChange || textUpdateTimer) return;
@@ -23,6 +61,20 @@ export function createActivityTracker(maxTurns?: number, onChange?: () => void) 
 		session: undefined,
 		lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 	};
+	const emitHarness = (toolName?: string) => {
+		try {
+			onHarnessActivity?.(
+				sanitizeHarnessActivity({
+					toolName: toolName ?? [...state.activeTools.values()].at(-1),
+					turnCount: state.turnCount,
+					toolCount: state.toolUses,
+					activeToolCount: state.activeTools.size,
+				}),
+			);
+		} catch {
+			// Harness projection faults must not abort the managed child.
+		}
+	};
 	return {
 		state,
 		callbacks: {
@@ -39,6 +91,7 @@ export function createActivityTracker(maxTurns?: number, onChange?: () => void) 
 					state.toolUses++;
 				}
 				onChange?.();
+				emitHarness(activity.toolName);
 			},
 			onTextDelta: (_delta: string, fullText: string) => {
 				state.responseText = fullText;
@@ -47,6 +100,7 @@ export function createActivityTracker(maxTurns?: number, onChange?: () => void) 
 			onTurnEnd: (turnCount: number) => {
 				state.turnCount = turnCount;
 				onChange?.();
+				emitHarness();
 			},
 			onSessionCreated: (session: any) => {
 				state.session = session;

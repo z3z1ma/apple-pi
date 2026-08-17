@@ -2,9 +2,14 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Model } from "@earendil-works/pi-ai";
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { ProgressChannel } from "../../operations/src/progress-channel.js";
 import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
 import { buildAgentPrompt } from "../../subagents/src/prompts.js";
-import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
+import {
+	getManagedSubagentService,
+	type HarnessBoundedActivity,
+	type ManagedSubagentService,
+} from "../../subagents/src/service.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { createReviewAuthorityPolicy } from "./authority-policy.js";
 import { clusterFindings, extractSealedHunk } from "./evidence.js";
@@ -18,7 +23,9 @@ import {
 } from "./git.js";
 import { acquireReviewLease, activeReviewLease } from "./lease.js";
 import { groundReportedAnchor } from "./location.js";
+import type { ReviewRunOwnership } from "./operations-service.js";
 import { deriveReviewBudgets, deriveRoleEnvelope, reviewShapeFrom } from "./policy.js";
+import { buildReviewProgressSnapshot } from "./progress.js";
 import { appendReviewReceipt, listReviewRunSummaries, loadReviewRun, reviewReceiptPath } from "./receipts.js";
 import {
 	createMetaReviewTool,
@@ -36,14 +43,18 @@ import type {
 	ReviewCoverageFailure,
 	ReviewFinding,
 	ReviewFocus,
+	ReviewFocusProgressState,
 	ReviewInput,
 	ReviewItem,
 	ReviewMetaReview,
 	ReviewModelRouting,
 	ReviewModelTier,
 	ReviewPartition,
+	ReviewProgressSnapshot,
+	ReviewReceiptStage,
 	ReviewReport,
 	ReviewRoleEnvelope,
+	ReviewRoleProgressStatus,
 	ReviewRun,
 	ReviewRunSummary,
 	ReviewSource,
@@ -125,6 +136,14 @@ interface ActiveReview {
 	releaseLease: () => void;
 	settled: Promise<void>;
 	resolveSettled: () => void;
+	stage?: ReviewReceiptStage;
+	cycleIndex: number;
+	plannerStatus: ReviewRoleProgressStatus;
+	verifierStatus: ReviewRoleProgressStatus;
+	focusStates: Map<string, ReviewFocusProgressState>;
+	focusActivity: Map<string, HarnessBoundedActivity>;
+	plannerActivity?: HarnessBoundedActivity;
+	verifierActivity?: HarnessBoundedActivity;
 }
 
 class ReviewStageError extends Error {
@@ -170,6 +189,7 @@ function itemsForReportedPath(items: Iterable<ReviewItem>, path: string, side: R
 
 export class ReviewController {
 	private readonly active = new Map<string, ActiveReview>();
+	private readonly progress = new ProgressChannel<ReviewProgressSnapshot>();
 	private readonly getService: () => ManagedSubagentService | undefined;
 	private readonly resolveModelOverride?: ReviewControllerDependencies["resolveModel"];
 
@@ -244,6 +264,8 @@ export class ReviewController {
 				: "No changes selected for review";
 			run.updatedAt = new Date().toISOString();
 			await appendReviewReceipt(run, { stage: "finalize", outcome: "skipped" });
+			options.onStarted?.(run);
+			this.publishStandalone(run, { stage: "finalize" });
 			return run;
 		}
 
@@ -276,8 +298,16 @@ export class ReviewController {
 			releaseLease,
 			settled,
 			resolveSettled,
+			stage: "input",
+			cycleIndex: 0,
+			plannerStatus: "idle",
+			verifierStatus: "idle",
+			focusStates: new Map(),
+			focusActivity: new Map(),
 		};
 		this.active.set(run.runId, control);
+		options.onStarted?.(run);
+		this.emitProgress(control);
 		const onExternalAbort = () => {
 			control.externalCancelled = true;
 			control.abort.abort();
@@ -315,12 +345,15 @@ export class ReviewController {
 			signal?.removeEventListener("abort", onExternalAbort);
 		}
 		run.updatedAt = new Date().toISOString();
+		control.stage = "finalize";
+		this.emitProgress(control);
 		try {
 			await appendReviewReceipt(run, {
 				stage: "finalize",
 				outcome: run.state,
 				details: { completed: run.completedItemIds.length, failed: run.failures.length, findings: run.findings.length },
 			});
+			this.emitProgress(control);
 			return run;
 		} finally {
 			control.cleanupReviewRoot();
@@ -373,6 +406,58 @@ export class ReviewController {
 			for (const agentId of control.activeAgentIds) this.getService()?.abort(agentId);
 		}
 		await Promise.all(controls.map((control) => control.settled));
+	}
+
+	subscribeProgress(listener: (snapshot: ReviewProgressSnapshot) => void): () => void {
+		return this.progress.subscribe(listener);
+	}
+
+	liveProgress(): ReviewProgressSnapshot[] {
+		return this.progress.list();
+	}
+
+	classifyOwnership(projectRootInput: string, runId: string): ReviewRunOwnership {
+		const projectRoot = reviewRepositoryRoot(projectRootInput);
+		const control = this.active.get(runId);
+		if (control && control.run.projectRoot === projectRoot) return { kind: "owned" };
+		const owner = activeReviewLease(projectRoot);
+		if (owner && owner.runId === runId && owner.pid !== process.pid) {
+			return { kind: "foreign", pid: owner.pid, ownerRunId: owner.runId };
+		}
+		return { kind: "stale" };
+	}
+
+	private emitProgress(control: ActiveReview): void {
+		try {
+			this.progress.publish(
+				buildReviewProgressSnapshot(control.run, {
+					sequence: this.progress.nextSequence(control.run.runId),
+					...(control.stage && { stage: control.stage }),
+					cycleIndex: control.cycleIndex,
+					plannerStatus: control.plannerStatus,
+					verifierStatus: control.verifierStatus,
+					focusStates: control.focusStates,
+					focusActivity: control.focusActivity,
+					...(control.plannerActivity && { plannerActivity: control.plannerActivity }),
+					...(control.verifierActivity && { verifierActivity: control.verifierActivity }),
+				}),
+			);
+		} catch {
+			// Projection faults must not alter the run.
+		}
+	}
+
+	private publishStandalone(run: ReviewRun, live: { stage?: ReviewReceiptStage } = {}): void {
+		try {
+			this.progress.publish(
+				buildReviewProgressSnapshot(run, {
+					sequence: this.progress.nextSequence(run.runId),
+					...live,
+				}),
+			);
+		} catch {
+			// Projection faults must not alter the run.
+		}
 	}
 
 	private async runCycles(
@@ -432,6 +517,10 @@ export class ReviewController {
 	): Promise<{ partitions: ReviewPartition[]; focuses: ReviewFocus[] }> {
 		run.state = "planning";
 		run.updatedAt = new Date().toISOString();
+		control.stage = "planner";
+		control.cycleIndex = cycle;
+		control.plannerStatus = "running";
+		this.emitProgress(control);
 		const route = await this.resolveModel(ctx, run.routing.plannerMode, "fast");
 		this.assertActive(control);
 		const covered = new Set<string>();
@@ -485,7 +574,11 @@ export class ReviewController {
 				requireCalls: cycle === 1,
 			},
 		);
-		if (opener.calls() === 0) return { partitions: [], focuses: [] };
+		if (opener.calls() === 0) {
+			control.plannerStatus = "completed";
+			this.emitProgress(control);
+			return { partitions: [], focuses: [] };
+		}
 		const compiled = compileReviewCycle(
 			opener.values(),
 			items,
@@ -502,6 +595,9 @@ export class ReviewController {
 			outcome: "graph_sealed",
 			details: compiled,
 		});
+		control.plannerStatus = "completed";
+		for (const focus of compiled.focuses) control.focusStates.set(focus.id, "queued");
+		this.emitProgress(control);
 		return compiled;
 	}
 
@@ -517,6 +613,10 @@ export class ReviewController {
 	): Promise<void> {
 		run.state = "reviewing";
 		run.updatedAt = new Date().toISOString();
+		control.stage = "reviewer";
+		control.cycleIndex = focuses[0]?.cycle ?? control.cycleIndex;
+		for (const focus of focuses) if (!control.focusStates.has(focus.id)) control.focusStates.set(focus.id, "queued");
+		this.emitProgress(control);
 		const itemById = new Map(items.map((item) => [item.id, item]));
 		const partitionById = new Map(partitions.map((partition) => [partition.id, partition]));
 		await appendReviewReceipt(run, {
@@ -529,6 +629,8 @@ export class ReviewController {
 		const pending = [...focuses];
 		const running = new Map<string, Promise<void>>();
 		const launch = async (focus: ReviewFocus): Promise<void> => {
+			control.focusStates.set(focus.id, "running");
+			this.emitProgress(control);
 			try {
 				await this.reviewFocus(
 					ctx,
@@ -661,6 +763,8 @@ export class ReviewController {
 			details: { reports: reporter.calls() },
 		});
 		control.succeededFocusIds.add(focus.id);
+		control.focusStates.set(focus.id, "completed");
+		this.emitProgress(control);
 	}
 
 	private async verifyCycle(
@@ -674,6 +778,10 @@ export class ReviewController {
 	): Promise<void> {
 		run.state = "verifying";
 		run.updatedAt = new Date().toISOString();
+		control.stage = "verifier";
+		control.cycleIndex = cycle;
+		control.verifierStatus = "running";
+		this.emitProgress(control);
 		const findings = (run.rawFindings ?? []).filter((finding) => finding.cycle === cycle);
 		const notes = (run.notes ?? []).filter((note) => note.cycle === cycle);
 		const clusters = clusterFindings(findings);
@@ -785,12 +893,16 @@ export class ReviewController {
 			outcome: "focus_verified",
 			details: metaReview,
 		});
+		control.verifierStatus = "completed";
+		this.emitProgress(control);
 	}
 
 	private async failFocus(run: ReviewRun, control: ActiveReview, focus: ReviewFocus, error: unknown): Promise<void> {
 		const classification = error instanceof ReviewStageError ? error.classification : "invalid_output";
 		const reason = safeReason(error);
 		control.failedFocusIds.add(focus.id);
+		control.focusStates.set(focus.id, "failed");
+		this.emitProgress(control);
 		await appendReviewReceipt(run, {
 			stage: "reviewer",
 			partitionId: focus.partitionId,
@@ -932,6 +1044,12 @@ export class ReviewController {
 					const tokens = usage.input + usage.output + usage.cacheWrite;
 					roleLiveTokens += tokens;
 					control.inflightTokens += tokens;
+				},
+				onActivity: (activity) => {
+					if (stage === "planner") control.plannerActivity = activity;
+					else if (stage === "verifier") control.verifierActivity = activity;
+					else if (focusId) control.focusActivity.set(focusId, activity);
+					this.emitProgress(control);
 				},
 			});
 		} finally {

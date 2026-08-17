@@ -1,6 +1,6 @@
-Status: open
+Status: active
 Created: 2026-08-15
-Updated: 2026-08-15
+Updated: 2026-08-17
 Depends-On: .ledger/202608151843-bootstrap-gated-work-items/task.md
 
 # Build interactive review, Ralph, and ledger-task operations UI
@@ -20,8 +20,8 @@ Design and implement a coherent terminal operations experience for long-running 
 
 ## Acceptance Criteria
 
-- AC-001: A long-running review continuously shows its current stage, semantic groups queued/running/completed/failed, coverage, retained findings, elapsed time, and usage without exposing internal agents through the public subagent API.
-- AC-002: Review has a keyboard-navigable detail view for active and persisted runs that can inspect groups, findings, verification decisions, residual risk, failures, and receipt-backed status, and can stop an owned active run with explicit confirmation.
+- AC-001: A long-running review continuously shows its current stage, cycle, partitions, focuses queued/running/completed/failed, coverage, retained findings, elapsed time, and usage without exposing internal agents through the public subagent API.
+- AC-002: Review has a keyboard-navigable detail view for active and persisted runs that can inspect cycles, partitions, focuses, findings, verification decisions, meta-review, residual risk, failures, and receipt-backed status, and can stop an owned active run with explicit confirmation.
 - AC-003: Ralph has a bounded fleet view for active and recent runs that identifies task, workspace, ledger root, iteration, current executor/review/judge stage, next objective or terminal gate, elapsed time, and usage; the user can navigate to run details and stop an owned active run.
 - AC-004: The task picker lists canonical tasks from the top-level ledger index, shows status derived from each `task.md`, supports fuzzy selection, and offers inspect/start/run-oriented actions without duplicating task status.
 - AC-005: A user or model can set and clear one active ledger task for the current session branch; reload and tree navigation reconstruct the correct pointer from session state, and the pointer contains only canonical task identity rather than copied task content.
@@ -36,7 +36,7 @@ Design and implement a coherent terminal operations experience for long-running 
 - [ ] WI-002: Implement canonical ledger catalog parsing, branch-scoped active-task entries, stale-pointer behavior, and model/human ledger actions.
 - [ ] WI-003: Integrate the dependency's canonical WI-### parser, mutation, receipt, and closure state into ledger actions, progress snapshots, and hub projections without duplicating authority.
 - [ ] WI-004: Build shared bounded operations-hub components, navigation, detail overlays, lifecycle disposal, and compact status projection.
-- [ ] WI-005: Integrate live and persisted review group, finding, verification, usage, and stop behavior into the hub and tool updates.
+- [ ] WI-005: Integrate live and persisted review cycle, partition, focus, finding, verification, meta-review, usage, and stop behavior into the hub and tool updates.
 - [ ] WI-006: Integrate multi-root Ralph fleet, nested review progress, iteration detail, usage, objectives, gates, and stop behavior into the hub.
 - [ ] WI-007: Complete TUI, controller, parser, session-branch, authority, closure, mode, package-loader, and documentation coverage.
 
@@ -47,6 +47,7 @@ Design and implement a coherent terminal operations experience for long-running 
 - `.ledger/202608151813-build-harness-operations-ui/specs/active-task.md`
 - `.ledger/202608151813-build-harness-operations-ui/specs/operations-hub.md`
 - `.ledger/202608151813-build-harness-operations-ui/research/current-state.md`
+- `.ledger/202608151813-build-harness-operations-ui/research/current-state-2026-08-16.md`
 - `components/review/src/index.ts`
 - `components/review/src/controller.ts`
 - `components/ralph/src/index.ts`
@@ -76,6 +77,7 @@ Design and implement a coherent terminal operations experience for long-running 
 - 2026-08-15: Bootstrap task `202608151843-bootstrap-gated-work-items` closed in `bc57e35`; the operator confirmed Pi reload before this task resumed.
 - 2026-08-15: Reloaded Ralph initially compiled this task without projecting WI-001 through WI-007; inspector projection was added in `c6fc6f1`.
 - 2026-08-15: After the subsequent operator-confirmed Pi reload, Ralph `inspect` enumerated WI-001 through WI-007 as open; the bootstrap commissioning gate is satisfied.
+- 2026-08-16: Replanned against the current cycle/partition/focus review controller, shipped work-item APIs, component-local tests, and in-repo rich TUI patterns. Remapped AC-001, AC-002, and WI-005 from semantic groups to the live review domain.
 
 ## Blockers
 

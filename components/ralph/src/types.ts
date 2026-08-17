@@ -1,5 +1,7 @@
+import type { ReviewProgressSnapshot } from "../../review/src/types.js";
+import type { HarnessBoundedActivity } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
-import type { TaskDocument } from "./task-document.js";
+import type { TaskDocument, WorkItemState } from "./task-document.js";
 
 export type RecordKind = "task" | "spec" | "plan" | "decision" | "research" | "evidence" | "knowledge" | "skill";
 
@@ -221,4 +223,44 @@ export interface RunSummary {
 	nextObjective?: string;
 	totalTokens: number;
 	receiptPath: string;
+}
+
+export interface RalphWorkItemProgress {
+	id: string;
+	state: WorkItemState;
+	description: string;
+}
+
+export interface RalphWorkItemSnapshot {
+	open: number;
+	complete: number;
+	cancelled: number;
+	total: number;
+	items: RalphWorkItemProgress[];
+	proposals?: string[];
+	confirmedIds?: string[];
+	rejectedIds?: string[];
+}
+
+export interface RalphProgressSnapshot {
+	runId: string;
+	projectRoot: string;
+	ledgerRoot: string;
+	taskPath: string;
+	sequence: number;
+	startedAt: string;
+	updatedAt: string;
+	state: RalphState;
+	stage?: RalphRole;
+	iteration: number;
+	mode: RalphMode;
+	usage: { totalTokens: number };
+	policy: { mode: RalphMode; recordCount?: number; contextBytes?: number };
+	activity?: HarnessBoundedActivity;
+	workItems: RalphWorkItemSnapshot;
+	review?: ReviewProgressSnapshot;
+	nestedReviewRunId?: string;
+	nextObjective?: string;
+	gate?: { kind: RalphTerminalState; reason: string };
+	terminalOutcome?: { state: RalphTerminalState; cause?: RalphTerminalCause; lastOutcome?: string };
 }

@@ -1,12 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { ProgressChannel } from "../../operations/src/progress-channel.js";
 import { ReviewController, summarizeReviewRun } from "../../review/src/controller.js";
-import type { ReviewRun } from "../../review/src/types.js";
-import { getManagedSubagentService, type ManagedSubagentService } from "../../subagents/src/service.js";
+import type { ReviewProgressSnapshot, ReviewRun } from "../../review/src/types.js";
+import {
+	getManagedSubagentService,
+	type HarnessBoundedActivity,
+	type ManagedSubagentService,
+} from "../../subagents/src/service.js";
 import { getLifetimeTotal } from "../../subagents/src/usage.js";
 import { type AuthorityDenial, createExecutorAuthorityPolicy } from "./authority-policy.js";
-import { acquireRalphRunLeases } from "./lease.js";
+import { acquireRalphRunLeases, activeProjectLease } from "./lease.js";
+import type { RalphRunOwnership } from "./operations-service.js";
+import { buildRalphProgressSnapshot } from "./progress.js";
 import { appendReceipt, listRunSummaries, loadRun, receiptPath } from "./receipts.js";
 import {
 	createRalphResultTool,
@@ -27,11 +34,13 @@ import {
 	completeTaskWorkItemsUnderLease,
 	recordExecutorOutcome,
 } from "./task.js";
+import type { WorkItem } from "./task-document.js";
 import type {
 	JudgeOutput,
 	RalphAgentRole,
 	RalphBudgets,
 	RalphMode,
+	RalphProgressSnapshot,
 	RalphRole,
 	RalphRun,
 	RalphState,
@@ -41,6 +50,7 @@ import type {
 	RunSummary,
 	WorkItemCompletionProposal,
 	WorkItemJudgment,
+	WorkItemReceipt,
 } from "./types.js";
 import {
 	compileWorkGraph,
@@ -83,7 +93,9 @@ export interface StartRunOptions {
 
 export interface RalphControllerDependencies {
 	getService?: () => ManagedSubagentService | undefined;
-	reviewController?: Pick<ReviewController, "run">;
+	reviewController?: Pick<ReviewController, "run"> & {
+		subscribeProgress?: ReviewController["subscribeProgress"];
+	};
 }
 
 interface ActiveRunControl {
@@ -95,12 +107,22 @@ interface ActiveRunControl {
 	forcedGate?: { state: RalphTerminalState; reason: string; cause: RalphTerminalCause };
 	settled?: Promise<void>;
 	resolveSettled?: () => void;
+	activity?: HarnessBoundedActivity;
+	workItems: WorkItem[];
+	workItemReceipt?: WorkItemReceipt;
+	review?: ReviewProgressSnapshot;
+	nestedReviewRunId?: string;
+	gate?: { kind: RalphTerminalState; reason: string };
 }
 
 export class RalphController {
 	private readonly active = new Map<string, ActiveRunControl>();
+	private readonly progress = new ProgressChannel<RalphProgressSnapshot>();
+	private readonly nestedReviews = new Set<string>();
 	private readonly getService: () => ManagedSubagentService | undefined;
-	private readonly reviewController: Pick<ReviewController, "run">;
+	private readonly reviewController: Pick<ReviewController, "run"> & {
+		subscribeProgress?: ReviewController["subscribeProgress"];
+	};
 
 	constructor(dependencies: RalphControllerDependencies = {}) {
 		this.getService = dependencies.getService ?? getManagedSubagentService;
@@ -144,6 +166,16 @@ export class RalphController {
 				outcome: "run_started",
 				graphHash: graph.graphHash,
 			});
+			try {
+				this.progress.publish(
+					buildRalphProgressSnapshot(run, {
+						sequence: this.progress.nextSequence(run.runId),
+						workItems: graph.task.taskDocument?.workItems ?? [],
+					}),
+				);
+			} catch {
+				// Projection faults must not alter the run.
+			}
 			return run;
 		} finally {
 			releaseLeases();
@@ -216,8 +248,10 @@ export class RalphController {
 			externalCancelled: false,
 			settled,
 			resolveSettled,
+			workItems: [],
 		};
 		this.active.set(runId, control);
+		this.emitProgress(run, control);
 		const onExternalAbort = () => {
 			control.externalCancelled = true;
 			control.abort.abort();
@@ -290,12 +324,56 @@ export class RalphController {
 		await Promise.all(controls.map((control) => control.settled));
 	}
 
+	subscribeProgress(listener: (snapshot: RalphProgressSnapshot) => void): () => void {
+		return this.progress.subscribe(listener);
+	}
+
+	liveProgress(): RalphProgressSnapshot[] {
+		return this.progress.list();
+	}
+
+	nestedReviewRunIds(): Set<string> {
+		return new Set(this.nestedReviews);
+	}
+
+	classifyOwnership(projectRootInput: string, runId: string): RalphRunOwnership {
+		const projectRoot = realpathSync(projectRootInput);
+		const control = this.active.get(runId);
+		if (control && control.projectRoot === projectRoot) return { kind: "owned" };
+		const owner = activeProjectLease(projectRoot);
+		if (owner && owner.runId === runId && owner.pid !== process.pid) {
+			return { kind: "foreign", pid: owner.pid, ownerRunId: owner.runId };
+		}
+		return { kind: "stale" };
+	}
+
+	private emitProgress(run: RalphRun, control?: ActiveRunControl): void {
+		try {
+			this.progress.publish(
+				buildRalphProgressSnapshot(run, {
+					sequence: this.progress.nextSequence(run.runId),
+					...(control?.activity && { activity: control.activity }),
+					workItems: control?.workItems ?? [],
+					...(control?.workItemReceipt && { workItemReceipt: control.workItemReceipt }),
+					...(control?.review && { review: control.review }),
+					...(control?.nestedReviewRunId && { nestedReviewRunId: control.nestedReviewRunId }),
+					...(control?.gate && { gate: control.gate }),
+				}),
+			);
+		} catch {
+			// Projection faults must not alter the run.
+		}
+	}
+
 	private async runIteration(ctx: ExtensionContext, run: RalphRun, control: ActiveRunControl): Promise<RalphRun> {
 		let graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		this.assertGraphUnchanged(run, graph.graphHash);
+		control.workItems = graph.task.taskDocument?.workItems ?? [];
 
 		run.state = "executing";
 		run.updatedAt = new Date().toISOString();
+		control.activity = undefined;
+		this.emitProgress(run, control);
 		const executorProfile = roleProfile("executor");
 		await appendReceipt(run, {
 			stage: "executor",
@@ -367,22 +445,44 @@ export class RalphController {
 		if (executor.status === "failed") return this.gate(run, "error", executor.summary);
 		run.state = "reviewing";
 		run.updatedAt = new Date().toISOString();
+		control.activity = undefined;
+		this.emitProgress(run, control);
 		await appendReceipt(run, {
 			stage: "reviewer",
 			outcome: "stage_started",
 			graphHash: graph.graphHash,
 		});
-		const reviewRun = await this.reviewController.run(
-			ctx,
-			{ mode: "workspace" },
-			{
-				root: run.projectRoot,
-				profile: "balanced",
-				background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
-				authorityPacket: graph.bundle,
-			},
-			control.abort.signal,
-		);
+		let nestedReviewId: string | undefined;
+		const unsubReview = this.reviewController.subscribeProgress?.((snapshot) => {
+			if (!nestedReviewId || snapshot.runId !== nestedReviewId) return;
+			control.review = snapshot;
+			control.nestedReviewRunId = snapshot.runId;
+			this.nestedReviews.add(snapshot.runId);
+			this.emitProgress(run, control);
+		});
+		let reviewRun: ReviewRun;
+		try {
+			reviewRun = await this.reviewController.run(
+				ctx,
+				{ mode: "workspace" },
+				{
+					root: run.projectRoot,
+					profile: "balanced",
+					background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
+					authorityPacket: graph.bundle,
+					onStarted: (started) => {
+						nestedReviewId = started.runId;
+						control.nestedReviewRunId = started.runId;
+						this.nestedReviews.add(started.runId);
+					},
+				},
+				control.abort.signal,
+			);
+		} finally {
+			unsubReview?.();
+		}
+		control.nestedReviewRunId = reviewRun.runId;
+		this.nestedReviews.add(reviewRun.runId);
 		run.totalTokens += reviewRun.totalTokens;
 		if (control.stopRequested)
 			throw new RalphGateError("stopped", "Stopped by the operator during independent review", "operator_stop");
@@ -409,6 +509,8 @@ export class RalphController {
 
 		run.state = "judging";
 		run.updatedAt = new Date().toISOString();
+		control.activity = undefined;
+		this.emitProgress(run, control);
 		const judgeProfileValue = roleProfile("judge");
 		await appendReceipt(run, {
 			stage: "judge",
@@ -478,6 +580,13 @@ export class RalphController {
 			await completeTaskWorkItemsUnderLease(graph.task.absolutePath, graph.task.digest, run.runId, confirmedWorkItems);
 		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
 		run.graphHash = graph.graphHash;
+		control.workItems = graph.task.taskDocument?.workItems ?? [];
+		control.workItemReceipt = {
+			confirmedIds: confirmedWorkItems,
+			rejectedIds: rejectedWorkItems.map((item) => item.id),
+			taskDigest: graph.task.digest,
+		};
+		this.emitProgress(run, control);
 		await appendReceipt(run, {
 			stage: "judge",
 			outcome: "work_items_applied",
@@ -501,6 +610,7 @@ export class RalphController {
 		run.nextObjective = [judgment.nextObjective, rejectedSummary].filter(Boolean).join("; ");
 		run.lastOutcome = judgment.reason;
 		run.updatedAt = new Date().toISOString();
+		this.emitProgress(run, control);
 		await appendRunJournal(
 			graph.task.absolutePath,
 			graph.task.digest,
@@ -557,6 +667,10 @@ export class RalphController {
 			internalOwner: `ralph:${run.runId}`,
 			onStarted: (agentId) => {
 				control.agentId = agentId;
+			},
+			onActivity: (activity) => {
+				control.activity = activity;
+				this.emitProgress(run, control);
 			},
 			onCompaction: () => {
 				if (!control.forcedGate)
@@ -665,6 +779,7 @@ export class RalphController {
 			outcome: "task_closed",
 			structuredOutput: judgment,
 		});
+		this.emitProgress(run, this.active.get(run.runId));
 		return run;
 	}
 
@@ -679,7 +794,10 @@ export class RalphController {
 		run.terminalCause = cause;
 		run.activeAgentId = undefined;
 		run.updatedAt = new Date().toISOString();
+		const control = this.active.get(run.runId);
+		if (control) control.gate = { kind: state, reason };
 		await appendReceipt(run, { outcome: "gate", gate: { kind: state, reason } });
+		this.emitProgress(run, control);
 		return run;
 	}
 

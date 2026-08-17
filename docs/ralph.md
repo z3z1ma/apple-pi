@@ -55,6 +55,7 @@ The context packet is root-first, then deterministically ordered by record kind 
 ## Commands
 
 ```text
+/ralph                          # open the Ralph operations hub (TUI) or a text summary (print/RPC)
 /ralph inspect .ledger/202608151430-example/task.md
 /ralph start .ledger/202608151430-example/task.md
 /ralph step <run-id>
@@ -70,6 +71,8 @@ The context packet is root-first, then deterministically ordered by record kind 
 - `run` continues autonomous iterations only while judgment says `iterate`. Ralph does not abort a run or its shared review for token spend, elapsed time, or role-turn count. `step` is one iteration because that is the command, not a resource ceiling. Operator stop, judge close/block/stop, and concrete faults remain the terminal paths.
 - `status` validates and replays the user-local receipt.
 - `stop` aborts active work, waits for it to quiesce, and records an `operator_stop` terminal cause.
+
+Argument-less `/ralph` opens the Ralph fleet in the operations hub. The live widget shows task path, iteration, stage, work-item counts, current activity, nested Review cycle/focus progress, next objective or gate, elapsed time, and usage. Accumulating finished iterations linger. Enter opens detail; `s` then `s` stops an owned run. Print/RPC modes skip overlays and widgets.
 
 The model-facing `ralph` tool is the primary orchestration interface; the slash command is human operational parity. The tool uses `task`, `root`, and `ledger_root`:
 

@@ -1,10 +1,10 @@
-import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import {
 	defineTool,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
 	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
+import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
@@ -33,6 +33,7 @@ import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { resolveAgentModel } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
+import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, partialOutputSuffix } from "./status-note.js";
@@ -51,7 +52,6 @@ import {
 } from "./ui/agent-widget.js";
 import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./ui/conversation-viewer.js";
 import { FleetList } from "./ui/fleet-list.js";
-import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
@@ -216,6 +216,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					widget.update();
 					fleet.update();
 				},
+				request.onActivity,
 			);
 			const { record } = await manager.spawnAndWait(
 				pi,
