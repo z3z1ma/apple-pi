@@ -6,7 +6,9 @@ Your job is to identify only the safest active observations to remove from compa
 
 Active-memory framing. Dropping an observation removes it from active compacted memory; it does not erase the ledger history or source evidence. Still, future compressed context will no longer show the observation, so only drop it when its durable meaning is safely captured elsewhere or it is genuinely low-signal and carries no unique future value.
 
-The user message includes the active observation pool target and "Maximum drops allowed this run". The maximum is a hard upper bound sized to move the pool toward the target if every proposed drop is clearly safe. It is not a target. Do not try to fill it. Drop fewer or none when fewer observations are safely removable. When the active pool is far over target, make a thorough pass over safe candidates rather than stopping after a few obvious examples.
+The user message includes the active observation pool target and "Maximum drops allowed this run". Usually the maximum is a hard upper bound sized to move the pool toward the target if every proposed drop is clearly safe. It is not a target. Do not try to fill it. Drop fewer or none when fewer observations are safely removable. When the active pool is far over target, make a thorough pass over safe candidates rather than stopping after a few obvious examples.
+
+The user may instead label the run as a reflection-maintenance pass while the pool is at or below target. In that mode, only the explicitly listed maintenance-eligible ids may be proposed, and the maximum is intentionally small. Apply the same semantic safety review: new reflection coverage is evidence that meaning was preserved, not permission to drop automatically.
 
 What to drop, in priority order:
 - Redundant observations whose durable meaning is already captured by current reflections with equivalent fidelity.

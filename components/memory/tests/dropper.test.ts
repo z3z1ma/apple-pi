@@ -83,6 +83,8 @@ describe("V3 dropper agent", () => {
 		expect(systemPrompt).toContain("Default action is KEEP");
 		expect(systemPrompt).toContain("When uncertain, keep");
 		expect(systemPrompt).toContain("active observation pool target");
+		expect(systemPrompt).toContain("reflection-maintenance pass");
+		expect(systemPrompt).toContain("not permission to drop automatically");
 		expect(systemPrompt).not.toContain("drop freely");
 		expect(systemPrompt).not.toContain("pruner");
 		expect(systemPrompt).not.toContain("drop-priority");
@@ -111,6 +113,44 @@ describe("V3 dropper agent", () => {
 		expect(userText).not.toContain("Drop urgency");
 		expect(userText).not.toContain("drop-priority");
 		expect(userText).not.toContain("drop-resistance");
+	});
+
+	it("runs a one-item maintenance pass below target and filters proposals to newly reflected ids", async () => {
+		let userText = "";
+		const loop = fakeAgentLoop(async (prompts, context) => {
+			userText = prompts[0].content[0].text;
+			await context.tools[0].execute("tool-1", {
+				ids: ["cccccccccccc", "bbbbbbbbbbbb", "aaaaaaaaaaaa"],
+			});
+		});
+
+		await expect(
+			runDropper({
+				...baseArgs,
+				targetTokens: 100,
+				maintenanceEligibleObservationIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"],
+				agentLoop: loop,
+			}),
+		).resolves.toEqual(["aaaaaaaaaaaa"]);
+
+		expect(userText).toContain("Reflection-maintenance pass");
+		expect(userText).toContain("Maintenance-eligible observation ids: aaaaaaaaaaaa, bbbbbbbbbbbb");
+		expect(userText).toContain("Maximum drops allowed this run: 1 observation");
+		expect(userText).not.toContain("over target by");
+		expect(userText).toContain("[cccccccccccc]");
+	});
+
+	it("returns no maintenance drop when the model proposes nothing below target", async () => {
+		const loop = fakeAgentLoop(() => {});
+
+		await expect(
+			runDropper({
+				...baseArgs,
+				targetTokens: 100,
+				maintenanceEligibleObservationIds: ["aaaaaaaaaaaa"],
+				agentLoop: loop,
+			}),
+		).resolves.toBeUndefined();
 	});
 
 	it("normalizes active drop ids, filters invalid ids, dedupes, and accepts critical observations", () => {

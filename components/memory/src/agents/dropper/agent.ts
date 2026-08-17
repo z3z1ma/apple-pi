@@ -48,6 +48,7 @@ interface RunDropperArgs {
 	reflections: Reflection[];
 	observations: Observation[];
 	targetTokens: number;
+	maintenanceEligibleObservationIds?: readonly string[];
 	signal?: AbortSignal;
 	agentLoop?: typeof agentLoop;
 	maxTurns?: number;
@@ -145,7 +146,11 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 	if (observations.length === 0) return undefined;
 
 	const metrics = observationPoolMetrics(observations, targetTokens);
-	const { observationTokens, fullness, tokensOverTarget, maxDropsAllowed } = metrics;
+	const { observationTokens, fullness, tokensOverTarget } = metrics;
+	const maintenanceEligibleIds =
+		normalizeDropObservationIds(args.maintenanceEligibleObservationIds, observations) ?? [];
+	const maintenanceMode = !metrics.ready && maintenanceEligibleIds.length > 0;
+	const maxDropsAllowed = maintenanceMode ? 1 : metrics.maxDropsAllowed;
 	const coverageById = reflectionCoverageMap(observations, reflections);
 	const coverageSummaryByRelevance = summarizeCoverageByRelevance(observations, coverageById);
 	debugLog("dropper.agent_start", {
@@ -158,6 +163,8 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 		maxDropsAllowed,
 		relevanceCounts: relevanceCounts(observations),
 		coverageSummaryByRelevance,
+		maintenanceMode,
+		maintenanceEligibleIdsCount: maintenanceEligibleIds.length,
 	});
 	if (maxDropsAllowed <= 0) {
 		debugLog("dropper.result", {
@@ -175,7 +182,12 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 
 	const proposedDropIds: string[] = [];
 	const proposed = new Set<string>();
-	const allowed = new Map(observations.map((observation) => [observation.id, observation]));
+	const maintenanceEligibleIdSet = new Set(maintenanceEligibleIds);
+	const allowed = new Map(
+		observations
+			.filter((observation) => !maintenanceMode || maintenanceEligibleIdSet.has(observation.id))
+			.map((observation) => [observation.id, observation]),
+	);
 	let toolCallCount = 0;
 	let rawRequestedIdsCount = 0;
 	let missingIdsCount = 0;
@@ -247,7 +259,10 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 	};
 
 	const fullnessPercent = Math.round(fullness * 100);
-	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map((observation) => observationToDropperLine(observation, coverageTierForObservation(observation, coverageById))))}\n\nActive observation pool: ~${observationTokens.toLocaleString()} tokens; target: ~${targetTokens.toLocaleString()} tokens; fullness against target: ~${fullnessPercent.toLocaleString()}%; over target by ~${tokensOverTarget.toLocaleString()} tokens.\nMaximum drops allowed this run: ${maxDropsAllowed.toLocaleString()} observation${maxDropsAllowed === 1 ? "" : "s"}. This maximum is sized to move the active pool toward the target if every proposed drop is clearly safe.\nThis maximum is a hard upper bound, not a target. Drop fewer or none if fewer observations are clearly safe.`;
+	const runGuidance = maintenanceMode
+		? `Active observation pool: ~${observationTokens.toLocaleString()} tokens; target: ~${targetTokens.toLocaleString()} tokens; fullness against target: ~${fullnessPercent.toLocaleString()}%.\nReflection-maintenance pass: the active pool is at or below target, but new reflections may have made a small amount of active evidence redundant.\nMaintenance-eligible observation ids: ${maintenanceEligibleIds.join(", ")}.\nMaximum drops allowed this run: 1 observation. Only propose a maintenance-eligible id, and only when its meaning is preserved with equivalent fidelity by current reflections. This maximum is a hard upper bound, not a target. Drop none when no eligible observation is clearly safe.`
+		: `Active observation pool: ~${observationTokens.toLocaleString()} tokens; target: ~${targetTokens.toLocaleString()} tokens; fullness against target: ~${fullnessPercent.toLocaleString()}%; over target by ~${tokensOverTarget.toLocaleString()} tokens.\nMaximum drops allowed this run: ${maxDropsAllowed.toLocaleString()} observation${maxDropsAllowed === 1 ? "" : "s"}. This maximum is sized to move the active pool toward the target if every proposed drop is clearly safe.\nThis maximum is a hard upper bound, not a target. Drop fewer or none if fewer observations are clearly safe.`;
+	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map((observation) => observationToDropperLine(observation, coverageTierForObservation(observation, coverageById))))}\n\n${runGuidance}`;
 	const prompts: Message[] = [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }];
 	const context: AgentContext = {
 		systemPrompt: DROPPER_SYSTEM,

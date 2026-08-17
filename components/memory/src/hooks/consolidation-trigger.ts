@@ -635,7 +635,14 @@ async function runDropperStage(
 
 	const folded = foldLedger(entries);
 	const metrics = observationPoolMetrics(folded.activeObservations, config.observationsPoolTargetTokens);
-	if (!metrics.ready) {
+	const activeObservationIds = new Set(folded.activeObservations.map((observation) => observation.id));
+	const currentReflectionIds = new Set(folded.currentReflections.map((reflection) => reflection.id));
+	const persistedSameRunReflections = sameRunReflections.filter((reflection) => currentReflectionIds.has(reflection.id));
+	const maintenanceEligibleObservationIds = Array.from(
+		new Set(persistedSameRunReflections.flatMap((reflection) => reflection.supportingObservationIds)),
+	).filter((id) => activeObservationIds.has(id));
+	const reflectionMaintenance = !metrics.ready && maintenanceEligibleObservationIds.length > 0;
+	if (!metrics.ready && !reflectionMaintenance) {
 		debugLog("dropper.not_ready", {
 			observationTokens: metrics.observationTokens,
 			targetTokens: metrics.targetTokens,
@@ -644,6 +651,7 @@ async function runDropperStage(
 			activeObservationCount: metrics.activeObservationCount,
 			droppableCount: metrics.droppableCount,
 			maxDropsAllowed: metrics.maxDropsAllowed,
+			maintenanceEligibleObservationIdsCount: maintenanceEligibleObservationIds.length,
 		});
 		return "continue";
 	}
@@ -668,14 +676,18 @@ async function runDropperStage(
 		targetTokens: metrics.targetTokens,
 		tokensOverTarget: metrics.tokensOverTarget,
 		fullness: metrics.fullness,
-		maxDropsAllowed: metrics.maxDropsAllowed,
+		maxDropsAllowed: reflectionMaintenance ? 1 : metrics.maxDropsAllowed,
+		reflectionMaintenance,
+		persistedSameRunReflectionCount: persistedSameRunReflections.length,
+		maintenanceEligibleObservationIdsCount: maintenanceEligibleObservationIds.length,
 	});
 
-	if (shouldNotifyWorker(config, ctx))
-		ctx.ui?.notify(
-			`Observational memory: dropper running — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`,
-			"info",
-		);
+	if (shouldNotifyWorker(config, ctx)) {
+		const message = reflectionMaintenance
+			? `Observational memory: dropper checking ${maintenanceEligibleObservationIds.length.toLocaleString()} newly reflected observation${maintenanceEligibleObservationIds.length === 1 ? "" : "s"} for one safe maintenance drop`
+			: `Observational memory: dropper running — active observation pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens (${Math.round(metrics.fullness * 100).toLocaleString()}%)`;
+		ctx.ui?.notify(message, "info");
+	}
 	const resolved = await resolveModel("dropper");
 	if (runtime.disposed) return "abort";
 	if (!resolved) return "abort";
@@ -687,6 +699,7 @@ async function runDropperStage(
 		reflections: folded.currentReflections,
 		observations: folded.activeObservations,
 		targetTokens: config.observationsPoolTargetTokens,
+		...(reflectionMaintenance ? { maintenanceEligibleObservationIds } : {}),
 		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
 	});
