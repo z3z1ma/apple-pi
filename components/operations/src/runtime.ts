@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import { type CatalogTask, inspectLedgerTask, listLedgerTasks } from "../../ralph/src/catalog.js";
 import type { RalphOperationsService } from "../../ralph/src/operations-service.js";
 import { resolveRalphRoots } from "../../ralph/src/roots.js";
-import type { ReviewOperationsService } from "../../review/src/operations-service.js";
 import {
 	type ActiveTaskProjection,
 	knownProjectRoots,
@@ -16,7 +15,6 @@ import {
 import { CompactOperationsWidget, type WidgetUICtx } from "./ui/compact-widget.js";
 import { createHubModel, type HubView, handleHubInput, renderHub } from "./ui/hub.js";
 import type { RalphViewRow } from "./ui/ralph-view.js";
-import type { ReviewViewRow } from "./ui/review-view.js";
 
 const RUNTIME_CHANNEL = "apple-pi:operations-runtime:request";
 let installedRuntime: OperationsRuntime | undefined;
@@ -32,10 +30,8 @@ export class OperationsRuntime {
 
 	constructor(
 		private readonly pi: ExtensionAPI,
-		readonly review: ReviewOperationsService,
 		readonly ralph: RalphOperationsService,
 	) {
-		review.subscribeProgress((snapshot) => this.widget.applyReview(snapshot));
 		ralph.subscribeProgress((snapshot) => this.widget.applyRalph(snapshot));
 	}
 
@@ -81,7 +77,7 @@ export class OperationsRuntime {
 		}
 		this.reconstruct(ctx);
 		let model = createHubModel(this.projection.activeTask, this.loadTasks(ctx.cwd));
-		model = { ...model, view, ralph: this.ralphRows(ctx.cwd), reviews: this.reviewRows(ctx.cwd) };
+		model = { ...model, view, ralph: this.ralphRows(ctx.cwd) };
 		await ctx.ui.custom((tui, theme, keybindings, done) => {
 			const component = {
 				render: (width: number) =>
@@ -119,11 +115,6 @@ export class OperationsRuntime {
 				const ownership = this.ralph.classifyOwnership(projectRoot, runId);
 				if (ownership.kind !== "owned") return;
 				await this.ralph.stop(projectRoot, runId);
-			},
-			stopReview: async (projectRoot: string, runId: string) => {
-				const ownership = this.review.classifyOwnership(projectRoot, runId);
-				if (ownership.kind !== "owned") return;
-				await this.review.stop(projectRoot, runId);
 			},
 		};
 	}
@@ -178,30 +169,6 @@ export class OperationsRuntime {
 		return rows;
 	}
 
-	reviewRows(cwd: string): ReviewViewRow[] {
-		const nested = this.ralph.nestedReviewRunIds();
-		for (const row of this.ralphRows(cwd)) {
-			if (row.receipt?.kind === "summary" && row.receipt.nestedReviewRunId) nested.add(row.receipt.nestedReviewRunId);
-			if (row.live?.nestedReviewRunId) nested.add(row.live.nestedReviewRunId);
-		}
-		const live = new Map(this.review.liveSnapshots().map((snapshot) => [snapshot.runId, snapshot]));
-		const rows: ReviewViewRow[] = [];
-		for (const root of this.knownRoots(cwd)) {
-			for (const receipt of this.review.listReceipts(root)) {
-				const runId = receipt.kind === "summary" ? receipt.summary.runId : receipt.runId;
-				rows.push({
-					runId,
-					live: live.get(runId),
-					receipt,
-					ownership: nested.has(runId)
-						? { kind: "nested", parentRunId: "ralph" }
-						: this.review.classifyOwnership(root, runId),
-				});
-			}
-		}
-		return rows.filter((row) => row.ownership.kind !== "nested");
-	}
-
 	private nonTuiSummary(cwd: string, view: HubView): string {
 		if (view === "ledger") {
 			const pointer = this.projection.activeTask.pointer;
@@ -217,16 +184,10 @@ export class OperationsRuntime {
 					.join("\n") || "No Ralph runs."
 			);
 		}
-		return (
-			this.reviewRows(cwd)
-				.slice(0, 10)
-				.map((row) => `${row.runId} ${row.live?.state ?? row.receipt?.kind}`)
-				.join("\n") || "No review runs."
-		);
+		return "No Ralph runs.";
 	}
 
 	async dispose(): Promise<void> {
-		await this.review.stopAll();
 		await this.ralph.stopAll();
 		this.widget.dispose();
 	}

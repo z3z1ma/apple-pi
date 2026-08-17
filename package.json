@@ -1,7 +1,7 @@
 {
   "name": "apple-pi",
   "version": "0.1.0",
-  "description": "Alex's integrated Pi system: advice, context, execution, subagents, first-class review, and bounded ledger-backed Ralph work loops.",
+  "description": "Alex's integrated Pi system: advice, context, execution, subagents, review-as-pi_exec, and bounded ledger-backed Ralph work loops.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -27,7 +27,6 @@
     "components/subagents/src/",
     "components/operations/src/",
     "components/ralph/src/",
-    "components/review/src/",
     "components/xai-hosted-tools/src/",
     "extensions/",
     "skills/",
@@ -44,7 +43,6 @@
       "./extensions/runtime.ts",
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",
-      "./extensions/review.ts",
       "./extensions/ralph.ts",
       "./extensions/harness.ts",
       "./extensions/xai-hosted-tools.ts"

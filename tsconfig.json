@@ -22,7 +22,6 @@
     "components/subagents/src/**/*.ts",
     "components/operations/src/**/*.ts",
     "components/ralph/src/**/*.ts",
-    "components/review/src/**/*.ts",
     "components/xai-hosted-tools/src/**/*.ts"
   ]
 }

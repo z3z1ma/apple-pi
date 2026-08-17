@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { acquireProjectLease, assertProjectLease } from "./lease.js";
 import { parseTaskDocument, type WorkItem } from "./task-document.js";
-import type { ExecutorOutput, JudgeOutput, ReviewerOutput } from "./types.js";
+import type { ExecutorOutput, JudgeOutput } from "./types.js";
 
 export class TaskMutationError extends Error {
 	constructor(
@@ -238,36 +238,6 @@ export function appendRunJournal(
 	return mutateTask(path, expectedDigest, (content) =>
 		appendSection(content, "Journal", `- ${date}: Ralph run \`${runId}\`, iteration ${iteration}: ${oneLine(message)}`),
 	);
-}
-
-export function appendIndependentReview(
-	path: string,
-	expectedDigest: string,
-	runId: string,
-	iteration: number,
-	review: ReviewerOutput,
-): Promise<{ content: string; digest: string }> {
-	const findings = review.findings.length
-		? review.findings
-				.map(
-					(finding) =>
-						`  - **${finding.severity}**${finding.path ? ` \`${oneLine(finding.path)}\`` : ""}: ${oneLine(finding.summary)} Evidence: ${oneLine(finding.evidence)}`,
-				)
-				.join("\n")
-		: "  - None.";
-	const risks = review.residualRisk.length
-		? review.residualRisk.map((risk) => `  - ${oneLine(risk)}`).join("\n")
-		: "  - None recorded.";
-	const markdown = [
-		`### Ralph independent review — run ${runId}, iteration ${iteration}`,
-		`Verdict: **${review.verdict}**`,
-		`Summary: ${oneLine(review.summary)}`,
-		"Findings:",
-		findings,
-		"Residual risk:",
-		risks,
-	].join("\n");
-	return mutateTask(path, expectedDigest, (content) => appendSection(content, "Review", markdown));
 }
 
 export function appendJudgment(

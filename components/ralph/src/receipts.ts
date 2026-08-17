@@ -56,7 +56,7 @@ const TERMINAL_CAUSES = new Set([
 ]);
 const TRANSITIONS: Record<string, Set<string>> = {
 	ready: new Set(["ready", "executing", ...TERMINAL]),
-	executing: new Set(["executing", "reviewing", ...TERMINAL]),
+	executing: new Set(["executing", "reviewing", "judging", ...TERMINAL]),
 	reviewing: new Set(["reviewing", "judging", ...TERMINAL]),
 	judging: new Set(["judging", "iterating", "done", ...TERMINAL]),
 	iterating: new Set(["iterating", "executing", ...TERMINAL]),
@@ -467,24 +467,9 @@ export function listRunSummaries(projectRoot: string): RunSummary[] {
 }
 
 export type RalphReceiptRow =
-	| { kind: "summary"; summary: RunSummary; nestedReviewRunId?: string }
+	| { kind: "summary"; summary: RunSummary }
 	| { kind: "load_error"; runId: string; receiptPath: string; reason: string }
 	| { kind: "legacy_audit"; runId: string; receiptPath: string };
-
-function nestedReviewRunIdFromEvents(projectRoot: string, runId: string): string | undefined {
-	try {
-		for (const event of [...readReceiptEvents(projectRoot, runId)].reverse()) {
-			const details = event.structuredOutput;
-			if (details && typeof details === "object" && !Array.isArray(details)) {
-				const reviewRunId = (details as { reviewRunId?: unknown }).reviewRunId;
-				if (typeof reviewRunId === "string" && reviewRunId.trim()) return reviewRunId;
-			}
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
-}
 
 export function listRalphReceiptRows(projectRoot: string): RalphReceiptRow[] {
 	const directory = runDirectory(projectRoot);
@@ -517,7 +502,6 @@ export function listRalphReceiptRows(projectRoot: string): RalphReceiptRow[] {
 		}
 		try {
 			const run = loadRun(projectRoot, runId);
-			const nestedReviewRunId = nestedReviewRunIdFromEvents(projectRoot, runId);
 			rows.push({
 				kind: "summary",
 				summary: {
@@ -531,7 +515,6 @@ export function listRalphReceiptRows(projectRoot: string): RalphReceiptRow[] {
 					totalTokens: run.totalTokens,
 					receiptPath: path,
 				},
-				...(nestedReviewRunId && { nestedReviewRunId }),
 			});
 		} catch (error) {
 			rows.push({

@@ -6,13 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { acquireProjectLease, acquireRalphRunLeases, activeProjectLease } from "../src/lease.js";
 import { appendReceipt, listRunSummaries, loadRun, receiptPath, readReceiptEvents } from "../src/receipts.js";
 import { parseExecutorOutput, parseJudgeOutput, roleProfile } from "../src/roles.js";
-import {
-	appendIndependentReview,
-	appendJudgment,
-	closeTask,
-	completeTaskWorkItemsUnderLease,
-	mutateTaskWorkItems,
-} from "../src/task.js";
+import { appendJudgment, closeTask, completeTaskWorkItemsUnderLease, mutateTaskWorkItems } from "../src/task.js";
 import type { RalphRun } from "../src/types.js";
 import { compileWorkGraph } from "../src/work-graph.js";
 
@@ -144,16 +138,9 @@ describe("Ralph role contracts", () => {
 });
 
 describe("task recording and receipts", () => {
-	it("records independent review and judgment in task.md before deterministic closure", async () => {
+	it("records judgment in task.md before deterministic closure", async () => {
 		const root = repo();
 		let graph = compileWorkGraph(root, TASK);
-		await appendIndependentReview(graph.task.absolutePath, graph.task.digest, "run-12345678", 1, {
-			verdict: "pass",
-			summary: "No falsifying defect found.",
-			findings: [],
-			residualRisk: ["Only the named behavior was inspected."],
-		});
-		graph = compileWorkGraph(root, TASK);
 		await appendJudgment(graph.task.absolutePath, graph.task.digest, "run-12345678", 1, {
 			decision: "close",
 			reason: "All gates hold.",
@@ -164,7 +151,6 @@ describe("task recording and receipts", () => {
 		await closeTask(graph.task.absolutePath, graph.task.digest);
 		const content = readFileSync(graph.task.absolutePath, "utf8");
 		expect(content).toContain("Status: done");
-		expect(content).toContain("Ralph independent review");
 		expect(content).toContain("Ralph judgment");
 	});
 

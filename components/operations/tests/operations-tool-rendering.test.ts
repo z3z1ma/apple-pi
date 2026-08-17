@@ -1,46 +1,11 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import type { RalphProgressSnapshot } from "../../ralph/src/types.js";
-import type { ReviewProgressSnapshot } from "../../review/src/types.js";
 import { CompactOperationsWidget, renderCompactLines } from "../src/ui/compact-widget.js";
 import type { Theme } from "../src/ui/format.js";
-import { renderRalphProgressCard, renderReviewProgressCard, throttleUpdates } from "../src/ui/tool-renderers.js";
+import { renderRalphProgressCard, throttleUpdates } from "../src/ui/tool-renderers.js";
 
 const theme: Theme = { fg: (_c, text) => text, bold: (text) => text };
-
-const review: ReviewProgressSnapshot = {
-	runId: "rev",
-	projectRoot: "/repo",
-	source: { mode: "workspace" },
-	profile: "fast",
-	sequence: 2,
-	startedAt: new Date(Date.now() - 1000).toISOString(),
-	updatedAt: new Date().toISOString(),
-	state: "reviewing",
-	cycleIndex: 1,
-	cycleCap: 1,
-	policy: { profile: "fast", selectedItems: 2, maxCycles: 1, maxFocuses: 4, maxConcurrency: 4 },
-	usage: { totalTokens: 800 },
-	planner: { status: "completed" },
-	verifier: { status: "idle" },
-	partitions: [],
-	focuses: [
-		{
-			id: "f",
-			partitionId: "p",
-			title: "Export",
-			state: "running",
-			findingCount: 0,
-			activity: { phase: "tool", toolName: "read", turnCount: 1, toolCount: 1, label: "reading…" },
-		},
-	],
-	findings: [],
-	notes: [],
-	verifierDecisions: [],
-	failures: [],
-	residualRisk: [],
-	coverage: { selected: 2, completed: 0, failed: 0, waived: 0 },
-};
 
 const ralph: RalphProgressSnapshot = {
 	runId: "ralph",
@@ -64,14 +29,10 @@ const ralph: RalphProgressSnapshot = {
 		items: [{ id: "WI-003", state: "open", description: "Integrate the work-item parser now." }],
 	},
 	nextObjective: "Keep the widget live.",
-	review,
 };
 
 describe("operations tool rendering", () => {
 	it("renders partial and final cards and clamps the compact widget", () => {
-		const partial = renderReviewProgressCard(review, theme, true).render(36);
-		expect(partial[0]).toContain("Review");
-		expect(partial.every((line) => visibleWidth(line) <= 36)).toBe(true);
 		const finalRalph = renderRalphProgressCard(
 			{ ...ralph, state: "done", terminalOutcome: { state: "done", lastOutcome: "closed" } },
 			theme,
@@ -86,7 +47,7 @@ describe("operations tool rendering", () => {
 				catalogTask: {
 					taskId: "202608151813-build-harness-operations-ui",
 					taskPath: ralph.taskPath,
-					title: "Build interactive review, Ralph, and ledger-task operations UI",
+					title: "Build interactive Ralph and ledger-task operations UI",
 					status: "active",
 					digest: "b".repeat(64),
 					acceptance: ["AC-001"],
@@ -94,7 +55,6 @@ describe("operations tool rendering", () => {
 					issues: 0,
 				},
 				ralph: [ralph],
-				reviews: [review],
 			},
 			theme,
 			28,

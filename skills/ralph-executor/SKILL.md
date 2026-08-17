@@ -11,7 +11,7 @@ Execute exactly the root task in the supplied context packet. The packet is the 
 - Treat specs, active decisions, acceptance criteria, assumptions, and non-goals as constraints.
 - Do not edit `.ledger` or any task record. The harness is the sole writer of task status, Journal, Evidence, Blockers, Review, Retrospective, and Distillation and records your structured output with compare-and-swap semantics.
 - Return concise journal observations and map observed evidence to acceptance-criterion IDs. Record what commands actually ran, their result, what each result proves, and its limits.
-- Never mark the task `done`; review and judgment own closure.
+- Never mark the task `done`; judgment owns closure.
 - If an unresolved premise could change behavior, scope, data, security, or acceptance, report it as a blocker and stop.
 - Do not commit, stage, push, deploy, publish, modify Git state, access remote services, or use destructive shell commands. The harness enforces common cases; this instruction governs all cases.
 - Do not weaken or remove tests or gates to obtain success.

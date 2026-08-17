@@ -32,7 +32,7 @@ function run(overrides: Partial<RalphRun> = {}): RalphRun {
 }
 
 describe("ralph progress", () => {
-	it("builds sanitized monotonic snapshots with work items and nested review", () => {
+	it("builds sanitized monotonic snapshots with work items", () => {
 		const channel = new ProgressChannel<RalphProgressSnapshot>();
 		const first = channel.publish(
 			buildRalphProgressSnapshot(run(), {
@@ -42,40 +42,15 @@ describe("ralph progress", () => {
 			}),
 		);
 		const second = channel.publish(
-			buildRalphProgressSnapshot(run({ state: "reviewing", totalTokens: 4000 }), {
+			buildRalphProgressSnapshot(run({ state: "judging", totalTokens: 4000 }), {
 				sequence: channel.nextSequence("ralph-1"),
 				workItems: [{ id: "WI-001", state: "open", description: "Add catalog parsing now." }],
-				nestedReviewRunId: "rev-9",
-				review: {
-					runId: "rev-9",
-					projectRoot: "/ws",
-					source: { mode: "workspace" },
-					profile: "balanced",
-					sequence: 1,
-					startedAt: run().startedAt,
-					updatedAt: run().updatedAt,
-					state: "reviewing",
-					cycleIndex: 1,
-					cycleCap: 1,
-					policy: { profile: "balanced", selectedItems: 1, maxCycles: 1, maxFocuses: 6, maxConcurrency: 6 },
-					usage: { totalTokens: 10 },
-					planner: { status: "completed" },
-					verifier: { status: "idle" },
-					partitions: [],
-					focuses: [{ id: "f1", partitionId: "p", title: "Export", state: "running", findingCount: 0 }],
-					findings: [],
-					notes: [],
-					verifierDecisions: [],
-					failures: [],
-					residualRisk: [],
-					coverage: { selected: 1, completed: 0, failed: 0, waived: 0 },
-				},
 			}),
 		);
 		expect(second.sequence).toBeGreaterThan(first.sequence);
 		expect(ralphProgressIdentity(first)).toBe(ralphProgressIdentity(second));
 		expect(second.workItems.total).toBe(1);
-		expect(second.review?.focuses[0]?.state).toBe("running");
+		expect(second.stage).toBe("judge");
 		expect(JSON.stringify(second)).not.toContain("must-not-leak");
 		const replayed: number[] = [];
 		channel.subscribe((snapshot) => replayed.push(snapshot.sequence));

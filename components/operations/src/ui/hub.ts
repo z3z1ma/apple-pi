@@ -7,10 +7,8 @@ import type { Theme } from "./format.js";
 import { filterLedgerTasks, type LedgerViewModel, renderLedgerView, selectedLedgerTask } from "./ledger-view.js";
 import type { RalphViewRow } from "./ralph-view.js";
 import { renderRalphDetail, renderRalphView } from "./ralph-view.js";
-import type { ReviewViewRow } from "./review-view.js";
-import { renderReviewDetail, renderReviewView } from "./review-view.js";
 
-export type HubView = "ledger" | "ralph" | "review";
+export type HubView = "ledger" | "ralph";
 
 export interface HubActions {
 	selectTask(taskPath: string): void;
@@ -18,16 +16,13 @@ export interface HubActions {
 	startRalph(taskPath: string): void;
 	runRalph(taskPath: string): void;
 	stopRalph(projectRoot: string, runId: string): Promise<void> | void;
-	stopReview(projectRoot: string, runId: string): Promise<void> | void;
 }
 
 export interface HubModel {
 	view: HubView;
 	ledger: LedgerViewModel;
 	ralph: RalphViewRow[];
-	reviews: ReviewViewRow[];
 	selectedRalphId?: string;
-	selectedReviewId?: string;
 	detail?: DetailViewState;
 }
 
@@ -36,12 +31,11 @@ export function createHubModel(active: ActiveTaskProjection, tasks: CatalogTask[
 		view: "ledger",
 		ledger: { tasks, query: "", selectedId: tasks[0]?.taskId, active, searchFocused: false },
 		ralph: [],
-		reviews: [],
 	};
 }
 
 export function renderHub(model: HubModel, theme: Theme, width: number, height = 18): string[] {
-	const tabs = (["ledger", "ralph", "review"] as const)
+	const tabs = (["ledger", "ralph"] as const)
 		.map((view) => (view === model.view ? theme.fg("accent", theme.bold(view)) : theme.fg("dim", view)))
 		.join("  ");
 	const header = ` ${tabs}`;
@@ -51,9 +45,7 @@ export function renderHub(model: HubModel, theme: Theme, width: number, height =
 	const body =
 		model.view === "ledger"
 			? renderLedgerView(model.ledger, theme, width, height - 1)
-			: model.view === "ralph"
-				? renderRalphView(model.ralph, model.selectedRalphId, theme, width, height - 1)
-				: renderReviewView(model.reviews, model.selectedReviewId, theme, width, height - 1);
+			: renderRalphView(model.ralph, model.selectedRalphId, theme, width, height - 1);
 	return clampLines([header, ...body], width, height);
 }
 
@@ -125,8 +117,7 @@ export function handleHubInput(
 		return { model: { ...model, ledger: { ...model.ledger, searchFocused: true } } };
 	}
 	if (model.view === "ledger") return handleLedgerKeys(model, data, actions, matches);
-	if (model.view === "ralph") return handleRalphKeys(model, data, matches);
-	return handleReviewKeys(model, data, matches);
+	return handleRalphKeys(model, data, matches);
 }
 
 function handleLedgerKeys(
@@ -237,75 +228,14 @@ function handleRalphKeys(
 	return { model };
 }
 
-function handleReviewKeys(
-	model: HubModel,
-	data: string,
-	matches: (id: string, fallback: () => boolean) => boolean,
-): { model: HubModel } {
-	if (matches("tui.select.down", () => matchesKey(data, Key.down))) {
-		return {
-			model: {
-				...model,
-				selectedReviewId: moveId(
-					model.reviews.map((row) => row.runId),
-					model.selectedReviewId,
-					1,
-				),
-			},
-		};
-	}
-	if (matches("tui.select.up", () => matchesKey(data, Key.up))) {
-		return {
-			model: {
-				...model,
-				selectedReviewId: moveId(
-					model.reviews.map((row) => row.runId),
-					model.selectedReviewId,
-					-1,
-				),
-			},
-		};
-	}
-	const row = model.reviews.find((entry) => entry.runId === model.selectedReviewId) ?? model.reviews[0];
-	if (row && matches("tui.select.confirm", () => matchesKey(data, Key.enter))) {
-		return {
-			model: {
-				...model,
-				selectedReviewId: row.runId,
-				detail: {
-					lines: row.live
-						? renderReviewDetail(row.live, { fg: (_c, text) => text, bold: (text) => text }, 120)
-						: [row.runId, row.ownership.kind],
-					offset: 0,
-					confirmingStop: false,
-					canStop: row.ownership.kind === "owned",
-					stopBlockedReason:
-						row.ownership.kind === "nested"
-							? "Stop the owning Ralph run"
-							: row.ownership.kind === "foreign"
-								? `Owned by process ${row.ownership.pid}`
-								: "Not a live owned run",
-				},
-			},
-		};
-	}
-	return { model };
-}
-
 function confirmStop(model: HubModel, actions: HubActions): void {
-	if (model.view === "ralph") {
-		const row = model.ralph.find((entry) => entry.runId === model.selectedRalphId);
-		if (row?.ownership.kind === "owned") void actions.stopRalph(row.workspaceRoot, row.runId);
-		return;
-	}
-	if (model.view === "review") {
-		const row = model.reviews.find((entry) => entry.runId === model.selectedReviewId);
-		if (row?.ownership.kind === "owned" && row.live) void actions.stopReview(row.live.projectRoot, row.runId);
-	}
+	if (model.view !== "ralph") return;
+	const row = model.ralph.find((entry) => entry.runId === model.selectedRalphId);
+	if (row?.ownership.kind === "owned") void actions.stopRalph(row.workspaceRoot, row.runId);
 }
 
 function nextView(view: HubView, delta: number): HubView {
-	const order: HubView[] = ["ledger", "ralph", "review"];
+	const order: HubView[] = ["ledger", "ralph"];
 	const index = order.indexOf(view);
 	return order[(index + delta + order.length) % order.length]!;
 }

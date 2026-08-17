@@ -26,13 +26,13 @@ Choose autonomous execution only after shaping a bounded task. Ralph does not es
 /ralph run .ledger/<task-id>/task.md --root ../task-worktree --ledger-root /absolute/main-checkout
 ```
 
-One iteration is a fresh executor, independent review, and a fresh closure judge. Roles do not inherit the parent conversation and are never resumed. Do not edit the checkout while a run is active. Use `/ralph stop <run-id>` to abort and wait for quiescence.
+One iteration is a fresh executor and a fresh closure judge. Roles do not inherit the parent conversation and are never resumed. Do not edit the checkout while a run is active. Use `/ralph stop <run-id>` to abort and wait for quiescence. Independent review is `/skill:review` when the parent session wants a review program.
 
 Treat terminal gates honestly:
 
-- `done`: deterministic evidence, review, retrospective, and distillation gates passed;
+- `done`: deterministic evidence, retrospective, and distillation gates passed;
 - `blocked`: shaping, authority, or dependency input is required;
-- `evidence_failed` or `review_failed`: inspect the recorded reason before another run;
+- `evidence_failed`: inspect the recorded reason before another run;
 - `authority_required`, `workspace_conflict`, or `compacted`: reconcile the workspace and task deliberately; never route around the gate.
 
 Ralph never commits, stages, pushes, deploys, resets, cleans, stashes, publishes, or updates remote systems. The human owns final inspection and integration.

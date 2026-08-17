@@ -216,6 +216,7 @@ export function extensionGuestSignatures(): string[] {
 export const GUEST_HELPER_SIGNATURES: string[] = [
 	"inputs: Readonly<Record<string, string>>  // from the inputs tool parameter; missing keys are undefined",
 	"display is not a program global; reading or assigning it throws. Pass display: { name?: string, description?: string } on the pi_exec tool call.",
+	"limits is a pi_exec tool parameter, not a program global. Pass limits: { agentBudget?, callBudget?, concurrency?, timeoutSeconds? } to scale the envelope up to package maxima.",
 	"Await every host call. Host arguments and the program return value must be JSON-serializable.",
 	"tools.list() → Promise<Array<{ name: string, description: string }>>  // captured session extension tools only, not pi.*",
 	"tools.search(query: string) → Promise<Array<{ name: string, description: string }>>  // case-insensitive substring on name+description",
@@ -340,6 +341,7 @@ export const PI_EXEC_PROMPT_GUIDELINES = [
 	"The code parameter is a JavaScript async-function body. Core calls are pi.read/grep/find/ls/bash/edit/write and each takes one object matching that parent tool, never a positional string: pi.read({ path }), pi.grep({ pattern }), pi.bash({ command }). fetch, agent/agents.run, parallel/pipeline, and every captured extension tool including the MCP gateway are listed on the code parameter before you write the program. Agent options may include task, name, model, thinking, tools, systemPrompt, context, and outputSchema. Call MCP and extension tools in the program, then bind compact results as agent context. Use agents.run for fan-out so one failed worker does not abort the program. Load the pi-exec skill for gather-then-bind examples.",
 	"Use Promise.all or parallel(items, mapper, concurrency) for independent work and pipeline(items, ...stages) for staged transforms. Keep dependent search→read and edit→verify calls sequential; never perform concurrent edits to the same file.",
 	"display is a pi_exec tool parameter beside code and inputs, not a program global. Pass display: { name, description } on the tool call for multi-step programs so the live tool card and activity widget communicate intent.",
+	"limits is a pi_exec tool parameter. Pass limits: { agentBudget, callBudget, concurrency, timeoutSeconds } when a workflow needs more workers or host calls than the shape-derived default. Package maxima still apply.",
 ];
 
 /** Live guest catalog. Built on read so late-registered extension tools appear. */

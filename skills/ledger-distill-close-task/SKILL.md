@@ -23,4 +23,4 @@ A valid no-promotion rationale names the lasting owners, for example: implementa
 
 Task-local candidate skills live under `skills/<slug>/SKILL.md` with `name`, a precise `description: "Use when ..."`, Objective, Prerequisites, Procedure, and Validation. They do not become ambient merely by existing in the ignored ledger; promote them to the repository's configured skill directory only when repeated toil justifies it.
 
-Closure still requires Ralph's evidence and review gates. For a blocked or stopped task, preserve crystallized findings and explicit next ownership without manufacturing `done`. Keep `.ledger/README.md` as a path index, not a duplicate status dashboard.
+Closure still requires Ralph's evidence, retrospective, and distillation gates. For a blocked or stopped task, preserve crystallized findings and explicit next ownership without manufacturing `done`. Keep `.ledger/README.md` as a path index, not a duplicate status dashboard.

@@ -8,7 +8,6 @@ import type {
 	CompiledWorkGraph,
 	ExecutorOutput,
 	JudgeOutput,
-	ReviewerOutput,
 	WorkItemCompletionProposal,
 	WorkItemJudgment,
 	RalphAgentRole,
@@ -80,22 +79,13 @@ export function executorPrompt(graph: CompiledWorkGraph, iteration: number, obje
 	].join("\n");
 }
 
-export function judgePrompt(
-	graph: CompiledWorkGraph,
-	changes: string,
-	executor: ExecutorOutput,
-	review: ReviewerOutput,
-): string {
+export function judgePrompt(graph: CompiledWorkGraph, changes: string, executor: ExecutorOutput): string {
 	return [
 		contextPacket(graph),
 		"",
 		"<executor-report>",
 		JSON.stringify(executor, null, 2),
 		"</executor-report>",
-		"",
-		"<independent-review>",
-		JSON.stringify(review, null, 2),
-		"</independent-review>",
 		"",
 		"<workspace-changes>",
 		changes,

@@ -9,18 +9,19 @@ description: Write or debug a pi_exec JavaScript program using the correct guest
 
 Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway. Do not plan to discover schemas inside the program.
 
-`display` and `inputs` are parameters on the `pi_exec` tool call, not program assignments.
+`display`, `inputs`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
 
 ```javascript
 // Tool arguments — not guest code
 {
   code: "...",
-  display: { name: "Audit review surfaces", description: "Collect sealed-file matches." },
-  inputs: { root: "components/review" },
+  display: { name: "Audit runtime surfaces", description: "Collect matching files." },
+  inputs: { root: "extensions" },
+  limits: { agentBudget: 32, callBudget: 256, concurrency: 8, timeoutSeconds: 1800 },
 }
 ```
 
-Inside `code`, read `inputs.root`. Never write `display.name = ...` or `display.description = ...`.
+Inside `code`, read `inputs.root`. Never write `display.name = ...` or `display.description = ...`. Never assign `limits` inside the program. Omitted limit fields keep the shape-derived default; values clamp to package maxima.
 
 ## Core tools
 

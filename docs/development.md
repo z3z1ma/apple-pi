@@ -5,13 +5,13 @@
 - Extension-facing components expose a thin `src/index.ts` entrypoint. It re-exports the component's public API and delegates installation to a cohesive domain module; library components expose their named modules directly.
 - Extension wrappers register Pi integration only. Composition-heavy extensions may keep their installer together when lifecycle state is shared; independently testable formatting, persistence, worker, fetch, and dispatch code belongs in named sibling modules.
 - Controllers, services, and algorithms stay whole when their state and dependency direction are cohesive. Split a module only at a production consumer, a test seam, or a one-way dependency boundary—not because it is long.
-- UI rendering belongs in the component's `ui/` modules. Review and Ralph keep their own UI presentation; they do not share a generic fleet, overlay, status, or progress abstraction.
+- UI rendering belongs in the component's `ui/` modules. Ralph keeps its own UI presentation; it does not share a generic fleet, overlay, status, or progress abstraction.
 - TypeScript uses NodeNext imports with `.js` suffixes throughout the repository. VCC's Bun suite follows the same module and formatting conventions.
 - Components place production TypeScript in `src/` and component-specific tests in `tests/`; root integration tests remain under `tests/`. Third-party attribution and license text are centralized in `THIRD_PARTY_NOTICES.md`.
 
 ## Retained cohesive modules
 
-`AdvisorRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, `agent-manager.ts`, Review/Ralph controllers, and VCC algorithms remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
+`AdvisorRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, `agent-manager.ts`, the Ralph controller, and VCC algorithms remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
 
 ## Quality commands
 

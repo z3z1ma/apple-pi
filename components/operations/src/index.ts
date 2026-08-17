@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getRalphOperationsService } from "../../ralph/src/operations-service.js";
-import { getReviewOperationsService } from "../../review/src/operations-service.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { createLedgerTool, resolveLedgerRoot } from "./ledger-tool.js";
 import { getOperationsRuntime, installOperationsRuntime, OperationsRuntime } from "./runtime.js";
@@ -18,23 +17,21 @@ export { CompactOperationsWidget, renderCompactLines } from "./ui/compact-widget
 export { createHubModel, handleHubInput, renderHub } from "./ui/hub.js";
 export { filterLedgerTasks, renderLedgerView } from "./ui/ledger-view.js";
 export { renderRalphDetail, renderRalphView } from "./ui/ralph-view.js";
-export { renderReviewDetail, renderReviewView } from "./ui/review-view.js";
-export { renderRalphProgressCard, renderReviewProgressCard, throttleUpdates } from "./ui/tool-renderers.js";
+export { renderRalphProgressCard, throttleUpdates } from "./ui/tool-renderers.js";
 
 export default function installHarness(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
-	const review = getReviewOperationsService(pi.events);
 	const ralph = getRalphOperationsService(pi.events);
-	if (!review || !ralph) {
+	if (!ralph) {
 		pi.registerCommand("harness", {
-			description: "Open the ledger, Ralph, and review operations hub",
+			description: "Open the ledger and Ralph operations hub",
 			handler: async (_input, ctx) => {
-				ctx.ui.notify("Harness operations require the review and Ralph extensions to load first.", "error");
+				ctx.ui.notify("Harness operations require the Ralph extension to load first.", "error");
 			},
 		});
 		return;
 	}
-	const runtime = new OperationsRuntime(pi, review, ralph);
+	const runtime = new OperationsRuntime(pi, ralph);
 	installOperationsRuntime(runtime, pi.events);
 	pi.registerTool(
 		createLedgerTool({
@@ -43,7 +40,7 @@ export default function installHarness(pi: ExtensionAPI): void {
 		}),
 	);
 	pi.registerCommand("harness", {
-		description: "Open the ledger, Ralph, and review operations hub",
+		description: "Open the ledger and Ralph operations hub",
 		handler: async (_input, ctx) => {
 			await runtime.openHub(ctx, "ledger");
 		},

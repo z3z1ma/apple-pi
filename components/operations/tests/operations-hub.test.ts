@@ -15,7 +15,6 @@ const actions = {
 	startRalph() {},
 	runRalph() {},
 	stopRalph() {},
-	stopReview() {},
 };
 
 describe("operations hub", () => {

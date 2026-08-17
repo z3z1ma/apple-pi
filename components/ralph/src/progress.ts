@@ -1,4 +1,3 @@
-import type { ReviewProgressSnapshot } from "../../review/src/types.js";
 import type { HarnessBoundedActivity } from "../../subagents/src/service.js";
 import type { WorkItem } from "./task-document.js";
 import type {
@@ -32,8 +31,6 @@ export interface RalphLiveProgress {
 	activity?: HarnessBoundedActivity;
 	workItems?: WorkItem[];
 	workItemReceipt?: WorkItemReceipt;
-	review?: ReviewProgressSnapshot;
-	nestedReviewRunId?: string;
 	gate?: { kind: RalphTerminalState; reason: string };
 }
 
@@ -64,8 +61,6 @@ export function buildRalphProgressSnapshot(run: RalphRun, live: RalphLiveProgres
 		},
 		...(live.activity && { activity: structuredClone(live.activity) }),
 		workItems: workItemSnapshot(live.workItems ?? [], live.workItemReceipt),
-		...(live.review && { review: structuredClone(live.review) }),
-		...(live.nestedReviewRunId && { nestedReviewRunId: live.nestedReviewRunId }),
 		...(run.nextObjective && { nextObjective: run.nextObjective }),
 		...(live.gate && { gate: structuredClone(live.gate) }),
 		...(TERMINAL.has(run.state) && {

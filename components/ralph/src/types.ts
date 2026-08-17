@@ -1,4 +1,3 @@
-import type { ReviewProgressSnapshot } from "../../review/src/types.js";
 import type { HarnessBoundedActivity } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
 import type { TaskDocument, WorkItemState } from "./task-document.js";
@@ -186,20 +185,6 @@ export interface ExecutorOutput {
 	nextObjective?: string;
 }
 
-export interface ReviewFinding {
-	severity: "critical" | "significant" | "minor" | "nit";
-	summary: string;
-	evidence: string;
-	path?: string;
-}
-
-export interface ReviewerOutput {
-	verdict: "pass" | "concerns" | "fail";
-	findings: ReviewFinding[];
-	residualRisk: string[];
-	summary: string;
-}
-
 export interface JudgeOutput {
 	decision: "close" | "iterate" | "blocked" | "stop";
 	reason: string;
@@ -258,8 +243,6 @@ export interface RalphProgressSnapshot {
 	policy: { mode: RalphMode; recordCount?: number; contextBytes?: number };
 	activity?: HarnessBoundedActivity;
 	workItems: RalphWorkItemSnapshot;
-	review?: ReviewProgressSnapshot;
-	nestedReviewRunId?: string;
 	nextObjective?: string;
 	gate?: { kind: RalphTerminalState; reason: string };
 	terminalOutcome?: { state: RalphTerminalState; cause?: RalphTerminalCause; lastOutcome?: string };

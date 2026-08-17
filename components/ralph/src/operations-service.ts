@@ -18,7 +18,6 @@ export interface RalphOperationsService {
 	liveSnapshots(): RalphProgressSnapshot[];
 	listReceipts(projectRoot: string): RalphReceiptRow[];
 	classifyOwnership(projectRoot: string, runId: string): RalphRunOwnership;
-	nestedReviewRunIds(): Set<string>;
 	stop(projectRoot: string, runId: string): Promise<unknown>;
 	stopAll(): Promise<void>;
 	start(ctx: ExtensionContext, taskPath: string, options?: StartRunOptions): Promise<unknown>;
@@ -56,7 +55,6 @@ export function ralphOperationsService(controller: RalphController): RalphOperat
 		liveSnapshots: () => controller.liveProgress(),
 		listReceipts: (projectRoot) => listRalphReceiptRows(resolveRalphRoots(projectRoot).workspaceRoot),
 		classifyOwnership: (projectRoot, runId) => controller.classifyOwnership(projectRoot, runId),
-		nestedReviewRunIds: () => controller.nestedReviewRunIds(),
 		stop: (projectRoot, runId) => controller.stop(projectRoot, runId),
 		stopAll: () => controller.stopAll(),
 		start: (ctx, taskPath, options) => controller.start(ctx, taskPath, options),

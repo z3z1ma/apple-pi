@@ -1,10 +1,8 @@
 import type { RalphRunOwnership } from "../../../ralph/src/operations-service.js";
 import type { RalphReceiptRow } from "../../../ralph/src/receipts.js";
 import type { RalphProgressSnapshot } from "../../../ralph/src/types.js";
-import type { ReviewProgressSnapshot } from "../../../review/src/types.js";
 import { clampLine } from "./bounded-lines.js";
 import { formatDuration, formatTokens, isLiveState, oneLine, type Theme, terminalGlyph } from "./format.js";
-import { renderReviewDetail } from "./review-view.js";
 
 export interface RalphViewRow {
 	runId: string;
@@ -74,14 +72,5 @@ export function renderRalphDetail(snapshot: RalphProgressSnapshot, theme: Theme,
 	if (snapshot.nextObjective) lines.push(`next ${snapshot.nextObjective}`);
 	if (snapshot.gate) lines.push(`gate ${snapshot.gate.kind}: ${snapshot.gate.reason}`);
 	if (snapshot.terminalOutcome?.lastOutcome) lines.push(`outcome ${snapshot.terminalOutcome.lastOutcome}`);
-	const rendered = lines.map((line) => clampLine(oneLine(line, 400), width));
-	if (snapshot.review) rendered.push(...renderNestedReview(snapshot.review, theme, width));
-	return rendered;
-}
-
-function renderNestedReview(snapshot: ReviewProgressSnapshot, theme: Theme, width: number): string[] {
-	return [
-		clampLine(theme.fg("dim", "nested review"), width),
-		...renderReviewDetail(snapshot, theme, width).map((line) => clampLine(`  ${line}`, width)),
-	];
+	return lines.map((line) => clampLine(oneLine(line, 400), width));
 }

@@ -6,7 +6,12 @@ import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
-import runtime, { aggregateUsage, deriveProgramEnvelope, executeProgram } from "../extensions/runtime.js";
+import runtime, {
+	aggregateUsage,
+	deriveProgramEnvelope,
+	executeProgram,
+	PROGRAM_ENVELOPE_MAXIMA,
+} from "../extensions/runtime.js";
 import {
 	agentOperationArgs,
 	CONTEXT_GUIDANCE,
@@ -688,6 +693,19 @@ describe("pi_exec tool", () => {
 		}
 	});
 
+	it("scales the envelope from optional tool-call limits and clamps to package maxima", () => {
+		const workers = 'return agent({ task: "x" });';
+		const plain = "return 1;";
+		expect(deriveProgramEnvelope(workers).agentBudget).toBe(8);
+		expect(deriveProgramEnvelope(workers, { agentBudget: 32 }).agentBudget).toBe(32);
+		expect(deriveProgramEnvelope(workers, { agentBudget: 9_999 }).agentBudget).toBe(
+			PROGRAM_ENVELOPE_MAXIMA.agentBudget,
+		);
+		expect(deriveProgramEnvelope(plain, { agentBudget: 32 }).agentBudget).toBe(0);
+		expect(deriveProgramEnvelope(plain, { callBudget: 12 }).callBudget).toBe(12);
+		expect(deriveProgramEnvelope(plain, { timeoutSeconds: 90 }).timeoutSeconds).toBe(90);
+	});
+
 	it("fails when a program exceeds its harness-owned call envelope", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-envelope-"));
 		try {
@@ -699,6 +717,28 @@ describe("pi_exec tool", () => {
 			await expect(
 				tool.execute("call-envelope", { code: template(count) }, undefined, undefined, { cwd: dir }),
 			).rejects.toThrow(/call budget exhausted/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("honors a lowered callBudget limit", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-limit-"));
+		try {
+			for (let index = 0; index < 3; index++) writeFileSync(join(dir, `${index}.txt`), String(index), "utf8");
+			const { tool } = register();
+			await expect(
+				tool.execute(
+					"lowered-calls",
+					{
+						code: `return Promise.all([0, 1, 2].map((index) => pi.read({ path: index + ".txt" })));`,
+						limits: { callBudget: 2 },
+					},
+					undefined,
+					undefined,
+					{ cwd: dir },
+				),
+			).rejects.toThrow(/call budget exhausted \(2\)/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

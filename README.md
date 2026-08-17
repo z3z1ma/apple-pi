@@ -9,11 +9,11 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
 - **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
-- **First-class review** (`review`, `/review`) — sealed Git scope, optional caller files/folders/globs, planner-opened file partitions and concrete focuses, parallel fresh read-only reviewers, one cycle verifier with a meta-review, and coverage receipts.
-- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, shared review, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
+- **Review** (`/skill:review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
+- **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
 
-apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, review, Ralph, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
+apple-pi owns its Advisor, questionnaire, context, memory, exec, subagent, Ralph, and xAI hosted-tools source. MCP is the deliberate exception: protocol, transport, OAuth, keyring, and MCP UI maintenance remain with the exact `pi-mcp-adapter` dependency while apple-pi owns its integration boundary.
 
 ## Install
 
@@ -105,7 +105,7 @@ Available globals:
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
 - `inputs.<key>` for separately supplied strings, and `print(...)`/`console.log(...)`
 
-`display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
+`display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
 
 Agent options include `task`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. Agents default to read-only core tools, but a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
 
@@ -135,7 +135,7 @@ return parallel(files, async (name) => {
 }, 3);
 ```
 
-Pi Exec derives a package-owned envelope from program shape: bounded host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Normal model calls never choose those numbers. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
+Pi Exec derives a default envelope from program shape: host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Pass optional `limits` on the tool call to raise or lower agent, call, concurrency, or timeout capacity up to package maxima. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
 
 `fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
 
@@ -220,26 +220,15 @@ A foreground result includes its agent ID. Pass that ID back through the `Agent`
 
 The imported implementation deliberately has **no worktree parameter or worktree code**, **no scheduled agents**, **no human `@agent` input interception**, **no plugin-local agent memory**, and **no duplicate output-transcript store**. Agents can still use ordinary `bash` when they intentionally need Git or worktrees. Agent-to-agent coordination remains available through explicit `allowed_subagents`, result retrieval, steering, and stopping.
 
-### First-class review
+### Review
 
-`review` is designed primarily for model-driven use and defaults to the current workspace. The tool's optional `root` lets an agent select a repository beneath its current directory or a linked worktree elsewhere; relative roots resolve from the caller cwd. It seals the selected Git input, asks the dedicated `review-planner` route to open file partitions with concrete focuses, runs those focuses as fresh read-only agents in parallel, then has one verifier decide the pile and write a meta-review. Distinct findings that share a path stay distinct and are grouped for presentation. `thorough` may repeat the cycle against residuals.
+Review is a skill over `pi_exec`, not an extension. Load `/skill:review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in `review-planner`, `reviewer`, and `review-verifier`. Workers return typed values through `pi_exec_return`.
 
 ```text
-/review
-/review preview
-/review run
-/review run workspace --root ../feature-worktree
-/review run range --root repos/service-a --from main --to HEAD --profile balanced
-/review run commit --commit abc123 --profile thorough
-/review status [run-id]
-/review stop <run-id>
+/skill:review
 ```
 
-Planning uses `review-planner`; reviewers use `review-routine`; the verifier uses `review-rigorous`. A selected file is covered once a successful focus reviewed it. A run is complete only after first-cycle verification also finishes. These entries come from trusted project or global `modes.json`, and missing entries defer to the caller's active model. Reviewers may read outside their assigned files to trace dependencies, but findings must name a patch-introduced cause in an assigned path.
-
-Workspace review supports dirty and unborn repositories. Binary changes are visible waivers, and a file stays complete if any covering focus succeeded. Receipts are stored outside the repository under `$PI_CODING_AGENT_DIR/reviews/runs/`.
-
-See [`docs/review.md`](docs/review.md) for pipeline invariants, model routing, finding schema, trust boundaries, cycle/focus caps, and Ralph integration.
+The default spine is plan focuses → fan-out read-only reviewers → one verifier → optional residual loop. Vary the program when the change asks for it. Findings must name a patch-introduced cause in an assigned path.
 
 ### Ledger task workflows and Ralph loops
 
@@ -256,9 +245,9 @@ The packaged lifecycle skills make shaping first-class:
 /skill:ledger-distill-close-task
 ```
 
-Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, invokes the shared review controller, and launches a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
+Ralph compiles the shaped task graph, launches a fresh executor for one bounded iteration, then a fresh read-only judge to close, block, stop, or request another iteration. No role inherits parent conversation or resumes a prior role session. The model-facing `ralph` tool is the primary orchestration interface; `/ralph` provides human operational parity.
 
-The live harness widget above the editor shows the active task, Ralph iteration and work items, nested Review cycle/focus counts, and accumulating runs. `/harness` and `/ledger` open the same operations hub. Exact controls are in [`docs/ledger.md`](docs/ledger.md), [`docs/review.md`](docs/review.md), and [`docs/ralph.md`](docs/ralph.md).
+The live harness widget above the editor shows the active task, Ralph iteration and work items, and accumulating runs. `/harness` and `/ledger` open the same operations hub. Exact controls are in [`docs/ledger.md`](docs/ledger.md) and [`docs/ralph.md`](docs/ralph.md).
 
 ```text
 /ralph inspect .ledger/202608151430-example/task.md
@@ -270,13 +259,13 @@ The live harness widget above the editor shows the active task, Ralph iteration 
 /ralph stop <run-id>
 ```
 
-`step` performs one complete executor → review → judge iteration. `run` repeats only when judgment says `iterate`. Ralph and shared review do not abort for token spend, role-turn count, or elapsed time. Compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
+`step` performs one complete executor → judge iteration. `run` repeats only when judgment says `iterate`. Ralph does not abort for token spend, role-turn count, or elapsed time. Compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
 
-The implementation checkout must have an established Git `HEAD`. Dirty checkouts are allowed. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory, leases the implementation workspace and task bundle, and reviews the targeted worktree. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
+The implementation checkout must have an established Git `HEAD`. Dirty checkouts are allowed. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory and leases the implementation workspace and task bundle. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
 
-Executors cannot edit `.ledger`; the controller records structured Journal, Evidence, Blockers, Retrospective, and Distillation with compare-and-swap semantics. Review and judgment remain in authoritative `task.md`; `Status: done` changes only after deterministic evidence, review, retrospective, and distillation gates hold. Machine receipts are keyed by implementation worktree and stay user-local under `$PI_CODING_AGENT_DIR/ralph/runs/`.
+Executors cannot edit `.ledger`; the controller records structured Journal, Evidence, Blockers, Retrospective, and Distillation with compare-and-swap semantics. Judgment remains in authoritative `task.md`; `Status: done` changes only after deterministic evidence, retrospective, and distillation gates hold. Machine receipts are keyed by implementation worktree and stay user-local under `$PI_CODING_AGENT_DIR/ralph/runs/`.
 
-See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor`, `ralph-judge`, `review-planner`, `reviewer`, and `review-verifier`.
+See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor` and `ralph-judge`. Independent review is `/skill:review`.
 
 ## Reference-repository decisions
 
@@ -292,7 +281,6 @@ See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill
 Additional boundaries:
 
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
-- **One review engine.** Standalone review and Ralph use the same scope, planner-opened partitions, parallel review, verification, anchoring, coverage, and receipt controller.
 - **One compaction hook.** Observational memory does not register its upstream compaction hook independently.
 - **Session ledger is authoritative.** Compaction projects memory but does not relocate it.
 - **No compatibility implementation.** There is one current path, not old/new variants.

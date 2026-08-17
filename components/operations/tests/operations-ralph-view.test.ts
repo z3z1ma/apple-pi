@@ -33,35 +33,11 @@ function ralph(root: string, runId: string): RalphProgressSnapshot {
 			],
 		},
 		nextObjective: "Finish catalog tests.",
-		review: {
-			runId: "nested-review",
-			projectRoot: root,
-			source: { mode: "workspace" },
-			profile: "balanced",
-			sequence: 1,
-			startedAt: new Date(0).toISOString(),
-			updatedAt: new Date().toISOString(),
-			state: "reviewing",
-			cycleIndex: 1,
-			cycleCap: 1,
-			policy: { profile: "balanced", selectedItems: 1, maxCycles: 1, maxFocuses: 6, maxConcurrency: 6 },
-			usage: { totalTokens: 10 },
-			planner: { status: "completed" },
-			verifier: { status: "idle" },
-			partitions: [],
-			focuses: [{ id: "f1", partitionId: "p1", title: "Export", state: "running", findingCount: 0 }],
-			findings: [],
-			notes: [],
-			verifierDecisions: [],
-			failures: [],
-			residualRisk: [],
-			coverage: { selected: 1, completed: 0, failed: 0, waived: 0 },
-		},
 	};
 }
 
 describe("ralph operations view", () => {
-	it("keeps distinct roots and nests review; stop stays on the owning Ralph run", () => {
+	it("keeps distinct roots; stop stays on the owning Ralph run", () => {
 		const a = ralph("/ws-a", "run-a");
 		const b = ralph("/ws-b", "run-b");
 		const rows = [
@@ -78,13 +54,11 @@ describe("ralph operations view", () => {
 		expect(list.join("\n")).toMatch(/pid 9/);
 		const detail = renderRalphDetail(a, theme, 80);
 		expect(detail.join("\n")).toMatch(/WI-003/);
-		expect(detail.join("\n")).toMatch(/nested review/);
 		let stopped = "";
 		const model: HubModel = {
 			view: "ralph",
 			ledger: { tasks: [], query: "", active: {}, searchFocused: false },
 			ralph: rows,
-			reviews: [],
 			selectedRalphId: "run-a",
 			detail: { lines: detail, offset: 0, confirmingStop: false, canStop: true },
 		};
@@ -96,7 +70,6 @@ describe("ralph operations view", () => {
 			stopRalph(root, id) {
 				stopped = `${root}:${id}`;
 			},
-			stopReview() {},
 		});
 		expect(armed.model.detail?.confirmingStop).toBe(true);
 		handleHubInput(armed.model, "s", {
@@ -107,7 +80,6 @@ describe("ralph operations view", () => {
 			stopRalph(root, id) {
 				stopped = `${root}:${id}`;
 			},
-			stopReview() {},
 		});
 		expect(stopped).toBe("/ws-a:run-a");
 	});

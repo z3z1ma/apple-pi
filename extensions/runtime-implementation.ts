@@ -16,7 +16,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
+import {
+	PROGRAM_ENVELOPE_MAXIMA,
+	type ProgramEnvelope,
+	type ProgramEnvelopeLimits,
+} from "../components/shared/src/runtime-envelope.js";
 import {
 	agentOperationArgs,
 	PI_EXEC_RETURN_TOOL,
@@ -36,7 +40,11 @@ import { capturedTool, capturedTools, installRegisteredToolCapture } from "./run
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
 import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./runtime-ui.js";
 
-export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
+export {
+	PROGRAM_ENVELOPE_MAXIMA,
+	type ProgramEnvelope,
+	type ProgramEnvelopeLimits,
+} from "../components/shared/src/runtime-envelope.js";
 export type {
 	ExecutionOperation,
 	ExecutionOutcome,
@@ -52,17 +60,36 @@ const DEFAULT_CALL_BUDGET = 128;
 const DEFAULT_CONCURRENCY = 16;
 const DEFAULT_AGENT_BUDGET = 8;
 
-/** Package-owned bounds derived from program shape, never model-selected arithmetic. */
-export function deriveProgramEnvelope(code: string): ProgramEnvelope {
+function clampLimit(value: number | undefined, fallback: number, min: number, max: number): number {
+	if (value === undefined || !Number.isFinite(value)) return fallback;
+	return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+/** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
+export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
 	const hasWorkers = /\bagent\s*\(|\bagents\.run\s*\(/.test(code);
 	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(/.test(code);
 	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
-	return {
+	const derived: ProgramEnvelope = {
 		callBudget,
 		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
 		agentBudget: hasWorkers ? DEFAULT_AGENT_BUDGET : 0,
 		memoryMb: 128,
 		timeoutSeconds: hasWorkers ? 600 : 300,
+	};
+	return {
+		callBudget: clampLimit(limits.callBudget, derived.callBudget, 1, PROGRAM_ENVELOPE_MAXIMA.callBudget),
+		concurrency: clampLimit(limits.concurrency, derived.concurrency, 1, PROGRAM_ENVELOPE_MAXIMA.concurrency),
+		agentBudget: hasWorkers
+			? clampLimit(limits.agentBudget, derived.agentBudget, 1, PROGRAM_ENVELOPE_MAXIMA.agentBudget)
+			: 0,
+		memoryMb: derived.memoryMb,
+		timeoutSeconds: clampLimit(
+			limits.timeoutSeconds,
+			derived.timeoutSeconds,
+			1,
+			PROGRAM_ENVELOPE_MAXIMA.timeoutSeconds,
+		),
 	};
 }
 const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
@@ -391,6 +418,44 @@ export default function runtime(pi: ExtensionAPI): void {
 					{ description: PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION },
 				),
 			),
+			limits: Type.Optional(
+				Type.Object(
+					{
+						agentBudget: Type.Optional(
+							Type.Integer({
+								minimum: 1,
+								maximum: PROGRAM_ENVELOPE_MAXIMA.agentBudget,
+								description: "Max nested agent() / agents.run workers for this program.",
+							}),
+						),
+						callBudget: Type.Optional(
+							Type.Integer({
+								minimum: 1,
+								maximum: PROGRAM_ENVELOPE_MAXIMA.callBudget,
+								description: "Max host calls (tools, fetch, agents) for this program.",
+							}),
+						),
+						concurrency: Type.Optional(
+							Type.Integer({
+								minimum: 1,
+								maximum: PROGRAM_ENVELOPE_MAXIMA.concurrency,
+								description: "Max in-flight host calls. Excess work queues.",
+							}),
+						),
+						timeoutSeconds: Type.Optional(
+							Type.Integer({
+								minimum: 1,
+								maximum: PROGRAM_ENVELOPE_MAXIMA.timeoutSeconds,
+								description: "Wall-clock seconds before the program is stopped.",
+							}),
+						),
+					},
+					{
+						description:
+							"Optional capacity for this program. Omitted fields keep the shape-derived default. Values clamp to package maxima.",
+					},
+				),
+			),
 		}),
 		renderCall(args, theme, context) {
 			return renderExecCall(args, theme, context);
@@ -400,7 +465,7 @@ export default function runtime(pi: ExtensionAPI): void {
 		},
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const startedAt = Date.now();
-			const envelope = deriveProgramEnvelope(params.code);
+			const envelope = deriveProgramEnvelope(params.code, params.limits);
 			const { callBudget, concurrency, agentBudget } = envelope;
 			const programName = params.display?.name?.trim() || "Program";
 			const operations: ExecutionOperation[] = [];

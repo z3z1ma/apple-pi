@@ -1,8 +1,6 @@
 import type { CatalogTask } from "../../../ralph/src/catalog.js";
 import { ralphProgressIdentity } from "../../../ralph/src/progress.js";
 import type { RalphProgressSnapshot } from "../../../ralph/src/types.js";
-import { reviewProgressIdentity } from "../../../review/src/progress.js";
-import type { ReviewProgressSnapshot } from "../../../review/src/types.js";
 import { SnapshotProjection } from "../progress-channel.js";
 import type { ActiveTaskProjection } from "../session-state.js";
 import { clampLines } from "./bounded-lines.js";
@@ -28,13 +26,11 @@ export type WidgetUICtx = {
 export interface CompactWidgetModel {
 	activeTask: ActiveTaskProjection;
 	catalogTask?: CatalogTask;
-	reviews: ReviewProgressSnapshot[];
 	ralph: RalphProgressSnapshot[];
 }
 
 interface Linger {
 	ralph: Map<string, number>;
-	reviews: Map<string, number>;
 }
 
 export class CompactOperationsWidget {
@@ -44,10 +40,9 @@ export class CompactOperationsWidget {
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private frame = 0;
 	private lastStatus: string | undefined;
-	private model: CompactWidgetModel = { activeTask: {}, reviews: [], ralph: [] };
-	private readonly linger: Linger = { ralph: new Map(), reviews: new Map() };
+	private model: CompactWidgetModel = { activeTask: {}, ralph: [] };
+	private readonly linger: Linger = { ralph: new Map() };
 	private readonly ralphProjection = new SnapshotProjection(ralphProgressIdentity);
-	private readonly reviewProjection = new SnapshotProjection(reviewProgressIdentity);
 	private projectionError: string | undefined;
 
 	setUICtx(ctx: WidgetUICtx | undefined): void {
@@ -68,15 +63,6 @@ export class CompactOperationsWidget {
 		this.refreshModel();
 	}
 
-	applyReview(snapshot: ReviewProgressSnapshot): void {
-		const result = this.reviewProjection.apply(snapshot);
-		if (!result.ok) this.projectionError = result.error;
-		else if (this.projectionError?.includes(snapshot.runId)) this.projectionError = undefined;
-		if (!isLiveState(snapshot.state)) this.linger.reviews.set(snapshot.runId, Date.now());
-		else this.linger.reviews.delete(snapshot.runId);
-		this.refreshModel();
-	}
-
 	setActiveTask(activeTask: ActiveTaskProjection, catalogTask?: CatalogTask): void {
 		this.model = { ...this.model, activeTask, catalogTask };
 		this.update();
@@ -87,10 +73,7 @@ export class CompactOperationsWidget {
 		const ralph = this.ralphProjection
 			.list()
 			.filter((snapshot) => this.visible(snapshot.state, this.linger.ralph.get(snapshot.runId), now));
-		const reviews = this.reviewProjection
-			.list()
-			.filter((snapshot) => this.visible(snapshot.state, this.linger.reviews.get(snapshot.runId), now));
-		this.model = { ...this.model, ralph, reviews };
+		this.model = { ...this.model, ralph };
 		this.update();
 	}
 
@@ -111,15 +94,14 @@ export class CompactOperationsWidget {
 	update(): void {
 		if (!this.ui) return;
 		const liveRalph = this.model.ralph.filter((snapshot) => isLiveState(snapshot.state));
-		const liveReviews = this.model.reviews.filter((snapshot) => isLiveState(snapshot.state));
 		const hasTask = Boolean(this.model.activeTask.pointer);
-		const hasFinished = this.model.ralph.length + this.model.reviews.length > liveRalph.length + liveReviews.length;
-		if (!hasTask && liveRalph.length === 0 && liveReviews.length === 0 && !hasFinished) {
+		const hasFinished = this.model.ralph.length > liveRalph.length;
+		if (!hasTask && liveRalph.length === 0 && !hasFinished) {
 			this.clear();
 			return;
 		}
 		this.ensureTimer();
-		const status = liveStatus(liveRalph, liveReviews);
+		const status = liveStatus(liveRalph);
 		if (status !== this.lastStatus) {
 			this.ui.setStatus(STATUS_KEY, status);
 			this.lastStatus = status;
@@ -151,20 +133,13 @@ export class CompactOperationsWidget {
 	}
 
 	private render(theme: Theme, width: number): string[] {
-		const live =
-			this.model.ralph.some((snapshot) => isLiveState(snapshot.state)) ||
-			this.model.reviews.some((snapshot) => isLiveState(snapshot.state));
+		const live = this.model.ralph.some((snapshot) => isLiveState(snapshot.state));
 		const heading = `${theme.fg(live ? "accent" : "dim", live ? "●" : "○")} ${theme.fg(live ? "accent" : "dim", "Harness")}`;
 		const body: string[] = [];
 		if (this.projectionError) body.push(theme.fg("error", `progress error: ${oneLine(this.projectionError, 72)}`));
 		if (this.model.activeTask.pointer) body.push(...this.renderTask(theme));
 		const ralph = [...this.model.ralph].sort(compareRalph);
 		for (const snapshot of ralph) body.push(...this.renderRalph(theme, snapshot));
-		const nested = new Set(ralph.map((snapshot) => snapshot.nestedReviewRunId).filter(Boolean));
-		for (const snapshot of this.model.reviews) {
-			if (nested.has(snapshot.runId)) continue;
-			body.push(...this.renderReview(theme, snapshot, false));
-		}
 		return clampLines([heading, ...body], width, MAX_LINES);
 	}
 
@@ -211,37 +186,6 @@ export class CompactOperationsWidget {
 				`${theme.fg("dim", "│  ")} ${theme.fg("warning", `⎿  gate: ${snapshot.gate.kind} — ${oneLine(snapshot.gate.reason, 56)}`)}`,
 			);
 		}
-		if (snapshot.review) lines.push(...this.renderReview(theme, snapshot.review, true));
-		return lines;
-	}
-
-	private renderReview(theme: Theme, snapshot: ReviewProgressSnapshot, nested: boolean): string[] {
-		const live = isLiveState(snapshot.state);
-		const glyph = live
-			? theme.fg("accent", SPINNER[this.frame % SPINNER.length]!)
-			: terminalGlyph(theme, snapshot.state);
-		const prefix = nested ? `${theme.fg("dim", "│  ")} ` : `${theme.fg("dim", "├─")} `;
-		const running = snapshot.focuses.filter((focus) => focus.state === "running");
-		const queued = snapshot.focuses.filter((focus) => focus.state === "queued");
-		const header = [
-			`${prefix}${glyph} ${theme.bold("Review")} ${theme.fg("muted", snapshot.state)}`,
-			theme.fg("dim", `· ${snapshot.source.mode}/${snapshot.profile}`),
-			theme.fg("dim", `· c${snapshot.cycleIndex}/${snapshot.cycleCap}`),
-			theme.fg("dim", `· ${snapshot.coverage.completed}/${snapshot.coverage.selected}`),
-			theme.fg("dim", `· ${formatTokens(snapshot.usage.totalTokens)}`),
-		].join(" ");
-		const lines = [header];
-		const focusTitles = [...running, ...queued].slice(0, 3).map((focus) => focus.title);
-		if (snapshot.focuses.length > 0) {
-			lines.push(
-				`${nested ? theme.fg("dim", "│   ") : theme.fg("dim", "│  ")} ${theme.fg("dim", `⎿  ${running.length} running · ${queued.length} queued${focusTitles.length ? ` · ${focusTitles.join(", ")}` : ""}`)}`,
-			);
-		}
-		if (snapshot.findings.length > 0) {
-			lines.push(
-				`${nested ? theme.fg("dim", "│   ") : theme.fg("dim", "│  ")} ${theme.fg("dim", `⎿  ${snapshot.findings.length} findings`)}`,
-			);
-		}
 		return lines;
 	}
 
@@ -268,17 +212,10 @@ export class CompactOperationsWidget {
 	}
 }
 
-function liveStatus(ralph: RalphProgressSnapshot[], reviews: ReviewProgressSnapshot[]): string | undefined {
-	const parts: string[] = [];
-	if (ralph.length) {
-		const first = ralph[0]!;
-		parts.push(`Ralph ${first.state} iter ${first.iteration} WI ${first.workItems.complete}/${first.workItems.total}`);
-	}
-	if (reviews.length) {
-		const first = reviews[0]!;
-		parts.push(`Review ${first.state} c${first.cycleIndex}/${first.cycleCap}`);
-	}
-	return parts.length ? parts.join(" · ") : undefined;
+function liveStatus(ralph: RalphProgressSnapshot[]): string | undefined {
+	if (!ralph.length) return undefined;
+	const first = ralph[0]!;
+	return `Ralph ${first.state} iter ${first.iteration} WI ${first.workItems.complete}/${first.workItems.total}`;
 }
 
 function compareRalph(left: RalphProgressSnapshot, right: RalphProgressSnapshot): number {
@@ -291,6 +228,5 @@ export function renderCompactLines(model: CompactWidgetModel, theme: Theme, widt
 	const widget = new CompactOperationsWidget();
 	widget.setActiveTask(model.activeTask, model.catalogTask);
 	for (const snapshot of model.ralph) widget.applyRalph(snapshot);
-	for (const snapshot of model.reviews) widget.applyReview(snapshot);
 	return widget.renderForTest(theme, width, frame);
 }

@@ -118,7 +118,7 @@ Canonical headers and exactly one level-one title are required. Acceptance crite
 
 Task status is `open | active | blocked | done | cancelled`. Ralph owns activation, blocked outcomes, and closure while a run is active.
 
-Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. Executors propose known open-item completion with evidence; independent review receives that proposal; judges confirm or reject exactly it; the controller alone applies confirmed completion under the task-bundle lease. Any open or malformed item independently blocks closure.
+Work Items are optional implementation decomposition, not acceptance criteria. When present, the section appears only between Acceptance Criteria and References and contains canonical `WI-###` open, complete, or substantively cancelled rows. Executors propose known open-item completion with evidence; judges confirm or reject exactly it; the controller alone applies confirmed completion under the task-bundle lease. Any open or malformed item independently blocks closure.
 
 ## Task dependencies
 
@@ -190,7 +190,7 @@ Apple-pi packages the complete lifecycle as on-demand Pi skills:
 Typical flow:
 
 ```text
-shape → research as needed → specify/decide → plan → inspect → execute/review/judge → distill
+shape → research as needed → specify/decide → plan → inspect → execute/judge → distill
 ```
 
 Not every task needs every record. The skills separate procedures; they do not require ceremony. A small but non-trivial task may need only `task.md`. Research, specs, decisions, plans, evidence records, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.

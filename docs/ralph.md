@@ -3,10 +3,10 @@
 Ralph executes one shaped `.ledger` task as a sequence of fresh, bounded contexts:
 
 ```text
-compile task graph → execute → independent review → judge → close or start a fresh iteration
+compile task graph → execute → judge → close or start a fresh iteration
 ```
 
-The task bundle is semantic authority. User-local JSONL receipts record machine execution state but cannot replace task evidence, review, blockers, retrospective, or distillation.
+The task bundle is semantic authority. User-local JSONL receipts record machine execution state but cannot replace task evidence, blockers, retrospective, or distillation.
 
 See [`ledger.md`](ledger.md) for shaping, record types, team/solo storage policy, and the full skill workflow.
 
@@ -67,12 +67,12 @@ The context packet is root-first, then deterministically ordered by record kind 
 
 - `inspect` validates and describes the graph without a model call or mutation.
 - `start` requires a trusted project, active model, and a Git worktree with `HEAD`. Dirty checkouts are allowed. It records receipt metadata before changing an open task to active.
-- `step` performs one complete fresh executor → shared independent review → fresh judge iteration.
-- `run` continues autonomous iterations only while judgment says `iterate`. Ralph does not abort a run or its shared review for token spend, elapsed time, or role-turn count. `step` is one iteration because that is the command, not a resource ceiling. Operator stop, judge close/block/stop, and concrete faults remain the terminal paths.
+- `step` performs one complete fresh executor → fresh judge iteration.
+- `run` continues autonomous iterations only while judgment says `iterate`. Ralph does not abort a run for token spend, elapsed time, or role-turn count. `step` is one iteration because that is the command, not a resource ceiling. Operator stop, judge close/block/stop, and concrete faults remain the terminal paths.
 - `status` validates and replays the user-local receipt.
 - `stop` aborts active work, waits for it to quiesce, and records an `operator_stop` terminal cause.
 
-Argument-less `/ralph` opens the Ralph fleet in the operations hub. The live widget shows task path, iteration, stage, work-item counts, current activity, nested Review cycle/focus progress, next objective or gate, elapsed time, and usage. Accumulating finished iterations linger. Enter opens detail; `s` then `s` stops an owned run. Print/RPC modes skip overlays and widgets.
+Argument-less `/ralph` opens the Ralph fleet in the operations hub. The live widget shows task path, iteration, stage, work-item counts, current activity, next objective or gate, elapsed time, and usage. Accumulating finished iterations linger. Enter opens detail; `s` then `s` stops an owned run. Print/RPC modes skip overlays and widgets.
 
 The model-facing `ralph` tool is the primary orchestration interface; the slash command is human operational parity. The tool uses `task`, `root`, and `ledger_root`:
 
@@ -84,20 +84,20 @@ Both root values may be absolute or session-relative. Ralph canonicalizes them a
 
 ## Fresh-role guarantees
 
-Ralph and the shared review controller reuse apple-pi's managed subagent service; there is no second model runner.
+Ralph reuses apple-pi's managed subagent service; there is no second model runner.
 
-- Each executor, review planner, review worker, verifier, and judge gets a new agent ID and Pi session.
+- Each executor and judge gets a new agent ID and Pi session.
 - No role is resumed or inherits parent conversation.
 - Internal role IDs cannot be publicly resumed, steered, listed, or inspected.
 - Role prompts are packaged procedures whose hashes enter receipts.
 - Executor tools: `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`.
-- Review and judge tools are read-only: `read`, `grep`, `find`, and `ls`.
+- Judge tools are read-only: `read`, `grep`, `find`, and `ls`.
 - Extensions, ambient skills, project context files, and parent conversation are disabled inside role sessions.
 - Any role compaction invalidates the curated fresh context and stops the run.
 
 The executor receives the compiled graph and one bounded objective. It cannot edit `.ledger`. It returns structured summary, criterion observations, Journal entries, Blockers, Retrospective, Distillation, and an optional next objective. The controller records owned task sections with digest compare-and-swap.
 
-The review controller seals the cumulative implementation workspace, partitions changed text into semantic groups, attempts to falsify each group with fresh reviewers, verifies every finding conservatively, and requires complete selected-item coverage. The judge receives the current task graph, executor report, verified review, and bounded workspace diff.
+The judge receives the current task graph, executor report, and bounded workspace diff. Independent review is a separate `/skill:review` program when the parent session wants it.
 
 ## Closure
 
@@ -110,8 +110,6 @@ A judge may choose:
 
 Even a judge's `close` cannot bypass deterministic closure checks:
 
-- review verdict is pass;
-- no critical or significant findings remain;
 - every task criterion has substantive observed Evidence;
 - the judge assessed every criterion as satisfied;
 - dependencies remain done and Blockers remain absent;
@@ -119,7 +117,7 @@ Even a judge's `close` cannot bypass deterministic closure checks:
 - Distillation contains performed promotion, an honest pending human-owned external action, or a substantive no-promotion rationale;
 - every Work Item is complete or substantively cancelled, with no parse issue.
 
-Executors may only propose completion evidence for known open work items. Independent review receives those proposals; judges assess exactly that set, and the controller alone completes confirmed IDs under its task-bundle lease. Rejected IDs remain open and are named in the next objective or terminal reason.
+Executors may only propose completion evidence for known open work items. Judges assess exactly that set, and the controller alone completes confirmed IDs under its task-bundle lease. Rejected IDs remain open and are named in the next objective or terminal reason.
 
 Only then does the controller set `Status: done`. The bundle is not moved or deleted.
 
@@ -127,7 +125,7 @@ Only then does the controller set `Status: done`. The bundle is not moved or del
 
 Ralph uses one implementation checkout and runs roles sequentially. The checkout may already be dirty. It may target a linked worktree supplied by the orchestrating model or human, but never creates, updates, commits, removes, or otherwise manages worktrees. Those lifecycle choices remain outside Ralph. It also never commits, stages, pushes, deploys, publishes, resets, cleans, stashes, or repairs a failed workspace.
 
-When `.ledger` is committed and current in the implementation worktree, omit `ledger_root` and Ralph uses that copy. When `/.ledger/` is ignored and remains in the main checkout, pass the main checkout as `ledger_root`. Executors and shared review always run against `root`; controller task mutations always target `ledger_root`. Read tools may inspect the external `.ledger` subtree, but writes there remain controller-only and other files in the ledger checkout remain outside role authority.
+When `.ledger` is committed and current in the implementation worktree, omit `ledger_root` and Ralph uses that copy. When `/.ledger/` is ignored and remains in the main checkout, pass the main checkout as `ledger_root`. Executors always run against `root`; controller task mutations always target `ledger_root`. Read tools may inspect the external `.ledger` subtree, but writes there remain controller-only and other files in the ledger checkout remain outside role authority.
 
 The executor policy blocks common forms of:
 
@@ -141,7 +139,7 @@ This is a workflow guard, not an OS sandbox. Trusted local scripts and dependenc
 
 An external or in-tree ledger is protected by a task-bundle lease, graph-hash checks before controller mutations, and root-task digest compare-and-swap. Executor writes that change compiled ledger authority become `authority_required`. Concurrent ledger mutation during a controller write becomes `workspace_conflict`; it is never silently adopted.
 
-Review diffs the targeted implementation worktree against `HEAD`, including staged content. The judge receives a `git status` plus `git diff HEAD` preview, truncated if large. Submodules and in-progress merge/rebase/cherry-pick are refused at start. Leases cover both the implementation workspace and authoritative task bundle: different tasks in different worktrees may proceed independently, while the same workspace or same authoritative task cannot execute concurrently.
+The judge receives a `git status` plus `git diff HEAD` preview, truncated if large. Submodules and in-progress merge/rebase/cherry-pick are refused at start. Leases cover both the implementation workspace and authoritative task bundle: different tasks in different worktrees may proceed independently, while the same workspace or same authoritative task cannot execute concurrently.
 
 Human edits in the implementation checkout are ordinary dirty work. They do not abort the run.
 
@@ -157,7 +155,7 @@ The default agent directory is `~/.pi/agent`. Receipts are keyed by canonical im
 
 Schema-v1 `.10x` receipts are retained as audit files but are not resumable and are omitted from current run listings. Addressing one directly returns an explicit legacy error; there is no dual execution runtime.
 
-Events contain project/task paths, graph and workspace hashes, role skill hashes, child session paths, usage, compaction count, structured role output, gates, and recoverable run state. The linked shared review has its own coverage receipt under `$PI_CODING_AGENT_DIR/reviews/runs/`.
+Events contain project/task paths, graph and workspace hashes, role skill hashes, child session paths, usage, compaction count, structured role output, gates, and recoverable run state.
 
 Receipts and persisted role sessions can contain project-sensitive text and absolute paths. Protect the Pi agent directory. Never put secrets or regulated personal data in ledger records, prompts, outputs, logs, or receipts.
 

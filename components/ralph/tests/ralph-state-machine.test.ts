@@ -4,13 +4,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ReviewRun } from "../../review/src/types.js";
 import type { ManagedAgentRequest, ManagedSubagentService } from "../../subagents/src/service.js";
 import type { AgentRecord } from "../../subagents/src/types.js";
-import { DEFAULT_RALPH_BUDGETS, RalphController } from "../src/controller.js";
+import { RalphController } from "../src/controller.js";
 import { readReceiptEvents } from "../src/receipts.js";
-import { roleProfile } from "../src/roles.js";
-import type { ReviewerOutput } from "../src/types.js";
 
 const roots: string[] = [];
 const TASK = ".ledger/202608151200-work/task.md";
@@ -113,7 +110,7 @@ function ignoreLedger(root: string): void {
 }
 
 interface PlannedRole {
-	role: "ralph-executor" | "shared-review-test" | "ralph-judge";
+	role: "ralph-executor" | "ralph-judge";
 	output: unknown;
 	mutate?: (request: ManagedAgentRequest) => void | Promise<void>;
 	compactions?: number;
@@ -151,77 +148,6 @@ function service(plan: PlannedRole[], seen: ManagedAgentRequest[]): ManagedSubag
 function testController(mock: ManagedSubagentService): RalphController {
 	return new RalphController({
 		getService: () => mock,
-		reviewController: {
-			async run(ctx, _source, options) {
-				const profile = roleProfile("judge");
-				const reviewRoot = options.root ?? ctx.cwd;
-				const record = await mock.runFresh(ctx, {
-					type: "shared-review-test",
-					description: "Shared review test adapter",
-					prompt: "Review the current Ralph workspace through the test seam.",
-					agentConfig: profile.config,
-					maxTurns: DEFAULT_RALPH_BUDGETS.reviewerMaxTurns,
-					thinkingLevel: "xhigh",
-					cwd: reviewRoot,
-					toolPolicy: async () => undefined,
-				});
-				const output = JSON.parse(record.result ?? "{}") as ReviewerOutput;
-				const now = new Date().toISOString();
-				return {
-					schemaVersion: 1,
-					runId: randomUUID(),
-					projectRoot: reviewRoot,
-					source: { mode: "workspace" },
-					profile: "balanced",
-					state: "complete",
-					startedAt: now,
-					updatedAt: now,
-					inputHash: "test-input",
-					selected: [
-						{
-							id: "item",
-							path: "source.txt",
-							status: "modified",
-							insertions: 1,
-							deletions: 1,
-							fingerprint: "test",
-							binary: false,
-						},
-					],
-					waived: [],
-					completedItemIds: ["item"],
-					failures: [],
-					findings: output.findings.map((finding, index) => ({
-						id: `finding-${index}`,
-						cycle: 1,
-						partitionId: "test",
-						focusId: "test",
-						severity: finding.severity,
-						category: "bug",
-						summary: finding.summary,
-						impact: finding.evidence,
-						evidence: finding.evidence,
-						path: finding.path ?? "source.txt",
-						anchor: "test",
-						side: "new",
-						anchorProvenance: "unresolved",
-						anchorMatchCount: 0,
-						validation: { status: "confirmed", reason: "test adapter", evidence: finding.evidence },
-					})),
-					residualRisk: output.residualRisk,
-					totalTokens: record.lifetimeUsage.input + record.lifetimeUsage.output,
-					budgets: {
-						timeoutSeconds: 60,
-						maxConcurrency: 1,
-						maxFocuses: 1,
-						maxCycles: 1,
-					},
-					routing: { plannerMode: "test", fastMode: "test", strongMode: "test" },
-					agents: [],
-					lastOutcome: output.summary,
-				} satisfies ReviewRun;
-			},
-		},
 	});
 }
 
@@ -234,12 +160,6 @@ const executorDone = {
 	retrospective: "An explicit boundary made the behavior and failure observable.",
 	distillation: ["The implementation and focused test remain the durable owners of this bounded invariant."],
 	workItemCompletions: [],
-};
-const reviewPass = {
-	verdict: "pass",
-	summary: "No falsifying defect found.",
-	findings: [],
-	residualRisk: ["Only AC-001 was reviewed."],
 };
 const judgeClose = {
 	decision: "close",
@@ -262,14 +182,13 @@ describe("Ralph state machine", () => {
 		expect(readFileSync(join(root, TASK), "utf8")).toContain("Status: open");
 	});
 
-	it("runs three distinct fresh roles, records review/judgment, and closes only after all gates", async () => {
+	it("runs executor then judge and closes only after evidence gates", async () => {
 		const root = repository();
 		writeFileSync(join(root, "source.txt"), "dirty before ralph\n");
 		const seen: ManagedAgentRequest[] = [];
 		const mock = service(
 			[
 				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-				{ role: "shared-review-test", output: reviewPass },
 				{ role: "ralph-judge", output: judgeClose },
 			],
 			seen,
@@ -279,20 +198,17 @@ describe("Ralph state machine", () => {
 		const result = await controller.step(context(root), started.runId);
 		expect(result.state).toBe("done");
 		expect(result.iteration).toBe(1);
-		expect(result.totalTokens).toBe(450);
-		expect(seen.map((request) => request.type)).toEqual(["ralph-executor", "shared-review-test", "ralph-judge"]);
-		const ralphRoles = seen.filter((request) => request.type === "ralph-executor" || request.type === "ralph-judge");
-		expect(ralphRoles.every((request) => request.maxTurns === 0)).toBe(true);
-		expect(ralphRoles.every((request) => request.maxTokens === undefined)).toBe(true);
-		expect(ralphRoles.every((request) => request.hardTurnLimit !== true)).toBe(true);
+		expect(result.totalTokens).toBe(300);
+		expect(seen.map((request) => request.type)).toEqual(["ralph-executor", "ralph-judge"]);
+		expect(seen.every((request) => request.maxTurns === 0)).toBe(true);
+		expect(seen.every((request) => request.maxTokens === undefined)).toBe(true);
+		expect(seen.every((request) => request.hardTurnLimit !== true)).toBe(true);
 		expect(seen[0].agentConfig.builtinToolNames).toContain("write");
 		expect(seen[1].agentConfig.builtinToolNames).toEqual(["read", "grep", "find", "ls"]);
-		expect(seen[2].agentConfig.builtinToolNames).toEqual(["read", "grep", "find", "ls"]);
 		expect(seen[1].toolPolicy).toBeTypeOf("function");
-		expect(seen[2].toolPolicy).toBeTypeOf("function");
 		const updated = readFileSync(join(root, TASK), "utf8");
 		expect(updated).toContain("Status: done");
-		expect(updated).toContain("Ralph independent review");
+		expect(updated).not.toContain("Ralph independent review");
 		expect(updated).toContain("Ralph judgment");
 		expect(existsSync(join(root, ".ledger", "202608151200-work", "evidence"))).toBe(false);
 		expect(existsSync(join(root, ".ledger", "202608151200-work", "reviews"))).toBe(false);
@@ -323,7 +239,6 @@ describe("Ralph state machine", () => {
 						},
 						mutate: () => completeTask(root),
 					},
-					{ role: "shared-review-test", output: reviewPass },
 					{
 						role: "ralph-judge",
 						output: {
@@ -384,7 +299,6 @@ describe("Ralph state machine", () => {
 							},
 							mutate: () => completeTask(root),
 						},
-						{ role: "shared-review-test", output: reviewPass },
 						{
 							role: "ralph-judge",
 							output: {
@@ -427,7 +341,6 @@ describe("Ralph state machine", () => {
 						output: executorDone,
 						mutate: () => completeTask(worktree, "changed only in linked worktree"),
 					},
-					{ role: "shared-review-test", output: reviewPass },
 					{ role: "ralph-judge", output: judgeClose },
 				],
 				seen,
@@ -456,7 +369,6 @@ describe("Ralph state machine", () => {
 			service(
 				[
 					{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(worktree) },
-					{ role: "shared-review-test", output: reviewPass },
 					{ role: "ralph-judge", output: judgeClose },
 				],
 				[],
@@ -503,7 +415,6 @@ describe("Ralph state machine", () => {
 			service(
 				[
 					{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-					{ role: "shared-review-test", output: reviewPass },
 					{ role: "ralph-judge", output: judgeClose },
 				],
 				[],
@@ -534,13 +445,8 @@ describe("Ralph state machine", () => {
 						writeFileSync(join(root, "source.txt"), "first iteration\n");
 					},
 				},
-				{
-					role: "shared-review-test",
-					output: { ...reviewPass, verdict: "concerns", summary: "Evidence remains incomplete." },
-				},
 				{ role: "ralph-judge", output: judgeIterate },
 				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root, "verified in iteration two") },
-				{ role: "shared-review-test", output: reviewPass },
 				{ role: "ralph-judge", output: judgeClose },
 			],
 			seen,
@@ -550,7 +456,7 @@ describe("Ralph state machine", () => {
 		expect(result.state).toBe("done");
 		expect(result.iteration).toBe(2);
 		expect(seen.filter((request) => request.type === "ralph-executor")).toHaveLength(2);
-		expect(seen[3].prompt).toContain("Run and record the missing behavior check.");
+		expect(seen[2].prompt).toContain("Run and record the missing behavior check.");
 	}, 15_000);
 
 	it("refuses executor attempts to rewrite .ledger task authority", async () => {
@@ -607,7 +513,6 @@ describe("Ralph state machine", () => {
 					output: { ...executorDone, acceptanceCriteria: [] },
 					mutate: () => writeFileSync(join(root, "source.txt"), "changed without evidence\n"),
 				},
-				{ role: "shared-review-test", output: reviewPass },
 				{ role: "ralph-judge", output: judgeClose },
 			],
 			[],
@@ -626,7 +531,6 @@ describe("Ralph state machine", () => {
 		const mock = service(
 			[
 				{ role: "ralph-executor", output: executorDone, mutate: () => completeTask(root) },
-				{ role: "shared-review-test", output: reviewPass },
 				{ role: "ralph-judge", output: judgeClose },
 			],
 			seen,

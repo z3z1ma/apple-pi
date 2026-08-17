@@ -153,7 +153,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 		name: "ralph",
 		label: "Ralph",
 		description:
-			"Orchestrate deterministic ledger task loops with fresh executors, independent review, and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs never push, deploy, commit, reset, or resume an agent, and they do not abort for token, turn, or elapsed-time ceilings.",
+			"Orchestrate deterministic ledger task loops with fresh executors and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs never push, deploy, commit, reset, or resume an agent, and they do not abort for token, turn, or elapsed-time ceilings.",
 		parameters: Type.Object({
 			action: Type.Union([
 				Type.Literal("inspect"),

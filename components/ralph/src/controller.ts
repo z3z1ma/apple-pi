@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ProgressChannel } from "../../operations/src/progress-channel.js";
-import { ReviewController, summarizeReviewRun } from "../../review/src/controller.js";
-import type { ReviewProgressSnapshot, ReviewRun } from "../../review/src/types.js";
 import {
 	getManagedSubagentService,
 	type HarnessBoundedActivity,
@@ -26,7 +24,6 @@ import {
 import { resolveRalphRoots } from "./roots.js";
 import {
 	activateTask,
-	appendIndependentReview,
 	appendJudgment,
 	appendRunJournal,
 	blockTask,
@@ -46,7 +43,6 @@ import type {
 	RalphState,
 	RalphTerminalCause,
 	RalphTerminalState,
-	ReviewerOutput,
 	RunSummary,
 	WorkItemCompletionProposal,
 	WorkItemJudgment,
@@ -93,9 +89,6 @@ export interface StartRunOptions {
 
 export interface RalphControllerDependencies {
 	getService?: () => ManagedSubagentService | undefined;
-	reviewController?: Pick<ReviewController, "run"> & {
-		subscribeProgress?: ReviewController["subscribeProgress"];
-	};
 }
 
 interface ActiveRunControl {
@@ -110,23 +103,16 @@ interface ActiveRunControl {
 	activity?: HarnessBoundedActivity;
 	workItems: WorkItem[];
 	workItemReceipt?: WorkItemReceipt;
-	review?: ReviewProgressSnapshot;
-	nestedReviewRunId?: string;
 	gate?: { kind: RalphTerminalState; reason: string };
 }
 
 export class RalphController {
 	private readonly active = new Map<string, ActiveRunControl>();
 	private readonly progress = new ProgressChannel<RalphProgressSnapshot>();
-	private readonly nestedReviews = new Set<string>();
 	private readonly getService: () => ManagedSubagentService | undefined;
-	private readonly reviewController: Pick<ReviewController, "run"> & {
-		subscribeProgress?: ReviewController["subscribeProgress"];
-	};
 
 	constructor(dependencies: RalphControllerDependencies = {}) {
 		this.getService = dependencies.getService ?? getManagedSubagentService;
-		this.reviewController = dependencies.reviewController ?? new ReviewController({ getService: this.getService });
 	}
 
 	async start(ctx: ExtensionContext, taskPath: string, options: StartRunOptions = {}): Promise<RalphRun> {
@@ -332,10 +318,6 @@ export class RalphController {
 		return this.progress.list();
 	}
 
-	nestedReviewRunIds(): Set<string> {
-		return new Set(this.nestedReviews);
-	}
-
 	classifyOwnership(projectRootInput: string, runId: string): RalphRunOwnership {
 		const projectRoot = realpathSync(projectRootInput);
 		const control = this.active.get(runId);
@@ -355,8 +337,6 @@ export class RalphController {
 					...(control?.activity && { activity: control.activity }),
 					workItems: control?.workItems ?? [],
 					...(control?.workItemReceipt && { workItemReceipt: control.workItemReceipt }),
-					...(control?.review && { review: control.review }),
-					...(control?.nestedReviewRunId && { nestedReviewRunId: control.nestedReviewRunId }),
 					...(control?.gate && { gate: control.gate }),
 				}),
 			);
@@ -443,68 +423,6 @@ export class RalphController {
 			workItems: { proposals: workItemProposals },
 		});
 		if (executor.status === "failed") return this.gate(run, "error", executor.summary);
-		run.state = "reviewing";
-		run.updatedAt = new Date().toISOString();
-		control.activity = undefined;
-		this.emitProgress(run, control);
-		await appendReceipt(run, {
-			stage: "reviewer",
-			outcome: "stage_started",
-			graphHash: graph.graphHash,
-		});
-		let nestedReviewId: string | undefined;
-		const unsubReview = this.reviewController.subscribeProgress?.((snapshot) => {
-			if (!nestedReviewId || snapshot.runId !== nestedReviewId) return;
-			control.review = snapshot;
-			control.nestedReviewRunId = snapshot.runId;
-			this.nestedReviews.add(snapshot.runId);
-			this.emitProgress(run, control);
-		});
-		let reviewRun: ReviewRun;
-		try {
-			reviewRun = await this.reviewController.run(
-				ctx,
-				{ mode: "workspace" },
-				{
-					root: run.projectRoot,
-					profile: "balanced",
-					background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
-					authorityPacket: graph.bundle,
-					onStarted: (started) => {
-						nestedReviewId = started.runId;
-						control.nestedReviewRunId = started.runId;
-						this.nestedReviews.add(started.runId);
-					},
-				},
-				control.abort.signal,
-			);
-		} finally {
-			unsubReview?.();
-		}
-		control.nestedReviewRunId = reviewRun.runId;
-		this.nestedReviews.add(reviewRun.runId);
-		run.totalTokens += reviewRun.totalTokens;
-		if (control.stopRequested)
-			throw new RalphGateError("stopped", "Stopped by the operator during independent review", "operator_stop");
-		if (control.externalCancelled || reviewRun.terminalCause === "external_cancellation")
-			throw new RalphGateError(
-				"interrupted",
-				"Independent review was cancelled by the caller",
-				"external_cancellation",
-			);
-		const review = ralphReviewOutput(reviewRun);
-		await appendReceipt(run, {
-			stage: "reviewer",
-			outcome: review.verdict,
-			structuredOutput: { reviewRunId: reviewRun.runId, review },
-		});
-		if (reviewRun.state !== "complete" && reviewRun.state !== "skipped") {
-			return this.gate(run, "review_failed", `Shared review did not complete: ${summarizeReviewRun(reviewRun)}`);
-		}
-		this.assertGraphUnchanged(run, compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot).graphHash);
-		await appendIndependentReview(graph.task.absolutePath, graph.task.digest, run.runId, run.iteration, review);
-		graph = compileWorkGraph(run.projectRoot, run.taskPath, run.ledgerRoot);
-		run.graphHash = graph.graphHash;
 		const judgedChanges = renderWorkspaceChanges(run.projectRoot);
 
 		run.state = "judging";
@@ -525,7 +443,7 @@ export class RalphController {
 			run,
 			control,
 			"judge",
-			judgePrompt(graph, judgedChanges, executor, review),
+			judgePrompt(graph, judgedChanges, executor),
 			judgeProfileValue,
 			createExecutorAuthorityPolicy(
 				run.projectRoot,
@@ -597,7 +515,7 @@ export class RalphController {
 			},
 		});
 
-		if (judgment.decision === "close") return this.closeIfSupported(run, graph, review, judgment);
+		if (judgment.decision === "close") return this.closeIfSupported(run, graph, judgment);
 		if (judgment.decision === "blocked") {
 			const reason = [judgment.reason, rejectedSummary].filter(Boolean).join("; ");
 			await blockTask(graph.task.absolutePath, graph.task.digest, reason);
@@ -745,7 +663,6 @@ export class RalphController {
 	private async closeIfSupported(
 		run: RalphRun,
 		graph: ReturnType<typeof compileWorkGraph>,
-		review: ReviewerOutput,
 		judgment: JudgeOutput,
 	): Promise<RalphRun> {
 		const missingEvidence = missingCriterionEvidence(graph);
@@ -753,15 +670,10 @@ export class RalphController {
 		const unsatisfied = graph.criteria
 			.filter((criterion) => assessments.get(criterion.id) !== "satisfied")
 			.map((criterion) => criterion.id);
-		const severeFindings = review.findings.filter(
-			(finding) => finding.severity === "critical" || finding.severity === "significant",
-		);
 		const openWorkItems =
 			graph.task.taskDocument?.workItems.filter((item) => item.state === "open").map((item) => item.id) ?? [];
 		const workItemIssues = graph.task.taskDocument?.workItemIssues ?? [];
 		const failures = [
-			...(review.verdict === "pass" ? [] : [`review verdict is ${review.verdict}`]),
-			...(severeFindings.length === 0 ? [] : ["review has closure-blocking findings"]),
 			...(missingEvidence.length === 0 ? [] : [`task Evidence omits ${missingEvidence.join(", ")}`]),
 			...(unsatisfied.length === 0 ? [] : [`judgment does not satisfy ${unsatisfied.join(", ")}`]),
 			...(hasRetrospective(graph) ? [] : ["task Retrospective is missing or placeholder"]),
@@ -907,31 +819,6 @@ function validateWorkItemJudgments(
 	if (assessed.size !== proposed.size)
 		throw new RalphGateError("error", "Judge omitted a proposed work-item assessment", "invalid_output");
 	return judgments;
-}
-
-function ralphReviewOutput(run: ReviewRun): ReviewerOutput {
-	const findings = run.findings.filter((finding) => finding.validation.status !== "rejected");
-	const severe = findings.some((finding) => finding.severity === "critical" || finding.severity === "significant");
-	const incomplete = run.state !== "complete" && run.state !== "skipped";
-	return {
-		verdict: incomplete || severe ? "fail" : findings.length > 0 ? "concerns" : "pass",
-		summary: run.lastOutcome ?? `Shared review finished with state ${run.state}`,
-		findings: findings.map((finding) => ({
-			severity: finding.severity,
-			summary: finding.summary,
-			evidence: `${finding.impact} Evidence: ${finding.evidence} Verification: ${finding.validation.status} — ${finding.validation.reason}`,
-			path: finding.path,
-		})),
-		residualRisk: [
-			...run.residualRisk,
-			...(incomplete
-				? [`Shared review coverage was ${run.completedItemIds.length}/${run.selected.length}; closure is unsupported.`]
-				: []),
-			...findings
-				.filter((finding) => finding.anchorProvenance === "ambiguous" || finding.anchorProvenance === "unresolved")
-				.map((finding) => `Finding ${finding.id} has ${finding.anchorProvenance} source anchoring.`),
-		],
-	};
 }
 
 class RalphGateError extends Error {
