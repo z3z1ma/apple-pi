@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { deriveRalphBudgets } from "../src/controller.js";
+import { DEFAULT_RALPH_BUDGETS, deriveRalphBudgets } from "../src/controller.js";
 
 describe("Ralph harness policy", () => {
-	it("derives bounded internal limits from mode and compiled graph shape", () => {
-		const small = deriveRalphBudgets("auto", { records: [{}] as any, byteLength: 1_000 });
-		const large = deriveRalphBudgets("auto", {
-			records: Array.from({ length: 32 }, () => ({})) as any,
-			byteLength: 250_000,
-		});
-		const step = deriveRalphBudgets("step", { records: [{}] as any, byteLength: 1_000 });
+	it("records step as a single iteration and does not scale resource fields from graph shape", () => {
+		const auto = deriveRalphBudgets("auto");
+		const step = deriveRalphBudgets("step");
 		expect(step.maxIterations).toBe(1);
-		expect(large.maxTokens).toBeGreaterThan(small.maxTokens);
-		expect(large.executorMaxTurns).toBeGreaterThan(small.executorMaxTurns);
-		expect(large.maxIterations).toBeLessThanOrEqual(10);
+		expect(auto.maxIterations).toBe(DEFAULT_RALPH_BUDGETS.maxIterations);
+		expect(auto.maxTokens).toBe(DEFAULT_RALPH_BUDGETS.maxTokens);
+		expect(auto.executorMaxTurns).toBe(DEFAULT_RALPH_BUDGETS.executorMaxTurns);
+		expect(auto.timeoutSeconds).toBe(DEFAULT_RALPH_BUDGETS.timeoutSeconds);
 	});
 });

@@ -80,7 +80,7 @@ const RALPH_ACTIONS: AutocompleteItem[] = [
 	{ value: "inspect ", label: "inspect", description: "Validate and summarize a ledger task without starting agents" },
 	{ value: "start ", label: "start", description: "Create a persisted step-mode run without executing an iteration" },
 	{ value: "step ", label: "step", description: "Execute at most one iteration of an existing run" },
-	{ value: "run ", label: "run", description: "Start and execute a bounded autonomous task loop" },
+	{ value: "run ", label: "run", description: "Start and execute an autonomous task loop" },
 	{ value: "status ", label: "status", description: "List runs or inspect one run ID" },
 	{ value: "stop ", label: "stop", description: "Stop a nonterminal run by ID" },
 ];
@@ -162,7 +162,7 @@ export default function installRalph(pi: ExtensionAPI): void {
 		name: "ralph",
 		label: "Ralph",
 		description:
-			"Orchestrate deterministic ledger task loops with fresh executors, independent review, and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs are bounded and never push, deploy, commit, reset, or resume an agent.",
+			"Orchestrate deterministic ledger task loops with fresh executors, independent review, and closure judges. The optional root targets a linked Git worktree; ledger_root selects the linked checkout whose .ledger is authoritative. Actions: inspect/start/step/run/status/stop. Runs never push, deploy, commit, reset, or resume an agent, and they do not abort for token, turn, or elapsed-time ceilings.",
 		parameters: Type.Object({
 			action: Type.Union([
 				Type.Literal("inspect"),

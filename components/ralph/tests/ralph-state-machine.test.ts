@@ -280,6 +280,10 @@ describe("Ralph state machine", () => {
 		expect(result.iteration).toBe(1);
 		expect(result.totalTokens).toBe(450);
 		expect(seen.map((request) => request.type)).toEqual(["ralph-executor", "shared-review-test", "ralph-judge"]);
+		const ralphRoles = seen.filter((request) => request.type === "ralph-executor" || request.type === "ralph-judge");
+		expect(ralphRoles.every((request) => request.maxTurns === 0)).toBe(true);
+		expect(ralphRoles.every((request) => request.maxTokens === undefined)).toBe(true);
+		expect(ralphRoles.every((request) => request.hardTurnLimit !== true)).toBe(true);
 		expect(seen[0].agentConfig.builtinToolNames).toContain("write");
 		expect(seen[1].agentConfig.builtinToolNames).toEqual(["read", "grep", "find", "ls"]);
 		expect(seen[2].agentConfig.builtinToolNames).toEqual(["read", "grep", "find", "ls"]);

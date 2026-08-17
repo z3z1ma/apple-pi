@@ -115,7 +115,6 @@ export function deriveRoleEnvelope(input: {
 	resultTool: ToolDefinition;
 	customTools: readonly ToolDefinition[];
 	builtinToolNames?: readonly string[];
-	elapsedSeconds: number;
 }): ReviewRoleEnvelope {
 	const contextWindow = modelNumber(input.model.contextWindow, 200_000);
 	const modelMaxOutputTokens = modelNumber(input.model.maxTokens, 16_384);
@@ -134,8 +133,6 @@ export function deriveRoleEnvelope(input: {
 			`${input.stage} rendered prompt needs ${estimatedInputTokens} input tokens plus ${reservedOutputTokens} reserved output tokens, exceeding model context window ${contextWindow}`,
 		);
 	}
-	const remainingSeconds = input.budgets.timeoutSeconds - input.elapsedSeconds;
-	if (remainingSeconds < 1) throw new Error(`${input.stage} cannot start because the elapsed-time policy is exhausted`);
 	return {
 		stage: input.stage,
 		...(input.partitionId && { partitionId: input.partitionId }),
@@ -151,7 +148,7 @@ export function deriveRoleEnvelope(input: {
 		builtinToolBytes,
 		estimatedInputTokens,
 		reservedOutputTokens,
-		timeoutSeconds: Math.max(1, Math.floor(remainingSeconds)),
+		timeoutSeconds: input.budgets.timeoutSeconds,
 	};
 }
 

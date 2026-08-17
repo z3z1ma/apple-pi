@@ -18,7 +18,6 @@ function envelope(prompt: string) {
 		systemPrompt: "Read-only review role.",
 		resultTool: tool,
 		customTools: [tool],
-		elapsedSeconds: 0,
 	});
 }
 
@@ -48,6 +47,7 @@ describe("review harness policy", () => {
 		expect(value).not.toHaveProperty("maxTurns");
 		expect(value).not.toHaveProperty("reservationTokens");
 		expect(value).not.toHaveProperty("maxTokens");
+		expect(value).not.toHaveProperty("remainingSeconds");
 	});
 
 	it("rejects a prompt that cannot fit the resolved model context window", () => {

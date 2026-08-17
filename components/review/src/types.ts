@@ -178,8 +178,8 @@ export type ReviewTerminalState =
 export type ReviewRunState = "planning" | "reviewing" | "verifying" | ReviewTerminalState;
 
 /**
- * Internal controller ceilings. These are not part of ordinary model or command
- * input; tests and trusted package policy may use them to establish a boundary.
+ * Recorded review-shape bounds. Focus, cycle, and concurrency still schedule work.
+ * Timeout is receipt metadata and is not a runtime abort.
  */
 export interface ReviewBudgets {
 	timeoutSeconds: number;
@@ -327,7 +327,7 @@ export interface StartReviewOptions {
 	profile?: ReviewProfile;
 	background?: string;
 	authorityPacket?: string;
-	/** Internal parent/controller safety constraints; never populated by normal tool or command input. */
+	/** Receipt-only recorded timeout; not applied as a runtime abort. */
 	constraints?: Partial<Pick<ReviewBudgets, "timeoutSeconds">>;
 
 	routing?: Partial<ReviewModelRouting>;

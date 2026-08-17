@@ -101,7 +101,7 @@ export interface RalphBudgets {
 	judgeMaxTurns: number;
 }
 
-/** Additive receipt policy. Numeric values remain controller-owned internal ceilings. */
+/** Additive receipt policy. Recorded numeric fields are not runtime ceilings. */
 export interface RalphResolvedPolicy {
 	version: 1;
 	mode: RalphMode;

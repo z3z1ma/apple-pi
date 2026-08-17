@@ -65,9 +65,9 @@ The context packet is root-first, then deterministically ordered by record kind 
 ```
 
 - `inspect` validates and describes the graph without a model call or mutation.
-- `start` requires a trusted project, active model, established Git `HEAD`, and clean Git checkout. It derives and records harness-owned limits before changing an open task to active.
+- `start` requires a trusted project, active model, established Git `HEAD`, and clean Git checkout. It records receipt metadata before changing an open task to active.
 - `step` performs one complete fresh executor → shared independent review → fresh judge iteration.
-- `run` performs bounded autonomous iterations under package-owned iteration, token, elapsed-time, and role-turn ceilings. Normal model and slash-command calls do not configure those numeric limits; receipts retain the resolved internal policy and explicit terminal cause.
+- `run` continues autonomous iterations only while judgment says `iterate`. Ralph does not abort a run or its shared review for token spend, elapsed time, or role-turn count. `step` is one iteration because that is the command, not a resource ceiling. Operator stop, judge close/block/stop, and concrete faults remain the terminal paths.
 - `status` validates and replays the user-local receipt.
 - `stop` aborts active work, waits for it to quiesce, and records an `operator_stop` terminal cause.
 
@@ -150,7 +150,7 @@ Receipts live outside the repository:
 $PI_CODING_AGENT_DIR/ralph/runs/<project-hash>/<run-id>.jsonl
 ```
 
-The default agent directory is `~/.pi/agent`. Receipts are keyed by canonical implementation worktree. Schema v2 stores both the absolute implementation `projectRoot` and absolute `ledgerRoot` plus `taskPath`. Events are append-only and sequence-numbered. Replay validates schema, structurally valid roots, task path, immutable metadata, legal state transitions, iteration progression, monotonic token usage, exact budgets, and embedded workspace snapshot hashes before trusting state. Status and audit replay do not require the ledger checkout to still exist; continuing execution does.
+The default agent directory is `~/.pi/agent`. Receipts are keyed by canonical implementation worktree. Schema v2 stores both the absolute implementation `projectRoot` and absolute `ledgerRoot` plus `taskPath`. Events are append-only and sequence-numbered. Replay validates schema, structurally valid roots, task path, immutable metadata, legal state transitions, iteration progression, monotonic token usage, recorded budget fields, and embedded workspace snapshot hashes before trusting state. Recorded budget fields are receipt compatibility, not runtime abort thresholds. Status and audit replay do not require the ledger checkout to still exist; continuing execution does.
 
 Schema-v1 `.10x` receipts are retained as audit files but are not resumable and are omitted from current run listings. Addressing one directly returns an explicit legacy error; there is no dual execution runtime.
 

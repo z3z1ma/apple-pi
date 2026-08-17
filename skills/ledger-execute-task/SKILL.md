@@ -19,7 +19,7 @@ Choose supervised execution when learning or risk is high:
 /ralph status <run-id>
 ```
 
-Choose autonomous execution only after shaping a bounded task. Ralph derives and records its own package-owned ceilings; ordinary model and slash-command calls do not estimate token, turn, or timeout arithmetic:
+Choose autonomous execution only after shaping a bounded task. Ralph does not estimate or enforce token, turn, or timeout arithmetic:
 
 ```text
 /ralph run .ledger/<task-id>/task.md
@@ -33,6 +33,6 @@ Treat terminal gates honestly:
 - `done`: deterministic evidence, review, retrospective, and distillation gates passed;
 - `blocked`: shaping, authority, or dependency input is required;
 - `evidence_failed` or `review_failed`: inspect the recorded reason before another run;
-- `authority_required`, `workspace_conflict`, `compacted`, or `budget_exhausted`: reconcile the workspace and task deliberately; never route around the gate.
+- `authority_required`, `workspace_conflict`, or `compacted`: reconcile the workspace and task deliberately; never route around the gate.
 
 Ralph never commits, stages, pushes, deploys, resets, cleans, stashes, publishes, or updates remote systems. The human owns final inspection and integration.

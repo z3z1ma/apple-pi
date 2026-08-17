@@ -35,13 +35,13 @@ Review execution requires a trusted project and an active model. Preview perform
 8. `fast` and `balanced` are one cycle. `thorough` may loop the same process up to three times; later planners see prior focuses, findings, and the meta-review, and must not repeat the same investigation.
 9. A selected file is incomplete if no cycle opened a review covering it, or if every focus that covered it failed. One failed sibling focus does not fail a file another focus already covered. A first-cycle verification miss does not publish `complete` even when every selected file was covered. Extra-cycle failure after a complete first pass does not un-complete the run. Error paths still coverage-account every selected file before the run settles.
 
-Planner and reviewer prompts identify items by unique repository paths, with a status suffix only when two selected items share a path. The controller resolves those aliases to sealed identities. Fail a role closed before launch only when its rendered prompt cannot fit the model context window or remaining elapsed time is exhausted.
+Planner and reviewer prompts identify items by unique repository paths, with a status suffix only when two selected items share a path. The controller resolves those aliases to sealed identities. Fail a role closed before launch only when its rendered prompt cannot fit the model context window.
 
 ## Profiles and model routing
 
 Profile selects how many plan → review → verify cycles to allow:
 
-- `fast`: one cycle, tighter focus and time caps.
+- `fast`: one cycle, tighter focus caps.
 - `balanced` (default): one complete cycle with more room to cut.
 - `thorough`: up to three cycles. Reviewers stay on the routine route with low thinking. The verifier always uses the rigorous route.
 
@@ -65,8 +65,8 @@ A live project lease prevents two Pi processes from reviewing the same project c
 
 ## Harness-owned limits and outcomes
 
-After sealing input, the controller derives focus, cycle, concurrency, and time caps. Review does not refuse or abort work for token spend or turn count. A limit never converts incomplete work into success. Historical receipts that still contain unused token-admission or turn-budget fields remain readable.
+After sealing input, the controller derives focus, cycle, and concurrency caps. Review does not refuse or abort work for token spend, turn count, or elapsed time. A limit never converts incomplete work into success. Historical receipts that still contain unused token-admission, turn-budget, or timeout fields remain readable.
 
 ## Ralph
 
-Ralph passes its compiled ledger task graph as the authority packet and its executor report as review background. The shared controller reviews the cumulative workspace change under the `balanced` profile. Ralph may still stop its own iteration on Ralph token or time exhaustion; it does not pass a remaining-token ceiling into review. A non-complete shared review terminates the iteration as `review_failed`; only a complete result can reach the closure judge.
+Ralph passes its compiled ledger task graph as the authority packet and its executor report as review background. The shared controller reviews the cumulative workspace change under the `balanced` profile. Ralph does not pass remaining-time or remaining-token constraints into review, and it does not abort its own roles for those reasons. A non-complete shared review terminates the iteration as `review_failed`; only a complete result can reach the closure judge.

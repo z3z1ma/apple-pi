@@ -267,13 +267,13 @@ Ralph compiles the shaped task graph, launches a fresh executor for one bounded 
 /ralph stop <run-id>
 ```
 
-`step` performs one complete executor → review → judge iteration. `run` repeats only when judgment says `iterate`, under harness-owned iteration, lifetime-token, review-concurrency, per-agent-turn, and elapsed-time ceilings. Normal model and slash-command calls do not configure the numeric arithmetic; compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
+`step` performs one complete executor → review → judge iteration. `run` repeats only when judgment says `iterate`. Ralph and shared review do not abort for token spend, role-turn count, or elapsed time. Compaction invalidates the curated-window premise and stops the affected coverage with an explicit cause.
 
 The implementation checkout must have an established Git `HEAD` and be clean at start. The model tool accepts `root` for a linked implementation worktree and `ledger_root` for the linked checkout containing authoritative `.ledger`. When the ledger is committed and current in the worktree, omit `ledger_root`; when `/.ledger/` is ignored, point `ledger_root` at the main checkout. Ralph verifies both roots share the trusted session repository's Git common directory, leases the implementation workspace and task bundle, and reviews the targeted worktree. It never creates or removes worktrees, commits, stages, pushes, deploys, resets, cleans, or stashes; those remain explicit human/orchestrator decisions.
 
 Executors cannot edit `.ledger`; the controller records structured Journal, Evidence, Blockers, Retrospective, and Distillation with compare-and-swap semantics. Review and judgment remain in authoritative `task.md`; `Status: done` changes only after deterministic evidence, review, retrospective, and distillation gates hold. Machine receipts are keyed by implementation worktree and stay user-local under `$PI_CODING_AGENT_DIR/ralph/runs/`.
 
-See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, budgets, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor`, `ralph-judge`, `review-planner`, `reviewer`, and `review-verifier`.
+See [`docs/ledger.md`](docs/ledger.md) for the artifact model and complete skill flow, and [`docs/ralph.md`](docs/ralph.md) for traversal, execution, receipts, and safety boundaries. Runtime-private procedures remain packaged as `ralph-executor`, `ralph-judge`, `review-planner`, `reviewer`, and `review-verifier`.
 
 ## Reference-repository decisions
 

@@ -890,7 +890,6 @@ export class ReviewController {
 				resultTool: capture.tool,
 				customTools,
 				builtinToolNames: profile.config.builtinToolNames,
-				elapsedSeconds: this.elapsedSeconds(run),
 			});
 		} catch (error) {
 			throw new ReviewStageError(safeReason(error), "policy_input");
@@ -904,16 +903,7 @@ export class ReviewController {
 			outcome: "role_policy_resolved",
 			details: envelope,
 		});
-		const timeout = AbortSignal.timeout(envelope.timeoutSeconds * 1000);
-		let timedOut = false;
-		timeout.addEventListener(
-			"abort",
-			() => {
-				timedOut = true;
-			},
-			{ once: true },
-		);
-		const signal = AbortSignal.any([control.abort.signal, timeout]);
+		const signal = control.abort.signal;
 		let activeId: string | undefined;
 		let roleLiveTokens = 0;
 		let authorityDenied = false;
@@ -988,27 +978,21 @@ export class ReviewController {
 					? "Review stopped"
 					: control.externalCancelled
 						? "Review cancelled by the caller"
-						: timedOut
-							? `${stage} exceeded its elapsed-time envelope`
-							: cause === "compaction"
-								? `${stage} compacted`
-								: `${stage} was aborted`,
+						: cause === "compaction"
+							? `${stage} compacted`
+							: `${stage} was aborted`,
 				control.stopRequested || control.externalCancelled
 					? "cancelled"
-					: timedOut
-						? "timeout"
-						: cause === "compaction"
-							? "compacted"
-							: "provider",
+					: cause === "compaction"
+						? "compacted"
+						: "provider",
 				control.stopRequested
 					? "operator_stop"
 					: control.externalCancelled
 						? "external_cancellation"
-						: timedOut
-							? "elapsed_time_ceiling"
-							: cause === "compaction"
-								? "compaction"
-								: "provider_error",
+						: cause === "compaction"
+							? "compaction"
+							: "provider_error",
 			);
 		}
 		if (record.status === "stopped") {
@@ -1020,23 +1004,19 @@ export class ReviewController {
 						? "Review cancelled by the caller"
 						: cause === "compaction"
 							? `${stage} compacted`
-							: timedOut
-								? `${stage} exceeded its elapsed-time envelope`
-								: "Review agent stopped",
+							: "Review agent stopped",
 				control.stopRequested || control.externalCancelled
 					? "cancelled"
 					: cause === "compaction"
 						? "compacted"
-						: "timeout",
+						: "unknown",
 				control.stopRequested
 					? "operator_stop"
 					: control.externalCancelled
 						? "external_cancellation"
 						: cause === "compaction"
 							? "compaction"
-							: timedOut
-								? "elapsed_time_ceiling"
-								: "internal_error",
+							: "internal_error",
 			);
 		}
 		if (record.status === "error")
@@ -1147,10 +1127,6 @@ export class ReviewController {
 		if (classifications.has("compacted")) return "compaction";
 		if (classifications.has("cancelled")) return "external_cancellation";
 		return "internal_error";
-	}
-
-	private elapsedSeconds(run: ReviewRun): number {
-		return (Date.now() - Date.parse(run.startedAt)) / 1000;
 	}
 
 	private settleCaughtRun(run: ReviewRun, error: unknown, control: ActiveReview): void {

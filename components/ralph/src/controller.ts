@@ -120,7 +120,7 @@ export class RalphController {
 		if (mode !== "step" && mode !== "auto") throw new Error(`Invalid Ralph mode: ${String(mode)}`);
 		const roots = resolveRalphRoots(ctx.cwd, options.root, options.ledgerRoot);
 		const preflight = compileWorkGraph(roots.workspaceRoot, taskPath, {}, roots.ledgerRoot);
-		const budgets = normalizeBudgets(options.budgets, deriveRalphBudgets(mode, preflight));
+		const budgets = normalizeBudgets(options.budgets, deriveRalphBudgets(mode));
 		const runId = randomUUID();
 		const releaseLeases = acquireRalphRunLeases(roots.workspaceRoot, roots.ledgerRoot, preflight.task.path, runId);
 		try {
@@ -173,7 +173,7 @@ export class RalphController {
 		signal?: AbortSignal,
 	): Promise<RalphRun> {
 		const run = await this.start(ctx, taskPath, { ...options, mode: "auto" });
-		return this.continue(ctx, run.runId, run.budgets.maxIterations, signal, run.projectRoot);
+		return this.continue(ctx, run.runId, Number.POSITIVE_INFINITY, signal, run.projectRoot);
 	}
 
 	async continue(
@@ -250,36 +250,13 @@ export class RalphController {
 		}
 		try {
 			for (let count = 0; count < maxIterations; count++) {
-				if (run.iteration >= run.budgets.maxIterations) {
-					return await this.gate(
-						run,
-						"budget_exhausted",
-						`Maximum iterations reached: ${run.budgets.maxIterations}`,
-						"iteration_ceiling",
-					);
-				}
-				if (this.elapsedSeconds(run) >= run.budgets.timeoutSeconds || run.totalTokens >= run.budgets.maxTokens) {
-					return await this.gate(
-						run,
-						"budget_exhausted",
-						"Run time or token budget exhausted before the next iteration",
-						this.elapsedSeconds(run) >= run.budgets.timeoutSeconds ? "elapsed_time_ceiling" : "aggregate_token_ceiling",
-					);
-				}
 				run.iteration++;
 				run.updatedAt = new Date().toISOString();
 				run = await this.runIteration(ctx, run, control);
 				if (run.state !== "iterating") return run;
 				if (run.mode === "step") return run;
 			}
-			return run.state === "iterating"
-				? await this.gate(
-						run,
-						"budget_exhausted",
-						`Invocation iteration limit reached: ${maxIterations}`,
-						"iteration_ceiling",
-					)
-				: run;
+			return run;
 		} catch (error) {
 			return await this.handleFailure(run, error);
 		} finally {
@@ -428,17 +405,6 @@ export class RalphController {
 			graphHash: graph.graphHash,
 			workspaceHashBefore: afterExecutor.hash,
 		});
-		const remainingSeconds = Math.max(1, run.budgets.timeoutSeconds - this.elapsedSeconds(run));
-		const remainingReviewTokens = run.budgets.maxTokens - run.totalTokens;
-		if (remainingReviewTokens < 10_000)
-			return this.gate(
-				run,
-				"budget_exhausted",
-				`Fewer than 10,000 tokens remain for independent review: ${remainingReviewTokens}`,
-				"aggregate_token_ceiling",
-			);
-		const reviewTimeout = AbortSignal.timeout(remainingSeconds * 1000);
-		const reviewSignal = AbortSignal.any([control.abort.signal, reviewTimeout]);
 		const reviewRun = await this.reviewController.run(
 			ctx,
 			{ mode: "workspace" },
@@ -447,37 +413,17 @@ export class RalphController {
 				profile: "balanced",
 				background: `Ralph iteration ${run.iteration} executor report:\n${JSON.stringify(executor, null, 2)}`,
 				authorityPacket: graph.bundle,
-				constraints: {
-					timeoutSeconds: Math.max(1, Math.ceil(remainingSeconds)),
-				},
 			},
-			reviewSignal,
+			control.abort.signal,
 		);
 		run.totalTokens += reviewRun.totalTokens;
 		if (control.stopRequested)
 			throw new RalphGateError("stopped", "Stopped by the operator during independent review", "operator_stop");
-		if (control.externalCancelled)
+		if (control.externalCancelled || reviewRun.terminalCause === "external_cancellation")
 			throw new RalphGateError(
 				"interrupted",
 				"Independent review was cancelled by the caller",
 				"external_cancellation",
-			);
-		if (reviewTimeout.aborted || reviewRun.terminalCause === "elapsed_time_ceiling") {
-			throw new RalphGateError(
-				"budget_exhausted",
-				"Independent review reached Ralph's elapsed-time ceiling",
-				"elapsed_time_ceiling",
-			);
-		}
-		if (reviewRun.terminalCause === "external_cancellation") {
-			throw new RalphGateError("interrupted", "Independent review was interrupted", "external_cancellation");
-		}
-		if (run.totalTokens >= run.budgets.maxTokens)
-			return this.gate(
-				run,
-				"budget_exhausted",
-				`Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`,
-				"aggregate_token_ceiling",
 			);
 		const afterReviewer = captureWorkspace(run.projectRoot);
 		assertWorkspaceMatches(afterExecutor, afterReviewer);
@@ -640,27 +586,15 @@ export class RalphController {
 						? "external_cancellation"
 						: "internal_error",
 			);
-		if (run.totalTokens >= run.budgets.maxTokens)
-			throw new RalphGateError(
-				"budget_exhausted",
-				"No token budget remains for the next fresh role",
-				"aggregate_token_ceiling",
-			);
-		const remainingMs = Math.max(1, run.budgets.timeoutSeconds * 1000 - (Date.now() - Date.parse(run.startedAt)));
-		const timeout = AbortSignal.timeout(remainingMs);
-		const signals = [control.abort.signal, timeout, ...(stageAbort ? [stageAbort] : [])];
-		const signal = AbortSignal.any(signals);
-		const maxTurns = role === "executor" ? run.budgets.executorMaxTurns : run.budgets.judgeMaxTurns;
+		const signals = [control.abort.signal, ...(stageAbort ? [stageAbort] : [])];
+		const signal = signals.length === 1 ? signals[0] : AbortSignal.any(signals);
 		const resultTool = createRalphResultTool(role);
-		let liveTokens = 0;
 		const record = await service.runFresh(ctx, {
 			type: `ralph-${role}`,
 			description: `Ralph ${role}: ${run.taskPath} (iteration ${run.iteration})`,
 			prompt,
 			agentConfig: profile.config,
-			maxTurns,
-			maxTokens: run.budgets.maxTokens - run.totalTokens,
-			hardTurnLimit: true,
+			maxTurns: 0,
 			toolExecution: "sequential",
 			thinkingLevel: role === "executor" ? "high" : "xhigh",
 			cwd: run.projectRoot,
@@ -670,17 +604,6 @@ export class RalphController {
 			internalOwner: `ralph:${run.runId}`,
 			onStarted: (agentId) => {
 				control.agentId = agentId;
-			},
-			onAssistantUsage: (usage) => {
-				liveTokens += usage.input + usage.output + usage.cacheWrite;
-				if (run.totalTokens + liveTokens >= run.budgets.maxTokens && !control.forcedGate) {
-					control.forcedGate = {
-						state: "budget_exhausted",
-						reason: `Token budget reached during ${role}`,
-						cause: "aggregate_token_ceiling",
-					};
-					control.abort.abort();
-				}
 			},
 			onCompaction: () => {
 				if (!control.forcedGate)
@@ -729,37 +652,22 @@ export class RalphController {
 				`${stage} compacted and no longer has the curated fresh context`,
 				"compaction",
 			);
-		if (run.totalTokens >= run.budgets.maxTokens)
-			throw new RalphGateError(
-				"budget_exhausted",
-				`Token budget reached: ${run.totalTokens}/${run.budgets.maxTokens}`,
-				"aggregate_token_ceiling",
-			);
 		if (record.status === "steered" || record.status === "aborted") {
 			throw new RalphGateError(
-				control.externalCancelled ? "interrupted" : "budget_exhausted",
-				control.externalCancelled ? `${stage} was cancelled by the caller` : `${stage} exceeded its turn budget`,
-				control.externalCancelled ? "external_cancellation" : "role_turn_ceiling",
+				control.externalCancelled ? "interrupted" : "error",
+				control.externalCancelled ? `${stage} was cancelled by the caller` : `${stage} was aborted`,
+				control.externalCancelled ? "external_cancellation" : "provider_error",
 			);
 		}
 		if (record.status === "stopped" && !allowStopped) {
-			const timedOut = this.elapsedSeconds(run) >= run.budgets.timeoutSeconds;
 			throw new RalphGateError(
-				control.stopRequested
-					? "stopped"
-					: control.externalCancelled
-						? "interrupted"
-						: timedOut
-							? "budget_exhausted"
-							: "interrupted",
+				control.stopRequested ? "stopped" : "interrupted",
 				`${stage} was stopped`,
 				control.stopRequested
 					? "operator_stop"
 					: control.externalCancelled
 						? "external_cancellation"
-						: timedOut
-							? "elapsed_time_ceiling"
-							: "internal_error",
+						: "internal_error",
 			);
 		}
 		if (record.status === "error")
@@ -871,10 +779,6 @@ export class RalphController {
 		if (!ctx.isProjectTrusted()) throw new Error("Ralph execution requires a trusted project");
 		if (!ctx.model) throw new Error("Ralph execution requires an active model");
 	}
-
-	private elapsedSeconds(run: RalphRun): number {
-		return (Date.now() - Date.parse(run.startedAt)) / 1000;
-	}
 }
 
 function substantiveWorkItemEvidence(value: string): boolean {
@@ -978,18 +882,10 @@ function boundedInteger(value: number | undefined, fallback: number, min: number
 	return value;
 }
 
-export function deriveRalphBudgets(
-	mode: RalphMode,
-	graph: Pick<ReturnType<typeof compileWorkGraph>, "records" | "byteLength">,
-): RalphBudgets {
-	const scale = Math.max(1, Math.ceil(graph.byteLength / (64 * 1024)), Math.ceil(graph.records.length / 8));
+export function deriveRalphBudgets(mode: RalphMode): RalphBudgets {
 	return {
-		maxIterations: mode === "step" ? 1 : Math.min(10, Math.max(2, scale * 2)),
-		maxTokens: Math.min(1_000_000, 250_000 + scale * 100_000),
-		timeoutSeconds: Math.min(7_200, 1_800 + scale * 900),
-		executorMaxTurns: Math.min(80, 24 + scale * 8),
-		reviewerMaxTurns: Math.min(30, 12 + scale * 4),
-		judgeMaxTurns: Math.min(20, 8 + scale * 2),
+		...DEFAULT_RALPH_BUDGETS,
+		maxIterations: mode === "step" ? 1 : DEFAULT_RALPH_BUDGETS.maxIterations,
 	};
 }
 
@@ -1015,8 +911,8 @@ export function summarizeRun(run: RalphRun): string {
 		`Workspace: ${run.projectRoot}`,
 		`Ledger: ${run.ledgerRoot}`,
 		`Task: ${run.taskPath}`,
-		`Iteration: ${run.iteration}/${run.budgets.maxIterations}`,
-		`Tokens: ${run.totalTokens}/${run.budgets.maxTokens}`,
+		`Iteration: ${run.iteration}`,
+		`Tokens: ${run.totalTokens}`,
 		...(run.terminalCause ? [`Cause: ${run.terminalCause}`] : []),
 		...(run.nextObjective ? [`Next objective: ${run.nextObjective}`] : []),
 		...(run.lastOutcome ? [`Outcome: ${run.lastOutcome}`] : []),
