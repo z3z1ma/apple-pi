@@ -8,7 +8,7 @@ One installable [Pi](https://github.com/badlogic/pi-mono) package for Alex's int
 - **Recall** — `vcc_recall` progressively recovers transcript and file-operation history; `recall` resolves a specific 12-character memory ID back to source entries.
 - **Pi Exec** (`pi_exec`) — a programmable JavaScript composition runtime over Pi tools, extension tools, MCP, and configurable subagents.
 - **MCP** (`mcp`, `/mcp`) — the full lazy, token-efficient `pi-mcp-adapter` gateway, installed as an exact package dependency.
-- **Interactive subagents** (`Agent`, `/agents`) — Markdown-defined foreground/background agents with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
+- **Interactive subagents** (`Agent`, `/agents`) — built-in specialist lanes plus Markdown-defined foreground/background agents, with nested delegation, steering, live widgets, FleetView, and persisted Pi sessions.
 - **Review** (`/skill:pi-review`) — write a `pi_exec` program from packaged references: plan focuses, fan out read-only reviewers, verify findings, optionally loop on residuals.
 - **Ledger task workflows and Ralph loops** (`/skill:ledger-*`, `ralph`, `/ralph`, `/ledger`, `/harness`) — self-contained `.ledger/<timestamp>-<slug>/` task graphs, shaping/research/specification/planning/distillation skills, fresh bounded execution, closure judgment, user-local run receipts, and a live operations hub/widget for task, work-item, and run progress.
 - **xAI hosted tools** — injects xAI's built-in `{ type: "web_search" }` and `{ type: "x_search" }` Responses tools on xAI models that use Pi's `openai-responses` API.
@@ -107,7 +107,7 @@ Available globals:
 
 `display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima. The packaged `pi-exec` skill has the guest signatures and the common authoring mistakes.
 
-Agent options include `task`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. Agents default to read-only core tools, but a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
+Agent options include `task`, `type`, `name`, `model`, `thinking`, `tools`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `Agent` tool and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier and Ralph executor/judge roles, which are program prompts, not catalog types. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers cannot call extension tools or MCP; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
 
 `context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: a worker-only `pi_exec_return` tool is injected via explicit `-e` under `--no-extensions`. The typed arguments become `agents.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agents.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
 
@@ -178,6 +178,22 @@ The adapter's separate `mcpScript` VM is intentionally filtered out: `pi_exec` i
 
 The `Agent` tool launches named agent *types* in foreground or background. `get_subagent_result` waits for or inspects background work, `steer_subagent` redirects a running agent after its current tool, and `stop_subagent` terminates queued or running work. `/agents` lists the live roster and discovered types. In TUI mode, active work appears in the above-editor widget and the navigable below-editor FleetView; the conversation viewer supports live scrolling, steering, and explicit stopping.
 
+`Agent` and `pi_exec` `agents.run` share the type catalog and serve different jobs. Use `Agent` for collaboration: background specialists, FleetView, steer/stop, resume, and a durable child session. Use `pi_exec` for composition: a program graph that fans out typed workers, binds MCP or tool results as `context`, and reduces to a compact value. The parent session remains a senior engineer who may implement; specialists exist to isolate context, pick a model class, or run non-overlapping parallel work.
+
+Built-in types:
+
+| Type | Lane | Default tools |
+| --- | --- | --- |
+| `Explore` | Local recon: where is X? | read-only |
+| `Research` | External docs via MCP/bound sources; not local recon | read-only |
+| `Plan` | How-to-implement across modules | read-only |
+| `Counsel` | Should we / root cause / YAGNI. Not Advisor, not pi-review | read-only |
+| `Implement` | Bounded specified writes. No research, no UI taste | write |
+| `Design` | User-visible layout, interaction, polish | write |
+| `general-purpose` | Substantial mixed work that does not fit a lane | write |
+
+One isolated, known-path, low-risk action stays in the parent. Do not use `general-purpose` when a lane fits. Review and Ralph keep their own `systemPrompt` roles and must not be retargeted onto these types.
+
 Agent definitions are Markdown with YAML frontmatter, discovered in this order:
 
 1. `.pi/agents/*.md`
@@ -202,14 +218,18 @@ Review the requested change. Report concrete findings with file paths and eviden
 
 Trusted agent definitions and settings control tool/extension scope, skills, model/thinking, turn limits with graceful wrap-up, session persistence, and explicit nested-agent allowlists. Each `Agent` invocation explicitly chooses `inherit_context` and `advisor`, both `false` by default: without inherited context, the task prompt is the complete handoff; setting `inherit_context: true` prepends the full parent conversation. The continuous second-model advisor remains off unless an invocation explicitly sets `advisor: true`; reserve it for correctness-critical implementation work rather than routine exploration. `max_turns` is a trusted definition-level run-length cutoff, not a model-facing output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
 
-Built-in agent types can also be routed through the shared `modes.json` mechanism without editing TypeScript. Named entries such as `Explore`, `Plan`, and `general-purpose` override the embedded built-in default for those agent types when the project is trusted or when the global mode is used. `provider` and `modelId` select a model together; `thinkingLevel` is independent, so a route may set only thinking. Custom Markdown agent files still win: a file's frontmatter `model:`/`thinking:` override the route, and an explicit `model` argument passed to the Agent tool remains highest precedence.
+Built-in agent types can also be routed through the shared `modes.json` mechanism without editing TypeScript. Named entries such as `Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, and `general-purpose` override the embedded built-in default for those agent types when the project is trusted or when the global mode is used. `provider` and `modelId` select a model together; `thinkingLevel` is independent, so a route may set only thinking. Custom Markdown agent files still win: a file's frontmatter `model:`/`thinking:` override the route, and an explicit `model` argument passed to the Agent tool or `agents.run` remains highest precedence.
 
 ```json
 {
   "modes": {
     "general-purpose": { "provider": "anthropic", "modelId": "claude-3-7-sonnet-20250219", "thinkingLevel": "medium" },
     "Explore": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" },
-    "Plan": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" }
+    "Research": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" },
+    "Plan": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" },
+    "Counsel": { "provider": "openai-codex", "modelId": "gpt-5.6-sol", "thinkingLevel": "xhigh" },
+    "Implement": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "high" },
+    "Design": { "provider": "openai-codex", "modelId": "gpt-5.6-luna", "thinkingLevel": "medium" }
   }
 }
 ```
@@ -222,7 +242,7 @@ The imported implementation deliberately has **no worktree parameter or worktree
 
 ### Review
 
-Review is a skill over `pi_exec`, not an extension. Load `/skill:pi-review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Workers return typed values through `pi_exec_return`.
+Review is a skill over `pi_exec`, not an extension. Load `/skill:pi-review`, write a program from the packaged references, and set `limits` so planner + reviewers + verifier fit. Role prompts live in the review skill references and are copied into `systemPrompt` constants. Leave those workers untyped; do not set `type` to `Counsel` or `Plan`. Workers return typed values through `pi_exec_return`.
 
 ```text
 /skill:pi-review

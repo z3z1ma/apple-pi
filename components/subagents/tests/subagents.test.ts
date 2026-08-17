@@ -1,17 +1,18 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "../src/abortable.js";
-import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
+import { selectAgentModel } from "../src/agent-runner.js";
 import { buildFullParentContext } from "../src/context.js";
+import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
-import { selectAgentModel } from "../src/agent-runner.js";
-import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { resolveAgentModel } from "../src/model-routing.js";
+import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
 import type { AgentConfig } from "../src/types.js";
+import { DEFAULT_AGENT_NAMES } from "../src/types.js";
 
 const roots: string[] = [];
 const temporaryRoot = (): string => {
@@ -33,6 +34,45 @@ describe("owned subagent surface", () => {
 		});
 	});
 
+	it("registers the specialist catalog as built-ins with lane-specific tools", () => {
+		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
+		expect(DEFAULT_AGENTS.get("Research")).toMatchObject({
+			model: "openai-codex/gpt-5.6-luna",
+			thinking: "medium",
+			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
+			extensions: true,
+			skills: false,
+			promptMode: "replace",
+		});
+		expect(DEFAULT_AGENTS.get("Counsel")).toMatchObject({
+			model: "openai-codex/gpt-5.6-sol",
+			thinking: "xhigh",
+			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
+			promptMode: "replace",
+		});
+		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
+			model: "openai-codex/gpt-5.6-luna",
+			thinking: "high",
+			extensions: false,
+			skills: false,
+			promptMode: "replace",
+		});
+		expect(DEFAULT_AGENTS.get("Implement")?.builtinToolNames).toBeUndefined();
+		expect(DEFAULT_AGENTS.get("Design")).toMatchObject({
+			model: "openai-codex/gpt-5.6-luna",
+			thinking: "medium",
+			extensions: false,
+			skills: false,
+			promptMode: "replace",
+		});
+		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/Not local reconnaissance/);
+		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/no docs tools/);
+		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/MCP/);
+		expect(DEFAULT_AGENTS.get("Counsel")?.systemPrompt).toMatch(/You advise; you do not implement/);
+		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
+		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
+	});
+
 	it("routes built-in agent models through modes.json and keeps custom frontmatter highest precedence", async () => {
 		const root = temporaryRoot();
 		const globalRoot = join(root, "pi-agent");
@@ -43,6 +83,7 @@ describe("owned subagent surface", () => {
 				modes: {
 					explore: { provider: "anthropic", modelId: "route-explore", thinkingLevel: "high" },
 					plan: { provider: "anthropic", modelId: "route-plan", thinkingLevel: "xhigh" },
+					counsel: { provider: "anthropic", modelId: "route-counsel", thinkingLevel: "high" },
 					"general-purpose": { thinkingLevel: "low" },
 				},
 			}),
@@ -60,6 +101,7 @@ describe("owned subagent surface", () => {
 			const available = [
 				{ provider: "anthropic", id: "route-explore", name: "route-explore" },
 				{ provider: "anthropic", id: "route-plan", name: "route-plan" },
+				{ provider: "anthropic", id: "route-counsel", name: "route-counsel" },
 				{ provider: "anthropic", id: "explicit", name: "explicit" },
 				{ provider: "openai-codex", id: "custom-frontmatter", name: "custom-frontmatter" },
 				{ provider: "openai-codex", id: "parent-model", name: "parent-model" },
@@ -87,6 +129,17 @@ describe("owned subagent surface", () => {
 			});
 			expect(plan.model).toMatchObject({ provider: "anthropic", id: "route-plan" });
 			expect(plan.thinkingLevel).toBe("xhigh");
+
+			const counsel = await resolveAgentModel({
+				cwd: root,
+				projectTrusted: false,
+				registry,
+				parentModel,
+				config: DEFAULT_AGENTS.get("Counsel"),
+				type: "Counsel",
+			});
+			expect(counsel.model).toMatchObject({ provider: "anthropic", id: "route-counsel" });
+			expect(counsel.thinkingLevel).toBe("high");
 
 			const custom = await resolveAgentModel({
 				cwd: root,

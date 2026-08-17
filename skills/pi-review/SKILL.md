@@ -1,6 +1,6 @@
 ---
 name: pi-review
-description: Run an evidence-driven code review with a dynamic planner, parallel focus reviewers, and independent verification. Use for pull requests, commits, patches, and working-tree changes.
+description: Default code-review skill. Use for any request to review, inspect, audit, assess, critique, validate, verify, or sanity-check code, implementations, or code changes for correctness, regressions, bugs, security, compatibility, completeness, maintainability, or operational risk. Applies to pull requests, commits, diffs, patches, branches, working-tree changes, refactors, migrations, fixes, tests, configuration, schemas, and generated code. Choose this skill whenever code review is the primary task, even if the user does not explicitly say "code review."
 ---
 
 # Review
@@ -82,6 +82,8 @@ The JavaScript references mark `PLANNER`, `REVIEWER`, and `VERIFIER` prompt cons
 ```
 
 Budget for one planner, one worker per partition focus, and one verifier. Increase the agent budget for additional cycles. Keep workers read-only; use the guest program for Git inspection, scheduling, validation, and aggregation.
+
+Planner, reviewer, and verifier are review-program roles via `systemPrompt`. Do not set `agents.run` `type` to `Counsel`, `Plan`, or another catalog lane for those workers. Catalog types are for interactive specialists and composed graphs, not this review spine.
 
 ## Finding standard
 

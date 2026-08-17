@@ -1,13 +1,13 @@
 ---
 name: pi-exec
-description: Write or debug a pi_exec JavaScript program using the correct guest APIs. Use when composing pi.read, grep, find, ls, bash, edit, write, fetch, extension tools, MCP, or agents inside pi_exec, when binding agent outputSchema values, or when a program fails with invalid arguments or "display is not defined".
+description: "Author or troubleshoot JavaScript passed to pi_exec. Use when asked to compose Pi tools, fetch, captured extension or MCP calls, parallel or pipeline stages, or agent workers in one program; bind context or outputSchema; or fix guest-runtime errors such as invalid pi.* arguments, missing pi_exec_return, or 'display is not defined'. Not for ordinary direct tool calls or interactive Agent collaboration."
 ---
 
 # Pi Exec Guest API
 
 `pi_exec` runs a JavaScript async-function body. Intermediate tool output stays inside the worker; only the returned value enters the main context.
 
-Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway. Do not plan to discover schemas inside the program.
+Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
 
 `display`, `inputs`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
 
@@ -50,9 +50,11 @@ The live `code` parameter lists every host signature, including web methods and 
 - `await skills.list()` → `[{ name, description }]` — session skills (package, project, user). `await skills.body({ name })` → SKILL.md body with frontmatter stripped. Throws if the skill is missing.
 - `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — captured extension tools only, not `pi.*`
 - `await extensions.<name>(args)` → `{ text, content, details, usage? }`
-- `type AgentRequest = string | { task: string, name?, model?, thinking?, tools?, systemPrompt?, context?, outputSchema? }`
+- `type AgentRequest = string | { task: string, type?, name?, model?, thinking?, tools?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
+- `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, `general-purpose`, …) and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
+- Review planner/reviewer/verifier and Ralph executor/judge stay custom `systemPrompt` workers. Do not set `type` to those roles.
 - `context` is a JSON-serializable value bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
 - `outputSchema` is a JSON Schema object. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
 - Workers have no extensions or MCP. Call those here, then bind the compact result as `context`.
@@ -65,7 +67,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `queueMicrotask`
 - `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, `TextEncoder`, `TextDecoder`, `DOMException`, `atob`, `btoa`, `structuredClone`
 
-`agent` / `agents.run` are pi_exec workers. `extensions.Agent({...})` is the interactive subagent tool; they are not the same API.
+`agent` / `agents.run` are pi_exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. `extensions.Agent({...})` is the interactive subagent tool for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog. They are not the same API.
 
 ## Gather, bind, then run workers
 
@@ -119,6 +121,16 @@ return parallel(files, async (name) => {
 ```
 
 The worker reads `context.path`. Do not `pi.read` the file in the parent just to stuff the body into `task`.
+
+Select a catalog lane when the worker should follow that role. Untyped workers stay generic and read-only — that is the review/Ralph pattern.
+
+```javascript
+const map = await agents.run({
+  type: "Explore",
+  task: "Where is session compaction owned? Return paths and a concise map.",
+  name: "compaction-map",
+});
+```
 
 Feed one typed worker result into the next. `first` is `{ path }`, not prose:
 

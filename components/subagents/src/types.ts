@@ -4,7 +4,15 @@ import type { LifetimeUsage } from "./usage.js";
 
 export type { ThinkingLevel };
 export type SubagentType = string;
-export const DEFAULT_AGENT_NAMES = ["general-purpose", "Explore", "Plan"] as const;
+export const DEFAULT_AGENT_NAMES = [
+	"general-purpose",
+	"Explore",
+	"Plan",
+	"Research",
+	"Counsel",
+	"Implement",
+	"Design",
+] as const;
 
 export interface AgentConfig {
 	name: string;

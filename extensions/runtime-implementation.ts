@@ -26,6 +26,7 @@ import {
 	PI_EXEC_RETURN_TOOL,
 	parseAgentRequest,
 	prepareAgentSpawn,
+	resolveExecWorker,
 	resolveStructuredOutput,
 } from "./runtime-agent.js";
 import {
@@ -94,7 +95,6 @@ export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimit
 	};
 }
 const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
-const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
@@ -176,20 +176,28 @@ async function runAgent(
 	signal: AbortSignal | undefined,
 	onActivity?: (activity: string) => void,
 ): Promise<WorkerResult> {
-	const requestedTools = request.tools ?? [...READ_ONLY_TOOLS];
-	if (requestedTools.some((tool) => !CORE_TOOL_NAMES.has(tool))) {
+	const resolved = await resolveExecWorker(request, {
+		cwd: ctx.cwd,
+		parentModel: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+		parentThinking: ctx.thinkingLevel,
+		projectTrusted: typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false,
+		registry: ctx.modelRegistry,
+		parentModelObject: ctx.model,
+	});
+	if (resolved.tools.some((tool) => !CORE_TOOL_NAMES.has(tool))) {
 		throw new Error(`agent tools must be selected from: ${CORE_TOOL_LIST.join(", ")}`);
 	}
-	if (request.thinking && !THINKING_LEVELS.has(request.thinking)) {
+	if (resolved.thinking && !THINKING_LEVELS.has(resolved.thinking)) {
 		throw new Error(`agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
 	}
-	const model = request.model ?? (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined);
-	const thinking = request.thinking ?? ctx.thinkingLevel;
-	const prepared = prepareAgentSpawn(request, {
-		tools: requestedTools,
-		...(model ? { model } : {}),
-		...(thinking ? { thinking } : {}),
-	});
+	const prepared = prepareAgentSpawn(
+		{ ...request, ...(resolved.systemPrompt ? { systemPrompt: resolved.systemPrompt } : {}) },
+		{
+			tools: resolved.tools,
+			...(resolved.model ? { model: resolved.model } : {}),
+			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
+		},
+	);
 
 	const pi = invocation();
 	try {

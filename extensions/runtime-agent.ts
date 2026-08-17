@@ -3,6 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Value } from "typebox/value";
+import {
+	BUILTIN_TOOL_NAMES,
+	buildAgentRegistry,
+	getAgentConfigIn,
+	getAvailableTypesIn,
+	resolveEnabledTypeIn,
+} from "../components/subagents/src/agent-types.js";
+import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
+import { resolveAgentModel } from "../components/subagents/src/model-routing.js";
+import type { AgentConfig } from "../components/subagents/src/types.js";
 
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 
@@ -23,6 +33,8 @@ export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./runtime-wor
 
 export interface AgentRequest {
 	task: string;
+	/** Built-in or Markdown agent type. Omit for a generic read-only worker. */
+	type?: string;
 	name?: string;
 	model?: string;
 	thinking?: string;
@@ -30,6 +42,26 @@ export interface AgentRequest {
 	systemPrompt?: string;
 	context?: unknown;
 	outputSchema?: Record<string, unknown>;
+}
+
+export interface ExecWorkerResolution {
+	tools: string[];
+	model?: string;
+	thinking?: string;
+	systemPrompt?: string;
+	type?: string;
+}
+
+export interface ExecWorkerResolveOptions {
+	cwd: string;
+	parentModel?: string;
+	parentThinking?: string;
+	projectTrusted?: boolean;
+	registry?: {
+		find(provider: string, modelId: string): { provider: string; id: string } | undefined;
+		getAvailable?(): Array<{ provider: string; id: string }>;
+	};
+	parentModelObject?: { provider: string; id: string };
 }
 
 export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentRequest {
@@ -43,8 +75,10 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 		throw new Error("agents.run tools must be an array of Pi core tool names");
 	}
 	const name = typeof rawArgs.name === "string" ? rawArgs.name.trim() : "";
+	const type = typeof rawArgs.type === "string" ? rawArgs.type.trim() : "";
 	const request: AgentRequest = {
 		task: rawArgs.task,
+		...(type ? { type } : {}),
 		...(name ? { name } : {}),
 		...(typeof rawArgs.model === "string" ? { model: rawArgs.model } : {}),
 		...(typeof rawArgs.thinking === "string" ? { thinking: rawArgs.thinking } : {}),
@@ -54,6 +88,83 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	if ("context" in rawArgs) request.context = rawArgs.context;
 	if ("outputSchema" in rawArgs) request.outputSchema = normalizeOutputSchema(rawArgs.outputSchema);
 	return request;
+}
+
+const READ_ONLY_WORKER_TOOLS = ["read", "grep", "find", "ls"];
+
+export function resolveExecAgentConfig(cwd: string, type: string): AgentConfig {
+	const registry = buildAgentRegistry(loadCustomAgents(cwd));
+	const key = resolveEnabledTypeIn(registry, type);
+	const config = key ? getAgentConfigIn(registry, key) : undefined;
+	if (!config) {
+		const available = getAvailableTypesIn(registry).join(", ") || "(none)";
+		throw new Error(`Unknown or disabled agent type: "${type}". Available: ${available}.`);
+	}
+	return config;
+}
+
+function defaultToolsFor(config: AgentConfig): string[] {
+	return config.builtinToolNames ?? [...BUILTIN_TOOL_NAMES];
+}
+
+function typedSystemPrompt(config: AgentConfig, additional?: string): string {
+	const role = `Agent type: ${config.name}\n\n${config.systemPrompt}`;
+	return additional?.trim() ? `${role}\n\nAdditional program guidance:\n${additional}` : role;
+}
+
+/**
+ * Resolve tools, model, thinking, and role prompt for an agents.run worker.
+ * Omitting type keeps the generic read-only worker. A catalog type supplies
+ * that agent's defaults; explicit tools/model/thinking override those defaults.
+ * systemPrompt appends and does not replace the type role.
+ */
+export async function resolveExecWorker(
+	request: AgentRequest,
+	options: ExecWorkerResolveOptions,
+): Promise<ExecWorkerResolution> {
+	if (!request.type) {
+		return {
+			tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
+			...(request.model ? { model: request.model } : options.parentModel ? { model: options.parentModel } : {}),
+			...(request.thinking
+				? { thinking: request.thinking }
+				: options.parentThinking
+					? { thinking: options.parentThinking }
+					: {}),
+			...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
+		};
+	}
+
+	const config = resolveExecAgentConfig(options.cwd, request.type);
+	const tools = request.tools ?? defaultToolsFor(config);
+	let model = request.model;
+	let thinking = request.thinking ?? config.thinking;
+
+	if (!request.model && options.registry) {
+		const resolved = await resolveAgentModel({
+			cwd: options.cwd,
+			projectTrusted: options.projectTrusted === true,
+			registry: options.registry as Parameters<typeof resolveAgentModel>[0]["registry"],
+			parentModel: options.parentModelObject as never,
+			config,
+			type: config.name,
+		});
+		if (resolved.model) model = `${resolved.model.provider}/${resolved.model.id}`;
+		if (!request.thinking && resolved.thinkingLevel) thinking = resolved.thinkingLevel;
+	} else if (!request.model && config.model) {
+		model = config.model;
+	}
+
+	if (!model && options.parentModel) model = options.parentModel;
+	if (!thinking && options.parentThinking) thinking = options.parentThinking;
+
+	return {
+		type: config.name,
+		tools,
+		...(model ? { model } : {}),
+		...(thinking ? { thinking } : {}),
+		systemPrompt: typedSystemPrompt(config, request.systemPrompt),
+	};
 }
 
 export function serializeAgentContext(context: unknown): string {
@@ -138,8 +249,10 @@ function summarizeBound(value: unknown): { bound: true; chars?: number } {
 /** Trace/widget args. Never includes bound payloads. */
 export function agentOperationArgs(rawArgs: Record<string, unknown>): Record<string, unknown> {
 	const name = typeof rawArgs.name === "string" ? rawArgs.name.trim() : "";
+	const type = typeof rawArgs.type === "string" ? rawArgs.type.trim() : "";
 	return {
 		...(typeof rawArgs.task === "string" ? { task: rawArgs.task } : {}),
+		...(type ? { type } : {}),
 		...(name ? { name } : {}),
 		...(typeof rawArgs.model === "string" ? { model: rawArgs.model } : {}),
 		...(typeof rawArgs.thinking === "string" ? { thinking: rawArgs.thinking } : {}),

@@ -23,6 +23,7 @@ import {
 	PI_EXEC_RETURN_TOOL,
 	parseAgentRequest,
 	prepareAgentSpawn,
+	resolveExecWorker,
 	resolveStructuredOutput,
 	serializeAgentContext,
 	WORKER_RETURN_EXTENSION_PATH,
@@ -423,6 +424,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION).toMatch(/not a program global/i);
 		expect(contract).toContain("agent(request: AgentRequest)");
 		expect(contract).toContain("agents.run(request: AgentRequest)");
+		expect(contract).toContain("type?: string");
 		expect(contract).toContain("context?: JSONValue");
 		expect(contract).toContain("outputSchema?: object");
 		expect(contract).toContain("value?: JSONValue");
@@ -448,6 +450,8 @@ describe("pi_exec guest API documentation", () => {
 		const skill = readFileSync(new URL("../skills/pi-exec/SKILL.md", import.meta.url), "utf8");
 		expect(skill).toContain("context?");
 		expect(skill).toContain("outputSchema?");
+		expect(skill).toContain("type?");
+		expect(skill).toContain('type: "Explore"');
 		expect(skill).toContain("agent(request: AgentRequest)");
 		expect(skill).toContain("agents.run(request: AgentRequest)");
 		expect(skill).toContain("value?: JSONValue");
@@ -540,8 +544,105 @@ describe("pi_exec agent binding", () => {
 		});
 	});
 
+	it("parses a catalog type and keeps untyped workers generic", () => {
+		expect(parseAgentRequest({ task: "map auth", type: "  Explore  " })).toEqual({
+			task: "map auth",
+			type: "Explore",
+		});
+		expect(parseAgentRequest({ task: "judge", systemPrompt: "REVIEWER" }).type).toBeUndefined();
+		expect(agentOperationArgs({ task: "map auth", type: "Explore" })).toEqual({
+			task: "map auth",
+			type: "Explore",
+		});
+	});
+
 	it("rejects an empty task", () => {
 		expect(() => parseAgentRequest({ task: "   " })).toThrow(/non-empty task/);
+	});
+
+	it("resolves catalog types for agents.run and leaves untyped workers read-only", async () => {
+		const cwd = process.cwd();
+		const untyped = await resolveExecWorker({ task: "inspect" }, { cwd });
+		expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"] });
+
+		const custom = await resolveExecWorker(
+			{ task: "review this diff", systemPrompt: "REVIEWER" },
+			{ cwd, parentModel: "xai/parent", parentThinking: "low" },
+		);
+		expect(custom.tools).toEqual(["read", "grep", "find", "ls"]);
+		expect(custom.systemPrompt).toBe("REVIEWER");
+		expect(custom.model).toBe("xai/parent");
+		expect(custom.type).toBeUndefined();
+
+		const explore = await resolveExecWorker({ task: "where is X?", type: "Explore" }, { cwd });
+		expect(explore.type).toBe("Explore");
+		expect(explore.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
+		expect(explore.model).toBe("openai-codex/gpt-5.6-luna");
+		expect(explore.thinking).toBe("medium");
+		expect(explore.systemPrompt).toContain("Agent type: Explore");
+		expect(explore.systemPrompt).toMatch(/file search specialist/i);
+
+		const guided = await resolveExecWorker(
+			{ task: "where is X?", type: "Explore", systemPrompt: "Prefer src/ over tests/." },
+			{ cwd },
+		);
+		expect(guided.systemPrompt).toContain("Agent type: Explore");
+		expect(guided.systemPrompt).toMatch(/file search specialist/i);
+		expect(guided.systemPrompt).toContain("Prefer src/ over tests/.");
+
+		const implement = await resolveExecWorker({ task: "apply the spec", type: "Implement" }, { cwd });
+		expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
+		expect(implement.thinking).toBe("high");
+
+		const narrowed = await resolveExecWorker(
+			{ task: "apply the spec", type: "Implement", tools: ["read", "edit"], thinking: "low", model: "xai/explicit" },
+			{ cwd },
+		);
+		expect(narrowed.tools).toEqual(["read", "edit"]);
+		expect(narrowed.thinking).toBe("low");
+		expect(narrowed.model).toBe("xai/explicit");
+
+		await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, { cwd })).rejects.toThrow(
+			/Unknown or disabled agent type/,
+		);
+	});
+
+	it("routes a typed agents.run worker through modes.json", async () => {
+		const root = mkdtempSync(join(tmpdir(), "apple-pi-exec-type-"));
+		const globalRoot = join(root, "pi-agent");
+		mkdirSync(globalRoot, { recursive: true });
+		writeFileSync(
+			join(globalRoot, "modes.json"),
+			JSON.stringify({
+				modes: {
+					counsel: { provider: "anthropic", modelId: "route-counsel", thinkingLevel: "high" },
+				},
+			}),
+		);
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = globalRoot;
+		try {
+			const available = [{ provider: "anthropic", id: "route-counsel", name: "route-counsel" }];
+			const resolved = await resolveExecWorker(
+				{ task: "should we split this module?", type: "Counsel" },
+				{
+					cwd: root,
+					parentModel: "openai-codex/parent",
+					parentModelObject: { provider: "openai-codex", id: "parent" },
+					registry: {
+						find: (provider, modelId) => available.find((model) => model.provider === provider && model.id === modelId),
+						getAvailable: () => available,
+					},
+				},
+			);
+			expect(resolved.model).toBe("anthropic/route-counsel");
+			expect(resolved.thinking).toBe("high");
+			expect(resolved.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it("rejects oversized or non-serializable context", () => {

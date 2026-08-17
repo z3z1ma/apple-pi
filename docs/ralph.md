@@ -1,6 +1,6 @@
 # Ledger-backed Ralph work loops
 
-Ralph executes one shaped `.ledger` task as a sequence of fresh, bounded contexts:
+Ralph executes one shaped `.ledger` task as a sequence of fresh, bounded contexts. Executor and judge are Ralph program roles, not catalog agent types. Do not retarget them onto `Implement`, `Counsel`, or another specialist lane.
 
 ```text
 compile task graph → execute → judge → close or start a fresh iteration
