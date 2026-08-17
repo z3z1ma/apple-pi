@@ -4,8 +4,8 @@
  *
  * Layers:
  *   1. pure logic        — severity helpers, backoff, terminal detection, arg
- *                          parsing, advisory/​delta formatting, AdviseTool dedup
- *                          (no model/network/TUI)
+ *                          parsing, advisory/​delta formatting, primary-agent
+ *                          protocol, AdviseTool dedup (no model/network/TUI)
  *   1b. runtime mechanics — always-hold + catch-up block: runTurnBlock branches
  *                          (stub runtime) and the real AdvisorRuntime + stub
  *                          Agent (hold → reconfirm → deliver/drop, settle waits)
@@ -23,7 +23,7 @@
  */
 
 import assert from "node:assert/strict";
-import { spawn, execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -133,6 +133,20 @@ test("parseAdvisorTestArgs: rejects bad input", () => {
 	assert.equal(A.parseAdvisorTestArgs("test nit"), null); // no note
 	assert.equal(A.parseAdvisorTestArgs("test bogus hi"), null); // bad severity
 	assert.equal(A.parseAdvisorTestArgs("status"), null);
+});
+
+test("appendPrimaryAdvisorPrompt: appends the protocol once and is idempotent", () => {
+	const once = A.appendPrimaryAdvisorPrompt("You are the coding agent.");
+	assert.match(once, /^You are the coding agent\.\n\n/);
+	assert.match(once, /<advisor-protocol>/);
+	assert.match(once, /<\/advisor-protocol>/);
+	assert.match(once, /\bnit\b/);
+	assert.match(once, /\bconcern\b/);
+	assert.match(once, /\bblocker\b/);
+	assert.match(once, /repeat/);
+	assert.match(once, /silently ignore/);
+	assert.equal(A.appendPrimaryAdvisorPrompt(once), once);
+	assert.equal(A.appendPrimaryAdvisorPrompt(""), A.PRIMARY_ADVISOR_PROTOCOL);
 });
 
 test("formatAdvisoryContent: wraps with severity + guidance, escapes XML", () => {
@@ -1796,6 +1810,7 @@ test("extension loads + registers /advisor command, advisory renderer, and branc
 	assert.ok(ext.commands.has("advisor"), "registers /advisor");
 	assert.ok(ext.messageRenderers.has("advisory"), "registers advisory renderer");
 	assert.ok(ext.handlers.has("session_tree"), "re-primes when the active branch changes");
+	assert.ok(ext.handlers.has("before_agent_start"), "injects the primary-agent protocol");
 });
 
 test("agent-core ordering: a steer queued during streaming is inserted after that assistant turn_end", async () => {
@@ -1880,6 +1895,25 @@ async function lifecycleHarness() {
 		turnCtx: { model: undefined, cwd: HERE },
 	};
 }
+
+test("lifecycle: before_agent_start appends the primary protocol only while enabled", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "advisor-prompt-"));
+	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+	try {
+		const x = await lifecycleHarness();
+		const base = "You are the coding agent.";
+		const onResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
+		assert.deepEqual(onResult, { systemPrompt: A.appendPrimaryAdvisorPrompt(base) });
+
+		await x.cmd("off", x.uiCtx);
+		const offResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
+		assert.equal(offResult, undefined);
+	} finally {
+		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	}
+});
 
 test("lifecycle: session rewrites capture active context passively for every Pi replacement path", async () => {
 	const x = await lifecycleHarness();

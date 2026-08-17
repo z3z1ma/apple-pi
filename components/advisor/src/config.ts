@@ -125,3 +125,31 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 	}
 	return prompt;
 }
+
+/** Distinctive wrapper so the primary prompt is appended at most once. */
+export const PRIMARY_ADVISOR_PROTOCOL_TAG = "advisor-protocol";
+
+/**
+ * Bundled instructions for the agent being reviewed. Injected into the primary
+ * system prompt while the advisor is enabled. Not user-overridable: an override
+ * could drop the repeat-handling contract.
+ */
+export const PRIMARY_ADVISOR_PROTOCOL = `<${PRIMARY_ADVISOR_PROTOCOL_TAG}>
+A persistent peer model reviews your turns and steers <advisory> notes. These are not the user.
+
+- nit — optional. Take it if cheap and clearly better; otherwise continue. It may refer to an earlier step.
+- concern — material. Verify before continuing on the flagged path. If valid, change course. If invalid, state one evidence-backed reason and continue. Do not silently ignore.
+- blocker — stop. Verify, then fix or change path before any more work on the flagged approach.
+
+Do not obey blindly: verify against the code and the user's request. The user outranks the advisor.
+
+A repeat or escalation means you did not resolve it. Act on the substance now. Do not acknowledge-and-continue, and do not argue with the advisor. If you already refuted the same claim with evidence and the new note adds none, do not relitigate.
+
+If you already answered the user and then act, write a fresh self-contained answer. Never thank, recap, or advise back.
+</${PRIMARY_ADVISOR_PROTOCOL_TAG}>`;
+
+/** Append the primary-agent advisor protocol, once, to a system prompt. */
+export function appendPrimaryAdvisorPrompt(systemPrompt: string): string {
+	if (systemPrompt.includes(`<${PRIMARY_ADVISOR_PROTOCOL_TAG}>`)) return systemPrompt;
+	return systemPrompt.trim() ? `${systemPrompt}\n\n${PRIMARY_ADVISOR_PROTOCOL}` : PRIMARY_ADVISOR_PROTOCOL;
+}

@@ -42,6 +42,10 @@
  *
  * An optional WATCHDOG.md in a trusted cwd is appended to the advisor's system
  * prompt (advisor-only guidance: review priorities, project traps).
+ *
+ * While enabled, `before_agent_start` appends a short protocol to the primary
+ * agent's system prompt so it knows how to treat nit/concern/blocker notes,
+ * including repeats. That text is for the agent being reviewed, not the advisor.
  */
 
 import { Agent, type AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -64,8 +68,10 @@ import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
 // ===========================================================================
 
 export type { AdvisorNote, AdvisorSeverity } from "./types.js";
-import type { AdvisorNote, AdvisorSeverity } from "./types.js";
+
 import type { PrimaryTurnState } from "../../shared/src/types.js";
+import type { AdvisorNote, AdvisorSeverity } from "./types.js";
+
 export type { PrimaryTurnState } from "../../shared/src/types.js";
 
 const ADVISORY_TYPE = "advisory";
@@ -249,15 +255,16 @@ import {
 	buildReviewMessages,
 	formatActiveSessionContext,
 	formatAdvisoryContent,
-	formatTurnDelta,
 	formatReconfirmPreamble,
+	formatTurnDelta,
 } from "./formatting.js";
+
 export {
 	buildReviewMessages,
 	formatActiveSessionContext,
 	formatAdvisoryContent,
-	formatTurnDelta,
 	formatReconfirmPreamble,
+	formatTurnDelta,
 } from "./formatting.js";
 
 // ---- build the persistent advisor Agent ----
@@ -736,7 +743,9 @@ function handoffInProgress(): boolean {
 // transcript via the low-level sessionManager.newSession() (which emits no
 // session_start). Must match HANDOFF_SESSION_REPLACED_CHANNEL in handoff.ts.
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
+
 import {
+	appendPrimaryAdvisorPrompt,
 	DEFAULT_ADVISOR_MODEL,
 	DEFAULT_ADVISOR_PROVIDER,
 	DEFAULT_THINKING,
@@ -744,7 +753,8 @@ import {
 	loadSystemPrompt,
 	saveEnabled,
 } from "./config.js";
-export { loadSystemPrompt } from "./config.js";
+
+export { appendPrimaryAdvisorPrompt, loadSystemPrompt, PRIMARY_ADVISOR_PROTOCOL } from "./config.js";
 
 export default function (pi: ExtensionAPI) {
 	let enabled = loadEnabled();
@@ -1007,7 +1017,8 @@ export default function (pi: ExtensionAPI) {
 
 	// User preflight happens before Pi starts streaming, so mark the turn running
 	// here as well as at turn_start. This closes the only real pre-turn window without
-	// consulting isIdle() or maintaining a second terminal flag.
+	// consulting isIdle() or maintaining a second terminal flag. Also append the
+	// primary-agent protocol so weaker models actually handle steered advisories.
 	pi.on("before_agent_start", (event, ctx) => {
 		if (!enabled) return;
 		if (reprimeAfterHandoff) {
@@ -1017,6 +1028,7 @@ export default function (pi: ExtensionAPI) {
 		autoResumeSuppressed = false;
 		turnState = "running";
 		pendingUserPrompt = event.prompt;
+		return { systemPrompt: appendPrimaryAdvisorPrompt(event.systemPrompt ?? "") };
 	});
 
 	// Fires for every assistant turn, including advisory-triggered runs and same-run
