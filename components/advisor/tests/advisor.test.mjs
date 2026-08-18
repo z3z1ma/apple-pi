@@ -98,6 +98,13 @@ test("nextBackoffMs: base, doubling, capped, guarded", () => {
 	assert.equal(A.nextBackoffMs(0), 15000); // defaults
 });
 
+test("formatAdvisorFooterText: labels reviewing vs idle, always shows cost", () => {
+	assert.equal(A.formatAdvisorFooterText(false, 0), "Advisor: $0.00");
+	assert.equal(A.formatAdvisorFooterText(false, 0.02), "Advisor: $0.02");
+	assert.equal(A.formatAdvisorFooterText(true, 0.02), "Advisor (reviewing): $0.02");
+	assert.equal(A.formatAdvisorFooterText(true, 1.5), "Advisor (reviewing): $1.50");
+});
+
 test("isTerminalTurn: terminal iff the assistant message made no tool calls", () => {
 	assert.equal(A.isTerminalTurn({ content: [{ type: "text" }] }), true);
 	assert.equal(A.isTerminalTurn({ content: [] }), true);
@@ -794,6 +801,35 @@ test("runTurnBlock: terminal blocks unconditionally (even with nothing held)", a
 	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt }));
 	assert.equal(rt.waited, true, "terminal must block until the advisor settles");
 	assert.equal(n, 0);
+});
+
+test("runTurnBlock: never notifies an unresolved 'catching up'/'waiting up to' wait — the footer owns that signal", async () => {
+	const notified = [];
+	const notify = (msg) => notified.push(msg);
+
+	await A.runTurnBlock(
+		blockArgs({ terminal: true, runtime: stubRuntime({ held: [], settleResult: "settled" }), notify }),
+	);
+	await A.runTurnBlock(
+		blockArgs({
+			terminal: false,
+			runtime: stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "timeout" }),
+			notify,
+		}),
+	);
+	assert.equal(notified.length, 0, `expected no notify calls while waiting, got: ${JSON.stringify(notified)}`);
+
+	// The timeout/failure outcome notify (a resolved, concrete result) still fires.
+	const outcomeNotified = [];
+	await A.runTurnBlock(
+		blockArgs({
+			terminal: true,
+			runtime: stubRuntime({ held: [{ note: "x", severity: "concern" }], settleResult: "timeout" }),
+			notify: (msg) => outcomeNotified.push(msg),
+		}),
+	);
+	assert.equal(outcomeNotified.length, 1);
+	assert.match(outcomeNotified[0], /didn't reconfirm in time/);
 });
 
 test("runTurnBlock: terminal timeout → delivers held best-effort (current, not stale)", async () => {
@@ -1998,6 +2034,34 @@ test("render: plain nit shows NIT tag", async () => {
 	const text = await renderAdvisory([{ note: "tidy this up" }]);
 	assert.match(text, /NIT/);
 	assert.match(text, /tidy this up/);
+});
+
+test("render: advisory card has a left border on both the heading and body lines", async () => {
+	const text = await renderAdvisory([{ note: "tidy this up", severity: "concern" }]);
+	const lines = text.split("\n").filter((line) => line.trim().length > 0);
+	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
+	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
+	assert.ok(
+		lines.some((line) => /Advisor/.test(line) && /CONCERN/.test(line)),
+		"heading line carries both the Advisor label and severity tag",
+	);
+});
+
+test("render: multiple advisory notes in one message render as separate bordered cards", async () => {
+	const text = await renderAdvisory([
+		{ note: "first issue", severity: "nit" },
+		{ note: "second issue", severity: "blocker" },
+	]);
+	assert.match(text, /first issue/);
+	assert.match(text, /second issue/);
+	assert.match(text, /NIT/);
+	assert.match(text, /BLOCKER/);
+	// A blank (border-less) line separates the two cards.
+	const rows = text.split("\n");
+	assert.ok(
+		rows.some((line) => line.trim() === ""),
+		"expected a spacer row between the two cards",
+	);
 });
 
 // ===========================================================================

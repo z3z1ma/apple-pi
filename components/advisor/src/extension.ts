@@ -36,8 +36,11 @@
  * Catch-up block: while a high-severity note is held — or whenever a turn is
  * about to idle — we stall the primary's next step (by awaiting in the `turn_end`
  * hook, which the agent loop awaits) so the advisor can catch up. The wait backs
- * off 15s→30s→60s… capped at 120s, is Escape-abortable, and shows a notice. Once
- * the advisor settles, surviving held notes are steered in against the now-unraced
+ * off 15s→30s→60s… capped at 120s, is Escape-abortable, and is reflected in the
+ * persistent footer state (formatAdvisorFooterText: "Advisor (reviewing)" vs
+ * "Advisor") rather than a one-shot notify — a toast for a wait that hasn't
+ * resolved yet is the ambiguity this footer state exists to remove. Once the
+ * advisor settles, surviving held notes are steered in against the now-unraced
  * state. This is a deliberate throttle (omp's syncBacklog idea).
  *
  * An optional WATCHDOG.md in a trusted cwd is appended to the advisor's system
@@ -52,7 +55,7 @@ import { Agent, type AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
@@ -158,12 +161,11 @@ export async function runTurnBlock(opts: {
 	if (!terminal && !runtime.hasHighPriority) return 0;
 
 	const timeoutMs = terminal ? capMs : nextBackoffMs(opts.consecutiveBlocks, baseMs, capMs);
-	opts.notify(
-		terminal
-			? "advisor: catching up before the turn ends…"
-			: `advisor: waiting up to ${Math.round(timeoutMs / 1000)}s to catch up…`,
-	);
-
+	// No "catching up"/"waiting up to Ns" notify here: a toast for an in-progress,
+	// not-yet-resolved wait is exactly the symptom this task fixed. The footer's
+	// reviewing/idle state (see formatAdvisorFooterText) is the persistent, self-
+	// resolving signal for "is it still working" now. `notify` below stays for the
+	// timeout/failure branch, which reports a concrete, already-decided outcome.
 	const result = await runtime.waitUntilSettled(timeoutMs, opts.signal);
 	if (result === "aborted") return opts.consecutiveBlocks; // user bailed; keep held + streak
 	if (result === "settled") {
@@ -720,6 +722,16 @@ export class AdvisorRuntime {
 // Advisor shows as a middle segment. Change this to reposition it (e.g.
 // "a-advisor" for leftmost).
 const STATUS_KEY = "q-advisor";
+
+/**
+ * Footer label + cost for the given reviewing state. `reviewing` distinguishes
+ * a live review in flight from idle so a glance at the footer always answers
+ * "is it still working" — the persistent, self-resolving signal that replaces
+ * the old one-shot "catching up" toast (which never resolved on a silent settle).
+ */
+export function formatAdvisorFooterText(reviewing: boolean, costUsd: number): string {
+	return `${reviewing ? "Advisor (reviewing)" : "Advisor"}: $${costUsd.toFixed(2)}`;
+}
 const DEBUG = !!process.env.ADVISOR_DEBUG;
 const dbg = (...a: unknown[]) => {
 	if (DEBUG) console.error("[advisor]", ...a);
@@ -756,6 +768,25 @@ import {
 
 export { appendPrimaryAdvisorPrompt, loadSystemPrompt, PRIMARY_ADVISOR_PROTOCOL } from "./config.js";
 
+// Wraps an advisory card's body in a severity-colored left rule (one line prefix
+// per rendered row), matching the bordered-card convention read from richer
+// third-party advisor UIs during UX research. Pure layout: no state of its own.
+class AdvisoryBorder implements Component {
+	constructor(
+		private readonly child: Component,
+		private readonly bar: string,
+	) {}
+
+	invalidate(): void {
+		this.child.invalidate();
+	}
+
+	render(width: number): string[] {
+		const inner = Math.max(1, width - 2);
+		return this.child.render(inner).map((line) => truncateToWidth(`${this.bar} ${line}`, width));
+	}
+}
+
 export default function (pi: ExtensionAPI) {
 	let enabled = loadEnabled();
 
@@ -785,9 +816,19 @@ export default function (pi: ExtensionAPI) {
 	// One source of truth for which primary boundary a queue flush belongs to.
 	let turnState: PrimaryTurnState = "ended-nonterminal";
 
-	// ---- statusbar: minimalistic per-session advisor cost ----
-	// Reflects the live advisor lifetime cost (rt.usage.cost) in the footer status
-	// bar as `│ Advisor: $N`. Cleared when the advisor is off or torn down.
+	// Most recent ctx seen from any hook that carries one. `updateStatus` needs this
+	// so the runtime's async `onSettled` callback — which fires whenever a review
+	// completes, not just at turn_end — can refresh the footer without waiting for
+	// the next primary-turn event. That is the actual fix for the reported UX gap:
+	// the old transient "catching up" notify had no matching "done" signal, so a
+	// silent settle was indistinguishable from a stuck advisor. A persistent,
+	// self-resolving footer state removes the need for a terminal message at all.
+	let latestCtx: unknown;
+
+	// ---- statusbar: per-session advisor cost + live reviewing/idle state ----
+	// Reflects the live advisor lifetime cost (rt.usage.cost) and whether a review
+	// is currently in flight (`Advisor (reviewing): $N` vs `Advisor: $N`) in the
+	// footer status bar. Cleared when the advisor is off or torn down.
 	//
 	// Footer ordering: pi sorts extension statuses alphabetically BY KEY and joins
 	// them with a single space (no separators of its own). So the key controls
@@ -799,6 +840,7 @@ export default function (pi: ExtensionAPI) {
 	// (e.g. pi-sub-bar with statusLeadingDivider:true starts with `│`), so a trailing
 	// bar here would double up (`│ Advisor │ │ …`).
 	function updateStatus(ctx: unknown): void {
+		latestCtx = ctx;
 		const ui = (
 			ctx as {
 				ui?: {
@@ -813,7 +855,7 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 		const bar = ui.theme ? ui.theme.fg("dim", "│") : "│";
-		ui.setStatus(STATUS_KEY, `${bar} Advisor: $${runtime.usage.cost.toFixed(2)}`);
+		ui.setStatus(STATUS_KEY, `${bar} ${formatAdvisorFooterText(!runtime.idle, runtime.usage.cost)}`);
 	}
 
 	// ---- advice delivery into the primary session ----
@@ -1002,7 +1044,11 @@ export default function (pi: ExtensionAPI) {
 		const compactAt = Math.min(95, Math.max(50, Number(process.env.ADVISOR_COMPACT_AT) || 80));
 		builtRuntime = new AdvisorRuntime(agent, builtAdviseTool, 1000, dbg, compactAt, (outcome) => {
 			// A disposed/replaced runtime may settle late; never let it flush the new one.
-			if (runtime === builtRuntime) flushSettledAdvice(outcome);
+			if (runtime !== builtRuntime) return;
+			flushSettledAdvice(outcome);
+			// Refresh the footer the moment this settle happens, not just at the next
+			// turn_end — a background review can finish while the primary keeps running.
+			if (latestCtx) updateStatus(latestCtx);
 		});
 		runtime = builtRuntime;
 		if (stagedReprime) builtRuntime.reprime(stagedReprime);
@@ -1125,14 +1171,25 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory card rendering ----
+	// Bordered card (severity-colored left rule, bold "Advisor <SEVERITY>" heading,
+	// body in the default readable `text` color) replacing the single dim inline
+	// line, matching the visual clarity of richer third-party advisor UIs surveyed
+	// during UX research. `text` (not `muted`/`dim`) for the body follows the same
+	// contrast rationale as the conversation-viewer fix: dim is nearly invisible in
+	// the dark theme and this is content the user is meant to read.
 	pi.registerMessageRenderer<{ notes: AdvisorNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
 		const container = new Container();
-		for (const n of notes) {
-			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "dim";
+		for (const [index, n] of notes.entries()) {
+			if (index > 0) container.addChild(new Spacer(1));
+			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
-			container.addChild(new Text(`${theme.fg(color, `◆ advisor [${tag}]`)} ${theme.fg("muted", n.note)}`, 1, 0));
+			const card = new Container();
+			card.addChild(new Text(`${theme.fg(color, theme.bold("Advisor"))} ${theme.fg(color, tag)}`, 0, 0));
+			card.addChild(new Spacer(1));
+			card.addChild(new Text(theme.fg("text", n.note), 0, 0));
+			container.addChild(new AdvisoryBorder(card, theme.fg(color, "│")));
 		}
 		return container;
 	});
