@@ -3,6 +3,7 @@ import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
+import { startSidecarUsageTracker } from "../../../../shared/src/sidecar-usage.js";
 import { debugLog } from "../../debug-log.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
 import { type Observation, type Reflection, reflectionToSummaryLine } from "../../session-ledger/index.js";
@@ -288,14 +289,27 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
-	await drainAgentStream(
-		stream,
-		(event) => {
-			// Tool execution collects candidate ids.
-			logAgentStreamError("dropper", event);
-		},
-		signal,
-	);
+	const usage = startSidecarUsageTracker({
+		agent: "dropper",
+		trigger: "observationsPoolTargetTokens",
+		provider: (model as { provider?: string }).provider,
+		model: (model as { id?: string }).id,
+	});
+	try {
+		await drainAgentStream(
+			stream,
+			(event) => {
+				// Tool execution collects candidate ids.
+				logAgentStreamError("dropper", event);
+				usage.observeEvent(event);
+			},
+			signal,
+		);
+		usage.finish("ok");
+	} catch (error) {
+		usage.finish(signal?.aborted ? "aborted" : "error");
+		throw error;
+	}
 	const droppedIds = selectDropCandidates(proposedDropIds, observations, maxDropsAllowed, reflections);
 	const reason =
 		droppedIds.length > 0

@@ -24,7 +24,7 @@
 
 import assert from "node:assert/strict";
 import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -1794,6 +1794,83 @@ test("runtime: PROACTIVE self-compaction respects a custom compactAtPercent thre
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(resets, 0, "context below the configured threshold is left intact");
+});
+
+test("runtime: bound session records each prompt including a self-compaction replay", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "advisor-usage-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+	try {
+		let attempts = 0;
+		const agent = {
+			state: { messages: [], model: { provider: "anthropic", id: "claude-opus-5" } },
+			async prompt() {
+				attempts++;
+				this.state.messages.push({
+					role: "assistant",
+					stopReason: attempts === 1 ? "length" : "stop",
+					usage: {
+						input: attempts,
+						output: 1,
+						cacheRead: 2,
+						cacheWrite: 0,
+						cost: { total: 0.01 * attempts },
+					},
+				});
+			},
+			abort() {},
+			reset() {
+				this.state.messages = [];
+			},
+		};
+		const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+		rt.setUsageSession("session-usage");
+		rt.push("secret primary delta");
+		assert.equal(await rt.waitUntilSettled(2000), "settled");
+		const path = join(agentDir, "sidecar-usage", "session-usage.ndjson");
+		const rows = readFileSync(path, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line));
+		assert.equal(rows.length, 2);
+		assert.equal(rows[0].trigger, "turn_end");
+		assert.equal(rows[0].status, "length");
+		assert.equal(rows[1].trigger, "turn_end_replay");
+		assert.equal(rows[1].status, "stop");
+		assert.equal(rows[0].provider, "anthropic");
+		assert.equal(rows[0].model, "claude-opus-5");
+		assert.equal(JSON.stringify(rows).includes("secret primary delta"), false);
+	} finally {
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+	}
+});
+
+test("runtime: unbound session writes no usage records", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "advisor-usage-unbound-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+	try {
+		const agent = {
+			state: { messages: [], model: { provider: "anthropic", id: "claude-opus-5" } },
+			async prompt() {
+				this.state.messages.push({
+					role: "assistant",
+					stopReason: "stop",
+					usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0.01 } },
+				});
+			},
+			abort() {},
+			reset() {},
+		};
+		const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+		rt.push("turn");
+		assert.equal(await rt.waitUntilSettled(2000), "settled");
+		assert.equal(existsSync(join(agentDir, "sidecar-usage")), false);
+	} finally {
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+	}
 });
 
 test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops accepting advice", async () => {

@@ -5,6 +5,7 @@ export default defineConfig({
 		environment: "node",
 		include: [
 			"components/ask-user-question/tests/**/*.test.ts",
+			"components/shared/tests/**/*.test.ts",
 			"components/memory/tests/**/*.test.ts",
 			"components/xai-hosted-tools/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",

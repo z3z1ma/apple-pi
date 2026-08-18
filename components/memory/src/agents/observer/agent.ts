@@ -3,6 +3,7 @@ import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
+import { startSidecarUsageTracker } from "../../../../shared/src/sidecar-usage.js";
 import { hashId } from "../../ids.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
 import { nowTimestamp, truncateRecordContent } from "../../serialize.js";
@@ -212,20 +213,33 @@ ${conversation}`;
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
 	let streamError: { stopReason: string; errorMessage?: string } | undefined;
-	await drainAgentStream(
-		stream,
-		(event) => {
-			// Drain events; the tool's execute already collects records.
-			logAgentStreamError("observer", event);
-			// Watch for a terminal API/stream failure so it is not conflated with
-			// a deliberate empty result.
-			const message = (event as { message?: { role?: string; stopReason?: string; errorMessage?: string } }).message;
-			if (message?.role === "assistant" && (message.stopReason === "error" || message.stopReason === "aborted")) {
-				streamError = { stopReason: message.stopReason, errorMessage: message.errorMessage };
-			}
-		},
-		signal,
-	);
+	const usage = startSidecarUsageTracker({
+		agent: "observer",
+		trigger: "observeAfterTokens",
+		provider: (model as { provider?: string }).provider,
+		model: (model as { id?: string }).id,
+	});
+	try {
+		await drainAgentStream(
+			stream,
+			(event) => {
+				// Drain events; the tool's execute already collects records.
+				logAgentStreamError("observer", event);
+				usage.observeEvent(event);
+				// Watch for a terminal API/stream failure so it is not conflated with
+				// a deliberate empty result.
+				const message = (event as { message?: { role?: string; stopReason?: string; errorMessage?: string } }).message;
+				if (message?.role === "assistant" && (message.stopReason === "error" || message.stopReason === "aborted")) {
+					streamError = { stopReason: message.stopReason, errorMessage: message.errorMessage };
+				}
+			},
+			signal,
+		);
+		usage.finish(streamError?.stopReason ?? "ok");
+	} catch (error) {
+		usage.finish(signal?.aborted ? "aborted" : "error");
+		throw error;
+	}
 
 	if (accumulated.size === 0) {
 		if (streamError) throw new ObserverStreamError(streamError.stopReason, streamError.errorMessage);

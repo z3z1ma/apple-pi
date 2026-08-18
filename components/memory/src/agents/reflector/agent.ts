@@ -3,6 +3,7 @@ import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
+import { startSidecarUsageTracker } from "../../../../shared/src/sidecar-usage.js";
 import { debugLog } from "../../debug-log.js";
 import { hashId } from "../../ids.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
@@ -286,14 +287,27 @@ export async function runReflector(args: RunReflectorArgs): Promise<ReflectorPas
 
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
-	await drainAgentStream(
-		stream,
-		(event) => {
-			// Tool execution collects records.
-			logAgentStreamError("reflector", event);
-		},
-		signal,
-	);
+	const usage = startSidecarUsageTracker({
+		agent: "reflector",
+		trigger: "reflectAfterTokens",
+		provider: (model as { provider?: string }).provider,
+		model: (model as { id?: string }).id,
+	});
+	try {
+		await drainAgentStream(
+			stream,
+			(event) => {
+				// Tool execution collects records.
+				logAgentStreamError("reflector", event);
+				usage.observeEvent(event);
+			},
+			signal,
+		);
+		usage.finish("ok");
+	} catch (error) {
+		usage.finish(signal?.aborted ? "aborted" : "error");
+		throw error;
+	}
 	const acceptedReflections = Array.from(accumulated.values());
 	const currentLaw = [...reflections.filter((reflection) => !retired.has(reflection.id)), ...acceptedReflections];
 	const afterCoverageById = reflectionCoverageMap(observations, currentLaw);

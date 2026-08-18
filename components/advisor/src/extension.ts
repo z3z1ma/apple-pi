@@ -59,6 +59,7 @@ import { type Component, Container, Spacer, Text, truncateToWidth } from "@earen
 import { Type } from "typebox";
 
 import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
+import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 
 // ===========================================================================
 // Advisor core — persistent second model that watches the main agent.
@@ -335,6 +336,9 @@ export class AdvisorRuntime {
 	#cumInput = 0;
 	#cumOutput = 0;
 	#cumCost = 0;
+	// Production turn_end binds this so #drain can emit after the hook returns.
+	// Tests that construct AdvisorRuntime directly leave it unset and write nothing.
+	#usageSession?: { sessionId?: string };
 	disposed = false;
 
 	// Self-compact when the advisor's own context reaches this % of its window
@@ -379,6 +383,59 @@ export class AdvisorRuntime {
 		try {
 			this.agent.reset();
 		} catch {}
+	}
+
+	/** Enable durable per-prompt usage records for this runtime. */
+	setUsageSession(sessionId?: string): void {
+		this.#usageSession = { sessionId };
+	}
+
+	async #promptAndRecord(messages: unknown, trigger: string): Promise<void> {
+		const before = this.agent.state.messages.length;
+		const started = Date.now();
+		const model = this.agent.state.model as { provider?: string; id?: string } | undefined;
+		try {
+			await this.agent.prompt(messages as never);
+		} finally {
+			this.#recordPromptUsage(before, Date.now() - started, trigger, model);
+		}
+	}
+
+	#recordPromptUsage(
+		before: number,
+		durationMs: number,
+		trigger: string,
+		model: { provider?: string; id?: string } | undefined,
+	): void {
+		if (!this.#usageSession) return;
+		withSidecarUsageContext({ sessionId: this.#usageSession.sessionId }, () => {
+			const created = this.agent.state.messages.slice(before);
+			let recorded = 0;
+			for (const message of created) {
+				if (message.role !== "assistant") continue;
+				const assistant = message as AssistantMessage;
+				recordSidecarUsage({
+					agent: "advisor",
+					trigger,
+					status: String(assistant.stopReason ?? "ok"),
+					provider: model?.provider,
+					model: model?.id,
+					durationMs,
+					...usageFieldsFromUnknown(assistant.usage),
+				});
+				recorded++;
+			}
+			if (recorded === 0) {
+				recordSidecarUsage({
+					agent: "advisor",
+					trigger,
+					status: "error",
+					provider: model?.provider,
+					model: model?.id,
+					durationMs,
+				});
+			}
+		});
 	}
 
 	get backlog(): number {
@@ -630,7 +687,8 @@ export class AdvisorRuntime {
 					let last: AssistantMessage | undefined;
 					for (let attempt = 0; attempt < 2; attempt++) {
 						this.onDebug?.("prompting advisor agent, delta chars=", promptChars, "held=", offered.length);
-						await this.agent.prompt(messages);
+						const trigger = attempt > 0 ? "turn_end_replay" : this.#failures > 0 ? "turn_end_retry" : "turn_end";
+						await this.#promptAndRecord(messages, trigger);
 						if (this.#epoch !== epoch) {
 							stale = true;
 							break; // reset/dispose during the prompt; batch is stale
@@ -749,6 +807,22 @@ const BLOCK_CAP_MS = 120_000;
 const HANDOFF_IN_PROGRESS_KEY = Symbol.for("pi-amplike-handoff-in-progress");
 function handoffInProgress(): boolean {
 	return !!(globalThis as any)[HANDOFF_IN_PROGRESS_KEY];
+}
+
+function sessionIdFromCtx(ctx: unknown): string | undefined {
+	try {
+		const sessionManager = (
+			ctx as {
+				sessionManager?: {
+					getSessionId?: () => string | undefined;
+					getSessionFile?: () => string | undefined;
+				};
+			}
+		).sessionManager;
+		return sessionManager?.getSessionId?.() ?? sessionManager?.getSessionFile?.();
+	} catch {
+		return undefined;
+	}
 }
 
 // Emitted by the handoff extension after its tool path replaces the session
@@ -1115,6 +1189,7 @@ export default function (pi: ExtensionAPI) {
 			toolResults: event.toolResults as ToolResultMessage[],
 		});
 		pendingUserPrompt = undefined;
+		rt.setUsageSession(sessionIdFromCtx(ctx));
 		rt.push(delta);
 
 		// Don't block during a handoff teardown (we'd stall the replacement).

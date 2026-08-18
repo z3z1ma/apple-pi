@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { withSidecarUsageContext } from "../../../shared/src/sidecar-usage.js";
 import { CONSOLIDATION_ABORT_REASON } from "../abort.js";
 import { runDropper } from "../agents/dropper/agent.js";
 import { observationPoolMetrics } from "../agents/dropper/pool.js";
@@ -327,9 +328,10 @@ function maybeLaunchConsolidation(pi: ExtensionAPI, runtime: Runtime, ctx: Conso
 				...sessionMetadata,
 				runId,
 			},
-			async () => {
-				await runConsolidationPipeline(pi, runtime, consolidationCtx, config);
-			},
+			() =>
+				withSidecarUsageContext({ sessionId: sessionMetadata.sessionId }, async () => {
+					await runConsolidationPipeline(pi, runtime, consolidationCtx, config);
+				}),
 		),
 	);
 }
@@ -474,18 +476,20 @@ async function runObserverStage(
 
 	let observations: Observation[] | undefined;
 	try {
-		observations = await runObserver({
-			model: resolved.model as any,
-			apiKey: resolved.apiKey,
-			headers: resolved.headers,
-			priorReflections,
-			priorObservations,
-			chunk,
-			allowedSourceEntryIds: sourceEntryIds,
-			maxTurns: config.agentMaxTurns,
-			thinkingLevel: resolved.thinkingLevel ?? "low",
-			signal: runtime.consolidationSignal,
-		});
+		observations = await withSidecarUsageContext({ threshold: config.observeAfterTokens }, () =>
+			runObserver({
+				model: resolved.model as any,
+				apiKey: resolved.apiKey,
+				headers: resolved.headers,
+				priorReflections,
+				priorObservations,
+				chunk,
+				allowedSourceEntryIds: sourceEntryIds,
+				maxTurns: config.agentMaxTurns,
+				thinkingLevel: resolved.thinkingLevel ?? "low",
+				signal: runtime.consolidationSignal,
+			}),
+		);
 		if (runtime.disposed) return "abort";
 	} catch (error) {
 		if (error instanceof ObserverStreamError) {
@@ -576,16 +580,18 @@ async function runReflectorStage(
 
 	const folded = foldLedger(entries);
 	const coverageBefore = latestReflectionCoverageIndex(entries);
-	const result = await runReflector({
-		model: resolved.model as any,
-		apiKey: resolved.apiKey,
-		headers: resolved.headers,
-		reflections: folded.currentReflections,
-		observations: folded.activeObservations,
-		maxTurns: config.agentMaxTurns,
-		thinkingLevel: resolved.thinkingLevel ?? "low",
-		signal: runtime.consolidationSignal,
-	});
+	const result = await withSidecarUsageContext({ threshold: config.reflectAfterTokens }, () =>
+		runReflector({
+			model: resolved.model as any,
+			apiKey: resolved.apiKey,
+			headers: resolved.headers,
+			reflections: folded.currentReflections,
+			observations: folded.activeObservations,
+			maxTurns: config.agentMaxTurns,
+			thinkingLevel: resolved.thinkingLevel ?? "low",
+			signal: runtime.consolidationSignal,
+		}),
+	);
 	if (runtime.disposed) return { ...empty, outcome: "abort" };
 	const armReflectorBackoff = () => {
 		runtime.reflectorMaintenanceBackoff = {
@@ -700,18 +706,25 @@ async function runDropperStage(
 	if (runtime.disposed) return "abort";
 	if (!resolved) return "abort";
 
-	const droppedIds = await runDropper({
-		model: resolved.model as any,
-		apiKey: resolved.apiKey,
-		headers: resolved.headers,
-		reflections: folded.currentReflections,
-		observations: folded.activeObservations,
-		targetTokens: config.observationsPoolTargetTokens,
-		...(reflectionMaintenance ? { maintenanceEligibleObservationIds } : {}),
-		maxTurns: config.agentMaxTurns,
-		thinkingLevel: resolved.thinkingLevel ?? "low",
-		signal: runtime.consolidationSignal,
-	});
+	const droppedIds = await withSidecarUsageContext(
+		{
+			threshold: config.observationsPoolTargetTokens,
+			trigger: reflectionMaintenance ? "reflectionMaintenance" : "observationsPoolTargetTokens",
+		},
+		() =>
+			runDropper({
+				model: resolved.model as any,
+				apiKey: resolved.apiKey,
+				headers: resolved.headers,
+				reflections: folded.currentReflections,
+				observations: folded.activeObservations,
+				targetTokens: config.observationsPoolTargetTokens,
+				...(reflectionMaintenance ? { maintenanceEligibleObservationIds } : {}),
+				maxTurns: config.agentMaxTurns,
+				thinkingLevel: resolved.thinkingLevel ?? "low",
+				signal: runtime.consolidationSignal,
+			}),
+	);
 	if (runtime.disposed) return "abort";
 	const coversUpToId = earlierCoverageMarkerId(entries, observationCoverageId, sameRunReflectionCoverageId);
 	const data = coversUpToId && droppedIds ? buildObservationsDroppedData(droppedIds, coversUpToId) : undefined;

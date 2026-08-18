@@ -52,3 +52,35 @@ Observations, reflections, drop records, and reflection retirements are custom e
 Thus memory is durable and project-associated through Pi's session location, but it is **not project-local repository state** and is not shared through Git.
 
 apple-pi intentionally does not create a `.pi/memory` mirror. A mirror would introduce a second source of truth, merge semantics, generated repository noise, and a privacy decision without improving current runtime behavior. If cross-session or team-shared memory becomes a concrete requirement, it should be designed as an explicit store and migration rather than an automatic copy.
+
+## Sidecar usage records
+
+Advisor reviews and observational-memory stages write one NDJSON line per model call to:
+
+```text
+~/.pi/agent/sidecar-usage/<session-id>.ndjson
+```
+
+Calls without a usable session id go to `sidecar-usage/unscoped.ndjson`. Records are identifiers and counters only: provider, model, input, cacheRead, cacheWrite, output, cost, duration, trigger, and status. They are not session-JSONL custom entries, so they do not affect compaction or memory projection.
+
+To extend the baseline spend table with sidecars, aggregate those files the same way session JSONL assistant messages are aggregated:
+
+```python
+from collections import defaultdict
+from pathlib import Path
+import json
+
+rows = defaultdict(lambda: {"calls": 0, "input": 0, "cacheRead": 0, "output": 0, "cost": 0.0})
+for path in Path.home().joinpath(".pi/agent/sidecar-usage").glob("*.ndjson"):
+    for line in path.read_text().splitlines():
+        rec = json.loads(line)
+        key = f"{rec.get('provider', '')}/{rec.get('model', '')}"
+        row = rows[key]
+        row["calls"] += 1
+        row["input"] += rec.get("input", 0)
+        row["cacheRead"] += rec.get("cacheRead", 0)
+        row["output"] += rec.get("output", 0)
+        row["cost"] += rec.get("cost", 0)
+```
+
+A write failure is ignored. Instrumentation never changes review or consolidation results.
