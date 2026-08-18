@@ -11,6 +11,7 @@ function captureHandler(
 		passive?: boolean;
 		compactInFlight?: boolean;
 		hostCompactionPending?: () => boolean;
+		hostOwnsUsageThreshold?: () => boolean;
 	} = {},
 ) {
 	let handler: ((event: unknown, ctx: unknown) => void) | undefined;
@@ -34,6 +35,7 @@ function captureHandler(
 	};
 	registerCompactionTrigger(pi as any, runtime as any, {
 		hostCompactionPending: args.hostCompactionPending,
+		hostOwnsUsageThreshold: args.hostOwnsUsageThreshold,
 	});
 	if (!handler) throw new Error("agent_settled handler was not registered");
 	return { handler, runtime };
@@ -117,6 +119,39 @@ describe("V3 compaction trigger", () => {
 
 		expect(ctx.sessionManager.getBranch).not.toHaveBeenCalled();
 		expect(ctx.compact).not.toHaveBeenCalled();
+	});
+
+	it("skips the source-token gate when the host owns a usage threshold", async () => {
+		const { handler, runtime } = captureHandler({
+			compactAfterTokens: 3,
+			hostOwnsUsageThreshold: () => true,
+		});
+		const ctx = fakeCtx([dueBranch], {
+			getContextUsage: vi.fn(() => ({ tokens: 135000, contextWindow: 200000 })),
+		});
+
+		handler(agentSettled(), ctx);
+		await vi.runAllTimersAsync();
+
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.compact).not.toHaveBeenCalled();
+	});
+
+	it("clears compactInFlight when the host takes ownership after deferral starts", async () => {
+		let hostOwns = false;
+		const { handler, runtime } = captureHandler({
+			compactAfterTokens: 3,
+			hostOwnsUsageThreshold: () => hostOwns,
+		});
+		const ctx = fakeCtx([dueBranch]);
+
+		handler(agentSettled(), ctx);
+		expect(runtime.compactInFlight).toBe(true);
+		hostOwns = true;
+		await vi.runAllTimersAsync();
+
+		expect(ctx.compact).not.toHaveBeenCalled();
+		expect(runtime.compactInFlight).toBe(false);
 	});
 
 	it("skips when the host has already requested compact", async () => {

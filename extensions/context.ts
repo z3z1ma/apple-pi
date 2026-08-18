@@ -7,9 +7,33 @@ import { registerConsolidationTrigger } from "../components/memory/src/hooks/con
 import { Runtime } from "../components/memory/src/runtime.js";
 import { buildCompactionProjection, type Entry, renderSummary } from "../components/memory/src/session-ledger/index.js";
 import { registerRecallTool as registerMemoryRecallTool } from "../components/memory/src/tools/recall-observation.js";
+import { hasEvaluableUsageThreshold, resolveUsageCompactionTrigger } from "../components/vcc/src/core/settings.js";
 import type { VccCompactionAugmenter } from "../components/vcc/src/hooks/before-compact.js";
 import { isProactiveTriggerActive } from "../components/vcc/src/hooks/proactive-threshold.js";
 import { installVcc } from "./vcc.js";
+
+function contextTokens(ctx: { getContextUsage?: () => { tokens?: number | null } | undefined }): number | undefined {
+	const tokens = ctx.getContextUsage?.()?.tokens;
+	return typeof tokens === "number" && Number.isFinite(tokens) ? tokens : undefined;
+}
+
+/** VCC owns compaction when it can evaluate a usage-vs-window waterline this turn. */
+function hostOwnsUsageThreshold(ctx: {
+	model?: { id?: string; provider?: string; contextWindow?: number };
+	getContextUsage?: () => { tokens?: number | null } | undefined;
+}): boolean {
+	return hasEvaluableUsageThreshold(ctx.model, contextTokens(ctx));
+}
+
+function vccUsageCompactionClock(ctx: {
+	model?: { id?: string; provider?: string; contextWindow?: number };
+	getContextUsage?: () => { tokens?: number | null } | undefined;
+}): { progress: number; threshold: number } | undefined {
+	const progress = contextTokens(ctx);
+	const threshold = resolveUsageCompactionTrigger(ctx.model);
+	if (progress === undefined || threshold === undefined) return undefined;
+	return { progress, threshold };
+}
 
 /**
  * One context extension owns compaction for the root session. VCC chooses the
@@ -38,8 +62,16 @@ export default function context(pi: ExtensionAPI): void {
 	const memory = new Runtime();
 	installVcc(pi, createMemoryCompactionAugmenter(memory));
 	registerConsolidationTrigger(pi, memory);
-	registerCompactionTrigger(pi, memory, { hostCompactionPending: isProactiveTriggerActive });
-	registerStatusCommand(pi, memory);
+	registerCompactionTrigger(pi, memory, {
+		hostCompactionPending: isProactiveTriggerActive,
+		hostOwnsUsageThreshold: hostOwnsUsageThreshold,
+	});
+	registerStatusCommand(pi, memory, {
+		compactionClock: (ctx) => {
+			const clock = vccUsageCompactionClock(ctx);
+			return clock ? { ...clock, unit: "context" } : undefined;
+		},
+	});
 	registerViewCommand(pi, memory);
 	registerMemoryRecallTool(pi);
 }

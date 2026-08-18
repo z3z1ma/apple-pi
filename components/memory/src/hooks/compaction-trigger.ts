@@ -6,6 +6,15 @@ import { type Entry, rawTokensSinceLastCompaction } from "../session-ledger/inde
 export type CompactionTriggerOptions = {
 	/** True while VCC (or another owner) has already called ctx.compact() and session_compact has not fired. */
 	hostCompactionPending?: () => boolean;
+	/**
+	 * True when VCC can evaluate a usage-vs-window waterline this turn.
+	 * Memory then leaves `ctx.compact()` to that owner and keeps the
+	 * source-token gate only as a fallback.
+	 */
+	hostOwnsUsageThreshold?: (ctx: {
+		model?: { contextWindow?: number } | undefined;
+		getContextUsage?: () => { tokens?: number | null } | undefined;
+	}) => boolean;
 };
 
 export function registerCompactionTrigger(
@@ -23,6 +32,7 @@ export function registerCompactionTrigger(
 
 		const entries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
 		if (!entries) return;
+		if (options.hostOwnsUsageThreshold?.(ctx)) return;
 		const progress = rawTokensSinceLastCompaction(entries);
 		const contextWindow = typeof ctx.model?.contextWindow === "number" ? ctx.model.contextWindow : undefined;
 		const threshold = resolveCompactAfterTokens(runtime.config, contextWindow);
@@ -54,6 +64,10 @@ export function registerCompactionTrigger(
 				}
 				const currentEntries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
 				if (!currentEntries) {
+					runtime.compactInFlight = false;
+					return;
+				}
+				if (options.hostOwnsUsageThreshold?.(ctx)) {
 					runtime.compactInFlight = false;
 					return;
 				}

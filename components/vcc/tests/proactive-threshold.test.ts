@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerProactiveThresholdHook, resetProactiveState } from "../src/hooks/proactive-threshold.js";
@@ -123,8 +123,30 @@ describe("proactiveThreshold: agent_end", () => {
 		expect(mock.captured).toHaveLength(0);
 	});
 
-	test("does NOT trigger when no modelThresholds configured", () => {
+	test("triggers at the package default compactPercent when no threshold is configured", () => {
 		setConfig({ debug: false, overrideDefaultCompaction: true });
+		const mock = createMockPi(
+			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
+			{ tokens: 110000, contextWindow: 128000, percent: 86 },
+		);
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		expect(mock.captured).toHaveLength(1);
+	});
+
+	test("does not apply the package default below 68% of the configured window", () => {
+		setConfig({ debug: false, overrideDefaultCompaction: true });
+		const mock = createMockPi(
+			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 200000 },
+			{ tokens: 135000, contextWindow: 200000, percent: 68 },
+		);
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		expect(mock.captured).toHaveLength(0);
+	});
+
+	test("an empty globalThreshold opts out of the package default", () => {
+		setConfig({ debug: false, overrideDefaultCompaction: true, globalThreshold: {} });
 		const mock = createMockPi(
 			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
@@ -495,10 +517,28 @@ describe("proactiveThreshold: modelId matching", () => {
 		expect(mock.captured).toHaveLength(1);
 	});
 
-	test("does NOT match when no key matches", () => {
+	test("unlisted models fall back to the package default, not to no threshold", () => {
 		setConfig({
 			debug: false,
 			overrideDefaultCompaction: true,
+			modelThresholds: {
+				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
+			},
+		});
+		const mock = createMockPi(
+			{ id: "Kimi-K2.6", provider: "neuralwatt", contextWindow: 128000 },
+			{ tokens: 110000, contextWindow: 128000, percent: 86 },
+		);
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		expect(mock.captured).toHaveLength(1);
+	});
+
+	test("empty globalThreshold keeps unmatched modelThresholds from applying a default", () => {
+		setConfig({
+			debug: false,
+			overrideDefaultCompaction: true,
+			globalThreshold: {},
 			modelThresholds: {
 				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
 			},

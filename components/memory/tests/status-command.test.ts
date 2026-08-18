@@ -9,14 +9,20 @@ import {
 	observationsRecordedEntry,
 	oldV2CompactionDetails,
 	oldV2ObservationEntry,
+	rawMessage,
 	reflection,
 	reflectionsRecordedEntry,
-	rawMessage,
-	textCustomMessage,
 	type TestEntry,
+	textCustomMessage,
 } from "./fixtures/session.js";
 
-function setup(args: { entries: TestEntry[]; runtime?: Partial<any>; model?: unknown; contextUsage?: unknown }) {
+function setup(args: {
+	entries: TestEntry[];
+	runtime?: Partial<any>;
+	model?: unknown;
+	contextUsage?: unknown;
+	compactionClock?: (ctx: unknown) => { progress: number; threshold: number; unit: "context" | "source" } | undefined;
+}) {
 	let handler: ((args: unknown, ctx: any) => Promise<void>) | undefined;
 	const pi = {
 		registerCommand: vi.fn((name: string, command: { handler: typeof handler }) => {
@@ -42,7 +48,9 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<any>; model?: unk
 		lastDropperError: undefined,
 		...args.runtime,
 	};
-	registerStatusCommand(pi as any, runtime as any);
+	registerStatusCommand(pi as any, runtime as any, {
+		compactionClock: args.compactionClock,
+	});
 	if (!handler) throw new Error("status handler not registered");
 	const notify = vi.fn();
 	const ctx = {
@@ -151,6 +159,16 @@ describe("V3 /om:status", () => {
 		}).run();
 
 		expect(output).toContain("Next compaction:  ~3 / 30 estimated source tokens");
+	});
+
+	it("shows the host usage clock when VCC owns the waterline", async () => {
+		const output = await setup({
+			entries: [textCustomMessage("raw-1", "aaaaaaaaaaaa")],
+			compactionClock: () => ({ progress: 135000, threshold: 136000, unit: "context" }),
+		}).run();
+
+		expect(output).toContain("Next compaction:  ~135,000 / 136,000 context tokens (99%)");
+		expect(output).not.toContain("estimated source tokens");
 	});
 
 	it("shows over-target active observation pool in the Activity section", async () => {

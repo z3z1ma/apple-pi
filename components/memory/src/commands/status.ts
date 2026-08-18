@@ -4,13 +4,13 @@ import { resolveCompactAfterTokens } from "../config.js";
 import type { Runtime } from "../runtime.js";
 import {
 	diffProjection,
+	type Entry,
 	foldLedger,
 	fullProjection,
 	rawTokensSinceLastCompaction,
 	rawTokensSinceObservationCoverage,
 	rawTokensSinceReflectionCoverage,
 	visibleProjection,
-	type Entry,
 } from "../session-ledger/index.js";
 
 function pct(current: number, total: number): number {
@@ -34,7 +34,21 @@ function appendSuffixes(line: string, suffixes: (string | undefined)[]): string 
 	return rendered.length > 0 ? `${line} ${rendered.join(" ")}` : line;
 }
 
-export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void {
+export type CompactionStatusClock = {
+	progress: number;
+	threshold: number;
+	unit: "context" | "source";
+};
+
+export type StatusCommandOptions = {
+	/** When set and it returns a clock, `/om:status` shows that instead of the source-token fallback. */
+	compactionClock?: (ctx: {
+		model?: { contextWindow?: number } | undefined;
+		getContextUsage?: () => { tokens?: number | null } | undefined;
+	}) => CompactionStatusClock | undefined;
+};
+
+export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime, options: StatusCommandOptions = {}): void {
 	pi.registerCommand("om:status", {
 		description: "Show observational memory status",
 		handler: async (_args, ctx) => {
@@ -61,9 +75,11 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 			);
 			const obsProgress = rawTokensSinceObservationCoverage(entries);
 			const reflectionProgress = rawTokensSinceReflectionCoverage(entries);
-			const compactionProgress = rawTokensSinceLastCompaction(entries);
 			const contextWindow = typeof ctx.model?.contextWindow === "number" ? ctx.model.contextWindow : undefined;
-			const compactThreshold = resolveCompactAfterTokens(runtime.config, contextWindow);
+			const hostClock = options.compactionClock?.(ctx);
+			const compactionProgress = hostClock?.progress ?? rawTokensSinceLastCompaction(entries);
+			const compactThreshold = hostClock?.threshold ?? resolveCompactAfterTokens(runtime.config, contextWindow);
+			const compactionUnit = hostClock?.unit === "context" ? "context tokens" : "estimated source tokens";
 
 			const passiveLines =
 				runtime.config.passive === true
@@ -83,7 +99,7 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 				"── Activity ──",
 				`Next observation: ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
 				`Next reflection:  ~${reflectionProgress.toLocaleString()} / ${runtime.config.reflectAfterTokens.toLocaleString()} tokens (${pct(reflectionProgress, runtime.config.reflectAfterTokens)}%)`,
-				`Next compaction:  ~${compactionProgress.toLocaleString()} / ${compactThreshold.toLocaleString()} estimated source tokens (${pct(compactionProgress, compactThreshold)}%)`,
+				`Next compaction:  ~${compactionProgress.toLocaleString()} / ${compactThreshold.toLocaleString()} ${compactionUnit} (${pct(compactionProgress, compactThreshold)}%)`,
 				`Visible observation pool: ~${visibleObservationTokens.toLocaleString()} / ${runtime.config.observationsPoolMaxTokens.toLocaleString()} tokens (${pct(visibleObservationTokens, runtime.config.observationsPoolMaxTokens)}%)`,
 				`Active observation pool: ~${activeObservationPool.observationTokens.toLocaleString()} / ${runtime.config.observationsPoolTargetTokens.toLocaleString()} target tokens (${pct(activeObservationPool.observationTokens, runtime.config.observationsPoolTargetTokens)}%)`,
 				`Reflection pool:         ~${visibleReflectionTokens.toLocaleString()} tokens`,

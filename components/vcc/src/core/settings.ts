@@ -95,13 +95,23 @@ const DEFAULT_SETTINGS: PiVccSettings = {
 };
 
 /**
+ * Applied at load time when the user file omits both `globalThreshold` and
+ * `defaultThreshold`. Kept out of {@link DEFAULT_SETTINGS} so
+ * {@link scaffoldSettings} does not pin today's value into existing files.
+ */
+export const DEFAULT_COMPACT_PERCENT = 68;
+
+const DEFAULT_GLOBAL_THRESHOLD: ModelThreshold = { compactPercent: DEFAULT_COMPACT_PERCENT };
+
+/**
  * Resolve the effective ModelThreshold for a given model.
  *
  * Lookup order:
  *  1. Exact match on "provider/modelId" key
  *  2. Exact match on "modelId" key
  *  3. globalThreshold from settings
- *  4. undefined (no override — pi-core's global settings apply)
+ *  4. defaultThreshold from settings
+ *  5. undefined (the caller decides whether to apply a package default)
  */
 export function getModelThreshold(
 	settings: PiVccSettings,
@@ -202,13 +212,43 @@ export function isPiCoreCompactionEnabled(projectCwd?: string): boolean {
 
 export function loadSettings(): PiVccSettings {
 	const parsed = readJson(settingsPath());
-	if (!parsed || typeof parsed !== "object") return { ...DEFAULT_SETTINGS };
+	if (!parsed || typeof parsed !== "object") {
+		return { ...DEFAULT_SETTINGS, globalThreshold: DEFAULT_GLOBAL_THRESHOLD };
+	}
 	const loaded = { ...DEFAULT_SETTINGS, ...(parsed as Partial<PiVccSettings>) };
-	// Backward compat: defaultThreshold → globalThreshold
-	if (!loaded.globalThreshold && (parsed as any).defaultThreshold) {
-		loaded.globalThreshold = (parsed as any).defaultThreshold;
+	// An explicit `globalThreshold` — including `{}` as opt-out — wins.
+	// A file that only has the deprecated `defaultThreshold` keeps that value.
+	// Omitting both applies the live package default without writing the file.
+	if (!Object.hasOwn(parsed, "globalThreshold")) {
+		loaded.globalThreshold = Object.hasOwn(parsed, "defaultThreshold")
+			? (parsed as Partial<PiVccSettings>).defaultThreshold
+			: DEFAULT_GLOBAL_THRESHOLD;
 	}
 	return loaded;
+}
+
+/**
+ * Usage-token count at which VCC will request compaction for this model, or
+ * `undefined` when VCC cannot evaluate a waterline (opted out, unusable
+ * threshold, or unknown window).
+ */
+export function resolveUsageCompactionTrigger(
+	model: { id?: string; provider?: string; contextWindow?: number } | undefined,
+): number | undefined {
+	const settings = loadSettings();
+	const identity = model && typeof model.id === "string" ? { id: model.id, provider: model.provider } : undefined;
+	const threshold = getModelThreshold(settings, identity);
+	if (!threshold) return undefined;
+	const contextWindow = typeof model?.contextWindow === "number" ? model.contextWindow : 0;
+	return resolveTriggerTokens(threshold, contextWindow);
+}
+
+/** True only when VCC can actually evaluate the waterline this turn. */
+export function hasEvaluableUsageThreshold(
+	model: { id?: string; provider?: string; contextWindow?: number } | undefined,
+	currentTokens: number | undefined,
+): boolean {
+	return currentTokens !== undefined && resolveUsageCompactionTrigger(model) !== undefined;
 }
 
 /**

@@ -24,6 +24,23 @@ Commands and tools:
 
 VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](../components/memory/src/config.ts) for the validated operational keys and defaults.
 
+## When compaction fires
+
+VCC requests compaction when provider-reported context usage exceeds a fraction of the **active model's configured `contextWindow`**. The default is 68% (`compactPercent: 68`) whenever `pi-vcc-config.json` omits both `globalThreshold` and `defaultThreshold`. That default is applied at load time and is not written into the file.
+
+The configured window is the cost lever. Pi already uses `models.json` / `modelOverrides.contextWindow` to keep requests inside a provider's short-context pricing tier; this package reads that same window and does not encode provider names or price tiers in TypeScript. Lowering a model's `contextWindow` to the tier boundary lowers the billed context at which compaction fires.
+
+Override the waterline in `~/.pi/agent/pi-vcc-config.json`:
+
+```json
+{
+  "overrideDefaultCompaction": true,
+  "globalThreshold": { "compactPercent": 60 }
+}
+```
+
+`reserveTokens` and `compactAtTokens` on `globalThreshold` or `modelThresholds` take precedence over `compactPercent` when set. An empty `"globalThreshold": {}` opts out of the package default. Observational memory then keeps its estimated-source-token gate (`compactAfterTokens`, default 81,000) as a fallback for turns where VCC cannot read usage or cannot resolve a window.
+
 ## Where memory persists
 
 Observations, reflections, drop records, and reflection retirements are custom entries in Pi's append-only session JSONL. With Pi's default session directory, files are grouped by working directory under:
