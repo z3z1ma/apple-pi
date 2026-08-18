@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { registerCompactionTrigger } from "../src/hooks/compaction-trigger.js";
-import { compactionEntry, rawMessage, textCustomMessage, type TestEntry } from "./fixtures/session.js";
+import { compactionEntry, rawMessage, type TestEntry, textCustomMessage } from "./fixtures/session.js";
 
 function captureHandler(
 	args: {
@@ -10,6 +10,7 @@ function captureHandler(
 		compactAfterTokensRatio?: number;
 		passive?: boolean;
 		compactInFlight?: boolean;
+		hostCompactionPending?: () => boolean;
 	} = {},
 ) {
 	let handler: ((event: unknown, ctx: unknown) => void) | undefined;
@@ -31,7 +32,9 @@ function captureHandler(
 		observerPromise: new Promise(() => {}),
 		reflectDropPromise: new Promise(() => {}),
 	};
-	registerCompactionTrigger(pi as any, runtime as any);
+	registerCompactionTrigger(pi as any, runtime as any, {
+		hostCompactionPending: args.hostCompactionPending,
+	});
 	if (!handler) throw new Error("agent_settled handler was not registered");
 	return { handler, runtime };
 }
@@ -114,6 +117,36 @@ describe("V3 compaction trigger", () => {
 
 		expect(ctx.sessionManager.getBranch).not.toHaveBeenCalled();
 		expect(ctx.compact).not.toHaveBeenCalled();
+	});
+
+	it("skips when the host has already requested compact", async () => {
+		const { handler, runtime } = captureHandler({
+			hostCompactionPending: () => true,
+		});
+		const ctx = fakeCtx([dueBranch]);
+
+		handler(agentSettled(), ctx);
+		await vi.runAllTimersAsync();
+
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+		expect(ctx.compact).not.toHaveBeenCalled();
+	});
+
+	it("clears compactInFlight when the host requests compact after deferral starts", async () => {
+		let hostPending = false;
+		const { handler, runtime } = captureHandler({
+			hostCompactionPending: () => hostPending,
+		});
+		const ctx = fakeCtx([dueBranch]);
+
+		handler(agentSettled(), ctx);
+		expect(runtime.compactInFlight).toBe(true);
+		hostPending = true;
+		await vi.runAllTimersAsync();
+
+		expect(ctx.compact).not.toHaveBeenCalled();
+		expect(runtime.compactInFlight).toBe(false);
 	});
 
 	it("does not await observer or reflect/drop promises before compacting", async () => {

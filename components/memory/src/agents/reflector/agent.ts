@@ -1,23 +1,24 @@
-import { agentLoop, type AgentContext, type AgentLoopConfig, type AgentTool } from "@earendil-works/pi-agent-core";
+import { type AgentContext, type AgentLoopConfig, type AgentTool, agentLoop } from "@earendil-works/pi-agent-core";
 import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
 import { debugLog } from "../../debug-log.js";
 import { hashId } from "../../ids.js";
-import { logAgentStreamError } from "../stream-errors.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
 import { truncateRecordContent } from "../../serialize.js";
-import { REFLECTOR_SYSTEM } from "./prompts.js";
+import { type Observation, type Reflection, reflectionToSummaryLine } from "../../session-ledger/index.js";
 import { estimateStringTokens } from "../../tokens.js";
-import { reflectionToSummaryLine, type Observation, type Reflection } from "../../session-ledger/index.js";
+import { drainAgentStream } from "../drain.js";
 import {
 	coverageTierForObservation,
+	type ReflectionCoverageTier,
 	reflectionCoverageMap,
 	summarizeCoverageByRelevance,
 	summarizeCoverageTransitionsByRelevance,
-	type ReflectionCoverageTier,
 } from "../dropper/coverage.js";
+import { logAgentStreamError } from "../stream-errors.js";
+import { REFLECTOR_SYSTEM } from "./prompts.js";
 
 interface RunReflectorArgs {
 	model: Model<any>;
@@ -285,11 +286,14 @@ export async function runReflector(args: RunReflectorArgs): Promise<ReflectorPas
 
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
-	for await (const event of stream) {
-		// Tool execution collects records.
-		logAgentStreamError("reflector", event);
-	}
-	await stream.result();
+	await drainAgentStream(
+		stream,
+		(event) => {
+			// Tool execution collects records.
+			logAgentStreamError("reflector", event);
+		},
+		signal,
+	);
 	const acceptedReflections = Array.from(accumulated.values());
 	const currentLaw = [...reflections.filter((reflection) => !retired.has(reflection.id)), ...acceptedReflections];
 	const afterCoverageById = reflectionCoverageMap(observations, currentLaw);

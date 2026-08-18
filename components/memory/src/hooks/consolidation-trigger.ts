@@ -1,38 +1,39 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { CONSOLIDATION_ABORT_REASON } from "../abort.js";
 import { runDropper } from "../agents/dropper/agent.js";
 import { observationPoolMetrics } from "../agents/dropper/pool.js";
 import { ObserverStreamError, runObserver } from "../agents/observer/agent.js";
 import { runReflector } from "../agents/reflector/agent.js";
+import { type Config, resolveObserverChunkMaxTokens } from "../config.js";
 import { debugLog, withDebugLogContext } from "../debug-log.js";
-import { resolveObserverChunkMaxTokens, type Config } from "../config.js";
 import { isStaleExtensionCtxError, type ResolveResult, type Runtime } from "../runtime.js";
 import { serializeSourceAddressedBranchEntries } from "../serialize.js";
 import {
-	OM_OBSERVATIONS_DROPPED,
-	OM_OBSERVATIONS_RECORDED,
-	OM_REFLECTIONS_RECORDED,
-	OM_REFLECTIONS_RETIRED,
 	buildObservationsDroppedData,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
 	buildReflectionsRetiredData,
+	type Entry,
 	earlierCoverageMarkerId,
+	type FoldedLedger,
 	foldLedger,
 	fullProjection,
 	isSourceEntry,
 	latestCoverageIndex,
 	latestCoverageMarkerId,
-	observationToSummaryLine,
-	realTokensSinceAnchor,
-	realTokensSinceCoverageIndex,
 	latestReflectionCoverageIndex,
+	type Observation,
+	OM_OBSERVATIONS_DROPPED,
+	OM_OBSERVATIONS_RECORDED,
+	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
+	observationToSummaryLine,
+	type Reflection,
 	rawTokensSinceObservationCoverage,
 	rawTokensSinceReflectionCoverage,
+	realTokensSinceAnchor,
+	realTokensSinceCoverageIndex,
 	reflectionToSummaryLine,
-	type Entry,
-	type FoldedLedger,
-	type Observation,
-	type Reflection,
 	type V3MemoryCustomType,
 } from "../session-ledger/index.js";
 
@@ -195,11 +196,7 @@ function stageDue(
 	threshold: number,
 ): boolean {
 	if (currentTokens !== undefined) {
-		const real = realTokensSinceCoverageIndex(
-			entries,
-			coverageIndexForStage(entries, customType),
-			currentTokens,
-		);
+		const real = realTokensSinceCoverageIndex(entries, coverageIndexForStage(entries, customType), currentTokens);
 		if (real !== undefined) return real >= threshold;
 	}
 	// Real delta unmeasurable (no usage baseline, or accounting basis changed) or
@@ -277,11 +274,13 @@ function makeModelResolver(
 }
 
 export function registerConsolidationTrigger(pi: ExtensionAPI, runtime: Runtime): void {
-	const launch = (_event: unknown, ctx: ConsolidationCtx) => {
+	pi.on("turn_end", (_event, ctx) => {
 		maybeLaunchConsolidation(pi, runtime, ctx);
-	};
-	pi.on("agent_start", launch);
-	pi.on("turn_end", launch);
+	});
+	// A new user turn must not share the provider with a leftover sidecar stream.
+	pi.on("agent_start", () => {
+		runtime.abortConsolidation(CONSOLIDATION_ABORT_REASON.userTurn);
+	});
 	pi.on("session_shutdown", () => {
 		runtime.dispose();
 	});
@@ -485,10 +484,16 @@ async function runObserverStage(
 			allowedSourceEntryIds: sourceEntryIds,
 			maxTurns: config.agentMaxTurns,
 			thinkingLevel: resolved.thinkingLevel ?? "low",
+			signal: runtime.consolidationSignal,
 		});
 		if (runtime.disposed) return "abort";
 	} catch (error) {
 		if (error instanceof ObserverStreamError) {
+			// A signal-initiated abort is the user-turn / dispose / timeout path,
+			// not a failed empty. Coverage stays put and the lock is released by
+			// Runtime. Independent API aborts (signal not aborted) still surface
+			// via recordConsolidationStageError so they remain visible.
+			if (error.stopReason === "aborted" && runtime.consolidationSignal?.aborted) return "abort";
 			// API/stream failure is not a clean empty (#32): surface it as a real
 			// failure instead of the "no observations" path. Coverage stays put.
 			runtime.recordConsolidationStageError(ctx, "observer", error);
@@ -579,6 +584,7 @@ async function runReflectorStage(
 		observations: folded.activeObservations,
 		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
+		signal: runtime.consolidationSignal,
 	});
 	if (runtime.disposed) return { ...empty, outcome: "abort" };
 	const armReflectorBackoff = () => {
@@ -637,7 +643,9 @@ async function runDropperStage(
 	const metrics = observationPoolMetrics(folded.activeObservations, config.observationsPoolTargetTokens);
 	const activeObservationIds = new Set(folded.activeObservations.map((observation) => observation.id));
 	const currentReflectionIds = new Set(folded.currentReflections.map((reflection) => reflection.id));
-	const persistedSameRunReflections = sameRunReflections.filter((reflection) => currentReflectionIds.has(reflection.id));
+	const persistedSameRunReflections = sameRunReflections.filter((reflection) =>
+		currentReflectionIds.has(reflection.id),
+	);
 	const maintenanceEligibleObservationIds = Array.from(
 		new Set(persistedSameRunReflections.flatMap((reflection) => reflection.supportingObservationIds)),
 	).filter((id) => activeObservationIds.has(id));
@@ -702,6 +710,7 @@ async function runDropperStage(
 		...(reflectionMaintenance ? { maintenanceEligibleObservationIds } : {}),
 		maxTurns: config.agentMaxTurns,
 		thinkingLevel: resolved.thinkingLevel ?? "low",
+		signal: runtime.consolidationSignal,
 	});
 	if (runtime.disposed) return "abort";
 	const coversUpToId = earlierCoverageMarkerId(entries, observationCoverageId, sameRunReflectionCoverageId);

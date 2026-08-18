@@ -1,33 +1,34 @@
-import { agentLoop, type AgentContext, type AgentLoopConfig, type AgentTool } from "@earendil-works/pi-agent-core";
+import { type AgentContext, type AgentLoopConfig, type AgentTool, agentLoop } from "@earendil-works/pi-agent-core";
 import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
 import { debugLog } from "../../debug-log.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
+import { type Observation, type Reflection, reflectionToSummaryLine } from "../../session-ledger/index.js";
+import { drainAgentStream } from "../drain.js";
 import { logAgentStreamError } from "../stream-errors.js";
-import { reflectionToSummaryLine, type Observation, type Reflection } from "../../session-ledger/index.js";
-import { DROPPER_SYSTEM } from "./prompts.js";
 import {
-	REFLECTION_COVERAGE_DROP_RANK,
 	coverageTierForObservation,
+	observationToDropperLine,
+	REFLECTION_COVERAGE_DROP_RANK,
 	reflectionCoverageMap,
 	summarizeCoverageByRelevance,
 	summarizeCoverageByRelevanceForIds,
-	observationToDropperLine,
 } from "./coverage.js";
 import { observationPoolMetrics } from "./pool.js";
+import { DROPPER_SYSTEM } from "./prompts.js";
+
+export type {
+	CoverageSummaryByRelevance,
+	CoverageTransitionSummaryByRelevance,
+	ReflectionCoverageTier,
+} from "./coverage.js";
 export {
-	maxDropCountForPool,
-	observationPoolFullness,
-	observationPoolMetrics,
-} from "./pool.js";
-export type { ObservationPoolMetrics } from "./pool.js";
-export {
-	REFLECTION_COVERAGE_TIERS,
 	coverageTierForObservation,
 	emptyCoverageSummaryByRelevance,
 	observationToDropperLine,
+	REFLECTION_COVERAGE_TIERS,
 	reflectionCoverageMap,
 	reflectionCoverageTierForCount,
 	reflectionSupportCounts,
@@ -35,11 +36,12 @@ export {
 	summarizeCoverageByRelevanceForIds,
 	summarizeCoverageTransitionsByRelevance,
 } from "./coverage.js";
-export type {
-	CoverageSummaryByRelevance,
-	CoverageTransitionSummaryByRelevance,
-	ReflectionCoverageTier,
-} from "./coverage.js";
+export type { ObservationPoolMetrics } from "./pool.js";
+export {
+	maxDropCountForPool,
+	observationPoolFullness,
+	observationPoolMetrics,
+} from "./pool.js";
 
 interface RunDropperArgs {
 	model: Model<any>;
@@ -286,11 +288,14 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
-	for await (const event of stream) {
-		// Tool execution collects candidate ids.
-		logAgentStreamError("dropper", event);
-	}
-	await stream.result();
+	await drainAgentStream(
+		stream,
+		(event) => {
+			// Tool execution collects candidate ids.
+			logAgentStreamError("dropper", event);
+		},
+		signal,
+	);
 	const droppedIds = selectDropCandidates(proposedDropIds, observations, maxDropsAllowed, reflections);
 	const reason =
 		droppedIds.length > 0

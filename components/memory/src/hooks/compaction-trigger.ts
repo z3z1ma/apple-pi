@@ -3,13 +3,23 @@ import { resolveCompactAfterTokens } from "../config.js";
 import { isStaleExtensionCtxError, type Runtime } from "../runtime.js";
 import { type Entry, rawTokensSinceLastCompaction } from "../session-ledger/index.js";
 
-export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): void {
+export type CompactionTriggerOptions = {
+	/** True while VCC (or another owner) has already called ctx.compact() and session_compact has not fired. */
+	hostCompactionPending?: () => boolean;
+};
+
+export function registerCompactionTrigger(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	options: CompactionTriggerOptions = {},
+): void {
 	// Pi emits agent_settled only after retries, automatic compaction, and queued
 	// continuation have finished, so retry policy stays owned by Pi.
 	pi.on("agent_settled", (_event, ctx) => {
 		runtime.ensureConfig(ctx.cwd);
 		if (runtime.config.passive === true) return;
 		if (runtime.compactInFlight) return;
+		if (options.hostCompactionPending?.()) return;
 
 		const entries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
 		if (!entries) return;
@@ -32,6 +42,10 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 		runtime.compactInFlight = true;
 		setTimeout(() => {
 			try {
+				if (options.hostCompactionPending?.()) {
+					runtime.compactInFlight = false;
+					return;
+				}
 				if (!ctx.isIdle()) {
 					runtime.compactInFlight = false;
 					if (hasUI)

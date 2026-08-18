@@ -5,9 +5,10 @@ import { registerViewCommand } from "../components/memory/src/commands/view.js";
 import { registerCompactionTrigger } from "../components/memory/src/hooks/compaction-trigger.js";
 import { registerConsolidationTrigger } from "../components/memory/src/hooks/consolidation-trigger.js";
 import { Runtime } from "../components/memory/src/runtime.js";
-import { buildCompactionProjection, renderSummary, type Entry } from "../components/memory/src/session-ledger/index.js";
+import { buildCompactionProjection, type Entry, renderSummary } from "../components/memory/src/session-ledger/index.js";
 import { registerRecallTool as registerMemoryRecallTool } from "../components/memory/src/tools/recall-observation.js";
 import type { VccCompactionAugmenter } from "../components/vcc/src/hooks/before-compact.js";
+import { isProactiveTriggerActive } from "../components/vcc/src/hooks/proactive-threshold.js";
 import { installVcc } from "./vcc.js";
 
 /**
@@ -37,7 +38,7 @@ export default function context(pi: ExtensionAPI): void {
 	const memory = new Runtime();
 	installVcc(pi, createMemoryCompactionAugmenter(memory));
 	registerConsolidationTrigger(pi, memory);
-	registerCompactionTrigger(pi, memory);
+	registerCompactionTrigger(pi, memory, { hostCompactionPending: isProactiveTriggerActive });
 	registerStatusCommand(pi, memory);
 	registerViewCommand(pi, memory);
 	registerMemoryRecallTool(pi);

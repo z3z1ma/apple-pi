@@ -15,6 +15,7 @@ vi.mock("../src/agents/dropper/agent.js", () => ({ runDropper: mockAgents.runDro
 
 import { ObserverStreamError } from "../src/agents/observer/agent.js";
 import { registerConsolidationTrigger } from "../src/hooks/consolidation-trigger.js";
+import { CONSOLIDATION_ABORT_REASON, errorFromAbortSignal, isQuietConsolidationAbort } from "../src/abort.js";
 import { isStaleExtensionCtxError } from "../src/runtime.js";
 import {
 	OM_OBSERVATIONS_DROPPED,
@@ -29,8 +30,8 @@ import {
 	reflection,
 	reflectionsRecordedEntry,
 	reflectionsRetiredEntry,
-	textCustomMessage,
 	type TestEntry,
+	textCustomMessage,
 } from "./fixtures/session.js";
 
 beforeEach(() => {
@@ -96,6 +97,8 @@ function setup(args: {
 		dispose: vi.fn(() => {
 			runtime.disposed = true;
 		}),
+		abortConsolidation: vi.fn(),
+		consolidationSignal: undefined as AbortSignal | undefined,
 		consolidationInFlight: args.consolidationInFlight ?? false,
 		consolidationPhase: undefined as "observer" | "reflector" | "dropper" | undefined,
 		resolveFailureNotified: false,
@@ -135,7 +138,7 @@ function setup(args: {
 		}),
 		recordConsolidationStageError: vi.fn((ctx, phase: "observer" | "reflector" | "dropper", error: unknown) => {
 			const message = error instanceof Error ? error.message : String(error);
-			if (isStaleExtensionCtxError(error)) return message;
+			if (isStaleExtensionCtxError(error) || isQuietConsolidationAbort(error)) return message;
 			if (phase === "observer") runtime.lastObserverError = message;
 			if (phase === "reflector") runtime.lastReflectorError = message;
 			if (phase === "dropper") runtime.lastDropperError = message;
@@ -144,8 +147,8 @@ function setup(args: {
 		}),
 	};
 	registerConsolidationTrigger(pi as any, runtime as any);
-	if (!handlers.agent_start) throw new Error("agent_start consolidation handler not registered");
 	if (!handlers.turn_end) throw new Error("turn_end consolidation handler not registered");
+	if (!handlers.agent_start) throw new Error("agent_start abort handler not registered");
 	const ctx = {
 		cwd: "/tmp/project",
 		hasUI: true,
@@ -181,16 +184,16 @@ describe("V3 consolidation trigger", () => {
 	const obsB = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-2"], tokenCount: 10 });
 	const refA = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
 
-	it("registers agent_start and turn_end consolidation entrypoints", () => {
+	it("registers turn_end launch, agent_start abort, and session_shutdown", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { pi } = setup({ entries });
 
-		expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
 		expect(pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
+		expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
 		expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
 	});
 
-	it("does not launch below all thresholds from either entrypoint", () => {
+	it("does not launch below all thresholds", () => {
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
@@ -205,7 +208,7 @@ describe("V3 consolidation trigger", () => {
 		expect(runtime.launchConsolidationTask).not.toHaveBeenCalled();
 	});
 
-	it("does not launch from either entrypoint in passive mode", () => {
+	it("does not launch in passive mode", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const passive = setup({ entries, passive: true });
 
@@ -215,36 +218,35 @@ describe("V3 consolidation trigger", () => {
 		expect(passive.runtime.launchConsolidationTask).not.toHaveBeenCalled();
 	});
 
-	it("does not launch from either entrypoint while consolidation is already in flight", () => {
+	it("does not launch while consolidation is already in flight", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const locked = setup({ entries, consolidationInFlight: true });
 
-		locked.fireAgentStart();
 		locked.fireTurnEnd();
 
 		expect(locked.runtime.launchConsolidationTask).not.toHaveBeenCalled();
 	});
 
-	it("launches from agent_start when work is due", () => {
+	it("does not launch from agent_start", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { fireAgentStart, runtime } = setup({ entries });
 
 		fireAgentStart();
 
-		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+		expect(runtime.launchConsolidationTask).not.toHaveBeenCalled();
+		expect(runtime.abortConsolidation).toHaveBeenCalledWith("observational-memory:user-turn");
 	});
 
-	it("uses the shared lock when agent_start fires before turn_end", () => {
+	it("launches from turn_end when work is due", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
-		const { fireAgentStart, fireTurnEnd, runtime } = setup({ entries });
+		const { fireTurnEnd, runtime } = setup({ entries });
 
-		fireAgentStart();
 		fireTurnEnd();
 
 		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
 	});
 
-	it("uses the shared lock when turn_end fires before agent_start", () => {
+	it("aborts an in-flight run when a new user turn starts", () => {
 		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
 		const { fireAgentStart, fireTurnEnd, runtime } = setup({ entries });
 
@@ -252,6 +254,7 @@ describe("V3 consolidation trigger", () => {
 		fireAgentStart();
 
 		expect(runtime.launchConsolidationTask).toHaveBeenCalledTimes(1);
+		expect(runtime.abortConsolidation).toHaveBeenCalledWith("observational-memory:user-turn");
 	});
 
 	it("runs observer first and appends source-addressed observations", async () => {
@@ -355,10 +358,7 @@ describe("V3 consolidation trigger", () => {
 			[expect.stringMatching(/^Observational memory: observer running on ~\d+-token chunk$/), "info"],
 			["Observational memory: 1 observation recorded", "info"],
 			["Observational memory: reflector running (~2 tokens)", "info"],
-			[
-				"Observational memory: dropper running — active observation pool ~19 / 5 target tokens (380%)",
-				"info",
-			],
+			["Observational memory: dropper running — active observation pool ~19 / 5 target tokens (380%)", "info"],
 		]);
 	});
 
@@ -487,6 +487,60 @@ describe("V3 consolidation trigger", () => {
 		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("no observations"), expect.anything());
 		expect(pi.appendEntry).not.toHaveBeenCalled();
 		expect(runtime.observerEmptyBackoff).toBeUndefined();
+		expect(mockAgents.runReflector).not.toHaveBeenCalled();
+	});
+
+	it("silently aborts on signal-initiated ObserverStreamError('aborted')", async () => {
+		mockAgents.runObserver.mockRejectedValueOnce(new ObserverStreamError("aborted"));
+		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
+		const { fire, runLaunchedWork, pi, runtime, ctx } = setup({ entries, reflectAfterTokens: 999 });
+		// Simulate the consolidation signal being aborted (user-turn / dispose path).
+		runtime.consolidationSignal = AbortSignal.abort("observational-memory:user-turn");
+
+		fire();
+		await runLaunchedWork();
+
+		// Signal was aborted → silent abort, no error recording.
+		expect(runtime.lastObserverError).toBeUndefined();
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("failed"), expect.anything());
+		expect(pi.appendEntry).not.toHaveBeenCalled();
+		expect(mockAgents.runReflector).not.toHaveBeenCalled();
+	});
+
+	it("surfaces independent API aborts when the signal is not aborted", async () => {
+		mockAgents.runObserver.mockRejectedValueOnce(new ObserverStreamError("aborted", "provider cancelled"));
+		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
+		const { fire, runLaunchedWork, pi, runtime, ctx } = setup({ entries, reflectAfterTokens: 999 });
+		// Signal is NOT aborted — this is an independent API abort.
+		runtime.consolidationSignal = new AbortController().signal;
+
+		fire();
+		await runLaunchedWork();
+
+		// Independent API abort → recorded as error with notification.
+		expect(runtime.lastObserverError).toContain("aborted");
+		expect(ctx.ui.notify).toHaveBeenCalledWith(
+			expect.stringContaining("observer failed"),
+			"warning",
+		);
+		expect(pi.appendEntry).not.toHaveBeenCalled();
+		expect(mockAgents.runReflector).not.toHaveBeenCalled();
+	});
+
+	it("stays quiet when runObserver rejects with a user-turn AbortError", async () => {
+		const abortError = new Error(CONSOLIDATION_ABORT_REASON.userTurn);
+		abortError.name = "AbortError";
+		mockAgents.runObserver.mockRejectedValueOnce(abortError);
+		const entries = [textCustomMessage("raw-1", "aaaaaaaa")];
+		const { fire, runLaunchedWork, pi, runtime, ctx } = setup({ entries, reflectAfterTokens: 999 });
+
+		fire();
+		await runLaunchedWork();
+
+		// user-turn AbortError is quiet: no lastObserverError, no warning notification.
+		expect(runtime.lastObserverError).toBeUndefined();
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("failed"), expect.anything());
+		expect(pi.appendEntry).not.toHaveBeenCalled();
 		expect(mockAgents.runReflector).not.toHaveBeenCalled();
 	});
 

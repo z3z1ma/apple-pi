@@ -8,6 +8,8 @@ Normal `/compact`, automatic compaction, overflow recovery, and explicit `/pi-vc
 
 The metadata is intentionally flat: `details.compactor === "pi-vcc"` and `details.type === "om.folded"` coexist so both recall systems recognize the same compaction.
 
+Observer, reflector, and dropper runs start after a root-session `turn_end`, not at `agent_start`, so they do not share the provider with the opening completion of a user turn. A new `agent_start` aborts an in-flight memory run. Auto-compaction still uses `agent_settled` and skips when VCC has already requested compact.
+
 Commands and tools:
 
 - `/pi-vcc` — explicit deterministic compaction

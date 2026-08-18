@@ -1,15 +1,16 @@
-import { agentLoop, type AgentContext, type AgentLoopConfig, type AgentTool } from "@earendil-works/pi-agent-core";
+import { type AgentContext, type AgentLoopConfig, type AgentTool, agentLoop } from "@earendil-works/pi-agent-core";
 import type { Message, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Static } from "typebox";
 import { hashId } from "../../ids.js";
-import { logAgentStreamError } from "../stream-errors.js";
 import { AGENT_LOOP_MAX_TOKENS, boundedMaxTokens } from "../../model-budget.js";
-import { OBSERVER_SYSTEM } from "./prompts.js";
 import { nowTimestamp, truncateRecordContent } from "../../serialize.js";
 import type { Observation, Relevance } from "../../session-ledger/index.js";
 import { observationLineTokenCount } from "../../tokens.js";
+import { drainAgentStream } from "../drain.js";
+import { logAgentStreamError } from "../stream-errors.js";
+import { OBSERVER_SYSTEM } from "./prompts.js";
 
 interface RunObserverArgs {
 	model: Model<any>;
@@ -211,17 +212,20 @@ ${conversation}`;
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal, streamSimple);
 	let streamError: { stopReason: string; errorMessage?: string } | undefined;
-	for await (const event of stream) {
-		// Drain events; the tool's execute already collects records.
-		logAgentStreamError("observer", event);
-		// Watch for a terminal API/stream failure so it is not conflated with
-		// a deliberate empty result.
-		const message = (event as { message?: { role?: string; stopReason?: string; errorMessage?: string } }).message;
-		if (message?.role === "assistant" && (message.stopReason === "error" || message.stopReason === "aborted")) {
-			streamError = { stopReason: message.stopReason, errorMessage: message.errorMessage };
-		}
-	}
-	await stream.result();
+	await drainAgentStream(
+		stream,
+		(event) => {
+			// Drain events; the tool's execute already collects records.
+			logAgentStreamError("observer", event);
+			// Watch for a terminal API/stream failure so it is not conflated with
+			// a deliberate empty result.
+			const message = (event as { message?: { role?: string; stopReason?: string; errorMessage?: string } }).message;
+			if (message?.role === "assistant" && (message.stopReason === "error" || message.stopReason === "aborted")) {
+				streamError = { stopReason: message.stopReason, errorMessage: message.errorMessage };
+			}
+		},
+		signal,
+	);
 
 	if (accumulated.size === 0) {
 		if (streamError) throw new ObserverStreamError(streamError.stopReason, streamError.errorMessage);

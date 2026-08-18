@@ -1,8 +1,12 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { loadModeSpec } from "../../shared/src/mode-utils.js";
-import { isThinkingLevel, type Config, DEFAULTS, loadConfig } from "./config.js";
+import { CONSOLIDATION_ABORT_REASON, type ConsolidationAbortReason, isQuietConsolidationAbort } from "./abort.js";
+import { type Config, DEFAULTS, isThinkingLevel, loadConfig } from "./config.js";
 
 export const OBSERVATIONAL_MEMORY_MODE = "observational-memory";
+
+/** Wall-clock cap for one observe/reflect/drop pipeline. Hang backstop, not a quality target. */
+export const CONSOLIDATION_HANG_TIMEOUT_MS = 15 * 60 * 1000;
 
 export type ResolveResult =
 	| { ok: true; model: unknown; apiKey?: string; headers?: Record<string, string>; thinkingLevel?: ModelThinkingLevel }
@@ -60,6 +64,8 @@ export class Runtime {
 	consolidationInFlight = false;
 	consolidationPromise: Promise<void> | null = null;
 	consolidationPhase: ConsolidationPhase | undefined;
+	private consolidationAbort: AbortController | null = null;
+	private consolidationTimeout: ReturnType<typeof setTimeout> | null = null;
 	compactInFlight = false;
 	resolveFailureNotified = false;
 	lastObserverError: string | undefined;
@@ -91,8 +97,23 @@ export class Runtime {
 		  }
 		| undefined;
 
+	get consolidationSignal(): AbortSignal | undefined {
+		return this.consolidationAbort?.signal;
+	}
+
+	abortConsolidation(reason: ConsolidationAbortReason): void {
+		this.consolidationAbort?.abort(reason);
+	}
+
 	dispose(): void {
 		this.disposed = true;
+		this.abortConsolidation(CONSOLIDATION_ABORT_REASON.disposed);
+	}
+
+	private clearConsolidationTimeout(): void {
+		if (this.consolidationTimeout === null) return;
+		clearTimeout(this.consolidationTimeout);
+		this.consolidationTimeout = null;
 	}
 
 	ensureConfig(cwd: string): Config {
@@ -144,13 +165,30 @@ export class Runtime {
 		};
 	}
 
-	launchConsolidationTask(ctx: LaunchCtx, work: () => Promise<void>): Promise<void> {
+	launchConsolidationTask(
+		ctx: LaunchCtx,
+		work: () => Promise<void>,
+		options: { timeoutMs?: number } = {},
+	): Promise<void> {
 		this.consolidationInFlight = true;
 		this.consolidationPhase = undefined;
 		this.lastObserverError = undefined;
 		this.lastReflectorError = undefined;
 		this.lastDropperError = undefined;
+		const controller = new AbortController();
+		this.consolidationAbort = controller;
+		this.clearConsolidationTimeout();
+		const timeoutMs = options.timeoutMs ?? CONSOLIDATION_HANG_TIMEOUT_MS;
+		const timeout = setTimeout(() => {
+			if (this.consolidationAbort === controller && !controller.signal.aborted) {
+				controller.abort(CONSOLIDATION_ABORT_REASON.timeout);
+			}
+		}, timeoutMs);
+		timeout.unref?.();
+		this.consolidationTimeout = timeout;
 		const promise = this.launchTrackedTask(ctx, "consolidation", work, () => {
+			this.clearConsolidationTimeout();
+			if (this.consolidationAbort === controller) this.consolidationAbort = null;
 			this.consolidationInFlight = false;
 			this.consolidationPhase = undefined;
 			if (this.consolidationPromise === promise) this.consolidationPromise = null;
@@ -161,7 +199,7 @@ export class Runtime {
 
 	recordConsolidationStageError(ctx: LaunchCtx, phase: ConsolidationPhase, error: unknown): string {
 		const message = error instanceof Error ? error.message : String(error);
-		if (isStaleExtensionCtxError(error)) return message;
+		if (isStaleExtensionCtxError(error) || isQuietConsolidationAbort(error)) return message;
 		if (phase === "observer") this.lastObserverError = message;
 		if (phase === "reflector") this.lastReflectorError = message;
 		if (phase === "dropper") this.lastDropperError = message;
@@ -183,7 +221,7 @@ export class Runtime {
 				await work();
 			} catch (error) {
 				errorMessage = error instanceof Error ? error.message : String(error);
-				if (hasUI && ui && !isStaleExtensionCtxError(error)) {
+				if (hasUI && ui && !isStaleExtensionCtxError(error) && !isQuietConsolidationAbort(error)) {
 					ui.notify(`Observational memory: ${label} failed: ${errorMessage}`, "warning");
 				}
 			} finally {

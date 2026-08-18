@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CONSOLIDATION_ABORT_REASON } from "../src/abort.js";
 import { isStaleExtensionCtxError, Runtime } from "../src/runtime.js";
 
 const STALE_CTX_ERROR = new Error(
@@ -236,6 +237,80 @@ describe("Runtime V3 behavior", () => {
 
 		expect(notify).not.toHaveBeenCalled();
 		expect(runtime.consolidationInFlight).toBe(false);
+	});
+
+	it("aborts in-flight consolidation on dispose", async () => {
+		const runtime = new Runtime();
+		let sawAbort: string | undefined;
+		const promise = runtime.launchConsolidationTask({ hasUI: false }, async () => {
+			await new Promise<void>((_, reject) => {
+				const signal = runtime.consolidationSignal;
+				if (!signal) throw new Error("expected consolidation signal");
+				const onAbort = () => {
+					sawAbort = signal.reason as string;
+					reject(new Error(String(signal.reason)));
+				};
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
+			});
+		});
+
+		runtime.dispose();
+		await promise;
+		expect(sawAbort).toBe(CONSOLIDATION_ABORT_REASON.disposed);
+		expect(runtime.consolidationInFlight).toBe(false);
+		expect(runtime.consolidationSignal).toBeUndefined();
+	});
+
+	it("does not notify when a new user turn aborts consolidation", async () => {
+		const runtime = new Runtime();
+		const notify = vi.fn();
+		const promise = runtime.launchConsolidationTask({ hasUI: true, ui: { notify } }, async () => {
+			await new Promise<void>((_, reject) => {
+				const signal = runtime.consolidationSignal;
+				if (!signal) throw new Error("expected consolidation signal");
+				const onAbort = () => reject(new Error(String(signal.reason)));
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
+			});
+		});
+
+		runtime.abortConsolidation(CONSOLIDATION_ABORT_REASON.userTurn);
+		await promise;
+		expect(notify).not.toHaveBeenCalled();
+		expect(runtime.disposed).toBe(false);
+		expect(runtime.consolidationInFlight).toBe(false);
+	});
+
+	it("aborts consolidation when the hang timeout elapses", async () => {
+		vi.useFakeTimers();
+		const runtime = new Runtime();
+		const notify = vi.fn();
+		try {
+			const promise = runtime.launchConsolidationTask(
+				{ hasUI: true, ui: { notify } },
+				async () => {
+					await new Promise<void>((_, reject) => {
+						const signal = runtime.consolidationSignal;
+						if (!signal) throw new Error("expected consolidation signal");
+						const onAbort = () => reject(new Error(String(signal.reason)));
+						if (signal.aborted) onAbort();
+						else signal.addEventListener("abort", onAbort, { once: true });
+					});
+				},
+				{ timeoutMs: 25 },
+			);
+
+			await vi.advanceTimersByTimeAsync(25);
+			await promise;
+			expect(notify).toHaveBeenCalledWith(
+				`Observational memory: consolidation failed: ${CONSOLIDATION_ABORT_REASON.timeout}`,
+				"warning",
+			);
+			expect(runtime.consolidationInFlight).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("keeps auto-compaction state independent from consolidation", () => {
