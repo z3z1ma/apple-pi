@@ -616,4 +616,75 @@ describe("ConversationViewer", () => {
 			}
 		});
 	});
+
+	describe("transcript contrast", () => {
+		function recordingTheme() {
+			const calls: Array<{ color: string; text: string }> = [];
+			return {
+				calls,
+				theme: {
+					fg: (color: string, text: string) => {
+						calls.push({ color, text });
+						return text;
+					},
+					bold: (text: string) => text,
+				},
+			};
+		}
+
+		it("paints readable bodies with text and keeps dim for chrome", () => {
+			const { calls, theme } = recordingTheme();
+			const messages = [
+				{ role: "user", content: "please inspect the file" },
+				{
+					role: "assistant",
+					content: [
+						{ type: "text", text: "checking now" },
+						{ type: "toolCall", name: "read", input: {} },
+					],
+				},
+				{ role: "toolResult", toolUseId: "t1", content: [{ type: "text", text: "factory_test.go contents" }] },
+				{
+					role: "bashExecution",
+					command: "ls",
+					output: "catalog_gen.go",
+					exitCode: 0,
+					cancelled: false,
+					truncated: false,
+					timestamp: Date.now(),
+				},
+			];
+			const viewer = new ConversationViewer(
+				mockTui(),
+				mockSession(messages),
+				mockRecord({
+					type: "Plan",
+					description: "Plan events-mgmt slice",
+					status: "running",
+				}),
+				{
+					activeTools: new Map(),
+					toolUses: 1,
+					responseText: "thinking...",
+					turnCount: 1,
+					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+				},
+				theme as any,
+				vi.fn(),
+			);
+			viewer.render(80);
+
+			const colorOf = (snippet: string) => calls.find((call) => call.text.includes(snippet))?.color;
+			expect(colorOf("Plan events-mgmt slice")).toBe("text");
+			expect(colorOf("please inspect the file")).toBe("text");
+			expect(colorOf("checking now")).toBe("text");
+			expect(colorOf("factory_test.go contents")).toBe("text");
+			expect(colorOf("catalog_gen.go")).toBe("text");
+			expect(colorOf("[Result]")).toBe("muted");
+			expect(colorOf("[Tool: read]")).toBe("muted");
+			expect(colorOf("thinking...")).toBe("thinkingText");
+			expect(calls.find((call) => call.text === "───")?.color).toBe("dim");
+			expect(colorOf("Esc close")).toBe("dim");
+		});
+	});
 });

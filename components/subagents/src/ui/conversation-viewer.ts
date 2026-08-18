@@ -181,7 +181,7 @@ export class ConversationViewer implements Component {
 
 		lines.push(
 			row(
-				`${statusIcon} ${renderAgentName(this.record.type, th, { bold: true })}${modeTag}  ${th.fg("muted", this.record.description)} ${th.fg("dim", "·")} ${fgPreservingNestedStyles(th, "dim", headerParts.join(" · "))}`,
+				`${statusIcon} ${renderAgentName(this.record.type, th, { bold: true })}${modeTag}  ${th.fg("text", this.record.description)} ${th.fg("dim", "·")} ${fgPreservingNestedStyles(th, "muted", headerParts.join(" · "))}`,
 			),
 		);
 		const invocationLine = this.invocationLine();
@@ -302,7 +302,7 @@ export class ConversationViewer implements Component {
 		const { modelName, tags } = buildInvocationTags(this.record.invocation);
 		const parts = modelName ? [modelName, ...tags] : tags;
 		if (parts.length === 0) return undefined;
-		return this.theme.fg("dim", `  ↳ ${parts.join(" · ")}`);
+		return this.theme.fg("muted", `  ↳ ${parts.join(" · ")}`);
 	}
 
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this view builds one ordered transcript with all display-state branches.
@@ -314,7 +314,7 @@ export class ConversationViewer implements Component {
 		const lines: string[] = [];
 
 		if (messages.length === 0) {
-			lines.push(th.fg("dim", "(waiting for first message...)"));
+			lines.push(th.fg("muted", "(waiting for first message...)"));
 			return lines;
 		}
 
@@ -326,7 +326,7 @@ export class ConversationViewer implements Component {
 				if (needsSeparator) lines.push(th.fg("dim", "───"));
 				lines.push(th.fg("accent", "[User]"));
 				for (const line of wrapTextWithAnsi(text.trim(), width)) {
-					lines.push(line);
+					lines.push(th.fg("text", line));
 				}
 			} else if (msg.role === "assistant") {
 				const textParts: string[] = [];
@@ -341,7 +341,7 @@ export class ConversationViewer implements Component {
 				lines.push(th.bold("[Assistant]"));
 				if (textParts.length > 0) {
 					for (const line of wrapTextWithAnsi(textParts.join("\n").trim(), width)) {
-						lines.push(line);
+						lines.push(th.fg("text", line));
 					}
 				}
 				for (const name of toolCalls) {
@@ -352,9 +352,9 @@ export class ConversationViewer implements Component {
 				const truncated = text.length > 500 ? `${text.slice(0, 500)}... (truncated)` : text;
 				if (!truncated.trim()) continue;
 				if (needsSeparator) lines.push(th.fg("dim", "───"));
-				lines.push(th.fg("dim", "[Result]"));
+				lines.push(th.fg("muted", "[Result]"));
 				for (const line of wrapTextWithAnsi(truncated.trim(), width)) {
-					lines.push(th.fg("dim", line));
+					lines.push(th.fg("text", line));
 				}
 			} else if ((msg as any).role === "bashExecution") {
 				const bash = msg as any;
@@ -363,7 +363,7 @@ export class ConversationViewer implements Component {
 				if (bash.output?.trim()) {
 					const out = bash.output.length > 500 ? `${bash.output.slice(0, 500)}... (truncated)` : bash.output;
 					for (const line of wrapTextWithAnsi(out.trim(), width)) {
-						lines.push(th.fg("dim", line));
+						lines.push(th.fg("text", line));
 					}
 				}
 			} else {
@@ -376,7 +376,7 @@ export class ConversationViewer implements Component {
 		if (this.record.status === "running" && this.activity) {
 			const act = describeActivity(this.activity.activeTools, this.activity.responseText);
 			lines.push("");
-			lines.push(truncateToWidth(th.fg("accent", "▍ ") + th.fg("dim", act), width));
+			lines.push(truncateToWidth(th.fg("accent", "▍ ") + th.fg("thinkingText", act), width));
 		}
 
 		return lines.map((l) => truncateToWidth(l, width));
