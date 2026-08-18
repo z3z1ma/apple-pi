@@ -45,14 +45,14 @@ export interface Config {
 }
 
 export const DEFAULTS: Config = {
-	observeAfterTokens: 10_000,
+	observeAfterTokens: 20_000,
 	reflectAfterTokens: 20_000,
 	compactAfterTokens: 81_000,
 	compactAfterTokensMode: "calibrated",
 	compactAfterTokensRatio: 0.68,
 	observationsPoolMaxTokens: 20_000,
 	observationsPoolTargetTokens: 10_000,
-	agentMaxTurns: 16,
+	agentMaxTurns: 24,
 	showWorkerNotifications: true,
 	passive: false,
 	debugLog: false,

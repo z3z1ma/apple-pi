@@ -5,7 +5,7 @@ import { type Config, DEFAULTS, isThinkingLevel, loadConfig } from "./config.js"
 
 export const OBSERVATIONAL_MEMORY_MODE = "observational-memory";
 
-/** Wall-clock cap for one observe/reflect/drop pipeline. Hang backstop, not a quality target. */
+/** Wall-clock cap for one curation pass. Hang backstop, not a quality target. */
 export const CONSOLIDATION_HANG_TIMEOUT_MS = 15 * 60 * 1000;
 
 export type ResolveResult =
@@ -31,7 +31,7 @@ function hasUsableAuth(auth: { apiKey?: unknown; headers?: unknown }): boolean {
 
 type NotifyLevel = "warning" | "info" | "error";
 type Notify = (message: string, type?: NotifyLevel) => void;
-export type ConsolidationPhase = "observer" | "reflector" | "dropper";
+export type ConsolidationPhase = "curator";
 
 const STALE_EXTENSION_CTX_MESSAGE = "This extension ctx is stale after session replacement or reload";
 
@@ -68,9 +68,7 @@ export class Runtime {
 	private consolidationTimeout: ReturnType<typeof setTimeout> | null = null;
 	compactInFlight = false;
 	resolveFailureNotified = false;
-	lastObserverError: string | undefined;
-	lastReflectorError: string | undefined;
-	lastDropperError: string | undefined;
+	lastCuratorError: string | undefined;
 	/** Deliberate-empty backoff (#23): skip observer re-fires over the same span until enough new tokens arrive. */
 	observerEmptyBackoff:
 		| {
@@ -172,9 +170,7 @@ export class Runtime {
 	): Promise<void> {
 		this.consolidationInFlight = true;
 		this.consolidationPhase = undefined;
-		this.lastObserverError = undefined;
-		this.lastReflectorError = undefined;
-		this.lastDropperError = undefined;
+		this.lastCuratorError = undefined;
 		const controller = new AbortController();
 		this.consolidationAbort = controller;
 		this.clearConsolidationTimeout();
@@ -200,9 +196,7 @@ export class Runtime {
 	recordConsolidationStageError(ctx: LaunchCtx, phase: ConsolidationPhase, error: unknown): string {
 		const message = error instanceof Error ? error.message : String(error);
 		if (isStaleExtensionCtxError(error) || isQuietConsolidationAbort(error)) return message;
-		if (phase === "observer") this.lastObserverError = message;
-		if (phase === "reflector") this.lastReflectorError = message;
-		if (phase === "dropper") this.lastDropperError = message;
+		this.lastCuratorError = message;
 		if (ctx.hasUI && ctx.ui) ctx.ui.notify(`Observational memory: ${phase} failed: ${message}`, "warning");
 		return message;
 	}

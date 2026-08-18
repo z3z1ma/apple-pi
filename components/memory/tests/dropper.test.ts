@@ -79,11 +79,11 @@ describe("V3 dropper agent", () => {
 		expect(systemPrompt).not.toContain("NEVER drop");
 		expect(systemPrompt).toContain("Preservation floor");
 		expect(systemPrompt).toContain("Do not force drops");
-		expect(systemPrompt).toContain("You cannot merge observations");
+		expect(systemPrompt).toContain("Dropping cannot merge, rewrite, or edit observations");
 		expect(systemPrompt).toContain("Default action is KEEP");
 		expect(systemPrompt).toContain("When uncertain, keep");
-		expect(systemPrompt).toContain("active observation pool target");
-		expect(systemPrompt).toContain("reflection-maintenance pass");
+		expect(systemPrompt).toContain("move the pool toward the target");
+		expect(systemPrompt).toContain("maintenance-eligible ids");
 		expect(systemPrompt).toContain("not permission to drop automatically");
 		expect(systemPrompt).not.toContain("drop freely");
 		expect(systemPrompt).not.toContain("pruner");

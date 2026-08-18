@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({ agentDir: "" }));
@@ -36,14 +36,14 @@ describe("V3 config", () => {
 
 	it("uses V3 defaults", () => {
 		expect(DEFAULTS).toEqual({
-			observeAfterTokens: 10000,
+			observeAfterTokens: 20000,
 			reflectAfterTokens: 20000,
 			compactAfterTokens: 81000,
 			compactAfterTokensMode: "calibrated",
 			compactAfterTokensRatio: 0.68,
 			observationsPoolMaxTokens: 20000,
 			observationsPoolTargetTokens: 10000,
-			agentMaxTurns: 16,
+			agentMaxTurns: 24,
 			showWorkerNotifications: true,
 			passive: false,
 			debugLog: false,

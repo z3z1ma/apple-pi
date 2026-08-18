@@ -179,13 +179,13 @@ describe("Runtime V3 behavior", () => {
 		});
 
 		const promise = runtime.launchConsolidationTask({ hasUI: false }, async () => {
-			runtime.consolidationPhase = "observer";
+			runtime.consolidationPhase = "curator";
 			await work;
 		});
 
 		expect(runtime.consolidationInFlight).toBe(true);
 		expect(runtime.consolidationPromise).toBe(promise);
-		expect(runtime.consolidationPhase).toBe("observer");
+		expect(runtime.consolidationPhase).toBe("curator");
 		release?.();
 		await promise;
 		expect(runtime.consolidationInFlight).toBe(false);
@@ -193,26 +193,16 @@ describe("Runtime V3 behavior", () => {
 		expect(runtime.consolidationPhase).toBeUndefined();
 	});
 
-	it("records stage-specific consolidation errors", () => {
+	it("records curator consolidation errors", () => {
 		const runtime = new Runtime();
 		const notify = vi.fn();
 
 		expect(
-			runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "observer", new Error("observe failed")),
-		).toBe("observe failed");
-		expect(
-			runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "reflector", new Error("reflect failed")),
-		).toBe("reflect failed");
-		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "dropper", "drop failed")).toBe(
-			"drop failed",
-		);
+			runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "curator", new Error("curate failed")),
+		).toBe("curate failed");
 
-		expect(runtime.lastObserverError).toBe("observe failed");
-		expect(runtime.lastReflectorError).toBe("reflect failed");
-		expect(runtime.lastDropperError).toBe("drop failed");
-		expect(notify).toHaveBeenCalledWith("Observational memory: observer failed: observe failed", "warning");
-		expect(notify).toHaveBeenCalledWith("Observational memory: reflector failed: reflect failed", "warning");
-		expect(notify).toHaveBeenCalledWith("Observational memory: dropper failed: drop failed", "warning");
+		expect(runtime.lastCuratorError).toBe("curate failed");
+		expect(notify).toHaveBeenCalledWith("Observational memory: curator failed: curate failed", "warning");
 	});
 
 	it("does not record or notify stale extension ctx errors", () => {
@@ -220,10 +210,10 @@ describe("Runtime V3 behavior", () => {
 		const notify = vi.fn();
 
 		expect(isStaleExtensionCtxError(STALE_CTX_ERROR)).toBe(true);
-		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "dropper", STALE_CTX_ERROR)).toBe(
+		expect(runtime.recordConsolidationStageError({ hasUI: true, ui: { notify } }, "curator", STALE_CTX_ERROR)).toBe(
 			STALE_CTX_ERROR.message,
 		);
-		expect(runtime.lastDropperError).toBeUndefined();
+		expect(runtime.lastCuratorError).toBeUndefined();
 		expect(notify).not.toHaveBeenCalled();
 	});
 

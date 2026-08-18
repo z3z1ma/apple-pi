@@ -9,7 +9,6 @@ import {
 	fullProjection,
 	rawTokensSinceLastCompaction,
 	rawTokensSinceObservationCoverage,
-	rawTokensSinceReflectionCoverage,
 	visibleProjection,
 } from "../session-ledger/index.js";
 
@@ -74,7 +73,6 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime, option
 				[addedSuffix(drift.reflectionsOnlyInFull.length)],
 			);
 			const obsProgress = rawTokensSinceObservationCoverage(entries);
-			const reflectionProgress = rawTokensSinceReflectionCoverage(entries);
 			const contextWindow = typeof ctx.model?.contextWindow === "number" ? ctx.model.contextWindow : undefined;
 			const hostClock = options.compactionClock?.(ctx);
 			const compactionProgress = hostClock?.progress ?? rawTokensSinceLastCompaction(entries);
@@ -97,8 +95,7 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime, option
 				reflectionLine,
 				"",
 				"── Activity ──",
-				`Next observation: ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
-				`Next reflection:  ~${reflectionProgress.toLocaleString()} / ${runtime.config.reflectAfterTokens.toLocaleString()} tokens (${pct(reflectionProgress, runtime.config.reflectAfterTokens)}%)`,
+				`Next curation:    ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
 				`Next compaction:  ~${compactionProgress.toLocaleString()} / ${compactThreshold.toLocaleString()} ${compactionUnit} (${pct(compactionProgress, compactThreshold)}%)`,
 				`Visible observation pool: ~${visibleObservationTokens.toLocaleString()} / ${runtime.config.observationsPoolMaxTokens.toLocaleString()} tokens (${pct(visibleObservationTokens, runtime.config.observationsPoolMaxTokens)}%)`,
 				`Active observation pool: ~${activeObservationPool.observationTokens.toLocaleString()} / ${runtime.config.observationsPoolTargetTokens.toLocaleString()} target tokens (${pct(activeObservationPool.observationTokens, runtime.config.observationsPoolTargetTokens)}%)`,
@@ -114,11 +111,9 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime, option
 				if (runtime.compactInFlight) lines.push("Auto-compaction: running");
 			}
 
-			if (runtime.lastObserverError || runtime.lastReflectorError || runtime.lastDropperError) {
+			if (runtime.lastCuratorError) {
 				lines.push("", "── Last error ──");
-				if (runtime.lastObserverError) lines.push(`Observer: ${runtime.lastObserverError}`);
-				if (runtime.lastReflectorError) lines.push(`Reflector: ${runtime.lastReflectorError}`);
-				if (runtime.lastDropperError) lines.push(`Dropper: ${runtime.lastDropperError}`);
+				lines.push(`Curator: ${runtime.lastCuratorError}`);
 			}
 
 			ctx.ui.notify(lines.join("\n"), "info");

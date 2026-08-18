@@ -86,6 +86,48 @@ function relevanceCounts(observations: readonly Observation[]): Record<Observati
 	);
 }
 
+export type DropGuardrails = {
+	metrics: ReturnType<typeof observationPoolMetrics>;
+	maintenanceMode: boolean;
+	maintenanceEligibleIds: string[];
+	maxDropsAllowed: number;
+	allowedIds: Set<string>;
+	coverageById: ReturnType<typeof reflectionCoverageMap>;
+};
+
+/**
+ * Compute drop eligibility from the current live observations and reflections.
+ * Callers must invoke this at tool-execute time and again at final selection;
+ * do not close over a start-of-pass snapshot.
+ */
+export function resolveDropGuardrails(args: {
+	observations: readonly Observation[];
+	reflections: readonly Reflection[];
+	targetTokens: number;
+	maintenanceEligibleObservationIds?: readonly string[];
+}): DropGuardrails {
+	const metrics = observationPoolMetrics(args.observations, args.targetTokens);
+	const activeIds = new Set(args.observations.map((observation) => observation.id));
+	const maintenanceEligibleIds = [...new Set(args.maintenanceEligibleObservationIds ?? [])].filter((id) =>
+		activeIds.has(id),
+	);
+	const maintenanceMode = !metrics.ready && maintenanceEligibleIds.length > 0;
+	const maxDropsAllowed = maintenanceMode ? 1 : metrics.maxDropsAllowed;
+	const allowedIds = new Set(
+		args.observations
+			.filter((observation) => !maintenanceMode || maintenanceEligibleIds.includes(observation.id))
+			.map((observation) => observation.id),
+	);
+	return {
+		metrics,
+		maintenanceMode,
+		maintenanceEligibleIds,
+		maxDropsAllowed,
+		allowedIds,
+		coverageById: reflectionCoverageMap(args.observations, args.reflections),
+	};
+}
+
 export function normalizeDropObservationIds(
 	ids: readonly string[] | undefined,
 	observations: readonly Observation[],

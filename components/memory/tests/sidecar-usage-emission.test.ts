@@ -10,6 +10,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 
 import { sidecarUsageRelativePath, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { runCurator } from "../src/agents/curator/agent.js";
 import { runDropper } from "../src/agents/dropper/agent.js";
 import { runObserver } from "../src/agents/observer/agent.js";
 import { runReflector } from "../src/agents/reflector/agent.js";
@@ -70,6 +71,29 @@ describe("memory sidecar usage emission", () => {
 			agentLoop: fakeAgentLoop([assistantEnd("stop")]),
 		});
 		expect(existsSync(join(agentDir, "sidecar-usage"))).toBe(false);
+	});
+
+	it("records a curator call with the observeAfterTokens trigger", async () => {
+		await withSidecarUsageContext({ sessionId: "om-curator", threshold: 20_000 }, async () => {
+			await runCurator({
+				model: { provider: "openai-codex", id: "gpt-5.6-luna" } as any,
+				apiKey: "test",
+				reflections: [],
+				observations: [],
+				chunk: "[Source entry id: entry-a]\nUser asked for a memory update.",
+				allowedSourceEntryIds: ["entry-a"],
+				targetTokens: 10_000,
+				agentLoop: fakeAgentLoop([assistantEnd("stop")]),
+			});
+		});
+		const [row] = readRows("om-curator");
+		expect(row).toMatchObject({
+			agent: "curator",
+			trigger: "observeAfterTokens",
+			threshold: 20_000,
+			status: "stop",
+		});
+		expect(JSON.stringify(row)).not.toContain("User asked");
 	});
 
 	it("records observer, reflector, and dropper calls with stage triggers", async () => {

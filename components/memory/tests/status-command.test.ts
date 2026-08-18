@@ -43,9 +43,7 @@ function setup(args: {
 		consolidationInFlight: false,
 		consolidationPhase: undefined,
 		compactInFlight: false,
-		lastObserverError: undefined,
-		lastReflectorError: undefined,
-		lastDropperError: undefined,
+		lastCuratorError: undefined,
 		...args.runtime,
 	};
 	registerStatusCommand(pi as any, runtime as any, {
@@ -74,7 +72,7 @@ describe("V3 /om:status", () => {
 		expect(output).toContain("── Memory ──");
 		expect(output).toContain("Observations: 0 recorded / 0 dropped / 0 active / 0 visible");
 		expect(output).toContain("Reflections:  0 recorded / 0 retired / 0 current / 0 visible");
-		expect(output).toContain("Next observation:");
+		expect(output).toContain("Next curation:");
 		expect(output).toContain("Next compaction:");
 		expect(output).not.toContain("Visible:");
 		expect(output).not.toContain("Drift:");
@@ -129,10 +127,8 @@ describe("V3 /om:status", () => {
 
 		const output = await setup({ entries }).run();
 
-		expect(output).toContain("Next observation:");
+		expect(output).toContain("Next curation:");
 		expect(output).toContain("/ 10 tokens");
-		expect(output).toContain("Next reflection:");
-		expect(output).toContain("/ 20 tokens");
 		expect(output).toContain("Next compaction:");
 		expect(output).toContain("/ 30 estimated source tokens");
 		expect(output).toContain("Visible observation pool: ~5 / 40 tokens (13%)");
@@ -197,22 +193,18 @@ describe("V3 /om:status", () => {
 					passive: true,
 				},
 				consolidationInFlight: true,
-				consolidationPhase: "reflector",
+				consolidationPhase: "curator",
 				compactInFlight: true,
-				lastObserverError: "observer failed",
-				lastReflectorError: "reflect failed",
-				lastDropperError: "drop failed",
+				lastCuratorError: "curate failed",
 			},
 		}).run();
 
 		expect(output).toContain("Passive: automatic memory workers and auto-compaction disabled");
-		expect(output).toContain("Consolidation: running (reflector)");
+		expect(output).toContain("Consolidation: running (curator)");
 		expect(output).not.toContain("Observer: running");
 		expect(output).not.toContain("Reflect/drop: running");
 		expect(output).toContain("Auto-compaction: running");
-		expect(output).toContain("Observer: observer failed");
-		expect(output).toContain("Reflector: reflect failed");
-		expect(output).toContain("Dropper: drop failed");
+		expect(output).toContain("Curator: curate failed");
 	});
 
 	it("shows consolidation in flight without phase when phase is unavailable", async () => {
