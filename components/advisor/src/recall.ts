@@ -1,7 +1,7 @@
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 
 import { recallObservationTool } from "../../memory/src/tools/recall-observation.js";
-import { sessionSearchTool } from "../../vcc/src/tools/recall.js";
+import { sessionSearchTool } from "../../session-search/src/index.js";
 
 export type PrimarySessionManager = Pick<
 	ExtensionContext["sessionManager"],

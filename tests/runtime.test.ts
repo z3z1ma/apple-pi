@@ -17,6 +17,7 @@ import runtime, {
 import {
 	agentOperationArgs,
 	CONTEXT_GUIDANCE,
+	LEDGER_EXTENSION_PATH,
 	OUTPUT_SCHEMA_GUIDANCE,
 	PI_EXEC_OUTPUT_SCHEMA_ENV,
 	PI_EXEC_RETURN_TOOL,
@@ -24,9 +25,8 @@ import {
 	prepareAgentSpawn,
 	resolveExecWorker,
 	resolveStructuredOutput,
+	SESSION_SEARCH_EXTENSION_PATH,
 	serializeAgentContext,
-	LEDGER_EXTENSION_PATH,
-	VCC_EXTENSION_PATH,
 	WORKER_RETURN_EXTENSION_PATH,
 } from "../extensions/runtime-agent.js";
 import {
@@ -710,7 +710,7 @@ describe("pi_exec agent binding", () => {
 			expect(prepared.args).toContain("--no-extensions");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				LEDGER_EXTENSION_PATH,
-				VCC_EXTENSION_PATH,
+				SESSION_SEARCH_EXTENSION_PATH,
 				WORKER_RETURN_EXTENSION_PATH,
 			]);
 			expect(prepared.args.join("\0")).toContain(OUTPUT_SCHEMA_GUIDANCE);

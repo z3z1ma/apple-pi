@@ -17,9 +17,12 @@
     "components/advisor/src/**/*.ts",
     "components/ask-user-question/src/**/*.ts",
     "components/shared/src/**/*.ts",
-    "components/vcc/src/**/*.ts",
+    "components/session-search/src/**/*.ts",
     "components/memory/src/**/*.ts",
     "components/subagents/src/**/*.ts",
-    "components/xai-hosted-tools/src/**/*.ts"
+    "components/xai-hosted-tools/src/**/*.ts",
+    "components/xai-context-compaction/src/**/*.ts",
+    "components/notify/src/**/*.ts",
+    "components/notify/tests/**/*.ts"
   ]
 }

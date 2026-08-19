@@ -8,7 +8,7 @@ import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
 import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
-import { VCC_EXTENSION_PATH } from "../extensions/vcc.js";
+import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
 
 const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
 const env: EnvInfo = { isGitRepo: true, branch: "main", platform: "test" };
@@ -52,7 +52,7 @@ describe("ledger system prompt distribution", () => {
 		expect(args).toContain("--extension");
 		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
 			LEDGER_EXTENSION_PATH,
-			VCC_EXTENSION_PATH,
+			SESSION_SEARCH_EXTENSION_PATH,
 		]);
 	});
 
@@ -60,17 +60,22 @@ describe("ledger system prompt distribution", () => {
 		expect(loadAdvisorSystemPrompt(process.cwd(), false)).not.toContain(marker);
 	});
 
-	it("loads children with ledger, VCC, and MCP", () => {
+	it("loads children with ledger, session_search, and MCP", () => {
 		expect(childSessionExtensions()).toEqual({
 			noExtensions: true,
-			additionalExtensionPaths: [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH],
+			additionalExtensionPaths: [LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH],
 		});
 	});
 
 	it("adds the advisor sidecar only when requested", () => {
 		expect(childSessionExtensions(true)).toEqual({
 			noExtensions: true,
-			additionalExtensionPaths: [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH, ADVISOR_EXTENSION_PATH],
+			additionalExtensionPaths: [
+				LEDGER_EXTENSION_PATH,
+				SESSION_SEARCH_EXTENSION_PATH,
+				MCP_EXTENSION_PATH,
+				ADVISOR_EXTENSION_PATH,
+			],
 		});
 	});
 });

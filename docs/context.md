@@ -1,21 +1,33 @@
 # Context and memory
 
-Normal `/compact`, automatic compaction, overflow recovery, and explicit `/pi-vcc` all pass through one `session_before_compact` owner:
+Compaction has one hook owner. On an xAI model using `openai-responses`, [`extensions/xai-context-compaction.ts`](../extensions/xai-context-compaction.ts) handles `/compact`, automatic compaction, and overflow recovery by calling xAI's `POST /responses/compact`. Other models leave `session_before_compact` unset so Pi's default summarizer runs.
 
-1. VCC selects a conversational cut and builds a deterministic summary without a model call.
-2. Observational memory folds ledger records up to the same cut and injects current law plus remaining working evidence.
-3. The two summaries and their metadata are returned as one compaction result.
+After any compaction entry exists, observational memory appends its current fold to the **tail** of the live conversation via the `context` event. That packet is the same for xAI compaction, Pi default summarization, and any compact-hook fallback that still writes a compaction entry.
 
-The cut keeps a suffix. That suffix always includes the last substantial assistant write-up (1500+ characters of text, otherwise the last assistant) when one exists. `firstKeptEntryId` is the start of the longest suffix that still includes that deliverable and fits the keep budget — not a message-count midpoint, and not automatically the write-up itself. A follow-up user turn cannot file a still-live write-up by becoming the new last user. After a compact, if the user has not spoken, a further non-overflow compact is skipped so the already-chosen tail is not shredded. Compact-all (`firstKeptEntryId` empty) is only used when there is no substantial write-up and the kept suffix cannot fit. The compiled prefix is one token-budgeted index of what fell off the cut, not a second set of word/line caps. The budget is `min(keep/10, dropped/10, leftover overhead)` so the summary stays an order of magnitude smaller than the live tail and still fits in the overhead reserved for system, tools, and observational memory. User intent and tool errors are pinned; remaining space fills backward so recent assistant prose and tool results win; oversized dumps are omitted rather than prefix-clipped. Merge reuses that same cap. `session_search` remains the path back to the full transcript.
+The curator pipeline, `/om:*` commands, and `memory_source` register only on the **root** session. Child sessions (subagents, `pi_exec` workers) load `session_search` and never start observer/reflector/curator work. The advisor session also does not run observational memory: after its own compaction summary it inserts a **read-only** copy of the parent fold, and its `memory_source` / `session_search` tools stay bound to the primary session.
 
-The metadata is intentionally flat: `details.compactor === "pi-vcc"` and `details.type === "om.folded"` coexist so both recall systems recognize the same compaction.
+## xAI server-side compaction
 
-A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. VCC's usage waterline and observational memory's fallback both request compact on `agent_settled`, after Pi auto-compaction. Both skip silently when the live branch already ends at a compaction entry, and memory skips when VCC has already requested compact. Codex overflow/output-limit recovery still fires on `agent_end`.
+When the active model is `provider === "xai"` and `api === "openai-responses"`:
+
+1. The hook converts the messages being summarized with pi-ai's Responses converter (tool calls, results, reasoning, and images stay in the request).
+2. If a previous xAI compaction item is stored on the latest compaction entry, that item is prepended so successive compact calls chain.
+3. Auth comes from `ctx.modelRegistry.getApiKeyAndHeaders(model)`. Existing headers are spread; `Authorization: Bearer` is added only when an API key exists. The endpoint is `{model.baseUrl || https://api.x.ai/v1}/responses/compact`.
+4. A successful response stores `{ type: "compaction", id, encrypted_content }` in `details.xaiCompaction` and keeps a real text summary (recent serialized tail) so a later 4xx can drop the opaque item without leaving an empty history.
+5. Later xAI Responses requests inject only that newest item after a leading system/developer prompt.
+6. Auth failure, HTTP errors, or a missing compaction item return `undefined` so Pi's default summarizer runs.
+7. `after_provider_response` is `{ status, headers }` only. If a request that carried an injected item gets a 4xx, injection is disabled for the rest of the session and a warning is shown. That failing turn itself still errors; 400s are not retried.
+
+Completions-routed Grok is left to Pi default compaction.
+
+## Observational memory packet
+
+`registerMemoryContextPacket` runs on every context rebuild after a compaction entry exists. It projects the ledger to the latest compaction's `firstKeptEntryId` and appends one custom message (`om.memory.packet`) at the end of `event.messages`. The injection is idempotent for that rebuild. The ledger itself stays in Pi session JSONL.
+
+A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. Observational memory's fallback still requests compact on `agent_settled` after Pi auto-compaction, and skips when the live branch already ends at a compaction entry.
 
 Commands and tools:
 
-- `/pi-vcc` — explicit deterministic compaction
-- `/pi-vcc-recall` — interactive history and file-operation search
 - `session_search` — model-facing search of this session's compacted transcript and file operations:
   - `mode:"touched"` groups write/edit operations by path and entry index.
   - `mode:"file"` searches only write/edit payloads.
@@ -24,24 +36,7 @@ Commands and tools:
 - `/om:status` and `/om:view` — observational-memory state
 - `memory_source` — exact source lookup by observation or reflection ID
 
-VCC settings remain at `~/.pi/agent/pi-vcc-config.json`. Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](../components/memory/src/config.ts) for the validated operational keys and defaults.
-
-## When compaction fires
-
-VCC requests compaction when provider-reported context usage exceeds a fraction of the **active model's configured `contextWindow`**. The default is 68% (`compactPercent: 68`) whenever `pi-vcc-config.json` omits both `globalThreshold` and `defaultThreshold`. That default is applied at load time and is not written into the file.
-
-The configured window is the cost lever. Pi already uses `models.json` / `modelOverrides.contextWindow` to keep requests inside a provider's short-context pricing tier; this package reads that same window and does not encode provider names or price tiers in TypeScript. Lowering a model's `contextWindow` to the tier boundary lowers the billed context at which compaction fires.
-
-Override the waterline in `~/.pi/agent/pi-vcc-config.json`:
-
-```json
-{
-  "overrideDefaultCompaction": true,
-  "globalThreshold": { "compactPercent": 60 }
-}
-```
-
-`reserveTokens` and `compactAtTokens` on `globalThreshold` or `modelThresholds` take precedence over `compactPercent` when set. An empty `"globalThreshold": {}` opts out of the package default. Observational memory then keeps its estimated-source-token gate (`compactAfterTokens`, default 81,000) as a fallback for turns where VCC cannot read usage or cannot resolve a window.
+Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](../components/memory/src/config.ts) for the validated operational keys and defaults.
 
 ## Where memory persists
 

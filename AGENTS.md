@@ -29,7 +29,7 @@ Authority is split deliberately:
 At a high level, the package adds five kinds of capability to Pi:
 
 1. **Turn assistance and interaction** — a persistent read-only advisor and a structured user-question tool.
-2. **Context continuity** — deterministic transcript compaction, model-generated observational memory, and two complementary recall paths.
+2. **Context continuity** — xAI server-side or Pi default compaction, model-generated observational memory, and two complementary recall paths.
 3. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
 4. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops.
 5. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
@@ -43,8 +43,8 @@ Pi discovers the package through the `pi` section of `package.json`. Each config
 There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
-- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. It loads ledger, VCC, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Advisor sidecar when `advisor: true`. It may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
-- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context. They load the ledger and VCC extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
+- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. It loads ledger, `session_search`, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Advisor sidecar when `advisor: true`. It may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
+- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context. They load the ledger and `session_search` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
 
@@ -55,12 +55,13 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
 | `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses shared mode routing; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
-| `components/vcc/` | Deterministic transcript compaction, history search, file-operation recovery, and continuation behavior | Supplies the compaction cut and transcript summary. Its tests run under Bun. |
-| `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and augments the same compaction selected by VCC. |
+| `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the observational-memory packet. |
+| `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
+| `components/xai-context-compaction/` | xAI server-side Responses compaction | Owns `session_before_compact` for xAI Responses models; injects the newest opaque item on later requests. |
 | `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, and TUI views | Serves both the interactive `Agent` surface and managed workers used by `pi_exec`, while keeping ownership and depth boundaries explicit. |
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
-| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | Review and Ralph are skills that author `pi_exec` programs, not hidden runtime engines. Ledger skills each own a specific lifecycle phase. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
@@ -77,8 +78,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 ### Context and memory
 
-- There is **one compaction owner**. VCC chooses the deterministic cut and transcript summary; observational memory projects its records to that same cut and augments the result.
-- The combined compaction metadata must remain readable by both systems. Do not introduce competing hooks or sequential independent compactions.
+- There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. Observational memory does not register a compact hook; it appends its packet to the conversation tail after a compaction entry exists.
+- Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; observational memory only appends its packet afterwards.
 - Session-history search and memory-source lookup are intentionally separate: one progressively searches transcript/file-operation history; the other resolves a known memory ID to source evidence.
 - Observational memory is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
 - Reload, switch, fork, and shutdown paths matter. Any asynchronous work holding a Pi extension context must stop or re-prime when that context becomes stale.
@@ -89,7 +90,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
 - `Agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
-- Child sessions and `pi_exec` workers do not discover package extensions. Children load ledger, VCC, and MCP via explicit paths under `--no-extensions`; `advisor: true` adds the Advisor sidecar. Workers load ledger and VCC the same way. Recursion is prevented because they do not load `pi_exec` or the subagent manager. Observational memory stays on the root context extension.
+- Child sessions and `pi_exec` workers do not discover package extensions. Children load ledger, `session_search`, and MCP via explicit paths under `--no-extensions`; `advisor: true` adds the Advisor sidecar. Workers load ledger and `session_search` the same way. Recursion is prevented because they do not load `pi_exec` or the subagent manager. Observational memory stays on the root context extension.
 - Child sessions must not bypass manager ownership, nesting depth, tool policy, or root-only capabilities. Avoid global registries unless they are explicitly process-scoped integration points with lifecycle cleanup.
 - Nested `pi_exec` operations are not separate top-level Pi tool calls. Policy extensions that gate only top-level `tool_call` events see the outer `pi_exec`, not every bridged operation; deployments needing an outer per-call gate must treat `pi_exec` itself as the capability boundary.
 - Persisted child sessions are Pi sessions. Do not add a second transcript or memory store merely for the subagent feature.
@@ -136,7 +137,7 @@ Use the root package only:
 npm install
 ```
 
-For a clean reproducible checkout, `npm ci` is appropriate. Follow the Node engine declared in `package.json`. Bun is also required for the VCC test suite even though the package runtime is Node/Pi.
+For a clean reproducible checkout, `npm ci` is appropriate. Follow the Node engine declared in `package.json`.
 
 Install the checkout into Pi using the command documented in `README.md` when exercising the package interactively. Do not publish, globally install, or change project activation as part of routine validation unless the operator authorizes it.
 
@@ -155,12 +156,11 @@ npm run pack:check
 Useful narrower commands are defined in `package.json`:
 
 - `test:unit` runs Vitest suites for components and root integration.
-- `test:vcc` runs the Bun-based VCC suite.
 - `test:advisor` runs the advisor's offline Node harness and expects the `pi` executable on `PATH`; its networked E2E mode is opt-in.
 - `test:loader` loads an explicit list of checkout extension entrypoints and checks the exposed surface.
 - `pack:check` prints npm's dry-run package contents. Inspect that list for expected source; the command does not assert completeness or test the tarball in an installed environment.
 
-Run the cheapest falsifying check while iterating, then the full relevant suite before declaring completion. A passing unit suite does not prove package loading, and a successful package dry run does not prove behavior. Some VCC regression tests may read existing local Pi session JSONL and copy it into temporary directories; they must leave originals unchanged, but inspect that test boundary before running the suite in an environment where local transcript access is not authorized.
+Run the cheapest falsifying check while iterating, then the full relevant suite before declaring completion. A passing unit suite does not prove package loading, and a successful package dry run does not prove behavior. Some session-search tests write temporary session JSONL; they must not touch real Pi session files.
 
 `npm run format` writes across broad repository paths. In a dirty working tree, prefer formatting only files you changed (for example with Biome's path arguments), then run the non-writing repository check. Never use a blanket formatter as accidental cleanup of someone else's work.
 
@@ -215,7 +215,7 @@ Never move credentials, private transcript content, or memory records into repos
 
 ### Changing compaction or recall
 
-1. Trace both VCC and observational-memory consumers before editing.
+1. Trace both `session_search` and observational-memory consumers before editing.
 2. Preserve the single-cut/single-hook model and shared metadata recognition.
 3. Test cut selection, projection/folding, continuation behavior, and both recall paths as applicable.
 4. Include reload/compaction lifecycle cases when asynchronous state changes.

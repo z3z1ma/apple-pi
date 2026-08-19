@@ -12,7 +12,7 @@ The [advisor](docs/advisor.md) has done more for session quality than anything e
 
 [Agents](docs/subagents.md) are typed specialist lanes — Explore, Research, Plan, Counsel, Implement, Design, general-purpose — each with tool scope, model defaults, and a role prompt. An Explore agent that can only read is different from an Implement agent that can write. Model routing goes through `modes.json`, so Counsel can point at a high-reasoning model and Explore at something fast. The same catalog serves both the interactive `Agent` tool and `pi_exec` `agents.run`. Custom agents are Markdown files with YAML frontmatter.
 
-[Context](docs/context.md) handles the rest: deterministic compaction keeps long sessions usable, observational memory lets the agent remember across compaction boundaries, and two recall paths (`session_search` for transcript history, `memory_source` for exact provenance) let it get back to what it needs.
+[Context](docs/context.md) handles the rest: xAI Responses sessions compact server-side, other models use Pi's default summarizer, observational memory appends its packet after compaction, and two recall paths (`session_search` for transcript history, `memory_source` for exact provenance) let the agent get back to what it needs.
 
 Each piece earns its place. There's some convergence with other projects — [Prime Intellect](https://github.com/PrimeIntellect-ai/prime-agent) arrived at a similar composition-over-REPL idea, [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) explored specialist lanes with tool policies — but this is my own take, shaped by what I've actually watched work and fail over a lot of sessions.
 
@@ -38,12 +38,14 @@ Add `-l` for project-local activation. Pi loads every extension from this one pa
 
 - [`/advisor`](docs/advisor.md) — persistent read-only peer review
 - [`ask_user_question`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
-- [Context](docs/context.md) — VCC compaction, observational memory, `session_search`, and `memory_source`
+- [Context](docs/context.md) — xAI / Pi compaction, observational memory, `session_search`, and `memory_source`
 - [`pi_exec`](docs/exec.md) — bounded JavaScript guest for programmatic tool composition
 - [`mcp`](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
 - [`Agent`](docs/subagents.md) — `/agents`, FleetView, and specialist lanes
 - [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` contract
 - [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
+- [xAI context compaction](docs/context.md) — server-side `/responses/compact` plus opaque-item injection on later Grok Responses requests
+- [Notify](docs/notify.md) — native macOS completion notifications (`/notify-setup`, `/notify-test`) with Ghostty/tmux click-to-focus
 
 ## Skills
 
@@ -70,7 +72,7 @@ npm test
 npm run pack:check
 ```
 
-See [`docs/development.md`](docs/development.md) for module conventions. The VCC suite needs Bun. Networked advisor E2E is opt-in: `ADVISOR_E2E=1 npm run test:advisor`.
+See [`docs/development.md`](docs/development.md) for module conventions. Networked advisor E2E is opt-in: `ADVISOR_E2E=1 npm run test:advisor`.
 
 ## Provenance
 

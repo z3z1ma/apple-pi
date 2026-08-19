@@ -211,9 +211,12 @@ export function formatAdvisorSeed(opts: {
 export function buildAdvisorSeed(opts: {
 	entries?: readonly unknown[];
 	rollingAdvice?: readonly SettledAdvice[];
+	/** Default true. Compact reseeds omit the fold; the parent packet carries it. */
+	includeFold?: boolean;
 }): string {
+	const includeFold = opts.includeFold !== false;
 	return formatAdvisorSeed({
-		fold: opts.entries ? formatCuratorFold(opts.entries) : "",
+		fold: includeFold && opts.entries ? formatCuratorFold(opts.entries) : "",
 		userMessages: opts.entries ? formatRecentUserMessages(collectRecentUserRequests(opts.entries)) : "",
 		trajectory: opts.entries ? formatRecentTrajectory(opts.entries) : "",
 		rollingAdvice: formatRollingAdvice(opts.rollingAdvice ?? []),

@@ -16,26 +16,27 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
+import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
+import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
+import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
 import { buildFullParentContext, extractText } from "./context.js";
 import { DEFAULT_AGENTS } from "./default-agents.js";
 import { detectEnv } from "./env.js";
+import { resolveAgentModel } from "./model-routing.js";
 import {
 	createNestedSubagentTools,
 	getMaxSubagentDepth,
 	type NestedAgentManager,
 	SUBAGENT_TOOL_NAMES,
 } from "./nested-tools.js";
-import { resolveAgentModel } from "./model-routing.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
-import { preloadSkills } from "./skill-loader.js";
 import type { ManagedAgentToolPolicy } from "./service.js";
+import { preloadSkills } from "./skill-loader.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
-import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
-import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
-import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
-import { VCC_EXTENSION_PATH } from "../../../extensions/vcc.js";
+
 export { getAgentConversation } from "./conversation.js";
 
 /**
@@ -56,12 +57,12 @@ export { SUBAGENT_TOOL_NAMES };
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
 
-/** Child sessions: no discovery; explicit `-e` ledger, VCC, MCP, and optional advisor. */
+/** Child sessions: no discovery; explicit `-e` ledger, session_search, MCP, and optional advisor. */
 export function childSessionExtensions(advisor = false): {
 	noExtensions: true;
 	additionalExtensionPaths: string[];
 } {
-	const additionalExtensionPaths = [LEDGER_EXTENSION_PATH, VCC_EXTENSION_PATH, MCP_EXTENSION_PATH];
+	const additionalExtensionPaths = [LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH];
 	if (advisor) additionalExtensionPaths.push(ADVISOR_EXTENSION_PATH);
 	return { noExtensions: true, additionalExtensionPaths };
 }
@@ -86,8 +87,7 @@ export function setDefaultMaxTurns(n: number | undefined): void {
 
 /**
  * Project default for `persist_session`. Persisted Pi session JSONL is the
- * authoritative subagent transcript and carries apple-pi VCC compaction
- * across resumed turns. Per-agent frontmatter may opt out.
+ * authoritative subagent transcript. Per-agent frontmatter may opt out.
  */
 let persistAgentSessions = true;
 
@@ -483,8 +483,8 @@ export async function runAgent(
 	const settingsManager = SettingsManager.create(configCwd, agentDir);
 	const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
 	const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
-	// Frontmatter wins; top-level sessions persist by default so VCC can
-	// compact against Pi's authoritative child-session JSONL.
+	// Frontmatter wins; top-level sessions persist by default so child
+	// transcripts remain searchable via session_search.
 	// Nested children stay in memory unless explicitly persisted by their own
 	// definition: their result is already recorded in the owning agent session.
 	const persistSession = agentConfig?.persistSession ?? (options.nested ? false : persistAgentSessions);
@@ -527,15 +527,18 @@ export async function runAgent(
 	session.setSessionName(options.agentId ? `${baseSessionName}#${options.agentId.slice(0, 8)}` : baseSessionName);
 
 	// Bind the explicit `-e` extensions so session_start fires. Registry scope
-	// is `excludeTools` from session construction.
-	await session.bindExtensions({
-		onError: (err) => {
-			options.onToolActivity?.({
-				type: "end",
-				toolName: `extension-error:${err.extensionPath}`,
-			});
-		},
-	});
+	// is `excludeTools` from session construction. Stay in child-session ALS so
+	// a leaked context.ts factory cannot register observational memory.
+	await runInChildSessionContext(() =>
+		session.bindExtensions({
+			onError: (err) => {
+				options.onToolActivity?.({
+					type: "end",
+					toolName: `extension-error:${err.extensionPath}`,
+				});
+			},
+		}),
+	);
 
 	// Pi activates a small built-in default at turn 1. Promote every registered
 	// tool that excludeTools did not deny, including ledger_add / ledger_close.

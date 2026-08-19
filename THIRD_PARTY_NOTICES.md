@@ -26,7 +26,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Source: <https://github.com/monotykamary/pi-vcc>
 - Imported commit: `664148ec91eb2b160164bb91bb1ebf926c1ad519`
 - Commit author: Tom X Nguyen
-- Local path: `components/vcc/`; integration in `extensions/context.ts`
+- Local path: `components/session-search/` (recall only); integration in `extensions/session-search.ts` and `extensions/context.ts`
 - License: MIT, as declared by the source README. The imported commit did not contain a standalone license file or separate copyright notice.
 
 ## pi-observational-memory
@@ -47,6 +47,17 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - License: MIT
 - Original notice: `Copyright (c) 2026 tintinweb`
 - Adopted code was substantially reduced and integrated. Retained responsibilities include Markdown agent discovery, Pi AgentSession execution, foreground/background management, nested delegation, result/steering tools, usage and compaction tracking, widgets, FleetView, and the conversation viewer. Worktree isolation, scheduling, prompt mentions, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy were removed.
+
+## pi-notify → Notify
+
+- Source: <https://github.com/Async23/pi-packages/tree/main/packages/notify>
+- Imported commit: `b3f7f44e21aaf9d20ce9a7d5f96a5c8781fd5127`
+- Upstream version at import: `0.1.1`
+- Author named by the source package: Async23
+- Local paths: `components/notify/`, `extensions/notify.ts`
+- License: MIT
+- Original notice: `Copyright (c) 2026 Async23`
+- The extension code, scripts, and assets were adopted largely as-is. All Chinese user-facing strings were translated to English (notification bodies, subtitles, error/cancellation summaries, and the generic-heading skip list), the `agent_settled` delivery path was gated to macOS, and the test suite was ported from `node:test` to Vitest.
 
 ## pi-mcp-adapter (runtime dependency)
 

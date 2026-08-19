@@ -1,0 +1,54 @@
+# Notify
+
+Native macOS completion notifications for Pi, with Ghostty/tmux click-to-focus.
+
+The extension is registered from `extensions/notify.ts` over `components/notify/`. It is macOS-only: the `agent_settled` delivery path is gated to `darwin`, and `/notify-setup` refuses to run elsewhere.
+
+## Behavior
+
+- Notifies on `agent_settled`, after retries, compaction retries, and queued follow-ups finish. One notification per Pi session (keyed by session and leaf), not per concurrent session.
+- Title shows tmux coordinates plus the Pi session or project name; the subtitle is the latest user prompt; the body is the final outcome.
+- Terminal provider errors and cancelled tasks are reported explicitly — including `cyber_policy` blocks — instead of being shown as successful completion.
+- Plays the macOS `Glass` sound by default.
+- Clicking the notification activates Ghostty and selects the original tmux pane.
+- Logs delivery metadata only (timestamp, delivery method, session ID, tmux coordinates) — never prompt or answer contents.
+
+## Requirements
+
+- macOS.
+- [`terminal-notifier`](https://github.com/julienXX/terminal-notifier): `brew install terminal-notifier`.
+
+Ghostty and tmux are optional; notifications still work without them, but click-to-focus requires both.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `/notify-setup` | Install or refresh the dedicated macOS `Pi Notifier.app` sender (created at `~/Applications/Pi Notifier.app`) so notifications appear under a Pi identity and icon in Notification settings. |
+| `/notify-test` | Send a test notification and verify tmux click-to-focus. |
+
+The package works immediately through Homebrew's `terminal-notifier` and its bundled Pi icon; the dedicated sender app is optional. macOS may ask for notification permission the first time it delivers.
+
+## Configuration
+
+Optional environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `PI_NOTIFY_DISABLED=1` | Disable notifications. |
+| `PI_NOTIFY_SOUND=name` | Change the macOS sound; defaults to `Glass`. |
+| `PI_NOTIFY_APP=/path/app` | Override the notifier app path. |
+| `PI_NOTIFY_FOCUS_SCRIPT=/path/script` | Override the tmux focus script. |
+| `PI_NOTIFY_LOG_PATH=/path/log` | Override the metadata log path (default `~/.pi/agent/logs/pi-notify.log`). |
+| `PI_NOTIFY_DISABLE_LOG=1` | Disable metadata logging. |
+
+## Fallback order
+
+```text
+Pi Notifier.app
+→ Homebrew terminal-notifier
+→ Ghostty AppleScript
+→ macOS AppleScript
+```
+
+The AppleScript fallbacks can display notifications but cannot guarantee exact tmux pane selection when clicked.

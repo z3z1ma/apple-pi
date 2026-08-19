@@ -39,7 +39,6 @@ function expectActiveTools(actual: string[], expected: string[]): void {
 afterEach(() => {
 	for (const provider of fauxProviders.splice(0)) provider.unregister();
 	for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
-	delete process.env.PI_VCC_CONFIG_PATH;
 });
 
 afterAll(() => {
@@ -880,10 +879,10 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("persists a child session with VCC and without observational memory", async () => {
+	it("persists a child session with session_search and without observational memory", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
-		process.env.PI_VCC_CONFIG_PATH = join(cwd, "vcc.json");
+
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-context", contextWindow: 200_000 }] });
 		fauxProviders.push(faux);
 		faux.setResponses([() => fauxAssistantMessage([fauxText("MEMORY-READY")])]);

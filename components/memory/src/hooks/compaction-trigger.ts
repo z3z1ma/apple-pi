@@ -10,10 +10,10 @@ function branchEndsWithCompaction(entries: Entry[] | undefined): boolean {
 }
 
 export type CompactionTriggerOptions = {
-	/** True while VCC (or another owner) has already called ctx.compact() and session_compact has not fired. */
+	/** True while a host owner has already called ctx.compact() and session_compact has not fired. */
 	hostCompactionPending?: () => boolean;
 	/**
-	 * True when VCC can evaluate a usage-vs-window waterline this turn.
+	 * True when a host owner can evaluate a usage-vs-window waterline this turn.
 	 * Memory then leaves `ctx.compact()` to that owner and keeps the
 	 * source-token gate only as a fallback.
 	 */

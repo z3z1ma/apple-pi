@@ -10,7 +10,6 @@ import {
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
 const temp = mkdtempSync(join(tmpdir(), "apple-pi-load-"));
-process.env.PI_VCC_CONFIG_PATH = join(temp, "vcc.json");
 process.env.PI_CODING_AGENT_DIR = temp;
 try {
 	const eventBus = createEventBus();
@@ -24,13 +23,15 @@ try {
 			"extensions/subagents.ts",
 			"extensions/ledger.ts",
 			"extensions/xai-hosted-tools.ts",
+			"extensions/xai-context-compaction.ts",
+			"extensions/notify.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 8);
+	assert.equal(result.extensions.length, 10);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -42,6 +43,15 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
+				extension.path.includes("xai-context-compaction") &&
+				(extension.handlers.get("session_before_compact")?.length ?? 0) > 0 &&
+				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
+		),
+		"missing xAI context compaction hooks",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
 				extension.path.endsWith("ledger.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
 		),
 		"missing ledger system-prompt injection",
@@ -49,7 +59,16 @@ try {
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
-	for (const command of ["advisor", "pi-vcc", "pi-vcc-recall", "om:status", "om:view", "mcp", "mcp-auth", "agents"]) {
+	for (const command of [
+		"advisor",
+		"om:status",
+		"om:view",
+		"mcp",
+		"mcp-auth",
+		"agents",
+		"notify-setup",
+		"notify-test",
+	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
 	for (const obsolete of ["ralph", "harness", "ledger"]) {
@@ -193,7 +212,6 @@ try {
 	assert(docs.readme.includes("/skill:pi-ralph"), "README omits /skill:pi-ralph");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
-	delete process.env.PI_VCC_CONFIG_PATH;
 	delete process.env.PI_CODING_AGENT_DIR;
 	rmSync(temp, { recursive: true, force: true });
 }

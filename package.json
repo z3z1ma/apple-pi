@@ -22,10 +22,15 @@
     "components/advisor/src/",
     "components/ask-user-question/src/",
     "components/shared/src/",
-    "components/vcc/src/",
+    "components/session-search/src/",
     "components/memory/src/",
     "components/subagents/src/",
     "components/xai-hosted-tools/src/",
+    "components/xai-context-compaction/src/",
+    "components/notify/src/",
+    "components/notify/assets/",
+    "components/notify/scripts/",
+    "components/notify/LICENSE",
     "extensions/",
     "skills/",
     "docs/",
@@ -42,7 +47,9 @@
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",
       "./extensions/ledger.ts",
-      "./extensions/xai-hosted-tools.ts"
+      "./extensions/xai-hosted-tools.ts",
+      "./extensions/xai-context-compaction.ts",
+      "./extensions/notify.ts"
     ],
     "skills": [
       "./skills"
@@ -54,9 +61,8 @@
     "lint": "biome lint components extensions tests",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:unit && npm run test:vcc && npm run test:advisor && npm run test:loader",
+    "test": "npm run test:unit && npm run test:advisor && npm run test:loader",
     "test:unit": "vitest run",
-    "test:vcc": "bun test components/vcc/tests",
     "test:advisor": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/advisor/tests/advisor.test.mjs",
     "test:loader": "node tests/package-load.mjs",
     "pack:check": "npm pack --dry-run"

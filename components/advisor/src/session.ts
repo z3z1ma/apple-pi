@@ -2,6 +2,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type {
 	AgentSession,
 	ExtensionAPI,
+	ExtensionContext,
 	SessionBeforeCompactEvent,
 	ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -13,6 +14,8 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
+import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
+import { registerAdvisorParentMemoryPacket } from "./parent-memory.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { ADVISOR_RESEED_ENTRY_ID, buildAdvisorSeed, type SettledAdvice } from "./seed.js";
 
@@ -24,15 +27,23 @@ export type AdvisorSeedSource = {
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const ADVISOR_SESSION_TOOLS = ["advise", "read", "grep", "find", "memory_source", "session_search"] as const;
 
-export function advisorCompactResult(event: SessionBeforeCompactEvent, source: AdvisorSeedSource) {
+export async function advisorCompactResult(
+	event: SessionBeforeCompactEvent,
+	source: AdvisorSeedSource,
+	ctx?: ExtensionContext,
+) {
+	const xai = ctx ? await compactWithXai(event, ctx) : undefined;
+	const xaiItem = xai?.compaction?.details?.xaiCompaction;
 	return {
 		compaction: {
 			summary: buildAdvisorSeed({
 				entries: source.entries(),
 				rollingAdvice: source.rollingAdvice(),
+				includeFold: false,
 			}),
 			firstKeptEntryId: ADVISOR_RESEED_ENTRY_ID,
 			tokensBefore: event.preparation.tokensBefore,
+			...(xaiItem ? { details: { xaiCompaction: xaiItem } } : {}),
 		},
 	};
 }
@@ -67,7 +78,13 @@ export async function createAdvisorSession(opts: {
 				name: "advisor-reseed",
 				hidden: true,
 				factory: (pi: ExtensionAPI) => {
-					pi.on("session_before_compact", (event) => advisorCompactResult(event, opts.seedSource));
+					// Replay + reseed only. Never register the observational-memory
+					// Runtime, triggers, commands, or memory_source here — those stay
+					// on the primary session. The parent packet is a read of that
+					// ledger, not a second OM pipeline.
+					registerXaiCompactionReplayHooks(pi);
+					pi.on("session_before_compact", (event, ctx) => advisorCompactResult(event, opts.seedSource, ctx));
+					registerAdvisorParentMemoryPacket(pi, opts.primarySessionManager);
 				},
 			},
 		],

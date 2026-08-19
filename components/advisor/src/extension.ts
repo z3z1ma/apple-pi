@@ -346,6 +346,11 @@ export {
 	formatTurnDelta,
 	formatUserBash,
 } from "./formatting.js";
+export {
+	buildParentMemoryPacket,
+	insertParentMemoryAfterCompaction,
+	registerAdvisorParentMemoryPacket,
+} from "./parent-memory.js";
 export { bindPrimaryRecallTools } from "./recall.js";
 export {
 	ADVISOR_RESEED_ENTRY_ID,

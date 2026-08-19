@@ -173,7 +173,7 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 
 ## Agent guidance
 
-The ledger extension appends the workbench contract on `before_agent_start`. Interactive children and `pi_exec` workers load that same file via `--no-extensions` plus `-e`; they do not discover other package extensions, and they do not load `pi_exec` or the subagent manager. Children also load VCC and MCP; workers load VCC. The Advisor does not receive the contract.
+The ledger extension appends the workbench contract on `before_agent_start`. Interactive children and `pi_exec` workers load that same file via `--no-extensions` plus `-e`; they do not discover other package extensions, and they do not load `pi_exec` or the subagent manager. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract.
 
 `ledger_add` creates `.ledger/INDEX.md` when absent, a timestamped task directory, structural `task.md`, every standard supporting directory, and one live index row with title and description. A new task begins with explicit shaping placeholders and a blocker; it is not execution-ready.
 

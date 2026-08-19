@@ -15,8 +15,8 @@ import { resolveAgentModel } from "../components/subagents/src/model-routing.js"
 import type { AgentConfig } from "../components/subagents/src/types.js";
 
 import { LEDGER_EXTENSION_PATH } from "./ledger.js";
-import { VCC_EXTENSION_PATH } from "./vcc.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
+import { SESSION_SEARCH_EXTENSION_PATH } from "./session-search.js";
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 
@@ -29,8 +29,7 @@ export const CONTEXT_GUIDANCE =
 export const OUTPUT_SCHEMA_GUIDANCE = `You must finish by calling ${PI_EXEC_RETURN_TOOL} with arguments that match its parameter schema. That call is this worker's return value. Do not put the result in assistant text.`;
 
 export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./runtime-worker-return.ts", import.meta.url));
-export { LEDGER_EXTENSION_PATH };
-export { VCC_EXTENSION_PATH };
+export { LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH };
 
 export interface AgentRequest {
 	task: string;
@@ -311,7 +310,7 @@ export function buildAgentCliArgs(
 		"--extension",
 		LEDGER_EXTENSION_PATH,
 		"--extension",
-		VCC_EXTENSION_PATH,
+		SESSION_SEARCH_EXTENSION_PATH,
 	];
 	if (options.extensionPath) args.push("--extension", options.extensionPath);
 	if (request.name) args.push("--name", request.name);

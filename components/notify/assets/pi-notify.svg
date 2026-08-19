@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Pi Notifier icon">
+  <title>Pi Notifier icon</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17151f"/>
+      <stop offset="0.55" stop-color="#30285f"/>
+      <stop offset="1" stop-color="#7567f8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.24" cy="0.16" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.23"/>
+      <stop offset="0.42" stop-color="#a99eff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#090811" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="220" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="64" y="64" width="896" height="896" rx="220" fill="url(#glow)"/>
+  <rect x="82" y="82" width="860" height="860" rx="202" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="4"/>
+  <text x="512" y="704" text-anchor="middle" fill="#f8f7ff"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="650" font-weight="500" letter-spacing="-22">π</text>
+</svg>

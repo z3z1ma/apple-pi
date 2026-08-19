@@ -1,6 +1,6 @@
 Status: active
 Created: 2026-08-18
-Updated: 2026-08-18
+Updated: 2026-08-19
 
 # Design advisor context framing
 
@@ -177,6 +177,10 @@ and primary-bound `memory_source` / `session_search`.
   dump, and live user-bash; skip critique-preservation proof. Implemented `call:<id>`
   receipts + session_search lookup, last-8 trajectory in the seed, omitted successful
   write content, and `!bash` via appendMessage observer.
+- 2026-08-19: Advisor compact still reseeds in one handler. On xAI Responses it also
+  calls `/responses/compact` and stores the opaque item; replay/4xx hooks live in the
+  same factory. Parent OM packet is inserted after the compaction summary; fold left
+  the reseed text so it is not duplicated.
 
 ## Blockers
 

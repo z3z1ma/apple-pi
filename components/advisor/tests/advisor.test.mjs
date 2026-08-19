@@ -779,8 +779,8 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.match(seeded, /User → implementing agent/);
 });
 
-test("compact hook reseeds and keeps no prior advisor deltas", () => {
-	const result = A.advisorCompactResult(
+test("compact hook reseeds and keeps no prior advisor deltas", async () => {
+	const result = await A.advisorCompactResult(
 		{ preparation: { tokensBefore: 12000 } },
 		{
 			entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
@@ -792,8 +792,8 @@ test("compact hook reseeds and keeps no prior advisor deltas", () => {
 	assert.match(result.compaction.summary, /ship it/);
 });
 
-test("compact hook includes recent trajectory in the reseed", () => {
-	const result = A.advisorCompactResult(
+test("compact hook includes recent trajectory in the reseed", async () => {
+	const result = await A.advisorCompactResult(
 		{ preparation: { tokensBefore: 8000 } },
 		{
 			entries: () => [
@@ -811,6 +811,128 @@ test("compact hook includes recent trajectory in the reseed", () => {
 	);
 	assert.match(result.compaction.summary, /## Recent trajectory/);
 	assert.match(result.compaction.summary, /keep this skeleton/);
+});
+
+test("compact hook keeps the reseed and stores an xAI item when compact succeeds", async () => {
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async () => ({
+		ok: true,
+		json: async () => ({ output: [{ type: "compaction", id: "cmp_adv", encrypted_content: "enc" }] }),
+		text: async () => "",
+	});
+	try {
+		const result = await A.advisorCompactResult(
+			{
+				preparation: {
+					tokensBefore: 9000,
+					messagesToSummarize: [{ role: "user", content: [{ type: "text", text: "old review" }] }],
+					turnPrefixMessages: [],
+				},
+				branchEntries: [],
+			},
+			{
+				entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
+				rollingAdvice: () => [],
+			},
+			{
+				model: { provider: "xai", api: "openai-responses", id: "grok-4.6", baseUrl: "https://api.x.ai/v1" },
+				modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k" }) },
+			},
+		);
+		assert.equal(result.compaction.firstKeptEntryId, A.ADVISOR_RESEED_ENTRY_ID);
+		assert.match(result.compaction.summary, /ship it/);
+		assert.ok(!result.compaction.summary.includes("[xAI Server-Side Compaction"));
+		assert.deepEqual(result.compaction.details.xaiCompaction, {
+			type: "compaction",
+			id: "cmp_adv",
+			encrypted_content: "enc",
+		});
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
+test("compact hook omits the parent fold from the reseed summary", async () => {
+	const result = await A.advisorCompactResult(
+		{ preparation: { tokensBefore: 1000 } },
+		{
+			entries: () => [
+				{ id: "m1", type: "message", message: { role: "user", content: "ship it" } },
+				{
+					id: "r1",
+					type: "custom",
+					customType: "om.reflections.recorded",
+					data: {
+						reflections: [
+							{
+								id: "abc123abc123",
+								content: "Do not reimplement auth",
+								supportingObservationIds: ["m1"],
+								tokenCount: 4,
+							},
+						],
+						coversUpToId: "m1",
+					},
+				},
+			],
+			rollingAdvice: () => [],
+		},
+	);
+	assert.match(result.compaction.summary, /ship it/);
+	assert.ok(!result.compaction.summary.includes("Do not reimplement auth"));
+	assert.ok(!result.compaction.summary.includes("## Current law"));
+});
+
+test("parent memory packet sits after the compaction summary and is idempotent", () => {
+	const packet = A.buildParentMemoryPacket([
+		{ id: "m1", type: "message", message: { role: "user", content: "Build it" } },
+		{
+			id: "r1",
+			type: "custom",
+			customType: "om.reflections.recorded",
+			data: {
+				reflections: [
+					{
+						id: "abc123abc123",
+						content: "Do not reimplement auth",
+						supportingObservationIds: ["m1"],
+						tokenCount: 4,
+					},
+				],
+				coversUpToId: "m1",
+			},
+		},
+	]);
+	assert.ok(packet);
+	assert.match(packet.content[0].text, /Do not reimplement auth/);
+	assert.match(packet.content[0].text, /memory_source/);
+	assert.match(packet.content[0].text, /not this advisor conversation/);
+	assert.ok(!packet.content[0].text.includes("this session's current working memory"));
+
+	const first = A.insertParentMemoryAfterCompaction(
+		[
+			{ role: "compactionSummary", summary: "reseed" },
+			{ role: "user", content: "next review" },
+		],
+		packet,
+	);
+	assert.equal(first.messages[0].role, "compactionSummary");
+	assert.equal(first.messages[1].customType, "om.memory.packet");
+	assert.equal(first.messages[2].role, "user");
+
+	assert.equal(A.insertParentMemoryAfterCompaction(first.messages, packet), undefined);
+	assert.equal(A.insertParentMemoryAfterCompaction([{ role: "user", content: "no compact yet" }], packet), undefined);
+});
+
+test("advisor parent-memory hook does not register the OM pipeline", () => {
+	const events = [];
+	const pi = {
+		on(event) {
+			events.push(event);
+		},
+	};
+	A.registerAdvisorParentMemoryPacket(pi, { getBranch: () => [] });
+	assert.deepEqual(events, ["context"]);
 });
 
 test("runtime: a thrown first prompt keeps the seed for the retry", async () => {
