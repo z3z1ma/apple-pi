@@ -13,4 +13,4 @@
 
 - `.ledger/202608181322-coalesce-advisor-reviews/task.md` — Coalesce advisor reviews without dropping deltas — The advisor drains immediately on every turn_end (one per assistant step), re-sending its whole accumulated history each time; defer the drain to batch low-signal steps while still pushing every delta, since a skipped delta is permanently absent from advisor context.
 
-- `.ledger/202608181322-design-advisor-context-framing/task.md` — Design advisor context framing — Design (not yet implement) the advisor's context strategy: preserve user intent across a turn's kickoff plus all steering messages, carry rolled summaries and recent nudges, and prefer a framed anchored window over a sliding tail so cache reads survive until the next frame boundary.
+- `.ledger/202608181322-design-advisor-context-framing/task.md` — Design advisor context framing — Advisor context is a regular session of lean trajectory receipts whose compact hook reseeds from the live curator fold, recent user messages, and rolling settled advice; recall uses primary-bound memory_source and session_search.

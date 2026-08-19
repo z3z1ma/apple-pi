@@ -1,4 +1,4 @@
-Status: open
+Status: active
 Created: 2026-08-18
 Updated: 2026-08-18
 
@@ -47,13 +47,15 @@ absent from everything it reasons about afterwards.
 
 ## Work Items
 
-- [ ] WI-001: Define "low-signal step" from delta content in a way that is explainable to a
+- [x] WI-001: Define "low-signal step" from delta content in a way that is explainable to a
       maintainer and does not encode a tool allow-list that silently rots.
-- [ ] WI-002: Separate queueing from drain scheduling at `push()`, preserving order.
-- [ ] WI-003: Guarantee drain-by-boundary: terminal turn, held advice present, backlog size, or
+      Defined in `specs/advisor-review-coalescing.md`: no user text, no successful diff, no
+      error result, no user bash, and no held high-severity note.
+- [x] WI-002: Separate queueing from drain scheduling at `push()`, preserving order.
+- [x] WI-003: Guarantee drain-by-boundary: terminal turn, held advice present, backlog size, or
       elapsed time, whichever comes first.
-- [ ] WI-004: Verify interaction with the existing catch-up wait and streak/timeout escalation.
-- [ ] WI-005: Tests for ordering, drain-by-boundary, terminal flush, and the shutdown and
+- [x] WI-004: Verify interaction with the existing catch-up wait and streak/timeout escalation.
+- [x] WI-005: Tests for ordering, drain-by-boundary, terminal flush, and the shutdown and
       reprime paths.
 
 ## References
@@ -66,8 +68,10 @@ absent from everything it reasons about afterwards.
   concern trigger
 - `node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js:455-464` — `turn_end`
   is per assistant step
-- `.ledger/202608181322-account-sidecar-model-usage/task.md` — evidence base; AC-003 needs its
-  instrumentation to be measurable rather than asserted
+- `specs/advisor-review-coalescing.md`
+- `.ledger/202608181322-design-advisor-context-framing/specs/advisor-context-frame.md`
+- `.ledger/history/202608181322-account-sidecar-model-usage/task.md` — sidecar usage has landed;
+  AC-003 is evidenced after implementation, not before
 
 ## Assumptions
 
@@ -80,11 +84,20 @@ absent from everything it reasons about afterwards.
 
 - 2026-08-18: Created. Measured ~87% of reviews produce no advice, but that is designed
   behaviour rather than waste, which is why this task coalesces rather than filters.
+- 2026-08-18: Joint design session started with the framing task. Scheduling and context
+  structure will be specified together so implementation can land as one change.
+- 2026-08-18: Specified drain-versus-push, name-agnostic low-signal, force-drain on terminal and
+  held high-priority, and the idle/waiter coupling so deferred pending cannot stall catch-up
+  for 120s. Implementation work items WI-002 through WI-005 remain open.
+- 2026-08-18: Implemented. `push()` only queues; drain starts on terminal, held high-severity,
+  non-low-signal, backlog 8, or 15s. User text is taken from primary `message_end`, not `input`,
+  so queued follow-ups do not force drain. `waitUntilSettled` treats intentional deferral as
+  settled. `onSettled` fires after a completed review even if more low-signal work remains.
 
 ## Blockers
 
-AC-003 cannot be evidenced until `.ledger/202608181322-account-sidecar-model-usage/task.md`
-lands. Either sequence this after it, or accept a weaker structural proof and say so explicitly.
+None. AC-003 remains an implementation-evidence criterion (sidecar counts), not a start blocker.
+Framing spec is active and this task may be implemented with it.
 
 ## Evidence
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expandEntryFile, parseDrillDown } from "../src/core/drill-down.js";
+import { expandEntryFile, expandToolCall, parseCallQuery, parseDrillDown } from "../src/core/drill-down.js";
 import { getTouchedFiles } from "../src/core/search-entries.js";
 import { registerRecallTool } from "../src/tools/recall.js";
 
@@ -83,6 +83,43 @@ describe("VCC file recall", () => {
 		const nestedPayload = expandEntryFile(rendered, [writeMessage, nested], parseDrillDown("#9:auth.ts")!);
 		expect(nestedPayload).toContain("old");
 		expect(nestedPayload).toContain("new");
+	});
+
+	it("resolves call:<id> to the persisted tool-result body", async () => {
+		expect(parseCallQuery("call: read-1")).toBe("read-1");
+		expect(parseCallQuery("#0:src/auth.ts")).toBeUndefined();
+		const readResult = {
+			role: "toolResult",
+			toolCallId: "read-1",
+			toolName: "read",
+			content: [{ type: "text", text: "SECRET_LINE\nsecond" }],
+			isError: false,
+		} as any;
+		expect(expandToolCall([readResult], "read-1")).toContain("SECRET_LINE");
+		expect(expandToolCall([readResult], "missing")).toContain("No primary tool result");
+
+		const dir = mkdtempSync(join(tmpdir(), "vcc-call-recall-"));
+		const file = join(dir, "session.jsonl");
+		try {
+			writeFileSync(file, `${JSON.stringify({ type: "message", id: "m2", message: readResult })}\n`, "utf8");
+			let tool: any;
+			registerRecallTool({
+				registerTool(value: any) {
+					tool = value;
+				},
+			} as any);
+			const ctx = {
+				sessionManager: {
+					getSessionFile: () => file,
+					getBranch: () => [{ id: "m2" }],
+				},
+			};
+			const recovered = await tool.execute("call", { query: "call:read-1" }, undefined, undefined, ctx);
+			expect(recovered.content[0].text).toContain("SECRET_LINE");
+			expect(recovered.content[0].text).toContain("call: read-1");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	it("exposes mode:touched and #N:path through session_search", async () => {

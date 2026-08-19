@@ -52,21 +52,25 @@
  */
 
 import { Agent, type AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Model, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { AssistantMessage, Model, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
+import { buildAdvisorSeed, type SettledAdvice } from "./seed.js";
+import { createAdvisorSession } from "./session.js";
 
 // ===========================================================================
 // Advisor core — persistent second model that watches the main agent.
 //
 // Port of oh-my-pi's advisor onto upstream pi's public extension surface. The
 // advisor is a long-lived `Agent` with its own model + read-only tools
-// (read/grep/find) and one `advise` tool. It is fed the primary transcript one
+// (read/grep/find, primary-bound memory_source/session_search) and one `advise`
+// tool. It is fed the primary transcript one
 // turn-delta at a time and may inject concise advice back. It is NOT an
 // executor: it cannot edit, run commands, or change session state.
 // ===========================================================================
@@ -120,9 +124,80 @@ export function isTerminalTurn(message: { content?: ReadonlyArray<{ type: string
 	return !(message?.content ?? []).some((c) => c.type === "toolCall");
 }
 
+/** Drain after this many still-pending deltas, even if every one is low-signal. */
+export const ADVISOR_DRAIN_BACKLOG = 8;
+/** Deferral timer from the first still-pending low-signal delta. */
+export const ADVISOR_DEFER_MS = 15_000;
+
+const BASH_APPEND_WATCHED = Symbol("advisor.bashAppendWatched");
+
+/** Observe persisted `!bash` pages. Pi records them via appendMessage, not message_end. */
+export function bindBashAppendObserver(
+	sessionManager: { appendMessage?: (message: unknown) => unknown },
+	onBash: (message: {
+		role?: string;
+		command?: string;
+		output?: string;
+		exitCode?: number;
+		excludeFromContext?: boolean;
+	}) => void,
+): () => void {
+	const append = sessionManager.appendMessage;
+	if (typeof append !== "function") return () => {};
+	const tracked = sessionManager as { appendMessage?: (message: unknown) => unknown } & {
+		[BASH_APPEND_WATCHED]?: boolean;
+	};
+	if (tracked[BASH_APPEND_WATCHED]) return () => {};
+	const original = append.bind(sessionManager);
+	tracked.appendMessage = (message: unknown) => {
+		const result = original(message);
+		const bash = message as {
+			role?: string;
+			command?: string;
+			output?: string;
+			exitCode?: number;
+			excludeFromContext?: boolean;
+		};
+		if (bash?.role === "bashExecution" && !bash.excludeFromContext) onBash(bash);
+		return result;
+	};
+	tracked[BASH_APPEND_WATCHED] = true;
+	return () => {
+		tracked.appendMessage = original;
+		delete tracked[BASH_APPEND_WATCHED];
+	};
+}
+
+/**
+ * A turn is low-signal when it has no user text, no error, no mutation, and no
+ * command execution. Judge the raw event, not the formatted delta. High-severity
+ * holds are a drain trigger, not part of this classification.
+ */
+export function isLowSignalTurn(opts: {
+	hasUserText?: boolean;
+	toolResults?: ReadonlyArray<{
+		toolName?: string;
+		isError?: boolean;
+		details?: { diff?: unknown; exitCode?: unknown; exit_code?: unknown };
+	}>;
+}): boolean {
+	if (opts.hasUserText) return false;
+	for (const result of opts.toolResults ?? []) {
+		if (result.isError) return false;
+		const name = (result.toolName ?? "").toLowerCase();
+		if (name === "edit" || name === "write" || name === "bash") return false;
+		const diff = result.details?.diff;
+		if (typeof diff === "string" && diff.trim()) return false;
+		const code = result.details?.exitCode ?? result.details?.exit_code;
+		if (typeof code === "number") return false;
+	}
+	return true;
+}
+
 /** Structural slice of AdvisorRuntime the catch-up block needs (so it's testable). */
 export interface TurnBlockRuntime {
 	readonly hasHighPriority: boolean;
+	startDrain(): void;
 	takeAllAdvice(): AdvisorNote[];
 	requeueAdvice(note: string, severity?: AdvisorSeverity): void;
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed">;
@@ -160,6 +235,7 @@ export async function runTurnBlock(opts: {
 	const baseMs = opts.baseMs ?? 15_000;
 	const capMs = opts.capMs ?? 120_000;
 	if (!terminal && !runtime.hasHighPriority) return 0;
+	runtime.startDrain();
 
 	const timeoutMs = terminal ? capMs : nextBackoffMs(opts.consecutiveBlocks, baseMs, capMs);
 	// No "catching up"/"waiting up to Ns" notify here: a toast for an in-progress,
@@ -256,10 +332,10 @@ export class AdviseTool {
 
 import {
 	buildReviewMessages,
-	formatActiveSessionContext,
 	formatAdvisoryContent,
 	formatReconfirmPreamble,
 	formatTurnDelta,
+	formatUserBash,
 } from "./formatting.js";
 
 export {
@@ -268,7 +344,18 @@ export {
 	formatAdvisoryContent,
 	formatReconfirmPreamble,
 	formatTurnDelta,
+	formatUserBash,
 } from "./formatting.js";
+export { bindPrimaryRecallTools } from "./recall.js";
+export {
+	ADVISOR_RESEED_ENTRY_ID,
+	buildAdvisorSeed,
+	collectRecentUserRequests,
+	formatAdvisorSeed,
+	formatRecentTrajectory,
+	RECENT_TRAJECTORY_TURNS,
+} from "./seed.js";
+export { ADVISOR_SESSION_TOOLS, advisorCompactResult } from "./session.js";
 
 // ---- build the persistent advisor Agent ----
 
@@ -279,6 +366,7 @@ function buildAdvisorAgent(opts: {
 	systemPrompt: string;
 	modelRegistry: any;
 	adviseTool: AdviseTool;
+	primarySessionManager: PrimarySessionManager;
 }): Agent {
 	const readOnly = createReadOnlyTools(opts.cwd);
 	const thinkingLevel = opts.model.reasoning ? (opts.thinkingLevel as any) : ("off" as any);
@@ -287,7 +375,7 @@ function buildAdvisorAgent(opts: {
 			systemPrompt: opts.systemPrompt,
 			model: opts.model,
 			thinkingLevel,
-			tools: [opts.adviseTool, ...readOnly] as any,
+			tools: [opts.adviseTool, ...readOnly, ...bindPrimaryRecallTools(opts.primarySessionManager)] as any,
 		},
 		convertToLlm,
 		// Pi installs its provider-aware default stream function before loading
@@ -301,14 +389,19 @@ function buildAdvisorAgent(opts: {
 // ---- AdvisorRuntime — drives the advisor agent off primary turn deltas ----
 
 /**
- * Feeds the persistent advisor agent one delta per primary turn, serialized so
- * the agent is never prompted while already streaming. On context overflow (or
- * any history rewrite) the caller invokes `reset()`, which clears the advisor's
- * own context so the next delta replays fresh.
+ * Feeds the persistent advisor conversation one delta per primary turn.
+ * Identity change uses `reset()`. Overflow uses the advisor session compact hook.
  */
+type PendingDelta = { text: string; lowSignal: boolean };
+
 export class AdvisorRuntime {
-	#pending: string[] = [];
+	#pending: PendingDelta[] = [];
 	#primedContext: string | undefined;
+	#deferTimer: ReturnType<typeof setTimeout> | undefined;
+	#forceDrain = false;
+	deferMs = ADVISOR_DEFER_MS;
+	#rolling: SettledAdvice[] = [];
+	#needsSeed = true;
 	// The ONE pending-advice queue. Nits, concerns, and blockers all enter here;
 	// boundary policy decides which severities can leave and when.
 	#advice: AdvisorNote[] = [];
@@ -328,11 +421,10 @@ export class AdvisorRuntime {
 	#failures = 0;
 	#epoch = 0;
 	#agentResetPending = false;
-	// Lifetime input/output/cost from advisor turns already discarded by a
-	// self-compaction (#softReset). The agent's message list only holds the CURRENT
-	// (post-compaction) context, so without folding these in, /advisor status would
-	// undercount lifetime tokens/cost after each self-compaction. A full reset()
-	// (primary compaction / new session) zeroes them — that is a fresh accounting.
+	// Lifetime input/output/cost from advisor turns already discarded by compact.
+	// The agent's message list only holds the CURRENT context, so without folding
+	// these in, /advisor status would undercount after compact. A full reset()
+	// (identity change) zeroes them — that is a fresh accounting.
 	#cumInput = 0;
 	#cumOutput = 0;
 	#cumCost = 0;
@@ -341,62 +433,66 @@ export class AdvisorRuntime {
 	#usageSession?: { sessionId?: string };
 	disposed = false;
 
-	// Self-compact when the advisor's own context reaches this % of its window
-	// (proactively, before the next review prompt). Below 100 so a fresh replay of
-	// the next batch comfortably fits; the reactive stopReason=="length" path is the
-	// backstop if a single batch crosses it anyway.
-	private readonly compactAtPercent: number;
-
 	constructor(
 		private readonly agent: Agent,
 		private readonly adviseTool: AdviseTool,
 		private readonly retryDelayMs = 1000,
 		private readonly onDebug?: (...a: unknown[]) => void,
-		compactAtPercent = 80,
 		private readonly onSettled?: (outcome: "ok" | "failed") => void,
-	) {
-		this.compactAtPercent = compactAtPercent;
-	}
-
-	/**
-	 * Self-compaction: clear ONLY the advisor agent's own message history,
-	 * preserving pending deltas/advice, backlog, failure count, and settle waiters.
-	 * Safe because the agent transcript is a pure linear accumulation of independent
-	 * turn deltas — no essential cross-turn state lives there (held
-	 * notes ride the reconfirm preamble). Unlike reset(), this does NOT bump the
-	 * epoch (the in-flight review is ours, not orphaned) nor drop queued/held work.
-	 */
-	#softReset(): void {
-		// Preserve lifetime token/cost accounting before the about-to-be-cleared
-		// messages are gone (see #cumInput/#cumOutput/#cumCost).
-		for (const m of this.agent.state.messages) {
-			if (m.role === "assistant" && (m as AssistantMessage).usage) {
-				const u = (m as AssistantMessage).usage;
-				this.#cumInput += u.input ?? 0;
-				this.#cumOutput += u.output ?? 0;
-				this.#cumCost += u.cost?.total ?? 0;
-			}
-		}
-		try {
-			this.agent.abort();
-		} catch {}
-		try {
-			this.agent.reset();
-		} catch {}
-	}
+		private readonly session?: { prompt(text: string): Promise<void>; dispose?: () => void },
+		private readonly seed?: () => string,
+	) {}
 
 	/** Enable durable per-prompt usage records for this runtime. */
 	setUsageSession(sessionId?: string): void {
 		this.#usageSession = { sessionId };
 	}
 
-	async #promptAndRecord(messages: unknown, trigger: string): Promise<void> {
-		const before = this.agent.state.messages.length;
+	#reviewText(messages: UserMessage[], prefix?: string): string {
+		const chunks = messages.flatMap((message) =>
+			Array.isArray(message.content)
+				? message.content.filter((part) => part.type === "text").map((part) => part.text ?? "")
+				: [],
+		);
+		return [prefix, ...chunks].filter((chunk) => chunk?.trim()).join("\n\n");
+	}
+
+	#foldDiscardedUsage(prior: readonly { role?: string; usage?: AssistantMessage["usage"] }[]): void {
+		if (prior.every((message) => this.agent.state.messages.includes(message as never))) return;
+		for (const message of prior) {
+			if (message.role !== "assistant" || !message.usage) continue;
+			this.#cumInput += message.usage.input ?? 0;
+			this.#cumOutput += message.usage.output ?? 0;
+			this.#cumCost += message.usage.cost?.total ?? 0;
+		}
+	}
+
+	async #promptAndRecord(messages: UserMessage[], trigger: string): Promise<void> {
+		const prior = this.agent.state.messages.slice();
+		const before = prior.length;
 		const started = Date.now();
 		const model = this.agent.state.model as { provider?: string; id?: string } | undefined;
+		let seed: string | undefined;
+		if (this.#needsSeed) seed = this.seed?.();
 		try {
-			await this.agent.prompt(messages as never);
+			if (this.session) await this.session.prompt(this.#reviewText(messages, seed));
+			else {
+				const prefixed =
+					seed?.trim() && messages[0]
+						? [
+								{
+									role: "user" as const,
+									content: [{ type: "text" as const, text: seed }],
+									timestamp: Date.now(),
+								},
+								...messages,
+							]
+						: messages;
+				await this.agent.prompt(prefixed as never);
+			}
+			this.#needsSeed = false;
 		} finally {
+			this.#foldDiscardedUsage(prior);
 			this.#recordPromptUsage(before, Date.now() - started, trigger, model);
 		}
 	}
@@ -442,10 +538,19 @@ export class AdvisorRuntime {
 		return this.#backlog;
 	}
 
-	/** True when no batch is in flight and nothing is queued: the advisor has
-	 *  reviewed everything pushed so far ("settled"). */
+	/** True when no batch is in flight and nothing is queued. */
 	get idle(): boolean {
 		return !this.#busy && this.#pending.length === 0;
+	}
+
+	/** True while a review prompt is in flight. Deferred pending is not reviewing. */
+	get reviewing(): boolean {
+		return this.#busy;
+	}
+
+	/** Caught up for wait purposes: idle, or intentionally deferred. */
+	get #caughtUp(): boolean {
+		return !this.#busy && !this.#shouldDrain();
 	}
 
 	/** Whether the shared queue contains anything worth blocking a mid-run turn for. */
@@ -477,12 +582,24 @@ export class AdvisorRuntime {
 	takeNits(): AdvisorNote[] {
 		const nits = this.#advice.filter((n) => !isHighSeverity(n.severity));
 		this.#advice = this.#advice.filter((n) => isHighSeverity(n.severity));
+		this.#rememberSettled(nits, "delivered");
 		return nits;
 	}
 
 	/** Drain every queued survivor after successful boundary reconciliation. */
 	takeAllAdvice(): AdvisorNote[] {
-		return this.#advice.splice(0);
+		const notes = this.#advice.splice(0);
+		this.#rememberSettled(notes, "delivered");
+		return notes;
+	}
+
+	get rollingAdvice(): readonly SettledAdvice[] {
+		return this.#rolling;
+	}
+
+	#rememberSettled(notes: readonly AdvisorNote[], disposition: SettledAdvice["disposition"]): void {
+		for (const note of notes) this.#rolling.push({ ...note, disposition });
+		if (this.#rolling.length > 8) this.#rolling.splice(0, this.#rolling.length - 8);
 	}
 
 	/** Whether advice from the in-flight review is still valid (not orphaned by a
@@ -498,7 +615,7 @@ export class AdvisorRuntime {
 	 */
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed"> {
 		if (this.disposed) return Promise.resolve("aborted");
-		if (this.idle) return Promise.resolve(this.#lastOutcome === "failed" ? "failed" : "settled");
+		if (this.#caughtUp) return Promise.resolve(this.#lastOutcome === "failed" ? "failed" : "settled");
 		return new Promise((resolve) => {
 			let done = false;
 			let waiter: { settle: () => void; cancel: () => void };
@@ -514,10 +631,10 @@ export class AdvisorRuntime {
 			};
 			const onAbort = () => finish("aborted");
 			waiter = {
-				// Fired when the drain reaches idle (a review completed).
+				// Fired when the drain reaches a catch-up boundary (reviewed or deferred).
 				settle: () => {
 					if (this.disposed) finish("aborted");
-					else if (this.idle) finish(this.#lastOutcome === "failed" ? "failed" : "settled");
+					else if (this.#caughtUp) finish(this.#lastOutcome === "failed" ? "failed" : "settled");
 				},
 				// Fired by reset()/dispose(): resolve immediately rather than waiting for
 				// the in-flight prompt to unwind (which could take up to the timeout).
@@ -561,12 +678,54 @@ export class AdvisorRuntime {
 		return { input, output, cost, contextTokens, contextPercent };
 	}
 
-	/** Queue a rendered primary-turn delta (markdown string) for review. */
-	push(deltaText: string): void {
+	/** Queue a rendered primary-turn delta. Drain starts only when required. */
+	push(deltaText: string, opts?: { lowSignal?: boolean; terminal?: boolean }): void {
 		if (this.disposed || !deltaText.trim()) return;
-		this.#pending.push(deltaText);
+		this.#pending.push({ text: deltaText, lowSignal: opts?.lowSignal === true });
 		this.#backlog++;
-		void this.#drain();
+		if (opts?.terminal) this.#forceDrain = true;
+		this.#scheduleDrain();
+	}
+
+	/** Force-start drain when catch-up must wait on pending work. */
+	startDrain(): void {
+		if (this.disposed || !this.#pending.length) return;
+		this.#forceDrain = true;
+		this.#scheduleDrain();
+	}
+
+	#shouldDrain(): boolean {
+		if (!this.#pending.length) return false;
+		if (this.#forceDrain) return true;
+		if (this.hasHighPriority) return true;
+		if (this.#pending.some((item) => !item.lowSignal)) return true;
+		return this.#pending.length > ADVISOR_DRAIN_BACKLOG;
+	}
+
+	#scheduleDrain(): void {
+		if (this.disposed || this.#busy) return;
+		if (this.#shouldDrain()) {
+			this.#clearDeferTimer();
+			void this.#drain();
+			return;
+		}
+		this.#armDeferTimer();
+	}
+
+	#armDeferTimer(): void {
+		if (this.#deferTimer || !this.#pending.length) return;
+		this.#deferTimer = setTimeout(() => {
+			this.#deferTimer = undefined;
+			if (this.disposed || this.#busy || !this.#pending.length) return;
+			this.#forceDrain = true;
+			void this.#drain();
+		}, this.deferMs);
+	}
+
+	#clearDeferTimer(): void {
+		if (!this.#deferTimer) return;
+		clearTimeout(this.#deferTimer);
+		this.#deferTimer = undefined;
 	}
 
 	/** Re-prime after a history rewrite (compaction / session switch / fork). */
@@ -589,13 +748,16 @@ export class AdvisorRuntime {
 	reset(): void {
 		this.#epoch++;
 		this.#pending = [];
+		this.#forceDrain = false;
+		this.#clearDeferTimer();
 		this.#primedContext = undefined;
 		this.#advice = [];
+		this.#rolling = [];
+		this.#needsSeed = true;
 		this.#reraised = undefined;
 		this.#lastOutcome = undefined;
 		this.#backlog = 0;
 		this.#failures = 0;
-		// Full reset = fresh accounting (unlike #softReset, which preserves these).
 		this.#cumInput = this.#cumOutput = this.#cumCost = 0;
 		this.adviseTool.resetDelivered();
 		try {
@@ -609,23 +771,104 @@ export class AdvisorRuntime {
 		this.disposed = true;
 		this.#epoch++;
 		this.#pending = [];
+		this.#forceDrain = false;
+		this.#clearDeferTimer();
 		this.#primedContext = undefined;
 		this.#advice = [];
+		this.#rolling = [];
 		this.#reraised = undefined;
 		this.#lastOutcome = undefined;
 		this.#backlog = 0;
 		try {
 			this.agent.abort();
 		} catch {}
+		try {
+			this.session?.dispose?.();
+		} catch {}
 		this.#cancelWaiters();
 	}
 
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: queue reconciliation, retries, and self-compaction share one runtime state machine.
+	async #reviewBatch(batch: PendingDelta[]): Promise<"ok" | "failed" | "stale"> {
+		const texts = batch.map((item) => item.text);
+		const epoch = this.#epoch;
+		// Re-offer the shared advice queue without removing it. On success, entries
+		// not re-raised are resolved and pruned. Snapshot by value so a discarded
+		// overflow attempt can restore prior severities without resurrecting entries
+		// concurrently drained at a primary turn boundary.
+		const offered = this.#advice.map((n) => ({ ...n }));
+		const offeredKeys = new Set(offered.map((n) => dedupeKey(n.note)));
+		const preamble = formatReconfirmPreamble(offered);
+		const primedContext = this.#primedContext;
+		this.#reraised = new Set();
+		this.#reviewEpoch = epoch;
+		const messages = buildReviewMessages(preamble, texts, primedContext);
+		const promptChars = messages.reduce(
+			(n, m) =>
+				n +
+				(Array.isArray(m.content)
+					? m.content.reduce(
+							(k: number, b: { type: string; text?: string }) => k + (b.type === "text" ? (b.text?.length ?? 0) : 0),
+							0,
+						)
+					: 0),
+			0,
+		);
+		try {
+			this.onDebug?.("prompting advisor agent, delta chars=", promptChars, "held=", offered.length);
+			const trigger = this.#failures > 0 ? "turn_end_retry" : "turn_end";
+			await this.#promptAndRecord(messages, trigger);
+			if (this.#epoch !== epoch) {
+				this.#reraised = undefined;
+				if (this.#agentResetPending) this.#resetAgentWhenIdle();
+				return "stale";
+			}
+			const last = this.agent.state.messages[this.agent.state.messages.length - 1] as AssistantMessage;
+			if (last?.stopReason === "error" || last?.stopReason === "aborted" || last?.stopReason === "length") {
+				if (last.stopReason === "length") {
+					const before = new Map(offered.map((n) => [dedupeKey(n.note), n]));
+					this.#advice = this.#advice.flatMap((current) => {
+						const prior = before.get(dedupeKey(current.note));
+						return prior ? [{ ...current, severity: prior.severity }] : [];
+					});
+					this.#reraised = new Set();
+				}
+				this.onDebug?.("advisor review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
+				this.#reraised = undefined;
+				return "failed";
+			}
+			const dropped: AdvisorNote[] = [];
+			for (const key of offeredKeys) {
+				if (this.#reraised?.has(key)) continue;
+				const i = this.#advice.findIndex((n) => dedupeKey(n.note) === key);
+				if (i < 0) continue;
+				dropped.push(this.#advice[i]!);
+				this.#advice.splice(i, 1);
+			}
+			this.#rememberSettled(dropped, "dropped");
+			if (this.#primedContext === primedContext) this.#primedContext = undefined;
+			this.#lastOutcome = "ok";
+			this.#failures = 0;
+			this.#reraised = undefined;
+			this.onDebug?.("advisor turn done, stop=", last?.stopReason);
+			return "ok";
+		} catch (e) {
+			this.#reraised = undefined;
+			this.onDebug?.("advisor prompt threw", String(e));
+			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
+			// Held notes were never removed, so nothing to restore there.
+			return this.#epoch !== epoch ? "stale" : "failed";
+		}
+	}
+
 	async #drain(): Promise<void> {
 		if (this.#busy) return;
 		this.#busy = true;
+		this.#clearDeferTimer();
+		let reviewed = false;
 		try {
 			while (!this.disposed && this.#pending.length) {
+				if (!this.#shouldDrain()) break;
+				this.#forceDrain = false;
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
 				if (this.#agentResetPending) {
 					this.onDebug?.("advisor private context still busy after history rewrite; dropping queued review");
@@ -636,137 +879,37 @@ export class AdvisorRuntime {
 				}
 				const batch = this.#pending.splice(0);
 				const turns = batch.length;
+				reviewed = true;
 				// Rough gauge of how many turns are still unreviewed (status display only).
 				this.#backlog = Math.max(0, this.#backlog - turns);
-				const epoch = this.#epoch;
-				// Re-offer the shared advice queue without removing it. On success, entries
-				// not re-raised are resolved and pruned. Snapshot by value so a discarded
-				// overflow attempt can restore prior severities without resurrecting entries
-				// concurrently drained at a primary turn boundary.
-				const offered = this.#advice.map((n) => ({ ...n }));
-				const offeredKeys = new Set(offered.map((n) => dedupeKey(n.note)));
-				const preamble = formatReconfirmPreamble(offered);
-				const primedContext = this.#primedContext;
-				this.#reraised = new Set();
-				this.#reviewEpoch = epoch;
-				const messages = buildReviewMessages(preamble, batch, primedContext);
-				const promptChars = messages.reduce(
-					(n, m) =>
-						n +
-						(Array.isArray(m.content)
-							? m.content.reduce(
-									(k: number, b: { type: string; text?: string }) =>
-										k + (b.type === "text" ? (b.text?.length ?? 0) : 0),
-									0,
-								)
-							: 0),
-					0,
-				);
-				// A review "fails" either by throwing OR — the common case — by resolving
-				// with an assistant message whose stopReason is "error"/"aborted" (the agent
-				// loop records provider failures that way instead of throwing). A failed
-				// review must NOT prune queued advice (we'd drop it as if recanted).
-				let failed = false;
-				// PROACTIVE self-compaction: if our own context has crossed the budget,
-				// clear the agent history now so this batch replays into a fresh context
-				// (queued advice survives via the reconfirm preamble) instead of marching into
-				// an overflow. Skipped when already fresh (nothing to reclaim).
-				const pct = this.usage.contextPercent;
-				if (pct !== null && pct >= this.compactAtPercent && this.agent.state.messages.length > 0) {
-					this.onDebug?.("advisor self-compacting (proactive), ctx=", pct, "% >=", this.compactAtPercent, "%");
-					this.#softReset();
-				}
-				let stale = false;
-				try {
-					// Inner loop: at most ONE reactive self-compaction retry. If the
-					// advisor's own context overflows mid-review (stopReason "length"), clear
-					// its history and replay THIS batch into a fresh context instead of
-					// counting a failure and retrying 3x into the same wall. Loop-safe: a
-					// fresh replay that STILL overflows means the single batch genuinely
-					// doesn't fit, so it falls through to the failed handling below.
-					let last: AssistantMessage | undefined;
-					for (let attempt = 0; attempt < 2; attempt++) {
-						this.onDebug?.("prompting advisor agent, delta chars=", promptChars, "held=", offered.length);
-						const trigger = attempt > 0 ? "turn_end_replay" : this.#failures > 0 ? "turn_end_retry" : "turn_end";
-						await this.#promptAndRecord(messages, trigger);
-						if (this.#epoch !== epoch) {
-							stale = true;
-							break; // reset/dispose during the prompt; batch is stale
-						}
-						last = this.agent.state.messages[this.agent.state.messages.length - 1] as AssistantMessage;
-						if (last?.stopReason === "length" && attempt === 0) {
-							this.onDebug?.("advisor context overflow, self-compacting (reactive) and replaying batch fresh");
-							this.#softReset();
-							// Roll back attempt-only queue mutations by intersection. Concurrently
-							// drained entries stay gone; surviving pre-attempt entries regain severity.
-							const before = new Map(offered.map((n) => [dedupeKey(n.note), n]));
-							this.#advice = this.#advice.flatMap((current) => {
-								const prior = before.get(dedupeKey(current.note));
-								return prior ? [{ ...current, severity: prior.severity }] : [];
-							});
-							this.#reraised = new Set();
-							continue;
-						}
-						break;
-					}
-					if (stale) {
-						this.#reraised = undefined;
-						if (this.#agentResetPending) this.#resetAgentWhenIdle();
-						continue;
-					}
-					if (last?.stopReason === "error" || last?.stopReason === "aborted" || last?.stopReason === "length") {
-						// error/aborted = provider failure (recorded, not thrown); length =
-						// truncated review (a fresh replay still didn't fit) — in all three the
-						// advisor didn't finish, so don't prune queued advice on its accidental
-						// "silence".
-						this.onDebug?.("advisor review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
-						failed = true;
-					} else {
-						// Success: prune offered queue entries the advisor stayed silent on.
-						for (const key of offeredKeys) {
-							if (!this.#reraised?.has(key)) {
-								const i = this.#advice.findIndex((n) => dedupeKey(n.note) === key);
-								if (i >= 0) this.#advice.splice(i, 1);
-							}
-						}
-						if (this.#primedContext === primedContext) this.#primedContext = undefined;
-						this.#lastOutcome = "ok";
-						this.#failures = 0;
-						this.onDebug?.("advisor turn done, stop=", last?.stopReason);
-					}
-					this.#reraised = undefined;
-				} catch (e) {
-					this.#reraised = undefined;
-					this.onDebug?.("advisor prompt threw", String(e));
-					// A reset/dispose aborts the in-flight prompt; drop the stale batch.
-					// Held notes were never removed, so nothing to restore there.
-					if (this.#epoch !== epoch) continue;
-					failed = true;
-				}
-				if (failed) {
-					this.#failures++;
-					if (this.#failures >= 3) {
-						// Gave up reconfirming this batch. Mark failed so waitUntilSettled
-						// reports it (don't deliver held notes as if confirmed).
-						this.#failures = 0;
-						this.#lastOutcome = "failed";
-					} else {
-						this.#pending.unshift(...batch);
-						this.#backlog += turns;
-						await new Promise((r) => setTimeout(r, this.retryDelayMs));
-					}
+				const result = await this.#reviewBatch(batch);
+				if (result === "stale" || result === "ok") continue;
+				this.#failures++;
+				if (this.#failures >= 3) {
+					// Gave up reconfirming this batch. Mark failed so waitUntilSettled
+					// reports it (don't deliver held notes as if confirmed).
+					this.#failures = 0;
+					this.#lastOutcome = "failed";
+				} else {
+					this.#pending.unshift(...batch);
+					this.#backlog += turns;
+					this.#forceDrain = true;
+					await new Promise((r) => setTimeout(r, this.retryDelayMs));
 				}
 			}
 		} finally {
 			this.#busy = false;
-			if (this.idle) {
-				this.#notifySettled();
+			const restart = !this.disposed && this.#shouldDrain();
+			if (!restart && this.#pending.length) this.#armDeferTimer();
+			if (!restart && this.#caughtUp) this.#notifySettled();
+			if (reviewed) {
 				try {
 					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok");
 				} catch (e) {
 					this.onDebug?.("advisor onSettled callback threw", String(e));
 				}
 			}
+			if (restart) void this.#drain();
 		}
 	}
 }
@@ -807,6 +950,19 @@ const BLOCK_CAP_MS = 120_000;
 const HANDOFF_IN_PROGRESS_KEY = Symbol.for("pi-amplike-handoff-in-progress");
 function handoffInProgress(): boolean {
 	return !!(globalThis as any)[HANDOFF_IN_PROGRESS_KEY];
+}
+
+function userMessageText(message: { content?: unknown } | undefined): string {
+	const content = message?.content;
+	if (typeof content === "string") return content.trim();
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((part) =>
+			part && typeof part === "object" && "type" in part && part.type === "text" ? String(part.text ?? "") : "",
+		)
+		.filter(Boolean)
+		.join("\n")
+		.trim();
 }
 
 function sessionIdFromCtx(ctx: unknown): string | undefined {
@@ -868,11 +1024,8 @@ export default function (pi: ExtensionAPI) {
 	let runtime: AdvisorRuntime | undefined;
 	let activeModelLabel: string | undefined;
 	let builtForCwd: string | undefined;
-	let stagedReprime: string | undefined;
-	let reprimeAfterHandoff = false;
-
-	// Delta accumulation across the lifecycle.
-	let pendingUserPrompt: string | undefined;
+	let pendingUserTexts: string[] = [];
+	let unwatchBash: (() => void) | undefined;
 
 	// The advise tool bound to the live runtime (held so the catch-up block can
 	// mark held notes delivered at the actual delivery point).
@@ -929,7 +1082,7 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 		const bar = ui.theme ? ui.theme.fg("dim", "│") : "│";
-		ui.setStatus(STATUS_KEY, `${bar} ${formatAdvisorFooterText(!runtime.idle, runtime.usage.cost)}`);
+		ui.setStatus(STATUS_KEY, `${bar} ${formatAdvisorFooterText(runtime.reviewing, runtime.usage.cost)}`);
 	}
 
 	// ---- advice delivery into the primary session ----
@@ -1023,47 +1176,46 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function teardown(): void {
+		unwatchBash?.();
+		unwatchBash = undefined;
 		runtime?.dispose();
 		runtime = undefined;
 		adviseTool = undefined;
 		activeModelLabel = undefined;
 		builtForCwd = undefined;
-		stagedReprime = undefined;
-		reprimeAfterHandoff = false;
-		pendingUserPrompt = undefined;
+		pendingUserTexts = [];
 		consecutiveBlocks = 0;
 		autoResumeSuppressed = false;
 		turnState = "ended-nonterminal";
 	}
 
-	function currentSessionContext(ctx: { sessionManager: { buildContextEntries(): SessionEntry[] } }): string {
+	function primaryEntries(): readonly unknown[] {
 		try {
-			return formatActiveSessionContext(ctx.sessionManager.buildContextEntries());
-		} catch (error) {
-			dbg("could not build advisor re-prime context", String(error));
-			return "";
+			return (
+				(
+					latestCtx as { sessionManager?: { getBranch?: () => unknown[] } } | undefined
+				)?.sessionManager?.getBranch?.() ?? []
+			);
+		} catch {
+			return [];
 		}
 	}
 
-	// Clear advisor-local state after the primary transcript changes, then stage
-	// Pi's active (compaction-aware) context for the next real review. Priming is
-	// passive: it never prompts the advisor or emits advice on its own.
-	function resetAdvisorState(contextText = ""): void {
-		const primed = contextText.trim() || undefined;
-		if (runtime) {
-			runtime.reprime(primed ?? "");
-			stagedReprime = undefined;
-		} else {
-			stagedReprime = primed;
-		}
-		pendingUserPrompt = undefined;
-		consecutiveBlocks = 0;
-		autoResumeSuppressed = false;
-		turnState = "ended-nonterminal";
-	}
-
-	function reprimeFromSession(ctx: { sessionManager: { buildContextEntries(): SessionEntry[] } }): void {
-		resetAdvisorState(currentSessionContext(ctx));
+	function watchPrimaryBash(ctx: { sessionManager?: object }): void {
+		if (unwatchBash || !ctx.sessionManager) return;
+		unwatchBash = bindBashAppendObserver(
+			ctx.sessionManager as { appendMessage?: (message: unknown) => unknown },
+			(message) => {
+				if (!enabled || process.env.ADVISOR_NO_REVIEW) return;
+				const delta = formatUserBash(message);
+				if (!delta) return;
+				void ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0]).then((rt) => {
+					if (!rt) return;
+					rt.setUsageSession(sessionIdFromCtx(latestCtx ?? ctx));
+					rt.push(delta, { lowSignal: false });
+				});
+			},
+		);
 	}
 
 	// ---- build the advisor agent lazily (needs ctx for model/registry/cwd) ----
@@ -1072,6 +1224,7 @@ export default function (pi: ExtensionAPI) {
 		modelRegistry: any;
 		model: any;
 		isProjectTrusted(): boolean;
+		sessionManager: PrimarySessionManager;
 	}): Promise<AdvisorRuntime | undefined> {
 		if (runtime && builtForCwd === ctx.cwd) return runtime;
 		if (runtime && builtForCwd !== ctx.cwd) teardown();
@@ -1105,30 +1258,49 @@ export default function (pi: ExtensionAPI) {
 		let builtRuntime!: AdvisorRuntime;
 		const builtAdviseTool = new AdviseTool((note, severity) => deliverAdvice(note, severity, builtRuntime));
 		adviseTool = builtAdviseTool;
-		const agent = buildAdvisorAgent({
-			cwd: ctx.cwd,
-			model,
-			thinkingLevel,
-			systemPrompt: loadSystemPrompt(ctx.cwd, projectTrusted),
-			modelRegistry: ctx.modelRegistry,
-			adviseTool: builtAdviseTool,
-		});
-		// ADVISOR_COMPACT_AT: % of the advisor's context window at which it self-
-		// compacts (clamped 50..95; default 80).
-		const compactAt = Math.min(95, Math.max(50, Number(process.env.ADVISOR_COMPACT_AT) || 80));
-		builtRuntime = new AdvisorRuntime(agent, builtAdviseTool, 1000, dbg, compactAt, (outcome) => {
-			// A disposed/replaced runtime may settle late; never let it flush the new one.
+		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
+		const seedSource = {
+			entries: primaryEntries,
+			rollingAdvice: () => builtRuntime?.rollingAdvice ?? [],
+		};
+		let session: Awaited<ReturnType<typeof createAdvisorSession>> | undefined;
+		try {
+			session = await createAdvisorSession({
+				cwd: ctx.cwd,
+				model,
+				thinkingLevel,
+				systemPrompt,
+				adviseTool: builtAdviseTool as never,
+				seedSource,
+				primarySessionManager: ctx.sessionManager,
+				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
+			});
+		} catch (error) {
+			dbg("advisor session unavailable", String(error));
+		}
+		const agent =
+			session?.agent ??
+			buildAdvisorAgent({
+				cwd: ctx.cwd,
+				model,
+				thinkingLevel,
+				systemPrompt,
+				modelRegistry: ctx.modelRegistry,
+				adviseTool: builtAdviseTool,
+				primarySessionManager: ctx.sessionManager,
+			});
+		const onSettled = (outcome: "ok" | "failed") => {
 			if (runtime !== builtRuntime) return;
 			flushSettledAdvice(outcome);
-			// Refresh the footer the moment this settle happens, not just at the next
-			// turn_end — a background review can finish while the primary keeps running.
 			if (latestCtx) updateStatus(latestCtx);
-		});
+		};
+		builtRuntime = new AdvisorRuntime(agent, builtAdviseTool, 1000, dbg, onSettled, session, () =>
+			buildAdvisorSeed({ entries: primaryEntries(), rollingAdvice: builtRuntime.rollingAdvice }),
+		);
 		runtime = builtRuntime;
-		if (stagedReprime) builtRuntime.reprime(stagedReprime);
-		stagedReprime = undefined;
 		activeModelLabel = `${model.provider}/${model.id}`;
 		builtForCwd = ctx.cwd;
+		watchPrimaryBash(ctx);
 		dbg("built advisor runtime, model=", activeModelLabel);
 		return runtime;
 	}
@@ -1139,16 +1311,28 @@ export default function (pi: ExtensionAPI) {
 	// here as well as at turn_start. This closes the only real pre-turn window without
 	// consulting isIdle() or maintaining a second terminal flag. Also append the
 	// primary-agent protocol so weaker models actually handle steered advisories.
-	pi.on("before_agent_start", (event, ctx) => {
+	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
-		if (reprimeAfterHandoff) {
-			reprimeAfterHandoff = false;
-			reprimeFromSession(ctx);
-		}
 		autoResumeSuppressed = false;
 		turnState = "running";
-		pendingUserPrompt = event.prompt;
 		return { systemPrompt: appendPrimaryAdvisorPrompt(event.systemPrompt ?? "") };
+	});
+
+	pi.on("message_end", (event) => {
+		if (!enabled) return;
+		if (event.message?.role !== "user") return;
+		const text = userMessageText(event.message);
+		if (!text || text.startsWith("/")) return;
+		pendingUserTexts.push(text);
+	});
+
+	// `!bash` is recorded by SessionManager.appendMessage, not message_end.
+	// Install the observer synchronously so executeBash is not stalled on advisor setup.
+	pi.on("user_bash", (event, ctx) => {
+		if (!enabled) return;
+		if (event.excludeFromContext) return;
+		if (process.env.ADVISOR_NO_REVIEW) return;
+		watchPrimaryBash(ctx);
 	});
 
 	// Fires for every assistant turn, including advisory-triggered runs and same-run
@@ -1183,14 +1367,19 @@ export default function (pi: ExtensionAPI) {
 		// review's reconfirmation preamble alongside concerns/blockers.
 		if (!terminal) flushNits(rt);
 
-		const delta = formatTurnDelta({
-			userPrompt: pendingUserPrompt,
-			assistant: event.message as AssistantMessage,
-			toolResults: event.toolResults as ToolResultMessage[],
-		});
-		pendingUserPrompt = undefined;
 		rt.setUsageSession(sessionIdFromCtx(ctx));
-		rt.push(delta);
+		const userPrompt = pendingUserTexts.join("\n\n");
+		pendingUserTexts = [];
+		const toolResults = event.toolResults as ToolResultMessage[];
+		const delta = formatTurnDelta({
+			userPrompt: userPrompt || undefined,
+			assistant: event.message as AssistantMessage,
+			toolResults,
+		});
+		rt.push(delta, {
+			lowSignal: isLowSignalTurn({ hasUserText: Boolean(userPrompt), toolResults }),
+			terminal,
+		});
 
 		// Don't block during a handoff teardown (we'd stall the replacement).
 		if (handoffInProgress()) return;
@@ -1216,28 +1405,20 @@ export default function (pi: ExtensionAPI) {
 		updateStatus(ctx);
 	});
 
-	// Re-prime the advisor whenever Pi replaces the primary's active context.
 	pi.on("session_compact", (_event, ctx) => {
-		reprimeFromSession(ctx);
 		updateStatus(ctx);
 	});
 	pi.on("session_tree", (_event, ctx) => {
-		reprimeFromSession(ctx);
+		teardown();
 		updateStatus(ctx);
 	});
 	pi.on("session_start", (_event, ctx) => {
-		// This also covers startup/reload: a newly loaded extension has no private
-		// advisor history yet, but the primary session may already have active context.
-		reprimeFromSession(ctx);
+		teardown();
 		updateStatus(ctx);
 	});
 
-	// Tool-path handoff replaces the transcript without a session_start event and
-	// does not provide a context here. Reset now; capture the new session from the
-	// first before_agent_start callback, before its prompt is recorded.
 	pi.events.on(HANDOFF_SESSION_REPLACED_CHANNEL, () => {
-		resetAdvisorState();
-		reprimeAfterHandoff = true;
+		teardown();
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
@@ -1302,7 +1483,6 @@ export default function (pi: ExtensionAPI) {
 			if (arg === "on") {
 				enabled = true;
 				saveEnabled(true);
-				if (!runtime) stagedReprime = currentSessionContext(ctx);
 				const rt = await ensureRuntime(ctx as any);
 				updateStatus(ctx);
 				ctx.ui.notify(

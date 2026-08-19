@@ -1,7 +1,15 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
-import { sessionEntryToContextMessages, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import { type SessionEntry, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
 
+import {
+	formatBashReceipt,
+	formatBytes,
+	formatResultReceipt,
+	lineCount,
+	truncateResultBody,
+	utf8Bytes,
+} from "./receipts.js";
 import type { AdvisorNote } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
@@ -54,28 +62,6 @@ export function formatAdvisoryContent(
 
 // ---- transcript delta formatting (primary turn → markdown for the advisor) ----
 
-// No truncation of the delta. The advisor is a peer reviewer (its own model, its
-// own read/grep/find), not a cheap/lightweight pass — nothing in the design says
-// otherwise. It must see what the main model saw, verbatim; clipping fields just
-// hid the part it needed to verify and bred false "didn't persist"/"garbled"
-// advice. (The advisor CAN re-read to verify — system prompt — but that's about
-// its actions, not a license to starve its input.)
-//
-// Input-budget policy (advisor self-compaction): the advisor's context is a pure
-// linear accumulation of INDEPENDENT turn deltas — no essential cross-turn state
-// lives in the agent's message history (pending advice lives in the shared queue
-// and rides the reconfirm preamble, not the transcript). So when the advisor's own context
-// approaches the window it self-compacts: #drain clears ONLY the agent's message
-// history (#softReset) and replays the current batch into a fresh context. Two
-// triggers — PROACTIVE (before prompting, when usage crosses COMPACT_AT_PERCENT)
-// and REACTIVE (a review that still comes back stopReason=="length"). The reactive
-// path is loop-safe: if the agent was ALREADY fresh and still overflowed, the
-// single batch genuinely doesn't fit, so we stop self-compacting and fall through
-// to the normal failed-review handling instead of spinning. This replaces the old
-// behavior (overflow -> fail review -> retry 3x into the same wall -> give up,
-// possibly shipping a stale held note on a terminal turn). Note AdvisorRuntime.reset
-// is still separately triggered by the PRIMARY's compaction / history rewrites;
-// self-compaction is the advisor managing its OWN budget between those resets.
 function textOf(content: Array<{ type: string; text?: string }>): string {
 	return content
 		.filter((c) => c.type === "text" && typeof c.text === "string")
@@ -114,6 +100,109 @@ function renderToolArgs(args: Record<string, unknown> | undefined): string {
 	return entries.map(([k, v]) => `${k}:${renderArgValue(v, "  ", 0)}`).join("\n");
 }
 
+function exitSuffix(tr: ToolResultMessage): string {
+	const details = (tr as { details?: { exitCode?: unknown; exit_code?: unknown } }).details;
+	const code = details?.exitCode ?? details?.exit_code;
+	return typeof code === "number" ? ` exit ${code}` : "";
+}
+
+function indexSuccessfulDiffs(results: readonly ToolResultMessage[]): Map<string, string> {
+	const diffByCallId = new Map<string, string>();
+	for (const tr of results) {
+		const id = (tr as { toolCallId?: string }).toolCallId;
+		const d = (tr as { details?: { diff?: unknown } }).details?.diff;
+		if (id && !tr.isError && typeof d === "string" && d.trim()) diffByCallId.set(id, d);
+	}
+	return diffByCallId;
+}
+
+function indexFailedCallIds(results: readonly ToolResultMessage[]): Set<string> {
+	const ids = new Set<string>();
+	for (const tr of results) {
+		const id = (tr as { toolCallId?: string }).toolCallId;
+		if (id && tr.isError) ids.add(id);
+	}
+	return ids;
+}
+
+function formatWriteCall(args: Record<string, unknown> | undefined, failed: boolean): string {
+	const path = typeof args?.path === "string" && args.path ? args.path : "?";
+	const content = typeof args?.content === "string" ? args.content : "";
+	if (!failed) {
+		return `→ tool \`write\`(${path}) — ${lineCount(content)} lines, ${formatBytes(utf8Bytes(content))}; content omitted`;
+	}
+	const truncated = { ...(args ?? {}) };
+	if (typeof truncated.content === "string") truncated.content = truncateResultBody(truncated.content);
+	const argsText = renderToolArgs(truncated);
+	return argsText ? `→ tool \`write\`:\n${argsText}` : "→ tool `write`";
+}
+
+function formatImplementingAgent(
+	assistant: AssistantMessage,
+	diffByCallId: Map<string, string>,
+	failedCallIds: Set<string>,
+	argsByCallId: Map<string, Record<string, unknown>>,
+): string {
+	const sub: string[] = [];
+	for (const c of assistant.content) {
+		if (c.type === "thinking" && c.thinking?.trim()) {
+			sub.push(`<thinking>\n${c.thinking.trim()}\n</thinking>`);
+		} else if (c.type === "text" && c.text?.trim()) {
+			sub.push(c.text.trim());
+		} else if (c.type === "toolCall") {
+			const callId = (c as { id?: string }).id;
+			if (callId && c.arguments && typeof c.arguments === "object") {
+				argsByCallId.set(callId, c.arguments as Record<string, unknown>);
+			}
+			// When this call produced a diff (a successful edit), suppress the raw
+			// {oldText,newText} args and let the result's -/+ diff carry the change: the
+			// args are two unannotated peer blobs and the advisor — reviewing AFTER the
+			// edit landed (a fresh read shows the NEW side) — can't tell which is on disk
+			// ("didn't persist"). With NO diff (failed edit, non-edit tool) show the args
+			// verbatim; for a failed edit they're the only evidence of what was attempted.
+			const args = c.arguments as Record<string, unknown> | undefined;
+			const edits = args?.edits;
+			const hasDiff = diffByCallId.has(callId ?? "");
+			if (hasDiff && Array.isArray(edits)) {
+				const p = typeof args?.path === "string" ? args.path : "?";
+				sub.push(`→ tool \`${c.name}\`(${p}) — ${edits.length} block(s); diff in tool result`);
+			} else if (c.name === "write") {
+				sub.push(formatWriteCall(args, Boolean(callId && failedCallIds.has(callId))));
+			} else {
+				const argsText = renderToolArgs(args);
+				sub.push(argsText ? `→ tool \`${c.name}\`:\n${argsText}` : `→ tool \`${c.name}\``);
+			}
+		}
+	}
+	return sub.length ? `#### Implementing agent\n\n${sub.join("\n\n")}` : "";
+}
+
+function formatProjectedResults(
+	results: readonly ToolResultMessage[],
+	argsByCallId: Map<string, Record<string, unknown>>,
+): string[] {
+	return results.map((tr) => {
+		// Prefer the canonical line-numbered unified diff (the same view the human /
+		// main model gets, computed by pi's edit-diff) for a SUCCESSFUL result: its -/+
+		// markers unambiguously frame removed-vs-current lines, which the flat
+		// {oldText,newText} echo lacks. It is also a pinned point-in-time snapshot of
+		// THIS turn's change — the advisor's own read returns current (possibly later-
+		// edited) disk, so the inline diff is not re-derivable and must ride verbatim.
+		// On an ERROR, show the text body instead: the error is the diagnostic, and a
+		// diff from a failed edit is untrustworthy (did it apply? partially?).
+		const diff = (tr as { details?: { diff?: unknown } }).details?.diff;
+		const successfulDiff = !tr.isError && typeof diff === "string" && diff.trim() ? diff : "";
+		const rawBody = successfulDiff || textOf(tr.content as Array<{ type: string; text?: string }>);
+		const callId = (tr as { toolCallId?: string }).toolCallId;
+		const body = successfulDiff
+			? successfulDiff
+			: formatResultReceipt(tr, rawBody, callId ? argsByCallId.get(callId) : undefined);
+		const pointer = callId ? `call: ${callId}` : "";
+		const text = [pointer, body || "(no text output)"].filter(Boolean).join("\n");
+		return `#### Tool result: \`${tr.toolName}\`${tr.isError ? " (error)" : ""}${exitSuffix(tr)}\n\n${text}`;
+	});
+}
+
 // Format one primary turn (optionally preceded by the user prompt) as a markdown
 // string with REAL newlines throughout (renderToolArgs keeps arg content verbatim).
 // The sections are joined with explicit "\n\n" here so the boundary never depends on
@@ -124,66 +213,31 @@ export function formatTurnDelta(opts: {
 	toolResults?: ToolResultMessage[];
 }): string {
 	const parts: string[] = [];
-	if (opts.userPrompt?.trim()) parts.push(`#### User\n\n${opts.userPrompt.trim()}`);
-
-	// Correlate calls → results by toolCallId so an edit's raw args can be suppressed
-	// in favor of the result's diff — but ONLY when a SUCCESSFUL diff exists. A failed
-	// edit (no diff, or an error result whose diff is untrustworthy) keeps its attempted
-	// {oldText,newText} so the advisor can still diagnose the failure. Name-agnostic:
-	// any non-error call whose result carries a diff.
-	const diffByCallId = new Map<string, string>();
-	for (const tr of opts.toolResults ?? []) {
-		const id = (tr as { toolCallId?: string }).toolCallId;
-		const d = (tr as { details?: { diff?: unknown } }).details?.diff;
-		if (id && !tr.isError && typeof d === "string" && d.trim()) diffByCallId.set(id, d);
+	if (opts.userPrompt?.trim()) {
+		parts.push(`#### User → implementing agent\n\n${opts.userPrompt.trim()}`);
 	}
 
-	const a = opts.assistant;
-	if (a) {
-		const sub: string[] = [];
-		for (const c of a.content) {
-			if (c.type === "thinking" && c.thinking?.trim()) {
-				sub.push(`<thinking>\n${c.thinking.trim()}\n</thinking>`);
-			} else if (c.type === "text" && c.text?.trim()) {
-				sub.push(c.text.trim());
-			} else if (c.type === "toolCall") {
-				// When this call produced a diff (a successful edit), suppress the raw
-				// {oldText,newText} args and let the result's -/+ diff carry the change: the
-				// args are two unannotated peer blobs and the advisor — reviewing AFTER the
-				// edit landed (a fresh read shows the NEW side) — can't tell which is on disk
-				// ("didn't persist"). With NO diff (failed edit, non-edit tool) show the args
-				// verbatim; for a failed edit they're the only evidence of what was attempted.
-				const edits = (c.arguments as { edits?: unknown[] } | undefined)?.edits;
-				const hasDiff = diffByCallId.has((c as { id?: string }).id ?? "");
-				if (hasDiff && Array.isArray(edits)) {
-					const p = (c.arguments as { path?: string }).path ?? "?";
-					sub.push(`→ tool \`${c.name}\`(${p}) — ${edits.length} block(s); diff in tool result`);
-				} else {
-					const argsText = renderToolArgs(c.arguments as Record<string, unknown> | undefined);
-					sub.push(argsText ? `→ tool \`${c.name}\`:\n${argsText}` : `→ tool \`${c.name}\``);
-				}
-			}
-		}
-		if (sub.length) parts.push(`#### Assistant\n\n${sub.join("\n\n")}`);
+	const results = opts.toolResults ?? [];
+	const diffByCallId = indexSuccessfulDiffs(results);
+	const failedCallIds = indexFailedCallIds(results);
+	const argsByCallId = new Map<string, Record<string, unknown>>();
+	if (opts.assistant) {
+		const agent = formatImplementingAgent(opts.assistant, diffByCallId, failedCallIds, argsByCallId);
+		if (agent) parts.push(agent);
 	}
-
-	for (const tr of opts.toolResults ?? []) {
-		// Prefer the canonical line-numbered unified diff (the same view the human /
-		// main model gets, computed by pi's edit-diff) for a SUCCESSFUL result: its -/+
-		// markers unambiguously frame removed-vs-current lines, which the flat
-		// {oldText,newText} echo lacks. It is also a pinned point-in-time snapshot of
-		// THIS turn's change — the advisor's own read returns current (possibly later-
-		// edited) disk, so the inline diff is not re-derivable and must ride verbatim.
-		// On an ERROR, show the text body instead: the error is the diagnostic, and a
-		// diff from a failed edit is untrustworthy (did it apply? partially?).
-		const diff = (tr as { details?: { diff?: unknown } }).details?.diff;
-		const body =
-			!tr.isError && typeof diff === "string" && diff.trim()
-				? diff
-				: textOf(tr.content as Array<{ type: string; text?: string }>);
-		parts.push(`#### Tool result: \`${tr.toolName}\`${tr.isError ? " (error)" : ""}\n\n${body || "(no text output)"}`);
-	}
+	parts.push(...formatProjectedResults(results, argsByCallId));
 	return parts.join("\n\n");
+}
+
+export function formatUserBash(message: {
+	command?: string;
+	output?: string;
+	exitCode?: number;
+	excludeFromContext?: boolean;
+}): string {
+	if (message.excludeFromContext) return "";
+	const failed = message.exitCode !== 0;
+	return `#### User bash\n\n$ ${message.command ?? ""}\n${formatBashReceipt(message.output ?? "", { exitCode: message.exitCode }, failed)}`.trimEnd();
 }
 
 function contextText(content: string | Array<{ type: string; text?: string }>): string {
@@ -211,7 +265,7 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[]): st
 		switch (message.role) {
 			case "user": {
 				const text = contextText(message.content).trim();
-				if (text) parts.push(`#### User\n\n${text}`);
+				if (text) parts.push(`#### User → implementing agent\n\n${text}`);
 				break;
 			}
 			case "assistant": {
@@ -233,10 +287,11 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[]): st
 				if (text) parts.push(`#### Extension context: \`${message.customType}\`\n\n${text}`);
 				break;
 			}
-			case "bashExecution":
-				if (!message.excludeFromContext)
-					parts.push(`#### User bash\n\n$ ${message.command}\n${message.output}`.trimEnd());
+			case "bashExecution": {
+				const bash = formatUserBash(message);
+				if (bash) parts.push(bash);
 				break;
+			}
 			case "branchSummary":
 				parts.push(`#### Branch summary\n\n${message.summary}`);
 				break;

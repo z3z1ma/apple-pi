@@ -24,7 +24,7 @@
 
 import assert from "node:assert/strict";
 import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -111,6 +111,29 @@ test("isTerminalTurn: terminal iff the assistant message made no tool calls", ()
 	assert.equal(A.isTerminalTurn(undefined), true);
 	assert.equal(A.isTerminalTurn({ content: [{ type: "toolCall" }] }), false);
 	assert.equal(A.isTerminalTurn({ content: [{ type: "text" }, { type: "toolCall" }] }), false);
+});
+
+test("isLowSignalTurn: read-only is low-signal; user/error/mutation/command are not", () => {
+	assert.equal(A.isLowSignalTurn({}), true);
+	assert.equal(A.isLowSignalTurn({ toolResults: [{ toolName: "read", isError: false }] }), true);
+	assert.equal(A.isLowSignalTurn({ hasUserText: true, toolResults: [{ toolName: "read" }] }), false);
+	assert.equal(A.isLowSignalTurn({ toolResults: [{ toolName: "read", isError: true }] }), false);
+	assert.equal(A.isLowSignalTurn({ toolResults: [{ toolName: "edit", isError: false }] }), false);
+	assert.equal(A.isLowSignalTurn({ toolResults: [{ toolName: "write", isError: false }] }), false);
+	assert.equal(
+		A.isLowSignalTurn({
+			toolResults: [{ toolName: "apply_patch", isError: false, details: { diff: "- a\n+ b" } }],
+		}),
+		false,
+	);
+	assert.equal(
+		A.isLowSignalTurn({ toolResults: [{ toolName: "bash", isError: false, details: { exitCode: 0 } }] }),
+		false,
+	);
+	assert.equal(
+		A.isLowSignalTurn({ toolResults: [{ toolName: "shell", isError: false, details: { exit_code: 1 } }] }),
+		false,
+	);
 });
 
 test("formatReconfirmPreamble: empty when nothing held, else lists held notes", () => {
@@ -212,11 +235,103 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 			},
 		],
 	});
-	assert.match(md, /#### User\n\ndo the thing/);
+	assert.match(md, /#### User → implementing agent\n\ndo the thing/);
 	assert.match(md, /<thinking>\nlet me think\n<\/thinking>/);
+	assert.match(md, /#### Implementing agent/);
 	assert.match(md, /here is my plan/);
-	assert.match(md, /→ tool `write`:\npath: a\.js/);
-	assert.match(md, /#### Tool result: `write`\n\nwrote a\.js/);
+	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
+	assert.match(md, /#### Tool result: `write`\n\ncall: 1\nwrote a\.js/);
+});
+
+test("formatTurnDelta: successful write omits content and addresses the result", () => {
+	const body = "export function refresh() {\n  return rotate();\n}\n";
+	const md = renderDelta({
+		assistant: {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "w1", name: "write", arguments: { path: "src/auth.ts", content: body } }],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "w1",
+				toolName: "write",
+				content: [{ type: "text", text: "Successfully wrote 48 bytes to src/auth.ts" }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(md, /→ tool `write`\(src\/auth\.ts\) — 3 lines/);
+	assert.match(md, /content omitted/);
+	assert.match(md, /call: w1/);
+	assert.ok(!md.includes("export function refresh"), "write content must not appear in the delta");
+});
+
+test("formatTurnDelta: failed write keeps a truncated attempted body", () => {
+	const body = `${"line\n".repeat(80)}secret-needle`;
+	const md = renderDelta({
+		assistant: {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "w2", name: "write", arguments: { path: "huge.ts", content: body } }],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "w2",
+				toolName: "write",
+				content: [{ type: "text", text: "Error: disk full" }],
+				isError: true,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(md, /→ tool `write`:/);
+	assert.match(md, /path: huge\.ts/);
+	assert.match(md, /truncated/);
+	assert.match(md, /`write` \(error\)/);
+	assert.ok(!md.includes("secret-needle"), "failed write content is capped");
+});
+
+test("formatUserBash: receipt without body, omitted when excluded", () => {
+	const ok = A.formatUserBash({ command: "pnpm test auth", output: "ok\n".repeat(50), exitCode: 0 });
+	assert.match(ok, /#### User bash/);
+	assert.match(ok, /\$ pnpm test auth/);
+	assert.match(ok, /50 lines/);
+	assert.ok(!ok.includes("ok\nok"), "successful user bash omits the body");
+	assert.equal(A.formatUserBash({ command: "secret", output: "nope", exitCode: 0, excludeFromContext: true }), "");
+});
+
+test("bindBashAppendObserver: pushes persisted bashExecution, not user messages", () => {
+	const seen = [];
+	const sm = {
+		appendMessage(message) {
+			this.last = message;
+			return "id-1";
+		},
+	};
+	const stop = A.bindBashAppendObserver(sm, (message) => seen.push(message.command));
+	assert.equal(sm.appendMessage({ role: "user", content: "hi" }), "id-1");
+	assert.equal(sm.appendMessage({ role: "bashExecution", command: "pnpm test", output: "ok", exitCode: 0 }), "id-1");
+	assert.equal(
+		sm.appendMessage({
+			role: "bashExecution",
+			command: "secret",
+			output: "x",
+			exitCode: 0,
+			excludeFromContext: true,
+		}),
+		"id-1",
+	);
+	assert.deepEqual(seen, ["pnpm test"]);
+	stop();
+	sm.appendMessage({ role: "bashExecution", command: "after", output: "", exitCode: 0 });
+	assert.deepEqual(seen, ["pnpm test"]);
 });
 
 test("formatTurnDelta: a multi-line bash command rides verbatim (no \\n escaping)", () => {
@@ -397,13 +512,12 @@ test("formatTurnDelta: an ERROR result with a diff keeps args + error text (untr
 	assert.ok(!md.includes("diff in tool result"), "no suppression header on an error result");
 });
 
-test("formatTurnDelta: feeds large content verbatim (no truncation, no markers)", () => {
-	const big = "LINE\n".repeat(5000); // ~25KB, well past every old clamp
-	const md = renderDelta({
-		userPrompt: big,
+test("formatTurnDelta: observation receipts keep loci and counts, not bodies", () => {
+	const big = "LINE\n".repeat(80);
+	const readMd = renderDelta({
 		assistant: {
 			role: "assistant",
-			content: [{ type: "text", text: big }],
+			content: [{ type: "toolCall", id: "1", name: "read", arguments: { path: "src/a.ts", offset: 10, limit: 80 } }],
 			usage: {},
 			stopReason: "toolUse",
 			timestamp: 1,
@@ -412,15 +526,149 @@ test("formatTurnDelta: feeds large content verbatim (no truncation, no markers)"
 			{
 				role: "toolResult",
 				toolCallId: "1",
-				toolName: "bash",
-				content: [{ type: "text", text: big }],
+				toolName: "read",
+				content: [{ type: "text", text: `${big}\n\n[Showing lines 10-89 of 412. Use offset=90 to continue.]` }],
+				details: { truncation: { truncated: true, truncatedBy: "lines", outputLines: 80, totalLines: 412 } },
 				isError: false,
 				timestamp: 2,
 			},
 		],
 	});
-	assert.ok(!md.includes("truncated"), "nothing should be truncated");
-	assert.ok(md.includes(big), "content rides verbatim");
+	assert.match(readMd, /requested 10–89/);
+	assert.match(readMd, /returned 10–89 of 412/);
+	assert.match(readMd, /80 lines/);
+	assert.ok(!readMd.includes("LINE\nLINE"), "read body is not in the delta");
+
+	const grepMd = renderDelta({
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "2",
+				toolName: "grep",
+				content: [
+					{
+						type: "text",
+						text: [
+							"src/auth/session.ts:81: const token = refreshToken()",
+							"src/auth/session.ts-82- return token",
+							"src/auth/session.ts:104: store.delete(old)",
+							"src/auth/refresh.ts:33: export function rotate()",
+							"",
+							"[100 matches limit reached. Use limit=200 for more]",
+						].join("\n"),
+					},
+				],
+				details: { matchLimitReached: 100 },
+				isError: false,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(grepMd, /3 matches in 2 files/);
+	assert.match(grepMd, /src\/auth\/session\.ts: 81, 104/);
+	assert.match(grepMd, /src\/auth\/refresh\.ts: 33/);
+	assert.match(grepMd, /truncated: 100 match limit/);
+	assert.ok(!grepMd.includes("const token"), "grep source text is dropped");
+	assert.ok(!grepMd.includes("return token"), "grep context lines are dropped");
+
+	const names = Array.from({ length: 30 }, (_, i) => `src/f${i}.ts`).join("\n");
+	const findMd = renderDelta({
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "3",
+				toolName: "find",
+				content: [{ type: "text", text: names }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(findMd, /30 paths/);
+	assert.match(findMd, /src\/f0\.ts/);
+	assert.match(findMd, /shown 20 of 30/);
+	assert.ok(!findMd.includes("src/f20.ts"), "find listing is capped");
+
+	const bashMd = renderDelta({
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "4",
+				toolName: "bash",
+				content: [{ type: "text", text: big }],
+				details: { exitCode: 0 },
+				isError: false,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(bashMd, /exit 0/);
+	assert.match(bashMd, /80 lines/);
+	assert.ok(!bashMd.includes("LINE\nLINE"), "successful bash body is omitted");
+	assert.ok(!bashMd.includes("… truncated"), "successful bash is a receipt, not a prefix");
+
+	const failBody = `${Array.from({ length: 40 }, (_, i) => `log ${i}`).join("\n")}\nError: boom\nCommand exited with code 1`;
+	const bashErr = renderDelta({
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "5",
+				toolName: "bash",
+				content: [{ type: "text", text: failBody }],
+				details: { exitCode: 1 },
+				isError: true,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(bashErr, /\(error\)/);
+	assert.match(bashErr, /… tail/);
+	assert.match(bashErr, /Error: boom/);
+	assert.ok(!bashErr.includes("log 0"), "bash failure keeps a tail, not the prefix");
+
+	const userMd = renderDelta({ userPrompt: big });
+	assert.ok(userMd.includes("LINE\nLINE"), "user text is not a result body");
+});
+
+test("formatTurnDelta: a failed read keeps the error text", () => {
+	const md = renderDelta({
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "1",
+				toolName: "read",
+				content: [{ type: "text", text: "Error: Offset 500 is beyond end of file (12 lines total)" }],
+				isError: true,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(md, /Offset 500 is beyond end of file/);
+});
+
+test("formatActiveSessionContext: user bash follows the same receipt rules", () => {
+	const output = "ok\n".repeat(50);
+	const context = A.formatActiveSessionContext([
+		{
+			type: "message",
+			id: "b1",
+			parentId: "root",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: {
+				role: "bashExecution",
+				command: "npm test",
+				output,
+				exitCode: 0,
+				cancelled: false,
+				truncated: false,
+				excludeFromContext: false,
+				timestamp: 1,
+			},
+		},
+	]);
+	assert.match(context, /#### User bash/);
+	assert.match(context, /50 lines/);
+	assert.ok(!context.includes("ok\nok"), "successful user bash omits the body");
 });
 
 test("formatTurnDelta: marks tool errors", () => {
@@ -441,6 +689,258 @@ test("formatTurnDelta: marks tool errors", () => {
 
 test("formatTurnDelta: empty turn ⇒ empty string", () => {
 	assert.equal(A.formatTurnDelta({}), "");
+});
+
+test("seed: recent users are current plus two completed requests, labeled as implementer-bound", () => {
+	const requests = A.collectRecentUserRequests([
+		{ type: "message", message: { role: "user", content: "first" } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+		{ type: "message", message: { role: "user", content: "second" } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+		{ type: "message", message: { role: "user", content: "third" } },
+		{
+			type: "message",
+			message: { role: "assistant", content: [{ type: "toolCall", id: "1", name: "bash" }] },
+		},
+		{ type: "message", message: { role: "toolResult", content: "out" } },
+		{ type: "message", message: { role: "user", content: "steer" } },
+	]);
+	assert.deepEqual(
+		requests.map((r) => ({ texts: r.texts, prior: r.prior })),
+		[
+			{ texts: ["first"], prior: true },
+			{ texts: ["second"], prior: true },
+			{ texts: ["third", "steer"], prior: false },
+		],
+	);
+	const built = A.buildAdvisorSeed({
+		entries: [{ type: "message", message: { role: "user", content: "do it" } }],
+		rollingAdvice: [{ note: "watch the lock", severity: "concern", disposition: "delivered" }],
+	});
+	assert.match(built, /User → implementing agent/);
+	assert.match(built, /do it/);
+	assert.match(built, /\[CONCERN\] \[delivered\] watch the lock/);
+	assert.match(built, /not a message to you/);
+});
+
+test("seed: recent trajectory keeps last implementing-agent turns and user bash", () => {
+	const older = Array.from({ length: A.RECENT_TRAJECTORY_TURNS }, (_, i) => ({
+		type: "message",
+		message: {
+			role: "assistant",
+			content: [{ type: "thinking", thinking: `stale think ${i}` }],
+		},
+	}));
+	const entries = [
+		{ type: "message", message: { role: "user", content: "old request" } },
+		...older,
+		{ type: "message", message: { role: "user", content: "ship it" } },
+		{
+			type: "message",
+			message: {
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "check refresh" },
+					{
+						type: "toolCall",
+						id: "e1",
+						name: "edit",
+						arguments: { path: "src/auth.ts", edits: [{ oldText: "a", newText: "b" }] },
+					},
+				],
+			},
+		},
+		{
+			type: "message",
+			message: {
+				role: "toolResult",
+				toolCallId: "e1",
+				toolName: "edit",
+				content: [{ type: "text", text: "ok" }],
+				details: { diff: "- a\n+ b" },
+				isError: false,
+			},
+		},
+		{
+			type: "message",
+			message: { role: "bashExecution", command: "pnpm test auth", output: "ok\n", exitCode: 0 },
+		},
+	];
+	const trajectory = A.formatRecentTrajectory(entries);
+	assert.match(trajectory, /## Recent trajectory/);
+	assert.match(trajectory, /check refresh/);
+	assert.match(trajectory, /→ tool `edit`\(src\/auth\.ts\)/);
+	assert.match(trajectory, /call: e1/);
+	assert.match(trajectory, /#### User bash/);
+	assert.ok(!trajectory.includes("stale think 0"), "older turns outside the tail are dropped");
+	assert.ok(!trajectory.includes("old request"), "user text stays in the user-request section");
+	const seeded = A.buildAdvisorSeed({ entries });
+	assert.match(seeded, /## Recent trajectory/);
+	assert.match(seeded, /User → implementing agent/);
+});
+
+test("compact hook reseeds and keeps no prior advisor deltas", () => {
+	const result = A.advisorCompactResult(
+		{ preparation: { tokensBefore: 12000 } },
+		{
+			entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
+			rollingAdvice: () => [],
+		},
+	);
+	assert.equal(result.compaction.firstKeptEntryId, A.ADVISOR_RESEED_ENTRY_ID);
+	assert.equal(result.compaction.tokensBefore, 12000);
+	assert.match(result.compaction.summary, /ship it/);
+});
+
+test("compact hook includes recent trajectory in the reseed", () => {
+	const result = A.advisorCompactResult(
+		{ preparation: { tokensBefore: 8000 } },
+		{
+			entries: () => [
+				{ type: "message", message: { role: "user", content: "ship it" } },
+				{
+					type: "message",
+					message: {
+						role: "assistant",
+						content: [{ type: "thinking", thinking: "keep this skeleton" }],
+					},
+				},
+			],
+			rollingAdvice: () => [],
+		},
+	);
+	assert.match(result.compaction.summary, /## Recent trajectory/);
+	assert.match(result.compaction.summary, /keep this skeleton/);
+});
+
+test("runtime: a thrown first prompt keeps the seed for the retry", async () => {
+	const prompts = [];
+	let fail = true;
+	const agent = {
+		state: { messages: [] },
+		async prompt(messages) {
+			prompts.push(messages);
+			if (fail) {
+				fail = false;
+				throw new Error("provider down");
+			}
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	const rt = new A.AdvisorRuntime(
+		agent,
+		new A.AdviseTool(() => false),
+		0,
+		undefined,
+		undefined,
+		undefined,
+		() => "ORIENTATION-SEED",
+	);
+	rt.push("delta one", { terminal: true });
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.equal(prompts.length, 2);
+	assert.match(JSON.stringify(prompts[0]), /ORIENTATION-SEED/);
+	assert.match(JSON.stringify(prompts[1]), /ORIENTATION-SEED/);
+	rt.dispose();
+});
+
+test("default advisor prompt names primary-bound recall tools", () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "advisor-prompt-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+	try {
+		const prompt = A.loadSystemPrompt(agentDir, false);
+		assert.match(prompt, /memory_source/);
+		assert.match(prompt, /session_search/);
+		assert.match(prompt, /primary implementing-agent transcript/);
+		assert.match(prompt, /call:<id>/);
+	} finally {
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("primary-bound memory_source resolves the primary branch, not the caller ctx", async () => {
+	const tools = A.bindPrimaryRecallTools({
+		getSessionFile: () => undefined,
+		getBranch: () => [
+			{
+				type: "message",
+				id: "raw-1",
+				timestamp: "2026-08-18T00:00:00.000Z",
+				message: { role: "user", content: "exact primary lock wording" },
+			},
+			{
+				type: "custom",
+				id: "om-1",
+				timestamp: "2026-08-18T00:00:01.000Z",
+				customType: "om.observations.recorded",
+				data: {
+					observations: [
+						{
+							id: "aabbccddeeff",
+							content: "lock lives in extension.ts",
+							timestamp: "2026-08-18T00:00:00.000Z",
+							relevance: "high",
+							sourceEntryIds: ["raw-1"],
+							tokenCount: 10,
+						},
+					],
+					coversUpToId: "raw-1",
+				},
+			},
+		],
+		getEntries: () => [],
+	});
+	const memory = tools.find((t) => t.name === "memory_source");
+	assert.ok(memory);
+	assert.match(memory.description, /primary implementing-agent session/);
+	for (const name of tools.map((t) => t.name)) {
+		assert.ok(A.ADVISOR_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
+	}
+	const hit = await memory.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
+		sessionManager: { getBranch: () => [] },
+	});
+	assert.match(hit.content[0].text, /exact primary lock wording/);
+	const miss = await memory.execute("c2", { id: "ffffffffffff" }, undefined, undefined, {
+		sessionManager: { getBranch: () => [] },
+	});
+	assert.match(miss.content[0].text, /No observation or reflection/);
+});
+
+test("primary-bound session_search reads the primary session file, not the caller ctx", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "advisor-recall-"));
+	const file = join(dir, "session.jsonl");
+	writeFileSync(
+		file,
+		`${JSON.stringify({
+			type: "message",
+			id: "m1",
+			message: { role: "user", content: "primary-only-token" },
+		})}\n`,
+	);
+	try {
+		const tools = A.bindPrimaryRecallTools({
+			getSessionFile: () => file,
+			getBranch: () => [{ id: "m1" }],
+			getEntries: () => [{ id: "m1" }],
+		});
+		const search = tools.find((t) => t.name === "session_search");
+		assert.ok(search);
+		assert.match(search.description, /primary implementing-agent session/);
+		const hit = await search.execute("c1", { query: "primary-only-token" }, undefined, undefined, {
+			sessionManager: {
+				getSessionFile: () => undefined,
+				getBranch: () => [],
+			},
+		});
+		assert.match(hit.content[0].text, /primary-only-token/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 test("buildReviewMessages: header turn + one single-block user turn per delta, content verbatim", () => {
@@ -478,7 +978,7 @@ test("buildReviewMessages: header turn + one single-block user turn per delta, c
 	assert.match(msgs[0].content[0].text, /### Session update/);
 	// The explicit \n\n boundary between the #### User and #### Assistant sections must
 	// be present in the block itself (the regression the reviewer flagged).
-	assert.match(msgs[1].content[0].text, /#### User\n\nu\n\n#### Assistant/);
+	assert.match(msgs[1].content[0].text, /#### User → implementing agent\n\nu\n\n#### Implementing agent/);
 	assert.ok(msgs[1].content[0].text.includes("echo hi\nls"), "command rides verbatim");
 });
 
@@ -564,9 +1064,10 @@ test("formatActiveSessionContext: renders Pi's active context verbatim and exclu
 	];
 	const context = A.formatActiveSessionContext(entries);
 	assert.match(context, /#### Compaction summary\n\nKeep the migration atomic\./);
-	assert.match(context, /#### User\n\nContinue the migration\./);
+	assert.match(context, /#### User → implementing agent\n\nContinue the migration\./);
 	assert.ok(context.includes("printf 'a\\nb'"), "tool arguments remain verbatim");
-	assert.ok(context.includes(bigResult), "active tool output is not newly truncated");
+	assert.match(context, /3000 lines/);
+	assert.ok(!context.includes(bigResult), "active bash output is a receipt, not a body");
 	assert.match(context, /#### Branch summary\n\nThe alternate branch rejected a global lock\./);
 	assert.doesNotMatch(context, /EXCLUDED-BASH-OUTPUT/, "!! bash output stays outside advisor context");
 	assert.doesNotMatch(context, /OLD-ADVISORY-MUST-NOT-REPLAY/);
@@ -741,8 +1242,12 @@ function stubRuntime({ held = [], settleResult = "settled" } = {}) {
 	return {
 		_held: [...held],
 		waited: false,
+		started: false,
 		get hasHighPriority() {
 			return this._held.some((n) => n.severity === "concern" || n.severity === "blocker");
+		},
+		startDrain() {
+			this.started = true;
 		},
 		takeAllAdvice() {
 			return this._held.splice(0);
@@ -765,6 +1270,7 @@ test("runTurnBlock: non-terminal with nothing held → no block, streak resets",
 		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 3, deliverHeld: (x) => delivered.push(...x) }),
 	);
 	assert.equal(n, 0);
+	assert.equal(rt.started, false, "must not force a deferred drain");
 	assert.equal(rt.waited, false, "must not block");
 	assert.equal(delivered.length, 0);
 });
@@ -799,6 +1305,7 @@ test("runTurnBlock: non-terminal + held + timeout → keeps held, doubles streak
 test("runTurnBlock: terminal blocks unconditionally (even with nothing held)", async () => {
 	const rt = stubRuntime({ held: [], settleResult: "settled" });
 	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt }));
+	assert.equal(rt.started, true, "terminal catch-up must start drain before waiting");
 	assert.equal(rt.waited, true, "terminal must block until the advisor settles");
 	assert.equal(n, 0);
 });
@@ -989,7 +1496,7 @@ function buildIntegration({ onReview } = {}) {
 		if (state.turn === "ended-terminal") deliverHeld(rt.takeAllAdvice());
 		else if (state.turn === "ended-nonterminal") flushNits();
 	};
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, 80, onSettled);
+	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, onSettled);
 	const block = (terminal, opts = {}) => {
 		state.turn = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!terminal) flushNits();
@@ -1069,7 +1576,7 @@ test("integration: terminal timeout requeue does not fake reconfirmation when la
 		rt.enqueueAdvice(note, severity);
 		return false;
 	});
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, 80, (outcome) => {
+	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, (outcome) => {
 		if (outcome === "ok") delivered.push(...rt.takeAllAdvice());
 	});
 	rt.enqueueAdvice("stale nit", "nit");
@@ -1107,7 +1614,7 @@ test("integration: terminal timeout delivers a nit that the late review genuinel
 		rt.enqueueAdvice(note, severity);
 		return false;
 	});
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, 80, (outcome) => {
+	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, (outcome) => {
 		if (outcome === "ok") delivered.push(...rt.takeAllAdvice());
 	});
 	rt.enqueueAdvice("still valid", "nit");
@@ -1384,6 +1891,132 @@ test("runtime.waitUntilSettled: settles on drain, times out, and aborts", async 
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 });
 
+test("runtime: low-signal pushes stay pending and do not start a review", async () => {
+	const reviews = [];
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt(input) {
+			reviews.push(input);
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt.push("read 1", { lowSignal: true });
+	rt.push("read 2", { lowSignal: true });
+	rt.push("read 3", { lowSignal: true });
+	assert.equal(reviews.length, 0);
+	assert.equal(rt.reviewing, false);
+	assert.equal(rt.idle, false);
+	assert.equal(await rt.waitUntilSettled(50), "settled", "deferred work is settled for catch-up");
+	rt.dispose();
+});
+
+test("runtime: a high-signal delta drains the deferred queue", async () => {
+	const reviews = [];
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt(input) {
+			reviews.push(typeof input === "string" ? input : input.map((m) => m.content[0].text).join("\n"));
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt.push("read 1", { lowSignal: true });
+	rt.push("read 2", { lowSignal: true });
+	rt.push("edit landed");
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 1);
+	assert.match(reviews[0], /read 1/);
+	assert.match(reviews[0], /read 2/);
+	assert.match(reviews[0], /edit landed/);
+	assert.equal(rt.idle, true);
+});
+
+test("runtime: held high-priority or terminal forces drain of low-signal pending", async () => {
+	const reviews = [];
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			reviews.push("reviewed");
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	const held = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	held.enqueueAdvice("data race", "concern");
+	held.push("read", { lowSignal: true });
+	assert.equal(await held.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 1, "held concern starts drain");
+
+	const terminal = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	terminal.push("read", { lowSignal: true, terminal: true });
+	assert.equal(await terminal.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 2, "terminal starts drain");
+});
+
+test("runtime: backlog and deferral timer drain low-signal pending", async () => {
+	const reviews = [];
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			reviews.push("reviewed");
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	const backlog = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	for (let i = 0; i < A.ADVISOR_DRAIN_BACKLOG; i++) backlog.push(`read ${i}`, { lowSignal: true });
+	assert.equal(reviews.length, 0);
+	backlog.push("read last", { lowSignal: true });
+	assert.equal(await backlog.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 1);
+
+	const timed = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	timed.deferMs = 20;
+	timed.push("read later", { lowSignal: true });
+	assert.equal(reviews.length, 1);
+	assert.equal(await timed.waitUntilSettled(20), "settled", "deferral is already settled for catch-up");
+	await new Promise((r) => setTimeout(r, 50));
+	assert.equal(reviews.length, 2, "deferral timer starts drain");
+	timed.dispose();
+});
+
+test("runtime: onSettled fires after a review even if more low-signal work is still pending", async () => {
+	const settled = [];
+	let release;
+	const agent = {
+		state: { messages: [], model: {} },
+		prompt() {
+			return new Promise((resolve) => {
+				release = () => {
+					this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+					resolve();
+				};
+			});
+		},
+		abort() {},
+		reset() {},
+	};
+	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0, undefined, (outcome) =>
+		settled.push(outcome),
+	);
+	rt.push("edit landed");
+	await new Promise((r) => setImmediate(r));
+	rt.push("read later", { lowSignal: true });
+	release();
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.deepEqual(settled, ["ok"]);
+	assert.equal(rt.idle, false);
+	assert.equal(rt.reviewing, false);
+	rt.dispose();
+});
+
 test("runtime.waitUntilSettled: a dropped (3x-failed) review resolves 'failed', held preserved", async () => {
 	let attempts = 0;
 	const agent = {
@@ -1523,12 +2156,7 @@ test("runtime.waitUntilSettled: reset() cancels a pending waiter as 'aborted' im
 	resolvePrompt?.(); // let the hung prompt unwind for a clean exit
 });
 
-test("runtime.waitUntilSettled: a batch that overflows even a FRESH context self-compacts once, then resolves 'failed', held preserved", async () => {
-	// stopReason "length" triggers a one-shot reactive self-compaction (clear the
-	// advisor's own history + replay the batch fresh). If the FRESH replay still
-	// overflows, the batch genuinely doesn't fit, so it counts as a failed review
-	// (retried up to 3x). Each outer review attempt therefore issues 2 prompts
-	// (initial + one fresh-replay) = 6 total across the 3 retries.
+test("runtime.waitUntilSettled: a truncated review retries 3 times then fails, without resetting the agent", async () => {
 	let attempts = 0;
 	let resets = 0;
 	const agent = {
@@ -1547,45 +2175,33 @@ test("runtime.waitUntilSettled: a batch that overflows even a FRESH context self
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
-	assert.equal(attempts, 6, "each of the 3 review retries self-compacts once then re-overflows (2 prompts each)");
-	assert.equal(resets, 3, "one reactive self-compaction per review retry");
+	assert.equal(attempts, 3);
+	assert.equal(resets, 0, "overflow is the session compact hook, not a private reset");
 	assert.equal(rt.hasHighPriority, true, "held note NOT pruned by a truncated review");
 });
 
-test("runtime.waitUntilSettled: an ACCUMULATED-context overflow self-compacts and the fresh replay succeeds", async () => {
-	// The common case: the advisor's own accumulated transcript overflowed, but the
-	// batch fits fine in a fresh context. One reactive self-compaction recovers it —
-	// the review then succeeds (settled, not failed) and recanted holds are pruned.
+test("runtime.waitUntilSettled: a later successful review still prunes recanted holds", async () => {
 	let attempts = 0;
-	let resets = 0;
 	const agent = {
-		state: {
-			messages: [
-				{ role: "user", content: [] },
-				{ role: "assistant", content: [] },
-			],
-			model: {},
-		},
+		state: { messages: [], model: {} },
 		async prompt() {
 			attempts++;
-			// First attempt overflows (accumulated context); after a self-compaction the
-			// fresh replay (empty messages) succeeds.
-			const overflow = this.state.messages.length > 0;
-			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: overflow ? "length" : "stop" });
+			this.state.messages.push({
+				role: "assistant",
+				content: [],
+				usage: {},
+				stopReason: attempts === 1 ? "length" : "stop",
+			});
 		},
 		abort() {},
-		reset() {
-			resets++;
-			this.state.messages = [];
-		},
+		reset() {},
 	};
 	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
-	rt.enqueueAdvice("data race", "blocker"); // offered as preamble; advisor stays silent → pruned on success
+	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(attempts, 2, "overflow then one successful fresh replay");
-	assert.equal(resets, 1, "exactly one reactive self-compaction");
-	assert.equal(rt.hasHighPriority, false, "a successful (post-compaction) review still prunes recanted holds");
+	assert.equal(attempts, 2);
+	assert.equal(rt.hasHighPriority, false);
 });
 
 test("runtime: a concern/blocker held by a DISCARDED overflowed attempt is rolled back, not kept (finding #1)", async () => {
@@ -1738,17 +2354,14 @@ test("runtime: the reactive rollback keeps PRE-EXISTING held notes, dropping onl
 	assert.equal(held[0].note, "real prior blocker", "phantom dropped by rollback, prior kept");
 });
 
-test("runtime: PROACTIVE self-compaction fires at ADVISOR_COMPACT_AT, replays fresh, and preserves lifetime cost accounting", async () => {
-	const promptMsgCounts = [];
+test("runtime: does not privately reset when context is a large fraction of the window", async () => {
 	let resets = 0;
 	const agent = {
 		state: {
-			// One prior turn whose usage puts the advisor at 90% of a 100k window.
 			messages: [{ role: "assistant", content: [], usage: { input: 90000, cost: { total: 0.5 } }, stopReason: "stop" }],
 			model: { contextWindow: 100000 },
 		},
 		async prompt() {
-			promptMsgCounts.push(this.state.messages.length); // 0 ⇒ replayed into a fresh context
 			this.state.messages.push({
 				role: "assistant",
 				content: [],
@@ -1762,38 +2375,11 @@ test("runtime: PROACTIVE self-compaction fires at ADVISOR_COMPACT_AT, replays fr
 			this.state.messages = [];
 		},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0); // default compactAt = 80
+	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(resets, 1, "proactive self-compaction reset the agent before the review");
-	assert.equal(promptMsgCounts[0], 0, "the batch was replayed into a fresh (cleared) context");
-	const u = rt.usage;
-	assert.equal(u.input, 90005, "lifetime input survives the self-compaction (folded 90000 + fresh 5)");
-	assert.ok(Math.abs(u.cost - 0.51) < 1e-9, "lifetime cost survives the self-compaction (0.5 + 0.01)");
-	assert.equal(u.contextTokens, 5, "context size reflects only the fresh post-compaction turn");
-});
-
-test("runtime: PROACTIVE self-compaction respects a custom compactAtPercent threshold (no reset below it)", async () => {
-	let resets = 0;
-	const agent = {
-		state: {
-			messages: [{ role: "assistant", content: [], usage: { input: 60000 }, stopReason: "stop" }], // 60% of 100k
-			model: { contextWindow: 100000 },
-		},
-		async prompt() {
-			this.state.messages.push({ role: "assistant", content: [], usage: { input: 5 }, stopReason: "stop" });
-		},
-		abort() {},
-		reset() {
-			resets++;
-			this.state.messages = [];
-		},
-	};
-	// Threshold 95 > 60% current ⇒ must NOT compact.
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0, undefined, 95);
-	rt.push("turn");
-	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(resets, 0, "context below the configured threshold is left intact");
+	assert.equal(resets, 0);
+	assert.equal(rt.usage.input, 90005);
 });
 
 test("runtime: bound session records each prompt including a self-compaction replay", async () => {
@@ -1835,7 +2421,7 @@ test("runtime: bound session records each prompt including a self-compaction rep
 		assert.equal(rows.length, 2);
 		assert.equal(rows[0].trigger, "turn_end");
 		assert.equal(rows[0].status, "length");
-		assert.equal(rows[1].trigger, "turn_end_replay");
+		assert.equal(rows[1].trigger, "turn_end_retry");
 		assert.equal(rows[1].status, "stop");
 		assert.equal(rows[0].provider, "anthropic");
 		assert.equal(rows[0].model, "claude-opus-5");
@@ -2033,7 +2619,7 @@ test("lifecycle: before_agent_start appends the primary protocol only while enab
 	}
 });
 
-test("lifecycle: session rewrites capture active context passively for every Pi replacement path", async () => {
+test("lifecycle: primary compact leaves the advisor alone; identity change does not dump primary context", async () => {
 	const x = await lifecycleHarness();
 	let builds = 0;
 	const ctx = {
@@ -2050,8 +2636,8 @@ test("lifecycle: session rewrites capture active context passively for every Pi 
 	}
 	x.h("session_compact")({}, ctx);
 	x.h("session_tree")({}, ctx);
-	assert.equal(builds, 7, "all session starts, compaction, and tree navigation use Pi's active context");
-	assert.deepEqual(x.sent, [], "capturing replacement context never emits advice by itself");
+	assert.equal(builds, 0, "advisor no longer reprimes from Pi's active context");
+	assert.deepEqual(x.sent, [], "identity change never emits advice by itself");
 });
 
 test("lifecycle: a direct late nit after terminal turn_end restates", async () => {

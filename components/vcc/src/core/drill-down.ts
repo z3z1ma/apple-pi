@@ -1,5 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
-import { contentBearingText } from "./content.js";
+import { contentBearingText, textOf } from "./content.js";
 import type { RenderedEntry } from "./render-entries.js";
 import { fileOperationsOf } from "./search-entries.js";
 
@@ -12,6 +12,29 @@ export interface DrillDownRequest {
 }
 
 const DRILL_DOWN = /^#(\d+):(.+?)(?::(full|\d+(?::\d+)?))?$/;
+const CALL_QUERY = /^call:\s*(\S+)\s*$/i;
+const CALL_BODY_CAP = 50 * 1024;
+
+/** Parse `call:<toolCallId>` from an advisor receipt address. */
+export const parseCallQuery = (query: string): string | undefined => {
+	const match = CALL_QUERY.exec(query.trim());
+	return match?.[1];
+};
+
+/** Recover a persisted primary tool-result body by toolCallId. */
+export const expandToolCall = (messages: Message[], callId: string): string => {
+	for (const message of messages) {
+		if (message.role !== "toolResult") continue;
+		if ((message as { toolCallId?: string }).toolCallId !== callId) continue;
+		const body = textOf(message.content);
+		const name = (message as { toolName?: string }).toolName ?? "tool";
+		const heading = `Tool result: ${name}\ncall: ${callId}`;
+		const size = Buffer.byteLength(body, "utf8");
+		if (size <= CALL_BODY_CAP) return `${heading}\n\n${body || "(no text output)"}`;
+		return `${heading}\n\n${bytePrefix(body, CALL_BODY_CAP)}\n\n... (${size - CALL_BODY_CAP} bytes omitted; full recall is capped at 50KB)`;
+	}
+	return `No primary tool result for call:${callId}.`;
+};
 
 /** Parse #N:path, #N:path:full, #N:path:offset, or #N:path:offset:limit. */
 export const parseDrillDown = (query: string): DrillDownRequest | undefined => {
