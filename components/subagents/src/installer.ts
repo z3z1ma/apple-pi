@@ -688,7 +688,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					!settled || params.transcript_tail !== undefined
 						? `Agent ${record.id} is ${record.status}.`
 						: record.result || record.error || "No output.";
-				if (waitExpired && !settled) output += ` Wait limit (${waitSeconds}s) reached; it continues in the background.`;
+				if (waitExpired && !settled) {
+					output += ` Wait limit (${waitSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
+				}
 				if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
 					const tail =
 						params.transcript_tail === undefined

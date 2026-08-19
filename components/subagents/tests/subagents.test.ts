@@ -296,6 +296,34 @@ describe("owned subagent surface", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("formats timeout output with instructions to call get_subagent_result again", async () => {
+		const record = {
+			id: "child-wait-timeout",
+			parentAgentId: "parent-1",
+			status: "running",
+			promise: new Promise(() => {}),
+		};
+		const manager = { getRecord: vi.fn(() => record) };
+		const tools = createNestedSubagentTools({
+			manager: manager as any,
+			pi: {} as any,
+			parentAgentId: "parent-1",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: process.cwd(),
+		});
+		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
+		const result = await resultTool.execute(
+			"check-child",
+			{ agent_id: "child-wait-timeout", wait_seconds: 1 },
+			undefined,
+		);
+		expect(result.content[0].text).toContain(
+			"Wait limit (1s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.",
+		);
+	});
+
 	it("clamps model-selected wait durations", () => {
 		expect(normalizeWaitSeconds(-1)).toBe(0);
 		expect(normalizeWaitSeconds(1.9)).toBe(1);

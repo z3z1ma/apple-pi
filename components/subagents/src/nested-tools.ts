@@ -299,7 +299,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			let output =
 				params.transcript_tail === undefined ? formatRecord(record, false) : `Agent ${record.id} is ${record.status}.`;
 			if (waitExpired && (record.status === "queued" || record.status === "running")) {
-				output += `\n\nWait limit (${waitSeconds}s) reached; it continues in the background.`;
+				output += `\n\nWait limit (${waitSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
 			}
 			if (params.transcript_tail !== undefined && record.session) {
 				const tail = Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));

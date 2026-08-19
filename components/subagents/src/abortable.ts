@@ -43,7 +43,7 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 }
 
 /** The longest a result check may wait without returning control to its caller. */
-export const MAX_SUBAGENT_RESULT_WAIT_SECONDS = 60;
+export const MAX_SUBAGENT_RESULT_WAIT_SECONDS = 300;
 export const MAX_SUBAGENT_RESULT_WAIT_MS = MAX_SUBAGENT_RESULT_WAIT_SECONDS * 1_000;
 
 /** Clamp model-facing wait input defensively at the tool boundary. */
