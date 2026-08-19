@@ -1190,6 +1190,56 @@ return { names: available.map((tool) => tool.name), text: echoed.text };
 		expect(widgets.at(-1)).toEqual({ key: "apple-pi:exec-activity", content: undefined });
 	});
 
+	it("does not stamp a sibling Path not found onto still-pending Promise.all calls", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-exec-missing-"));
+		try {
+			const missing = join(dir, "does-not-exist");
+			const { tool, resultHandler } = register();
+			await expect(
+				tool.execute(
+					"sibling-path",
+					{
+						code: `return Promise.all([
+  pi.grep({ path: ${JSON.stringify(missing)}, pattern: "x" }),
+  pi.bash({ command: "sleep 0.4 && echo ok" }),
+]);`,
+					},
+					undefined,
+					undefined,
+					{
+						cwd: dir,
+						sessionManager: {
+							getSessionId: () => "test-session",
+							getSessionFile: () => undefined,
+						},
+					},
+				),
+			).rejects.toThrow(`Path not found: ${missing}`);
+
+			const patch = resultHandler({
+				toolName: "pi_exec",
+				toolCallId: "sibling-path",
+				isError: true,
+			});
+			const operations = patch.details.trace.operations as Array<{
+				ref: string;
+				outcome: string;
+				error?: string;
+			}>;
+			const grep = operations.find((operation) => operation.ref === "pi.grep");
+			const bash = operations.find((operation) => operation.ref === "pi.bash");
+			expect(grep).toMatchObject({
+				outcome: "failed",
+				error: `Path not found: ${missing}`,
+			});
+			expect(bash?.outcome).toBe("aborted");
+			expect(bash?.error).toBe("pi_exec failed");
+			expect(bash?.error).not.toContain(missing);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("reattaches durable trace details to failed tool results", async () => {
 		const { tool, resultHandler } = register();
 		await expect(

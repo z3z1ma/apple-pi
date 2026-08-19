@@ -745,8 +745,8 @@ export default function runtime(pi: ExtensionAPI): void {
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
 					for (const operation of pendingOperations) {
-						operation.outcome = result.outcome;
-						operation.error = result.error ?? `pi_exec ${result.outcome}`;
+						operation.outcome = result.outcome === "failed" ? "aborted" : result.outcome;
+						operation.error = `pi_exec ${result.outcome}`;
 					}
 					pendingOperations.clear();
 					activeOperations.clear();
