@@ -10,13 +10,13 @@
  *   auto-compaction are indistinguishable. The proactive trigger handles
  *   the "compact earlier than pi-core" direction.
  */
-import { describe, test, expect, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isCodexContextOverflowPending } from "../src/core/codex-output-limit.js";
 import { registerBeforeCompactHook } from "../src/hooks/before-compact.js";
 import { registerProactiveThresholdHook, resetProactiveState } from "../src/hooks/proactive-threshold.js";
-import { isCodexContextOverflowPending } from "../src/core/codex-output-limit.js";
 
 let tmpDir: string;
 let CONFIG_PATH: string;
@@ -176,7 +176,7 @@ describe("integration: proactive trigger + before-compact", () => {
 		registerProactiveThresholdHook(pi);
 		registerBeforeCompactHook(pi);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 
 		const entries = [
@@ -238,7 +238,7 @@ describe("integration: proactive trigger + before-compact", () => {
 		registerProactiveThresholdHook(pi);
 		registerBeforeCompactHook(pi);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 
 		emit("session_compact", { type: "session_compact", compactionEntry: {} });
@@ -304,7 +304,7 @@ describe("integration: proactive trigger + before-compact with overrideDefaultCo
 		registerProactiveThresholdHook(pi);
 		registerBeforeCompactHook(pi);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 
 		const entries = [
@@ -349,7 +349,7 @@ describe("integration: cooldown prevents double compaction", () => {
 		resetProactiveState();
 	});
 
-	test("agent_end + model_select on same turn: only one compact()", () => {
+	test("agent_settled + model_select on same turn: only one compact()", () => {
 		setConfig({
 			debug: false,
 			overrideDefaultCompaction: true,
@@ -363,14 +363,14 @@ describe("integration: cooldown prevents double compaction", () => {
 		);
 		registerProactiveThresholdHook(pi);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 
 		emit("model_select", { type: "model_select" });
 		expect(compactCalls).toHaveLength(1);
 	});
 
-	test("two consecutive agent_ends without session_compact: second blocked by cooldown", () => {
+	test("two consecutive agent_settled events without session_compact: second blocked by cooldown", () => {
 		setConfig({
 			debug: false,
 			overrideDefaultCompaction: true,
@@ -384,10 +384,10 @@ describe("integration: cooldown prevents double compaction", () => {
 		);
 		registerProactiveThresholdHook(pi);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 
-		emit("agent_end", { type: "agent_end", messages: [] });
+		emit("agent_settled", { type: "agent_settled" });
 		expect(compactCalls).toHaveLength(1);
 	});
 });

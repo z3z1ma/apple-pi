@@ -80,7 +80,7 @@ function setConfig(cfg: Record<string, unknown>) {
 	writeFileSync(CONFIG_PATH, JSON.stringify(cfg));
 }
 
-describe("proactiveThreshold: agent_end", () => {
+describe("proactiveThreshold: agent_settled", () => {
 	afterEach(() => {
 		resetProactiveState();
 		if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
@@ -99,11 +99,49 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 		expect(mock.captured[0].method).toBe("compact");
 		expect(mock.notifyCalls.length).toBeGreaterThanOrEqual(1);
 		expect(mock.notifyCalls[0].msg).toContain("auto");
+	});
+
+	test("does not request compact on agent_end when only the usage waterline is crossed", () => {
+		setConfig({
+			debug: false,
+			overrideDefaultCompaction: true,
+			modelThresholds: {
+				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
+			},
+		});
+		const mock = createMockPi(
+			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
+			{ tokens: 110000, contextWindow: 128000, percent: 86 },
+		);
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		expect(mock.captured).toHaveLength(0);
+	});
+
+	test("does NOT trigger when the live branch already ends with a compaction", () => {
+		setConfig({
+			debug: false,
+			overrideDefaultCompaction: true,
+			modelThresholds: {
+				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
+			},
+		});
+		const mock = createMockPi(
+			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
+			{ tokens: 110000, contextWindow: 128000, percent: 86 },
+		);
+		mock.ctx.sessionManager = {
+			getBranch: () => [{ type: "message" }, { type: "compaction" }],
+		};
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_settled", { type: "agent_settled" });
+		expect(mock.captured).toHaveLength(0);
+		expect(mock.notifyCalls).toHaveLength(0);
 	});
 
 	test("does NOT trigger when context is below threshold", () => {
@@ -119,7 +157,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 80000, contextWindow: 128000, percent: 63 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -130,7 +168,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -141,7 +179,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 135000, contextWindow: 200000, percent: 68 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -152,7 +190,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -169,7 +207,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: null, contextWindow: 128000, percent: null },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -186,7 +224,7 @@ describe("proactiveThreshold: agent_end", () => {
 			{ tokens: 50000, contextWindow: 0, percent: null },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 });
@@ -277,7 +315,7 @@ describe("proactiveThreshold: model_select", () => {
 			{ tokens: 90000, contextWindow: 128000, percent: 70 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -295,7 +333,7 @@ describe("proactiveThreshold: model_select", () => {
 			{ tokens: 70000, contextWindow: 128000, percent: 55 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -332,7 +370,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 150001, contextWindow: 1000000, percent: 15 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 		expect(mock.notifyCalls[0].msg).toContain("150.0k tok");
 	});
@@ -348,7 +386,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 150000, contextWindow: 1000000, percent: 15 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -365,7 +403,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 150001, contextWindow: 1000000, percent: 15 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -380,7 +418,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 120000, contextWindow: 200000, percent: 60 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -395,7 +433,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 140000, contextWindow: 200000, percent: 70 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -410,7 +448,7 @@ describe("proactiveThreshold: compactAtTokens", () => {
 			{ tokens: 190000, contextWindow: 200000, percent: 95 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 });
@@ -435,8 +473,8 @@ describe("proactiveThreshold: cooldown", () => {
 		);
 		registerProactiveThresholdHook(mock.piApi);
 
-		// First trigger: agent_end causes compact
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		// First trigger: agent_settled causes compact
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 
 		// session_compact fires (compaction completed) — sets cooldown
@@ -462,7 +500,7 @@ describe("proactiveThreshold: cooldown", () => {
 		registerProactiveThresholdHook(mock.piApi);
 
 		// First trigger
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 
 		// session_compact sets cooldown
@@ -472,7 +510,7 @@ describe("proactiveThreshold: cooldown", () => {
 		await new Promise((r) => setTimeout(r, 3200));
 
 		// Second trigger should now work
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(2);
 	}, 10000);
 });
@@ -496,7 +534,7 @@ describe("proactiveThreshold: modelId matching", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -513,7 +551,7 @@ describe("proactiveThreshold: modelId matching", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -530,7 +568,7 @@ describe("proactiveThreshold: modelId matching", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 
@@ -548,7 +586,7 @@ describe("proactiveThreshold: modelId matching", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 });
@@ -573,7 +611,7 @@ describe("proactiveThreshold: exact boundary", () => {
 			{ tokens: 95232, contextWindow: 128000, percent: 74 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 
@@ -591,7 +629,7 @@ describe("proactiveThreshold: exact boundary", () => {
 			{ tokens: 95233, contextWindow: 128000, percent: 74 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(1);
 	});
 });
@@ -612,7 +650,7 @@ describe("proactiveThreshold: without model", () => {
 		});
 		const mock = createMockPi(undefined, { tokens: 110000, contextWindow: 128000, percent: 86 });
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
 	});
 });
@@ -636,7 +674,7 @@ describe("proactiveThreshold: works for pi-core compaction too", () => {
 			{ tokens: 110000, contextWindow: 128000, percent: 86 },
 		);
 		registerProactiveThresholdHook(mock.piApi);
-		mock.emit("agent_end", { type: "agent_end", messages: [] });
+		mock.emit("agent_settled", { type: "agent_settled" });
 		// Should still trigger compact — ctx.compact() will invoke pi-core's compaction
 		expect(mock.captured).toHaveLength(1);
 	});
@@ -780,5 +818,34 @@ describe("proactiveThreshold: Codex recovery errors", () => {
 		// pi-core's _checkCompaction bails on `enabled: false`; pi-vcc must drive.
 		expect(mock.captured).toHaveLength(1);
 		expect(mock.notifyCalls[0].msg).toContain("context window");
+	});
+
+	test("does not force Codex recovery compact when the branch already ends with a compaction", () => {
+		setConfig({ debug: false, overrideDefaultCompaction: true });
+		const mock = createMockPi(
+			{ id: "luna", provider: "openai-codex", contextWindow: 272000 },
+			{ tokens: null, contextWindow: 272000, percent: null },
+		);
+		mock.ctx.sessionManager = {
+			getBranch: () => [{ type: "compaction" }],
+		};
+		registerProactiveThresholdHook(mock.piApi);
+
+		mock.emit("agent_end", {
+			type: "agent_end",
+			messages: [
+				{
+					role: "assistant",
+					api: "openai-codex-responses",
+					provider: "openai-codex",
+					stopReason: "error",
+					errorMessage:
+						"Model stopped because it reached the maximum output token limit. The response may be incomplete.",
+				},
+			],
+		});
+
+		expect(mock.captured).toHaveLength(0);
+		expect(mock.notifyCalls).toHaveLength(0);
 	});
 });

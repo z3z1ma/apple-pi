@@ -450,7 +450,7 @@ export const registerBeforeCompactHook = (
 		// indistinguishable (both have customInstructions: undefined).
 		//
 		// The per-model threshold is now served entirely by the proactive
-		// trigger (in proactive-threshold.ts), which fires on agent_end /
+		// trigger (in proactive-threshold.ts), which fires on agent_settled /
 		// model_select when the per-model threshold is crossed. This correctly
 		// compacts earlier than pi-core's global threshold without needing to
 		// cancel any compaction here.

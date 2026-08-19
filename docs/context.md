@@ -8,7 +8,7 @@ Normal `/compact`, automatic compaction, overflow recovery, and explicit `/pi-vc
 
 The metadata is intentionally flat: `details.compactor === "pi-vcc"` and `details.type === "om.folded"` coexist so both recall systems recognize the same compaction.
 
-A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. Auto-compaction still uses `agent_settled` and skips when VCC has already requested compact.
+A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. VCC's usage waterline and observational memory's fallback both request compact on `agent_settled`, after Pi auto-compaction. Both skip silently when the live branch already ends at a compaction entry, and memory skips when VCC has already requested compact. Codex overflow/output-limit recovery still fires on `agent_end`.
 
 Commands and tools:
 

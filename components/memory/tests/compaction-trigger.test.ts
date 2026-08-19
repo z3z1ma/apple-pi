@@ -110,6 +110,51 @@ describe("V3 compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 	});
 
+	it("does not compact when the live branch already ends with a compaction", async () => {
+		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
+		const branch = [
+			textCustomMessage("raw-1", "aaaaaaaaaaaa"),
+			compactionEntry("cmp-1", { firstKeptEntryId: "raw-1" }),
+		];
+		const ctx = fakeCtx([branch]);
+
+		handler(agentSettled(), ctx);
+		await vi.runAllTimersAsync();
+
+		expect(ctx.compact).not.toHaveBeenCalled();
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.ui.notify).not.toHaveBeenCalled();
+	});
+
+	it("skips deferred compact when a compaction becomes the live leaf", async () => {
+		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
+		const after = [...dueBranch, compactionEntry("cmp-1", { firstKeptEntryId: "raw-1" })];
+		const ctx = fakeCtx([dueBranch, after]);
+
+		handler(agentSettled(), ctx);
+		expect(runtime.compactInFlight).toBe(true);
+		await vi.runAllTimersAsync();
+
+		expect(ctx.compact).not.toHaveBeenCalled();
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("Already compacted"), "error");
+	});
+
+	it("treats Already compacted as a silent no-op", async () => {
+		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
+		const compact = vi.fn((opts: { onError?: (error: { message: string }) => void }) => {
+			opts.onError?.({ message: "Already compacted" });
+		});
+		const ctx = fakeCtx([dueBranch], { compact });
+
+		handler(agentSettled(), ctx);
+		await vi.runAllTimersAsync();
+
+		expect(compact).toHaveBeenCalledTimes(1);
+		expect(runtime.compactInFlight).toBe(false);
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith("Observational memory: Already compacted", "error");
+	});
+
 	it("skips when compaction is already in flight", async () => {
 		const { handler } = captureHandler({ compactInFlight: true });
 		const ctx = fakeCtx([dueBranch]);

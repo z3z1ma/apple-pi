@@ -3,6 +3,12 @@ import { resolveCompactAfterTokens } from "../config.js";
 import { isStaleExtensionCtxError, type Runtime } from "../runtime.js";
 import { type Entry, rawTokensSinceLastCompaction } from "../session-ledger/index.js";
 
+/** Pi's manual `ctx.compact()` throws if the live leaf is already a compaction. */
+function branchEndsWithCompaction(entries: Entry[] | undefined): boolean {
+	if (!entries || entries.length === 0) return false;
+	return entries[entries.length - 1]?.type === "compaction";
+}
+
 export type CompactionTriggerOptions = {
 	/** True while VCC (or another owner) has already called ctx.compact() and session_compact has not fired. */
 	hostCompactionPending?: () => boolean;
@@ -32,6 +38,7 @@ export function registerCompactionTrigger(
 
 		const entries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
 		if (!entries) return;
+		if (branchEndsWithCompaction(entries)) return;
 		if (options.hostOwnsUsageThreshold?.(ctx)) return;
 		const progress = rawTokensSinceLastCompaction(entries);
 		const contextWindow = typeof ctx.model?.contextWindow === "number" ? ctx.model.contextWindow : undefined;
@@ -81,6 +88,11 @@ export function registerCompactionTrigger(
 						);
 					return;
 				}
+				const liveEntries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
+				if (branchEndsWithCompaction(liveEntries)) {
+					runtime.compactInFlight = false;
+					return;
+				}
 				ctx.compact({
 					onComplete: () => {
 						runtime.compactInFlight = false;
@@ -88,8 +100,9 @@ export function registerCompactionTrigger(
 					},
 					onError: (error: { message: string }) => {
 						runtime.compactInFlight = false;
-						if (error.message === "Compaction cancelled") {
-							// We already notified the user with the real reason before returning { cancel: true }.
+						if (error.message === "Compaction cancelled" || error.message === "Already compacted") {
+							// Cancelled: we already notified the real reason.
+							// Already compacted: the branch leaf is a compaction; a no-op.
 							return;
 						}
 						if (hasUI) ui?.notify(`Observational memory: ${error.message}`, "error");

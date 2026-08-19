@@ -7,14 +7,22 @@ import {
 	isCodexOutputLimitError,
 	markCodexContextOverflowPending,
 } from "../core/codex-output-limit.js";
-import { loadSettings, getModelThreshold, isPiCoreCompactionEnabled, resolveTriggerTokens } from "../core/settings.js";
+import { getModelThreshold, isPiCoreCompactionEnabled, loadSettings, resolveTriggerTokens } from "../core/settings.js";
 
 type ProactiveContext = {
 	model?: any;
 	getContextUsage?: () => any;
 	compact?: (options?: any) => void;
 	ui?: any;
-	sessionManager?: { getCwd?: () => string };
+	sessionManager?: { getCwd?: () => string; getBranch?: () => unknown[] };
+};
+
+/** Pi's manual `ctx.compact()` throws if the live leaf is already a compaction. */
+const branchEndsWithCompaction = (ctx: ProactiveContext): boolean => {
+	const branch = ctx.sessionManager?.getBranch?.();
+	if (!Array.isArray(branch) || branch.length === 0) return false;
+	const last = branch[branch.length - 1];
+	return !!last && typeof last === "object" && (last as { type?: unknown }).type === "compaction";
 };
 
 const formatTokens = (n: number): string => {
@@ -76,6 +84,7 @@ const checkAndTrigger = (ctx: ProactiveContext, source: string) => {
 
 	// Cooldown guard — prevent double-trigger within 3s of last compaction.
 	if (isCoolingDown()) return;
+	if (branchEndsWithCompaction(ctx)) return;
 
 	try {
 		const pct = Math.round((usage.tokens / contextWindow) * 100);
@@ -86,20 +95,24 @@ const checkAndTrigger = (ctx: ProactiveContext, source: string) => {
 	} catch {}
 
 	// Set cooldown IMMEDIATELY (before ctx.compact() runs) to prevent
-	// pi-core's own _checkCompaction from also triggering compaction
-	// on the same turn.
+	// a second settled/model-switch check from also requesting compact.
 	setCooldown();
 
 	// Mark that this compaction was triggered by us, so session_before_compact
 	// doesn't cancel it if tokensBefore differs from getContextUsage().
 	proactiveTriggerActive = true;
 
+	if (branchEndsWithCompaction(ctx)) {
+		proactiveTriggerActive = false;
+		return;
+	}
 	ctx.compact?.();
 };
 
 /** Force compaction for Codex responses that report an output limit as an error. */
 const triggerCodexOutputLimitCompaction = (ctx: ProactiveContext) => {
 	if (isCoolingDown()) return;
+	if (branchEndsWithCompaction(ctx)) return;
 
 	try {
 		ctx?.ui?.notify?.("pi-vcc: Codex reached its maximum output token limit. Compacting...", "info");
@@ -107,12 +120,17 @@ const triggerCodexOutputLimitCompaction = (ctx: ProactiveContext) => {
 
 	setCooldown();
 	proactiveTriggerActive = true;
+	if (branchEndsWithCompaction(ctx)) {
+		proactiveTriggerActive = false;
+		return;
+	}
 	ctx.compact?.({ customInstructions: CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION });
 };
 
 /** Force compaction when Codex omits the model identity from an overflow error. */
 const triggerCodexContextOverflowCompaction = (ctx: ProactiveContext) => {
 	if (isCoolingDown()) return;
+	if (branchEndsWithCompaction(ctx)) return;
 
 	try {
 		ctx?.ui?.notify?.("pi-vcc: Codex input exceeded the context window. Compacting...", "info");
@@ -120,6 +138,10 @@ const triggerCodexContextOverflowCompaction = (ctx: ProactiveContext) => {
 
 	setCooldown();
 	proactiveTriggerActive = true;
+	if (branchEndsWithCompaction(ctx)) {
+		proactiveTriggerActive = false;
+		return;
+	}
 	ctx.compact?.({ customInstructions: CODEX_CONTEXT_OVERFLOW_COMPACT_INSTRUCTION });
 };
 
@@ -144,10 +166,12 @@ const lastAssistantMessage = (event: unknown): unknown => {
  *
  * Three triggers:
  *
- * 1. `agent_end` — after each agent run completes, check if context
- *    exceeds the active configured threshold. If that threshold is lower
- *    than pi-core's global threshold (meaning this config wants to compact
- *    earlier), pi-core won't trigger compaction — so we do.
+ * 1. `agent_settled` — after retries, Pi auto-compaction, and queued
+ *    continuation have finished. If context still exceeds the configured
+ *    threshold, request compact. This is later than `agent_end` so a
+ *    fire-and-forget `ctx.compact()` cannot race Pi's `_checkCompaction`.
+ *    Codex overflow/output-limit recovery stays on `agent_end` because
+ *    those errors have no usable usage snapshot.
  *
  * 2. `model_select` — when switching models, the new model may have a
  *    different threshold. Check immediately in case current context exceeds
@@ -191,8 +215,11 @@ export const registerProactiveThresholdHook = (pi: ExtensionAPI) => {
 			if (!piCoreWillHandle) {
 				triggerCodexContextOverflowCompaction(ctx);
 			}
-			return;
 		}
+	});
+
+	// Usage waterline — after Pi has had its chance to compact.
+	pi.on("agent_settled", (_event, ctx) => {
 		checkAndTrigger(ctx, "auto");
 	});
 
