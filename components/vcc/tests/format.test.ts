@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { formatSummary } from "../src/core/format.js";
+import { describe, expect, it } from "bun:test";
+import { formatSummary, wrapLongLines } from "../src/core/format.js";
 import type { SectionData } from "../src/sections.js";
 
 const empty: SectionData = {
@@ -62,12 +62,14 @@ describe("formatSummary", () => {
 		expect(r).toContain("\n\n");
 	});
 
-	it("wraps long lines so compaction TUI rendering stays bounded", () => {
+	it("does not wrap; wrapLongLines is a TUI pass after compile packs", () => {
 		const data = {
 			...empty,
 			briefTranscript: `[assistant]\n${"word ".repeat(80)}`,
 		};
-		const r = formatSummary(data);
-		expect(Math.max(...r.split("\n").map((line) => line.length))).toBeLessThanOrEqual(120);
+		const formatted = formatSummary(data);
+		expect(formatted.split("\n").some((line) => line.length > 120)).toBe(true);
+		const wrapped = wrapLongLines(formatted);
+		expect(Math.max(...wrapped.split("\n").map((line) => line.length))).toBeLessThanOrEqual(120);
 	});
 });

@@ -11,21 +11,21 @@
  *   validation, so no Agent prototype patch is required.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
 	buildOwnCut,
 	shouldResumeAfterCompaction,
 	shouldTriggerResumeForCompaction,
 } from "../src/hooks/before-compact.js";
 import {
-	makeUserEntry,
-	makeAssistantEntry,
-	resetIds,
-	userMsg,
 	assistantMsg,
-	toolResultMsg,
 	compactionSummaryMsg,
+	makeAssistantEntry,
 	makeContextMessages,
+	makeUserEntry,
+	resetIds,
+	toolResultMsg,
+	userMsg,
 } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -74,14 +74,13 @@ describe("buildOwnCut", () => {
 		expect(result.messages).toEqual([user1.message, assistant1.message]);
 	});
 
-	it("mid-cycle cut when only one user message (3+ live messages)", () => {
+	it("keeps the last assistant when only one user message (3+ live messages)", () => {
 		const entries = [makeUserEntry("u1"), makeAssistantEntry("a1", "stop"), makeAssistantEntry("a1b", "stop")];
 		const result = buildOwnCut(entries);
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		// Single user at idx 0 → mid-cycle boundary instead of compact-all
-		// But there are no toolResult messages, so no completed cycles → still compact-all
-		expect(result.compactAll).toBe(true);
+		expect(result.compactAll).toBe(false);
+		expect(result.firstKeptEntryId).toBe(entries[2].id);
 	});
 
 	it("cancels when no live messages", () => {

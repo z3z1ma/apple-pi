@@ -4,8 +4,8 @@ import { clip, firstLine } from "./content.js";
 import { collapseSkillText } from "./skill-collapse.js";
 import { extractPath } from "./tool-args.js";
 
-const TRUNCATE_USER = 256;
-const TRUNCATE_ASSISTANT = 200;
+// User/assistant/result bodies are not clipped here. compile() packs the
+// finished artifact to one window-derived token budget.
 
 // Strip common self-reflective assistant prefixes that carry no semantic info.
 // Conservative list: only removes the leading filler, preserves the actual content.
@@ -207,7 +207,7 @@ const toolOneLiner = (name: string, args: Record<string, unknown>): string => {
 	return `* ${name}`;
 };
 
-interface BriefLine {
+export interface BriefLine {
 	/** Section header like "[user]", "[assistant]", "[tool_error] bash" */
 	header: string;
 	/** Content lines for this section */
@@ -227,6 +227,7 @@ export interface TranscriptEntry {
 
 /**
  * Build BriefLine sections from NormalizedBlocks.
+ * Lossless index structure: no per-role word caps. compile() applies the budget.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: VCC's single-pass section builder preserves ordered compaction context.
 export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
@@ -242,11 +243,12 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 		lastHeader = header;
 	};
 
-	for (const b of blocks) {
+	for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+		const b = blocks[blockIndex];
 		switch (b.kind) {
 			case "user": {
 				if (isNoiseUser(b.text)) break;
-				const text = truncateTokens(collapseSkillText(b.text), TRUNCATE_USER);
+				const text = collapseSkillText(b.text).trim();
 				if (text) {
 					const ref = b.sourceIndex != null ? ` (#${b.sourceIndex})` : "";
 					push("[user]", text + ref);
@@ -271,7 +273,7 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 					if (stripped === raw) break;
 					raw = stripped;
 				}
-				const text = truncateTokens(raw, TRUNCATE_ASSISTANT);
+				const text = raw.trim();
 				if (text) {
 					const ref = b.sourceIndex != null ? ` (#${b.sourceIndex})` : "";
 					push("[assistant]", text + ref);
@@ -295,7 +297,14 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 					const header = `[tool_error] ${b.name}${ref}`;
 					push(header, body);
 					lastHeader = header;
+					break;
 				}
+				const body = b.text.replace(/\s+/g, " ").trim();
+				if (!body) break;
+				const ref = b.sourceIndex != null ? ` (#${b.sourceIndex})` : "";
+				const header = `[tool_result] ${b.name}${ref}`;
+				push(header, body);
+				lastHeader = header;
 				break;
 			}
 			case "thinking":
@@ -326,29 +335,6 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
 			}
 		}
 		sec.lines = out;
-	}
-
-	// Cap tool calls per [assistant] turn — keep tail (latest actions tend to
-	// be the deciding edits/writes; head is usually exploration noise).
-	const TOOL_CALLS_PER_TURN = 8;
-	for (const sec of sections) {
-		if (sec.header !== "[assistant]") continue;
-		const toolIdxs = sec.lines.map((l, i) => (l.startsWith("* ") ? i : -1)).filter((i) => i >= 0);
-		if (toolIdxs.length <= TOOL_CALLS_PER_TURN) continue;
-		const dropCount = toolIdxs.length - TOOL_CALLS_PER_TURN;
-		const dropSet = new Set(toolIdxs.slice(0, dropCount));
-		const firstKeptToolIdx = toolIdxs[dropCount];
-		const next: string[] = [];
-		let inserted = false;
-		for (let i = 0; i < sec.lines.length; i++) {
-			if (dropSet.has(i)) continue;
-			if (!inserted && i === firstKeptToolIdx) {
-				next.push(`* (${dropCount} earlier tool-call entries omitted)`);
-				inserted = true;
-			}
-			next.push(sec.lines[i]);
-		}
-		sec.lines = next;
 	}
 
 	// Collapse consecutive identical [tool_error] sections (same tool, same body).
@@ -460,9 +446,9 @@ export const sectionsToTranscript = (sections: BriefLine[]): TranscriptEntry[] =
 					entries.push({ role: "assistant", text: clean, ...(ref && { ref }) });
 				}
 			}
-		} else if (sec.header.startsWith("[tool_error]")) {
-			// [tool_error] bash (#5)
-			const headerMatch = sec.header.match(/^\[tool_error\]\s+(\S+)\s*(?:\(#(\d+)\))?/);
+		} else if (sec.header.startsWith("[tool_error]") || sec.header.startsWith("[tool_result]")) {
+			// [tool_error] bash (#5) / [tool_result] Read (#3)
+			const headerMatch = sec.header.match(/^\[tool_(?:error|result)\]\s+(\S+)\s*(?:\(#(\d+)\))?/);
 			const tool = headerMatch?.[1] ?? "unknown";
 			const ref = headerMatch?.[2] ? `#${headerMatch[2]}` : undefined;
 			for (const line of sec.lines) {
@@ -737,7 +723,7 @@ const _buildCausalBreadcrumb = (
  * Each turn starts at a user/bash block and continues through assistant
  * responses, tool calls, and tool results until the next user/bash block.
  * This is the HCA zone — the heaviest compression layer that covers turns
- * that would otherwise fall off the brief transcript's capBrief cutoff.
+ * that would otherwise fall off the packed brief.
  *
  * V2: extracts causal chains from assistant text and includes them in
  * turn summaries. Causal breadcrumbs are emitted for the ...recall system.

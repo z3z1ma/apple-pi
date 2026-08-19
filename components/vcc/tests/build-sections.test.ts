@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { buildSections } from "../src/core/build-sections.js";
 import type { NormalizedBlock } from "../src/types.js";
 
@@ -35,13 +35,14 @@ describe("buildSections", () => {
 		expect(r.outstandingContext[0]).toContain("FAIL");
 	});
 
-	it("brief transcript hides tool results but shows errors", () => {
+	it("brief transcript keeps tool result bodies and shows errors", () => {
 		const blocks: NormalizedBlock[] = [
 			{ kind: "tool_result", name: "Read", text: "lots of code here ...", isError: false },
 			{ kind: "tool_result", name: "bash", text: "Command not found", isError: true },
 		];
 		const r = buildSections({ blocks });
-		expect(r.briefTranscript).not.toContain("lots of code");
+		expect(r.briefTranscript).toContain("[tool_result] Read");
+		expect(r.briefTranscript).toContain("lots of code");
 		expect(r.briefTranscript).toContain("[tool_error] bash");
 		expect(r.briefTranscript).toContain("Command not found");
 	});

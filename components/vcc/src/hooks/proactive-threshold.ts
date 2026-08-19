@@ -7,6 +7,7 @@ import {
 	isCodexOutputLimitError,
 	markCodexContextOverflowPending,
 } from "../core/codex-output-limit.js";
+import { buildOwnCut, resolveMaxKeptTokens } from "../core/own-cut.js";
 import { getModelThreshold, isPiCoreCompactionEnabled, loadSettings, resolveTriggerTokens } from "../core/settings.js";
 
 type ProactiveContext = {
@@ -85,6 +86,18 @@ const checkAndTrigger = (ctx: ProactiveContext, source: string) => {
 	// Cooldown guard — prevent double-trigger within 3s of last compaction.
 	if (isCoolingDown()) return;
 	if (branchEndsWithCompaction(ctx)) return;
+
+	const branch = ctx.sessionManager?.getBranch?.();
+	if (Array.isArray(branch)) {
+		const preview = buildOwnCut(branch, {
+			maxKeptTokens: resolveMaxKeptTokens({
+				contextWindow,
+				maxTokens: ctx.model?.maxTokens ?? 0,
+			}),
+			reason: "threshold",
+		});
+		if (!preview.ok) return;
+	}
 
 	try {
 		const pct = Math.round((usage.tokens / contextWindow) * 100);

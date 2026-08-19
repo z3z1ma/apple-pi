@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { buildOwnCut } from "../src/hooks/before-compact.js";
 
 const msg = (id: string, role: "user" | "assistant" | "toolResult", content = "x") => ({
@@ -92,10 +92,7 @@ describe("buildOwnCut", () => {
 		expect(r.messageRange).toEqual(["m1", "m2"]);
 	});
 
-	test("single user prompt + autonomous tail: cut at mid-cycle boundary", () => {
-		// The agentic scenario: user types 1 prompt, agent runs autonomously
-		// (assistant + toolResult interleaved). No user > idx 0.
-		// Instead of compact-all, find a completed tool-cycle boundary.
+	test("single user prompt + autonomous tail: keeps the last assistant, not a midpoint", () => {
 		const r = buildOwnCut([
 			msg("m1", "user", "go"),
 			msg("m2", "assistant", "calling tool"),
@@ -107,25 +104,18 @@ describe("buildOwnCut", () => {
 		expect(r.ok).toBe(true);
 		if (!r.ok) return;
 		expect(r.compactAll).toBe(false);
-		// Should cut after the first completed cycle (m2→m3) or the second (m4→m5)
-		// Mid-cycle logic picks nearest to midpoint of 6 = index 3
-		// Cycle 1 ends at m3 (idx 3), cycle 2 ends at m5 (idx 5)
-		// Distance: |3-3|=0 vs |5-3|=2, so picks m3
-		expect(r.firstKeptEntryId).toBe("m4");
-		expect(r.messages).toHaveLength(3); // m1, m2, m3
+		expect(r.firstKeptEntryId).toBe("m6");
+		expect(r.messages).toHaveLength(5);
 	});
 
-	test("no user message: compact-all instead of cancelling", () => {
-		// When there are enough live messages but none are from the user
-		// (e.g., long assistant/tool chain), compact all rather than
-		// cancelling and leaving the session unrecoverable.
+	test("no user message: keeps the last assistant instead of compact-all", () => {
 		const r = buildOwnCut([msg("m1", "assistant", "a"), msg("m2", "assistant", "b"), msg("m3", "assistant", "c")]);
 		expect(r.ok).toBe(true);
 		if (!r.ok) return;
-		expect(r.compactAll).toBe(true);
-		expect(r.firstKeptEntryId).toBe("");
-		expect(r.messages).toHaveLength(3);
-		expect(r.messageRange).toEqual(["m1", "m3"]);
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("m3");
+		expect(r.messages).toHaveLength(2);
+		expect(r.messageRange).toEqual(["m1", "m2"]);
 	});
 
 	test("compact-all then more chat: orphan recovery + normal cut", () => {
@@ -163,8 +153,7 @@ describe("buildOwnCut", () => {
 		]);
 		expect(r.ok).toBe(true);
 		if (!r.ok) return;
-		// Single user at idx 0 of live range → mid-cycle boundary
-		// Live messages: [u1, a1, t1, a2]. Midpoint=2. Completed cycle ends at t1 (idx 2).
+		// Single user at idx 0 → keep the last assistant deliverable.
 		expect(r.compactAll).toBe(false);
 		expect(r.firstKeptEntryId).toBe("a2");
 	});
@@ -382,5 +371,104 @@ describe("buildOwnCut oversized-turn guard (maxKeptTokens)", () => {
 		expect(r.compactAll).toBe(false);
 		expect(r.firstKeptEntryId).toBe("u2");
 		expect(r.messages).toHaveLength(2); // u1, a1
+	});
+});
+
+describe("buildOwnCut deliverable protection", () => {
+	const writeup = "A".repeat(2000);
+	const giant = "x".repeat(100_000);
+
+	test("never summarizes a long write-up on a single-user investigation", () => {
+		const r = buildOwnCut(
+			[
+				msg("u1", "user", "investigate"),
+				toolCall("a1", "tc1"),
+				toolResult("t1", "tc1", giant),
+				msg("a2", "assistant", writeup),
+			],
+			{ maxKeptTokens: 10_000 },
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("a2");
+		expect((r.messages as any[]).some((m) => m.content === writeup)).toBe(false);
+	});
+
+	test("fills the keep budget with the write-up plus recent evidence", () => {
+		const r = buildOwnCut(
+			[
+				msg("u1", "user", "investigate"),
+				toolCall("a1", "tc1"),
+				toolResult("t1", "tc1", giant),
+				msg("a2", "assistant", "recent note"),
+				msg("t2", "toolResult", "small"),
+				msg("a3", "assistant", writeup),
+			],
+			{ maxKeptTokens: 10_000 },
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("a2");
+		const summarized = JSON.stringify(r.messages);
+		expect(summarized.includes(giant)).toBe(true);
+		expect(summarized.includes(writeup)).toBe(false);
+	});
+
+	test("a later user prompt does not file an earlier live write-up", () => {
+		const r = buildOwnCut([
+			msg("u1", "user", "investigate"),
+			msg("a1", "assistant", writeup),
+			msg("u2", "user", "do it"),
+		]);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("a1");
+		expect((r.messages as any[]).some((m) => m.content === writeup)).toBe(false);
+	});
+
+	test("already-kept tail without a new user cancels instead of shredding", () => {
+		const r = buildOwnCut([
+			msg("old", "user", "prior"),
+			comp("c1", "a1"),
+			msg("a1", "assistant", writeup),
+			toolCall("a2", "tc1"),
+			toolResult("t1", "tc1", "x"),
+			msg("a3", "assistant", "closer"),
+		]);
+		expect(r.ok).toBe(false);
+		if (r.ok) return;
+		expect(r.reason).toBe("nothing_safe_to_summarize");
+	});
+
+	test("overflow may still shrink an already-kept tail toward the write-up", () => {
+		const r = buildOwnCut(
+			[
+				msg("old", "user", "prior"),
+				comp("c1", "a0"),
+				msg("a0", "assistant", "kept-tail start"),
+				toolResult("t0", "tc0", giant),
+				msg("a1", "assistant", writeup),
+				msg("a2", "assistant", "closer"),
+			],
+			{ maxKeptTokens: 10_000, reason: "overflow" },
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("a1");
+	});
+
+	test("compact-all is refused while a long write-up exists", () => {
+		const r = buildOwnCut(
+			[msg("u1", "user", "go"), toolCall("a1", "tc1"), toolResult("t1", "tc1", giant), msg("a2", "assistant", writeup)],
+			{ maxKeptTokens: 10 },
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.compactAll).toBe(false);
+		expect(r.firstKeptEntryId).toBe("a2");
 	});
 });

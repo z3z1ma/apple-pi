@@ -1,14 +1,14 @@
-import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
-import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerBeforeCompactHook, PI_VCC_COMPACT_INSTRUCTION } from "../src/hooks/before-compact.js";
 import {
 	CODEX_OUTPUT_LIMIT_COMPACT_INSTRUCTION,
 	isCodexContextOverflowPending,
 	markCodexContextOverflowPending,
 } from "../src/core/codex-output-limit.js";
 import { VCC_RESUME_CUSTOM_TYPE } from "../src/core/invisible-continue.js";
+import { PI_VCC_COMPACT_INSTRUCTION, registerBeforeCompactHook } from "../src/hooks/before-compact.js";
 
 let tmpDir: string;
 let CONFIG_PATH: string;
@@ -112,17 +112,14 @@ describe("registerBeforeCompactHook: cancel paths", () => {
 		expect(notifyCalls[0].msg).toContain("Too few messages");
 	});
 
-	test("/pi-vcc with no user message compacts all instead of cancelling", () => {
+	test("/pi-vcc with no user message cancels when the live tail already fits", () => {
 		setConfig({ debug: false, overrideDefaultCompaction: false });
 		const { pi, invoke } = createMockPi();
 		registerBeforeCompactHook(pi);
 
 		const entries = [msg("m1", "assistant"), msg("m2", "assistant"), msg("m3", "assistant")];
 		const result = invoke(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
-		// No longer cancels — compacts all to recover from context overflow
-		expect(result.cancel).toBeUndefined();
-		expect(result.compaction).toBeDefined();
-		expect(result.compaction.firstKeptEntryId).toBe("");
+		expect(result.cancel).toBe(true);
 	});
 
 	test("/compact with override=true cancels and notifies (NEW: was silent before)", () => {
@@ -256,34 +253,32 @@ describe("registerBeforeCompactHook: compact-all path", () => {
 		if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);
 	});
 
-	test("single-user + autonomous tail → cuts at mid-cycle boundary", () => {
+	test("single-user + autonomous tail → keeps the last write-up", () => {
 		setConfig({ debug: false, overrideDefaultCompaction: false });
 		const { pi, invoke, notifyCalls } = createMockPi();
 		registerBeforeCompactHook(pi);
 
+		const writeup = "A".repeat(2000);
 		const entries = [
 			msg("m1", "user", "go"),
 			msg("m2", "assistant", "calling tool"),
-			msg("m3", "toolResult", "result"),
-			msg("m4", "assistant", "done"),
+			msg("m3", "toolResult", "x".repeat(100_000)),
+			msg("m4", "assistant", writeup),
 		];
 		const result = invoke(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
 		expect(result.compaction).toBeDefined();
-		// Single user at idx 0, completed cycle m2→m3 ends at idx 2 (midpoint=2)
-		// Cut after m3, keep from m4 onward
 		expect(result.compaction.firstKeptEntryId).toBe("m4");
 		expect(result.compaction.details.messageRange).toEqual(["m1", "m3"]);
-		expect(notifyCalls).toHaveLength(0); // no cancel notify on success
+		expect(notifyCalls).toHaveLength(0);
 	});
 
-	test("compact-all stores the summarized message range", () => {
+	test("fitting no-user chain cancels instead of compact-all", () => {
 		setConfig({ debug: false, overrideDefaultCompaction: false });
 		const { pi, invoke } = createMockPi();
 		registerBeforeCompactHook(pi);
 
 		const entries = [msg("m1", "assistant"), msg("m2", "assistant"), msg("m3", "assistant")];
 		const result = invoke(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
-		expect(result.compaction.firstKeptEntryId).toBe("");
-		expect(result.compaction.details.messageRange).toEqual(["m1", "m3"]);
+		expect(result.cancel).toBe(true);
 	});
 });

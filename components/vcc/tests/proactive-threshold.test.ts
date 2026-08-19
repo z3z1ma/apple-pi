@@ -141,6 +141,52 @@ describe("proactiveThreshold: agent_settled", () => {
 		registerProactiveThresholdHook(mock.piApi);
 		mock.emit("agent_settled", { type: "agent_settled" });
 		expect(mock.captured).toHaveLength(0);
+	});
+
+	test("does NOT trigger when an already-kept tail has no new user", () => {
+		setConfig({
+			debug: false,
+			overrideDefaultCompaction: true,
+			modelThresholds: {
+				"neuralwatt/GLM-5.1": { reserveTokens: 32768 },
+			},
+		});
+		const mock = createMockPi(
+			{ id: "GLM-5.1", provider: "neuralwatt", contextWindow: 128000 },
+			{ tokens: 110000, contextWindow: 128000, percent: 86 },
+		);
+		mock.ctx.sessionManager = {
+			getBranch: () => [
+				{ id: "u1", type: "message", message: { role: "user", content: "go" } },
+				{ id: "c1", type: "compaction", firstKeptEntryId: "a1" },
+				{
+					id: "a1",
+					type: "message",
+					message: { role: "assistant", content: "A".repeat(2000) },
+				},
+				{
+					id: "a2",
+					type: "message",
+					message: {
+						role: "assistant",
+						content: [{ type: "toolCall", id: "tc1", name: "read", arguments: {} }],
+					},
+				},
+				{
+					id: "t1",
+					type: "message",
+					message: {
+						role: "toolResult",
+						toolCallId: "tc1",
+						content: [{ type: "text", text: "x" }],
+					},
+				},
+				{ id: "a3", type: "message", message: { role: "assistant", content: "closer" } },
+			],
+		};
+		registerProactiveThresholdHook(mock.piApi);
+		mock.emit("agent_settled", { type: "agent_settled" });
+		expect(mock.captured).toHaveLength(0);
 		expect(mock.notifyCalls).toHaveLength(0);
 	});
 

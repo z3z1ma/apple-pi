@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { compile } from "../src/core/summarize.js";
+import { describe, expect, it } from "bun:test";
 import { buildSections } from "../src/core/build-sections.js";
+import { compile } from "../src/core/summarize.js";
 import type { NormalizedBlock } from "../src/types.js";
 import { userMsg } from "./fixtures.js";
 
@@ -109,17 +109,17 @@ describe("breadcrumbs: mergeFileLines (+recall:)", () => {
 	});
 });
 
-describe("breadcrumbs: capBrief", () => {
+describe("breadcrumbs: packed brief", () => {
 	it("shows omitted count without redundant recall terms", () => {
 		const longTranscript = Array.from({ length: 200 }, (_, i) => `[user]\nmessage ${i}`).join("\n\n");
 		const previousSummary = `[Session Goal]\n- goal\n\n---\n\n${longTranscript}`;
 		const r = compile({
 			previousSummary,
 			messages: [userMsg("latest")],
+			budgetTokens: 200,
 		});
-		expect(r).toContain("earlier lines omitted");
-		// capBrief should NOT include recall: terms (redundant with Files And Changes)
-		expect(r).not.toMatch(/\.\.\.\(\d+ earlier lines omitted, recall:/);
+		expect(r).toContain("earlier entries omitted");
+		expect(r).not.toMatch(/\.\.\.\(\d+ earlier entries omitted, recall:/);
 	});
 });
 

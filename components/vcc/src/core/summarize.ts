@@ -1,15 +1,19 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { FileOps } from "../types.js";
-import { normalize } from "./normalize.js";
-import { filterNoise } from "./filter-noise.js";
 import { buildSections } from "./build-sections.js";
-import { formatSummary, capBrief, wrapLongLines } from "./format.js";
 import { refineBreadcrumbKey } from "./causal-keys.js";
+import { filterNoise } from "./filter-noise.js";
+import { formatSummary, wrapLongLines } from "./format.js";
+import { normalize } from "./normalize.js";
+import { resolveSummaryBudgetTokens } from "./own-cut.js";
+import { packCompiledArtifact } from "./pack-brief.js";
 
 export interface CompileInput {
 	messages: Message[];
 	previousSummary?: string;
 	fileOps?: FileOps;
+	/** Token budget for the entire compiled artifact, including merge. */
+	budgetTokens?: number;
 }
 
 // Cache-friendly order: stable sections first, volatile sections last
@@ -251,7 +255,7 @@ const mergePrevious = (prev: string, fresh: string): string => {
 		parts.push(headers.join("\n\n"));
 	}
 	if (mergedBrief) {
-		parts.push(capBrief(mergedBrief));
+		parts.push(mergedBrief);
 	}
 
 	return parts.join(SEPARATOR);
@@ -266,8 +270,9 @@ export const compile = (input: CompileInput): string => {
 	const prev = input.previousSummary ? stripRecallNote(input.previousSummary) : undefined;
 	const merged = prev ? mergePrevious(prev, fresh) : fresh;
 	if (!merged) return "";
-	const body = merged;
-	return wrapLongLines(`${HANDFOFF_PREAMBLE}\n\n${body}`);
+	const budget = input.budgetTokens ?? resolveSummaryBudgetTokens({ maxKeptTokens: 20000 });
+	const packed = packCompiledArtifact(merged, budget);
+	return wrapLongLines(`${HANDFOFF_PREAMBLE}\n\n${packed}`);
 };
 
 const stripRecallNote = (text: string): string => {

@@ -6,7 +6,6 @@ const section = (title: string, items?: string[]): string => {
 	return `[${title}]\n${body}`;
 };
 
-const BRIEF_MAX_LINES = 120;
 const TUI_SAFE_LINE_CHARS = 120;
 
 const wrapLine = (line: string, maxChars: number): string[] => {
@@ -38,18 +37,6 @@ export const wrapLongLines = (text: string, maxChars = TUI_SAFE_LINE_CHARS): str
 		.flatMap((line) => wrapLine(line, maxChars))
 		.join("\n");
 
-export const capBrief = (text: string): string => {
-	const lines = text.split("\n");
-	if (lines.length <= BRIEF_MAX_LINES) return text;
-	const omitted = lines.length - BRIEF_MAX_LINES;
-	const kept = lines.slice(-BRIEF_MAX_LINES);
-	// Find first section header to avoid cutting mid-section
-	const firstHeader = kept.findIndex((l) => /^\[.+\]/.test(l));
-	const clean = firstHeader > 0 ? kept.slice(firstHeader) : kept;
-	const crumbLine = `...(${omitted} earlier lines omitted)`;
-	return `${crumbLine}\n\n${clean.join("\n")}`;
-};
-
 /** Format the summary with cache-friendly section ordering.
  *
  * Stable (merged/accumulated) sections come first so the prompt prefix
@@ -78,12 +65,11 @@ export const formatSummary = (data: SectionData): string => {
 		parts.push(allHeaders.join("\n\n"));
 	}
 	if (data.briefTranscript) {
-		parts.push(capBrief(data.briefTranscript));
+		parts.push(data.briefTranscript);
 	}
 
 	if (parts.length === 0) return "";
 
-	const result = wrapLongLines(parts.join("\n\n---\n\n"));
-
-	return result;
+	// No wrap and no line-cap here. compile() packs to a token budget, then wraps.
+	return parts.join("\n\n---\n\n");
 };

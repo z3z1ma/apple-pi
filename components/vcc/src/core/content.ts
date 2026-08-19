@@ -1,5 +1,8 @@
 import type { Message } from "@earendil-works/pi-ai";
 
+/** Same chars/4 estimate as the cut. Used to enforce one compile budget. */
+export const estimateTextTokens = (text: string): number => Math.ceil(text.length / 4);
+
 export const clip = (text: string, max = 200): string => {
 	if (text.length <= max) return text;
 	// Try to cut at a word boundary

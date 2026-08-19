@@ -46,8 +46,8 @@ export interface ModelThreshold {
 	 * Recent tokens to keep (not summarized) when pi-core handles compaction.
 	 *
 	 * Only affects pi-core's default compaction (when overrideDefaultCompaction
-	 * is false). Pi-vcc's own buildOwnCut uses task-boundary heuristics instead
-	 * of token budgets, so this value is advisory/forward-compat for now.
+	 * is false). Pi-vcc's own buildOwnCut uses a deliverable-preserving suffix
+	 * budget derived from the model window, not this field.
 	 */
 	keepRecentTokens?: number;
 }

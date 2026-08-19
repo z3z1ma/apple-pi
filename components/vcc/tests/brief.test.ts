@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { compileBrief } from "../src/core/brief.js";
 import type { NormalizedBlock } from "../src/types.js";
 
@@ -54,12 +54,25 @@ describe("compileBrief", () => {
 		expect(matches?.length).toBe(1);
 	});
 
-	it("hides non-error tool results", () => {
+	it("keeps successful tool result bodies in the unbudgeted brief", () => {
 		const blocks: NormalizedBlock[] = [
 			{ kind: "tool_result", name: "Read", text: "const x = 1;\nconst y = 2;\n// lots of code", isError: false },
 		];
 		const r = compileBrief(blocks);
-		expect(r).toBe("");
+		expect(r).toContain("[tool_result] Read");
+		expect(r).toContain("const x = 1");
+	});
+
+	it("keeps older successful tool results until compile packs the budget", () => {
+		const blocks: NormalizedBlock[] = Array.from({ length: 10 }, (_, i) => ({
+			kind: "tool_result" as const,
+			name: "Read",
+			text: `file ${i} contents`,
+			isError: false,
+		}));
+		const r = compileBrief(blocks);
+		expect(r).toContain("file 0 contents");
+		expect(r).toContain("file 9 contents");
 	});
 
 	it("shows tool errors with first line", () => {
@@ -105,20 +118,14 @@ describe("compileBrief", () => {
 		expect(matches?.length).toBe(2);
 	});
 
-	it("truncates long user text", () => {
+	it("does not clip user or assistant text in the unbudgeted brief", () => {
 		const longText = Array.from({ length: 300 }, (_, i) => `word${i}`).join(" ");
-		const blocks: NormalizedBlock[] = [{ kind: "user", text: longText }];
-		const r = compileBrief(blocks);
-		expect(r).toContain("(truncated)");
-		expect(r).not.toContain("word299");
-	});
-
-	it("truncates long assistant text", () => {
-		const longText = Array.from({ length: 300 }, (_, i) => `word${i}`).join(" ");
-		const blocks: NormalizedBlock[] = [{ kind: "assistant", text: longText }];
-		const r = compileBrief(blocks);
-		expect(r).toContain("(truncated)");
-		expect(r).not.toContain("word299");
+		const r = compileBrief([
+			{ kind: "user", text: longText },
+			{ kind: "assistant", text: longText },
+		]);
+		expect(r).not.toContain("(truncated)");
+		expect(r).toContain("word299");
 	});
 
 	it("renders a realistic conversation flow", () => {
@@ -148,11 +155,11 @@ describe("compileBrief", () => {
 		expect(r).toContain("[user]\ntest lại đi");
 		expect(r).toContain('[assistant]\nRunning tests again.\n* bash "npm test"');
 
-		// Hidden content
 		expect(r).not.toContain("think");
-		expect(r).not.toContain("export function login");
-		expect(r).not.toContain("File edited successfully");
-		expect(r).not.toContain("All tests passed");
+		expect(r).toContain("[tool_result] Read");
+		expect(r).toContain("export function login");
+		expect(r).toContain("File edited successfully");
+		expect(r).toContain("All tests passed");
 	});
 
 	// ── noise filtering tests (aligned with VCC) ──
@@ -168,34 +175,18 @@ describe("compileBrief", () => {
 			{ kind: "tool_result", name: "Read", text: "...", isError: false },
 		];
 		const r = compileBrief(blocks);
-		// The first assistant section has text + tool, so it's NOT tool-only
-		// The second would be tool-only but merges into the first (adjacent assistant)
-		// So all under one [assistant]
-		expect(r.match(/\[assistant\]/g)?.length).toBe(1);
+		expect(r.match(/\[assistant\]/g)?.length).toBe(2);
+		expect(r).toContain("[tool_result] Read");
 	});
 
-	it("caps tool calls per [assistant] turn at 8 (keep tail)", () => {
+	it("keeps all tool-call one-liners in the unbudgeted brief", () => {
 		const blocks: NormalizedBlock[] = [{ kind: "assistant", text: "Working." }];
 		for (let i = 1; i <= 12; i++) {
 			blocks.push({ kind: "tool_call", name: "bash", args: { command: `echo ${i}` } });
 		}
 		const r = compileBrief(blocks);
-		expect(r).toContain("(4 earlier tool-call entries omitted)");
-		// Last 8 (5..12) kept; first 4 dropped
-		expect(r).not.toContain('echo 1"');
-		expect(r).not.toContain('echo 4"');
-		expect(r).toContain("echo 5");
-		expect(r).toContain("echo 12");
-	});
-
-	it("does not cap when tool calls per turn <= 8", () => {
-		const blocks: NormalizedBlock[] = [{ kind: "assistant", text: "ok" }];
-		for (let i = 1; i <= 8; i++) {
-			blocks.push({ kind: "tool_call", name: "bash", args: { command: `c${i}` } });
-		}
-		const r = compileBrief(blocks);
 		expect(r).not.toContain("entries omitted");
-		expect(r).toContain("c1");
-		expect(r).toContain("c8");
+		expect(r).toContain("echo 1");
+		expect(r).toContain("echo 12");
 	});
 });
