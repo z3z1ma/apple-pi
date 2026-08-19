@@ -82,6 +82,20 @@ test("parses tmux coordinates and builds a safely quoted focus command", () => {
 	expect(command).toMatch(/'%931'/);
 });
 
+test("bakes the absolute tmux binary and socket into the click command", () => {
+	const target = parseTmuxTarget("$2\tcurrent work\t@343\t21\t%931\t1\tπ\n");
+	assert.ok(target);
+	const command = buildFocusCommand(target, "/run/current-system/sw/bin/tmux", "/private/tmp/tmux-502/default");
+	// The click runs with no $TMUX or interactive $PATH, so both the tmux path
+	// and the server socket must be present in the stored command string.
+	expect(command).toMatch(/'TMUX_BIN=\/run\/current-system\/sw\/bin\/tmux'/);
+	expect(command).toMatch(/'TMUX_SOCKET=\/private\/tmp\/tmux-502\/default'/);
+	expect(command).toMatch(/'\/usr\/bin\/env'/);
+	expect(command).toMatch(/focus-tmux\.sh/);
+	// Omitting the optional args must not emit empty env assignments.
+	expect(buildFocusCommand(target)).not.toMatch(/TMUX_BIN=/);
+});
+
 interface HarnessCall {
 	command: string;
 	args: string[];

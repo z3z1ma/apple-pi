@@ -232,9 +232,21 @@ export function parseTmuxTarget(output: string): TmuxTarget | undefined {
 	};
 }
 
-export function buildFocusCommand(target: TmuxTarget | undefined): string {
+export function tmuxSocketFromEnv(): string {
+	// $TMUX is "<socket>,<pid>,<session>" inside a tmux client; the socket is the
+	// portion before the first comma.
+	return (process.env.TMUX || "").split(",")[0] || "";
+}
+
+export function buildFocusCommand(target: TmuxTarget | undefined, tmuxBin?: string, tmuxSocket?: string): string {
 	if (!target?.paneId) return "";
-	return ["/usr/bin/env", "bash", FOCUS_SCRIPT, target.sessionName, target.windowId, target.paneId, target.windowIndex]
+	// The click runs in a minimal launchd context with no $TMUX or interactive
+	// $PATH, so bake the absolute tmux binary and server socket into the stored
+	// command. terminal-notifier persists this exact string and runs it later.
+	const env = ["/usr/bin/env"];
+	if (tmuxBin) env.push(`TMUX_BIN=${tmuxBin}`);
+	if (tmuxSocket) env.push(`TMUX_SOCKET=${tmuxSocket}`);
+	return [...env, "bash", FOCUS_SCRIPT, target.sessionName, target.windowId, target.paneId, target.windowIndex]
 		.map(shellQuote)
 		.join(" ");
 }
@@ -275,12 +287,44 @@ async function isFile(path: string): Promise<boolean> {
 	}
 }
 
-async function readTmuxTarget(pi: ExtensionAPI): Promise<TmuxTarget | undefined> {
+// Resolve an absolute tmux path. The focus script runs in a launchd context
+// with a minimal PATH that may exclude the real install (e.g. nix-darwin at
+// /run/current-system/sw/bin), so the extension must resolve the absolute path
+// here and bake it into the click command.
+//
+// Resolve via the PATH first: the tmux client must match the running server's
+// protocol version, and the server was started by whatever tmux is on the
+// user's PATH — the same environment Pi inherits. A shell PATH lookup returns
+// that binary. The hardcoded candidates are only a last resort when no tmux is
+// on PATH, and could otherwise bake in a mismatched build (e.g. a Homebrew
+// tmux against a nix-started server), so they must not win over the PATH.
+async function resolveTmuxBin(pi: ExtensionAPI): Promise<string> {
+	try {
+		const result = await pi.exec("/bin/sh", ["-c", "command -v tmux"], {
+			timeout: 2_000,
+		});
+		const resolved = result.stdout.trim();
+		if (result.code === 0 && resolved) return resolved;
+	} catch {
+		// Fall through to the fixed candidates below.
+	}
+	const candidates = [
+		"/opt/homebrew/bin/tmux",
+		"/run/current-system/sw/bin/tmux",
+		`${HOME}/.nix-profile/bin/tmux`,
+		"/usr/local/bin/tmux",
+	];
+	for (const candidate of candidates) {
+		if (await isExecutable(candidate)) return candidate;
+	}
+	return "tmux";
+}
+
+async function readTmuxTarget(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxTarget | undefined> {
 	const pane = process.env.TMUX_PANE;
 	if (!pane) return undefined;
-	const tmux = (await isExecutable("/opt/homebrew/bin/tmux")) ? "/opt/homebrew/bin/tmux" : "tmux";
 	const result = await pi.exec(
-		tmux,
+		tmuxBin,
 		[
 			"display-message",
 			"-p",
@@ -358,7 +402,8 @@ async function deliverNotification(
 	prompt: string,
 	answer: string,
 ): Promise<NotificationResult> {
-	const [target, project] = await Promise.all([readTmuxTarget(pi), projectTitle(pi, ctx.cwd)]);
+	const tmuxBin = await resolveTmuxBin(pi);
+	const [target, project] = await Promise.all([readTmuxTarget(pi, tmuxBin), projectTitle(pi, ctx.cwd)]);
 	const threadTitle = shortDisplayText(
 		pi.getSessionName() || cleanPaneTitle(target?.paneTitle) || project,
 		THREAD_TITLE_MAX_WIDTH,
@@ -369,7 +414,7 @@ async function deliverNotification(
 	const sessionId = ctx.sessionManager.getSessionId();
 	const group = `pi-agent-turn-complete-${safeId(sessionId || target?.paneId || project)}`;
 	const content: NotificationContent = { title, subtitle, body, group };
-	const focusCommand = buildFocusCommand(target);
+	const focusCommand = buildFocusCommand(target, tmuxBin, tmuxSocketFromEnv());
 	const iconPath = (await isFile(APP_ICON))
 		? APP_ICON
 		: (await isFile(BUNDLED_ICON))
