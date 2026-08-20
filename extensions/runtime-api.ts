@@ -9,6 +9,11 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
+import { INFERENCE_PROFILE_NAMES } from "../components/shared/src/model-profiles.js";
+import {
+	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
+	TEAM_SYSTEM_PROMPT_TAG,
+} from "../components/subagents/src/team-system-prompt.js";
 import { capturedTools } from "./runtime-tools.js";
 
 const CORE_TOOL_FACTORIES = {
@@ -228,13 +233,14 @@ export const GUEST_HELPER_SIGNATURES: string[] = [
 	"extensions.<name>(args?: object) → Promise<ToolResult>",
 	"ToolResult = { text: string, content, details, usage? }",
 	'type AgentTool = "read"|"grep"|"find"|"ls"|"bash"|"edit"|"write"',
-	"type AgentRequest = string | { task: string, type?: string, name?: string, profile?: string, tools?: AgentTool[], systemPrompt?: string, context?: JSONValue, outputSchema?: object }",
+	`type InferenceProfile = ${INFERENCE_PROFILE_NAMES.map((profile) => JSON.stringify(profile)).join("|")}`,
+	"type AgentRequest = string | { task: string, type?: string, name?: string, profile?: InferenceProfile, tools?: AgentTool[], systemPrompt?: string, context?: JSONValue, outputSchema?: object }",
 	'type AgentRunResult = { status: "completed"|"failed", text: string, value?: JSONValue, error?: string, toolCalls: number, usage? }',
 	'agent(request: AgentRequest) → Promise<string | JSONValue>  // returns outputSchema value when set; otherwise text; throws if status !== "completed"',
 	"agents.run(request: AgentRequest) → Promise<AgentRunResult>",
-	"type selects a built-in or Markdown agent (Explore, Plan, Research, Counsel, Implement, Design, …) and supplies that type's tools, prompt, and default profile; an explicit profile overrides only model/thinking, explicit tools override capabilities, and systemPrompt appends without replacing the type role",
+	`the live <${TEAM_SYSTEM_PROMPT_TAG}> block lists callable teammates with name, inference profile, and description; the separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block lists the inference profiles and their descriptions. type selects a teammate; profile selects an inference profile; systemPrompt appends dynamic specialization without replacing the teammate definition or granting capabilities`,
 	'omit type for a generic read-only worker; tools then default to ["read","grep","find","ls"]; tools must be chosen from AgentTool',
-	"Review planner/reviewer/verifier and Ralph stay custom systemPrompt workers — do not set type to those program roles",
+	"Review planner/reviewer/verifier and Ralph stay custom systemPrompt workers — do not set type for those program-specific workers",
 	"agent(...) is a pi_exec worker for composition. extensions.Agent(...) is the interactive subagent tool for collaboration (background, steer, resume).",
 	"Workers load the ledger and session_search extensions. They do not load pi_exec or the subagent manager, and they cannot call MCP. Call those in the program, then bind the compact result as context.",
 	"context is JSON-cloned to a temp file and attached as @file (not stuffed into task/argv). Prefer agents.run for fan-out (does not throw).",
@@ -341,7 +347,7 @@ export const PI_EXEC_DESCRIPTION =
 
 export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec when programmatic composition materially reduces intermediate context or coordinates already-justified parallel work. Use direct tools for straightforward sequential inspection, regardless of the exact number of calls.",
-	"The code parameter is a JavaScript async-function body. Core calls are pi.read/grep/find/ls/bash/edit/write and each takes one object matching that parent tool, never a positional string: pi.read({ path }), pi.grep({ pattern }), pi.bash({ command }). fetch, skills.list, skills.body({ name }), agent/agents.run, parallel/pipeline, and every captured extension tool including the MCP gateway are listed on the code parameter before you write the program. Agent options may include task, type, name, profile, tools, systemPrompt, context, and outputSchema. type selects a catalog agent and supplies that type's tools, prompt, and default profile; an explicit profile overrides only model/thinking, explicit tools override capabilities, and systemPrompt appends without replacing the type role. Omit type for a generic read-only worker. Review roles stay custom systemPrompt workers, not catalog types. Ralph increments use an explicit systemPrompt and write-capable tool list without a catalog type. Call MCP and extension tools in the program, then bind compact results as agent context. Use agents.run for fan-out so one failed worker does not abort the program. Load the pi-exec skill for gather-then-bind examples. The Agent tool is for collaboration (background, steer, resume); agents.run is for in-program graphs.",
+	`The code parameter is a JavaScript async-function body. Core calls are pi.read/grep/find/ls/bash/edit/write and each takes one object matching that parent tool, never a positional string: pi.read({ path }), pi.grep({ pattern }), pi.bash({ command }). fetch, skills.list, skills.body({ name }), agent/agents.run, parallel/pipeline, and every captured extension tool including the MCP gateway are listed on the code parameter before you write the program. Agent options may include task, type, name, profile, tools, systemPrompt, context, and outputSchema. The live <${TEAM_SYSTEM_PROMPT_TAG}> block lists every callable teammate with its name, configured inference profile, and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block lists the inference profiles and their descriptions. type selects a teammate; profile selects an inference profile; systemPrompt appends dynamic specialization without replacing the teammate definition or granting capabilities. Explicit tools override capabilities. Omit type for a generic read-only worker. The interactive Agent tool provides the equivalent subagent_type, profile, and system_prompt combination. Review and Ralph may remain untyped program workers with explicit system prompts. Call MCP and extension tools in the program, then bind compact results as agent context. Use agents.run for fan-out so one failed worker does not abort the program. Load the pi-exec skill for gather-then-bind examples. The Agent tool is for collaboration (background, steer, resume); agents.run is for in-program graphs.`,
 	"Use Promise.all or parallel(items, mapper, concurrency) for independent work and pipeline(items, ...stages) for staged transforms. Keep dependent search→read and edit→verify calls sequential; never perform concurrent edits to the same file.",
 	"display is a pi_exec tool parameter beside code and inputs, not a program global. Pass display: { name, description } on the tool call for multi-step programs so the live tool card and activity widget communicate intent.",
 	"limits is a pi_exec tool parameter. Pass limits: { agentBudget, callBudget, concurrency, timeoutSeconds } when a workflow needs more workers or host calls than the shape-derived default. Package maxima still apply.",

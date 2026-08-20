@@ -104,8 +104,10 @@ export interface SpawnOptions {
 	/** Internal roles can enforce an immediate hard stop instead of the public grace window. */
 	hardTurnLimit?: boolean;
 	toolExecution?: "sequential" | "parallel";
-	/** Exact role profile supplied by an internal orchestrator. Bypasses the public agent registry. */
+	/** Exact enabled config captured at dispatch. Execution must not re-read mutable role policy when present. */
 	agentConfig?: AgentConfig;
+	/** Invocation-level guidance appended after the selected definition's prompt. */
+	systemPrompt?: string;
 	/** Per-call enforcement layered ahead of the session's existing tool policy. */
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
@@ -305,6 +307,7 @@ export class AgentManager {
 			hardTurnLimit: options.hardTurnLimit,
 			toolExecution: options.toolExecution,
 			agentConfig: options.agentConfig,
+			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
 			customTools: options.customTools,
 			isolated: options.isolated,
@@ -530,6 +533,9 @@ export class AgentManager {
 			record.result = undefined;
 			record.error = undefined;
 			record.completedAt = undefined;
+			// This record is entering a new run generation. A queued result waiter
+			// must not observe the previous generation's already-settled promise.
+			record.promise = undefined;
 			record.status = "queued";
 
 			const start = () => this.startResume(id, record, prompt, signal, options);

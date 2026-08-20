@@ -53,8 +53,8 @@ The live `code` parameter lists every host signature, including web methods and 
 - `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
-- `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, …) and supplies that type's tools, prompt, and default model profile. An explicit `profile` overrides only model/thinking; it never grants tools or changes the role. Explicit `tools` still override capabilities. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
-- Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` to those program roles. Ralph explicitly grants its write-capable tool list.
+- The live `<subagent-team>` block lists every callable teammate with its `name`, configured inference `profile`, and own `description`. The separate `<inference-profiles>` block lists the inference profiles as `{ profile, description }` entries. `type` selects a teammate; `profile` selects an inference profile; `systemPrompt` appends dynamic specialization without replacing the teammate definition or granting capabilities. The interactive Agent tool uses the equivalent `subagent_type`, `profile`, and `system_prompt` combination. Explicit `tools` override capabilities. Omit `type` for a generic read-only worker.
+- Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` for those program-specific workers. Ralph explicitly grants its write-capable tool list.
 - `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
 - `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
 - Workers load the ledger and `session_search` extensions. They do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
@@ -124,7 +124,7 @@ return parallel(files, async (name) => {
 
 The worker reads `context.path`. Do not `pi.read` the file in the parent just to stuff the body into `task`.
 
-Select a catalog lane when the worker should follow that role. Untyped workers default to generic and read-only; program roles such as review and Ralph provide their own `systemPrompt`, and Ralph explicitly grants write-capable tools.
+Select a catalog teammate when the worker should follow that agent definition. Untyped workers default to generic and read-only; program-specific workers such as review and Ralph provide their own `systemPrompt`, and Ralph explicitly grants write-capable tools.
 
 ```javascript
 const map = await agents.run({

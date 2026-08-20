@@ -416,6 +416,11 @@ describe("pi_exec guest API documentation", () => {
 		const contract = piExecGuestApiContract();
 		expect(guidelines).toContain("never a positional string");
 		expect(guidelines).toContain("pi.read({ path })");
+		expect(guidelines).toContain("live <subagent-team> block lists every callable teammate");
+		expect(guidelines).toContain("separate <inference-profiles> block lists the inference profiles");
+		expect(guidelines).toContain("type selects a teammate; profile selects an inference profile");
+		expect(guidelines).toContain("equivalent subagent_type, profile, and system_prompt combination");
+		expect(guidelines).not.toContain("better model class");
 		expect(guidelines).toContain("display is a pi_exec tool parameter");
 		expect(guidelines).not.toMatch(/Set display\.name/);
 		expect(guidelines).not.toMatch(/await tools\.describe/);
@@ -426,7 +431,16 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("agent(request: AgentRequest)");
 		expect(contract).toContain("agents.run(request: AgentRequest)");
 		expect(contract).toContain("type?: string");
-		expect(contract).toContain("profile?: string");
+		expect(contract).toContain("profile?: InferenceProfile");
+		expect(contract).toContain(
+			'type InferenceProfile = "quick"|"balanced"|"deep"|"coding"|"visual-engineering"|"background"',
+		);
+		expect(contract).toContain(
+			"live <subagent-team> block lists callable teammates with name, inference profile, and description",
+		);
+		expect(contract).toContain("separate <inference-profiles> block lists the inference profiles");
+		expect(contract).toContain("profile selects an inference profile");
+		expect(contract).toContain("systemPrompt appends dynamic specialization");
 		expect(contract).not.toContain("model?: string");
 		expect(contract).not.toContain("thinking?: AgentThinking");
 		expect(contract).toContain("context?: JSONValue");
@@ -456,6 +470,10 @@ describe("pi_exec guest API documentation", () => {
 		expect(skill).toContain("outputSchema?");
 		expect(skill).toContain("type?");
 		expect(skill).toContain("profile?");
+		expect(skill).toContain("live `<subagent-team>` block lists every callable teammate");
+		expect(skill).toContain("separate `<inference-profiles>` block lists the inference profiles");
+		expect(skill).toContain("configured inference `profile`, and own `description`");
+		expect(skill).toContain("equivalent `subagent_type`, `profile`, and `system_prompt` combination");
 		expect(skill).toContain('type: "Explore"');
 		expect(skill).toContain("agent(request: AgentRequest)");
 		expect(skill).toContain("agents.run(request: AgentRequest)");
@@ -661,14 +679,14 @@ describe("pi_exec agent binding", () => {
 			mkdirSync(join(root, ".pi", "agents"), { recursive: true });
 			writeFileSync(
 				join(root, ".pi", "agents", "general.md"),
-				"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: quick\n---\n\nFollow the project-specific role.\n",
+				"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: quick\n---\n\nFollow the project-specific instructions.\n",
 			);
 			writeFileSync(
 				join(agentDir, "model-profiles.json"),
 				JSON.stringify({ profiles: { quick: { model: "xai/custom", thinking: "low" } } }),
 			);
 			const resolved = await resolveExecWorker(
-				{ task: "apply the project role", type: "general-purpose" },
+				{ task: "apply the project instructions", type: "general-purpose" },
 				{
 					cwd: root,
 					projectTrusted: true,
@@ -681,7 +699,7 @@ describe("pi_exec agent binding", () => {
 				model: "xai/custom",
 				thinking: "low",
 			});
-			expect(resolved.systemPrompt).toContain("Follow the project-specific role.");
+			expect(resolved.systemPrompt).toContain("Follow the project-specific instructions.");
 			await expect(
 				resolveExecWorker(
 					{ task: "must not load project config", type: "general-purpose" },

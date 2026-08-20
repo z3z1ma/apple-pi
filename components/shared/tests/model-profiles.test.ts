@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	INFERENCE_PROFILE_CATALOG,
+	INFERENCE_PROFILE_NAMES,
+	isInferenceProfileName,
 	loadModelProfiles,
 	MODEL_PROFILES_FILENAME,
 	modelProfilesPath,
@@ -46,13 +49,16 @@ describe("user-global model profiles", () => {
 	it("requires the global file and an exact case-sensitive profile name", () => {
 		expect(() => loadModelProfiles()).toThrow(modelProfilesPath());
 		writeProfiles({ quick: { model: "anthropic/claude-fast", thinking: "low" } });
-		expect(() => resolveModelProfile("Quick", { find: () => undefined })).toThrow('profile "Quick" is not defined');
+		expect(() => resolveModelProfile("Quick", { find: () => undefined })).toThrow(/model profile must be one of/);
 		expect(() => resolveModelProfile(" quick", { find: () => undefined })).toThrow(/unpadded/);
 	});
 
-	it("rejects malformed or capability-bearing profiles", () => {
+	it("rejects malformed, unknown, or capability-bearing profiles", () => {
 		writeFileSync(join(agentDir, MODEL_PROFILES_FILENAME), "{");
 		expect(() => loadModelProfiles()).toThrow(/invalid JSON/);
+
+		writeProfiles({ custom: { model: "anthropic/custom", thinking: "low" } });
+		expect(() => loadModelProfiles()).toThrow(/unsupported profile "custom"/);
 
 		writeProfiles({ quick: { model: "anthropic/claude-fast", thinking: "low", tools: ["write"] } });
 		expect(() => loadModelProfiles()).toThrow(/unsupported field: tools/);
@@ -71,19 +77,17 @@ describe("user-global model profiles", () => {
 		);
 	});
 
-	it("treats prototype-like names as ordinary own profile keys", () => {
-		writeFileSync(
-			join(agentDir, MODEL_PROFILES_FILENAME),
-			'{"profiles":{"__proto__":{"model":"xai/proto","thinking":"low"},"constructor":{"model":"xai/ctor","thinking":"high"}}}',
+	it("publishes the fixed inference profile catalog with profile-specific descriptions", () => {
+		expect(INFERENCE_PROFILE_CATALOG.map((entry) => entry.profile)).toEqual(INFERENCE_PROFILE_NAMES);
+		expect(INFERENCE_PROFILE_CATALOG.every((entry) => entry.description.length > 40)).toBe(true);
+		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "quick")?.description).toMatch(
+			/fast, economical model.*reasoning effort/,
 		);
-		const profiles = loadModelProfiles();
-		expect(Object.getPrototypeOf(profiles)).toBeNull();
-		expect(Object.hasOwn(profiles, "__proto__")).toBe(true);
-		expect(Object.hasOwn(profiles, "constructor")).toBe(true);
-		expect(resolveModelProfile("constructor", { find: (provider, id) => ({ provider, id }) as never }).model).toEqual({
-			provider: "xai",
-			id: "ctor",
-		});
+		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "deep")?.description).toMatch(
+			/strongest reasoning model.*high reasoning effort/,
+		);
+		expect(isInferenceProfileName("coding")).toBe(true);
+		expect(isInferenceProfileName("custom")).toBe(false);
 	});
 
 	it("does not read project profile files or legacy modes.json", () => {

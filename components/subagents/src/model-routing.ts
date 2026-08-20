@@ -1,6 +1,15 @@
 import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { resolveModelProfile } from "../../shared/src/model-profiles.js";
+import { Type } from "typebox";
+import { INFERENCE_PROFILE_NAMES, resolveModelProfile } from "../../shared/src/model-profiles.js";
 import type { AgentConfig, ThinkingLevel } from "./types.js";
+
+export const INFERENCE_PROFILE_PARAMETER_SCHEMA = Type.Union(
+	INFERENCE_PROFILE_NAMES.map((profile) => Type.Literal(profile)),
+	{
+		description:
+			"User-global inference profile override. Selects model/thinking only and must be one of the known inference profiles.",
+	},
+);
 
 interface ModelRegistry {
 	find(provider: string, modelId: string): Model<any> | undefined;

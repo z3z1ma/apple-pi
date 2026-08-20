@@ -5,6 +5,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { INFERENCE_PROFILE_NAMES, isInferenceProfileName } from "../../shared/src/model-profiles.js";
 import { BUILTIN_TOOL_NAMES } from "./agent-types.js";
 import type { AgentConfig, SubagentConfigScope } from "./types.js";
 
@@ -81,6 +82,12 @@ function loadFromDir(
 		const profile = rawProfile?.trim();
 		if (fm.profile !== undefined && (!profile || profile !== rawProfile)) {
 			const message = `${path}: profile must be a non-empty, unpadded string`;
+			if (strict) throw new Error(message);
+			warnIfNew(`Skipping agent file ${message}`);
+			continue;
+		}
+		if (profile && !isInferenceProfileName(profile)) {
+			const message = `${path}: profile must be one of: ${INFERENCE_PROFILE_NAMES.join(", ")}`;
 			if (strict) throw new Error(message);
 			warnIfNew(`Skipping agent file ${message}`);
 			continue;

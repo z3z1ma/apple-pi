@@ -6,6 +6,8 @@ import type { AgentConfig, EnvInfo } from "./types.js";
 
 /** Extra sections to inject into the system prompt. */
 export interface PromptExtras {
+	/** Invocation-level guidance appended after the selected definition's prompt. */
+	additionalSystemPrompt?: string;
 	/** Preloaded skill contents to inject. */
 	skillBlocks?: { name: string; content: string }[];
 }
@@ -48,6 +50,9 @@ Platform: ${env.platform}`;
 			extraSections.push(`\n# Preloaded Skill: ${skill.name}\n${skill.content}`);
 		}
 	}
+	const invocationSection = extras?.additionalSystemPrompt?.trim()
+		? `\n\n<invocation_instructions>\n${extras.additionalSystemPrompt.trim()}\n</invocation_instructions>`
+		: "";
 	const extrasSuffix = extraSections.length > 0 ? `\n\n${extraSections.join("\n")}` : "";
 
 	if (config.promptMode === "append") {
@@ -75,7 +80,7 @@ You are operating as a sub-agent invoked to handle a specific task.
 		// placed verbatim (no wrapper tag) so it forms an identical byte prefix
 		// with the parent session, maximising KV cache hits. The <active_agent>
 		// tag and env block vary per call and are placed after the cached prefix.
-		return `${identity}\n\n${bridge}\n\n${activeAgentTag}${envBlock}${customSection}${extrasSuffix}`;
+		return `${identity}\n\n${bridge}\n\n${activeAgentTag}${envBlock}${customSection}${extrasSuffix}${invocationSection}`;
 	}
 
 	// "replace" mode — env header + the config's full system prompt
@@ -84,7 +89,7 @@ You have been invoked to handle a specific task autonomously.
 
 ${envBlock}`;
 
-	return `${activeAgentTag + replaceHeader}\n\n${config.systemPrompt}${extrasSuffix}`;
+	return `${activeAgentTag + replaceHeader}\n\n${config.systemPrompt}${extrasSuffix}${invocationSection}`;
 }
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */

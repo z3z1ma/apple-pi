@@ -46,20 +46,20 @@ Each profile requires exactly:
 - `model`: an exact `provider/model` identity known to Pi's model registry;
 - `thinking`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`.
 
-Profile names are exact and case-sensitive. Unknown fields and partial bundles are invalid. An absent, malformed, unknown, or unavailable selected profile fails visibly; apple-pi does not substitute another model or inspect an older configuration format.
+Profile names are exact, case-sensitive, and limited to the six known names below. The global file maps those names to provider models and thinking levels; it cannot introduce new profile names. Unknown fields and partial bundles are invalid. A missing mapping or unavailable selected model fails visibly; apple-pi does not substitute another profile, model, or older configuration format.
 
-The package documents these semantic workload names; bundled consumers select them as shown:
+The inference profiles have these intended inference characteristics:
 
-| Workload | Consumers |
+| Inference profile | Intended characteristics |
 | --- | --- |
-| `quick` | Explore, Research |
-| `balanced` | General-purpose custom agents and explicit worker overrides |
-| `deep` | Plan, Counsel, Advisor, review workers |
-| `coding` | Implement, Ralph increments |
-| `visual-engineering` | Design |
-| `background` | Observational memory |
+| `quick` | Latency-first inference intended for a fast, economical model with light-to-moderate reasoning effort. |
+| `balanced` | General-purpose inference intended for a broadly capable model with substantial but measured reasoning effort. |
+| `deep` | Maximum-depth inference intended for the strongest reasoning model available with high reasoning effort. |
+| `coding` | Software-engineering inference intended for a code-strong model with high reasoning effort. |
+| `visual-engineering` | Visual-engineering inference intended for a model strong in UI, spatial, and multimodal reasoning with moderate-to-high effort. |
+| `background` | Low-cost asynchronous inference intended for an economical model with low reasoning effort. |
 
-Custom Markdown agents may select any user-defined profile with `profile:`. The interactive `Agent` tool and `pi_exec` workers may override a type's default with `profile`. A generic `agents.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking.
+Built-in and custom Markdown agents may select one of these known names with `profile:`. The interactive `Agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agents.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking.
 
 Profiles select only model and thinking. They never grant tools, write access, extensions, skills, Advisor use, persistence, or any other capability.
 

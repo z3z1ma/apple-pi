@@ -313,9 +313,13 @@ Answer the task.
 		writeFileSync(join(cwd, ".pi", "subagents.json"), JSON.stringify({ maxConcurrent: 1 }));
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-tool", contextWindow: 200_000 }] });
 		fauxProviders.push(faux);
+		let initialSystemPrompt = "";
 		let resumedContext = "";
 		faux.setResponses([
-			() => fauxAssistantMessage([fauxText("AGENT-TOOL-OK")]),
+			(context) => {
+				initialSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage([fauxText("AGENT-TOOL-OK")]);
+			},
 			(context) => {
 				resumedContext = JSON.stringify(context.messages);
 				return fauxAssistantMessage([fauxText("AGENT-RESUME-OK")]);
@@ -372,6 +376,7 @@ Answer the task.
 					prompt: "answer now",
 					description: "Answer test",
 					subagent_type: "tool-test",
+					system_prompt: "Use the invocation-specific answer format.",
 				},
 				undefined,
 				undefined,
@@ -382,6 +387,12 @@ Answer the task.
 			const agentId = firstText.match(/Agent ID: ([^\s]+)/)?.[1];
 			expect(agentId).toBeTruthy();
 			expect(result.details).toMatchObject({ agentId, subagentType: "tool-test", status: "completed" });
+			expect(initialSystemPrompt).toContain("Answer the task.");
+			expect(initialSystemPrompt).toContain("<invocation_instructions>");
+			expect(initialSystemPrompt).toContain("Use the invocation-specific answer format.");
+			expect(initialSystemPrompt.indexOf("Use the invocation-specific answer format.")).toBeGreaterThan(
+				initialSystemPrompt.indexOf("Answer the task."),
+			);
 
 			const incompatibleResume = await tool.execute(
 				"public-agent-incompatible-resume",
@@ -514,10 +525,32 @@ Answer the task.
 				undefined,
 			);
 			expect(queuedSnapshot.content[0].text).toContain(`Agent ${queuedAgentId} is queued.`);
-			const queuedStopped = await stopTool.execute("public-agent-stop-queued", { agent_id: queuedAgentId });
-			expect(queuedStopped.isError).toBe(false);
-			expect(queuedStopped.content[0].text).toBe(`Stopped subagent ${queuedAgentId}.`);
-			await new Promise((resolve) => setTimeout(resolve, 150));
+
+			let queuedContext = "";
+			let queuedToolNames: string[] = [];
+			faux.appendResponses([
+				(context) => {
+					queuedContext = JSON.stringify(context);
+					queuedToolNames = context.tools?.map((candidate) => candidate.name) ?? [];
+					return fauxAssistantMessage([fauxText("QUEUED-SNAPSHOT-DONE")]);
+				},
+			]);
+			writeFileSync(
+				join(cwd, ".pi", "agents", "tool-test.md"),
+				`---
+name: tool-test
+description: reloaded role must not replace queued policy
+tools: edit
+extensions: false
+skills: false
+persist_session: false
+---
+RELOADED ROLE MUST NOT RUN.
+`,
+			);
+			const reloadedRoster = lifecycle.get("before_agent_start")!({ systemPrompt: "root" }, extensionCtx)
+				.systemPrompt as string;
+			expect(reloadedRoster).toContain("reloaded role must not replace queued policy");
 
 			releaseLiveResponse?.();
 			let completedSnapshotText = "";
@@ -543,9 +576,55 @@ Answer the task.
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
 			expect(sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"))).toBe(true);
-			expect(sentMessages.some((message) => String(message.content).includes(queuedAgentId!))).toBe(false);
+			const queuedResult = await checkResult.execute(
+				"public-agent-queued-result",
+				{ agent_id: queuedAgentId, wait_seconds: 5 },
+				undefined,
+			);
+			expect(queuedResult.content[0].text).toContain("QUEUED-SNAPSHOT-DONE");
+			expect(queuedContext).toContain("Answer the task.");
+			expect(queuedContext).not.toContain("RELOADED ROLE MUST NOT RUN");
+			expect(queuedToolNames).toContain("read");
+			expect(queuedToolNames).not.toContain("edit");
 			const liveResult = await checkResult.execute("public-agent-live-result", { agent_id: liveAgentId }, undefined);
 			expect(liveResult.content[0].text).toContain("LIVE-AGENT-DONE");
+
+			let releaseAwaitedResponse: (() => void) | undefined;
+			const awaitedResponseGate = new Promise<void>((resolve) => {
+				releaseAwaitedResponse = resolve;
+			});
+			faux.appendResponses([
+				async () => {
+					await awaitedResponseGate;
+					return fauxAssistantMessage([fauxText("OMITTED-WAIT-DONE")]);
+				},
+			]);
+			const awaitedLaunch = await tool.execute(
+				"public-agent-omitted-wait",
+				{
+					prompt: "finish before returning the result",
+					description: "Omitted result wait test",
+					subagent_type: "tool-test",
+					run_in_background: true,
+				},
+				undefined,
+				undefined,
+				extensionCtx,
+			);
+			const awaitedAgentId = (awaitedLaunch.content[0].text as string).match(/Agent ID: ([^\s]+)/)?.[1];
+			expect(awaitedAgentId).toBeTruthy();
+			let omittedWaitSettled = false;
+			const omittedWait = checkResult
+				.execute("public-agent-omitted-result-wait", { agent_id: awaitedAgentId }, undefined)
+				.then((result) => {
+					omittedWaitSettled = true;
+					return result;
+				});
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(omittedWaitSettled).toBe(false);
+			releaseAwaitedResponse?.();
+			const omittedWaitResult = await omittedWait;
+			expect(omittedWaitResult.content[0].text).toContain("OMITTED-WAIT-DONE");
 
 			let releaseStoppedResponse: (() => void) | undefined;
 			const stoppedResponseGate = new Promise<void>((resolve) => {
@@ -572,10 +651,43 @@ Answer the task.
 			const stoppableAgentId = (stoppableLaunch.content[0].text as string).match(/Agent ID: ([^\s]+)/)?.[1];
 			expect(stoppableAgentId).toBeTruthy();
 
+			faux.appendResponses([() => fauxAssistantMessage([fauxText("QUEUED-RESUME-DONE")])]);
+			const queuedResume = await tool.execute(
+				"public-agent-queued-resume",
+				{
+					prompt: "resume after the occupied pool slot clears",
+					description: "Queued background resume wait test",
+					subagent_type: "tool-test",
+					resume: awaitedAgentId,
+					run_in_background: true,
+				},
+				undefined,
+				undefined,
+				extensionCtx,
+			);
+			expect(queuedResume.content[0].text).toContain(`Agent ID: ${awaitedAgentId}`);
+			expect(queuedResume.details).toMatchObject({ agentId: awaitedAgentId, status: "background" });
+			let queuedResumeSettled = false;
+			const queuedResumeWait = checkResult
+				.execute("public-agent-queued-resume-wait", { agent_id: awaitedAgentId }, undefined)
+				.then((result) => {
+					queuedResumeSettled = true;
+					return result;
+				});
+			const queuedResumeTimeout = await checkResult.execute(
+				"public-agent-queued-resume-timeout",
+				{ agent_id: awaitedAgentId, wait_seconds: 0.01 },
+				undefined,
+			);
+			expect(queuedResumeTimeout.content[0].text).toContain("Wait limit (0.01s) reached");
+			expect(queuedResumeSettled).toBe(false);
+
 			const stopped = await stopTool.execute("public-agent-stop", { agent_id: stoppableAgentId });
 			expect(stopped.isError).toBe(false);
 			expect(stopped.content[0].text).toBe(`Stopped subagent ${stoppableAgentId}.`);
 			releaseStoppedResponse?.();
+			const queuedResumeResult = await queuedResumeWait;
+			expect(queuedResumeResult.content[0].text).toContain("QUEUED-RESUME-DONE");
 
 			const stoppedSnapshot = await checkResult.execute(
 				"public-agent-stopped-check",

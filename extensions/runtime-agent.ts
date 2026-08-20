@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Value } from "typebox/value";
 import {
+	INFERENCE_PROFILE_NAMES,
+	type InferenceProfileName,
+	isInferenceProfileName,
+} from "../components/shared/src/model-profiles.js";
+import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
 	getAgentConfigIn,
@@ -36,7 +41,7 @@ export interface AgentRequest {
 	/** Built-in or Markdown agent type. Omit for a generic read-only worker. */
 	type?: string;
 	name?: string;
-	profile?: string;
+	profile?: InferenceProfileName;
 	tools?: string[];
 	systemPrompt?: string;
 	context?: unknown;
@@ -83,11 +88,15 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	if (rawArgs.profile !== undefined && (!profile || profile !== rawProfile)) {
 		throw new Error("agents.run profile must be a non-empty, unpadded string");
 	}
+	if (profile && !isInferenceProfileName(profile)) {
+		throw new Error(`agents.run profile must be one of: ${INFERENCE_PROFILE_NAMES.join(", ")}`);
+	}
+	const validatedProfile: InferenceProfileName | undefined = profile as InferenceProfileName | undefined;
 	const request: AgentRequest = {
 		task: rawArgs.task,
 		...(type ? { type } : {}),
 		...(name ? { name } : {}),
-		...(profile ? { profile } : {}),
+		...(validatedProfile ? { profile: validatedProfile } : {}),
 		...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools as string[] } : {}),
 		...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
 	};
@@ -114,15 +123,15 @@ function defaultToolsFor(config: AgentConfig): string[] {
 }
 
 function typedSystemPrompt(config: AgentConfig, additional?: string): string {
-	const role = `Agent type: ${config.name}\n\n${config.systemPrompt}`;
-	return additional?.trim() ? `${role}\n\nAdditional program guidance:\n${additional}` : role;
+	const definitionPrompt = `Agent type: ${config.name}\n\n${config.systemPrompt}`;
+	return additional?.trim() ? `${definitionPrompt}\n\nAdditional program guidance:\n${additional}` : definitionPrompt;
 }
 
 /**
- * Resolve tools, model, thinking, and role prompt for an agents.run worker.
+ * Resolve tools, model, thinking, and the definition prompt for an agents.run worker.
  * Omitting type keeps the generic read-only worker. A catalog type supplies
  * that agent's defaults; an explicit profile overrides only inference selection.
- * systemPrompt appends and does not replace the type role.
+ * systemPrompt appends and does not replace the selected agent definition.
  */
 export async function resolveExecWorker(
 	request: AgentRequest,

@@ -81,6 +81,8 @@ export interface AgentRecord {
 export interface AgentInvocation {
 	modelName?: string;
 	profile?: string;
+	/** Invocation-level system guidance appended to the selected definition. */
+	systemPrompt?: string;
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;

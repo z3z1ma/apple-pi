@@ -66,6 +66,13 @@ try {
 		),
 		"missing ledger system-prompt injection",
 	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("subagents.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
+		),
+		"missing live subagent-team system-prompt injection",
+	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
@@ -162,8 +169,30 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "Agent");
 	assert(agentTool, "missing Agent tool definition");
+	assert.match(agentTool.definition.description, /<subagent-team>/);
+	assert.match(
+		agentTool.definition.description,
+		/every callable teammate with its name, configured inference profile, and own description/,
+	);
+	assert.match(agentTool.definition.description, /<inference-profiles>/);
+	assert.match(agentTool.definition.description, /dynamic guidance with system_prompt/);
+	assert.match(piExecTool.definition.description, /<subagent-team>/);
+	assert.match(piExecTool.definition.description, /callable teammates with name, inference profile, and description/);
+	assert.match(piExecTool.definition.description, /<inference-profiles>/);
+	assert.match(piExecTool.definition.description, /profile selects an inference profile/);
+	assert.match(piExecTool.definition.description, /systemPrompt appends dynamic specialization/);
 	const agentProperties = agentTool.definition.parameters.properties;
-	assert("profile" in agentProperties, "Agent schema omits the model profile selector");
+	assert("profile" in agentProperties, "Agent schema omits the inference profile selector");
+	assert.deepEqual(
+		agentProperties.profile.anyOf.map((entry) => entry.const),
+		["quick", "balanced", "deep", "coding", "visual-engineering", "background"],
+	);
+	assert("system_prompt" in agentProperties, "Agent schema omits invocation-level system guidance");
+	assert.match(
+		agentProperties.system_prompt.description,
+		/appended after the selected definition and preloaded skills/,
+	);
+	assert.match(agentProperties.system_prompt.description, /cannot change capabilities/);
 	for (const removed of ["isolation", "schedule", "name", "max_turns", "model", "thinking"]) {
 		assert(!(removed in agentProperties), `removed subagent field leaked into schema: ${removed}`);
 	}
@@ -175,7 +204,10 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "get_subagent_result");
 	assert(!resultTool.definition.parameters.required.includes("wait_seconds"));
-	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /Omit to wait 300 seconds/);
+	assert(!("maximum" in resultTool.definition.parameters.properties.wait_seconds));
+	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /Omit to wait until settlement/);
+	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /no application maximum/);
+	assert.match(resultTool.definition.description, /uncapped positive finite timeout/);
 	assert(
 		existsSync("skills/pi-review/references/plan-review-verify.js"),
 		"missing pi-review plan-review-verify reference",
@@ -201,14 +233,14 @@ try {
 				`${program} must declare the ${constant} prompt placeholder`,
 			);
 		}
-		assert(!source.includes("skills.body"), `${program} must not load role prompts via skills.body`);
+		assert(!source.includes("skills.body"), `${program} must not load program prompts via skills.body`);
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
 		assert(source.includes('profile: "deep"'), `${program} workers must select the deep model profile`);
 		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
 	}
 	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
-	assert(!ralphSource.includes("type:"), "pi-ralph must remain a program-only role, not a catalog type");
-	assert(ralphSource.includes("systemPrompt: RALPH"), "pi-ralph must supply its explicit worker role");
+	assert(!ralphSource.includes("type:"), "pi-ralph must remain an untyped program worker");
+	assert(ralphSource.includes("systemPrompt: RALPH"), "pi-ralph must supply its explicit worker prompt");
 	assert(ralphSource.includes('profile: "coding"'), "pi-ralph must select the coding model profile");
 	assert(ralphSource.includes("tools: RALPH_TOOLS"), "pi-ralph must grant its explicit write-capable tools");
 	for (const tool of ["read", "grep", "find", "ls", "bash", "edit", "write"]) {
@@ -220,7 +252,7 @@ try {
 	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
 	assert(reviewedSource.includes("const PLANNER"), "ralph-reviewed.js must keep the inlined review planner");
 	assert(!reviewedSource.includes('type: "general-purpose"'), "reviewed Ralph must not use a retired catalog type");
-	assert(reviewedSource.includes("systemPrompt: RALPH"), "reviewed Ralph must supply its explicit worker role");
+	assert(reviewedSource.includes("systemPrompt: RALPH"), "reviewed Ralph must supply its explicit worker prompt");
 	assert(reviewedSource.includes("tools: RALPH_TOOLS"), "reviewed Ralph must grant write-capable tools");
 	const defaultAgentsSource = readFileSync("components/subagents/src/default-agents.ts", "utf8");
 	assert(!defaultAgentsSource.includes('name: "general-purpose"'), "retired built-in general-purpose agent remains");

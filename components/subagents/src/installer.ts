@@ -6,12 +6,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import {
-	DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS,
-	MAX_SUBAGENT_RESULT_WAIT_SECONDS,
-	normalizeWaitSeconds,
-	waitForAgentSettlement,
-} from "./abortable.js";
+import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
+import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
@@ -35,13 +31,19 @@ import { inChildSessionContext } from "./child-context.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
-import { resolveAgentProfile } from "./model-routing.js";
+import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, partialOutputSuffix } from "./status-note.js";
-import { appendTeamSystemPrompt, toTeamMember } from "./team-system-prompt.js";
+import {
+	appendTeamSystemPrompt,
+	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
+	TEAM_SYSTEM_PROMPT_TAG,
+	type TeamMember,
+	toTeamMember,
+} from "./team-system-prompt.js";
 import type {
 	AgentInvocation,
 	AgentRecord,
@@ -405,8 +407,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	// descriptions no longer carry a competing static list.
 	pi.on("before_agent_start", (event, ctx) => {
 		bindSessionContext(ctx);
-		const members = getAvailableTypes().map((name) => toTeamMember(name, getAgentConfig(name)?.description));
-		return { systemPrompt: appendTeamSystemPrompt(event.systemPrompt ?? "", members) };
+		const members: TeamMember[] = getAvailableTypes().map((name) => toTeamMember(name, getAgentConfig(name)));
+		return {
+			systemPrompt: appendTeamSystemPrompt(event.systemPrompt ?? "", members, INFERENCE_PROFILE_CATALOG),
+		};
 	});
 
 	const agentTool = defineTool({
@@ -417,12 +421,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"Use background mode for parallel work, then get_subagent_result; use resume to continue an in-memory agent.",
 			"Custom agents are Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
 			"Subagents may delegate only when their definition explicitly sets allowed_subagents.",
-			"The Agent tool is for collaboration: backgrounding, steering, resume, and a durable child session. pi_exec agents.run is for composition: typed workers in a program graph with core tools, MCP, and bound context. They share this type catalog. The available subagent team and each one's role are listed in the system prompt.",
+			`The live <${TEAM_SYSTEM_PROMPT_TAG}> system-prompt block lists every callable teammate with its name, configured inference profile, and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block lists the inference profiles and their descriptions. Select the teammate with subagent_type, optionally select an inference profile with profile, and append dynamic guidance with system_prompt without changing capabilities.`,
 		].join(" "),
 		promptGuidelines: [
-			"The parent session is a senior engineer who may implement. Delegate when a specialist isolates context, uses a better model class, or enables non-overlapping parallelism — not because a type exists. One isolated, known-path, low-risk action stays here; if no specialist lane fits, keep the work in the parent session.",
-			"Broad or uncertain repo discovery → background Explore. External or version-sensitive docs → Research. Cross-module how-to-implement → Plan. Costly should, root-cause, or YAGNI judgment → Counsel. Bounded specified writes → Implement. User-visible layout, interaction, or polish → Design. Do not launch overlapping writers. Do not retry an unchanged rejected task.",
-			"Use the Agent tool when you need collaboration: backgrounding, FleetView, steer/stop, resume, or a durable child session. Use pi_exec agents.run when you need a dynamic graph that composes specialists with core tools, MCP, or bound context. They share the same type catalog. Review and Ralph program roles use explicit systemPrompt workers rather than catalog types.",
+			`The parent session is a senior engineer who may implement. In the live <${TEAM_SYSTEM_PROMPT_TAG}> block, choose a teammate by its own description and use its configured inference profile unless the invocation needs an explicit profile override. If no teammate fits, keep the work in the parent session.`,
+			"Do not launch overlapping writers. Do not retry an unchanged rejected task.",
+			`Use the Agent tool for collaboration and pi_exec agents.run for program graphs. Agent subagent_type and agents.run type select a teammate; profile selects an available inference profile. Pair profile with Agent's system_prompt or agents.run's systemPrompt for dynamic specialization. Additional guidance cannot grant capabilities.`,
 			"The persistent Advisor reviews the root session. Child sessions load it only when their agent definition enables it or the invocation explicitly sets advisor true; built-in Implement enables it by default, and advisor false disables that default for one new session.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
@@ -430,10 +434,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			prompt: Type.String({ description: "Self-contained task for the agent." }),
 			description: Type.String({ description: "Short task description shown in the UI." }),
 			subagent_type: Type.String({ description: "Agent type from the available Markdown/default definitions." }),
-			profile: Type.Optional(
+			profile: Type.Optional(INFERENCE_PROFILE_PARAMETER_SCHEMA),
+			system_prompt: Type.Optional(
 				Type.String({
 					minLength: 1,
-					description: "User-global model profile override. It changes model/thinking only, never capabilities.",
+					description:
+						"Invocation-specific system guidance appended after the selected definition and preloaded skills. It cannot change capabilities and is fixed for the session.",
 				}),
 			),
 			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
@@ -465,14 +471,16 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const requestedAdvisor = params.advisor ?? existing.invocation?.advisor === true;
 				const requestedIsolation = params.isolated === true;
 				const requestedProfile = params.profile ?? existing.invocation?.profile;
+				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
 				if (
 					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
 					requestedAdvisor !== (existing.invocation?.advisor === true) ||
 					requestedIsolation !== (existing.invocation?.isolated === true) ||
-					requestedProfile !== existing.invocation?.profile
+					requestedProfile !== existing.invocation?.profile ||
+					requestedSystemPrompt !== existing.invocation?.systemPrompt
 				) {
 					return textResult(
-						"profile, inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						"profile, system_prompt, inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
 						undefined,
 						true,
 					);
@@ -507,6 +515,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (!dispatch.ok) return textResult(dispatch.message, undefined, true);
 			const type = dispatch.type;
 			const config = getAgentConfig(type);
+			if (!config) return textResult(`Unknown or disabled agent type: "${type}"`, undefined, true);
 			const resolvedAgentProfile = resolveAgentProfile({
 				registry: ctx.modelRegistry,
 				parentModel: ctx.model,
@@ -544,6 +553,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			const invocationDetails: AgentInvocation = {
 				modelName,
 				profile: resolvedAgentProfile.profile,
+				systemPrompt: invocation.systemPrompt,
 				thinking: resolvedAgentProfile.thinkingLevel,
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
@@ -553,6 +563,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			};
 			const options = {
 				description: params.description,
+				agentConfig: config,
+				systemPrompt: invocation.systemPrompt,
 				model,
 				modelResolved: true,
 				maxTurns: effectiveMaxTurns,
@@ -651,14 +663,15 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		defineTool({
 			name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 			label: "Get Subagent Result",
-			description: `Check a subagent with a bounded ${DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS}-second wait by default. Settled final output is returned in full. wait_seconds may choose 0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s; 0 checks immediately, and an expired wait returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.`,
+			description:
+				"Check a subagent, waiting until it settles by default. Settled final output is returned in full. wait_seconds may choose an uncapped positive finite timeout; 0 checks immediately, and an expired wait returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.",
 			parameters: Type.Object({
 				agent_id: Type.String(),
 				wait_seconds: Type.Optional(
-					Type.Integer({
+					Type.Number({
 						minimum: 0,
-						maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS,
-						description: `Seconds to wait before yielding control. Omit to wait ${DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS} seconds (or to take an immediate transcript_tail snapshot); 0 always checks immediately, and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.`,
+						description:
+							"Seconds to wait before yielding control. Omit to wait until settlement (or to take an immediate transcript_tail snapshot); 0 always checks immediately, and positive finite values have no application maximum.",
 					}),
 				),
 				verbose: Type.Boolean({
@@ -675,11 +688,13 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				),
 			}),
 			async execute(_toolCallId, params, signal) {
-				const waitSeconds =
-					params.transcript_tail !== undefined && params.wait_seconds === undefined
-						? 0
-						: normalizeWaitSeconds(params.wait_seconds);
-				if (params.transcript_tail !== undefined && (params.verbose || waitSeconds > 0)) {
+				let waitMode: ResultWaitMode;
+				try {
+					waitMode = resolveResultWaitMode(params.wait_seconds, params.transcript_tail !== undefined);
+				} catch (error) {
+					return textResult(error instanceof Error ? error.message : String(error), undefined, true);
+				}
+				if (params.transcript_tail !== undefined && (params.verbose || waitMode.kind === "timed")) {
 					return textResult(
 						"transcript_tail cannot be combined with verbose or a positive wait_seconds value.",
 						undefined,
@@ -689,10 +704,11 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const record = manager.getRecord(params.agent_id);
 				if (!record || record.parentAgentId || record.internalOwner)
 					return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
-				const waitExpired =
-					waitSeconds > 0 && (record.status === "queued" || record.status === "running")
-						? !(await waitForAgentSettlement(record, waitSeconds * 1_000, signal))
-						: false;
+				let waitExpiredSeconds: number | undefined;
+				if (waitMode.kind !== "immediate" && (record.status === "queued" || record.status === "running")) {
+					const outcome = await waitForAgentSettlement(record, waitMode, signal);
+					if (outcome === "timed-out" && waitMode.kind === "timed") waitExpiredSeconds = waitMode.seconds;
+				}
 				const settled = record.status !== "queued" && record.status !== "running";
 				if (settled && params.transcript_tail === undefined) {
 					record.resultConsumed = true;
@@ -702,8 +718,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					!settled || params.transcript_tail !== undefined
 						? `Agent ${record.id} is ${record.status}.`
 						: record.result || record.error || "No output.";
-				if (waitExpired && !settled) {
-					output += ` Wait limit (${waitSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
+				if (waitExpiredSeconds !== undefined && !settled) {
+					output += ` Wait limit (${waitExpiredSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
 				}
 				if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
 					const tail =

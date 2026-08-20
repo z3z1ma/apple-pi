@@ -41,6 +41,16 @@ describe("ledger system prompt distribution", () => {
 		expect(inherited).not.toContain(marker);
 	});
 
+	it("appends invocation-specific system guidance after preloaded skills", () => {
+		const prompt = buildAgentPrompt(config, "/repo", env, undefined, {
+			skillBlocks: [{ name: "demo", content: "Generic skill guidance." }],
+			additionalSystemPrompt: "Invocation-specific guidance.",
+		});
+		expect(prompt.indexOf("Do the assigned work.")).toBeLessThan(prompt.indexOf("Generic skill guidance."));
+		expect(prompt.indexOf("Generic skill guidance.")).toBeLessThan(prompt.indexOf("Invocation-specific guidance."));
+		expect(prompt).toContain("<invocation_instructions>\nInvocation-specific guidance.\n</invocation_instructions>");
+	});
+
 	it("loads the ledger extension on workers instead of pasting the contract", () => {
 		const args = buildAgentCliArgs(
 			{ task: "Inspect the task", systemPrompt: "Custom worker guidance" },

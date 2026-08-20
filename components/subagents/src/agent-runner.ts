@@ -140,8 +140,10 @@ export interface RunOptions {
 	/** Abort on the exact turn boundary instead of steering through the public grace window. */
 	hardTurnLimit?: boolean;
 	toolExecution?: "sequential" | "parallel";
-	/** Exact internal role configuration; unlike registry agents, this cannot be replaced by project files. */
+	/** Exact enabled config captured at dispatch. Execution must not re-read mutable role policy when present. */
 	agentConfig?: AgentConfig;
+	/** Invocation-level guidance appended after the selected definition and skills. */
+	systemPrompt?: string;
 	/** Enforcement that runs before the session's existing beforeToolCall hook. */
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
@@ -342,8 +344,8 @@ export async function runAgent(
 	// Get parent system prompt for append-mode agents
 	const parentSystemPrompt = ctx.getSystemPrompt();
 
-	// Build prompt extras (skill preloading only; durable memory is session-owned).
-	const extras: PromptExtras = {};
+	// Build invocation extras; durable memory remains session-owned.
+	const extras: PromptExtras = { additionalSystemPrompt: options.systemPrompt };
 
 	// Skills: isolated turns them off. Extensions never inherit from the package.
 	const skills = options.isolated ? false : config.skills;
