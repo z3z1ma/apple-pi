@@ -111,7 +111,7 @@ interface HarnessCall {
 	args: string[];
 }
 
-function createLifecycleHarness() {
+function createLifecycleHarness({ focused = false }: { focused?: boolean } = {}) {
 	const handlers = new Map<string, (...args: unknown[]) => unknown>();
 	const commands = new Map<string, unknown>();
 	const calls: HarnessCall[] = [];
@@ -127,6 +127,11 @@ function createLifecycleHarness() {
 		},
 		async exec(command: string, args: string[]) {
 			calls.push({ command, args });
+			if (args.some((arg) => String(arg).includes("focus-check.sh"))) {
+				// focus-check.sh exits 0 only when the operator is already viewing
+				// the pane; non-zero otherwise.
+				return { code: focused ? 0 : 1, stdout: "", stderr: "", killed: false };
+			}
 			if (String(command).endsWith("tmux")) {
 				return {
 					code: 0,
@@ -163,6 +168,10 @@ function createLifecycleHarness() {
 
 function notifierCall(calls: HarnessCall[]) {
 	return calls.find((call) => String(call.command).includes("Pi Notifier.app/Contents/MacOS/terminal-notifier"));
+}
+
+function focusCheckCall(calls: HarnessCall[]) {
+	return calls.find((call) => call.args.some((arg) => String(arg).includes("focus-check.sh")));
 }
 
 async function flushUntil(predicate: () => boolean, tries = 50): Promise<void> {
@@ -206,6 +215,21 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 		"Implemented and passing tests.",
 	]);
 	expect(call.args.includes("-execute")).toBe(true);
+});
+
+test("suppresses the settle notification when the operator is already viewing the pane", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness({ focused: true });
+	handlers.get("input")?.({ text: "do the thing", source: "interactive" });
+	handlers.get("before_agent_start")?.({ prompt: "do the thing" });
+	handlers.get("message_end")?.({
+		message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
+	});
+
+	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+
+	const check = focusCheckCall(calls);
+	assert.ok(check, "focus-check.sh should run before delivery on the settle path");
+	expect(notifierCall(calls)).toBeUndefined();
 });
 
 test("notifies when ask_user_question starts but not for other tools", async () => {
@@ -301,4 +325,18 @@ test("clears a transient error when an automatic retry succeeds", async () => {
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
 	expect(call.args.slice(4, 6)).toEqual(["-message", "Task completed after automatic retry."]);
+});
+
+test("/notify-test always delivers, ignoring pane focus", async () => {
+	const { calls, commands, ctx } = createLifecycleHarness({ focused: true });
+	const command = commands.get("notify-test") as { handler: (args: string, ctx: unknown) => Promise<void> };
+	const notices: Array<{ text: string; level: string }> = [];
+	const testCtx = { ...ctx, ui: { notify: (text: string, level: string) => notices.push({ text, level }) } };
+
+	await command.handler("", testCtx);
+
+	// The manual test must never consult the focus check nor be suppressed.
+	expect(focusCheckCall(calls)).toBeUndefined();
+	assert.ok(notifierCall(calls), "notify-test should deliver a notification");
+	expect(notices.at(-1)?.level).toBe("info");
 });

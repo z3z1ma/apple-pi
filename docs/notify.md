@@ -8,6 +8,7 @@ The extension is registered from `extensions/notify.ts` over `components/notify/
 
 - Notifies on `agent_settled`, after retries, compaction retries, and queued follow-ups finish. One notification per Pi session (keyed by session and leaf), not per concurrent session.
 - Also notifies when the `ask_user_question` tool starts, since that tool blocks the turn waiting on the operator and `agent_settled` does not fire while it is pending. The body shows the first question (with a `(+N more)` suffix for multi-question prompts). Delivery is fire-and-forget so notifier timeouts never delay the questionnaire dialog.
+- Automatic notifications (both the settle and ask paths) are suppressed when the operator is already viewing the pane — Ghostty is the frontmost app and the pane's tmux window is the active window of an attached session. Detection lives in `scripts/focus-check.sh` and fails open: any inconclusive result still delivers. `/notify-test` is exempt and always delivers.
 - Title shows tmux coordinates plus the Pi session or project name; the subtitle is the latest user prompt; the body is the final outcome.
 - Terminal provider errors and cancelled tasks are reported explicitly — including `cyber_policy` blocks — instead of being shown as successful completion.
 - Plays the macOS `Glass` sound by default.

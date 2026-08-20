@@ -27,6 +27,7 @@ const APP_NOTIFIER = join(NOTIFIER_APP, "Contents", "MacOS", "terminal-notifier"
 const APP_ICON = join(NOTIFIER_APP, "Contents", "Resources", "Pi.icns");
 const BUNDLED_ICON = fileURLToPath(new URL("../assets/pi-notify-1024.png", import.meta.url));
 const BUNDLED_FOCUS_SCRIPT = fileURLToPath(new URL("../scripts/focus-tmux.sh", import.meta.url));
+const FOCUS_CHECK_SCRIPT = fileURLToPath(new URL("../scripts/focus-check.sh", import.meta.url));
 const INSTALL_APP_SCRIPT = fileURLToPath(new URL("../scripts/install-notifier-app.sh", import.meta.url));
 const HOMEBREW_NOTIFIER = "/opt/homebrew/bin/terminal-notifier";
 const FOCUS_SCRIPT = process.env.PI_NOTIFY_FOCUS_SCRIPT || BUNDLED_FOCUS_SCRIPT;
@@ -349,6 +350,33 @@ async function readTmuxTarget(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxTa
 	return result.code === 0 ? parseTmuxTarget(result.stdout) : undefined;
 }
 
+// Report whether the operator is already looking at the Pi pane: Ghostty is
+// frontmost and the pane's tmux window is the active window of an attached
+// session. Delegated to focus-check.sh so the platform detection stays with the
+// other bash focus logic. Fails open — any error or inconclusive result returns
+// false so a real notification is never suppressed by a detection failure.
+async function isOperatorViewingPane(
+	pi: ExtensionAPI,
+	tmuxBin: string,
+	tmuxSocket: string,
+	target: TmuxTarget | undefined,
+): Promise<boolean> {
+	if (!target?.paneId && !target?.windowId) return false;
+	const env = ["/usr/bin/env"];
+	if (tmuxBin) env.push(`TMUX_BIN=${tmuxBin}`);
+	if (tmuxSocket) env.push(`TMUX_SOCKET=${tmuxSocket}`);
+	try {
+		const result = await pi.exec(
+			env[0],
+			[...env.slice(1), "bash", FOCUS_CHECK_SCRIPT, target.paneId || "", target.windowId || ""],
+			{ timeout: NOTIFIER_TIMEOUT_MS },
+		);
+		return result.code === 0;
+	} catch {
+		return false;
+	}
+}
+
 async function projectTitle(pi: ExtensionAPI, cwd: string): Promise<string> {
 	try {
 		const result = await pi.exec("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { timeout: 2_000 });
@@ -414,9 +442,11 @@ async function deliverNotification(
 	prompt: string,
 	answer: string,
 	subtitleFallback = "Task complete",
+	skipIfFocused = false,
 ): Promise<NotificationResult> {
 	const tmuxBin = await resolveTmuxBin(pi);
 	const [target, project] = await Promise.all([readTmuxTarget(pi, tmuxBin), projectTitle(pi, ctx.cwd)]);
+	const tmuxSocket = tmuxSocketFromEnv();
 	const threadTitle = shortDisplayText(
 		pi.getSessionName() || cleanPaneTitle(target?.paneTitle) || project,
 		THREAD_TITLE_MAX_WIDTH,
@@ -427,7 +457,22 @@ async function deliverNotification(
 	const sessionId = ctx.sessionManager.getSessionId();
 	const group = `pi-agent-turn-complete-${safeId(sessionId || target?.paneId || project)}`;
 	const content: NotificationContent = { title, subtitle, body, group };
-	const focusCommand = buildFocusCommand(target, tmuxBin, tmuxSocketFromEnv());
+
+	// Suppress redundant automatic notifications when the operator is already
+	// viewing the pane. Skipped for /notify-test, which must always deliver.
+	if (skipIfFocused && (await isOperatorViewingPane(pi, tmuxBin, tmuxSocket, target))) {
+		await appendLog({
+			ts: new Date().toISOString(),
+			success: false,
+			via: "skipped-focused",
+			sessionId,
+			tmuxPane: target?.paneId || "",
+			coordinate: target?.coordinate || "",
+		});
+		return { ...content, success: false, via: "skipped-focused" };
+	}
+
+	const focusCommand = buildFocusCommand(target, tmuxBin, tmuxSocket);
 	const iconPath = (await isFile(APP_ICON))
 		? APP_ICON
 		: (await isFile(BUNDLED_ICON))
@@ -528,7 +573,9 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		const prompt = latestPrompt || latestBranchText(ctx, "user");
 		// This event blocks the tool pipeline until the handler resolves, so deliver
 		// without awaiting; otherwise notifier timeouts would delay the dialog.
-		void deliverNotification(pi, ctx, prompt, askQuestionSummary(event.args), "Pi needs your input").catch(() => {});
+		void deliverNotification(pi, ctx, prompt, askQuestionSummary(event.args), "Pi needs your input", true).catch(
+			() => {},
+		);
 	});
 
 	pi.on("agent_settled", async (_event, ctx) => {
@@ -547,7 +594,7 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 				: latestAborted
 					? "Task cancelled."
 					: latestAssistant || latestBranchText(ctx, "assistant");
-		await deliverNotification(pi, ctx, prompt, answer);
+		await deliverNotification(pi, ctx, prompt, answer, "Task complete", true);
 	});
 
 	pi.registerCommand("notify-setup", {
