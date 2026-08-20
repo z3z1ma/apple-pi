@@ -293,32 +293,88 @@ try {
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
 		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
 	}
-	for (const program of ["multi-lens-review.js", "security-baseline-review.js", "residual-review-loop.js"]) {
+	for (const program of [
+		"plan-review-verify.js",
+		"targeted-review.js",
+		"multi-lens-review.js",
+		"security-baseline-review.js",
+		"residual-review-loop.js",
+	]) {
 		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		assert(source.includes("fitForContext"), `${program} must bound serialized verifier metadata`);
+		assert(source.includes("std.git.change"), `${program} must use normalized Git evidence`);
+		assert(source.includes("if (!compare)"), `${program} must reject an empty comparison`);
+		assert(source.includes("std.context.fit"), `${program} must use the shared context budget`);
+		assert(!source.includes("std.agents.planFanoutReduce"), `${program} must retain its required review topology`);
+	}
+	for (const program of [
+		"plan-review-verify.js",
+		"targeted-review.js",
+		"multi-lens-review.js",
+		"security-baseline-review.js",
+	]) {
+		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
+		assert(source.includes("statusSummary"), `${program} must keep status context compact`);
+	}
+	for (const program of [
+		"targeted-review.js",
+		"multi-lens-review.js",
+		"security-baseline-review.js",
+		"residual-review-loop.js",
+	]) {
+		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
+		assert(source.includes("std.context.pack"), `${program} must pack verifier metadata by serialized size`);
 		assert(source.includes("candidateIdsOmitted"), `${program} must report omitted verifier candidates`);
 		assert(!source.includes("candidates.slice(0, 64)"), `${program} must not count-bound verifier candidates`);
+		assert(!source.includes("notes.slice(0, 64)"), `${program} must not count-bound verifier notes`);
 	}
 	for (const prompt of ["planner", "reviewer", "verifier"]) {
 		const source = readFileSync(`skills/pi-review/references/${prompt}.md`, "utf8");
 		assert(source.includes("Template"), `${prompt}.md must describe an adaptable prompt template`);
 	}
 	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
-	assert(!ralphSource.includes("type:"), "pi-ralph must remain an untyped program worker");
-	assert(ralphSource.includes("systemPrompt: RALPH"), "pi-ralph must supply its explicit worker prompt");
-	assert(ralphSource.includes('profile: "coding"'), "pi-ralph must select the coding model profile");
-	assert(ralphSource.includes("tools: RALPH_TOOLS"), "pi-ralph must grant its explicit write-capable tools");
+	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
+	for (const [program, source] of [
+		["ralph.js", ralphSource],
+		["ralph-reviewed.js", reviewedSource],
+	]) {
+		const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
+		assert(source.includes("inputs.iterations"), `${program} must take a caller-chosen iteration bound`);
+		assert(source.includes("Number.isSafeInteger"), `${program} must reject an unsafe iteration bound`);
+		assert(source.includes("systemPrompt: RALPH"), `${program} must supply its explicit worker prompt`);
+		assert(source.includes('profile: "coding"'), `${program} must select the coding model profile`);
+		assert(source.includes("tools: RALPH_TOOLS"), `${program} must grant explicit write-capable tools`);
+		assert(!source.includes("std.agents.planFanoutReduce"), `${program} must retain its required topology`);
+		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
+	}
 	for (const tool of ["read", "grep", "find", "ls", "bash", "edit", "write"]) {
 		assert(ralphSource.includes(`"${tool}"`), `pi-ralph worker omits ${tool}`);
 	}
-	assert(ralphSource.includes("inputs.iterations"), "pi-ralph must take a caller-chosen iteration bound");
+	const incrementPrompt = readFileSync("skills/pi-ralph/references/increment.md", "utf8");
+	assert(incrementPrompt.includes("Prompt Template"), "Ralph increment prompt must be adaptable");
+	assert(ralphSource.includes("<adapt references/increment.md"), "default Ralph must adapt the increment prompt");
+	assert(reviewedSource.includes("<adapt references/increment.md"), "reviewed Ralph must adapt the increment prompt");
+	assert(!ralphSource.includes("type:"), "pi-ralph must remain an untyped program worker");
 	assert(!ralphSource.includes("const PLANNER"), "default pi-ralph must not inline the review planner");
 	assert(!ralphSource.includes("reviewChange"), "default pi-ralph must not inline the review workflow");
-	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
 	assert(reviewedSource.includes("const PLANNER"), "ralph-reviewed.js must keep the inlined review planner");
 	assert(!reviewedSource.includes('type: "general-purpose"'), "reviewed Ralph must not use a retired catalog type");
-	assert(reviewedSource.includes("systemPrompt: RALPH"), "reviewed Ralph must supply its explicit worker prompt");
-	assert(reviewedSource.includes("tools: RALPH_TOOLS"), "reviewed Ralph must grant write-capable tools");
+	for (const primitive of [
+		"std.git.change",
+		"std.context.fit",
+		"std.context.pack",
+		"std.coverage.compare",
+		"std.reconcile.byId",
+	]) {
+		assert(reviewedSource.includes(primitive), `reviewed Ralph must use ${primitive}`);
+	}
+	assert(!reviewedSource.includes("function clipPatch"), "reviewed Ralph must use the shared context budget");
+	assert(!reviewedSource.includes("notes.slice(0, 64)"), "reviewed Ralph must not count-bound reviewer notes");
+	assert(reviewedSource.includes("const reviewedPaths"), "reviewed Ralph must retain previously reviewed paths");
+	assert(
+		reviewedSource.includes("const feedback = reviewFeedback"),
+		"reviewed Ralph must bind bounded review feedback",
+	);
 	const defaultAgentsSource = readFileSync("components/subagents/src/default-agents.ts", "utf8");
 	assert(!defaultAgentsSource.includes('name: "general-purpose"'), "retired built-in general-purpose agent remains");
 	assert(!defaultAgentsSource.includes("model:"), "built-in agents must not embed concrete models");

@@ -1,28 +1,21 @@
 const RALPH_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write"];
-const RALPH = `You are one fresh iteration of a Ralph loop.
-
-The goal and context paths are your frame of reference. Read the small ledger index or task first, follow links only as needed, and inspect the current repository before deciding that work is missing.
-
-Choose the single most important unfinished increment toward the goal. Implement it completely. Run the fastest relevant project checks as backpressure.
-
-Update the durable ledger task records as you work. The ledger is the memory the next fresh iteration will read: record what changed, what you learned, what remains, and any blockers. Prefer the task Journal, Evidence, Blockers, Retrospective, and Distillation sections, and keep work items honest.
-
-If the goal is already satisfied in the repository, do not invent more implementation. Update the ledger to say so and stop.
-
-Do not commit, push, or reset. The calling session owns integration.
-
-Stop after one coherent increment. The next iteration will receive a fresh context window and the updated repository.`;
+// Adapt references/increment.md for the goal and inline it before running this template.
+const RALPH = "<adapt references/increment.md for this goal and inline it here>";
 
 const goal = (inputs.goal || "").trim();
 const stack = (inputs.stack || "")
 	.split("\n")
 	.map((path) => path.trim())
 	.filter(Boolean);
-const iterations = Number.parseInt(String(inputs.iterations || ""), 10);
+const iterationInput = String(inputs.iterations ?? "");
 if (!goal) throw new Error("inputs.goal is required");
 if (stack.length === 0) throw new Error("inputs.stack is required (newline-separated context paths)");
-if (!Number.isInteger(iterations) || iterations < 1) {
-	throw new Error("inputs.iterations is required (positive integer)");
+if (!/^[1-9]\d*$/.test(iterationInput)) {
+	throw new Error("inputs.iterations is required (canonical positive integer)");
+}
+const iterations = Number(iterationInput);
+if (!Number.isSafeInteger(iterations)) {
+	throw new Error("inputs.iterations must be a safe positive integer");
 }
 
 const failures = [];
@@ -36,10 +29,21 @@ for (let iteration = 1; iteration <= iterations; iteration++) {
 		task: `Goal:\n${goal}`,
 		context: { stack },
 	});
-	if (result.status === "failed") {
+	if (result.status !== "completed") {
 		failures.push({ iteration, error: result.error || "increment failed" });
-		return { status: "failed", iterations: iteration, failedAt: iteration, failures };
+		return {
+			status: "failed",
+			requestedIterations: iterations,
+			completedIterations: iteration - 1,
+			failedAt: iteration,
+			failures,
+		};
 	}
 }
 
-return { status: "completed", iterations, failures };
+return {
+	status: "completed",
+	requestedIterations: iterations,
+	completedIterations: iterations,
+	failures,
+};

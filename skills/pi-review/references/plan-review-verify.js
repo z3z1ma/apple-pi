@@ -24,38 +24,29 @@ async function gitOutput(command) {
   return result.output;
 }
 
+function statusSummary(status) {
+  return status.entries.map((entry) => `${entry.index}${entry.worktree} ${entry.path}${entry.from ? ` <- ${entry.from}` : ""}`).join("\n");
+}
+
 function compactText(value, limit) {
   const text = String(value || "");
   return text.length <= limit ? text : `${text.slice(0, limit)}…`;
 }
 
-function clipPatch(patch, limit) {
-  if (patch.length <= limit) return { text: patch, truncated: false };
-  if (limit <= 0) return { text: "", truncated: patch.length > 0 };
-  const half = Math.floor(limit / 2);
-  return {
-    text: `${patch.slice(0, half)}\n\n[... patch clipped for worker context ...]\n\n${patch.slice(-half)}`,
-    truncated: true,
-  };
-}
-
 function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
-  let low = 0;
-  let high = Math.min(maxPatchChars, patch.length);
-  let best;
-  while (low <= high) {
-    const limit = Math.floor((low + high) / 2);
-    const clipped = clipPatch(patch, limit);
-    const candidate = { ...base, [patchKey]: clipped.text, [truncatedKey]: clipped.truncated };
-    if (JSON.stringify(candidate).length <= 48000) {
-      best = candidate;
-      low = limit + 1;
-    } else {
-      high = limit - 1;
-    }
-  }
-  if (!best) throw new Error("Review context exceeds the worker context limit before adding a patch");
-  return best;
+  const fitted = std.context.fit(
+    {
+      ...base,
+      [patchKey]: std.context.clippable(patch, {
+        maxChars: maxPatchChars,
+        strategy: "head-tail",
+        marker: "\n\n[... patch clipped for worker context ...]\n\n",
+      }),
+      [truncatedKey]: false,
+    },
+    { maxSerializedChars: 47900 },
+  );
+  return { ...fitted.value, [truncatedKey]: fitted.truncated.includes(`$.${patchKey}`) };
 }
 
 async function patchFor(paths) {
@@ -63,16 +54,12 @@ async function patchFor(paths) {
   return gitOutput(`git diff --no-ext-diff --unified=3 ${shellQuote(compare)} -- ${pathArgs}`);
 }
 
-const allPathArgs = files.map(shellQuote).join(" ");
-const [changeStatus, changeStat, rawPlanningPatch, rawUntrackedFiles] = await Promise.all([
-  gitOutput(`git status --short --untracked-files=all -- ${allPathArgs}`),
-  gitOutput(`git diff --no-ext-diff --stat ${shellQuote(compare)} -- ${allPathArgs}`),
-  patchFor(files),
-  gitOutput(`git ls-files --others --exclude-standard -z -- ${allPathArgs}`),
-]);
-const untrackedFiles = rawUntrackedFiles.split("\0").filter(Boolean);
+const change = await std.git.change({ compare, paths: files });
+const rawPlanningPatch = change.patch;
+const changeStatus = statusSummary(change.status);
+const { untrackedFiles } = change;
 const planningContext = contextWithPatch(
-  { files, untrackedFiles, background, compare, changeStatus, changeStat },
+  { files, untrackedFiles, background, compare, changeStatus, changeStat: change.stat },
   "changePatch",
   "changePatchTruncated",
   rawPlanningPatch,
@@ -132,8 +119,21 @@ const partitions = plan.partitions.map((partition, partitionIndex) => {
   }
   return { id: `partition-${partitionIndex + 1}`, ...partition };
 });
-const assignedPaths = new Set(partitions.flatMap((partition) => partition.files));
-const uncoveredFiles = files.filter((path) => !assignedPaths.has(path));
+const assignedPaths = partitions.flatMap((partition) => partition.files);
+const uniqueAssignedPaths = [...new Set(assignedPaths)];
+const assignmentCoverage = std.coverage.compare(
+  files.map((path) => ({ path })),
+  uniqueAssignedPaths.map((path) => ({ path })),
+  { id: "path" },
+);
+const assignmentReport = {
+  complete: assignmentCoverage.complete,
+  covered: assignmentCoverage.covered.map((item) => item.path),
+  missing: assignmentCoverage.missing.map((item) => item.path),
+  unexpected: assignmentCoverage.unexpected.map((item) => item.path),
+  overlapping: [...new Set(assignedPaths.filter((path, index) => assignedPaths.indexOf(path) !== index))],
+};
+const uncoveredFiles = assignmentReport.missing;
 const focuses = partitions.flatMap((partition) =>
   partition.focuses.map((focus, focusIndex) => ({
     id: `${partition.id}-focus-${focusIndex + 1}`,
@@ -254,24 +254,36 @@ const focusCoverage = reviews.map((review) => ({
 const candidatePaths = [...new Set(candidates.map((candidate) => candidate.path))];
 let rawVerificationPatch = "";
 if (candidatePaths.length > 0) rawVerificationPatch = await patchFor(candidatePaths);
-const verifierCandidates = candidates.map((candidate) => ({
-  candidateId: candidate.candidateId,
-  focusId: candidate.focusId,
-  scopeValid: candidate.scopeValid,
-  title: compactText(candidate.title, 180),
-  severity: candidate.severity,
-  path: candidate.path,
-  startLine: candidate.startLine,
-  endLine: candidate.endLine,
-  trigger: compactText(candidate.trigger, 500),
-  evidence: compactText(candidate.evidence, 700),
-  impact: compactText(candidate.impact, 400),
-}));
-const verifierNotes = notes.slice(0, 64).map((note) => ({
-  focusId: note.focusId,
-  topic: compactText(note.topic, 160),
-  observation: compactText(note.observation, 400),
-}));
+const verifierCandidates = std.context.pack(
+  candidates.map((candidate) => ({
+    candidateId: candidate.candidateId,
+    focusId: candidate.focusId,
+    scopeValid: candidate.scopeValid,
+    title: compactText(candidate.title, 180),
+    severity: candidate.severity,
+    path: candidate.path,
+    startLine: candidate.startLine,
+    endLine: candidate.endLine,
+    trigger: compactText(candidate.trigger, 500),
+    evidence: compactText(candidate.evidence, 700),
+    impact: compactText(candidate.impact, 400),
+    recommendation: compactText(candidate.recommendation, 300),
+  })),
+  {
+    maxSerializedChars: 12000,
+    id: "candidateId",
+    priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
+  },
+);
+const verifierNotes = std.context.pack(
+  notes.map((note, index) => ({
+    id: `${note.focusId}-note-${index + 1}`,
+    focusId: note.focusId,
+    topic: compactText(note.topic, 160),
+    observation: compactText(note.observation, 400),
+  })),
+  { maxSerializedChars: 8000, id: "id" },
+);
 const verifierContext = contextWithPatch(
   {
     files,
@@ -279,12 +291,16 @@ const verifierContext = contextWithPatch(
     background,
     compare,
     changeStatus,
-    changeStat,
+    changeStat: change.stat,
     planSummary: plan.summary,
+    assignmentCoverage: assignmentReport,
     focusCoverage,
-    candidates: verifierCandidates,
-    notes: verifierNotes,
-    notesOmitted: notes.length - verifierNotes.length,
+    candidates: verifierCandidates.items,
+    candidatesOmitted: verifierCandidates.omitted.length,
+    candidateIdsOmitted: verifierCandidates.omittedIds,
+    notes: verifierNotes.items,
+    notesOmitted: verifierNotes.omitted.length,
+    noteIdsOmitted: verifierNotes.omittedIds,
     failedFocuses,
     uncoveredFiles,
     truncatedFocuses,
@@ -336,28 +352,39 @@ const meta = await agent({
   },
 });
 
-const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
+const decisionReconciliation = std.reconcile.byId(candidates, meta.decisions, { id: "candidateId" });
+const reconciledById = new Map(decisionReconciliation.values.map((candidate) => [candidate.candidateId, candidate]));
 const normalizedDecisions = meta.decisions.map((decision) => ({
-  ...candidateById.get(decision.candidateId),
+  ...reconciledById.get(decision.candidateId),
   ...decision,
 }));
 const normalizedMeta = { ...meta, decisions: normalizedDecisions };
-const decidedIds = new Set(normalizedDecisions.map((decision) => decision.candidateId));
-const unknownDecisionIds = normalizedDecisions
-  .filter((decision) => !candidateById.has(decision.candidateId))
-  .map((decision) => decision.candidateId);
-const undecidedCandidates = candidates.filter((candidate) => !decidedIds.has(candidate.candidateId));
+const undecidedIds = new Set(decisionReconciliation.missingIds);
+const undecidedCandidates = decisionReconciliation.values.filter((candidate) => undecidedIds.has(candidate.candidateId));
 
 return {
   scope: { files: files.length, compare },
-  plan: { summary: plan.summary, partitions: partitions.length, focuses: focuses.length },
+  plan: {
+    summary: plan.summary,
+    partitions: partitions.length,
+    focuses: focuses.length,
+    assignmentCoverage: assignmentReport,
+  },
   candidates: candidates.length,
   failedFocuses,
+  assignmentCoverage: assignmentReport,
   uncoveredFiles,
   truncatedFocuses,
   planningPatchTruncated: planningContext.changePatchTruncated,
   verificationPatchTruncated: verifierContext.verificationPatchTruncated,
-  unknownDecisionIds,
+  decisionReconciliation: {
+    unknownIds: decisionReconciliation.unknownIds,
+    missingIds: decisionReconciliation.missingIds,
+    duplicateIds: decisionReconciliation.duplicateIds,
+  },
+  unknownDecisionIds: decisionReconciliation.unknownIds,
+  missingDecisionIds: decisionReconciliation.missingIds,
+  duplicateDecisionIds: decisionReconciliation.duplicateIds,
   undecidedCandidates,
   meta: normalizedMeta,
 };

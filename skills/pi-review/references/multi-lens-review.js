@@ -28,14 +28,8 @@ if (files.length === 0) throw new Error("inputs.paths is required (newline-separ
 if (lenses.length < 2) throw new Error("inputs.lenses requires at least two independently useful lenses");
 if (!compare) throw new Error("inputs.compare is required");
 
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
-}
-
-async function gitOutput(command) {
-  const result = await pi.bash({ command });
-  if (!result.ok) throw new Error(result.output || `Git command failed: ${command}`);
-  return result.output;
+function statusSummary(status) {
+  return status.entries.map((entry) => `${entry.index}${entry.worktree} ${entry.path}${entry.from ? ` <- ${entry.from}` : ""}`).join("\n");
 }
 
 function compactText(value, limit) {
@@ -43,63 +37,26 @@ function compactText(value, limit) {
   return text.length <= limit ? text : `${text.slice(0, limit)}…`;
 }
 
-function fitForContext(items, mapper, maxChars) {
-  const kept = [];
-  let size = 2;
-  for (const item of items) {
-    const compact = mapper(item);
-    const compactSize = JSON.stringify(compact).length + (kept.length > 0 ? 1 : 0);
-    if (size + compactSize > maxChars) break;
-    kept.push(compact);
-    size += compactSize;
-  }
-  return {
-    items: kept,
-    omittedCount: items.length - kept.length,
-    omittedIds: items
-      .slice(kept.length)
-      .map((item) => item.candidateId)
-      .filter(Boolean),
-  };
-}
-
-function clipPatch(patch, limit) {
-  if (patch.length <= limit) return { text: patch, truncated: false };
-  if (limit <= 0) return { text: "", truncated: patch.length > 0 };
-  const half = Math.floor(limit / 2);
-  return {
-    text: `${patch.slice(0, half)}\n\n[... patch clipped for worker context ...]\n\n${patch.slice(-half)}`,
-    truncated: true,
-  };
-}
-
 function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
-  let low = 0;
-  let high = Math.min(maxPatchChars, patch.length);
-  let best;
-  while (low <= high) {
-    const limit = Math.floor((low + high) / 2);
-    const clipped = clipPatch(patch, limit);
-    const candidate = { ...base, [patchKey]: clipped.text, [truncatedKey]: clipped.truncated };
-    if (JSON.stringify(candidate).length <= 48000) {
-      best = candidate;
-      low = limit + 1;
-    } else {
-      high = limit - 1;
-    }
-  }
-  if (!best) throw new Error("Review context exceeds the worker context limit before adding a patch");
-  return best;
+  const fitted = std.context.fit(
+    {
+      ...base,
+      [patchKey]: std.context.clippable(patch, {
+        maxChars: maxPatchChars,
+        strategy: "head-tail",
+        marker: "\n\n[... patch clipped for worker context ...]\n\n",
+      }),
+      [truncatedKey]: false,
+    },
+    { maxSerializedChars: 47900 },
+  );
+  return { ...fitted.value, [truncatedKey]: fitted.truncated.includes(`$.${patchKey}`) };
 }
 
-const pathArgs = files.map(shellQuote).join(" ");
-const [changeStatus, changeStat, rawPatch, rawUntrackedFiles] = await Promise.all([
-  gitOutput(`git status --short --untracked-files=all -- ${pathArgs}`),
-  gitOutput(`git diff --no-ext-diff --stat ${shellQuote(compare)} -- ${pathArgs}`),
-  gitOutput(`git diff --no-ext-diff --unified=3 ${shellQuote(compare)} -- ${pathArgs}`),
-  gitOutput(`git ls-files --others --exclude-standard -z -- ${pathArgs}`),
-]);
-const untrackedFiles = rawUntrackedFiles.split("\0").filter(Boolean);
+const change = await std.git.change({ compare, paths: files });
+const rawPatch = change.patch;
+const changeStatus = statusSummary(change.status);
+const { untrackedFiles } = change;
 const reviewPatch = contextWithPatch(
   { files, contextFiles, background, compare, untrackedFiles },
   "patch",
@@ -192,26 +149,24 @@ const focusCoverage = reviews.map((review) => ({
   status: review.status,
   patchTruncated: reviewPatch.patchTruncated,
 }));
-const verifierCandidates = fitForContext(
-  candidates,
-  (candidate) => ({
+const verifierCandidates = std.context.pack(
+  candidates.map((candidate) => ({
     ...candidate,
     title: compactText(candidate.title, 180),
     trigger: compactText(candidate.trigger, 500),
     evidence: compactText(candidate.evidence, 700),
     impact: compactText(candidate.impact, 400),
     recommendation: compactText(candidate.recommendation, 300),
-  }),
-  12000,
+  })),
+  {
+    maxSerializedChars: 12000,
+    id: "candidateId",
+    priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
+  },
 );
-const verifierNotes = fitForContext(
-  reviews.flatMap((review) => review.notes.map((note) => ({ focusId: review.lens.id, ...note }))),
-  (note) => ({
-    focusId: note.focusId,
-    topic: compactText(note.topic, 160),
-    observation: compactText(note.observation, 400),
-  }),
-  8000,
+const verifierNotes = std.context.pack(
+  reviews.flatMap((review) => review.notes.map((note, index) => ({ id: `${review.lens.id}-note-${index + 1}`, focusId: review.lens.id, topic: compactText(note.topic, 160), observation: compactText(note.observation, 400) }))),
+  { maxSerializedChars: 8000 },
 );
 const verifierContext = contextWithPatch(
   {
@@ -220,12 +175,12 @@ const verifierContext = contextWithPatch(
     background,
     compare,
     changeStatus,
-    changeStat,
+    changeStat: change.stat,
     focusCoverage,
     candidates: verifierCandidates.items,
     candidateIdsOmitted: verifierCandidates.omittedIds,
     notes: verifierNotes.items,
-    notesOmitted: verifierNotes.omittedCount,
+    notesOmitted: verifierNotes.omitted.length,
     failedFocuses,
     uncoveredFiles: [],
     truncatedFocuses: reviewPatch.patchTruncated ? lenses.map((lens) => lens.id) : [],

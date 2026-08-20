@@ -96,13 +96,21 @@ The JavaScript references mark `PLANNER`, `REVIEWER`, and `VERIFIER` prompt cons
 
 Budget for the roles in the selected shape: one planner when partitioning, one `quick` worker per focus or lens, and one verifier. Increase the agent budget for an explicit residual cycle. Keep workers read-only; use the guest program for Git inspection, scheduling, validation, and aggregation.
 
+## Planned composition ownership
+
+`[references/plan-review-verify.js](references/plan-review-verify.js)` is the canonical planned-review composition. It owns planner validation against `inputs.paths`, per-focus patch collection between stages, read-only reviewer fan-out, bounded verifier context, and decision/coverage reporting. The standard library supplies normalized evidence, serialized-size packing, assignment coverage, and ID reconciliation; it does not replace those controller-owned boundaries. Keep the adapted `PLANNER`, `REVIEWER`, and `VERIFIER` prompts inlined with their explicit profile and read-only tool assignments.
+
+## Ralph boundary
+
+`pi-review` owns review composition and finding semantics. `pi-ralph` owns the caller-bounded fresh-context implementation loop, and its default loop remains separate from review. `[references/ralph-reviewed.js](../pi-ralph/references/ralph-reviewed.js)` is an opt-in advanced example that composes a Ralph increment with this review spine; it is not a default workflow or permission to make review implicit.
+
 ## Extend the shapes deliberately
 
 The references are starting points, not a fixed review workflow. Add a JavaScript template only when the control flow changes materially, such as a residual cycle after verification, redundant independent baselines for a security boundary, or staged migration review across old and new representations. For a different emphasis within the same topology, adapt the prompt templates and focus questions instead of duplicating a program.
 
 Every new shape must state its scenario, input contract, role/profile matrix, independent verification point, failure/coverage reporting, and agent budget. Keep raw provider names and `thinking` values out of templates; use only named inference profiles.
 
-Planner, reviewer, and verifier are review-program roles via `systemPrompt`. Do not set `agents.run` `type` to `Counsel`, `Plan`, or another catalog lane for those workers. Catalog types are for interactive specialists and composed graphs, not this review spine.
+Planner, reviewer, and verifier are review-program roles via `systemPrompt`. Do not set `agents.run` `type` to `Counsel`, `Plan`, or another catalog lane for those workers. Catalog types are for interactive specialists and composed graphs, not this review spine. Do not force these shapes through `std.agents.planFanoutReduce`: planned review requires controller validation and per-focus patch collection between stages, while the other shapes have fixed or conditional fan-out that the helper does not express.
 
 ## Finding standard
 

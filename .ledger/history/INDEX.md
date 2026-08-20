@@ -5,3 +5,5 @@
 - `.ledger/history/202608181322-account-sidecar-model-usage/task.md` — done — Account for advisor and memory sidecar model usage — Emit durable per-call usage/cost records for advisor and observational-memory model calls so per-provider quota spend is measurable; today ~100% of sidecar spend is invisible.
 
 - `.ledger/history/202608181322-merge-memory-consolidation-pass/task.md` — done — Merge memory consolidation into one curation pass — Observer, reflector, and dropper run as up to three sequential model calls re-sending overlapping input; merge them into one curation pass with coverage tiers and drop budget recomputed against post-record state rather than a pre-loop snapshot.
+
+- `.ledger/history/202608201212-upgrade-ralph-pi-exec-templates/task.md` — done — Bring Ralph templates to pi_exec standard-library quality — Adapt pi-ralph references and both skill guides to use the shared pi_exec std library with deliberate templates and coverage checks.
