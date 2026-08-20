@@ -10,8 +10,9 @@
 # stale record its own shutdown hook never removed, and pid reuse could mask it.
 # Records whose pid is gone are pruned here so the directory does not grow.
 #
-#   Row: rank \t pane_id \t pid \t kind \t icon \t age \t loc \t path
+#   Row: rank \t pane_id \t pid \t kind \t icon \t age \t loc \t name \t path
 #   rank/pane_id/pid/kind are hidden from the display via fzf's --with-nth.
+#   name is the Pi session name when set, else the tmux pane title/window name.
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=helpers.sh
@@ -49,12 +50,19 @@ done
 # Two tagged streams into one awk: pane_id -> (session, location), and the agent
 # records themselves. A record whose pane no longer exists is dropped.
 {
-  tmux list-panes -a -F $'T\t#{pane_id}\t#{session_name}\t#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null
+  tmux list-panes -a -F $'T\t#{pane_id}\t#{session_name}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_title}' 2>/dev/null
   printf '%s' "$records" | sed $'s/^/A\t/'
 } | awk -F'\t' -v now="$(date +%s)" -v home="$HOME" -v prefix="$prefix" '
-  $1 == "T" { pane[$2] = 1; sess[$2] = $3; loc[$2] = $4; next }
+  # pane_title may itself contain a tab; keep it last and rejoin the remainder.
+  $1 == "T" {
+    pane[$2] = 1; sess[$2] = $3; loc[$2] = $4; wname[$2] = $5
+    title = $6
+    for (i = 7; i <= NF; i++) title = title "\t" $i
+    ptitle[$2] = title
+    next
+  }
   $1 == "A" {
-    status = $3; paneid = $4; cwd = $5; updated = $6
+    status = $3; paneid = $4; cwd = $5; updated = $6; sname = $7
     if (!(paneid in pane)) next   # the pane is gone: crashed or killed Pi
 
     if      (status == "waiting") { icon = "\033[33m●\033[0m waiting"; rank = 0 }  # yellow - needs you
@@ -68,8 +76,20 @@ done
     path = cwd
     if (index(path, home) == 1) path = "~" substr(path, length(home) + 1)
 
-    printf "%s\t%s\t%s\t%s\t%s\t%5s\t%s\t%s\n",
-      rank, paneid, $2, kind, icon, age, loc[paneid], path
+    # A human label: prefer the Pi session name, then a cleaned pane title,
+    # then the tmux window name.
+    name = sname
+    if (name == "") {
+      name = ptitle[paneid]
+      sub(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏][ ]*/, "", name)   # strip a leading spinner frame
+      sub(/^π[ ]*[-–—|·:]?[ ]*/, "", name)   # strip a leading "π - " prefix
+    }
+    if (name == "") name = wname[paneid]
+    if (name == "") name = "-"
+    if (length(name) > 30) name = substr(name, 1, 29) "…"
+
+    printf "%s\t%s\t%s\t%s\t%s\t%5s\t%s\t%s\t%s\n",
+      rank, paneid, $2, kind, icon, age, loc[paneid], name, path
   }
 ' | sort -t$'\t' -k1,1n -k6,6n
 # rank asc (what needs you floats up), then age asc so whatever just changed

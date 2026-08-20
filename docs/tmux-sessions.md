@@ -85,7 +85,9 @@ Requirements: tmux ≥ 3.2 (for `display-popup`),
 
 Inside the picker: `enter` jumps to the session, `ctrl-x` kills the highlighted
 one, and typing filters. Sessions needing attention (`waiting`, `idle`) sort to
-the top.
+the top. Each row shows status, age, tmux location, a name, and the working
+directory. The name is the Pi session name when set, otherwise the tmux pane
+title (with Pi's spinner/`π` prefix stripped) or window name.
 
 ## `/pi-sessions`
 
