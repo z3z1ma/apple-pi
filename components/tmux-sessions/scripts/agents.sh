@@ -81,8 +81,11 @@ done
     name = sname
     if (name == "") {
       name = ptitle[paneid]
-      sub(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏][ ]*/, "", name)   # strip a leading spinner frame
-      sub(/^π[ ]*[-–—|·:]?[ ]*/, "", name)   # strip a leading "π - " prefix
+      # Alternation of whole characters, not bracket classes: in a non-UTF-8
+      # (C) locale awk treats [⠋…] as a set of single bytes and would strip one
+      # lead byte, leaving mojibake. Each alternative matches a full byte string.
+      sub(/^(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏) */, "", name)   # strip a leading spinner frame
+      sub(/^π *(-|–|—|\||·|:)? */, "", name)         # strip a leading "π - " prefix
     }
     if (name == "") name = wname[paneid]
     if (name == "") name = "-"
