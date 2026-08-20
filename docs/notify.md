@@ -7,6 +7,7 @@ The extension is registered from `extensions/notify.ts` over `components/notify/
 ## Behavior
 
 - Notifies on `agent_settled`, after retries, compaction retries, and queued follow-ups finish. One notification per Pi session (keyed by session and leaf), not per concurrent session.
+- Also notifies when the `ask_user_question` tool starts, since that tool blocks the turn waiting on the operator and `agent_settled` does not fire while it is pending. The body shows the first question (with a `(+N more)` suffix for multi-question prompts). Delivery is fire-and-forget so notifier timeouts never delay the questionnaire dialog.
 - Title shows tmux coordinates plus the Pi session or project name; the subtitle is the latest user prompt; the body is the final outcome.
 - Terminal provider errors and cancelled tasks are reported explicitly — including `cyber_policy` blocks — instead of being shown as successful completion.
 - Plays the macOS `Glass` sound by default.

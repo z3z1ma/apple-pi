@@ -2,6 +2,8 @@
  * Native macOS completion notifications for Pi.
  *
  * - Fires on agent_settled, after retries, compaction, and queued follow-ups.
+ * - Fires when ask_user_question starts, so an away operator learns Pi is
+ *   waiting on their input rather than still working.
  * - Shows tmux coordinates, the latest user prompt, and the final outcome.
  * - Clicking the notification activates Ghostty and selects the original pane.
  * - Run /notify-setup once for a dedicated sender app and icon.
@@ -29,6 +31,7 @@ const INSTALL_APP_SCRIPT = fileURLToPath(new URL("../scripts/install-notifier-ap
 const HOMEBREW_NOTIFIER = "/opt/homebrew/bin/terminal-notifier";
 const FOCUS_SCRIPT = process.env.PI_NOTIFY_FOCUS_SCRIPT || BUNDLED_FOCUS_SCRIPT;
 const LOG_PATH = process.env.PI_NOTIFY_LOG_PATH || join(PI_HOME, "logs", "pi-notify.log");
+const ASK_TOOL = "ask_user_question";
 const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
 const GHOSTTY_ICON = "/Applications/Ghostty.app/Contents/Resources/Ghostty.icns";
 const NOTIFIER_TIMEOUT_MS = 5_000;
@@ -165,6 +168,15 @@ export function notificationSummary(value: unknown): string {
 	while (lines.length > 1 && GENERIC_HEADINGS.has(lines[0].toLowerCase())) lines.shift();
 	const first = lines[0] || "The task has completed.";
 	return first.length <= BODY_MAX_LENGTH ? first : `${first.slice(0, BODY_MAX_LENGTH - 3)}...`;
+}
+
+export function askQuestionSummary(args: unknown): string {
+	const fallback = "Pi needs your input.";
+	const questions = (args as { questions?: unknown } | null | undefined)?.questions;
+	if (!Array.isArray(questions) || questions.length === 0) return fallback;
+	const first = compactText((questions[0] as { question?: unknown })?.question);
+	if (!first) return fallback;
+	return questions.length > 1 ? `${first} (+${questions.length - 1} more)` : first;
 }
 
 export function notificationErrorSummary(value: unknown): string {
@@ -401,6 +413,7 @@ async function deliverNotification(
 	ctx: ExtensionContext,
 	prompt: string,
 	answer: string,
+	subtitleFallback = "Task complete",
 ): Promise<NotificationResult> {
 	const tmuxBin = await resolveTmuxBin(pi);
 	const [target, project] = await Promise.all([readTmuxTarget(pi, tmuxBin), projectTitle(pi, ctx.cwd)]);
@@ -409,7 +422,7 @@ async function deliverNotification(
 		THREAD_TITLE_MAX_WIDTH,
 	);
 	const title = target?.coordinate ? `${target.coordinate} · ${threadTitle || project}` : threadTitle || project;
-	const subtitle = notificationSubtitle(firstNonEmptyLine(prompt)) || "Task complete";
+	const subtitle = notificationSubtitle(firstNonEmptyLine(prompt)) || subtitleFallback;
 	const body = notificationSummary(answer);
 	const sessionId = ctx.sessionManager.getSessionId();
 	const group = `pi-agent-turn-complete-${safeId(sessionId || target?.paneId || project)}`;
@@ -504,6 +517,18 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		latestAborted = false;
 		const text = extractMessageText(event.message);
 		if (text) latestAssistant = text;
+	});
+
+	pi.on("tool_execution_start", (event, ctx) => {
+		// The ask tool blocks the turn waiting on the operator, so agent_settled
+		// never fires while it is pending. Notify here that Pi needs input; do not
+		// gate on ctx.isIdle(), which is false mid-turn.
+		if (event.toolName !== ASK_TOOL) return;
+		if (process.platform !== "darwin" || notificationsDisabled() || ctx.mode !== "tui") return;
+		const prompt = latestPrompt || latestBranchText(ctx, "user");
+		// This event blocks the tool pipeline until the handler resolves, so deliver
+		// without awaiting; otherwise notifier timeouts would delay the dialog.
+		void deliverNotification(pi, ctx, prompt, askQuestionSummary(event.args), "Pi needs your input").catch(() => {});
 	});
 
 	pi.on("agent_settled", async (_event, ctx) => {

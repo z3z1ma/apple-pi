@@ -22,6 +22,7 @@ Object.defineProperty(process, "platform", { value: "darwin" });
 const extension = await import("../src/index.js");
 
 const {
+	askQuestionSummary,
 	buildFocusCommand,
 	cleanPaneTitle,
 	default: registerPiNotify,
@@ -46,6 +47,15 @@ test("summarizes assistant output without generic Markdown headings", () => {
 	expect(notificationSummary("[config file](file:///tmp/config.ts) has been updated.")).toBe(
 		"config file has been updated.",
 	);
+});
+
+test("summarizes ask_user_question prompts for the notification body", () => {
+	expect(askQuestionSummary({ questions: [{ question: "Which storage backend?" }] })).toBe("Which storage backend?");
+	expect(askQuestionSummary({ questions: [{ question: "Which backend?" }, { question: "Which region?" }] })).toBe(
+		"Which backend? (+1 more)",
+	);
+	expect(askQuestionSummary({ questions: [] })).toBe("Pi needs your input.");
+	expect(askQuestionSummary(undefined)).toBe("Pi needs your input.");
 });
 
 test("extracts only visible assistant text", () => {
@@ -155,9 +165,22 @@ function notifierCall(calls: HarnessCall[]) {
 	return calls.find((call) => String(call.command).includes("Pi Notifier.app/Contents/MacOS/terminal-notifier"));
 }
 
+async function flushUntil(predicate: () => boolean, tries = 50): Promise<void> {
+	for (let attempt = 0; attempt < tries; attempt += 1) {
+		if (predicate()) return;
+		await new Promise((resolve) => setImmediate(resolve));
+	}
+}
+
 test("registers lifecycle handlers and sends after agent_settled", async () => {
 	const { calls, commands, ctx, handlers } = createLifecycleHarness();
-	expect([...handlers.keys()]).toEqual(["input", "before_agent_start", "message_end", "agent_settled"]);
+	expect([...handlers.keys()]).toEqual([
+		"input",
+		"before_agent_start",
+		"message_end",
+		"tool_execution_start",
+		"agent_settled",
+	]);
 	expect(commands.has("notify-setup")).toBe(true);
 	expect(commands.has("notify-test")).toBe(true);
 
@@ -183,6 +206,28 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 		"Implemented and passing tests.",
 	]);
 	expect(call.args.includes("-execute")).toBe(true);
+});
+
+test("notifies when ask_user_question starts but not for other tools", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness();
+	handlers.get("input")?.({ text: "help me pick a backend", source: "interactive" });
+	handlers.get("before_agent_start")?.({ prompt: "help me pick a backend" });
+
+	// A non-ask tool must never notify, even though it also starts mid-turn.
+	handlers.get("tool_execution_start")?.({ toolName: "read", args: { path: "README.md" } }, ctx);
+	await flushUntil(() => calls.length > 0, 5);
+	expect(notifierCall(calls)).toBeUndefined();
+
+	handlers.get("tool_execution_start")?.(
+		{ toolName: "ask_user_question", args: { questions: [{ question: "Which storage backend?" }] } },
+		ctx,
+	);
+	// Delivery is fire-and-forget, so wait for the notifier spawn to land.
+	await flushUntil(() => Boolean(notifierCall(calls)));
+
+	const call = notifierCall(calls);
+	assert.ok(call, "ask_user_question should trigger a notification");
+	expect(call.args.slice(2, 6)).toEqual(["-subtitle", "help me pick a backend", "-message", "Which storage backend?"]);
 });
 
 test("reports terminal cyber_policy errors instead of completion", async () => {
