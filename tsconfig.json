@@ -23,6 +23,8 @@
     "components/xai-hosted-tools/src/**/*.ts",
     "components/xai-context-compaction/src/**/*.ts",
     "components/notify/src/**/*.ts",
-    "components/notify/tests/**/*.ts"
+    "components/notify/tests/**/*.ts",
+    "components/tmux-sessions/src/**/*.ts",
+    "components/tmux-sessions/tests/**/*.ts"
   ]
 }

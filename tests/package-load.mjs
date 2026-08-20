@@ -25,13 +25,23 @@ try {
 			"extensions/xai-hosted-tools.ts",
 			"extensions/xai-context-compaction.ts",
 			"extensions/notify.ts",
+			"extensions/tmux-sessions.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 10);
+	assert.equal(result.extensions.length, 11);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("tmux-sessions.ts") &&
+				(extension.handlers.get("agent_settled")?.length ?? 0) > 0 &&
+				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+		),
+		"missing tmux-sessions status-publishing hooks",
+	);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -68,6 +78,7 @@ try {
 		"agents",
 		"notify-setup",
 		"notify-test",
+		"pi-sessions",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}

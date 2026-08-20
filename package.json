@@ -31,6 +31,10 @@
     "components/notify/assets/",
     "components/notify/scripts/",
     "components/notify/LICENSE",
+    "components/tmux-sessions/src/",
+    "components/tmux-sessions/scripts/",
+    "components/tmux-sessions/pi_session_manager.tmux",
+    "components/tmux-sessions/LICENSE",
     "extensions/",
     "skills/",
     "docs/",
@@ -49,7 +53,8 @@
       "./extensions/ledger.ts",
       "./extensions/xai-hosted-tools.ts",
       "./extensions/xai-context-compaction.ts",
-      "./extensions/notify.ts"
+      "./extensions/notify.ts",
+      "./extensions/tmux-sessions.ts"
     ],
     "skills": [
       "./skills"

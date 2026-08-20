@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Interactive picker for live Pi sessions.
+#
+#   picker.sh           fzf picker; on enter, jumps to the chosen session.
+#   picker.sh --list    print the rows only (used by fzf's ctrl-x reload).
+#
+# Rows come from agents.sh. Two kinds of row jump differently:
+#   dedicated  a Pi in a `pi-*` session this plugin launched — resumed in the
+#              popup, over the window it was launched from.
+#   loose      a Pi running in any other pane — focused in place.
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=helpers.sh
+. "$DIR/helpers.sh"
+
+[ "${1:-}" = '--list' ] && exec "$DIR/agents.sh"
+
+for tool in fzf jq; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    tmux display-message "pi-tmux-sessions: $tool is required for the picker"
+    exit 0
+  }
+done
+
+self="$DIR/picker.sh"
+export FZF_DEFAULT_OPTS=''
+export PI_PICKER="$self"
+
+# Arbitrary user fzf options (e.g. custom --bind or --preview-window).
+extra_opts=()
+fzf_options="$(get_tmux_option @pi_fzf_options '')"
+[ -n "$fzf_options" ] && eval "extra_opts=($fzf_options)"
+
+# ctrl-x terminates the Pi process itself: a dedicated session dies with its
+# last window, a loose pane keeps the shell that hosted it. The reload waits a
+# beat so the record drops out of the list before the refresh.
+sel=$("$DIR/agents.sh" | fzf --ansi --delimiter='\t' --with-nth=5,6,7,8 \
+  --reverse --cycle --header='Pi sessions · enter: jump · ctrl-x: kill' \
+  --preview='tmux capture-pane -ept {2}' --preview-window='up,70%,follow' \
+  --bind="ctrl-x:execute-silent(kill {3})+reload(sleep 0.3; $self --list)" \
+  ${extra_opts[@]+"${extra_opts[@]}"})
+
+[ -z "$sel" ] && exit 0
+pane=$(printf '%s' "$sel" | cut -f2)
+kind=$(printf '%s' "$sel" | cut -f4)
+
+parent=$(tmux show-options -gqv @pi_parent 2>/dev/null)
+session=$(tmux display-message -p -t "$pane" '#{session_name}' 2>/dev/null)
+
+if [ "$kind" = loose ]; then
+  # Focus the pane in place on the outer client. This popup closes on its own
+  # when the script exits.
+  if [ -n "$parent" ]; then
+    tmux switch-client -c "$parent" -t "$session" 2>/dev/null
+  else
+    tmux switch-client -t "$session" 2>/dev/null
+  fi
+  tmux select-window -t "$pane" 2>/dev/null
+  tmux select-pane -t "$pane" 2>/dev/null
+  exit 0
+fi
+
+# Move the parent client to the window the session was launched from
+# (best-effort), focus the chosen Pi's own window inside that session, then
+# resume it in THIS popup over the top. Falls back to resuming over the current
+# window when origin/parent are unknown.
+origin=$(tmux show-options -qv -t "$session" @pi_origin 2>/dev/null)
+[ -n "$origin" ] && [ -n "$parent" ] &&
+  tmux switch-client -c "$parent" -t "$origin" 2>/dev/null
+
+tmux select-window -t "$pane" 2>/dev/null
+tmux select-pane -t "$pane" 2>/dev/null
+tmux attach-session -t "$session"

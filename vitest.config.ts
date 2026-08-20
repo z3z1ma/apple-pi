@@ -12,6 +12,7 @@ export default defineConfig({
 			"components/xai-context-compaction/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
+			"components/tmux-sessions/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],
 	},

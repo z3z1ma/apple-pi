@@ -70,6 +70,15 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Original notice: `Copyright (c) 2026 Nico Bailon`
 - Boundary: the upstream package is installed as a normal npm dependency; its source is not copied into apple-pi. apple-pi suppresses only the duplicate `mcpScript` tool at registration and exposes the adapter's `mcp` gateway to ordinary Pi turns and `pi_exec`. The dependency retains ownership of MCP transports, protocol negotiation, lifecycle, OAuth/keyring storage, approvals, output guarding, prompts/resources, and MCP UI behavior.
 
+## tmux-claude-session-manager → Tmux sessions
+
+- Source: <https://github.com/craftzdog/tmux-claude-session-manager>
+- Author named by the source package: Takuya Matsuyama
+- Local paths: `components/tmux-sessions/` (bash scripts, `pi_session_manager.tmux`); the status-publishing extension in `components/tmux-sessions/src/` and `extensions/tmux-sessions.ts` is original to apple-pi
+- License: MIT
+- Original notice: `Copyright (c) 2026 Takuya Matsuyama` (reproduced verbatim in `components/tmux-sessions/LICENSE`)
+- The bash picker, launcher, popup-in-popup handling, and bell forwarding are adapted from upstream and retargeted from Claude Code to Pi. Pi has no `claude agents --json` equivalent, so status comes from JSON records the apple-pi extension writes to disk (`agents.sh` reads those records and joins them to tmux panes) rather than from an external agent command. Session prefix, tmux options, and command default were renamed to the `pi`/`@pi_*` namespace.
+
 ## MIT license applying to the imported works
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
