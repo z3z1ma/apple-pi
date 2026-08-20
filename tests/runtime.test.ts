@@ -39,6 +39,7 @@ import {
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
 	piExecGuestApiContract,
+	STD_GUEST_API_FUNCTIONS,
 } from "../extensions/runtime-api.js";
 import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
@@ -117,6 +118,243 @@ return { structured, text };
 			structured: { status: "completed", text: "INSPECT", ref: "agents.run" },
 			text: "SUMMARIZE",
 		});
+	});
+
+	it("composes the standard library's evidence, context, reconciliation, Git, and plan-fanout-reduce semantics", async () => {
+		const calls: Array<{ ref: string; args: Record<string, unknown> }> = [];
+		const result = await execute(
+			`
+const change = await std.git.change({ compare: "HEAD", paths: ["src/a.ts"] });
+const fitted = std.context.fit({
+  file: std.context.required("src/a.ts"),
+  patch: std.context.clippable(change.patch, { maxChars: 20, priority: 100 }),
+  note: std.context.droppable("x".repeat(100), { priority: 1 }),
+}, { maxSerializedChars: 70 });
+const evidence = std.evidence.bundle([{ kind: "git-diff", source: "git", content: fitted.value.patch }]);
+const requiredEvidence = std.evidence.require(evidence, [evidence.items[0].id]);
+const reconciliation = std.reconcile.byId([{ candidateId: "a" }, { candidateId: "b" }], [{ candidateId: "a", status: "confirmed" }, { candidateId: "z" }], { id: "candidateId" });
+const workflow = await std.agents.planFanoutReduce({ change }, {
+  plan: { prompt: "plan", profile: "balanced" },
+  fanout: { profile: "quick", concurrency: 1, outputSchema: { type: "object" } },
+  reduce: { prompt: "reduce", profile: "deep", outputSchema: { type: "object" } },
+});
+const descriptor = Object.getOwnPropertyDescriptor(globalThis, "std");
+return {
+  change: { additions: change.additions, deletions: change.deletions, files: change.changedFiles, untracked: change.untrackedFiles },
+  fitted: { chars: fitted.serializedChars, truncated: fitted.truncated, dropped: fitted.dropped },
+  evidence: requiredEvidence,
+  reconciliation,
+  workflow,
+  frozen: Object.isFrozen(std) && Object.isFrozen(std.agents),
+  nonReplaceable: descriptor && !descriptor.writable && !descriptor.configurable,
+};
+`,
+			async (ref, args) => {
+				calls.push({ ref, args });
+				if (ref === "pi.bash") {
+					const command = String(args.command);
+					if (command.includes("'status'")) return { ok: true, output: "?? new.ts\0" };
+					if (command.includes("--stat")) return { ok: true, output: " src/a.ts | 3 ++-" };
+					if (command.includes("--name-status")) return { ok: true, output: "M\0src/a.ts\0" };
+					if (command.includes("ls-files")) return { ok: true, output: "new.ts\0" };
+					if (command.includes("--numstat")) return { ok: true, output: "2\t1\tsrc/a.ts\n" };
+					return { ok: true, output: "x".repeat(100) };
+				}
+				if (args.task === "plan")
+					return {
+						status: "completed",
+						text: "",
+						value: {
+							fanout: [{ prompt: "inspect a", name: "a", context: { path: "src/a.ts" } }, { prompt: "inspect b" }],
+						},
+					};
+				if (args.task === "reduce") return { status: "completed", text: "", value: { summary: "reduced" } };
+				return { status: "completed", text: "", value: { finding: String(args.task) } };
+			},
+		);
+
+		expect(result.outcome).toBe("succeeded");
+		expect(result.value).toMatchObject({
+			change: { additions: 2, deletions: 1, files: ["src/a.ts"], untracked: ["new.ts"] },
+			fitted: { truncated: ["$.patch"], dropped: ["$.note"] },
+			reconciliation: { unknownIds: ["z"], missingIds: ["b"], duplicateIds: [] },
+			workflow: { plan: { fanout: expect.any(Array) }, results: expect.any(Array), value: { summary: "reduced" } },
+			frozen: true,
+			nonReplaceable: true,
+		});
+		expect(calls.filter((call) => call.ref === "pi.bash")).toHaveLength(6);
+		expect(calls.filter((call) => call.ref === "agents.run")).toHaveLength(4);
+		expect(calls.find((call) => call.args.task === "plan")?.args.outputSchema).toMatchObject({
+			properties: { fanout: { type: "array" } },
+			required: ["fanout"],
+		});
+	});
+
+	it("runs one schema-first read-only change analysis over collected evidence", async () => {
+		let dispatches = 0;
+		const result = await execute(
+			`return std.dev.analyzeChange({ instruction: "Summarize risk", schema: { type: "object" }, paths: ["src/widget.ts"] });`,
+			async (ref, args) => {
+				if (ref === "agents.run") {
+					dispatches++;
+					expect(args.tools).toEqual(["read", "grep", "find", "ls"]);
+					return { status: "completed", text: "", value: { risk: "bounded" } };
+				}
+				const command = String(args.command);
+				if (command.includes("'status'")) return { ok: true, output: "" };
+				if (command.includes("--stat")) return { ok: true, output: "stat" };
+				if (command.includes("--name-status")) return { ok: true, output: "M\0src/widget.ts\0" };
+				if (command.includes("ls-files")) return { ok: true, output: "" };
+				if (command.includes("--numstat")) return { ok: true, output: "1\t0\tsrc/widget.ts\n" };
+				return { ok: true, output: "patch" };
+			},
+		);
+		expect(result).toEqual({ outcome: "succeeded", value: { risk: "bounded" } });
+		expect(dispatches).toBe(1);
+
+		const unsafe = await execute(
+			`return std.dev.analyzeChange({ instruction: "x", schema: { type: "object" }, tools: ["write"] });`,
+			async () => {
+				dispatches++;
+				return undefined;
+			},
+		);
+		expect(unsafe).toMatchObject({ outcome: "failed", error: expect.stringContaining("permits only read") });
+		expect(dispatches).toBe(1);
+	});
+
+	it("executes only a globally bounded set of discovered neighboring test paths", async () => {
+		const commands: string[] = [];
+		let discoveredTests = "src/widget.test.ts\n";
+		const hostCall = async (ref: string, args: Record<string, unknown>) => {
+			if (ref === "pi.read") return JSON.stringify({ scripts: { "test:unit": "vitest run" } });
+			const command = String(args.command);
+			commands.push(command);
+			if (command.includes("test -e 'package.json'")) return { ok: true, output: "" };
+			if (command.includes("'status'")) return { ok: true, output: "" };
+			if (command.includes("--stat")) return { ok: true, output: "stat" };
+			if (command.includes("--name-status")) return { ok: true, output: "M\0src/widget.ts\0" };
+			if (command.includes("ls-files")) return { ok: true, output: "" };
+			if (command.includes("--numstat")) return { ok: true, output: "1\t0\tsrc/widget.ts\n" };
+			if (command.startsWith("find ")) return { ok: true, output: discoveredTests };
+			if (command === "npm run test:unit -- 'src/widget.test.ts'") return { ok: true, output: "targeted pass" };
+			return { ok: true, output: "patch" };
+		};
+		const result = await execute(`return std.dev.runRelevantTests({ paths: ["src/widget.ts"] });`, hostCall);
+		expect(result).toMatchObject({
+			outcome: "succeeded",
+			value: {
+				status: "passed",
+				command: "npm run test:unit -- 'src/widget.test.ts'",
+				output: "targeted pass",
+				selectedTests: ["src/widget.test.ts"],
+			},
+		});
+		expect(commands).toContain("npm run test:unit -- 'src/widget.test.ts'");
+
+		discoveredTests = "src/widget.test.ts\nsrc/widget.spec.ts\n";
+		commands.length = 0;
+		const overflow = await execute(
+			`return std.dev.runRelevantTests({ paths: ["src/widget.ts"], maxTests: 1 });`,
+			hostCall,
+		);
+		expect(overflow).toMatchObject({
+			outcome: "failed",
+			error: expect.stringContaining("discovered 2 tests, exceeding maxTests 1"),
+		});
+		expect(commands.some((command) => command.startsWith("npm run test:unit"))).toBe(false);
+
+		const unsafeTemplate = await execute(
+			`return std.dev.runRelevantTests({ command: "npm test" });`,
+			async () => undefined,
+		);
+		expect(unsafeTemplate).toMatchObject({
+			outcome: "failed",
+			error: expect.stringContaining("must include the {tests} placeholder"),
+		});
+	});
+
+	it("populates or rejects every documented change-neighborhood include", async () => {
+		const result = await execute(
+			`return std.repo.changeNeighborhood({ include: ["definitions", "references", "owners"] });`,
+			async (ref, args) => {
+				if (ref === "pi.grep") return `${args.pattern}: hit`;
+				if (ref === "pi.read") return "src/** @team";
+				const command = String(args.command);
+				if (command.includes("'status'")) return { ok: true, output: "" };
+				if (command.includes("--stat")) return { ok: true, output: "stat" };
+				if (command.includes("--name-status")) return { ok: true, output: "M\0src/widget.ts\0" };
+				if (command.includes("ls-files")) return { ok: true, output: "" };
+				if (command.includes("--numstat")) return { ok: true, output: "1\t0\tsrc/widget.ts\n" };
+				if (command.includes("test -e 'CODEOWNERS'")) return { ok: true, output: "" };
+				return { ok: true, output: "patch" };
+			},
+		);
+		expect(result.value).toMatchObject({
+			definitions: { "src/widget.ts": "(function|class|interface|type|const|let|var)\\s+widget: hit" },
+			references: { "src/widget.ts": "widget: hit" },
+			owners: "src/** @team",
+		});
+		const unsupported = await execute(
+			`return std.repo.changeNeighborhood({ include: ["invented"] });`,
+			async () => undefined,
+		);
+		expect(unsupported).toMatchObject({
+			outcome: "failed",
+			error: expect.stringContaining("unsupported include: invented"),
+		});
+	});
+
+	it("preserves ordinary context objects whose fields resemble internal fit slots", async () => {
+		const result = await execute(
+			`return std.context.fit({ ordinary: { policy: "domain", active: false, value: { retained: true } } }, { maxSerializedChars: 200 });`,
+			async () => undefined,
+		);
+		expect(result).toEqual({
+			outcome: "succeeded",
+			value: {
+				value: { ordinary: { policy: "domain", active: false, value: { retained: true } } },
+				truncated: [],
+				dropped: [],
+				serializedChars: 73,
+			},
+		});
+	});
+
+	it("exposes only capabilities that materially improve on existing guest tools", async () => {
+		const result = await execute(
+			`return Object.fromEntries(Object.entries(std).map(([namespace, api]) => [namespace, Object.keys(api).sort()]));`,
+			async () => undefined,
+		);
+		expect(result).toEqual({
+			outcome: "succeeded",
+			value: {
+				agents: ["planFanoutReduce"],
+				context: ["clippable", "droppable", "fit", "pack", "partition", "required"],
+				coverage: ["compare", "requireComplete"],
+				dev: ["analyzeChange", "analyzeFailure", "findRelevantTests", "runRelevantTests"],
+				evidence: ["bundle", "item", "pack", "require"],
+				git: ["change"],
+				reconcile: ["byId", "oneToOne"],
+				repo: ["changeNeighborhood"],
+			},
+		});
+		for (const removed of [
+			"assert",
+			"result",
+			"text",
+			"collections",
+			"shell",
+			"fs",
+			"http",
+			"scope",
+			"graph",
+			"agent",
+			"semantic",
+			"effect",
+		]) {
+			expect((result.value as Record<string, unknown>)[removed]).toBeUndefined();
+		}
 	});
 
 	it("forwards bound agent context without interpolating it into the task", async () => {
@@ -498,6 +736,64 @@ describe("pi_exec guest API documentation", () => {
 				expect(skill).toContain(field);
 			}
 		}
+	});
+
+	it("keeps every exposed std function in the complete agent-facing contract", async () => {
+		const result = await execute(
+			`return Object.fromEntries(Object.entries(std).map(([namespace, api]) => [namespace, Object.keys(api).sort()]));`,
+			async () => undefined,
+		);
+		expect(result.outcome).toBe("succeeded");
+		const expected = Object.fromEntries(
+			Object.entries(STD_GUEST_API_FUNCTIONS).map(([namespace, functions]) => [namespace, [...functions].sort()]),
+		);
+		expect(result.value).toEqual(expected);
+
+		const contract = piExecGuestApiContract();
+		for (const [namespace, functions] of Object.entries(STD_GUEST_API_FUNCTIONS)) {
+			for (const name of functions) {
+				const path = `std.${namespace}.${name}`;
+				const declaration = contract.split("\n").find((line) => line.includes(path));
+				expect(declaration, path).toBeDefined();
+				const suffix = declaration!.slice(declaration!.indexOf(path) + path.length);
+				expect(suffix, path).toMatch(/^(?:<[^>]+>)?\(/);
+				expect(declaration, path).toContain("→");
+			}
+		}
+	});
+
+	it("documents reconciler schemas and context-marking constraints", async () => {
+		const contract = piExecGuestApiContract();
+		expect(contract).toContain("{ id?: Key<T>, key?: Key<T>, overlay?: boolean }");
+		expect(contract).toContain("unknownIds: unknown[], missingIds: unknown[], duplicateIds: unknown[]");
+		expect(contract).toContain("clippable(value: string");
+		expect(contract).toContain("value: Unmarked<T>");
+		expect(contract).toContain("tools?: ReadOnlyAgentTool[]");
+		expect(contract).not.toContain("std.context.summarize");
+
+		const invalidClippable = await execute(
+			`return std.context.fit({ value: std.context.clippable(1) });`,
+			async () => undefined,
+		);
+		expect(invalidClippable).toMatchObject({
+			outcome: "failed",
+			error: expect.stringContaining("clippable only supports strings"),
+		});
+
+		const reconciliation = await execute(
+			`return std.reconcile.oneToOne([{ candidateId: "a" }], [{ candidateId: "a", verdict: "yes" }], { key: "candidateId" });`,
+			async () => undefined,
+		);
+		expect(reconciliation).toMatchObject({
+			outcome: "succeeded",
+			value: { pairs: [{ candidateId: "a", verdict: "yes" }], complete: true },
+		});
+
+		const primitive = await execute(`return std.reconcile.oneToOne(["a"], ["a"]);`, async () => undefined);
+		expect(primitive).toMatchObject({
+			outcome: "succeeded",
+			value: { pairs: ["a"], complete: true },
+		});
 	});
 
 	it("documents every host-provided guest global", async () => {
@@ -911,8 +1207,10 @@ describe("pi_exec tool", () => {
 		expect(tool.description).toContain("pi.read({");
 		expect(tool.description).toContain("outputSchema?");
 		expect(tool.description).toContain("agent(request: AgentRequest)");
+		expect(tool.description).toContain("std.agents.planFanoutReduce");
 		expect(tool.parameters.properties.code.description).toBe(piExecGuestApiContract());
 		expect(tool.parameters.properties.code.description).toContain("agents.run(");
+		expect(tool.parameters.properties.code.description).toContain("std.context.fit<T>(");
 		expect(tool.parameters.properties.code.description).toContain("outputSchema?: object");
 		expect(tool.parameters.properties.code.description).toContain("value?: JSONValue");
 
@@ -999,8 +1297,19 @@ describe("pi_exec tool", () => {
 
 	it("scales the envelope from optional tool-call limits and clamps to package maxima", () => {
 		const workers = 'return agent({ task: "x" });';
+		const stdWorkers =
+			'return std.agents.planFanoutReduce({}, { plan: { prompt: "p", profile: "balanced" }, fanout: { profile: "quick" }, reduce: { prompt: "r", profile: "deep" } });';
 		const plain = "return 1;";
 		expect(deriveProgramEnvelope(workers).agentBudget).toBe(8);
+		expect(deriveProgramEnvelope(stdWorkers).agentBudget).toBe(8);
+		expect(
+			deriveProgramEnvelope(
+				'const workflow = std.agents; return workflow.planFanoutReduce({}, { plan: { prompt: "p", profile: "balanced" }, fanout: { profile: "quick" }, reduce: { prompt: "r", profile: "deep" } });',
+			).agentBudget,
+		).toBe(8);
+		expect(
+			deriveProgramEnvelope('const workflow = std.agents; return workflow.map([], () => ({ task: "x" }));').concurrency,
+		).toBe(16);
 		expect(deriveProgramEnvelope(workers, { agentBudget: 32 }).agentBudget).toBe(32);
 		expect(deriveProgramEnvelope(workers, { agentBudget: 9_999 }).agentBudget).toBe(
 			PROGRAM_ENVELOPE_MAXIMA.agentBudget,

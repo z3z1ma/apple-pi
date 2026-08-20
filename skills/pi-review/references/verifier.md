@@ -1,4 +1,6 @@
-# Review Verifier
+# Review Verifier Template
+
+Adapt this reference before inlining it into a review program. Add scenario-specific corroboration or risk checks; retain independent source inspection, the candidate decision rules, coverage assessment, and declared output shape unless the program schema changes with it.
 
 ## Objective
 

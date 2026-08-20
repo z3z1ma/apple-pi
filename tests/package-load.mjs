@@ -213,6 +213,15 @@ try {
 		"missing pi-review plan-review-verify reference",
 	);
 	assert(existsSync("skills/pi-review/references/targeted-review.js"), "missing pi-review targeted-review reference");
+	assert(existsSync("skills/pi-review/references/multi-lens-review.js"), "missing pi-review multi-lens reference");
+	assert(
+		existsSync("skills/pi-review/references/security-baseline-review.js"),
+		"missing pi-review security-baseline reference",
+	);
+	assert(
+		existsSync("skills/pi-review/references/residual-review-loop.js"),
+		"missing pi-review residual-loop reference",
+	);
 	assert(existsSync("skills/pi-review/references/planner.md"), "missing pi-review planner reference");
 	assert(existsSync("skills/pi-review/references/reviewer.md"), "missing pi-review reviewer reference");
 	assert(existsSync("skills/pi-review/references/verifier.md"), "missing pi-review verifier reference");
@@ -221,22 +230,78 @@ try {
 		existsSync("skills/pi-ralph/references/ralph-reviewed.js"),
 		"missing advanced pi-ralph review composition reference",
 	);
-	for (const [program, prompts] of [
-		["plan-review-verify.js", ["planner", "reviewer", "verifier"]],
-		["targeted-review.js", ["reviewer", "verifier"]],
+	for (const [program, prompts, roleProfiles] of [
+		[
+			"plan-review-verify.js",
+			["PLANNER", "REVIEWER", "VERIFIER"],
+			[
+				[`name: "review-planner"`, "balanced"],
+				["name: focus.id", "quick"],
+				[`name: "review-verifier"`, "deep"],
+			],
+		],
+		[
+			"targeted-review.js",
+			["REVIEWER", "VERIFIER"],
+			[
+				["name: focus.id", "quick"],
+				[`name: "review-verifier"`, "balanced"],
+			],
+		],
+		[
+			"multi-lens-review.js",
+			["REVIEWER", "VERIFIER"],
+			[
+				["name: lens.id", "quick"],
+				[`name: "review-verifier"`, "deep"],
+			],
+		],
+		[
+			"security-baseline-review.js",
+			["ATTACKER", "DEFENDER", "VERIFIER"],
+			[
+				["name: baseline.id", "balanced"],
+				[`name: "security-verifier"`, "deep"],
+			],
+		],
+		[
+			"residual-review-loop.js",
+			["REVIEWER", "TRIAGE_VERIFIER", "FINAL_VERIFIER"],
+			[
+				["name: id", "quick"],
+				[`name: "coverage-triage"`, "balanced"],
+				[`name: "final-review-verifier"`, "deep"],
+			],
+		],
 	]) {
 		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		for (const prompt of prompts) {
-			const constant = prompt.toUpperCase();
+		const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
+		for (const constant of prompts) {
 			assert(
-				source.includes(`const ${constant} = "<copy references/${prompt}.md>";`),
-				`${program} must declare the ${constant} prompt placeholder`,
+				new RegExp(`const ${constant}\\s*=\\s*"<adapt `).test(source),
+				`${program} must declare an adaptable ${constant} prompt`,
 			);
+		}
+		for (const [role, profile] of roleProfiles) {
+			const rolePattern = new RegExp(
+				`${role.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]{0,160}?profile: "${profile}"`,
+			);
+			assert(rolePattern.test(source), `${program} must assign ${profile} to ${role}`);
 		}
 		assert(!source.includes("skills.body"), `${program} must not load program prompts via skills.body`);
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
-		assert(source.includes('profile: "deep"'), `${program} workers must select the deep model profile`);
 		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
+	}
+	for (const program of ["multi-lens-review.js", "security-baseline-review.js", "residual-review-loop.js"]) {
+		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
+		assert(source.includes("fitForContext"), `${program} must bound serialized verifier metadata`);
+		assert(source.includes("candidateIdsOmitted"), `${program} must report omitted verifier candidates`);
+		assert(!source.includes("candidates.slice(0, 64)"), `${program} must not count-bound verifier candidates`);
+	}
+	for (const prompt of ["planner", "reviewer", "verifier"]) {
+		const source = readFileSync(`skills/pi-review/references/${prompt}.md`, "utf8");
+		assert(source.includes("Template"), `${prompt}.md must describe an adaptable prompt template`);
 	}
 	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
 	assert(!ralphSource.includes("type:"), "pi-ralph must remain an untyped program worker");

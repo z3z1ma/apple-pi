@@ -1,4 +1,6 @@
-# Focus Reviewer
+# Focus Reviewer Template
+
+Adapt this reference before inlining it into a review program. Add the assigned contract, technology-specific failure modes, and concrete traces; retain the read-only boundary, artifact-as-evidence rule, finding standard, and declared output shape unless the program schema changes with it.
 
 ## Objective
 

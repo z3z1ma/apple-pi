@@ -2,9 +2,10 @@
 // Not the default. Prefer /skill:pi-ralph then /skill:pi-review.
 const READ_ONLY = ["read", "grep", "find", "ls"];
 const RALPH_TOOLS = [...READ_ONLY, "bash", "edit", "write"];
-const PLANNER = "<copy skills/pi-review/references/planner.md>";
-const REVIEWER = "<copy skills/pi-review/references/reviewer.md>";
-const VERIFIER = "<copy skills/pi-review/references/verifier.md>";
+// Adapt these review prompt references to the increment before inlining them; preserve their output contracts.
+const PLANNER = "<adapt skills/pi-review/references/planner.md for this increment and inline it here>";
+const REVIEWER = "<adapt skills/pi-review/references/reviewer.md for each focus and inline it here>";
+const VERIFIER = "<adapt skills/pi-review/references/verifier.md for this increment and inline it here>";
 const RALPH = `You are one fresh iteration of a Ralph loop.
 
 The goal, context paths, and any prior review findings are your frame of reference. Read the small ledger index or task first, follow links only as needed, and inspect the current repository before deciding that work is missing.
@@ -137,7 +138,7 @@ async function reviewChange(files, background) {
 	);
 	const plan = await agent({
 		name: "review-planner",
-		profile: "deep",
+		profile: "balanced",
 		tools: READ_ONLY,
 		systemPrompt: PLANNER,
 		task: "Partition the change and define focused investigations. Return the typed plan.",
@@ -223,7 +224,7 @@ async function reviewChange(files, background) {
 			}
 			const result = await agents.run({
 				name: focus.id,
-				profile: "deep",
+				profile: "quick",
 				tools: READ_ONLY,
 				systemPrompt: REVIEWER,
 				task: "Investigate the assigned partition focus and return the typed review result.",

@@ -49,6 +49,102 @@ return parallel(files, async (name) => {
 }, 3);
 ```
 
+## Guest standard library
+
+`std` is deliberately small. A function belongs here only when it adds material semantics beyond JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, or `pipeline`. The live `code` parameter documents the complete input and output type of every exposed function.
+
+| Namespace | Contract |
+| --- | --- |
+| `git` | `change()` concurrently gathers and normalizes status, patch, statistics, changed paths, untracked paths, renames, and line totals. |
+| `repo` | `changeNeighborhood()` adds requested definitions, references, neighboring tests, configuration, and ownership evidence for changed files. |
+| `context` | Required/clippable/droppable markers plus serialized-budget fitting, priority packing, and budget partitioning. |
+| `evidence` | Stable provenance items, bundles, budget packing, and required-ID validation. |
+| `coverage`, `reconcile` | ID/identity coverage checks and one-to-one overlay reconciliation with explicit missing, unknown, and duplicate metadata. |
+| `agents` | Only `planFanoutReduce()`: a typed planner-created fan-out followed by a typed reducer. |
+| `dev` | Generic schema-first change/failure analysis over collected repository evidence, plus relevant-test discovery/execution. |
+
+There are intentionally no `std` wrappers for assertions, collections, text splitting, shell, filesystem reads, HTTP, ordinary graphs, single agents, generic semantic prompts, or writes. Use JavaScript and the already-documented guest APIs directly. `std.git`, `std.repo`, evidence collection, and development analysis are read-only. `std.dev.runRelevantTests` is the only function that directly executes a host command by design: it first discovers neighboring test paths, injects those paths into the command, and reports the real status/output. `std.agents.planFanoutReduce` can also perform caller-authorized effects when a stage is explicitly granted `bash`, `edit`, or `write`; it adds no authority of its own.
+
+### Evidence and context
+
+Use `std.context.fit` instead of reimplementing serialized-size clipping. Required fields either fit or fail; clippable strings shrink by priority; droppable fields are removed first. The return reports exactly what changed.
+
+```javascript
+const change = await std.git.change({ compare: "HEAD", paths: files });
+const planning = std.context.fit({
+  files: std.context.required(files),
+  status: std.context.required(change.status),
+  patch: std.context.clippable(change.patch, {
+    priority: 100,
+    maxChars: 12_000,
+    strategy: "head-tail",
+  }),
+  history: std.context.droppable(history, { priority: 10 }),
+}, { maxSerializedChars: 48_000 });
+
+const evidence = std.evidence.bundle([
+  std.evidence.item({
+    kind: "git-diff",
+    source: "git",
+    locator: { compare: change.compare, paths: change.paths },
+    content: planning.value.patch,
+    truncated: planning.truncated.includes("$.patch"),
+  }),
+]);
+```
+
+Evidence items have stable IDs, kind, source, locator, content, and truncation state. Use `std.evidence.require`, `std.evidence.pack`, and `std.reconcile.byId` to preserve provenance and coverage across workers.
+
+### Planner-created fan-out
+
+`planFanoutReduce` is the one retained worker topology because the planner-created task list, failure-preserving fan-out envelopes, three explicit profiles, and typed reducer are materially more than `parallel` plus `agents.run`.
+
+```javascript
+const workflow = await std.agents.planFanoutReduce(change, {
+  plan: {
+    prompt: PLANNER,
+    profile: "balanced",
+    tools: READ_ONLY,
+    // Defaults to { fanout: [{ prompt, context?, name? }] }.
+  },
+  fanout: {
+    profile: "quick",
+    tools: READ_ONLY,
+    concurrency: 6,
+    outputSchema: reviewerSchema,
+  },
+  reduce: {
+    prompt: REDUCER,
+    profile: "deep",
+    tools: READ_ONLY,
+    outputSchema: verdictSchema,
+  },
+});
+```
+
+Task policy remains in supplied prompts and schemas. For fixed fan-out, retries, pipelines, or one-off typed calls, use `parallel`, `pipeline`, `agent`, and `agents.run` directly.
+
+### Evidence-backed development analysis
+
+`std.dev.analyzeChange` and `analyzeFailure` require both an instruction and output schema. They collect repository evidence and bind it to one read-only worker instead of offering many overlapping prompt aliases.
+
+```javascript
+const risk = await std.dev.analyzeChange({
+  compare: "HEAD",
+  paths: files,
+  instruction: "Identify compatibility risks and cite the changed paths that support each conclusion.",
+  schema: {
+    type: "object",
+    properties: {
+      risks: { type: "array", items: { type: "string" } },
+    },
+    required: ["risks"],
+  },
+});
+```
+
+Use `std.dev.findRelevantTests()` for discovery without execution. `std.dev.runRelevantTests()` executes only the discovered neighboring test paths, forwarding them after `--` to the package `test:unit` / `test` script. For a custom runner, pass a command template such as `npx vitest run {tests}`; `{tests}` is required and is replaced with shell-quoted paths. The global `maxTests` limit defaults to 128; exceeding it fails instead of silently truncating the suite. No tests or runnable command produces an explicit `not_run` result. Use `pi.write`, `pi.edit`, and `pi.bash` directly for other authorized effects; `std` does not duplicate them.
+
 ## Envelope, fetch, and traces
 
 Pi Exec derives a default envelope from program shape: host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Pass optional `limits` on the tool call to raise or lower agent, call, concurrency, or timeout capacity up to package maxima. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.

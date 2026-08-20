@@ -1,5 +1,6 @@
 import vm from "node:vm";
 import { parentPort, workerData } from "node:worker_threads";
+import { STDLIB_SETUP_SOURCE } from "./runtime-stdlib.mjs";
 import { installWebHostHelpers, WEB_SETUP_SOURCE } from "./runtime-web.mjs";
 
 if (!parentPort) throw new Error("pi_exec worker requires a parent port");
@@ -280,6 +281,8 @@ ${WEB_SETUP_SOURCE}
       return value;
     });
   };
+
+${STDLIB_SETUP_SOURCE}
 })();
 `,
 	{ filename: "apple-pi-setup.js" },

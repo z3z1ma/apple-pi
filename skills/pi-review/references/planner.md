@@ -1,4 +1,6 @@
-# Review Planner
+# Review Planner Template
+
+Adapt this reference before inlining it into a review program. Add change-specific contracts, risk surfaces, and terms; retain the read-only boundary, artifact-as-evidence rule, partition requirements, and declared output shape unless the program schema changes with it.
 
 ## Objective
 

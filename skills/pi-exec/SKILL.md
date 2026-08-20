@@ -53,6 +53,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
+- `std` is deliberately small: normalized Git/change-neighborhood evidence, context budgets, provenance, coverage/reconciliation, `planFanoutReduce`, and schema-first change/failure analysis. The live `code` description gives every exposed function's complete input and output type. Use JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, and `pipeline` directly instead of looking for duplicate wrappers. `planFanoutReduce(input, { plan, fanout, reduce })` requires all three inference profiles; its default planner schema is `{ fanout: [{ prompt, context?, name? }] }`. It adds no authority, but any stage explicitly granted `bash`, `edit`, or `write` can perform caller-authorized effects. `std.dev.analyzeChange` and `analyzeFailure` require an instruction and schema and grant only read-only worker tools. `std.dev.runRelevantTests` is the only function that directly executes a host command by design: it runs discovered neighboring test paths, and a custom command must contain the `{tests}` placeholder, and the global `maxTests` limit defaults to 128 and fails rather than truncating.
 - The live `<subagent-team>` block lists every callable teammate with its `name`, configured inference `profile`, and own `description`. The separate `<inference-profiles>` block lists the inference profiles as `{ profile, description }` entries. `type` selects a teammate; `profile` selects an inference profile; `systemPrompt` appends dynamic specialization without replacing the teammate definition or granting capabilities. The interactive Agent tool uses the equivalent `subagent_type`, `profile`, and `system_prompt` combination. Explicit `tools` override capabilities. Omit `type` for a generic read-only worker.
 - Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` for those program-specific workers. Ralph explicitly grants its write-capable tool list.
 - `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
@@ -96,6 +97,19 @@ const verdict = await agent({
   },
 });
 return verdict.id;
+```
+
+Use `std.git.change` and `std.context.fit` to collect and bound repository evidence. For a fixed fan-out, use the existing `parallel` and `agents.run` APIs directly:
+
+```javascript
+const change = await std.git.change({ compare: "HEAD", paths: ["src/a.ts", "src/b.ts"] });
+const bounded = std.context.fit({
+  patch: std.context.clippable(change.patch, { maxChars: 12_000, priority: 100 }),
+}, { maxSerializedChars: 16_000 });
+return parallel(change.changedFiles, (path) => agents.run({
+  task: "Inspect this changed path and name its user-visible consequence.",
+  context: { path, patch: bounded.value.patch },
+}), 2);
 ```
 
 List, filter in JavaScript, then fan-out one worker per path:
