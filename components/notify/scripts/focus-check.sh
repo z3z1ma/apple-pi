@@ -9,8 +9,9 @@ set -euo pipefail
 #
 # "In focus" requires BOTH:
 #   1. Ghostty is the frontmost macOS application, and
-#   2. the target pane's tmux window is the active window of an attached
-#      session (session + window level, matching the notification target).
+#   2. the foreground (most-recently-active) tmux client is currently displaying
+#      the window that contains the target pane. This correctly handles multiple
+#      Ghostty tabs/windows attached as separate clients to different sessions.
 #
 # Runs from the Pi process (unlike focus-tmux.sh, which runs in a clicked
 # launchd context), but still honors TMUX_BIN / TMUX_SOCKET so it targets the
@@ -35,7 +36,14 @@ case "$front_bundle" in
 *) exit 1 ;;
 esac
 
-# 2. The target pane's window must be the active window of an attached session.
+# 2. The foreground tmux client must be displaying the target pane's window.
+#    Each Ghostty tab/window is a separate tmux client that may be attached to a
+#    different session, so a per-session "window active / session attached" check
+#    would falsely match a background tab attached to the Pi session. Instead
+#    identify the foreground client as the most-recently-active attached client
+#    and compare the window it is currently showing. This is a heuristic
+#    (tmux cannot report which Ghostty tab is frontmost), but it errs toward the
+#    client the operator last interacted with.
 if [[ -z "$tmux_bin" || ! -x "$tmux_bin" ]]; then
 	tmux_bin="$(command -v tmux || true)"
 fi
@@ -53,9 +61,19 @@ target="$pane_id"
 [[ -n "$target" ]] || target="$window_id"
 [[ -n "$target" ]] || exit 1
 
-info="$(tm display-message -p -t "$target" '#{window_active} #{session_attached}' 2>/dev/null || true)"
-window_active="${info%% *}"
-session_attached="${info##* }"
+# The tmux window that contains the Pi pane.
+pi_window="$(tm display-message -p -t "$target" '#{window_id}' 2>/dev/null || true)"
+[[ -n "$pi_window" ]] || exit 1
 
-[[ "$window_active" == "1" && -n "$session_attached" && "$session_attached" != "0" ]] || exit 1
+# Foreground client = the attached client with the most recent activity.
+# client_activity is an integer timestamp and client_name is a tty path with no
+# spaces, so whitespace-delimited parsing is safe.
+clients="$(tm list-clients -F '#{client_activity} #{client_name}' 2>/dev/null || true)"
+[[ -n "$clients" ]] || exit 1
+fg_client="$(printf '%s\n' "$clients" | sort -k1,1nr | head -1 | awk '{print $2}')"
+[[ -n "$fg_client" ]] || exit 1
+
+# The window that foreground client is currently displaying.
+shown_window="$(tm display-message -p -c "$fg_client" '#{window_id}' 2>/dev/null || true)"
+[[ -n "$shown_window" && "$shown_window" == "$pi_window" ]] || exit 1
 exit 0
