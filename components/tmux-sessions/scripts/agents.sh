@@ -10,9 +10,10 @@
 # stale record its own shutdown hook never removed, and pid reuse could mask it.
 # Records whose pid is gone are pruned here so the directory does not grow.
 #
-#   Row: rank \t pane_id \t pid \t kind \t icon \t age \t loc \t name \t path
+#   Row: rank \t pane_id \t pid \t kind \t icon \t age \t loc \t window \t name \t path
 #   rank/pane_id/pid/kind are hidden from the display via fzf's --with-nth.
-#   name is the Pi session name when set, else the tmux pane title/window name.
+#   window is the tmux window name; name is the Pi session name when set, else
+#   the tmux pane title/window name.
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=helpers.sh
@@ -91,8 +92,10 @@ done
     if (name == "") name = "-"
     if (length(name) > 30) name = substr(name, 1, 29) "…"
 
-    printf "%s\t%s\t%s\t%s\t%s\t%5s\t%s\t%s\t%s\n",
-      rank, paneid, $2, kind, icon, age, loc[paneid], name, path
+    window = (wname[paneid] != "") ? wname[paneid] : "-"
+
+    printf "%s\t%s\t%s\t%s\t%s\t%5s\t%s\t%s\t%s\t%s\n",
+      rank, paneid, $2, kind, icon, age, loc[paneid], window, name, path
   }
 ' | sort -t$'\t' -k1,1n -k6,6n
 # rank asc (what needs you floats up), then age asc so whatever just changed

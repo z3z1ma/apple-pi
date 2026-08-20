@@ -34,7 +34,7 @@ fzf_options="$(get_tmux_option @pi_fzf_options '')"
 # ctrl-x terminates the Pi process itself: a dedicated session dies with its
 # last window, a loose pane keeps the shell that hosted it. The reload waits a
 # beat so the record drops out of the list before the refresh.
-sel=$("$DIR/agents.sh" | fzf --ansi --delimiter='\t' --with-nth=5,6,7,8,9 \
+sel=$("$DIR/agents.sh" | fzf --ansi --delimiter='\t' --with-nth=5,6,7,8,9,10 \
   --reverse --cycle --header='Pi sessions · enter: jump · ctrl-x: kill' \
   --preview='tmux capture-pane -ept {2}' --preview-window='up,70%,follow' \
   --bind="ctrl-x:execute-silent(kill {3})+reload(sleep 0.3; $self --list)" \
