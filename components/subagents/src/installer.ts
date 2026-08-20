@@ -6,7 +6,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "./abortable.js";
+import {
+	DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS,
+	MAX_SUBAGENT_RESULT_WAIT_SECONDS,
+	normalizeWaitSeconds,
+	waitForAgentSettlement,
+} from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
@@ -25,19 +30,26 @@ import {
 	registerAgents,
 	resolveSpawnType,
 	setDefaultsDisabled,
-	setFallbackSubagent,
 } from "./agent-types.js";
 import { inChildSessionContext } from "./child-context.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
-import { resolveAgentModel } from "./model-routing.js";
+import { resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, partialOutputSuffix } from "./status-note.js";
-import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, WidgetMode } from "./types.js";
+import { appendTeamSystemPrompt, toTeamMember } from "./team-system-prompt.js";
+import type {
+	AgentInvocation,
+	AgentRecord,
+	JoinMode,
+	NotificationDetails,
+	SubagentConfigScope,
+	WidgetMode,
+} from "./types.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -63,7 +75,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 
 	let strictAgentFiles = false;
-	const reloadAgents = (cwd: string, strict = strictAgentFiles) => registerAgents(loadCustomAgents(cwd, strict));
+	const reloadAgents = (scope: SubagentConfigScope, strict = strictAgentFiles) =>
+		registerAgents(loadCustomAgents(scope, strict));
 	registerAgents(new Map());
 
 	const activityById = new Map<string, AgentActivity>();
@@ -289,8 +302,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	};
 	const uninstallManagedService = installManagedSubagentService(managedService, pi.events);
 
-	const bindSessionCwd = (cwd: string) => {
-		applyCompleteSettings(loadSettings(cwd), {
+	const bindSessionContext = (ctx: { cwd: string; isProjectTrusted?: () => boolean }): SubagentConfigScope => {
+		const scope = {
+			cwd: ctx.cwd,
+			projectTrusted: typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false,
+		};
+		applyCompleteSettings(loadSettings(scope), {
 			setMaxConcurrent: (value) => manager.setMaxConcurrent(value),
 			setDefaultMaxTurns,
 			setGraceTurns,
@@ -311,9 +328,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				widget.update();
 			},
 			setMaxSubagentDepth,
-			setFallbackSubagent,
 		});
-		reloadAgents(cwd, strictAgentFiles);
+		reloadAgents(scope, strictAgentFiles);
+		return scope;
 	};
 
 	pi.registerMessageRenderer<NotificationDetails>("subagent-notification", (message, { expanded }, theme) => {
@@ -342,7 +359,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		bindSessionCwd(ctx.cwd);
+		bindSessionContext(ctx);
 		manager.clearCompleted(true);
 		if (ctx.hasUI) {
 			widget.setUICtx(ctx.ui);
@@ -382,13 +399,15 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		manager.dispose();
 	});
 
-	const availableDescription = () =>
-		getAvailableTypes()
-			.map((name) => {
-				const config = getAgentConfig(name);
-				return `${name}: ${config?.description ?? name}`;
-			})
-			.join("; ");
+	// Teach the root agent about its subagent team via the system prompt (mirrors
+	// the ledger prompt append). The roster is rebuilt per turn from the freshly
+	// bound registry so custom agent files and cwd changes are reflected; the tool
+	// descriptions no longer carry a competing static list.
+	pi.on("before_agent_start", (event, ctx) => {
+		bindSessionContext(ctx);
+		const members = getAvailableTypes().map((name) => toTeamMember(name, getAgentConfig(name)?.description));
+		return { systemPrompt: appendTeamSystemPrompt(event.systemPrompt ?? "", members) };
+	});
 
 	const agentTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.AGENT,
@@ -398,31 +417,24 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"Use background mode for parallel work, then get_subagent_result; use resume to continue an in-memory agent.",
 			"Custom agents are Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
 			"Subagents may delegate only when their definition explicitly sets allowed_subagents.",
-			"The Agent tool is for collaboration: backgrounding, steering, resume, and a durable child session. pi_exec agents.run is for composition: typed workers in a program graph with core tools, MCP, and bound context. They share this type catalog.",
-			`Available: ${availableDescription() || "none"}.`,
+			"The Agent tool is for collaboration: backgrounding, steering, resume, and a durable child session. pi_exec agents.run is for composition: typed workers in a program graph with core tools, MCP, and bound context. They share this type catalog. The available subagent team and each one's role are listed in the system prompt.",
 		].join(" "),
 		promptGuidelines: [
-			"The parent session is a senior engineer who may implement. Delegate when a specialist isolates context, uses a better model class, or enables non-overlapping parallelism — not because a type exists. One isolated, known-path, low-risk action stays here.",
-			"Broad or uncertain repo discovery → background Explore. External or version-sensitive docs → Research. Cross-module how-to-implement → Plan. Costly should, root-cause, or YAGNI judgment → Counsel. Bounded specified writes → Implement. User-visible layout, interaction, or polish → Design. Do not use general-purpose when a lane fits. Do not launch overlapping writers. Do not retry an unchanged rejected task.",
-			"Use the Agent tool when you need collaboration: backgrounding, FleetView, steer/stop, resume, or a durable child session. Use pi_exec agents.run when you need a dynamic graph that composes specialists with core tools, MCP, or bound context. They share the same type catalog. Review planner/reviewer/verifier are program roles via custom systemPrompt, not catalog types. Ralph increments use type general-purpose.",
-			"The persistent Advisor reviews the root session. Child sessions do not load it; leave advisor false.",
+			"The parent session is a senior engineer who may implement. Delegate when a specialist isolates context, uses a better model class, or enables non-overlapping parallelism — not because a type exists. One isolated, known-path, low-risk action stays here; if no specialist lane fits, keep the work in the parent session.",
+			"Broad or uncertain repo discovery → background Explore. External or version-sensitive docs → Research. Cross-module how-to-implement → Plan. Costly should, root-cause, or YAGNI judgment → Counsel. Bounded specified writes → Implement. User-visible layout, interaction, or polish → Design. Do not launch overlapping writers. Do not retry an unchanged rejected task.",
+			"Use the Agent tool when you need collaboration: backgrounding, FleetView, steer/stop, resume, or a durable child session. Use pi_exec agents.run when you need a dynamic graph that composes specialists with core tools, MCP, or bound context. They share the same type catalog. Review and Ralph program roles use explicit systemPrompt workers rather than catalog types.",
+			"The persistent Advisor reviews the root session. Child sessions load it only when their agent definition enables it or the invocation explicitly sets advisor true; built-in Implement enables it by default, and advisor false disables that default for one new session.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
 			prompt: Type.String({ description: "Self-contained task for the agent." }),
 			description: Type.String({ description: "Short task description shown in the UI." }),
 			subagent_type: Type.String({ description: "Agent type from the available Markdown/default definitions." }),
-			model: Type.Optional(Type.String({ description: "Optional provider/model override; agent frontmatter wins." })),
-			thinking: Type.Optional(
-				Type.Union([
-					Type.Literal("off"),
-					Type.Literal("minimal"),
-					Type.Literal("low"),
-					Type.Literal("medium"),
-					Type.Literal("high"),
-					Type.Literal("xhigh"),
-					Type.Literal("max"),
-				]),
+			profile: Type.Optional(
+				Type.String({
+					minLength: 1,
+					description: "User-global model profile override. It changes model/thinking only, never capabilities.",
+				}),
 			),
 			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
 			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
@@ -434,30 +446,33 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				default: false,
 				description: "Include the full parent conversation before the initial task prompt.",
 			}),
-			advisor: Type.Boolean({
-				default: false,
-				description:
-					"Keep false for exploration, search, planning, and routine work. Set true only for correctness-critical implementation where continuous second-model review justifies substantial cost and latency.",
-			}),
+			advisor: Type.Optional(
+				Type.Boolean({
+					description:
+						"Override the agent definition's Advisor default. Omit to use the definition; false disables it when the definition enables it.",
+				}),
+			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
-			bindSessionCwd(ctx.cwd);
+			bindSessionContext(ctx);
 
 			if (params.resume) {
 				const existing = manager.getRecord(params.resume);
 				if (!existing || existing.parentAgentId || existing.internalOwner)
 					return textResult(`Agent not found: ${params.resume}`, undefined, true);
 				const requestedInheritance = params.inherit_context === true;
-				const requestedAdvisor = params.advisor === true;
+				const requestedAdvisor = params.advisor ?? existing.invocation?.advisor === true;
 				const requestedIsolation = params.isolated === true;
+				const requestedProfile = params.profile ?? existing.invocation?.profile;
 				if (
 					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
 					requestedAdvisor !== (existing.invocation?.advisor === true) ||
-					requestedIsolation !== (existing.invocation?.isolated === true)
+					requestedIsolation !== (existing.invocation?.isolated === true) ||
+					requestedProfile !== existing.invocation?.profile
 				) {
 					return textResult(
-						"inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						"profile, inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
 						undefined,
 						true,
 					);
@@ -492,22 +507,16 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (!dispatch.ok) return textResult(dispatch.message, undefined, true);
 			const type = dispatch.type;
 			const config = getAgentConfig(type);
-			const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
-			const resolvedAgentModel = await resolveAgentModel({
-				cwd: ctx.cwd,
-				projectTrusted,
+			const resolvedAgentProfile = resolveAgentProfile({
 				registry: ctx.modelRegistry,
 				parentModel: ctx.model,
+				parentThinking: ctx.thinkingLevel,
 				config,
-				type,
-				explicitModel: params.model,
+				explicitProfile: params.profile,
 			});
-			if (resolvedAgentModel.error) return textResult(resolvedAgentModel.error, undefined, true);
+			if (resolvedAgentProfile.error) return textResult(resolvedAgentProfile.error, undefined, true);
 			const invocation = resolveAgentInvocationConfig(config, params);
-			if (config?.isDefault === true && params.thinking == null && resolvedAgentModel.thinkingLevel !== undefined) {
-				invocation.thinking = resolvedAgentModel.thinkingLevel;
-			}
-			const model = resolvedAgentModel.model;
+			const model = resolvedAgentProfile.model;
 			const effectiveMaxTurns = normalizeMaxTurns(invocation.maxTurns ?? getDefaultMaxTurns());
 			let id: string | undefined;
 			const tracker = createActivityTracker(effectiveMaxTurns, () => {
@@ -534,7 +543,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					: undefined;
 			const invocationDetails: AgentInvocation = {
 				modelName,
-				thinking: invocation.thinking,
+				profile: resolvedAgentProfile.profile,
+				thinking: resolvedAgentProfile.thinkingLevel,
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
@@ -549,7 +559,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
 				advisor: invocation.advisor,
-				thinkingLevel: invocation.thinking,
+				thinkingLevel: resolvedAgentProfile.thinkingLevel,
 				cwd: params.cwd,
 				invocation: invocationDetails,
 				onToolActivity: tracker.callbacks.onToolActivity,
@@ -570,7 +580,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					record.joinMode = joinMode;
 					trackBatch(id, joinMode);
 					return textResult(
-						`${dispatch.fellBackFrom !== undefined ? `Requested type fell back to ${type}.\n` : ""}Agent started in background. Agent ID: ${id}`,
+						`Agent started in background. Agent ID: ${id}`,
 						detailsFor(record, tracker.state, { status: "background" }),
 					);
 				}
@@ -641,15 +651,16 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		defineTool({
 			name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 			label: "Get Subagent Result",
-			description: `Check a subagent without blocking by default. Settled final output is returned in full. wait_seconds chooses how long to wait (0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s) before returning control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.`,
+			description: `Check a subagent with a bounded ${DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS}-second wait by default. Settled final output is returned in full. wait_seconds may choose 0–${MAX_SUBAGENT_RESULT_WAIT_SECONDS}s; 0 checks immediately, and an expired wait returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.`,
 			parameters: Type.Object({
 				agent_id: Type.String(),
-				wait_seconds: Type.Integer({
-					minimum: 0,
-					maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS,
-					default: 0,
-					description: `Seconds to wait before yielding control; 0 checks immediately and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.`,
-				}),
+				wait_seconds: Type.Optional(
+					Type.Integer({
+						minimum: 0,
+						maximum: MAX_SUBAGENT_RESULT_WAIT_SECONDS,
+						description: `Seconds to wait before yielding control. Omit to wait ${DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS} seconds (or to take an immediate transcript_tail snapshot); 0 always checks immediately, and ${MAX_SUBAGENT_RESULT_WAIT_SECONDS} is the maximum.`,
+					}),
+				),
 				verbose: Type.Boolean({
 					default: false,
 					description: "Append the full conversation transcript. Mutually exclusive with transcript_tail.",
@@ -664,7 +675,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				),
 			}),
 			async execute(_toolCallId, params, signal) {
-				const waitSeconds = normalizeWaitSeconds(params.wait_seconds);
+				const waitSeconds =
+					params.transcript_tail !== undefined && params.wait_seconds === undefined
+						? 0
+						: normalizeWaitSeconds(params.wait_seconds);
 				if (params.transcript_tail !== undefined && (params.verbose || waitSeconds > 0)) {
 					return textResult(
 						"transcript_tail cannot be combined with verbose or a positive wait_seconds value.",
@@ -772,7 +786,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		description: "View live subagents and discovered Markdown agent types",
 		handler: async (_args, ctx) => {
 			if (!ctx.hasUI) return;
-			bindSessionCwd(ctx.cwd);
+			bindSessionContext(ctx);
 			const records = manager.listAgents().filter((record) => !record.parentAgentId && !record.internalOwner);
 			const choices = [
 				...records.map(

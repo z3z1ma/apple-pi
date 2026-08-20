@@ -96,12 +96,12 @@ return values.map((value) => value.toUpperCase());
 		expect(calls.sort()).toEqual(["a", "b"]);
 	});
 
-	it("accepts the parent session's max thinking level", async () => {
-		const result = await execute(`return agents.run({ task: "inspect", thinking: "max" });`, async (_ref, args) => ({
+	it("passes a model profile through the guest agents.run bridge", async () => {
+		const result = await execute(`return agents.run({ task: "inspect", profile: "deep" });`, async (_ref, args) => ({
 			status: "completed",
-			text: String(args.thinking),
+			text: String(args.profile),
 		}));
-		expect(result.value).toEqual({ status: "completed", text: "max" });
+		expect(result.value).toEqual({ status: "completed", text: "deep" });
 	});
 
 	it("supports structured agents.run and the text-returning agent convenience", async () => {
@@ -426,6 +426,9 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("agent(request: AgentRequest)");
 		expect(contract).toContain("agents.run(request: AgentRequest)");
 		expect(contract).toContain("type?: string");
+		expect(contract).toContain("profile?: string");
+		expect(contract).not.toContain("model?: string");
+		expect(contract).not.toContain("thinking?: AgentThinking");
 		expect(contract).toContain("context?: JSONValue");
 		expect(contract).toContain("outputSchema?: object");
 		expect(contract).toContain("value?: JSONValue");
@@ -452,6 +455,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(skill).toContain("context?");
 		expect(skill).toContain("outputSchema?");
 		expect(skill).toContain("type?");
+		expect(skill).toContain("profile?");
 		expect(skill).toContain('type: "Explore"');
 		expect(skill).toContain("agent(request: AgentRequest)");
 		expect(skill).toContain("agents.run(request: AgentRequest)");
@@ -551,9 +555,10 @@ describe("pi_exec agent binding", () => {
 	});
 
 	it("parses a catalog type and keeps untyped workers generic", () => {
-		expect(parseAgentRequest({ task: "map auth", type: "  Explore  " })).toEqual({
+		expect(parseAgentRequest({ task: "map auth", type: "  Explore  ", profile: "deep" })).toEqual({
 			task: "map auth",
 			type: "Explore",
+			profile: "deep",
 		});
 		expect(parseAgentRequest({ task: "judge", systemPrompt: "REVIEWER" }).type).toBeUndefined();
 		expect(agentOperationArgs({ task: "map auth", type: "Explore" })).toEqual({
@@ -562,68 +567,142 @@ describe("pi_exec agent binding", () => {
 		});
 	});
 
-	it("rejects an empty task", () => {
+	it("rejects empty tasks, padded profiles, and raw inference options", () => {
 		expect(() => parseAgentRequest({ task: "   " })).toThrow(/non-empty task/);
+		expect(() => parseAgentRequest({ task: "inspect", profile: " deep" })).toThrow(/unpadded/);
+		expect(() => parseAgentRequest({ task: "inspect", model: "xai/raw" })).toThrow(/raw model\/thinking/);
+		expect(() => parseAgentRequest({ task: "inspect", thinking: "high" })).toThrow(/raw model\/thinking/);
 	});
 
-	it("resolves catalog types for agents.run and leaves untyped workers read-only", async () => {
+	it("resolves catalog defaults and explicit profile overrides for agents.run", async () => {
 		const cwd = process.cwd();
-		const untyped = await resolveExecWorker({ task: "inspect" }, { cwd });
-		expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"] });
-
-		const custom = await resolveExecWorker(
-			{ task: "review this diff", systemPrompt: "REVIEWER" },
-			{ cwd, parentModel: "xai/parent", parentThinking: "low" },
+		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-exec-profiles-"));
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({
+				profiles: {
+					quick: { model: "xai/fast", thinking: "medium" },
+					coding: { model: "xai/coder", thinking: "high" },
+					deep: { model: "anthropic/deep", thinking: "xhigh" },
+				},
+			}),
 		);
-		expect(custom.tools).toEqual(["read", "grep", "find", "ls"]);
-		expect(custom.systemPrompt).toBe("REVIEWER");
-		expect(custom.model).toBe("xai/parent");
-		expect(custom.type).toBeUndefined();
+		const available = [
+			{ provider: "xai", id: "fast" },
+			{ provider: "xai", id: "coder" },
+			{ provider: "anthropic", id: "deep" },
+		];
+		const options = {
+			cwd,
+			registry: {
+				find: (provider: string, id: string) =>
+					available.find((model) => model.provider === provider && model.id === id),
+			},
+		};
+		try {
+			const untyped = await resolveExecWorker({ task: "inspect" }, { cwd });
+			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"] });
 
-		const explore = await resolveExecWorker({ task: "where is X?", type: "Explore" }, { cwd });
-		expect(explore.type).toBe("Explore");
-		expect(explore.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
-		expect(explore.model).toBe("openai-codex/gpt-5.6-luna");
-		expect(explore.thinking).toBe("medium");
-		expect(explore.systemPrompt).toContain("Agent type: Explore");
-		expect(explore.systemPrompt).toMatch(/file search specialist/i);
+			const custom = await resolveExecWorker(
+				{ task: "review this diff", systemPrompt: "REVIEWER" },
+				{ cwd, parentModel: "xai/parent", parentThinking: "low" },
+			);
+			expect(custom.tools).toEqual(["read", "grep", "find", "ls"]);
+			expect(custom.systemPrompt).toBe("REVIEWER");
+			expect(custom.model).toBe("xai/parent");
+			expect(custom.type).toBeUndefined();
 
-		const guided = await resolveExecWorker(
-			{ task: "where is X?", type: "Explore", systemPrompt: "Prefer src/ over tests/." },
-			{ cwd },
-		);
-		expect(guided.systemPrompt).toContain("Agent type: Explore");
-		expect(guided.systemPrompt).toMatch(/file search specialist/i);
-		expect(guided.systemPrompt).toContain("Prefer src/ over tests/.");
+			const explore = await resolveExecWorker({ task: "where is X?", type: "Explore" }, options);
+			expect(explore.type).toBe("Explore");
+			expect(explore.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
+			expect(explore.model).toBe("xai/fast");
+			expect(explore.thinking).toBe("medium");
+			expect(explore.systemPrompt).toContain("Agent type: Explore");
+			expect(explore.systemPrompt).toMatch(/file search specialist/i);
 
-		const implement = await resolveExecWorker({ task: "apply the spec", type: "Implement" }, { cwd });
-		expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
-		expect(implement.thinking).toBe("high");
+			const guided = await resolveExecWorker(
+				{ task: "where is X?", type: "Explore", systemPrompt: "Prefer src/ over tests/." },
+				options,
+			);
+			expect(guided.systemPrompt).toContain("Agent type: Explore");
+			expect(guided.systemPrompt).toContain("Prefer src/ over tests/.");
 
-		const narrowed = await resolveExecWorker(
-			{ task: "apply the spec", type: "Implement", tools: ["read", "edit"], thinking: "low", model: "xai/explicit" },
-			{ cwd },
-		);
-		expect(narrowed.tools).toEqual(["read", "edit"]);
-		expect(narrowed.thinking).toBe("low");
-		expect(narrowed.model).toBe("xai/explicit");
+			const implement = await resolveExecWorker({ task: "apply the spec", type: "Implement" }, options);
+			expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
+			expect(implement.model).toBe("xai/coder");
+			expect(implement.thinking).toBe("high");
 
-		await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, { cwd })).rejects.toThrow(
-			/Unknown or disabled agent type/,
-		);
+			const overridden = await resolveExecWorker(
+				{ task: "apply the spec", type: "Implement", tools: ["read", "edit"], profile: "deep" },
+				options,
+			);
+			expect(overridden.tools).toEqual(["read", "edit"]);
+			expect(overridden.thinking).toBe("xhigh");
+			expect(overridden.model).toBe("anthropic/deep");
+
+			await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, options)).rejects.toThrow(
+				/Unknown or disabled agent type/,
+			);
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+			rmSync(agentDir, { recursive: true, force: true });
+		}
 	});
 
-	it("routes a typed agents.run worker through modes.json", async () => {
+	it("resolves a project-defined custom general-purpose worker without restoring a built-in", async () => {
+		const root = mkdtempSync(join(tmpdir(), "apple-pi-exec-custom-general-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-exec-empty-global-"));
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		try {
+			mkdirSync(join(root, ".pi", "agents"), { recursive: true });
+			writeFileSync(
+				join(root, ".pi", "agents", "general.md"),
+				"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: quick\n---\n\nFollow the project-specific role.\n",
+			);
+			writeFileSync(
+				join(agentDir, "model-profiles.json"),
+				JSON.stringify({ profiles: { quick: { model: "xai/custom", thinking: "low" } } }),
+			);
+			const resolved = await resolveExecWorker(
+				{ task: "apply the project role", type: "general-purpose" },
+				{
+					cwd: root,
+					projectTrusted: true,
+					registry: { find: (provider, id) => (provider === "xai" && id === "custom" ? { provider, id } : undefined) },
+				},
+			);
+			expect(resolved).toMatchObject({
+				type: "general-purpose",
+				tools: ["read", "edit"],
+				model: "xai/custom",
+				thinking: "low",
+			});
+			expect(resolved.systemPrompt).toContain("Follow the project-specific role.");
+			await expect(
+				resolveExecWorker(
+					{ task: "must not load project config", type: "general-purpose" },
+					{ cwd: root, projectTrusted: false },
+				),
+			).rejects.toThrow(/Unknown or disabled agent type/);
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+			rmSync(root, { recursive: true, force: true });
+			rmSync(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("routes a typed agents.run worker through its semantic model profile", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-exec-type-"));
 		const globalRoot = join(root, "pi-agent");
 		mkdirSync(globalRoot, { recursive: true });
 		writeFileSync(
-			join(globalRoot, "modes.json"),
-			JSON.stringify({
-				modes: {
-					counsel: { provider: "anthropic", modelId: "route-counsel", thinkingLevel: "high" },
-				},
-			}),
+			join(globalRoot, "model-profiles.json"),
+			JSON.stringify({ profiles: { deep: { model: "anthropic/route-counsel", thinking: "high" } } }),
 		);
 		const previous = process.env.PI_CODING_AGENT_DIR;
 		process.env.PI_CODING_AGENT_DIR = globalRoot;
@@ -703,11 +782,15 @@ describe("pi_exec agent binding", () => {
 			required: ["id"],
 			additionalProperties: false,
 		};
-		const prepared = prepareAgentSpawn({ task: "judge", outputSchema: schema }, { tools: ["read", "grep"] });
+		const prepared = prepareAgentSpawn(
+			{ task: "judge", outputSchema: schema },
+			{ tools: ["read", "grep"], projectTrusted: false },
+		);
 		try {
 			const toolsFlag = prepared.args.indexOf("--tools");
 			expect(prepared.args[toolsFlag + 1]).toBe(`read,grep,${PI_EXEC_RETURN_TOOL}`);
 			expect(prepared.args).toContain("--no-extensions");
+			expect(prepared.args).toContain("--no-approve");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
@@ -733,7 +816,10 @@ describe("pi_exec agent binding", () => {
 			required: ["id"],
 			additionalProperties: false,
 		};
-		const prepared = prepareAgentSpawn({ task: "judge", outputSchema: schema }, { tools: ["read"] });
+		const prepared = prepareAgentSpawn(
+			{ task: "judge", outputSchema: schema },
+			{ tools: ["read"], projectTrusted: false },
+		);
 		const previous = process.env[PI_EXEC_OUTPUT_SCHEMA_ENV];
 		process.env[PI_EXEC_OUTPUT_SCHEMA_ENV] = prepared.env?.[PI_EXEC_OUTPUT_SCHEMA_ENV];
 		try {
@@ -756,7 +842,7 @@ describe("pi_exec agent binding", () => {
 		const payload = { ids: [1, 2], note: "x".repeat(75_000) };
 		const prepared = prepareAgentSpawn(
 			{ task: "judge these rows", name: "judge", context: payload },
-			{ tools: ["read", "grep"], model: "xai/test", thinking: "low" },
+			{ tools: ["read", "grep"], projectTrusted: true, model: "xai/test", thinking: "low" },
 		);
 		try {
 			const attached = prepared.args.find((arg) => arg.startsWith("@"));
@@ -767,6 +853,7 @@ describe("pi_exec agent binding", () => {
 			expect(readFileSync(path, "utf8")).toBe(JSON.stringify(payload));
 			expect(statSync(path).mode & 0o077).toBe(0);
 			expect(prepared.args).toContain("--name");
+			expect(prepared.args).toContain("--approve");
 			expect(prepared.args).toContain("judge");
 			expect(prepared.args.at(-1)).toBe("judge these rows");
 			expect(prepared.args.join("\0")).toContain(CONTEXT_GUIDANCE);

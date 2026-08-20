@@ -53,7 +53,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | Area | Responsibility | Important relationships |
 | --- | --- | --- |
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
-| `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses shared mode routing; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
+| `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses the user-global `deep` model profile; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the observational-memory packet. |
 | `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
@@ -191,12 +191,12 @@ A file that works from the checkout but is absent from the package tarball is a 
 
 ## Configuration, trust, and state
 
-Several features read global Pi configuration and optionally trusted project-local configuration. Shared mode routing follows the same principle: trusted project settings may override global settings; untrusted project content must not silently become model/system-prompt authority.
+Several features read global Pi configuration and optionally trusted project-local configuration. Model profiles are the deliberate exception: provider/model/thinking policy is read only from user-global `model-profiles.json`; projects and agent definitions may reference profile names but cannot redefine their mappings. Other trusted project settings may override global settings; untrusted project content must not silently become model/system-prompt authority.
 
 Preserve these categories:
 
 - **Package configuration** — tracked manifest and docs in this repository.
-- **User/project Pi configuration** — modes, settings, MCP, subagent definitions, and optional advisor guidance resolved at runtime with trust checks.
+- **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional advisor guidance resolved at runtime with their documented trust boundaries.
 - **Session state** — Pi session JSONL, including context and observational-memory entries.
 - **Task workbench state** — `.ledger`, governed by repository-owner storage policy.
 - **Temporary worker state** — bounded files/processes that must be cleaned up on success, failure, cancellation, and shutdown.

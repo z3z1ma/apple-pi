@@ -11,8 +11,8 @@ import {
 	resolveEnabledTypeIn,
 } from "../components/subagents/src/agent-types.js";
 import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
-import { resolveAgentModel } from "../components/subagents/src/model-routing.js";
-import type { AgentConfig } from "../components/subagents/src/types.js";
+import { resolveAgentProfile } from "../components/subagents/src/model-routing.js";
+import type { AgentConfig, SubagentConfigScope } from "../components/subagents/src/types.js";
 
 import { LEDGER_EXTENSION_PATH } from "./ledger.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
@@ -36,8 +36,7 @@ export interface AgentRequest {
 	/** Built-in or Markdown agent type. Omit for a generic read-only worker. */
 	type?: string;
 	name?: string;
-	model?: string;
-	thinking?: string;
+	profile?: string;
 	tools?: string[];
 	systemPrompt?: string;
 	context?: unknown;
@@ -74,14 +73,21 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	) {
 		throw new Error("agents.run tools must be an array of Pi core tool names");
 	}
+	if (rawArgs.model !== undefined || rawArgs.thinking !== undefined) {
+		throw new Error("agents.run selects inference with profile; raw model/thinking options are not supported");
+	}
 	const name = typeof rawArgs.name === "string" ? rawArgs.name.trim() : "";
 	const type = typeof rawArgs.type === "string" ? rawArgs.type.trim() : "";
+	const rawProfile = typeof rawArgs.profile === "string" ? rawArgs.profile : undefined;
+	const profile = rawProfile?.trim();
+	if (rawArgs.profile !== undefined && (!profile || profile !== rawProfile)) {
+		throw new Error("agents.run profile must be a non-empty, unpadded string");
+	}
 	const request: AgentRequest = {
 		task: rawArgs.task,
 		...(type ? { type } : {}),
 		...(name ? { name } : {}),
-		...(typeof rawArgs.model === "string" ? { model: rawArgs.model } : {}),
-		...(typeof rawArgs.thinking === "string" ? { thinking: rawArgs.thinking } : {}),
+		...(profile ? { profile } : {}),
 		...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools as string[] } : {}),
 		...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
 	};
@@ -92,8 +98,8 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 
 const READ_ONLY_WORKER_TOOLS = ["read", "grep", "find", "ls"];
 
-export function resolveExecAgentConfig(cwd: string, type: string): AgentConfig {
-	const registry = buildAgentRegistry(loadCustomAgents(cwd));
+export function resolveExecAgentConfig(scope: SubagentConfigScope, type: string): AgentConfig {
+	const registry = buildAgentRegistry(loadCustomAgents(scope));
 	const key = resolveEnabledTypeIn(registry, type);
 	const config = key ? getAgentConfigIn(registry, key) : undefined;
 	if (!config) {
@@ -115,7 +121,7 @@ function typedSystemPrompt(config: AgentConfig, additional?: string): string {
 /**
  * Resolve tools, model, thinking, and role prompt for an agents.run worker.
  * Omitting type keeps the generic read-only worker. A catalog type supplies
- * that agent's defaults; explicit tools/model/thinking override those defaults.
+ * that agent's defaults; an explicit profile overrides only inference selection.
  * systemPrompt appends and does not replace the type role.
  */
 export async function resolveExecWorker(
@@ -123,40 +129,50 @@ export async function resolveExecWorker(
 	options: ExecWorkerResolveOptions,
 ): Promise<ExecWorkerResolution> {
 	if (!request.type) {
+		if (!request.profile) {
+			return {
+				tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
+				...(options.parentModel ? { model: options.parentModel } : {}),
+				...(options.parentThinking ? { thinking: options.parentThinking } : {}),
+				...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
+			};
+		}
+		if (!options.registry) throw new Error("agents.run profile resolution requires Pi's model registry");
+		const resolved = resolveAgentProfile({
+			registry: options.registry as Parameters<typeof resolveAgentProfile>[0]["registry"],
+			parentModel: options.parentModelObject as never,
+			parentThinking: options.parentThinking as never,
+			explicitProfile: request.profile,
+		});
+		if (resolved.error) throw new Error(resolved.error);
 		return {
 			tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
-			...(request.model ? { model: request.model } : options.parentModel ? { model: options.parentModel } : {}),
-			...(request.thinking
-				? { thinking: request.thinking }
-				: options.parentThinking
-					? { thinking: options.parentThinking }
-					: {}),
+			...(resolved.model ? { model: `${resolved.model.provider}/${resolved.model.id}` } : {}),
+			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
 			...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
 		};
 	}
 
-	const config = resolveExecAgentConfig(options.cwd, request.type);
+	const config = resolveExecAgentConfig(
+		{ cwd: options.cwd, projectTrusted: options.projectTrusted === true },
+		request.type,
+	);
 	const tools = request.tools ?? defaultToolsFor(config);
-	let model = request.model;
-	let thinking = request.thinking ?? config.thinking;
-
-	if (!request.model && options.registry) {
-		const resolved = await resolveAgentModel({
-			cwd: options.cwd,
-			projectTrusted: options.projectTrusted === true,
-			registry: options.registry as Parameters<typeof resolveAgentModel>[0]["registry"],
-			parentModel: options.parentModelObject as never,
-			config,
-			type: config.name,
-		});
-		if (resolved.model) model = `${resolved.model.provider}/${resolved.model.id}`;
-		if (!request.thinking && resolved.thinkingLevel) thinking = resolved.thinkingLevel;
-	} else if (!request.model && config.model) {
-		model = config.model;
+	if (!options.registry && (request.profile || config.profile)) {
+		throw new Error("agents.run profile resolution requires Pi's model registry");
 	}
-
-	if (!model && options.parentModel) model = options.parentModel;
-	if (!thinking && options.parentThinking) thinking = options.parentThinking;
+	const resolved = options.registry
+		? resolveAgentProfile({
+				registry: options.registry as Parameters<typeof resolveAgentProfile>[0]["registry"],
+				parentModel: options.parentModelObject as never,
+				parentThinking: options.parentThinking as never,
+				config,
+				explicitProfile: request.profile,
+			})
+		: { model: options.parentModelObject, thinking: options.parentThinking };
+	if ("error" in resolved && resolved.error) throw new Error(resolved.error);
+	const model = resolved.model ? `${resolved.model.provider}/${resolved.model.id}` : options.parentModel;
+	const thinking = resolved.thinking ?? options.parentThinking;
 
 	return {
 		type: config.name,
@@ -244,8 +260,7 @@ export function agentOperationArgs(rawArgs: Record<string, unknown>): Record<str
 		...(typeof rawArgs.task === "string" ? { task: rawArgs.task } : {}),
 		...(type ? { type } : {}),
 		...(name ? { name } : {}),
-		...(typeof rawArgs.model === "string" ? { model: rawArgs.model } : {}),
-		...(typeof rawArgs.thinking === "string" ? { thinking: rawArgs.thinking } : {}),
+		...(typeof rawArgs.profile === "string" ? { profile: rawArgs.profile } : {}),
 		...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools } : {}),
 		...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
 		...("context" in rawArgs ? { context: summarizeBound(rawArgs.context) } : {}),
@@ -282,6 +297,7 @@ export function buildAgentCliArgs(
 	request: AgentRequest,
 	options: {
 		tools: readonly string[];
+		projectTrusted: boolean;
 		model?: string;
 		thinking?: string;
 		contextPath?: string;
@@ -301,6 +317,7 @@ export function buildAgentCliArgs(
 		"json",
 		"--print",
 		"--no-session",
+		options.projectTrusted ? "--approve" : "--no-approve",
 		"--no-extensions",
 		"--no-skills",
 		"--tools",
@@ -323,7 +340,7 @@ export function buildAgentCliArgs(
 
 export function prepareAgentSpawn(
 	request: AgentRequest,
-	options: { tools: readonly string[]; model?: string; thinking?: string },
+	options: { tools: readonly string[]; projectTrusted: boolean; model?: string; thinking?: string },
 ): { args: string[]; cleanup: () => void; env?: Record<string, string> } {
 	const cleanups: Array<() => void> = [];
 	try {
@@ -338,6 +355,7 @@ export function prepareAgentSpawn(
 		return {
 			args: buildAgentCliArgs(request, {
 				tools,
+				projectTrusted: options.projectTrusted,
 				...(options.model ? { model: options.model } : {}),
 				...(options.thinking ? { thinking: options.thinking } : {}),
 				...(context ? { contextPath: context.path } : {}),

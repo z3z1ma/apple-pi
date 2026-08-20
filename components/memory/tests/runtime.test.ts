@@ -33,12 +33,10 @@ describe("Runtime V3 behavior", () => {
 		rmSync(agentDir, { recursive: true, force: true });
 	});
 
-	it("uses the observational-memory mode when present", async () => {
+	it("uses the background model profile", async () => {
 		writeFileSync(
-			join(agentDir, "modes.json"),
-			JSON.stringify({
-				modes: { "observational-memory": { provider: "anthropic", modelId: "configured", thinkingLevel: "max" } },
-			}),
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "anthropic/configured", thinking: "max" } } }),
 		);
 		const runtime = new Runtime();
 		const configured = { provider: "anthropic", id: "configured" };
@@ -62,44 +60,34 @@ describe("Runtime V3 behavior", () => {
 		});
 	});
 
-	it("falls back to the session model and notifies when the configured mode model is missing", async () => {
+	it("fails instead of substituting the session model when the profile model is unavailable", async () => {
 		writeFileSync(
-			join(agentDir, "modes.json"),
-			JSON.stringify({
-				modes: { "observational-memory": { provider: "anthropic", modelId: "missing" } },
-			}),
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "anthropic/missing", thinking: "low" } } }),
 		);
 		const runtime = new Runtime();
-		const notify = vi.fn();
 		const sessionModel = { provider: "openai" };
-		const registry = modelRegistry();
 
-		const result = await runtime.resolveModel({
-			cwd: agentDir,
-			projectTrusted: false,
-			model: sessionModel,
-			modelRegistry: registry,
-			hasUI: true,
-			ui: { notify },
+		await expect(
+			runtime.resolveModel({ model: sessionModel, modelRegistry: modelRegistry(), hasUI: false }),
+		).resolves.toMatchObject({
+			ok: false,
+			reason: expect.stringContaining('profile "background" selects unavailable model "anthropic/missing"'),
 		});
-
-		expect(result).toMatchObject({ ok: true, model: sessionModel });
-		expect(notify).toHaveBeenCalledWith(
-			"Observational memory: configured mode anthropic/missing not found, using session model",
-			"warning",
-		);
 	});
 
 	it("returns model resolution failures", async () => {
 		const runtime = new Runtime();
 		await expect(
 			runtime.resolveModel({ model: undefined, modelRegistry: modelRegistry(), hasUI: false }),
-		).resolves.toEqual({
-			ok: false,
-			reason: "no model available (session has no model and no observational-memory mode configured)",
-		});
+		).resolves.toMatchObject({ ok: false, reason: expect.stringContaining("model-profiles.json") });
 
-		const registry = modelRegistry({ auth: { ok: false } });
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "anthropic/memory", thinking: "low" } } }),
+		);
+		const model = { provider: "anthropic", id: "memory" };
+		const registry = modelRegistry({ found: model, auth: { ok: false } });
 		await expect(
 			runtime.resolveModel({ model: { provider: "anthropic" }, modelRegistry: registry, hasUI: false }),
 		).resolves.toEqual({
@@ -111,7 +99,12 @@ describe("Runtime V3 behavior", () => {
 	it("accepts OAuth-shaped auth (headers only, no apiKey)", async () => {
 		const runtime = new Runtime();
 		const model = { provider: "kimi-coding", id: "kimi-for-coding" };
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "kimi-coding/kimi-for-coding", thinking: "low" } } }),
+		);
 		const registry = modelRegistry({
+			found: model,
 			auth: { ok: true, apiKey: undefined, headers: { Authorization: "Bearer oauth-token" } },
 		});
 
@@ -122,22 +115,37 @@ describe("Runtime V3 behavior", () => {
 			model,
 			apiKey: undefined,
 			headers: { Authorization: "Bearer oauth-token" },
+			thinkingLevel: "low",
 		});
 	});
 
 	it("accepts apiKey auth unchanged", async () => {
 		const runtime = new Runtime();
 		const model = { provider: "anthropic", id: "claude" };
-		const registry = modelRegistry({ auth: { ok: true, apiKey: "sk-ant-key" } });
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "anthropic/claude", thinking: "medium" } } }),
+		);
+		const registry = modelRegistry({ found: model, auth: { ok: true, apiKey: "sk-ant-key" } });
 
 		const result = await runtime.resolveModel({ model, modelRegistry: registry, hasUI: false });
 
-		expect(result).toEqual({ ok: true, model, apiKey: "sk-ant-key", headers: undefined });
+		expect(result).toEqual({
+			ok: true,
+			model,
+			apiKey: "sk-ant-key",
+			headers: undefined,
+			thinkingLevel: "medium",
+		});
 	});
 
 	it("rejects auth that carries neither apiKey nor usable headers", async () => {
 		const runtime = new Runtime();
-		const model = { provider: "xai" };
+		const model = { provider: "xai", id: "memory" };
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "xai/memory", thinking: "low" } } }),
+		);
 
 		for (const auth of [
 			{ ok: true },
@@ -145,7 +153,7 @@ describe("Runtime V3 behavior", () => {
 			{ ok: true, headers: {} },
 			{ ok: true, headers: { Authorization: "" } },
 		]) {
-			const registry = modelRegistry({ auth });
+			const registry = modelRegistry({ found: model, auth });
 			await expect(runtime.resolveModel({ model, modelRegistry: registry, hasUI: false })).resolves.toEqual({
 				ok: false,
 				reason: 'no API key or auth headers for provider "xai"',
@@ -156,8 +164,12 @@ describe("Runtime V3 behavior", () => {
 	it("points OAuth providers at /login when auth resolution fails", async () => {
 		const runtime = new Runtime();
 		const model = { provider: "openai-codex", id: "gpt-5-codex" };
+		writeFileSync(
+			join(agentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "openai-codex/gpt-5-codex", thinking: "low" } } }),
+		);
 		const registry = {
-			...modelRegistry({ auth: { ok: false, error: "refresh failed" } }),
+			...modelRegistry({ found: model, auth: { ok: false, error: "refresh failed" } }),
 			isUsingOAuth: vi.fn((candidate: { provider?: string }) => candidate?.provider === "openai-codex"),
 		};
 

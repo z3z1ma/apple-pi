@@ -3,8 +3,8 @@
  * turn and injects concise advice inline. Port of oh-my-pi's advisor onto
  * upstream pi's extension API.
  *
- * Enable with `/advisor on` (persisted). The advisor model defaults to
- * openrouter/z-ai/glm-5.2 (override via an "advisor" entry in modes.json).
+ * Enable with `/advisor on` (persisted). The advisor uses the user-global
+ * `deep` model profile.
  *
  * Delivery model. Every advise() call enters one shared queue; only primary turn
  * boundaries or advisor-review completion flush it. Nothing is a hard interrupt:
@@ -58,7 +58,7 @@ import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-age
 import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
-import { resolveModelAndThinking } from "../../shared/src/mode-utils.js";
+import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { buildAdvisorSeed, type SettledAdvice } from "./seed.js";
@@ -992,10 +992,8 @@ function sessionIdFromCtx(ctx: unknown): string | undefined {
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
 
 import {
+	ADVISOR_MODEL_PROFILE,
 	appendPrimaryAdvisorPrompt,
-	DEFAULT_ADVISOR_MODEL,
-	DEFAULT_ADVISOR_PROVIDER,
-	DEFAULT_THINKING,
 	loadEnabled,
 	loadSystemPrompt,
 	saveEnabled,
@@ -1028,6 +1026,8 @@ export default function (pi: ExtensionAPI) {
 	// Lazily-built advisor state, rebuilt when cwd/model changes or session resets.
 	let runtime: AdvisorRuntime | undefined;
 	let activeModelLabel: string | undefined;
+	let modelProfileError: string | undefined;
+	let lastNotifiedProfileError: string | undefined;
 	let builtForCwd: string | undefined;
 	let pendingUserTexts: string[] = [];
 	let unwatchBash: (() => void) | undefined;
@@ -1224,41 +1224,43 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ---- build the advisor agent lazily (needs ctx for model/registry/cwd) ----
-	async function ensureRuntime(ctx: {
-		cwd: string;
-		modelRegistry: any;
-		model: any;
-		isProjectTrusted(): boolean;
-		sessionManager: PrimarySessionManager;
-	}): Promise<AdvisorRuntime | undefined> {
+	async function ensureRuntime(
+		ctx: {
+			cwd: string;
+			modelRegistry: any;
+			hasUI?: boolean;
+			ui?: { notify(message: string, level: "warning"): void };
+			isProjectTrusted?(): boolean;
+			sessionManager: PrimarySessionManager;
+		},
+		notifyProfileError = true,
+	): Promise<AdvisorRuntime | undefined> {
 		if (runtime && builtForCwd === ctx.cwd) return runtime;
 		if (runtime && builtForCwd !== ctx.cwd) teardown();
 
-		if (!ctx.model) return undefined;
-
-		const projectTrusted = ctx.isProjectTrusted();
-		// Resolve advisor model: a trusted project's modes.json first, then the
-		// user-global mode, else the default.
+		const projectTrusted = ctx.isProjectTrusted?.() ?? false;
 		let model: any;
-		let thinkingLevel = DEFAULT_THINKING;
+		let thinkingLevel: any;
 		try {
-			const resolved = await resolveModelAndThinking(
-				ctx.cwd,
-				ctx.modelRegistry,
-				ctx.model,
-				DEFAULT_THINKING,
-				{ mode: "advisor" },
-				projectTrusted,
-			);
-			// An explicitly configured advisor model is valid even when it happens to
-			// be the same object as the primary model. Without one, use our hard default.
-			model = resolved.explicitModel ? resolved.model : undefined;
-			thinkingLevel = resolved.thinkingLevel || DEFAULT_THINKING;
-		} catch {}
-		if (!model) {
-			model = ctx.modelRegistry.find(DEFAULT_ADVISOR_PROVIDER, DEFAULT_ADVISOR_MODEL);
+			const resolved = resolveModelProfile(ADVISOR_MODEL_PROFILE, ctx.modelRegistry);
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(resolved.model);
+			if (!auth.ok) {
+				throw new Error(
+					`model profile ${JSON.stringify(ADVISOR_MODEL_PROFILE)} cannot authenticate ${resolved.model.provider}/${resolved.model.id}: ${auth.error ?? "authentication unavailable"}`,
+				);
+			}
+			model = resolved.model;
+			thinkingLevel = resolved.thinking;
+			modelProfileError = undefined;
+			lastNotifiedProfileError = undefined;
+		} catch (error) {
+			modelProfileError = error instanceof Error ? error.message : String(error);
+			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
+				lastNotifiedProfileError = modelProfileError;
+				ctx.ui.notify(`Advisor unavailable: ${modelProfileError}`, "warning");
+			}
+			return undefined;
 		}
-		if (!model) return undefined;
 
 		let builtRuntime!: AdvisorRuntime;
 		const builtAdviseTool = new AdviseTool((note, severity) => deliverAdvice(note, severity, builtRuntime));
@@ -1468,9 +1470,9 @@ export default function (pi: ExtensionAPI) {
 					updateStatus(ctx);
 					return;
 				}
-				const rt = await ensureRuntime(ctx as any);
+				const rt = await ensureRuntime(ctx as any, false);
 				if (!rt) {
-					ctx.ui.notify(`advisor enabled but no advisor model is available`, "warning");
+					ctx.ui.notify(`advisor enabled but unavailable: ${modelProfileError ?? "unknown profile error"}`, "warning");
 					return;
 				}
 				updateStatus(ctx);
@@ -1488,10 +1490,12 @@ export default function (pi: ExtensionAPI) {
 			if (arg === "on") {
 				enabled = true;
 				saveEnabled(true);
-				const rt = await ensureRuntime(ctx as any);
+				const rt = await ensureRuntime(ctx as any, false);
 				updateStatus(ctx);
 				ctx.ui.notify(
-					rt ? `advisor on — ${activeModelLabel}` : `advisor on, but no advisor model available`,
+					rt
+						? `advisor on — ${activeModelLabel}`
+						: `advisor on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
 					rt ? "info" : "warning",
 				);
 				return;

@@ -1,9 +1,9 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { loadModeSpec } from "../../shared/src/mode-utils.js";
+import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { CONSOLIDATION_ABORT_REASON, type ConsolidationAbortReason, isQuietConsolidationAbort } from "./abort.js";
-import { type Config, DEFAULTS, isThinkingLevel, loadConfig } from "./config.js";
+import { type Config, DEFAULTS, loadConfig } from "./config.js";
 
-export const OBSERVATIONAL_MEMORY_MODE = "observational-memory";
+export const OBSERVATIONAL_MEMORY_PROFILE = "background";
 
 /** Wall-clock cap for one curation pass. Hang backstop, not a quality target. */
 export const CONSOLIDATION_HANG_TIMEOUT_MS = 15 * 60 * 1000;
@@ -126,24 +126,13 @@ export class Runtime {
 	}
 
 	async resolveModel(ctx: ResolveCtx): Promise<ResolveResult> {
-		const route = await loadModeSpec(ctx.cwd ?? process.cwd(), OBSERVATIONAL_MEMORY_MODE, ctx.projectTrusted === true);
-		let model = ctx.model;
-		if (route?.provider && route.modelId) {
-			const configured = ctx.modelRegistry.find(route.provider, route.modelId);
-			if (configured) {
-				model = configured;
-			} else if (ctx.hasUI && ctx.ui) {
-				ctx.ui.notify(
-					`Observational memory: configured mode ${route.provider}/${route.modelId} not found, using session model`,
-					"warning",
-				);
-			}
+		let resolved: ReturnType<typeof resolveModelProfile>;
+		try {
+			resolved = resolveModelProfile(OBSERVATIONAL_MEMORY_PROFILE, ctx.modelRegistry);
+		} catch (error) {
+			return { ok: false, reason: error instanceof Error ? error.message : String(error) };
 		}
-		if (!model)
-			return {
-				ok: false,
-				reason: "no model available (session has no model and no observational-memory mode configured)",
-			};
+		const model = resolved.model;
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		const provider = (model as { provider?: string }).provider ?? "unknown";
 		if (!auth.ok || !hasUsableAuth(auth)) {
@@ -153,13 +142,12 @@ export class Runtime {
 				: `no API key or auth headers for provider "${provider}"`;
 			return { ok: false, reason };
 		}
-		const thinkingLevel = isThinkingLevel(route?.thinkingLevel) ? route.thinkingLevel : undefined;
 		return {
 			ok: true,
 			model,
 			apiKey: auth.apiKey as string | undefined,
 			headers: auth.headers as Record<string, string> | undefined,
-			...(thinkingLevel ? { thinkingLevel } : {}),
+			thinkingLevel: resolved.thinking,
 		};
 	}
 

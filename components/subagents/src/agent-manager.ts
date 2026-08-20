@@ -96,7 +96,7 @@ interface SpawnArgs {
 
 export interface SpawnOptions {
 	description: string;
-	/** Model selected at the spawning boundary, including modes.json routing. */
+	/** Model selected from the user-global profile at the spawning boundary. */
 	model?: Model<any>;
 	/** True when `model`/`thinkingLevel` are the completed spawn-boundary resolution. */
 	modelResolved?: boolean;

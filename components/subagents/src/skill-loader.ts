@@ -50,17 +50,21 @@ export interface PreloadedSkill {
 	content: string;
 }
 
-export function preloadSkills(skillNames: string[], cwd: string): PreloadedSkill[] {
-	return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd) }));
+export function preloadSkills(skillNames: string[], cwd: string, projectTrusted: boolean): PreloadedSkill[] {
+	return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd, projectTrusted) }));
 }
 
-function loadSkillContent(name: string, cwd: string): string {
+function loadSkillContent(name: string, cwd: string, projectTrusted: boolean): string {
 	if (isUnsafeName(name)) {
 		return `(Skill "${name}" skipped: name contains path traversal characters)`;
 	}
 	const roots = [
-		join(cwd, ".pi", "skills"), // project — Pi standard
-		join(cwd, ".agents", "skills"), // project — Agent Skills spec
+		...(projectTrusted
+			? [
+					join(cwd, ".pi", "skills"), // project — Pi standard
+					join(cwd, ".agents", "skills"), // project — Agent Skills spec
+				]
+			: []),
 		join(getAgentDir(), "skills"), // user — Pi standard
 		join(homedir(), ".agents", "skills"), // user — Agent Skills spec
 		join(homedir(), ".pi", "skills"), // legacy global, pre-Pi

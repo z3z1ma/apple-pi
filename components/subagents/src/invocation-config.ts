@@ -1,7 +1,6 @@
-import type { AgentConfig, JoinMode, ThinkingLevel } from "./types.js";
+import type { AgentConfig, JoinMode } from "./types.js";
 
 interface AgentInvocationParams {
-	thinking?: string;
 	run_in_background?: boolean;
 	isolated?: boolean;
 	inherit_context?: boolean;
@@ -12,7 +11,6 @@ export function resolveAgentInvocationConfig(
 	agentConfig: AgentConfig | undefined,
 	params: AgentInvocationParams,
 ): {
-	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	/** undefined = compact handoff, true = full parent branch, false = none. */
 	inheritContext: boolean;
@@ -21,13 +19,12 @@ export function resolveAgentInvocationConfig(
 	isolated: boolean;
 } {
 	return {
-		thinking: (params.thinking ?? agentConfig?.thinking) as ThinkingLevel | undefined,
 		// Turn ceilings are agent-definition or trusted-settings policy, never model arithmetic.
 		maxTurns: agentConfig?.maxTurns,
-		// These execution choices belong to each invocation. Explicit false is the
-		// ordinary case: the prompt is the complete handoff.
+		// Context inheritance belongs to each invocation. Advisor may have a trusted
+		// definition default; an explicit invocation boolean wins, including false.
 		inheritContext: params.inherit_context === true,
-		advisor: params.advisor === true,
+		advisor: params.advisor ?? agentConfig?.advisor ?? false,
 		runInBackground: params.run_in_background === true,
 		isolated: params.isolated === true,
 	};

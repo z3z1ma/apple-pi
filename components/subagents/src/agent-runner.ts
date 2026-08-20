@@ -20,12 +20,11 @@ import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
 import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
-import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getToolNamesForType } from "./agent-types.js";
+import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
 import { buildFullParentContext, extractText } from "./context.js";
-import { DEFAULT_AGENTS } from "./default-agents.js";
 import { detectEnv } from "./env.js";
-import { resolveAgentModel } from "./model-routing.js";
+import { resolveAgentProfile } from "./model-routing.js";
 import {
 	createNestedSubagentTools,
 	getMaxSubagentDepth,
@@ -141,7 +140,7 @@ export interface RunOptions {
 	/** Abort on the exact turn boundary instead of steering through the public grace window. */
 	hardTurnLimit?: boolean;
 	toolExecution?: "sequential" | "parallel";
-	/** Exact internal role profile; unlike registry agents, this cannot be replaced by project files. */
+	/** Exact internal role configuration; unlike registry agents, this cannot be replaced by project files. */
 	agentConfig?: AgentConfig;
 	/** Enforcement that runs before the session's existing beforeToolCall hook. */
 	toolPolicy?: ManagedAgentToolPolicy;
@@ -315,21 +314,21 @@ export async function runAgent(
 	prompt: string,
 	options: RunOptions,
 ): Promise<RunResult> {
-	const registeredAgentConfig = getAgentConfig(type);
 	const suppliedAgentConfig = options.agentConfig;
-	const agentConfig = suppliedAgentConfig ?? registeredAgentConfig;
-	const config = suppliedAgentConfig
-		? {
-				displayName: suppliedAgentConfig.displayName ?? suppliedAgentConfig.name,
-				color: suppliedAgentConfig.color,
-				description: suppliedAgentConfig.description,
-				builtinToolNames: suppliedAgentConfig.builtinToolNames ?? BUILTIN_TOOL_NAMES,
-				extensions: suppliedAgentConfig.extensions,
-				excludeExtensions: suppliedAgentConfig.excludeExtensions,
-				skills: suppliedAgentConfig.skills,
-				promptMode: suppliedAgentConfig.promptMode,
-			}
-		: getConfig(type);
+	const agentConfig = suppliedAgentConfig ?? getAgentConfig(type);
+	if (!agentConfig || agentConfig.enabled === false) {
+		throw new Error(`Unknown or disabled agent type: "${type}"`);
+	}
+	const config = {
+		displayName: agentConfig.displayName ?? agentConfig.name,
+		color: agentConfig.color,
+		description: agentConfig.description,
+		builtinToolNames: agentConfig.builtinToolNames ?? BUILTIN_TOOL_NAMES,
+		extensions: agentConfig.extensions,
+		excludeExtensions: agentConfig.excludeExtensions,
+		skills: agentConfig.skills,
+		promptMode: agentConfig.promptMode,
+	};
 	const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
 
 	// Resolve working directory: explicit override > parent cwd.
@@ -351,7 +350,7 @@ export async function runAgent(
 
 	// Skill preloading: when skills is string[], preload their content into prompt
 	if (Array.isArray(skills)) {
-		const loaded = preloadSkills(skills, configCwd);
+		const loaded = preloadSkills(skills, configCwd, projectTrusted);
 		if (loaded.length > 0) {
 			extras.skillBlocks = loaded;
 		}
@@ -361,23 +360,15 @@ export async function runAgent(
 		? (suppliedAgentConfig.builtinToolNames ?? [...BUILTIN_TOOL_NAMES])
 		: getToolNamesForType(type);
 
-	// Build system prompt from agent config
-	let systemPrompt: string;
-	if (agentConfig) {
-		systemPrompt = buildAgentPrompt(agentConfig, effectiveCwd, env, parentSystemPrompt, extras);
-	} else {
-		// Unknown type fallback: spread the canonical general-purpose config (defensive —
-		// unreachable in practice since index.ts resolves unknown types before calling runAgent).
-		const fallback = DEFAULT_AGENTS.get("general-purpose");
-		if (!fallback) throw new Error(`No fallback config available for unknown type "${type}"`);
-		systemPrompt = buildAgentPrompt({ ...fallback, name: type }, effectiveCwd, env, parentSystemPrompt, extras);
-	}
+	// Build system prompt from the validated agent config.
+	const systemPrompt = buildAgentPrompt(agentConfig, effectiveCwd, env, parentSystemPrompt, extras);
 
 	// When skills is string[], we've already preloaded them into the prompt.
 	// Still pass noSkills: true since we don't need the skill loader to load them again.
 	const noSkills = skills === false || Array.isArray(skills);
 
 	const agentDir = getAgentDir();
+	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
 	// Same `--no-extensions` plus `-e` contract as pi_exec workers. Children
 	// also load MCP, and the advisor sidecar when requested. Suppress
@@ -390,6 +381,7 @@ export async function runAgent(
 	const loader = new DefaultResourceLoader({
 		cwd: configCwd,
 		agentDir,
+		settingsManager,
 		noExtensions,
 		additionalExtensionPaths,
 		noSkills,
@@ -420,20 +412,16 @@ export async function runAgent(
 	// Top-level and nested Agent tools resolve routing before queueing a spawn so
 	// queued work cannot observe a later config change. Direct runAgent callers
 	// retain the same resolution here.
-	const resolvedModel = options.modelResolved
+	const resolvedProfile = options.modelResolved
 		? { model: options.model, thinkingLevel: options.thinkingLevel }
-		: await resolveAgentModel({
-				cwd: configCwd,
-				projectTrusted,
+		: resolveAgentProfile({
 				registry: ctx.modelRegistry,
 				parentModel: ctx.model,
+				parentThinking: ctx.thinkingLevel,
 				config: agentConfig,
-				type,
 			});
-	const model = selectAgentModel(options.model, resolvedModel);
-
-	// Resolve thinking level: explicit option > custom frontmatter > named built-in mode route > embedded built-in fallback > undefined (inherit)
-	const thinkingLevel = options.thinkingLevel ?? resolvedModel.thinkingLevel ?? agentConfig?.thinking;
+	const model = selectAgentModel(options.model, resolvedProfile);
+	const thinkingLevel = options.thinkingLevel ?? resolvedProfile.thinkingLevel;
 
 	const disallowedSet = agentConfig?.disallowedTools ? new Set(agentConfig.disallowedTools) : undefined;
 
@@ -458,6 +446,7 @@ export async function runAgent(
 					maxSubagentDepth: effectiveMaxDepth,
 					allowedSubagents: agentConfig.allowedSubagents,
 					configCwd,
+					projectTrusted,
 				})
 			: [];
 	const nestedToolNames = new Set(nestedTools.map((tool) => tool.name));
@@ -480,7 +469,6 @@ export async function runAgent(
 	}
 	const sessionExcludeTools = [...denyTools];
 
-	const settingsManager = SettingsManager.create(configCwd, agentDir);
 	const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
 	const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
 	// Frontmatter wins; top-level sessions persist by default so child

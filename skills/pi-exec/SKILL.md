@@ -50,11 +50,11 @@ The live `code` parameter lists every host signature, including web methods and 
 - `await skills.list()` → `[{ name, description }]` — session skills (package, project, user). `await skills.body({ name })` → SKILL.md body with frontmatter stripped. Throws if the skill is missing.
 - `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — captured extension tools only, not `pi.*`
 - `await extensions.<name>(args)` → `{ text, content, details, usage? }`
-- `type AgentRequest = string | { task: string, type?, name?, model?, thinking?, tools?, systemPrompt?, context?, outputSchema? }`
+- `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
 - `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
-- `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, `general-purpose`, …) and supplies that type's tools, prompt, and model/thinking as defaults. Explicit `tools` / `model` / `thinking` override those defaults. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
-- Review planner/reviewer/verifier stay custom `systemPrompt` workers. Do not set `type` to those roles. Ralph increments use `type: "general-purpose"` with Ralph instructions in the task.
+- `type` selects a built-in or Markdown agent (`Explore`, `Plan`, `Research`, `Counsel`, `Implement`, `Design`, …) and supplies that type's tools, prompt, and default model profile. An explicit `profile` overrides only model/thinking; it never grants tools or changes the role. Explicit `tools` still override capabilities. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker.
+- Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` to those program roles. Ralph explicitly grants its write-capable tool list.
 - `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
 - `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
 - Workers load the ledger and `session_search` extensions. They do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
@@ -84,6 +84,7 @@ const rows = await parallel(ids, async (id) => {
 const verdict = await agent({
   task: "Which row is a real regression?",
   name: "judge",
+  profile: "deep",
   context: rows,
   outputSchema: {
     type: "object",
@@ -123,7 +124,7 @@ return parallel(files, async (name) => {
 
 The worker reads `context.path`. Do not `pi.read` the file in the parent just to stuff the body into `task`.
 
-Select a catalog lane when the worker should follow that role. Untyped workers stay generic and read-only — that is the review pattern. Ralph increments are typed `general-purpose` workers.
+Select a catalog lane when the worker should follow that role. Untyped workers default to generic and read-only; program roles such as review and Ralph provide their own `systemPrompt`, and Ralph explicitly grants write-capable tools.
 
 ```javascript
 const map = await agents.run({

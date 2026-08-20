@@ -177,11 +177,12 @@ async function runAgent(
 	signal: AbortSignal | undefined,
 	onActivity?: (activity: string) => void,
 ): Promise<WorkerResult> {
+	const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
 	const resolved = await resolveExecWorker(request, {
 		cwd: ctx.cwd,
 		parentModel: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
 		parentThinking: ctx.thinkingLevel,
-		projectTrusted: typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false,
+		projectTrusted,
 		registry: ctx.modelRegistry,
 		parentModelObject: ctx.model,
 	});
@@ -195,6 +196,7 @@ async function runAgent(
 		{ ...request, ...(resolved.systemPrompt ? { systemPrompt: resolved.systemPrompt } : {}) },
 		{
 			tools: resolved.tools,
+			projectTrusted,
 			...(resolved.model ? { model: resolved.model } : {}),
 			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
 		},

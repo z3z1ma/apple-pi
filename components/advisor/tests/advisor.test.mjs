@@ -65,7 +65,7 @@ const ALIAS = {
 };
 const jiti = createJiti(import.meta.url, { moduleCache: false, alias: ALIAS });
 const A = await jiti.import(resolve(HERE, "../src/index.ts"));
-const M = await jiti.import(resolve(HERE, "../../shared/src/mode-utils.ts"));
+const P = await jiti.import(resolve(HERE, "../../shared/src/model-profiles.ts"));
 
 // formatTurnDelta returns a markdown string with verbatim (un-escaped) content.
 const renderDelta = (o) => A.formatTurnDelta(o);
@@ -1205,23 +1205,19 @@ test("buildReviewMessages: re-prime context precedes but is distinct from the ne
 	assert.equal(messages[2].content[0].text, "LATEST-ACTIVITY");
 });
 
-test("project advisor mode and WATCHDOG are honored only when the project is trusted", async () => {
+test("the global deep profile and trusted project WATCHDOG have separate authority", async () => {
 	const root = mkdtempSync(join(tmpdir(), "advisor-trust-"));
 	const agentDir = join(root, "agent");
 	const cwd = join(root, "project");
 	mkdirSync(join(agentDir, "system-prompts"), { recursive: true });
 	mkdirSync(join(cwd, ".pi"), { recursive: true });
 	writeFileSync(
-		join(agentDir, "modes.json"),
-		JSON.stringify({
-			modes: { advisor: { provider: "global-provider", modelId: "global-model", thinkingLevel: "low" } },
-		}),
+		join(agentDir, "model-profiles.json"),
+		JSON.stringify({ profiles: { deep: { model: "global-provider/global-model", thinking: "low" } } }),
 	);
 	writeFileSync(
-		join(cwd, ".pi", "modes.json"),
-		JSON.stringify({
-			modes: { advisor: { provider: "project-provider", modelId: "project-model", thinkingLevel: "high" } },
-		}),
+		join(cwd, ".pi", "model-profiles.json"),
+		JSON.stringify({ profiles: { deep: { model: "project-provider/project-model", thinking: "high" } } }),
 	);
 	writeFileSync(join(agentDir, "system-prompts", "advisor.md"), "GLOBAL-ADVISOR-PROMPT");
 	writeFileSync(join(cwd, "WATCHDOG.md"), "PROJECT-WATCHDOG-GUIDANCE");
@@ -1229,30 +1225,13 @@ test("project advisor mode and WATCHDOG are honored only when the project is tru
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
-		assert.deepEqual(await M.loadModeSpec(cwd, "advisor", false), {
-			provider: "global-provider",
-			modelId: "global-model",
-			thinkingLevel: "low",
-		});
-		assert.deepEqual(await M.loadModeSpec(cwd, "advisor", true), {
-			provider: "project-provider",
-			modelId: "project-model",
-			thinkingLevel: "high",
-		});
 		const primaryModel = { provider: "global-provider", id: "global-model" };
-		const resolved = await M.resolveModelAndThinking(
-			cwd,
-			{
-				find: (provider, modelId) =>
-					provider === primaryModel.provider && modelId === primaryModel.id ? primaryModel : undefined,
-			},
-			primaryModel,
-			"medium",
-			{ mode: "advisor" },
-			false,
-		);
-		assert.equal(resolved.model, primaryModel, "an explicit advisor mode may intentionally use the primary model");
-		assert.equal(resolved.explicitModel, true);
+		const resolved = P.resolveModelProfile("deep", {
+			find: (provider, modelId) =>
+				provider === primaryModel.provider && modelId === primaryModel.id ? primaryModel : undefined,
+		});
+		assert.equal(resolved.model, primaryModel, "a profile may intentionally select the primary model");
+		assert.equal(resolved.thinking, "low");
 		const untrustedPrompt = A.loadSystemPrompt(cwd, false);
 		assert.match(untrustedPrompt, /^GLOBAL-ADVISOR-PROMPT/);
 		assert.doesNotMatch(untrustedPrompt, /<ledger-workbench>/);

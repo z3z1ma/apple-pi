@@ -2,13 +2,20 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_SUBAGENT_RESULT_WAIT_SECONDS, normalizeWaitSeconds, waitForAgentSettlement } from "../src/abortable.js";
+import {
+	DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS,
+	MAX_SUBAGENT_RESULT_WAIT_SECONDS,
+	normalizeWaitSeconds,
+	waitForAgentSettlement,
+} from "../src/abortable.js";
 import { selectAgentModel } from "../src/agent-runner.js";
+import { buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
+import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
-import { resolveAgentModel } from "../src/model-routing.js";
+import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { formatNotification } from "../src/notifications.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
@@ -48,40 +55,34 @@ describe("owned subagent surface", () => {
 		expect(notification).not.toContain(output);
 	});
 
-	it("uses Luna for the built-in read-only explorer", () => {
-		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
-		});
+	it("uses the quick profile for the built-in read-only explorer", () => {
+		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({ profile: "quick" });
 	});
 
 	it("registers the specialist catalog as built-ins with lane-specific tools", () => {
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
 		expect(DEFAULT_AGENTS.get("Research")).toMatchObject({
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
+			profile: "quick",
 			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Counsel")).toMatchObject({
-			model: "openai-codex/gpt-5.6-sol",
-			thinking: "xhigh",
+			profile: "deep",
 			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "high",
+			profile: "coding",
+			advisor: true,
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Implement")?.builtinToolNames).toBeUndefined();
 		expect(DEFAULT_AGENTS.get("Design")).toMatchObject({
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
+			profile: "visual-engineering",
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
@@ -92,119 +93,130 @@ describe("owned subagent surface", () => {
 		expect(DEFAULT_AGENTS.get("Counsel")?.systemPrompt).toMatch(/You advise; you do not implement/);
 		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
 		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
+		expect(DEFAULT_AGENTS.has("general-purpose")).toBe(false);
 	});
 
-	it("routes built-in agent models through modes.json and keeps custom frontmatter highest precedence", async () => {
+	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {
+		const disabled = {
+			...DEFAULT_AGENTS.get("Implement")!,
+			name: "Disabled",
+			enabled: false,
+			isDefault: false,
+		};
+		const registry = buildAgentRegistry(
+			new Map([
+				["Disabled", disabled],
+				["case", { ...disabled, name: "case", enabled: true }],
+				["CASE", { ...disabled, name: "CASE", enabled: true }],
+			]),
+		);
+		for (const requested of ["missing", "Disabled", "", "CaSe"]) {
+			const result = resolveSpawnTypeIn(registry, requested);
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.message).toContain("Available:");
+		}
+		expect(getToolNamesForType("missing")).toEqual([]);
+	});
+
+	it("allows a Markdown definition to create an ordinary custom general-purpose type", () => {
+		const root = temporaryRoot();
+		const agentDir = temporaryRoot();
+		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(root, ".pi", "agents", "custom-general.md"),
+			"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: coding\nadvisor: true\n---\n\nFollow the project contract.\n",
+		);
+		mkdirSync(join(agentDir, "agents"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "agents", "global-safe.md"),
+			"---\nname: global-safe\ndescription: User-owned global agent\n---\n\nGlobal role.\n",
+		);
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		try {
+			const registry = buildAgentRegistry(loadCustomAgents({ cwd: root, projectTrusted: true }));
+			expect(resolveSpawnTypeIn(registry, "general-purpose")).toEqual({ ok: true, type: "general-purpose" });
+			const untrusted = buildAgentRegistry(loadCustomAgents({ cwd: root, projectTrusted: false }));
+			expect(resolveSpawnTypeIn(untrusted, "general-purpose").ok).toBe(false);
+			expect(resolveSpawnTypeIn(untrusted, "global-safe")).toEqual({ ok: true, type: "global-safe" });
+			expect(registry.get("general-purpose")).toMatchObject({
+				profile: "coding",
+				advisor: true,
+				builtinToolNames: ["read", "edit"],
+			});
+			expect(registry.get("general-purpose")?.isDefault).toBeUndefined();
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+		}
+	});
+
+	it("rejects raw model and thinking fields in custom agent definitions", () => {
+		const root = temporaryRoot();
+		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(root, ".pi", "agents", "raw-model.md"),
+			"---\nname: raw-model\ndescription: Invalid raw route\nmodel: xai/direct\nthinking: high\n---\n\nInvalid role.\n",
+		);
+		expect(() => loadCustomAgents({ cwd: root, projectTrusted: true }, true)).toThrow(/raw model\/thinking fields/);
+	});
+
+	it("resolves semantic profiles exactly and lets an invocation override the type default", () => {
 		const root = temporaryRoot();
 		const globalRoot = join(root, "pi-agent");
 		mkdirSync(globalRoot, { recursive: true });
 		writeFileSync(
-			join(globalRoot, "modes.json"),
+			join(globalRoot, "model-profiles.json"),
 			JSON.stringify({
-				modes: {
-					explore: { provider: "anthropic", modelId: "route-explore", thinkingLevel: "high" },
-					plan: { provider: "anthropic", modelId: "route-plan", thinkingLevel: "xhigh" },
-					counsel: { provider: "anthropic", modelId: "route-counsel", thinkingLevel: "high" },
-					"general-purpose": { thinkingLevel: "low" },
+				profiles: {
+					quick: { model: "anthropic/fast", thinking: "low" },
+					deep: { model: "anthropic/deep", thinking: "xhigh" },
+					silent: { model: "anthropic/fast", thinking: "off" },
 				},
 			}),
 		);
 		const previous = process.env.PI_CODING_AGENT_DIR;
 		process.env.PI_CODING_AGENT_DIR = globalRoot;
 		try {
-			const registry = {
-				find: (provider: string, modelId: string) => {
-					const match = available.find((m) => m.provider === provider && m.id === modelId);
-					return match ?? undefined;
-				},
-				getAvailable: () => available,
-			};
 			const available = [
-				{ provider: "anthropic", id: "route-explore", name: "route-explore" },
-				{ provider: "anthropic", id: "route-plan", name: "route-plan" },
-				{ provider: "anthropic", id: "route-counsel", name: "route-counsel" },
-				{ provider: "anthropic", id: "explicit", name: "explicit" },
-				{ provider: "openai-codex", id: "custom-frontmatter", name: "custom-frontmatter" },
-				{ provider: "openai-codex", id: "parent-model", name: "parent-model" },
+				{ provider: "anthropic", id: "fast", name: "fast" },
+				{ provider: "anthropic", id: "deep", name: "deep" },
+				{ provider: "openai-codex", id: "parent", name: "parent" },
 			];
-			const parentModel = { provider: "openai-codex", id: "parent-model" } as any;
+			const registry = {
+				find: (provider: string, modelId: string) =>
+					available.find((model) => model.provider === provider && model.id === modelId),
+			};
+			const parentModel = available[2] as any;
 
-			const route = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
+			const quick = resolveAgentProfile({
 				registry,
 				parentModel,
 				config: DEFAULT_AGENTS.get("Explore"),
-				type: "Explore",
 			});
-			expect(route.model).toMatchObject({ provider: "anthropic", id: "route-explore" });
-			expect(route.thinkingLevel).toBe("high");
+			expect(quick.model).toMatchObject({ provider: "anthropic", id: "fast" });
+			expect(quick.thinkingLevel).toBe("low");
+			expect(quick.profile).toBe("quick");
 
-			const plan = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
-				registry,
-				parentModel,
-				config: DEFAULT_AGENTS.get("Plan"),
-				type: "Plan",
-			});
-			expect(plan.model).toMatchObject({ provider: "anthropic", id: "route-plan" });
-			expect(plan.thinkingLevel).toBe("xhigh");
-
-			const counsel = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
-				registry,
-				parentModel,
-				config: DEFAULT_AGENTS.get("Counsel"),
-				type: "Counsel",
-			});
-			expect(counsel.model).toMatchObject({ provider: "anthropic", id: "route-counsel" });
-			expect(counsel.thinkingLevel).toBe("high");
-
-			const custom = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
-				registry,
-				parentModel,
-				config: { ...DEFAULT_AGENTS.get("Explore")!, isDefault: false, model: "openai-codex/custom-frontmatter" },
-				type: "Explore",
-			});
-			expect(custom.model).toMatchObject({ provider: "openai-codex", id: "custom-frontmatter" });
-			expect(custom.thinkingLevel).toBe("medium");
-
-			const explicit = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
+			const overridden = resolveAgentProfile({
 				registry,
 				parentModel,
 				config: DEFAULT_AGENTS.get("Explore"),
-				type: "Explore",
-				explicitModel: "anthropic/explicit",
+				explicitProfile: "deep",
 			});
-			expect(explicit.model).toMatchObject({ provider: "anthropic", id: "explicit" });
+			expect(overridden.model).toMatchObject({ provider: "anthropic", id: "deep" });
+			expect(overridden.thinkingLevel).toBe("xhigh");
+			expect(overridden.profile).toBe("deep");
 
-			const generalPurpose = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
-				registry,
-				parentModel,
-				config: DEFAULT_AGENTS.get("general-purpose"),
-				type: "general-purpose",
-			});
-			expect(generalPurpose.model).toBe(parentModel);
-			expect(generalPurpose.thinkingLevel).toBe("low");
+			const off = resolveAgentProfile({ registry, config: DEFAULT_AGENTS.get("Explore"), explicitProfile: "silent" });
+			expect(off).toMatchObject({ model: available[0], thinking: "off", thinkingLevel: "off" });
 
-			const embeddedFallback = await resolveAgentModel({
-				cwd: root,
-				projectTrusted: false,
-				registry,
-				parentModel,
-				config: DEFAULT_AGENTS.get("Plan"),
-				type: "unrouted-built-in",
-			});
-			expect(embeddedFallback.model).toBe(parentModel);
-			expect(embeddedFallback.error).toBeUndefined();
+			const inherited = resolveAgentProfile({ registry, parentModel, parentThinking: "off" });
+			expect(inherited).toMatchObject({ model: parentModel, thinking: "off", thinkingLevel: "off" });
+
+			const missing = resolveAgentProfile({ registry, config: { profile: "missing" } });
+			expect(missing.model).toBeUndefined();
+			expect(missing.error).toMatch(/profile "missing" is not defined/);
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
@@ -226,7 +238,7 @@ describe("owned subagent surface", () => {
 		).toThrow("invalid configured model");
 	});
 
-	it("keeps explicit thinking overrides and normalizes invocation booleans", () => {
+	it("keeps inference selection out of invocation lifecycle normalization", () => {
 		const config = {
 			name: "reviewer",
 			description: "review",
@@ -234,30 +246,30 @@ describe("owned subagent surface", () => {
 			skills: true,
 			systemPrompt: "review",
 			promptMode: "replace",
-			model: "openai-codex/embedded",
-			thinking: "low" as const,
+			profile: "deep",
 			maxTurns: 11,
 		} satisfies AgentConfig;
 		const resolved = resolveAgentInvocationConfig(config, {
-			thinking: "high",
 			run_in_background: false,
 			isolated: false,
 			inherit_context: false,
 			advisor: false,
 		});
 		expect(resolved).toMatchObject({
-			thinking: "high",
 			maxTurns: 11,
 			inheritContext: false,
 			advisor: false,
 			runInBackground: false,
 			isolated: false,
 		});
+		expect(resolved).not.toHaveProperty("thinking");
 	});
 
-	it("uses explicit invocation booleans for context and advisor", () => {
+	it("uses agent Advisor defaults while preserving explicit invocation overrides", () => {
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ advisor: true });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ advisor: false });
 		expect(
-			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: false,
@@ -265,7 +277,7 @@ describe("owned subagent surface", () => {
 			}),
 		).toMatchObject({ inheritContext: false, advisor: false });
 		expect(
-			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("general-purpose"), {
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: true,
@@ -312,6 +324,7 @@ describe("owned subagent surface", () => {
 			maxSubagentDepth: 2,
 			allowedSubagents: "all",
 			configCwd: process.cwd(),
+			projectTrusted: false,
 		});
 		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
 		const result = await resultTool.execute(
@@ -324,7 +337,8 @@ describe("owned subagent surface", () => {
 		);
 	});
 
-	it("clamps model-selected wait durations", () => {
+	it("defaults result checks to five minutes and clamps model-selected waits", () => {
+		expect(normalizeWaitSeconds(undefined)).toBe(DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS);
 		expect(normalizeWaitSeconds(-1)).toBe(0);
 		expect(normalizeWaitSeconds(1.9)).toBe(1);
 		expect(normalizeWaitSeconds(MAX_SUBAGENT_RESULT_WAIT_SECONDS + 1)).toBe(MAX_SUBAGENT_RESULT_WAIT_SECONDS);
@@ -339,15 +353,21 @@ describe("owned subagent surface", () => {
 			maxSubagentDepth: 1,
 			allowedSubagents: "all",
 			configCwd: process.cwd(),
+			projectTrusted: false,
 		});
 		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
-		expect(agentSchema.required).toEqual(
-			expect.arrayContaining(["run_in_background", "isolated", "inherit_context", "advisor"]),
-		);
-		expect(agentSchema.properties.advisor.description).toContain("Keep false for exploration");
-		expect(resultSchema.required).toContain("wait_seconds");
+		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context"]));
+		expect(agentSchema.required).not.toContain("advisor");
+		expect(agentSchema.properties.profile.description).toContain("model/thinking only");
+		expect(agentSchema.properties).not.toHaveProperty("model");
+		expect(agentSchema.properties).not.toHaveProperty("thinking");
+		expect(agentSchema.properties.advisor.description).toContain("definition's Advisor default");
+		expect(resultSchema.required).not.toContain("wait_seconds");
 		expect(resultSchema.properties.wait_seconds.maximum).toBe(MAX_SUBAGENT_RESULT_WAIT_SECONDS);
+		expect(resultSchema.properties.wait_seconds.description).toContain(
+			`Omit to wait ${DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS} seconds`,
+		);
 	});
 
 	it("sanitizes settings to the retained orchestration controls", () => {
@@ -362,13 +382,31 @@ describe("owned subagent surface", () => {
 				schedulingEnabled: true,
 				agentMentions: "model",
 				outputTranscript: true,
+				fallbackSubagent: "Implement",
 			}),
 		);
-		const settings = loadSettings(root) as Record<string, unknown>;
+		const settings = loadSettings({ cwd: root, projectTrusted: true }) as Record<string, unknown>;
 		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false, widgetMode: "all" });
 		expect(settings).not.toHaveProperty("schedulingEnabled");
 		expect(settings).not.toHaveProperty("agentMentions");
 		expect(settings).not.toHaveProperty("outputTranscript");
+		expect(settings).not.toHaveProperty("fallbackSubagent");
+	});
+
+	it("ignores project subagent settings until the project is trusted", () => {
+		const project = temporaryRoot();
+		const agentDir = temporaryRoot();
+		mkdirSync(join(project, ".pi"), { recursive: true });
+		writeFileSync(join(project, ".pi", "subagents.json"), JSON.stringify({ maxConcurrent: 17 }));
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		try {
+			expect(loadSettings({ cwd: project, projectTrusted: false }).maxConcurrent).toBeUndefined();
+			expect(loadSettings({ cwd: project, projectTrusted: true }).maxConcurrent).toBe(17);
+		} finally {
+			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previous;
+		}
 	});
 
 	it("bounds recent transcript snapshots while preserving their newest content", () => {
@@ -422,6 +460,7 @@ describe("owned subagent surface", () => {
 			maxSubagentDepth: 2,
 			allowedSubagents: "all",
 			configCwd: process.cwd(),
+			projectTrusted: false,
 		});
 		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
 		const result = await resultTool.execute(
@@ -491,6 +530,7 @@ describe("owned subagent surface", () => {
 			maxSubagentDepth: 2,
 			allowedSubagents: "all",
 			configCwd: process.cwd(),
+			projectTrusted: false,
 		});
 		const stopTool = tools.find((tool) => tool.name === "stop_subagent") as any;
 
@@ -512,7 +552,7 @@ describe("owned subagent surface", () => {
 		let persistent = true;
 		const settings = { persistAgentSessions: false, maxConcurrent: 5 };
 		expect(saveSettings(settings, root)).toBe(true);
-		applySettings(loadSettings(root), {
+		applySettings(loadSettings({ cwd: root, projectTrusted: true }), {
 			setMaxConcurrent: () => {},
 			setDefaultMaxTurns: () => {},
 			setGraceTurns: () => {},
@@ -525,7 +565,6 @@ describe("owned subagent surface", () => {
 			},
 			setWidgetMode: () => {},
 			setMaxSubagentDepth: () => {},
-			setFallbackSubagent: () => {},
 		});
 		expect(persistent).toBe(false);
 	});

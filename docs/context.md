@@ -36,7 +36,7 @@ Commands and tools:
 - `/om:status` and `/om:view` — observational-memory state
 - `memory_source` — exact source lookup by observation or reflection ID
 
-Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level use the `observational-memory` entry in `modes.json` instead, following the same trusted-project then global lookup as other named modes. See [`components/memory/src/config.ts`](../components/memory/src/config.ts) for the validated operational keys and defaults.
+Observational-memory operational settings use the `observational-memory` key in global `~/.pi/agent/settings.json` or project `.pi/settings.json`; project values override global values. Its model and thinking level come from the user-global `background` model profile. Missing, invalid, unavailable, or unauthenticated profile selection skips consolidation with an observable failure; it never substitutes the session model. See [Model profiles](model-profiles.md) for inference policy and [`components/memory/src/config.ts`](../components/memory/src/config.ts) for the validated operational keys and defaults.
 
 ## Where memory persists
 

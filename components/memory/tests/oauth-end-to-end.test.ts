@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -164,6 +164,14 @@ describe("OAuth provider end-to-end consolidation", () => {
 			contextWindow: 200_000,
 			maxTokens: 8_000,
 		};
+		writeFileSync(
+			join(testAgentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "kimi-coding/om-e2e", thinking: "low" } } }),
+		);
+		const registry = oauthModelRegistry();
+		vi.spyOn(registry, "find").mockImplementation((provider, id) =>
+			provider === model.provider && id === model.id ? model : undefined,
+		);
 
 		const entries = [textCustomMessage("raw-1", "User: please remember that the OAuth login works.")];
 		const appended: Array<{ customType: string; data: any }> = [];
@@ -190,7 +198,7 @@ describe("OAuth provider end-to-end consolidation", () => {
 			hasUI: true,
 			ui: { notify: (message: string) => notices.push(message) },
 			model,
-			modelRegistry: oauthModelRegistry(),
+			modelRegistry: registry,
 			sessionManager: { getBranch: () => entries },
 		});
 		await runtime.consolidationPromise;
@@ -233,6 +241,14 @@ describe("OAuth provider end-to-end consolidation", () => {
 			contextWindow: 200_000,
 			maxTokens: 8_000,
 		};
+		writeFileSync(
+			join(testAgentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { background: { model: "openai-codex/gpt-5-codex", thinking: "low" } } }),
+		);
+		const registry = expiredOAuthModelRegistry("openai-codex");
+		vi.spyOn(registry, "find").mockImplementation((provider, id) =>
+			provider === model.provider && id === model.id ? model : undefined,
+		);
 		const entries = [textCustomMessage("raw-1", "User: please remember that the OAuth login works.")];
 		const notices: string[] = [];
 		const appended: unknown[] = [];
@@ -257,7 +273,7 @@ describe("OAuth provider end-to-end consolidation", () => {
 			hasUI: true,
 			ui: { notify: (message: string) => notices.push(message) },
 			model,
-			modelRegistry: expiredOAuthModelRegistry("openai-codex"),
+			modelRegistry: registry,
 			sessionManager: { getBranch: () => entries },
 		});
 		await runtime.consolidationPromise;

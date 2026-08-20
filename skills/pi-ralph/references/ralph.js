@@ -1,3 +1,4 @@
+const RALPH_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write"];
 const RALPH = `You are one fresh iteration of a Ralph loop.
 
 The goal and context paths are your frame of reference. Read the small ledger index or task first, follow links only as needed, and inspect the current repository before deciding that work is missing.
@@ -28,9 +29,11 @@ const failures = [];
 
 for (let iteration = 1; iteration <= iterations; iteration++) {
 	const result = await agents.run({
-		type: "general-purpose",
 		name: `ralph-${iteration}`,
-		task: `${RALPH}\n\nGoal:\n${goal}`,
+		profile: "coding",
+		tools: RALPH_TOOLS,
+		systemPrompt: RALPH,
+		task: `Goal:\n${goal}`,
 		context: { stack },
 	});
 	if (result.status === "failed") {

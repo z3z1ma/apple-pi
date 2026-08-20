@@ -96,7 +96,7 @@ const reviewContext = contextWithPatch(
 
 const review = await agents.run({
 	name: focus.id,
-	thinking: "high",
+	profile: "deep",
 	tools: READ_ONLY,
 	systemPrompt: REVIEWER,
 	task: "Investigate the assigned partition focus and return the typed review result.",
@@ -198,7 +198,7 @@ const verifierContext = contextWithPatch(
 
 const meta = await agent({
 	name: "review-verifier",
-	thinking: "xhigh",
+	profile: "deep",
 	tools: READ_ONLY,
 	systemPrompt: VERIFIER,
 	task: "Verify every candidate and assess the review coverage. Return the typed verdict.",

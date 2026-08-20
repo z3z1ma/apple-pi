@@ -1,72 +1,54 @@
-import type { Model } from "@earendil-works/pi-ai";
-import { loadModeSpec } from "../../shared/src/mode-utils.js";
-import { resolveModel } from "./model-resolver.js";
+import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import type { AgentConfig, ThinkingLevel } from "./types.js";
 
 interface ModelRegistry {
 	find(provider: string, modelId: string): Model<any> | undefined;
-	getAvailable?(): Array<{ provider: string; id: string }>;
 }
 
-type AgentModelResolution = {
+export interface AgentProfileResolution {
 	model: Model<any> | undefined;
 	thinkingLevel?: ThinkingLevel;
+	/** Exact profile value for CLI transports that accept an explicit off level. */
+	thinking?: ModelThinkingLevel;
+	profile?: string;
 	error?: string;
-};
-
-function resolveConfiguredModel(input: string, registry: ModelRegistry): Model<any> | string {
-	return resolveModel(input, registry as any) as Model<any> | string;
 }
 
 /**
- * Resolve the model and thinking level for an agent invocation.
- *
- * Model precedence is: explicit invocation > custom frontmatter > built-in
- * modes.json route > embedded built-in fallback > parent. Thinking is resolved
- * independently, so a route may set only `thinkingLevel`.
+ * Resolve the model profile selected by an invocation or agent definition.
+ * Profiles change inference resources only; the agent type remains the owner of
+ * prompts, tools, permissions, and lifecycle policy.
  */
-export async function resolveAgentModel(args: {
-	cwd?: string;
-	projectTrusted?: boolean;
+export function resolveAgentProfile(args: {
 	registry: ModelRegistry;
 	parentModel?: Model<any>;
+	parentThinking?: ModelThinkingLevel;
 	config?: Partial<AgentConfig>;
-	type?: string;
-	explicitModel?: string;
-}): Promise<AgentModelResolution> {
-	const { cwd = process.cwd(), projectTrusted = false, registry, parentModel, config, type, explicitModel } = args;
-	const configThinking = config?.thinking as ThinkingLevel | undefined;
-
-	if (explicitModel) {
-		const model = resolveConfiguredModel(explicitModel, registry);
-		return typeof model === "string"
-			? { model: parentModel, thinkingLevel: configThinking, error: model }
-			: { model, thinkingLevel: configThinking };
+	explicitProfile?: string;
+}): AgentProfileResolution {
+	const { registry, parentModel, parentThinking, config, explicitProfile } = args;
+	const profile = explicitProfile ?? config?.profile;
+	if (!profile) {
+		return {
+			model: parentModel,
+			thinking: parentThinking,
+			thinkingLevel: parentThinking,
+		};
 	}
-
-	// A Markdown definition replaces a built-in agent, including its model policy.
-	if (config && config.isDefault !== true && config.model) {
-		const model = resolveConfiguredModel(config.model, registry);
-		return typeof model === "string"
-			? { model: parentModel, thinkingLevel: configThinking, error: model }
-			: { model, thinkingLevel: configThinking };
+	try {
+		const resolved = resolveModelProfile(profile, registry);
+		return {
+			model: resolved.model,
+			thinking: resolved.thinking,
+			thinkingLevel: resolved.thinking,
+			profile: resolved.name,
+		};
+	} catch (error) {
+		return {
+			model: undefined,
+			profile,
+			error: error instanceof Error ? error.message : String(error),
+		};
 	}
-
-	if (config?.isDefault === true) {
-		const route = type ? await loadModeSpec(cwd, type, projectTrusted) : undefined;
-		const routeModel = route?.provider && route.modelId ? registry.find(route.provider, route.modelId) : undefined;
-		const thinkingLevel = (route?.thinkingLevel as ThinkingLevel | undefined) ?? configThinking;
-
-		if (routeModel) return { model: routeModel, thinkingLevel };
-
-		if (config.model) {
-			const embeddedModel = resolveConfiguredModel(config.model, registry);
-			// Embedded models are defaults, not configuration requirements. Preserve
-			// the historical fallback to the caller's model when one is unavailable.
-			if (typeof embeddedModel !== "string") return { model: embeddedModel, thinkingLevel };
-		}
-		return { model: parentModel, thinkingLevel };
-	}
-
-	return { model: parentModel, thinkingLevel: configThinking };
 }

@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOL_NAMES } from "./agent-types.js";
-import type { AgentConfig, ThinkingLevel } from "./types.js";
+import type { AgentConfig, SubagentConfigScope } from "./types.js";
 
 const RESERVED_IN_TYPE = ":";
 
@@ -25,15 +25,17 @@ const RESERVED_IN_TYPE = ":";
  * An agent's type comes from its required frontmatter `name:`. Two files can
  * claim the same name; the later load wins.
  */
-export function loadCustomAgents(cwd: string, strict = false): Map<string, AgentConfig> {
+export function loadCustomAgents(scope: SubagentConfigScope, strict = false): Map<string, AgentConfig> {
 	const globalDir = join(getAgentDir(), "agents");
-	const workspaceProjectDir = join(cwd, ".agents", "agents");
-	const projectDir = join(cwd, ".pi", "agents");
+	const workspaceProjectDir = join(scope.cwd, ".agents", "agents");
+	const projectDir = join(scope.cwd, ".pi", "agents");
 
 	const agents = new Map<string, AgentConfig>();
 	loadFromDir(globalDir, agents, "global", strict); // lowest priority
-	loadFromDir(workspaceProjectDir, agents, "project", strict); // shared workspace
-	loadFromDir(projectDir, agents, "project", strict); // highest priority (overwrites)
+	if (scope.projectTrusted) {
+		loadFromDir(workspaceProjectDir, agents, "project", strict); // shared workspace
+		loadFromDir(projectDir, agents, "project", strict); // highest priority (overwrites)
+	}
 
 	warnedLastLoad = warnedThisLoad;
 	warnedThisLoad = new Set();
@@ -69,6 +71,21 @@ function loadFromDir(
 			continue;
 		}
 
+		if (fm.model !== undefined || fm.thinking !== undefined) {
+			const message = `${path}: agent definitions select a model profile; raw model/thinking fields are not supported`;
+			if (strict) throw new Error(message);
+			warnIfNew(`Skipping agent file ${message}`);
+			continue;
+		}
+		const rawProfile = str(fm.profile);
+		const profile = rawProfile?.trim();
+		if (fm.profile !== undefined && (!profile || profile !== rawProfile)) {
+			const message = `${path}: profile must be a non-empty, unpadded string`;
+			if (strict) throw new Error(message);
+			warnIfNew(`Skipping agent file ${message}`);
+			continue;
+		}
+
 		const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
 
 		agents.set(name, {
@@ -83,11 +100,11 @@ function loadFromDir(
 			extensions: inheritField(fm.extensions),
 			excludeExtensions: csvListOptional(fm.exclude_extensions),
 			skills: inheritField(fm.skills),
-			model: str(fm.model),
-			thinking: str(fm.thinking) as ThinkingLevel | undefined,
+			profile,
 			maxTurns: nonNegativeInt(fm.max_turns),
 			persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
 			sessionDir: str(fm.session_dir),
+			advisor: typeof fm.advisor === "boolean" ? fm.advisor : undefined,
 			allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
 			systemPrompt: body.trim(),
 			promptMode: fm.prompt_mode === "append" ? "append" : "replace",

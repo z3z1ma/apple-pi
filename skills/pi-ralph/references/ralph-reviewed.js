@@ -1,6 +1,7 @@
 // Advanced example: Ralph increments with an inlined pi-review spine.
 // Not the default. Prefer /skill:pi-ralph then /skill:pi-review.
 const READ_ONLY = ["read", "grep", "find", "ls"];
+const RALPH_TOOLS = [...READ_ONLY, "bash", "edit", "write"];
 const PLANNER = "<copy skills/pi-review/references/planner.md>";
 const REVIEWER = "<copy skills/pi-review/references/reviewer.md>";
 const VERIFIER = "<copy skills/pi-review/references/verifier.md>";
@@ -136,7 +137,7 @@ async function reviewChange(files, background) {
 	);
 	const plan = await agent({
 		name: "review-planner",
-		thinking: "high",
+		profile: "deep",
 		tools: READ_ONLY,
 		systemPrompt: PLANNER,
 		task: "Partition the change and define focused investigations. Return the typed plan.",
@@ -222,7 +223,7 @@ async function reviewChange(files, background) {
 			}
 			const result = await agents.run({
 				name: focus.id,
-				thinking: "high",
+				profile: "deep",
 				tools: READ_ONLY,
 				systemPrompt: REVIEWER,
 				task: "Investigate the assigned partition focus and return the typed review result.",
@@ -346,7 +347,7 @@ async function reviewChange(files, background) {
 	);
 	const meta = await agent({
 		name: "review-verifier",
-		thinking: "xhigh",
+		profile: "deep",
 		tools: READ_ONLY,
 		systemPrompt: VERIFIER,
 		task: "Verify every candidate and assess the review coverage. Return the typed verdict.",
@@ -425,7 +426,7 @@ async function reviewChange(files, background) {
 }
 
 function incrementTask(findings) {
-	const parts = [RALPH, `Goal:\n${goal}`];
+	const parts = [`Goal:\n${goal}`];
 	if (findings.length > 0) {
 		parts.push(
 			`Address these verified review findings before starting new work:\n${JSON.stringify(findings, null, 2)}`,
@@ -441,8 +442,10 @@ for (let iteration = 1; ; iteration++) {
 	const headBefore = (await gitOutput("git rev-parse HEAD")).trim();
 	const before = await workspaceSnapshot();
 	const result = await agents.run({
-		type: "general-purpose",
 		name: `ralph-${iteration}`,
+		profile: "coding",
+		tools: RALPH_TOOLS,
+		systemPrompt: RALPH,
 		task: incrementTask(findings),
 		context: { stack, findings },
 	});

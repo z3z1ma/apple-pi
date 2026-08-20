@@ -42,12 +42,14 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 	});
 }
 
-/** The longest a result check may wait without returning control to its caller. */
-export const MAX_SUBAGENT_RESULT_WAIT_SECONDS = 300;
+/** The ordinary and longest result-check wait: five minutes, still bounded and abortable. */
+export const DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS = 300;
+export const MAX_SUBAGENT_RESULT_WAIT_SECONDS = DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS;
 export const MAX_SUBAGENT_RESULT_WAIT_MS = MAX_SUBAGENT_RESULT_WAIT_SECONDS * 1_000;
 
 /** Clamp model-facing wait input defensively at the tool boundary. */
-export function normalizeWaitSeconds(seconds: number): number {
+export function normalizeWaitSeconds(seconds: number | undefined): number {
+	if (seconds === undefined) return DEFAULT_SUBAGENT_RESULT_WAIT_SECONDS;
 	if (!Number.isFinite(seconds)) return 0;
 	return Math.min(MAX_SUBAGENT_RESULT_WAIT_SECONDS, Math.max(0, Math.floor(seconds)));
 }

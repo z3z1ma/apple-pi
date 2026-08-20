@@ -201,7 +201,7 @@ Typical flow:
 shape → research as needed → specify/decide → plan → inspect → /skill:pi-ralph → /skill:pi-review → distill
 ```
 
-Ralph is a `pi_exec` skill, not an extension. Each iteration is a fresh `general-purpose` agent that implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
+Ralph is a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker with the Ralph system prompt and explicit write-capable tools; it implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
 
 Not every task needs every record. The skills separate procedures; they do not require ceremony. A small but non-trivial task may need only `task.md`. Research, specs, decisions, plans, evidence records, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
 

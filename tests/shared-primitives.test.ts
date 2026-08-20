@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseArgv } from "../components/shared/src/argv.js";
@@ -146,21 +146,17 @@ describe("subagent settings rebinding", () => {
 			setMaxSubagentDepth: (value: number) => {
 				applied.maxSubagentDepth = value;
 			},
-			setFallbackSubagent: (value: string | undefined) => {
-				applied.fallbackSubagent = value;
-			},
 		};
 
-		applyCompleteSettings(loadSettings(first), appliers);
+		applyCompleteSettings(loadSettings({ cwd: first, projectTrusted: true }), appliers);
 		expect(applied).toMatchObject({ maxConcurrent: 9, widgetMode: "all" });
 		applySettings({ persistAgentSessions: false }, appliers);
 		expect(applied.persistAgentSessions).toBe(false);
-		applyCompleteSettings(loadSettings(second), appliers);
+		applyCompleteSettings(loadSettings({ cwd: second, projectTrusted: true }), appliers);
 		expect(applied).toMatchObject({
 			maxConcurrent: 4,
 			widgetMode: "background",
 			persistAgentSessions: true,
-			fallbackSubagent: undefined,
 		});
 	});
 });

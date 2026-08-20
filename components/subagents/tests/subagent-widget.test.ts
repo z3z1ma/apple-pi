@@ -75,7 +75,7 @@ describe("AgentWidget", () => {
 	function makeRecord(id: string, opts: { isBackground?: boolean; parentAgentId?: string } = {}) {
 		return {
 			id,
-			type: "general-purpose",
+			type: "Explore",
 			description: `${id} description`,
 			status: "running",
 			toolUses: 0,
@@ -161,7 +161,7 @@ describe("AgentWidget overflow accounting", () => {
 	function record(id: string, status: string) {
 		return {
 			id,
-			type: "general-purpose",
+			type: "Explore",
 			description: `${id} description`,
 			status,
 			toolUses: 0,

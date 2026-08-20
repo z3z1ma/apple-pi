@@ -37,30 +37,6 @@ export function setDefaultsDisabled(b: boolean): void {
 	disableDefaults = b;
 }
 
-/** `fallbackSubagent` value that disables the fallback entirely (strict dispatch). */
-export const NO_FALLBACK = "none";
-
-/**
- * Agent type substituted when a caller-supplied `subagent_type` doesn't resolve
- * to exactly one enabled agent. `undefined` keeps the historical behavior
- * (general-purpose); `NO_FALLBACK` makes dispatch fail closed. Set from
- * `subagents.json` (`fallbackSubagent`).
- *
- * Module state rather than an index.ts closure because both top-level and
- * nested dispatch paths need the same fallback decision.
- */
-let fallbackSubagent: string | undefined;
-
-/** Get the configured fallback agent type. undefined = general-purpose. */
-export function getFallbackSubagent(): string | undefined {
-	return fallbackSubagent;
-}
-
-/** Set the configured fallback agent type. undefined = general-purpose. */
-export function setFallbackSubagent(v: string | undefined): void {
-	fallbackSubagent = v;
-}
-
 /**
  * Build a registry map: DEFAULT_AGENTS first (unless disabled via settings),
  * then user agents overlaid on top (same name overrides the default).
@@ -155,19 +131,14 @@ export function resolveEnabledTypeIn(registry: Map<string, AgentConfig>, request
 
 /** Outcome of resolving a caller-supplied `subagent_type` into a spawnable type. */
 export type SpawnTypeResolution =
-	/** Spawn this type. `fellBackFrom` is set when it isn't what the caller asked for. */
-	| { ok: true; type: string; fellBackFrom?: string }
+	| { ok: true; type: string }
 	/** Refuse the spawn and return this message to the caller. */
 	| { ok: false; message: string };
 
 /**
- * Resolve a caller-supplied agent type against a registry, applying the
- * `fallbackSubagent` policy. The single decision point for top-level dispatch,
- * so a type that fails here never reaches `runAgent`, where `getConfig`
- * would silently substitute general-purpose.
- *
- * Unknown, disabled, and case-ambiguous names are all treated the same way:
- * the caller named something that doesn't identify exactly one enabled agent.
+ * Resolve a caller-supplied agent type strictly against a registry. Unknown,
+ * disabled, missing, and case-ambiguous names fail closed; dispatch never
+ * substitutes a different agent.
  *
  * Pure over `registry` — callers that need fresh agent files reload before
  * calling (the Agent tool already does, per spawn). Reloading here would mean
@@ -180,41 +151,8 @@ export function resolveSpawnTypeIn(registry: Map<string, AgentConfig>, requested
 	const key = resolveEnabledTypeIn(registry, raw);
 	if (key !== undefined) return { ok: true, type: key };
 
-	// A missing type follows the same policy as a wrong one rather than always
-	// erroring: before this setting existed an empty type fell back like any
-	// other unresolvable name, and only opting in should change that.
 	const reason = raw ? `Unknown or disabled agent type: "${raw}".` : "No agent type given.";
-
-	// Trimmed like `requested`: a padded value set programmatically would
-	// otherwise be reported as a missing agent.
-	const configured = typeof fallbackSubagent === "string" ? fallbackSubagent.trim() : undefined;
-
-	if (configured !== undefined && configured.toLowerCase() === NO_FALLBACK) {
-		return { ok: false, message: `${reason} Available: ${available()}.` };
-	}
-
-	if (configured !== undefined) {
-		// An explicitly configured fallback that is itself unusable is a
-		// misconfiguration, not a second chance to guess — say so rather than
-		// quietly dropping to general-purpose.
-		const fallbackKey = resolveUnambiguousKeyIn(registry, configured);
-		if (fallbackKey === undefined || registry.get(fallbackKey)?.enabled === false) {
-			return {
-				ok: false,
-				message:
-					`${reason} The configured fallbackSubagent "${configured}" is itself ` +
-					`unknown or disabled. Available: ${available()}.`,
-			};
-		}
-		return { ok: true, type: fallbackKey, fellBackFrom: raw };
-	}
-
-	// Unset: historical behavior, deliberately unchanged. #183 asks for the
-	// fallback to remain the default, so the pre-existing hole it leaves — an
-	// unregistered general-purpose resolving to `getConfig`'s all-tools hardcoded
-	// tier — is what `fallbackSubagent: none` is for, not something to close
-	// under everyone silently.
-	return { ok: true, type: "general-purpose", fellBackFrom: raw };
+	return { ok: false, message: `${reason} Available: ${available()}.` };
 }
 
 /** Resolve a caller-supplied agent type against the process-wide registry. */
@@ -262,12 +200,17 @@ export function getToolNamesForType(type: string): string[] {
 	const key = resolveKey(type);
 	const raw = key ? agents.get(key) : undefined;
 	const config = raw?.enabled !== false ? raw : undefined;
+	if (!config) return [];
 	// `undefined` (definition omitted the field) → all built-ins; an explicit `[]`
 	// (`tools: none` or a `tools:` with only `ext:` entries) → zero built-ins.
-	return config?.builtinToolNames ?? [...BUILTIN_TOOL_NAMES];
+	return config.builtinToolNames ?? [...BUILTIN_TOOL_NAMES];
 }
 
-/** Get config for a type (case-insensitive, returns a SubagentTypeConfig-compatible object). Falls back to general-purpose. */
+/**
+ * Get presentation metadata for a type. Unknown/stale record types remain
+ * renderable but receive no tools, skills, color, or inherited prompt policy;
+ * dispatch validation is intentionally stricter and happens before runAgent.
+ */
 export function getConfig(type: string): {
 	displayName: string;
 	color?: string;
@@ -293,28 +236,12 @@ export function getConfig(type: string): {
 		};
 	}
 
-	// Fallback for unknown/disabled types — general-purpose config
-	const gp = agents.get("general-purpose");
-	if (gp && gp.enabled !== false) {
-		return {
-			displayName: gp.displayName ?? gp.name,
-			color: gp.color,
-			description: gp.description,
-			builtinToolNames: gp.builtinToolNames ?? BUILTIN_TOOL_NAMES,
-			extensions: gp.extensions,
-			excludeExtensions: gp.excludeExtensions,
-			skills: gp.skills,
-			promptMode: gp.promptMode,
-		};
-	}
-
-	// Absolute fallback (should never happen)
 	return {
-		displayName: "Agent",
-		description: "General-purpose agent for complex, multi-step tasks",
-		builtinToolNames: BUILTIN_TOOL_NAMES,
+		displayName: type,
+		description: type,
+		builtinToolNames: [],
 		extensions: false,
-		skills: true,
-		promptMode: "append",
+		skills: false,
+		promptMode: "replace",
 	};
 }

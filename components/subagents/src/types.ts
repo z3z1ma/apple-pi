@@ -1,18 +1,11 @@
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { LifetimeUsage } from "./usage.js";
 
-export type { ThinkingLevel };
+export type ThinkingLevel = ModelThinkingLevel;
 export type SubagentType = string;
-export const DEFAULT_AGENT_NAMES = [
-	"general-purpose",
-	"Explore",
-	"Plan",
-	"Research",
-	"Counsel",
-	"Implement",
-	"Design",
-] as const;
+export type SubagentConfigScope = Readonly<{ cwd: string; projectTrusted: boolean }>;
+export const DEFAULT_AGENT_NAMES = ["Explore", "Plan", "Research", "Counsel", "Implement", "Design"] as const;
 
 export interface AgentConfig {
 	name: string;
@@ -25,11 +18,13 @@ export interface AgentConfig {
 	extensions: true | string[] | false;
 	excludeExtensions?: string[];
 	skills: true | string[] | false;
-	model?: string;
-	thinking?: ThinkingLevel;
+	/** User-global model profile name. Profiles select inference only, never capabilities. */
+	profile?: string;
 	maxTurns?: number;
 	persistSession?: boolean;
 	sessionDir?: string;
+	/** Default Advisor sidecar choice; an explicit invocation boolean overrides it. */
+	advisor?: boolean;
 	allowedSubagents?: "all" | string[];
 	systemPrompt: string;
 	promptMode: "replace" | "append";
@@ -85,6 +80,7 @@ export interface AgentRecord {
 
 export interface AgentInvocation {
 	modelName?: string;
+	profile?: string;
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;

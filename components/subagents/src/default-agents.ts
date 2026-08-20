@@ -33,28 +33,6 @@ Use Bash ONLY for read-only operations: ls, git status, git log, git diff, find,
 
 export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 	[
-		"general-purpose",
-		{
-			name: "general-purpose",
-			displayName: "Agent",
-			description:
-				"General-purpose agent for substantial independent work that would otherwise consume a large portion of the main context: open-ended research across many sources, multi-step investigation or execution, or a required fresh-context review. Do not use it when a specialist lane fits (Explore, Research, Plan, Counsel, Implement, Design). Do not use it for targeted file or symbol searches, routine planning, or work the main agent can complete with a short direct-tool sequence.",
-			// builtinToolNames omitted — means "all available tools" (resolved at lookup time)
-			extensions: false,
-			skills: true,
-			systemPrompt: `# Completion Contract
-You own the assigned task, not an open-ended improvement program.
-
-- Establish the task's acceptance criteria and take the smallest coherent path to satisfy them.
-- Batch independent inspection where practical; do not use one-tool micro-iterations when a coherent next step is clear.
-- Run the checks needed to support the result, then return your final answer immediately once the acceptance criteria are satisfied.
-- If progress needs missing authority, evidence, or a materially broader scope, report the blocker and useful findings instead of continuing to search for more work.
-- Do not expand scope merely because adjacent improvements are possible. The assigned prompt is authoritative; any parent handoff is context only.`,
-			promptMode: "append",
-			isDefault: true,
-		},
-	],
-	[
 		"Explore",
 		{
 			name: "Explore",
@@ -64,10 +42,7 @@ You own the assigned task, not an open-ended improvement program.
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
-			// Fast model for read-only search. resolveModel can fall back to the same
-			// model under another provider when the Codex provider is unavailable.
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
+			profile: "quick",
 			systemPrompt: `${READ_ONLY_CONTRACT}
 
 # Role
@@ -97,8 +72,7 @@ Your role is EXCLUSIVELY to search and analyze existing local code.
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
-			model: "openai-codex/gpt-5.6-sol",
-			thinking: "xhigh",
+			profile: "deep",
 			systemPrompt: `${READ_ONLY_CONTRACT}
 
 # Role
@@ -138,8 +112,7 @@ List 3-5 files most critical for implementing this plan:
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
+			profile: "quick",
 			systemPrompt: `${READ_ONLY_CONTRACT}
 
 # Role
@@ -171,8 +144,7 @@ Official docs, current API behavior, implementation examples, and version-specif
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
-			model: "openai-codex/gpt-5.6-sol",
-			thinking: "xhigh",
+			profile: "deep",
 			systemPrompt: `${READ_ONLY_CONTRACT}
 
 # Role
@@ -198,8 +170,8 @@ Architecture, costly trade-offs, persistent debugging, review, and simplificatio
 				"Bounded implementation of an already-specified change. Receives a complete spec, file ownership, and assigned checks; edits code; does not research, redesign, or spawn children. Use for mechanical or headless writes. Do not use for UI or visual polish (Design), discovery, or unclear requirements. One isolated small edit belongs in the parent, not here.",
 			extensions: false,
 			skills: false,
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "high",
+			profile: "coding",
+			advisor: true,
 			systemPrompt: `# Role
 You are Implement — a bounded execution specialist.
 Apply a complete task specification. Do not plan, research, or redesign.
@@ -229,8 +201,7 @@ Apply a complete task specification. Do not plan, research, or redesign.
 				"User-visible UI/UX implementation and review: layout, hierarchy, spacing, motion, affordances, responsive behavior, and feel. Write-capable. Do not use for backend or headless logic (Implement) or copy-only edits. Treat Design output as intentional; later mechanical edits must preserve visual structure and interaction.",
 			extensions: false,
 			skills: false,
-			model: "openai-codex/gpt-5.6-luna",
-			thinking: "medium",
+			profile: "visual-engineering",
 			systemPrompt: `# Role
 You are Design — a UI/UX implementation specialist.
 User-visible layout, hierarchy, spacing, motion, affordances, responsive behavior, and feel. Implement and review those qualities.

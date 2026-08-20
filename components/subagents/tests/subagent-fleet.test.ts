@@ -1,5 +1,6 @@
 import { Editor, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
+import { hasAgentBadge } from "../src/agent-color.js";
 import type { AgentManager } from "../src/agent-manager.js";
 import type { AgentRecord } from "../src/types.js";
 import { getDisplayName } from "../src/ui/agent-widget.js";
@@ -23,7 +24,7 @@ const FAKE_SESSION = { subscribe: () => () => {}, messages: [] };
 function makeRecord(over: Partial<AgentRecord> = {}): AgentRecord {
 	return {
 		id: "a1",
-		type: "general-purpose",
+		type: "Explore",
 		description: "Sleep then report 1",
 		status: "running",
 		toolUses: 0,
@@ -315,6 +316,10 @@ describe("FleetList vs other focused components (#123)", () => {
 });
 
 describe("FleetList rendering", () => {
+	it("renders a stale or removed agent type neutrally", () => {
+		expect(getDisplayName("retired-type")).toBe("retired-type");
+		expect(hasAgentBadge("retired-type")).toBe(false);
+	});
 	it("renders main + agent rows with markers, type, description and right-aligned stats", () => {
 		const h = harness([makeRecord({ description: "Sleep then report 1" })]);
 		const lines = h.render(120);
@@ -323,7 +328,7 @@ describe("FleetList rendering", () => {
 		expect(lines.find((l) => l.includes("main"))).toContain("●"); // main selected by default
 		const agentLine = lines.find((l) => l.includes("Sleep then report 1"))!;
 		expect(agentLine).toContain("○");
-		expect(agentLine).toContain(getDisplayName("general-purpose"));
+		expect(agentLine).toContain(getDisplayName("Explore"));
 		expect(agentLine).toContain("↓ 13.1k tokens");
 		expect(agentLine).toMatch(/\d+s · ↓/); // "<seconds>s · ↓ ..." (timing-agnostic)
 	});

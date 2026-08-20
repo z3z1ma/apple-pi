@@ -46,7 +46,7 @@ function mockSession(messages: any[] = []) {
 function mockRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
 	return {
 		id: "test-1",
-		type: "general-purpose",
+		type: "Explore",
 		description: "test agent",
 		status: "running",
 		toolUses: 0,

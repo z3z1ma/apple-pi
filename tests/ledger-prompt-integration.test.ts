@@ -44,7 +44,7 @@ describe("ledger system prompt distribution", () => {
 	it("loads the ledger extension on workers instead of pasting the contract", () => {
 		const args = buildAgentCliArgs(
 			{ task: "Inspect the task", systemPrompt: "Custom worker guidance" },
-			{ tools: ["read"], model: "provider/model", thinking: "high" },
+			{ tools: ["read"], projectTrusted: false, model: "provider/model", thinking: "high" },
 		);
 		const guidance = args[args.indexOf("--append-system-prompt") + 1];
 		expect(guidance).not.toContain(marker);

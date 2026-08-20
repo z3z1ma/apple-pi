@@ -14,11 +14,11 @@ The calling session is the controller. It chooses how many iterations to run, re
 - **Goal**: the outcome this batch is working toward.
 - **Stack**: newline-separated lookup paths. Include the task root (`.ledger/<id>/task.md`) and any small index or plan the next fresh agent should open first. Do not dump file bodies into the task.
 - **Iterations**: a positive integer chosen by the calling session for this batch.
-- **Envelope**: set `limits` so that many `general-purpose` increments can finish.
+- **Envelope**: set `limits` so that many fresh increment workers can finish.
 
 ## Loop
 
-1. **Increment** — spawn `type: "general-purpose"` with no `tools` or `systemPrompt` override. Put Ralph instructions and the goal in the task. Bind the stack as `context`.
+1. **Increment** — spawn an untyped program worker with the `RALPH` system prompt and explicit `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write` tools. Put only the goal in the task and bind the stack as `context`.
 2. **Remember** — the agent updates ledger task records as it works. Journal, evidence, blockers, retrospective, distillation, and work items are the memory the next window will read.
 3. **Stop** — after the requested iteration count, or earlier if an increment fails. Return `{ status, iterations, failedAt?, failures }`.
 
@@ -48,7 +48,7 @@ After the program returns, the calling session runs `/skill:pi-review`, records 
 }
 ```
 
-Do not pass `tools` or `systemPrompt` to the increment worker. `type: "general-purpose"` keeps the rich agent prompt and the full builtin tool set. Ralph instructions belong in the task.
+Do not assign a catalog `type` to the increment worker. Ralph is a program-only role: pass the `RALPH` constant as `systemPrompt` and grant the explicit `RALPH_TOOLS` list. This keeps its choose-an-increment behavior distinct from the narrower `Implement` specialist.
 
 The increment prompt is the `RALPH` constant in the reference. Pass repository paths through `context`.
 

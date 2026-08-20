@@ -163,9 +163,19 @@ try {
 		.find((tool) => tool.definition.name === "Agent");
 	assert(agentTool, "missing Agent tool definition");
 	const agentProperties = agentTool.definition.parameters.properties;
-	for (const removed of ["isolation", "schedule", "name", "max_turns"]) {
+	assert("profile" in agentProperties, "Agent schema omits the model profile selector");
+	for (const removed of ["isolation", "schedule", "name", "max_turns", "model", "thinking"]) {
 		assert(!(removed in agentProperties), `removed subagent field leaked into schema: ${removed}`);
 	}
+	assert(
+		!agentTool.definition.parameters.required.includes("advisor"),
+		"advisor must remain optional for config defaults",
+	);
+	const resultTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "get_subagent_result");
+	assert(!resultTool.definition.parameters.required.includes("wait_seconds"));
+	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /Omit to wait 300 seconds/);
 	assert(
 		existsSync("skills/pi-review/references/plan-review-verify.js"),
 		"missing pi-review plan-review-verify reference",
@@ -193,23 +203,32 @@ try {
 		}
 		assert(!source.includes("skills.body"), `${program} must not load role prompts via skills.body`);
 		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
+		assert(source.includes('profile: "deep"'), `${program} workers must select the deep model profile`);
+		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
 	}
 	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
-	assert(ralphSource.includes('type: "general-purpose"'), "pi-ralph must use a general-purpose increment worker");
-	assert(
-		/agents\.run\(\{\s*type: "general-purpose",\s*name: `ralph-\$\{iteration\}`/.test(ralphSource),
-		"pi-ralph increment must be an unprompted general-purpose worker",
-	);
-	assert(
-		!/type: "general-purpose"[\s\S]{0,200}systemPrompt:/.test(ralphSource),
-		"pi-ralph must not override the increment system prompt",
-	);
-	assert(!/type: "general-purpose"[\s\S]{0,200}tools:/.test(ralphSource), "pi-ralph must not restrict increment tools");
+	assert(!ralphSource.includes("type:"), "pi-ralph must remain a program-only role, not a catalog type");
+	assert(ralphSource.includes("systemPrompt: RALPH"), "pi-ralph must supply its explicit worker role");
+	assert(ralphSource.includes('profile: "coding"'), "pi-ralph must select the coding model profile");
+	assert(ralphSource.includes("tools: RALPH_TOOLS"), "pi-ralph must grant its explicit write-capable tools");
+	for (const tool of ["read", "grep", "find", "ls", "bash", "edit", "write"]) {
+		assert(ralphSource.includes(`"${tool}"`), `pi-ralph worker omits ${tool}`);
+	}
 	assert(ralphSource.includes("inputs.iterations"), "pi-ralph must take a caller-chosen iteration bound");
 	assert(!ralphSource.includes("const PLANNER"), "default pi-ralph must not inline the review planner");
 	assert(!ralphSource.includes("reviewChange"), "default pi-ralph must not inline the review workflow");
 	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
 	assert(reviewedSource.includes("const PLANNER"), "ralph-reviewed.js must keep the inlined review planner");
+	assert(!reviewedSource.includes('type: "general-purpose"'), "reviewed Ralph must not use a retired catalog type");
+	assert(reviewedSource.includes("systemPrompt: RALPH"), "reviewed Ralph must supply its explicit worker role");
+	assert(reviewedSource.includes("tools: RALPH_TOOLS"), "reviewed Ralph must grant write-capable tools");
+	const defaultAgentsSource = readFileSync("components/subagents/src/default-agents.ts", "utf8");
+	assert(!defaultAgentsSource.includes('name: "general-purpose"'), "retired built-in general-purpose agent remains");
+	assert(!defaultAgentsSource.includes("model:"), "built-in agents must not embed concrete models");
+	assert(!defaultAgentsSource.includes("thinking:"), "built-in agents must not embed raw thinking levels");
+	assert(existsSync("components/shared/src/model-profiles.ts"), "model profile authority is missing");
+	assert(!existsSync("components/shared/src/mode-utils.ts"), "legacy modes parser remains");
+	assert(!existsSync("components/subagents/src/model-resolver.ts"), "legacy fuzzy model resolver remains");
 	const docs = {
 		ledger: readFileSync("docs/ledger.md", "utf8"),
 		readme: readFileSync("README.md", "utf8"),

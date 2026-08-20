@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { NO_FALLBACK } from "./agent-types.js";
-import type { JoinMode, WidgetMode } from "./types.js";
+import type { JoinMode, SubagentConfigScope, WidgetMode } from "./types.js";
 
 export interface SubagentsSettings {
 	maxConcurrent?: number;
@@ -15,12 +14,9 @@ export interface SubagentsSettings {
 	persistAgentSessions?: boolean;
 	widgetMode?: WidgetMode;
 	maxSubagentDepth?: number;
-	fallbackSubagent?: string;
 }
 
-export const DEFAULT_SUBAGENT_SETTINGS: Required<Omit<SubagentsSettings, "fallbackSubagent">> & {
-	fallbackSubagent: string | undefined;
-} = {
+export const DEFAULT_SUBAGENT_SETTINGS: Required<SubagentsSettings> = {
 	maxConcurrent: 4,
 	defaultMaxTurns: 0,
 	graceTurns: 5,
@@ -31,7 +27,6 @@ export const DEFAULT_SUBAGENT_SETTINGS: Required<Omit<SubagentsSettings, "fallba
 	persistAgentSessions: true,
 	widgetMode: "background",
 	maxSubagentDepth: 2,
-	fallbackSubagent: undefined,
 };
 
 export interface SettingsAppliers {
@@ -45,7 +40,6 @@ export interface SettingsAppliers {
 	setPersistAgentSessions: (enabled: boolean) => void;
 	setWidgetMode: (mode: WidgetMode) => void;
 	setMaxSubagentDepth: (n: number) => void;
-	setFallbackSubagent: (value: string | undefined) => void;
 }
 
 const JOIN_MODES = new Set<JoinMode>(["async", "group", "smart"]);
@@ -88,10 +82,6 @@ function sanitize(raw: unknown): SubagentsSettings {
 	for (const key of ["strictAgentFiles", "disableDefaultAgents", "fleetView", "persistAgentSessions"] as const) {
 		if (typeof value[key] === "boolean") result[key] = value[key];
 	}
-	if (value.fallbackSubagent === false) result.fallbackSubagent = NO_FALLBACK;
-	else if (typeof value.fallbackSubagent === "string" && value.fallbackSubagent.trim()) {
-		result.fallbackSubagent = value.fallbackSubagent.trim();
-	}
 	return result;
 }
 
@@ -107,10 +97,10 @@ function readSettingsFile(path: string): SubagentsSettings {
 	}
 }
 
-export function loadSettings(cwd = process.cwd()): SubagentsSettings {
+export function loadSettings(scope: SubagentConfigScope): SubagentsSettings {
 	return {
 		...readSettingsFile(join(getAgentDir(), "subagents.json")),
-		...readSettingsFile(join(cwd, ".pi", "subagents.json")),
+		...(scope.projectTrusted ? readSettingsFile(join(scope.cwd, ".pi", "subagents.json")) : {}),
 	};
 }
 
@@ -136,14 +126,9 @@ export function applySettings(settings: SubagentsSettings, appliers: SettingsApp
 	if (settings.persistAgentSessions !== undefined) appliers.setPersistAgentSessions(settings.persistAgentSessions);
 	if (settings.widgetMode) appliers.setWidgetMode(settings.widgetMode);
 	if (settings.maxSubagentDepth !== undefined) appliers.setMaxSubagentDepth(settings.maxSubagentDepth);
-	if (settings.fallbackSubagent !== undefined) appliers.setFallbackSubagent(settings.fallbackSubagent);
 }
 
-export function resolveCompleteSettings(settings: SubagentsSettings = {}): Required<
-	Omit<SubagentsSettings, "fallbackSubagent">
-> & {
-	fallbackSubagent: string | undefined;
-} {
+export function resolveCompleteSettings(settings: SubagentsSettings = {}): Required<SubagentsSettings> {
 	return { ...DEFAULT_SUBAGENT_SETTINGS, ...settings };
 }
 
@@ -159,5 +144,4 @@ export function applyCompleteSettings(settings: SubagentsSettings, appliers: Set
 	appliers.setPersistAgentSessions(resolved.persistAgentSessions);
 	appliers.setWidgetMode(resolved.widgetMode);
 	appliers.setMaxSubagentDepth(resolved.maxSubagentDepth);
-	appliers.setFallbackSubagent(resolved.fallbackSubagent);
 }

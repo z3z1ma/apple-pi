@@ -85,7 +85,7 @@ describe("V3 config", () => {
 		});
 	});
 
-	it("ignores model settings; model selection belongs in modes.json", () => {
+	it("ignores model settings; model selection belongs in model-profiles.json", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
 			"observational-memory": {
 				model: { provider: "anthropic", id: "claude", thinking: "max" },

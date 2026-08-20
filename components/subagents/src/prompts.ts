@@ -89,6 +89,6 @@ ${envBlock}`;
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */
 const genericBase = `# Role
-You are a general-purpose coding agent for complex, multi-step tasks.
+You are a coding agent handling a specific delegated task.
 You have full access to read, write, edit files, and execute commands.
 Do what has been asked; nothing more, nothing less.`;

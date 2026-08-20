@@ -2,9 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-export const DEFAULT_ADVISOR_PROVIDER = "openrouter";
-export const DEFAULT_ADVISOR_MODEL = "z-ai/glm-5.2";
-export const DEFAULT_THINKING = "low";
+export const ADVISOR_MODEL_PROFILE = "deep";
 
 const STATE_FILE = () => path.join(getAgentDir(), ".advisor-state.json");
 
