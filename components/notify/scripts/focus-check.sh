@@ -4,8 +4,16 @@ set -euo pipefail
 # Decide whether the operator is already looking at the Pi pane, so the caller
 # can suppress a redundant desktop notification. Exit 0 means "in focus, skip
 # the notification"; any non-zero exit means "not confirmed in focus, deliver
-# it". Every uncertain branch fails open (non-zero) so a real notification is
-# never dropped because detection was inconclusive.
+# it". Every uncertain branch fails open (non-zero) so an inconclusive detection
+# never drops a notification.
+#
+# Limitation: fail-open covers only inconclusive branches, not a wrong
+# foreground-client pick. tmux cannot report which Ghostty tab is frontmost, so
+# step 2 approximates it with the most-recently-active client. If the operator
+# types in the Pi pane and then switches Ghostty tabs without typing (tab
+# switching produces no tmux input), the Pi client can retain the highest
+# activity and this check may exit 0 and suppress a notification the operator is
+# no longer looking at. Suppression is therefore best-effort, not guaranteed.
 #
 # "In focus" requires BOTH:
 #   1. Ghostty is the frontmost macOS application, and
