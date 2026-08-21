@@ -107,6 +107,12 @@ artifact, never the approval.
 | "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
 | "They approved the spike, so the follow-up change is approved too" | Each task gets its own classification and its own approval. |
 
+## Visual Companion
+
+Offer the browser companion only when the first genuinely visual question would be clearer shown than described—mockups, layout comparisons, diagrams, spatial relationships, or design polish. Do not offer it merely because the topic is a UI. Send the offer as its own message: **"Some of the questions coming up would be easier to answer visually. I can open a local browser companion to show options and collect clicks. Want to use it?"**
+
+Start nothing until the operator accepts. On acceptance, read [visual-companion.md](visual-companion.md) and follow its authenticated, terminal-primary loop. Visual HTML may persist under the task's evidence storage; tokens, URLs, PIDs, logs, and browser events remain ephemeral. Record selected semantics in the specification, decision, or Journal because visual artifacts are evidence, not authority.
+
 ## Checklist
 
 Classify first, announce the path, then complete the applicable checklist in order. Use the governing Ledger task for durable state when the work is non-trivial.
@@ -132,8 +138,9 @@ Classify first, announce the path, then complete the applicable checklist in ord
 4. **Present design** — in sections scaled to their complexity, get user approval after each section
 5. **Write the active specification** — use the governing Ledger task's `specs/` directory
 6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-7. **User reviews written spec** — ask user to review the spec file before proceeding
-8. **Transition to implementation planning** — load `ledger-writing-plans` and create the source-backed plan
+7. **Independent spec review** — use [spec-document-reviewer-prompt.md](spec-document-reviewer-prompt.md) through `ledger-pi-review`; resolve material findings
+8. **User reviews written spec** — ask user to review the spec file before proceeding
+9. **Transition to implementation planning** — load `ledger-writing-plans` and create the source-backed plan
 
 ## Process Flow
 
@@ -153,6 +160,7 @@ digraph ledger-brainstorming {
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
+    "Independent spec review" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Load ledger-writing-plans" [shape=doublecircle];
     "Hidden complexity? Upgrade path" [shape=box];
@@ -173,7 +181,9 @@ digraph ledger-brainstorming {
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
+    "Spec self-review\n(fix inline)" -> "Independent spec review";
+    "Independent spec review" -> "Write design doc" [label="material findings"];
+    "Independent spec review" -> "User reviews spec?" [label="ready"];
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
     "User reviews spec?" -> "Load ledger-writing-plans" [label="approved"];
 }

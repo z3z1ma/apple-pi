@@ -111,8 +111,7 @@ let ownerPid = process.env.LEDGER_VISUAL_OWNER_PID ? Number(process.env.LEDGER_V
 // remote binds — and defeats DNS rebinding — where a Host/Origin allowlist
 // cannot. It rides the served URL as ?key= and is mirrored into a cookie on
 // first load so same-origin subresources and the WebSocket carry it for free.
-// Persisted alongside the port (LEDGER_VISUAL_TOKEN_FILE) so a restart keeps the
-// same key and an already-open tab's cookie still validates.
+// Stored in the ephemeral state directory so the capability key never enters Ledger content.
 const TOKEN_FILE = process.env.LEDGER_VISUAL_TOKEN_FILE || null;
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -215,13 +214,6 @@ function readApplePiVersion() {
   }
 
   return 'unknown';
-}
-
-function isTruthyEnv(value) {
-  if (!value) return false;
-  const normalized = String(value).trim().toLowerCase();
-  if (!normalized) return false;
-  return !['0', 'false', 'no', 'off'].includes(normalized);
 }
 
 function escapeHtmlText(value) {
@@ -646,10 +638,7 @@ function startServer() {
     // one after an EADDRINUSE fallback) so it can't collide with another server's
     // cookie in the shared localhost jar.
     COOKIE_NAME = 'ledger-visual-key-' + PORT;
-    // Record the bound port AND token so the next restart of this session reuses
-    // them — but ONLY when we got our preferred port. On a fallback we bound a
-    // *different* port because someone else holds the preferred one; persisting
-    // would overwrite the shared files and strand that other session's open tab.
+    // Record the bound port and token in this session's ephemeral state. On a fallback we bound a different port because another process holds the preferred one, so keep the original state untouched.
     if (PORT_FILE && !triedFallback) {
       try { fs.writeFileSync(PORT_FILE, String(PORT)); } catch (e) { /* best effort */ }
       if (TOKEN_FILE) {
