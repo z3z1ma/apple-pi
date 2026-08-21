@@ -15,3 +15,29 @@
 - `.ledger/history/202608202254-strengthen-ledger-workflow/task.md` — done — Strengthen Ledger workflow with evaluated Superpowers principles — Fuse Superpowers procedures and 10x durable judgment into 13 Ledger lifecycle skills while preserving Pi utility boundaries.
 
 - `.ledger/history/202608211154-colorize-input-card-editor/task.md` — done — Colorize the input card and custom editor — Add theme-aware semantic color and styling to the bottom information strip and Apple Pi custom editor while preserving native editing, responsive width, and component status integration.
+
+- `.ledger/history/202608151813-build-harness-operations-ui/task.md` — cancelled — Build interactive review, Ralph, and ledger-task operations UI
+
+- `.ledger/history/202608151813-converge-typescript-architecture/task.md` — done — Converge TypeScript architecture, formatting, and quality controls
+
+- `.ledger/history/202608151813-replace-caller-budget-arithmetic/task.md` — done — Replace caller-configured budget arithmetic with harness-owned limits
+
+- `.ledger/history/202608151843-bootstrap-gated-work-items/task.md` — done — Bootstrap gated task-local work items outside Ralph
+
+- `.ledger/history/202608160933-adapt-review-planning-for-speed/task.md` — done — Adapt review planning for focused, fast semantic coverage
+
+- `.ledger/history/202608162041-slim-review-planner-drop-token-gates/task.md` — done — Slim review planning and drop review token gates
+
+- `.ledger/history/202608162056-observational-memory-compacted-context/task.md` — cancelled — Research observational memory in compacted context
+
+- `.ledger/history/202608162324-distill-observational-memory-current-state/task.md` — cancelled — Distill observational memory into current working state
+
+- `.ledger/history/202608181322-coalesce-advisor-reviews/task.md` — cancelled — Coalesce advisor reviews without dropping deltas — The advisor drains immediately on every turn_end (one per assistant step), re-sending its whole accumulated history each time; defer the drain to batch low-signal steps while still pushing every delta, since a skipped delta is permanently absent from advisor context.
+
+- `.ledger/history/202608181322-design-advisor-context-framing/task.md` — cancelled — Design advisor context framing — Advisor context is a regular session of lean trajectory receipts whose compact hook reseeds from the live curator fold, recent user messages, and rolling settled advice; recall uses primary-bound memory_source and session_search.
+
+- `.ledger/history/202608181322-gate-compaction-on-real-context-window/task.md` — cancelled — Gate compaction on real context usage within the configured window — Compaction currently gates on estimated source tokens (81k default) and ignores the model's configured contextWindow, so billed context reached 196k median / 331k p90 and crossed provider long-context price tiers. Gate on provider-reported usage relative to the configured window instead, with no model names in TypeScript.
+
+- `.ledger/history/202608182330-protect-vcc-finished-turn-deliverable/task.md` — cancelled — Protect finished-turn deliverables in VCC compaction — Rewrite VCC cut, subsequent-compact, and compile so long-horizon analyses survive ambient and follow-up compaction instead of being mid-cycle sliced, shredded to a stub tail, or 200-word compiled.
+
+- `.ledger/history/202608211051-rename-skills-generalize-ralph/task.md` — cancelled — Rename workflow skills and generalize Ralph — Replace Superpowers-derived public skill names with concise 10x-aligned names, remove relative cross-skill references, and split Ralph into general and Ledger-specific bounded iteration programs.
