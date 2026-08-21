@@ -257,7 +257,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 						...options,
 						isBackground: true,
 					});
-					return textResult(`Nested agent started in background. Agent ID: ${id}`);
+					return textResult(
+						`Nested agent started in background. Agent ID: ${id}\n\nCall get_subagent_result with this agent_id to wait for its final result.`,
+					);
 				}
 				const { record } = await context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, {
 					...options,

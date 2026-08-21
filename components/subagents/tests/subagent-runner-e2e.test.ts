@@ -482,7 +482,9 @@ Answer the task.
 				undefined,
 				extensionCtx,
 			);
-			const liveAgentId = (liveLaunch.content[0].text as string).match(/Agent ID: ([^\s]+)/)?.[1];
+			const liveLaunchText = liveLaunch.content[0].text as string;
+			expect(liveLaunchText).toContain("Call get_subagent_result with this agent_id to wait for its final result.");
+			const liveAgentId = liveLaunchText.match(/Agent ID: ([^\s]+)/)?.[1];
 			expect(liveAgentId).toBeTruthy();
 
 			let liveSnapshotText = "";
@@ -666,6 +668,9 @@ RELOADED ROLE MUST NOT RUN.
 				extensionCtx,
 			);
 			expect(queuedResume.content[0].text).toContain(`Agent ID: ${awaitedAgentId}`);
+			expect(queuedResume.content[0].text).toContain(
+				"Call get_subagent_result with this agent_id to wait for its final result.",
+			);
 			expect(queuedResume.details).toMatchObject({ agentId: awaitedAgentId, status: "background" });
 			let queuedResumeSettled = false;
 			const queuedResumeWait = checkResult

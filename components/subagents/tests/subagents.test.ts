@@ -639,6 +639,9 @@ describe("owned subagent surface", () => {
 			} as any,
 		);
 		expect(result.isError).not.toBe(true);
+		expect(result.content[0].text).toContain(
+			"Call get_subagent_result with this agent_id to wait for its final result.",
+		);
 		expect(spawn).toHaveBeenCalledOnce();
 		const options = spawn.mock.calls[0]?.[4] as any;
 		expect(options.agentConfig).toMatchObject({

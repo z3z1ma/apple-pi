@@ -501,7 +501,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					return textResult(`Agent ${existing.id} is already running or cannot be resumed.`, undefined, true);
 				if (background)
 					return textResult(
-						`Agent resumed in background. Agent ID: ${existing.id}`,
+						`Agent resumed in background. Agent ID: ${existing.id}\n\nCall get_subagent_result with this agent_id to wait for its final result.`,
 						detailsFor(resumed, activity.state, { status: "background" }),
 					);
 				return textResult(
@@ -592,7 +592,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					record.joinMode = joinMode;
 					trackBatch(id, joinMode);
 					return textResult(
-						`Agent started in background. Agent ID: ${id}`,
+						`Agent started in background. Agent ID: ${id}\n\nCall get_subagent_result with this agent_id to wait for its final result.`,
 						detailsFor(record, tracker.state, { status: "background" }),
 					);
 				}
