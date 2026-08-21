@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recallMemorySources, type Entry, type Observation, type Reflection } from "../src/session-ledger/recall.js";
+import { type Entry, type Observation, type Reflection, recallMemorySources } from "../src/session-ledger/recall.js";
 import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
@@ -220,37 +220,6 @@ describe("session-ledger recall", () => {
 			collision: false,
 			partial: false,
 		});
-	});
-
-	it("ignores old V2 memory entries and details", () => {
-		const entries: Entry[] = [
-			{
-				type: "custom",
-				id: "old-obs-entry",
-				customType: "om.observation",
-				data: {
-					records: [observation({ id: OBS_1, sourceEntryIds: ["src-1"] })],
-					coversFromId: "src-1",
-					coversUpToId: "src-1",
-					tokenCount: 10,
-				},
-			},
-			{
-				type: "compaction",
-				id: "old-compaction",
-				firstKeptEntryId: "src-1",
-				details: {
-					type: "observational-memory",
-					version: 4,
-					observations: [observation({ id: OBS_2, sourceEntryIds: ["src-1"] })],
-					reflections: [reflection({ id: REF_1, supportingObservationIds: [OBS_2] })],
-				},
-			},
-		];
-
-		expect(recallMemorySources(entries, OBS_1).status).toBe("not_found");
-		expect(recallMemorySources(entries, OBS_2).status).toBe("not_found");
-		expect(recallMemorySources(entries, REF_1).status).toBe("not_found");
 	});
 
 	it("reports collisions when an id matches multiple V3 records", () => {

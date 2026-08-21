@@ -7,8 +7,6 @@ import {
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
-	oldV2CompactionDetails,
-	oldV2ObservationEntry,
 	rawMessage,
 	reflection,
 	reflectionsRecordedEntry,
@@ -66,7 +64,7 @@ function setup(args: {
 }
 
 describe("V3 /om:status", () => {
-	it("renders concise no-memory status without V2 committed/pending language", async () => {
+	it("renders concise no-memory status", async () => {
 		const output = await setup({ entries: [] }).run();
 
 		expect(output).toContain("── Memory ──");
@@ -74,20 +72,14 @@ describe("V3 /om:status", () => {
 		expect(output).toContain("Reflections:  0 recorded / 0 retired / 0 current / 0 visible");
 		expect(output).toContain("Next curation:");
 		expect(output).toContain("Next compaction:");
-		expect(output).not.toContain("Visible:");
-		expect(output).not.toContain("Drift:");
-		expect(output).not.toContain("committed");
-		expect(output).not.toContain("pending");
 	});
 
-	it("reports V3 ledger counts, visible/full drift, and ignores old V2 memory", async () => {
+	it("reports ledger counts and visible/full drift", async () => {
 		const obsA = observation("aaaaaaaaaaaa", { tokenCount: 5 });
 		const obsB = observation("bbbbbbbbbbbb", { tokenCount: 7 });
 		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"], { tokenCount: 3 });
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			oldV2ObservationEntry("v2-obs"),
-			compactionEntry("cmp-v2", { firstKeptEntryId: "raw-1", details: oldV2CompactionDetails() }),
 			compactionEntry("cmp-visible", {
 				firstKeptEntryId: "raw-1",
 				details: memoryDetails({ observations: [obsA], reflections: [] }),
@@ -104,11 +96,6 @@ describe("V3 /om:status", () => {
 		expect(output).toContain("Visible observation pool: ~5 / 40 tokens (13%)");
 		// Active pool counts the full rendered line (id + timestamp + relevance + content).
 		expect(output).toContain("Active observation pool: ~19 / 20 target tokens (95%)");
-		expect(output).not.toContain("Visible:");
-		expect(output).not.toContain("Drift:");
-		expect(output).not.toContain("full truth");
-		expect(output).not.toContain("v2-obs");
-		expect(output).not.toContain("observational-memory");
 	});
 
 	it("shows separate progress clocks, visible pool, active observation pool, and reflection pool", async () => {
@@ -135,9 +122,6 @@ describe("V3 /om:status", () => {
 		// Active pool counts the full rendered line, unlike the visible pool's stored tokenCount.
 		expect(output).toContain("Active observation pool: ~19 / 20 target tokens (95%)");
 		expect(output).toContain("Reflection pool:         ~3 tokens");
-		expect(output).not.toContain("Observation pool:");
-		expect(output).not.toContain("Full fold pool:");
-		expect(output).not.toContain("visible observation tokens");
 	});
 
 	it("shows raw source progress and ignores provider context", async () => {
@@ -157,7 +141,7 @@ describe("V3 /om:status", () => {
 		expect(output).toContain("Next compaction:  ~3 / 30 estimated source tokens");
 	});
 
-	it("shows the host usage clock when VCC owns the waterline", async () => {
+	it("shows the host usage clock for the context waterline", async () => {
 		const output = await setup({
 			entries: [textCustomMessage("raw-1", "aaaaaaaaaaaa")],
 			compactionClock: () => ({ progress: 135000, threshold: 136000, unit: "context" }),
@@ -201,8 +185,6 @@ describe("V3 /om:status", () => {
 
 		expect(output).toContain("Passive: automatic memory workers and auto-compaction disabled");
 		expect(output).toContain("Consolidation: running (curator)");
-		expect(output).not.toContain("Observer: running");
-		expect(output).not.toContain("Reflect/drop: running");
 		expect(output).toContain("Auto-compaction: running");
 		expect(output).toContain("Curator: curate failed");
 	});

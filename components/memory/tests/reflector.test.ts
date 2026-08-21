@@ -97,9 +97,6 @@ describe("V3 reflector agent", () => {
 		expect(systemPrompt).toContain("Durable blockers, invariants, and open decisions");
 		expect(systemPrompt).toContain("Reflection content rules");
 		expect(systemPrompt).toContain("Lead with the fact or pattern");
-		expect(systemPrompt).not.toContain("legacy/no-provenance");
-		expect(systemPrompt).not.toContain("pruner");
-		expect(systemPrompt).not.toContain("Pass strategy");
 	});
 
 	it("renders coverage tiers in every active observation line for the reflector", async () => {
@@ -125,8 +122,6 @@ describe("V3 reflector agent", () => {
 		expect(userText).toContain("[coverage: none] Uncovered durable fact");
 		expect(userText).toContain("[coverage: partial] Partially covered fact");
 		expect(userText).toContain("[coverage: strong] Strongly covered fact");
-		expect(userText).not.toContain("drop-priority");
-		expect(userText).not.toContain("drop-resistance");
 	});
 
 	it("renders reflector observation lines with coverage evidence only", () => {
@@ -139,8 +134,6 @@ describe("V3 reflector agent", () => {
 		expect(line).toContain("[critical]");
 		expect(line).toContain("[coverage: partial]");
 		expect(line).toContain("Important reflected fact");
-		expect(line).not.toContain("drop-priority");
-		expect(line).not.toContain("drop-resistance");
 	});
 
 	it("summarizes accepted reflection support-id counts without exposing ids", () => {

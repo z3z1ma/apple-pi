@@ -34,8 +34,6 @@ export const V3_REFLECTIONS_RECORDED = "om.reflections.recorded";
 export const V3_OBSERVATIONS_DROPPED = "om.observations.dropped";
 export const V3_REFLECTIONS_RETIRED = "om.reflections.retired";
 export const V3_FOLDED = "om.folded";
-export const V2_OBSERVATION = "om.observation";
-export const V2_DETAILS_TYPE = "observational-memory";
 
 const DEFAULT_TIMESTAMP = "2026-05-02T10:00:00.000Z";
 
@@ -192,36 +190,6 @@ export function reflectionsRetiredEntry(
 		customType: V3_REFLECTIONS_RETIRED,
 		data: args,
 		...overrides,
-	};
-}
-
-export function oldV2ObservationEntry(
-	id: string,
-	args: { records?: unknown[]; coversFromId?: string; coversUpToId?: string; tokenCount?: number } = {},
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
-	return {
-		type: "custom",
-		id,
-		parentId: null,
-		timestamp: DEFAULT_TIMESTAMP,
-		customType: V2_OBSERVATION,
-		data: {
-			records: args.records ?? [observation("v2-obs")],
-			coversFromId: args.coversFromId ?? "raw-1",
-			coversUpToId: args.coversUpToId ?? "raw-1",
-			tokenCount: args.tokenCount ?? 10,
-		},
-		...overrides,
-	};
-}
-
-export function oldV2CompactionDetails(args: { observations?: unknown[]; reflections?: unknown[] } = {}): unknown {
-	return {
-		type: V2_DETAILS_TYPE,
-		version: 4,
-		observations: args.observations ?? [observation("v2-obs")],
-		reflections: args.reflections ?? [],
 	};
 }
 

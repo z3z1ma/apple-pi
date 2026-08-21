@@ -47,7 +47,6 @@ describe("subagent team system prompt", () => {
 		const block = buildTeamSystemPrompt(members, profiles);
 		const catalogs = catalogData(block);
 		expect(block).toContain("<inference-profiles>\n# Inference profiles");
-		expect(block).not.toContain("Catalog");
 		expect(catalogs.members[0]).toEqual({
 			name: "Explore",
 			profile: "quick",

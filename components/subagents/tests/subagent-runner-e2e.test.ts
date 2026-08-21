@@ -19,13 +19,7 @@ const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
 const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "session_search", "mcp"];
-const FORBIDDEN_CHILD_TOOLS = [
-	"memory_source",
-	"recall",
-	"vcc_recall",
-	"pi_exec",
-	...Object.values(SUBAGENT_TOOL_NAMES),
-];
+const FORBIDDEN_CHILD_TOOLS = ["memory_source", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {
 	for (const name of [...expected, ...CHILD_EXTENSION_TOOLS]) {

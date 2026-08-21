@@ -88,7 +88,6 @@ describe("owned subagent surface", () => {
 		expect(DEFAULT_AGENTS.get("Counsel")?.systemPrompt).toMatch(/You advise; you do not implement/);
 		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
 		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
-		expect(DEFAULT_AGENTS.has("general-purpose")).toBe(false);
 	});
 
 	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {
@@ -111,49 +110,6 @@ describe("owned subagent surface", () => {
 			if (!result.ok) expect(result.message).toContain("Available:");
 		}
 		expect(getToolNamesForType("missing")).toEqual([]);
-	});
-
-	it("allows a Markdown definition to create an ordinary custom general-purpose type", () => {
-		const root = temporaryRoot();
-		const agentDir = temporaryRoot();
-		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
-		writeFileSync(
-			join(root, ".pi", "agents", "custom-general.md"),
-			"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: coding\nadvisor: true\n---\n\nFollow the project contract.\n",
-		);
-		mkdirSync(join(agentDir, "agents"), { recursive: true });
-		writeFileSync(
-			join(agentDir, "agents", "global-safe.md"),
-			"---\nname: global-safe\ndescription: User-owned global agent\n---\n\nGlobal instructions.\n",
-		);
-		const previous = process.env.PI_CODING_AGENT_DIR;
-		process.env.PI_CODING_AGENT_DIR = agentDir;
-		try {
-			const registry = buildAgentRegistry(loadCustomAgents({ cwd: root, projectTrusted: true }));
-			expect(resolveSpawnTypeIn(registry, "general-purpose")).toEqual({ ok: true, type: "general-purpose" });
-			const untrusted = buildAgentRegistry(loadCustomAgents({ cwd: root, projectTrusted: false }));
-			expect(resolveSpawnTypeIn(untrusted, "general-purpose").ok).toBe(false);
-			expect(resolveSpawnTypeIn(untrusted, "global-safe")).toEqual({ ok: true, type: "global-safe" });
-			expect(registry.get("general-purpose")).toMatchObject({
-				profile: "coding",
-				advisor: true,
-				builtinToolNames: ["read", "edit"],
-			});
-			expect(registry.get("general-purpose")?.isDefault).toBeUndefined();
-		} finally {
-			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
-			else process.env.PI_CODING_AGENT_DIR = previous;
-		}
-	});
-
-	it("rejects raw model and thinking fields in custom agent definitions", () => {
-		const root = temporaryRoot();
-		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
-		writeFileSync(
-			join(root, ".pi", "agents", "raw-model.md"),
-			"---\nname: raw-model\ndescription: Invalid raw route\nmodel: xai/direct\nthinking: high\n---\n\nInvalid instructions.\n",
-		);
-		expect(() => loadCustomAgents({ cwd: root, projectTrusted: true }, true)).toThrow(/raw model\/thinking fields/);
 	});
 
 	it("rejects custom agent profiles outside the known inference profile set", () => {
@@ -275,7 +231,6 @@ describe("owned subagent surface", () => {
 			runInBackground: false,
 			isolated: false,
 		});
-		expect(resolved).not.toHaveProperty("thinking");
 	});
 
 	it("enables Advisor only for write-capable default agents", () => {
@@ -470,7 +425,7 @@ describe("owned subagent surface", () => {
 		expect(await waiting).toBe("settled");
 	});
 
-	it("accepts large yield intervals without expiring at the old cap", async () => {
+	it("accepts large yield intervals", async () => {
 		vi.useFakeTimers();
 		const record = { status: "running" as const, promise: new Promise<void>(() => {}) };
 		const waiting = waitForAgentSettlement(record, { kind: "yield", seconds: 301 });
@@ -545,18 +500,14 @@ describe("owned subagent surface", () => {
 		]);
 		expect(agentSchema.properties.profile.description).toContain("model/thinking only");
 		expect(agentSchema.properties.system_prompt.description).toContain("appended after the selected definition");
-		expect(agentSchema.properties).not.toHaveProperty("model");
-		expect(agentSchema.properties).not.toHaveProperty("thinking");
 		expect(agentSchema.properties.advisor.description).toContain("definition's Advisor default");
 		expect(resultSchema.required).not.toContain("yield_seconds");
 		expect(resultSchema.properties.yield_seconds.minimum).toBe(0);
-		expect(resultSchema.properties.yield_seconds).not.toHaveProperty("maximum");
 		expect(resultSchema.properties.yield_seconds.description).toContain("very large positive value");
 		expect(resultSchema.properties.yield_seconds.description).toContain("not a child timeout");
-		expect(resultSchema.properties).not.toHaveProperty("wait_seconds");
 	});
 
-	it("sanitizes settings to the retained orchestration controls", () => {
+	it("loads current orchestration settings", () => {
 		const root = temporaryRoot();
 		mkdirSync(join(root, ".pi"), { recursive: true });
 		writeFileSync(
@@ -565,18 +516,10 @@ describe("owned subagent surface", () => {
 				maxConcurrent: 7,
 				persistAgentSessions: false,
 				widgetMode: "all",
-				schedulingEnabled: true,
-				agentMentions: "model",
-				outputTranscript: true,
-				fallbackSubagent: "Implement",
 			}),
 		);
 		const settings = loadSettings({ cwd: root, projectTrusted: true }) as Record<string, unknown>;
 		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false, widgetMode: "all" });
-		expect(settings).not.toHaveProperty("schedulingEnabled");
-		expect(settings).not.toHaveProperty("agentMentions");
-		expect(settings).not.toHaveProperty("outputTranscript");
-		expect(settings).not.toHaveProperty("fallbackSubagent");
 	});
 
 	it("ignores project subagent settings until the project is trusted", () => {

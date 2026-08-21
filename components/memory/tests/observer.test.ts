@@ -27,8 +27,7 @@ function assistantEndEvent(stopReason: string, errorMessage?: string): any {
 }
 
 describe("OBSERVATION_TIMESTAMP_PATTERN", () => {
-	it("matches local minute timestamps without regex shorthand escapes", () => {
-		expect(OBSERVATION_TIMESTAMP_PATTERN).not.toContain("\\d");
+	it("matches local minute timestamps", () => {
 		const pattern = new RegExp(OBSERVATION_TIMESTAMP_PATTERN);
 		expect(pattern.test("2026-05-02 10:30")).toBe(true);
 		expect(pattern.test("2026-5-02 10:30")).toBe(false);
@@ -62,8 +61,6 @@ describe("runObserver", () => {
 		expect(systemPrompt).toContain("zero observations");
 		expect(systemPrompt).toContain("The dropper will drop these first");
 		expect(systemPrompt).toContain("highest-resistance, load-bearing observations");
-		expect(systemPrompt).not.toContain("will NEVER be dropped");
-		expect(systemPrompt).not.toContain("pruner");
 	});
 
 	it("records V3 observations with source ids and code-computed tokenCount", async () => {

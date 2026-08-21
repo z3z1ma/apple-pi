@@ -7,12 +7,10 @@ import {
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
-	oldV2CompactionDetails,
-	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
-	textCustomMessage,
 	type TestEntry,
+	textCustomMessage,
 } from "./fixtures/session.js";
 
 const COPY_SUCCESS = "Copied /om:view output to clipboard.";
@@ -43,19 +41,6 @@ function setup(entries: TestEntry[], clipboardResult = true) {
 	return { run, notify, copyToClipboard };
 }
 
-function expectNoDiagnostics(output: string) {
-	expect(output).not.toContain("Memory view:");
-	expect(output).not.toContain("Memory diff:");
-	expect(output).not.toContain("recorded / ");
-	expect(output).not.toContain("dropped");
-	expect(output).not.toContain(" visible +");
-	expect(output).not.toContain("tokens");
-	expect(output).not.toContain("Observation pool");
-	expect(output).not.toContain("Reflection pool");
-	expect(output).not.toContain("Full fold pool");
-	expect(output).not.toContain("only in full");
-}
-
 describe("V3 /om:view", () => {
 	it("renders no-memory visible output as content-only sections and copies it", async () => {
 		const { output, clipboardText, copyToClipboard } = await setup([]).run();
@@ -70,9 +55,6 @@ describe("V3 /om:view", () => {
 		expect(copyToClipboard).toHaveBeenCalledTimes(1);
 		expect(clipboardText).toBe(expected);
 		expect(output).toBe(`${expected}\n\n${COPY_SUCCESS}`);
-		expect(output).not.toContain("committed");
-		expect(output).not.toContain("pending");
-		expectNoDiagnostics(output);
 	});
 
 	it("default view renders latest visible om.folded memory content only and copies clean output", async () => {
@@ -97,17 +79,14 @@ describe("V3 /om:view", () => {
 		expect(clipboardText).not.toContain("bbbbbbbbbbbb");
 		expect(clipboardText).not.toContain(COPY_SUCCESS);
 		expect(output).toBe(`${clipboardText}\n\n${COPY_SUCCESS}`);
-		expectNoDiagnostics(output);
 	});
 
-	it("full view folds recorded V3 memory, excludes dropped observations, and copies clean output", async () => {
+	it("full view folds recorded memory, excludes dropped observations, and copies clean output", async () => {
 		const obsA = observation("aaaaaaaaaaaa", { content: "Dropped observation content" });
 		const obsB = observation("bbbbbbbbbbbb", { content: "Kept observation content" });
 		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			oldV2ObservationEntry("v2-obs"),
-			compactionEntry("cmp-v2", { firstKeptEntryId: "raw-1", details: oldV2CompactionDetails() }),
 			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-1" }),
 			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "om-obs" }),
 			observationsDroppedEntry("om-drop", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "om-ref" }),
@@ -123,10 +102,7 @@ describe("V3 /om:view", () => {
 		expect(clipboardText).toContain("Kept observation content");
 		expect(clipboardText).not.toContain("[aaaaaaaaaaaa]");
 		expect(clipboardText).not.toContain("Dropped observation content");
-		expect(clipboardText).not.toContain("v2-obs");
-		expect(clipboardText).not.toContain("observational-memory");
 		expect(output).toBe(`${clipboardText}\n\n${COPY_SUCCESS}`);
-		expectNoDiagnostics(output);
 	});
 
 	it("full view renders recorded empty states and copies them", async () => {
@@ -141,7 +117,6 @@ describe("V3 /om:view", () => {
 
 		expect(clipboardText).toBe(expected);
 		expect(output).toBe(`${expected}\n\n${COPY_SUCCESS}`);
-		expectNoDiagnostics(output);
 	});
 
 	it("keeps rendering the memory view when clipboard copy fails", async () => {

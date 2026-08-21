@@ -6,7 +6,6 @@ import {
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
-	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
 	reflectionsRetiredEntry,
@@ -103,27 +102,6 @@ describe("session-ledger V3 folding", () => {
 		const folded = foldLedger(entries);
 
 		expect(folded.droppedObservationIds.has("deadbeef0000")).toBe(true);
-		expect(folded.activeObservations).toEqual([]);
-	});
-
-	it("ignores old V2 entries and unknown custom entries", () => {
-		const entries = [
-			textCustomMessage("raw-1", "aaaa"),
-			oldV2ObservationEntry("v2-obs"),
-			{
-				type: "custom",
-				id: "unknown",
-				parentId: null,
-				timestamp: "2026-05-02T10:00:00.000Z",
-				customType: "other.memory",
-				data: { any: true },
-			},
-		];
-
-		const folded = foldLedger(entries);
-
-		expect(folded.observations).toEqual([]);
-		expect(folded.reflections).toEqual([]);
 		expect(folded.activeObservations).toEqual([]);
 	});
 

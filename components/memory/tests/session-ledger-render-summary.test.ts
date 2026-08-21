@@ -16,7 +16,6 @@ describe("session-ledger V3 summary rendering", () => {
 		expect(summary).toContain("These records are this session's current working memory after compaction.");
 		expect(summary).toContain("Honor current law");
 		expect(summary).toContain("Do not replay this list as a historical stack");
-		expect(summary).not.toContain("past records");
 		expect(summary).toContain("use memory_source");
 		expect(summary).toContain("use session_search");
 	});
@@ -53,7 +52,6 @@ describe("session-ledger V3 summary rendering", () => {
 		expect(summary).not.toContain("supportingObservationIds");
 		expect(summary).not.toContain("entry-user");
 		expect(summary).not.toContain("entry-tool");
-		expect(summary).not.toContain("legacy");
 		expect(summary).not.toContain("[object Object]");
 	});
 });

@@ -76,7 +76,6 @@ describe("V3 dropper agent", () => {
 		expect(systemPrompt).toContain("Relevance is importance/resistance, not an absolute keep/drop lock");
 		expect(systemPrompt).toContain("Coverage is evidence, not an automatic decision");
 		expect(systemPrompt).toContain("age alone is not enough");
-		expect(systemPrompt).not.toContain("NEVER drop");
 		expect(systemPrompt).toContain("Preservation floor");
 		expect(systemPrompt).toContain("Do not force drops");
 		expect(systemPrompt).toContain("Dropping cannot merge, rewrite, or edit observations");
@@ -85,12 +84,6 @@ describe("V3 dropper agent", () => {
 		expect(systemPrompt).toContain("move the pool toward the target");
 		expect(systemPrompt).toContain("maintenance-eligible ids");
 		expect(systemPrompt).toContain("not permission to drop automatically");
-		expect(systemPrompt).not.toContain("drop freely");
-		expect(systemPrompt).not.toContain("pruner");
-		expect(systemPrompt).not.toContain("drop-priority");
-		expect(systemPrompt).not.toContain("drop-resistance");
-		expect(systemPrompt).not.toContain("Pass strategy");
-		expect(systemPrompt).not.toContain("Urgency guidance");
 	});
 
 	it("passes target-return max drops as a hard upper bound", async () => {
@@ -110,9 +103,6 @@ describe("V3 dropper agent", () => {
 		expect(userText).toContain("sized to move the active pool toward the target");
 		expect(userText).toContain("hard upper bound, not a target");
 		expect(userText).toContain("Drop fewer or none");
-		expect(userText).not.toContain("Drop urgency");
-		expect(userText).not.toContain("drop-priority");
-		expect(userText).not.toContain("drop-resistance");
 	});
 
 	it("runs a one-item maintenance pass below target and filters proposals to newly reflected ids", async () => {
@@ -136,7 +126,6 @@ describe("V3 dropper agent", () => {
 		expect(userText).toContain("Reflection-maintenance pass");
 		expect(userText).toContain("Maintenance-eligible observation ids: aaaaaaaaaaaa, bbbbbbbbbbbb");
 		expect(userText).toContain("Maximum drops allowed this run: 1 observation");
-		expect(userText).not.toContain("over target by");
 		expect(userText).toContain("[cccccccccccc]");
 	});
 

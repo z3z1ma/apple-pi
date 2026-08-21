@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({ agentDir: "" }));
@@ -85,7 +85,7 @@ describe("debug logging", () => {
 		expect(existsSync(join(agentDir, "observational-memory", "debug", "session-b.ndjson"))).toBe(true);
 	});
 
-	it("falls back to the legacy global debug file without a usable session id", () => {
+	it("uses the global debug file without a usable session id", () => {
 		withDebugLogContext({ enabled: true, cwd: "/tmp/project", runId: "run-1" }, () => debugLog("observer.start"));
 		withDebugLogContext({ enabled: true, sessionId: "---" }, () => debugLog("observer.start"));
 

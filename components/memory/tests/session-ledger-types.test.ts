@@ -1,34 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	OM_FOLDED,
-	OM_OBSERVATIONS_DROPPED,
-	OM_OBSERVATIONS_RECORDED,
-	OM_REFLECTIONS_RECORDED,
-	OM_REFLECTIONS_RETIRED,
 	buildObservationsDroppedData,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
 	buildReflectionsRetiredData,
 	isMemoryDetails,
+	isObservation,
 	isObservationsDroppedData,
 	isObservationsDroppedEntry,
 	isObservationsRecordedData,
 	isObservationsRecordedEntry,
-	isObservation,
 	isReflection,
 	isReflectionsRecordedData,
 	isReflectionsRecordedEntry,
 	isReflectionsRetiredData,
 	isReflectionsRetiredEntry,
+	OM_FOLDED,
+	OM_OBSERVATIONS_DROPPED,
+	OM_OBSERVATIONS_RECORDED,
+	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_RETIRED,
 } from "../src/session-ledger/index.js";
 import {
 	memoryDetails,
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
-	oldV2CompactionDetails,
-	oldV2ObservationEntry,
 	reflection,
 	reflectionsRecordedEntry,
 	reflectionsRetiredEntry,
@@ -145,10 +143,5 @@ describe("session-ledger V3 type guards and builders", () => {
 				}),
 			),
 		).toBe(true);
-	});
-
-	it("ignores old V2 observation entries and old V2 compaction details", () => {
-		expect(isObservationsRecordedEntry(oldV2ObservationEntry("v2-entry"))).toBe(false);
-		expect(isMemoryDetails(oldV2CompactionDetails())).toBe(false);
 	});
 });

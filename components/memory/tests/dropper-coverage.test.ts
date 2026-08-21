@@ -88,7 +88,5 @@ describe("V3 dropper reflection coverage helpers", () => {
 		expect(line).toContain("[critical]");
 		expect(line).toContain("[coverage: strong]");
 		expect(line).toContain("Important fact");
-		expect(line).not.toContain("drop-priority");
-		expect(line).not.toContain("drop-resistance");
 	});
 });

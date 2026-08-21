@@ -276,8 +276,6 @@ describe("Ledger visual companion", () => {
 		expect(screen.status).toBe(200);
 		expect(html).toContain("Ledger layout choice");
 		expect(html).toContain("apple-pi Ledger visual companion");
-		expect(html).not.toContain("primeradiant");
-		expect(html).not.toContain("Superpowers");
 
 		const stopped = JSON.parse(run("stop-server.sh", [runtime])) as { status: string };
 		runtimeDirs.pop();
@@ -596,10 +594,7 @@ describe("Ledger visual companion", () => {
 		expect(guide).toContain('"$SKILL_DIR/scripts/start-server.sh"');
 		expect(guide).toContain('"$SKILL_DIR/scripts/stop-server.sh" "$session_dir"');
 		expect(guide).toContain('"$SKILL_DIR/scripts/stop-server.sh" --status "$session_dir"');
-		expect(guide).not.toMatch(/^scripts\/(?:start|stop)-server\.sh/m);
 		expect(guide).toContain("Never bind the companion to `0.0.0.0`");
-		expect(readFileSync(join(scripts, "helper.js"), "utf8")).not.toContain("sessionStorage");
-
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-ledger-visual-cwd-"));
 		tempDirs.push(root);
 		const task = join(root, ".ledger", "202608210200-cwd");

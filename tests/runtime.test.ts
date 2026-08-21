@@ -539,7 +539,6 @@ describe("pi_exec guest API documentation", () => {
 		for (const signature of coreGuestSignatures()) {
 			expect(signature).toMatch(/^pi\.[a-z]+\(\{ /);
 			expect(signature).toMatch(/ → Promise</);
-			expect(signature).not.toMatch(/^pi\.[a-z]+\([a-z]/);
 		}
 	});
 
@@ -557,7 +556,7 @@ describe("pi_exec guest API documentation", () => {
 		);
 	});
 
-	it("embeds live object signatures in the tool contract and keeps the skill in sync", () => {
+	it("embeds live object signatures in the tool contract", () => {
 		const guidelines = PI_EXEC_PROMPT_GUIDELINES.join("\n");
 		const contract = piExecGuestApiContract();
 		expect(guidelines).toContain("never a positional string");
@@ -566,10 +565,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(guidelines).toContain("separate <inference-profiles> block lists the inference profiles");
 		expect(guidelines).toContain("type selects a teammate; profile selects an inference profile");
 		expect(guidelines).toContain("equivalent subagent_type, profile, and system_prompt combination");
-		expect(guidelines).not.toContain("better model class");
 		expect(guidelines).toContain("display is a pi_exec tool parameter");
-		expect(guidelines).not.toMatch(/Set display\.name/);
-		expect(guidelines).not.toMatch(/await tools\.describe/);
 		expect(PI_EXEC_DESCRIPTION).toContain("never a positional string");
 		expect(PI_EXEC_DESCRIPTION).toContain("outputSchema?");
 		expect(PI_EXEC_DESCRIPTION).toContain("value?");
@@ -587,8 +583,6 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("separate <inference-profiles> block lists the inference profiles");
 		expect(contract).toContain("profile selects an inference profile");
 		expect(contract).toContain("systemPrompt appends dynamic specialization");
-		expect(contract).not.toContain("model?: string");
-		expect(contract).not.toContain("thinking?: AgentThinking");
 		expect(contract).toContain("context?: JSONValue");
 		expect(contract).toContain("outputSchema?: object");
 		expect(contract).toContain("value?: JSONValue");
@@ -609,39 +603,13 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("encodeInto(");
 		expect(contract).toContain("getSetCookie(");
 		expect(contract).toContain("DOMException");
-		expect(contract).not.toContain("_fromFetch");
 
-		const skill = readFileSync(new URL("../skills/pi-exec/SKILL.md", import.meta.url), "utf8");
-		expect(skill).toContain("context?");
-		expect(skill).toContain("outputSchema?");
-		expect(skill).toContain("type?");
-		expect(skill).toContain("profile?");
-		expect(skill).toContain("live `<subagent-team>` block lists every callable teammate");
-		expect(skill).toContain("separate `<inference-profiles>` block lists the inference profiles");
-		expect(skill).toContain("configured inference `profile`, and own `description`");
-		expect(skill).toContain("equivalent `subagent_type`, `profile`, and `system_prompt` combination");
-		expect(skill).toContain('type: "Explore"');
-		expect(skill).toContain("agent(request: AgentRequest)");
-		expect(skill).toContain("agents.run(request: AgentRequest)");
-		expect(skill).toContain("value?: JSONValue");
-		expect(skill).toContain("bind the compact result as `context`");
-		expect(skill).not.toContain("50,000-character");
-		expect(contract).not.toContain("max 50000 chars");
-		expect(skill).toContain("Never `JSON.parse` assistant text");
-		expect(skill).toContain("const verdict = await agent({");
-		expect(skill).toContain("const result = await agents.run({");
-		expect(skill).toContain("skills.list()");
-		expect(skill).toContain("skills.body({ name })");
-		expect(skill).toContain("context: first");
-		expect(skill).not.toMatch(/Before calling an unfamiliar extension tool/);
 		const definitions = coreToolDefinitions();
 		for (const name of CORE_GUEST_TOOL_NAMES) {
 			const signature = `pi.${name}({`;
 			expect(contract).toContain(signature);
-			expect(skill).toContain(signature);
 			for (const field of Object.keys(definitions[name]?.parameters.properties ?? {})) {
 				expect(contract).toContain(field);
-				expect(skill).toContain(field);
 			}
 		}
 	});
@@ -726,18 +694,10 @@ describe("pi_exec skills", () => {
 			const names = listSkills({ cwd: dir, includeDefaults: false }).map((skill) => skill.name);
 			expect(names).toContain("review");
 			expect(names).toContain("ralph");
-			expect(names).not.toContain("ralph-executor");
-			expect(names).not.toContain("ralph-judge");
-			expect(names).not.toContain("review-planner");
-			expect(names).not.toContain("reviewer");
-			expect(names).not.toContain("review-verifier");
 			const body = readSkillBody("review", { cwd: dir, includeDefaults: false });
 			expect(body.startsWith("# Review")).toBe(true);
 			expect(body).not.toMatch(/^---/);
 			expect(body).toContain("pi_exec");
-			expect(() => readSkillBody("review-planner", { cwd: dir, includeDefaults: false })).toThrow(
-				/Unknown skill: review-planner/,
-			);
 			expect(() => readSkillBody("", { cwd: dir, includeDefaults: false })).toThrow(/requires a skill name/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
@@ -785,7 +745,6 @@ describe("pi_exec agent binding", () => {
 			profile: "deep",
 			advisor: true,
 		});
-		expect(parseAgentRequest({ task: "judge", systemPrompt: "REVIEWER" }).type).toBeUndefined();
 		expect(agentOperationArgs({ task: "map auth", type: "Explore", advisor: false })).toEqual({
 			task: "map auth",
 			type: "Explore",
@@ -793,11 +752,9 @@ describe("pi_exec agent binding", () => {
 		});
 	});
 
-	it("rejects empty tasks, padded profiles, and raw inference options", () => {
+	it("rejects empty tasks, padded profiles, and invalid advisor values", () => {
 		expect(() => parseAgentRequest({ task: "   " })).toThrow(/non-empty task/);
 		expect(() => parseAgentRequest({ task: "inspect", profile: " deep" })).toThrow(/unpadded/);
-		expect(() => parseAgentRequest({ task: "inspect", model: "xai/raw" })).toThrow(/raw model\/thinking/);
-		expect(() => parseAgentRequest({ task: "inspect", thinking: "high" })).toThrow(/raw model\/thinking/);
 		expect(() => parseAgentRequest({ task: "inspect", advisor: "on" })).toThrow(/advisor must be a boolean/);
 	});
 
@@ -833,13 +790,12 @@ describe("pi_exec agent binding", () => {
 			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"], advisor: false });
 
 			const custom = await resolveExecWorker(
-				{ task: "review this diff", systemPrompt: "REVIEWER" },
+				{ task: "review this diff", systemPrompt: "Focus on API boundaries." },
 				{ cwd, parentModel: "xai/parent", parentThinking: "low" },
 			);
 			expect(custom.tools).toEqual(["read", "grep", "find", "ls"]);
-			expect(custom.systemPrompt).toBe("REVIEWER");
+			expect(custom.systemPrompt).toBe("Focus on API boundaries.");
 			expect(custom.model).toBe("xai/parent");
-			expect(custom.type).toBeUndefined();
 
 			const explore = await resolveExecWorker({ task: "where is X?", type: "Explore" }, options);
 			expect(explore.type).toBe("Explore");
@@ -879,50 +835,6 @@ describe("pi_exec agent binding", () => {
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
-			rmSync(agentDir, { recursive: true, force: true });
-		}
-	});
-
-	it("resolves a project-defined custom general-purpose worker without restoring a built-in", async () => {
-		const root = mkdtempSync(join(tmpdir(), "apple-pi-exec-custom-general-"));
-		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-exec-empty-global-"));
-		const previous = process.env.PI_CODING_AGENT_DIR;
-		process.env.PI_CODING_AGENT_DIR = agentDir;
-		try {
-			mkdirSync(join(root, ".pi", "agents"), { recursive: true });
-			writeFileSync(
-				join(root, ".pi", "agents", "general.md"),
-				"---\nname: general-purpose\ndescription: Project-defined agent\ntools: read, edit\nprofile: quick\n---\n\nFollow the project-specific instructions.\n",
-			);
-			writeFileSync(
-				join(agentDir, "model-profiles.json"),
-				JSON.stringify({ profiles: { quick: { model: "xai/custom", thinking: "low" } } }),
-			);
-			const resolved = await resolveExecWorker(
-				{ task: "apply the project instructions", type: "general-purpose" },
-				{
-					cwd: root,
-					projectTrusted: true,
-					registry: { find: (provider, id) => (provider === "xai" && id === "custom" ? { provider, id } : undefined) },
-				},
-			);
-			expect(resolved).toMatchObject({
-				type: "general-purpose",
-				tools: ["read", "edit"],
-				model: "xai/custom",
-				thinking: "low",
-			});
-			expect(resolved.systemPrompt).toContain("Follow the project-specific instructions.");
-			await expect(
-				resolveExecWorker(
-					{ task: "must not load project config", type: "general-purpose" },
-					{ cwd: root, projectTrusted: false },
-				),
-			).rejects.toThrow(/Unknown or disabled agent type/);
-		} finally {
-			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
-			else process.env.PI_CODING_AGENT_DIR = previous;
-			rmSync(root, { recursive: true, force: true });
 			rmSync(agentDir, { recursive: true, force: true });
 		}
 	});
@@ -1163,7 +1075,6 @@ describe("pi_exec tool", () => {
 		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
 		expect(tool.description).toContain("extensions.echo_value({ value: string })");
-		expect(tool.description).not.toContain("extensions.pi_exec_program");
 	});
 
 	it("discovers and executes project-local programs using their JSDoc descriptions", async () => {

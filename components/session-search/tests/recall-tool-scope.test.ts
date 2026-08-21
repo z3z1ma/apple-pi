@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { registerRecallTool } from "../src/tool.js";
 
 const makeSession = () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-vcc-recall-scope-"));
+	const dir = mkdtempSync(join(tmpdir(), "session-search-recall-scope-"));
 	const file = join(dir, "session.jsonl");
 	const lines = [
 		JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: "active lineage token" } }),

@@ -13,7 +13,6 @@ import {
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
-	oldV2CompactionDetails,
 	reflection,
 	reflectionsRecordedEntry,
 	reflectionsRetiredEntry,
@@ -68,15 +67,6 @@ describe("session-ledger V3 projections", () => {
 		];
 
 		expect(visibleProjection(entries)).toEqual({ observations: [obs2], reflections: [ref1] });
-	});
-
-	it("ignores old V2 compaction details for visible projection", () => {
-		const entries = [
-			textCustomMessage("raw-1", "aaaa"),
-			compactionEntry("cmp-v2", { firstKeptEntryId: "raw-1", details: oldV2CompactionDetails() }),
-		];
-
-		expect(visibleProjection(entries)).toEqual({ observations: [], reflections: [] });
 	});
 
 	it("finds the latest full-fold boundary", () => {

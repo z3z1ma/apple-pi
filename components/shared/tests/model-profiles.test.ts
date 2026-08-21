@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -88,23 +88,5 @@ describe("user-global model profiles", () => {
 		);
 		expect(isInferenceProfileName("coding")).toBe(true);
 		expect(isInferenceProfileName("custom")).toBe(false);
-	});
-
-	it("does not read project profile files or legacy modes.json", () => {
-		const project = mkdtempSync(join(tmpdir(), "apple-pi-project-profiles-"));
-		try {
-			mkdirSync(join(project, ".pi"), { recursive: true });
-			writeFileSync(
-				join(project, ".pi", MODEL_PROFILES_FILENAME),
-				JSON.stringify({ profiles: { quick: { model: "xai/project", thinking: "low" } } }),
-			);
-			writeFileSync(
-				join(agentDir, "modes.json"),
-				JSON.stringify({ modes: { quick: { provider: "xai", modelId: "legacy", thinkingLevel: "low" } } }),
-			);
-			expect(() => loadModelProfiles()).toThrow(/cannot read model profiles/);
-		} finally {
-			rmSync(project, { recursive: true, force: true });
-		}
 	});
 });

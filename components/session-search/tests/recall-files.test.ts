@@ -22,7 +22,7 @@ const writeMessage = {
 	],
 } as any;
 
-describe("VCC file recall", () => {
+describe("file recall", () => {
 	it("parses and pages #N:path drill-down requests", () => {
 		expect(parseDrillDown("#42:src/auth.ts:30:5")).toEqual({
 			index: 42,
@@ -98,7 +98,7 @@ describe("VCC file recall", () => {
 		expect(expandToolCall([readResult], "read-1")).toContain("SECRET_LINE");
 		expect(expandToolCall([readResult], "missing")).toContain("No primary tool result");
 
-		const dir = mkdtempSync(join(tmpdir(), "vcc-call-recall-"));
+		const dir = mkdtempSync(join(tmpdir(), "session-search-call-recall-"));
 		const file = join(dir, "session.jsonl");
 		try {
 			writeFileSync(file, `${JSON.stringify({ type: "message", id: "m2", message: readResult })}\n`, "utf8");
@@ -123,7 +123,7 @@ describe("VCC file recall", () => {
 	});
 
 	it("exposes mode:touched and #N:path through session_search", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "vcc-file-recall-"));
+		const dir = mkdtempSync(join(tmpdir(), "session-search-file-recall-"));
 		const file = join(dir, "session.jsonl");
 		try {
 			writeFileSync(file, `${JSON.stringify({ type: "message", id: "m1", message: writeMessage })}\n`, "utf8");

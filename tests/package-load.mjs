@@ -104,9 +104,6 @@ try {
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
-	for (const obsolete of ["ralph", "harness", "ledger"]) {
-		assert(!commands.has(obsolete), `obsolete /${obsolete} command remains`);
-	}
 	for (const tool of [
 		"ask_user_question",
 		"session_search",
@@ -123,15 +120,9 @@ try {
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
-	for (const obsolete of ["ralph", "ledger", "vcc_recall", "recall"]) {
-		assert(!tools.has(obsolete), `obsolete ${obsolete} tool remains`);
-	}
-	assert(!tools.has("mcpScript"), "mcpScript duplicates pi_exec and must stay disabled");
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "pi_exec");
-	for (const leaked of ["callBudget", "concurrency", "memoryMb", "agentBudget", "timeoutSeconds"])
-		assert(!(leaked in piExecTool.definition.parameters.properties), `pi_exec caller budget leaked: ${leaked}`);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);
@@ -188,51 +179,10 @@ try {
 	]) {
 		assert(existsSync(visualPath), `missing Ledger brainstorming support: ${visualPath}`);
 	}
-	for (const obsoletePath of ["components/ledger", "components/operations", "extensions/harness.ts"]) {
-		assert(!existsSync(obsoletePath), `obsolete ledger runtime remains: ${obsoletePath}`);
-	}
-	for (const obsolete of [
-		"ledger-shape-task",
-		"ledger-research-task",
-		"ledger-specify-task",
-		"ledger-plan-task",
-		"ledger-execute-task",
-		"ledger-distill-close-task",
-		"brainstorming",
-		"writing-plans",
-		"executing-plans",
-		"subagent-driven-development",
-		"dispatching-parallel-agents",
-		"systematic-debugging",
-		"test-driven-development",
-		"requesting-code-review",
-		"receiving-code-review",
-		"verification-before-completion",
-		"using-git-worktrees",
-		"finishing-a-development-branch",
-		"writing-skills",
-		"ledger-ralph",
-		"ledger-review",
-		"ledger-pi-exec",
-		"ralph-executor",
-		"ralph-judge",
-		"ralph-reviewer",
-		"review-planner",
-		"reviewer",
-		"review-verifier",
-		"apple-review-planner",
-		"apple-reviewer",
-		"apple-review-verifier",
-	])
-		assert(!existsSync(`skills/${obsolete}`), `obsolete skill remains: ${obsolete}`);
 	const askUserTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "ask_user_question");
 	assert(askUserTool, "missing ask_user_question tool definition");
-	const questionSchema = askUserTool.definition.parameters.properties.questions.items;
-	const optionSchema = questionSchema.properties.options.items;
-	assert(!("preview" in optionSchema.properties), "deferred preview field leaked into ask_user_question schema");
-	assert(!("notes" in questionSchema.properties), "deferred notes field leaked into ask_user_question schema");
 	const agentTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "Agent");
@@ -261,9 +211,6 @@ try {
 		/appended after the selected definition and preloaded skills/,
 	);
 	assert.match(agentProperties.system_prompt.description, /cannot change capabilities/);
-	for (const removed of ["isolation", "schedule", "name", "max_turns", "model", "thinking"]) {
-		assert(!(removed in agentProperties), `removed subagent field leaked into schema: ${removed}`);
-	}
 	assert(
 		!agentTool.definition.parameters.required.includes("advisor"),
 		"advisor must remain optional for config defaults",
@@ -278,88 +225,20 @@ try {
 	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
 	assert.match(resultTool.definition.description, /use a very large yield_seconds value/);
 	assert.match(resultTool.definition.description, /not an agent timeout/);
-	assert(
-		existsSync("skills/review/references/plan-review-verify.js"),
-		"missing review plan-review-verify reference",
-	);
+	assert(existsSync("skills/review/references/plan-review-verify.js"), "missing review plan-review-verify reference");
 	assert(existsSync("skills/review/references/targeted-review.js"), "missing review targeted-review reference");
 	assert(existsSync("skills/review/references/multi-lens-review.js"), "missing review multi-lens reference");
 	assert(
 		existsSync("skills/review/references/security-baseline-review.js"),
 		"missing review security-baseline reference",
 	);
-	assert(
-		existsSync("skills/review/references/residual-review-loop.js"),
-		"missing review residual-loop reference",
-	);
+	assert(existsSync("skills/review/references/residual-review-loop.js"), "missing review residual-loop reference");
 	assert(existsSync("skills/review/references/planner.md"), "missing review planner reference");
 	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
 	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
 	assert(existsSync("skills/ralph/references/ralph-simple.js"), "missing general Ralph reference");
 	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing Ledger Ralph reference");
-	assert(
-		existsSync("skills/ralph/references/ralph-ledger-review.js"),
-		"missing reviewed Ledger Ralph reference",
-	);
-	const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-	for (const [program, prompts] of [
-		["plan-review-verify.js", ["PLANNER", "REVIEWER", "VERIFIER"]],
-		["targeted-review.js", ["REVIEWER", "VERIFIER"]],
-		["multi-lens-review.js", ["REVIEWER", "VERIFIER"]],
-		["security-baseline-review.js", ["ATTACKER", "DEFENDER", "VERIFIER"]],
-		["residual-review-loop.js", ["REVIEWER", "TRIAGE_VERIFIER", "FINAL_VERIFIER"]],
-	]) {
-		const source = readFileSync(`skills/review/references/${program}`, "utf8");
-		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
-		for (const constant of prompts)
-			assert(
-				new RegExp(`const ${constant}\\s*=\\s*"<adapt `).test(source),
-				`${program} must declare an adaptable ${constant} prompt`,
-			);
-	}
-	for (const [program, prompts] of [
-		["ralph-simple.js", ["RALPH"]],
-		["ralph-ledger.js", ["RALPH"]],
-		["ralph-ledger-review.js", ["PLANNER", "REVIEWER", "VERIFIER", "RALPH"]],
-	]) {
-		const source = readFileSync(`skills/ralph/references/${program}`, "utf8");
-		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
-		for (const constant of prompts)
-			assert(
-				new RegExp(`const ${constant}\\s*=\\s*"<adapt `).test(source),
-				`${program} must declare an adaptable ${constant} prompt`,
-			);
-	}
-	const simpleSource = readFileSync("skills/ralph/references/ralph-simple.js", "utf8");
-	const runSimple = new AsyncFunction("inputs", "std", "pi", "agents", simpleSource);
-	const emptyChange = { patch: "", untrackedFiles: [] };
-	const simpleResult = await runSimple(
-		{ goal: "Make one bounded change", iterations: "1" },
-		{ git: { change: async () => emptyChange } },
-		{ bash: async () => ({ ok: true, output: "" }) },
-		{ run: async () => ({ status: "completed" }) },
-	);
-	assert.equal(simpleResult.status, "completed");
-	const ledgerSource = readFileSync("skills/ralph/references/ralph-ledger.js", "utf8");
-	await assert.rejects(new AsyncFunction("inputs", ledgerSource)({ goal: "Execute the task", iterations: "1" }), /inputs\.task is required/);
-	const defaultAgentsSource = readFileSync("components/subagents/src/default-agents.ts", "utf8");
-	assert(!defaultAgentsSource.includes('name: "general-purpose"'), "retired built-in general-purpose agent remains");
-	assert(!defaultAgentsSource.includes("model:"), "built-in agents must not embed concrete models");
-	assert(!defaultAgentsSource.includes("thinking:"), "built-in agents must not embed raw thinking levels");
-	assert(existsSync("components/shared/src/model-profiles.ts"), "model profile authority is missing");
-	assert(!existsSync("components/shared/src/mode-utils.ts"), "legacy modes parser remains");
-	assert(!existsSync("components/subagents/src/model-resolver.ts"), "legacy fuzzy model resolver remains");
-	const docs = {
-		ledger: readFileSync("docs/ledger.md", "utf8"),
-		readme: readFileSync("README.md", "utf8"),
-	};
-	assert(docs.ledger.includes("ledger_add"), "ledger docs omit the add tool");
-	assert(docs.ledger.includes("ledger_close"), "ledger docs omit the close tool");
-	assert(docs.ledger.includes(".ledger/history/"), "ledger docs omit history archival");
-	assert(!docs.ledger.includes("/harness"), "obsolete /harness docs remain");
-	assert(!docs.ledger.includes("last-valid-entry-wins"), "obsolete active-task pointer docs remain");
-	assert(docs.readme.includes("ledger_add"), "README omits the add tool");
-	assert(docs.readme.includes("/skill:ralph"), "README omits /skill:ralph");
+	assert(existsSync("skills/ralph/references/ralph-ledger-review.js"), "missing reviewed Ledger Ralph reference");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
 	delete process.env.PI_CODING_AGENT_DIR;

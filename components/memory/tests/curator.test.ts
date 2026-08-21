@@ -52,9 +52,6 @@ describe("runCurator", () => {
 		expect(systemPrompt).toContain("Preserve user assertions exactly");
 		expect(systemPrompt).toContain("future-agent utility test");
 		expect(systemPrompt).toContain("Default action is KEEP");
-		expect(systemPrompt).not.toContain("That ends the run");
-		expect(systemPrompt).not.toContain("20,000");
-		expect(systemPrompt).not.toContain("20000");
 	});
 
 	it("lets record_reflections cite an observation recorded earlier in the same pass", async () => {

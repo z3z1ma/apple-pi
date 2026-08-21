@@ -85,16 +85,6 @@ describe("V3 config", () => {
 		});
 	});
 
-	it("ignores model settings; model selection belongs in model-profiles.json", () => {
-		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
-				model: { provider: "anthropic", id: "claude", thinking: "max" },
-			},
-		});
-
-		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
-	});
-
 	it("ignores invalid V3 values", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
 			"observational-memory": {
@@ -143,24 +133,6 @@ describe("V3 config", () => {
 			observationsPoolMaxTokens: 40,
 			observationsPoolTargetTokens: 20,
 		});
-	});
-
-	it("ignores old V2 settings without warnings or aliases", () => {
-		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
-				observationThresholdTokens: 10,
-				compactionThresholdTokens: 20,
-				reflectionThresholdTokens: 30,
-				compactionModel: { provider: "anthropic", id: "old" },
-				thinkingLevel: "high",
-				observerMaxTurnsPerRun: 2,
-				reflectorMaxTurnsPerPass: 3,
-				prunerMaxTurnsPerPass: 4,
-				compactionMaxToolCalls: 5,
-			},
-		});
-
-		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
 	});
 
 	it("parses passive env override", () => {

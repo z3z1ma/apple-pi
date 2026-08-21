@@ -57,7 +57,7 @@ const buildContent = () =>
 	].join("\n");
 
 const makeSession = () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-vcc-recall-expand-"));
+	const dir = mkdtempSync(join(tmpdir(), "session-search-recall-expand-"));
 	const file = join(dir, "session.jsonl");
 	writeFileSync(
 		file,

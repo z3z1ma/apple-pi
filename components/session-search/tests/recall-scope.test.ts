@@ -13,11 +13,6 @@ describe("normalizeRecallScope", () => {
 		expect(normalizeRecallScope("all")).toBe("all");
 		expect(normalizeRecallScope("ALL")).toBe("all");
 	});
-
-	it("does not keep VCC compaction scopes", () => {
-		expect(normalizeRecallScope("compaction:latest")).toBe("lineage");
-		expect(normalizeRecallScope("compaction:0")).toBe("lineage");
-	});
 });
 
 describe("normalizeRecallMode", () => {
