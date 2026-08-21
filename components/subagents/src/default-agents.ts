@@ -140,7 +140,7 @@ Official docs, current API behavior, implementation examples, and version-specif
 			name: "Counsel",
 			displayName: "Counsel",
 			description:
-				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Advisor (live parent-turn peer) and pi-review (structured change review).",
+				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Advisor (live parent-turn peer) and ledger-pi-review (structured change review).",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,

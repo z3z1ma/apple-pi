@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Generate a Ledger-owned review package for the current worktree diff,
+# including every non-ignored untracked file.
+# Usage: review-package PLAN_FILE BASE [OUTFILE]
+set -euo pipefail
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: review-package PLAN_FILE BASE [OUTFILE]" >&2
+  exit 2
+fi
+
+plan=$1
+base=$2
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
+
+if [ $# -eq 3 ]; then
+  out=$3
+else
+  dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
+  out="$dir/review-$(git rev-parse --short "$base")-worktree.diff"
+fi
+
+root=$(git rev-parse --show-toplevel)
+root=$(cd "$root" && pwd -P)
+out_dir=$(dirname "$out")
+out_abs=$(cd "$out_dir" && pwd -P)/$(basename "$out")
+out_repo_path=
+case "$out_abs" in
+  "$root"/*) out_repo_path=${out_abs#"$root"/} ;;
+esac
+if [ -n "$out_repo_path" ] && git -C "$root" ls-files --error-unmatch -- "$out_repo_path" >/dev/null 2>&1; then
+  echo "refusing to overwrite tracked review package path: $out_repo_path" >&2
+  exit 2
+fi
+
+# Snapshot the untracked set before opening the output file. An explicit
+# OUTFILE may itself be non-ignored and already exist, so exclude it by its
+# repository-relative path rather than relying on creation order.
+untracked=()
+while IFS= read -r -d '' path; do
+  [ -n "$out_repo_path" ] && [ "$path" = "$out_repo_path" ] && continue
+  untracked+=("$path")
+done < <(git -C "$root" ls-files --others --exclude-standard -z)
+
+{
+  echo "# Review package: ${base}..WORKTREE"
+  echo
+  echo "## Working-tree status"
+  git -C "$root" -c core.quotePath=true status --short --untracked-files=no
+  for path in "${untracked[@]}"; do
+    printf '?? %q\n' "$path"
+  done
+  echo
+  echo "## Files changed"
+  git -C "$root" diff --stat "$base"
+  for path in "${untracked[@]}"; do
+    printf 'untracked: %q\n' "$path"
+  done
+  echo
+  echo "## Diff"
+  git -C "$root" diff --binary -U10 "$base"
+
+  if [ ${#untracked[@]} -gt 0 ]; then
+    echo
+    echo "## Untracked file patches"
+  fi
+  for path in "${untracked[@]}"; do
+    if [ ! -e "$root/$path" ] && [ ! -L "$root/$path" ]; then
+      printf 'untracked file disappeared before packaging: %q\n' "$path" >&2
+      exit 3
+    fi
+
+    set +e
+    (cd "$root" && git diff --no-index --binary -U10 -- /dev/null "$path")
+    status=$?
+    set -e
+    if [ "$status" -gt 1 ]; then
+      printf 'failed to package untracked file: %q\n' "$path" >&2
+      exit "$status"
+    fi
+  done
+} > "$out_abs"
+
+echo "wrote ${out_abs}: $(wc -c < "$out_abs" | tr -d ' ') bytes"

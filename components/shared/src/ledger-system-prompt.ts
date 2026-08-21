@@ -1,9 +1,30 @@
 export const LEDGER_SYSTEM_PROMPT_TAG = "ledger-workbench";
 
 export const LEDGER_SYSTEM_PROMPT = `<ledger-workbench>
-# .ledger workbench
+# Ledger workbench
 
-A repository may use \`.ledger\` as a plain-Markdown workbench for non-trivial, multi-step work. The transcript is not durable task state. Use the ledger when the user asks for it, when a prepared ledger task governs the work, or when long-running work needs a cold-start contract. Do not create ledger ceremony for a small one-off change unless the user asks.
+Ledger is apple-pi's shared authority, memory, execution record, and learning loop. The transcript is transient; a task bundle lets a cold-start maintainer recover what outcome is owned, what authorized it, what is settled, what was observed, and what should happen next. Ledger is not a paperwork target or a second product database.
+
+Apply the Ledger method to all work and scale its artifacts to consequence. Exact typo, formatting, and one-line mechanical work can stay record-free. Work that creates or materially changes behavior, data meaning, an interface, persistence, side effects, a verification path, or a multi-session outcome needs a governing task unless repository authority already provides an equivalent owner.
+
+## Fundamental model
+
+- **Authority:** one task owns one coherent outcome. Active specifications and decisions govern semantics. Source and tests describe the current system but cannot ratify a new product choice.
+- **Provenance:** every execution-changing assumption is record-backed, explicitly user-ratified, or blocking. Pressure, examples, worker confidence, polished artifacts, and passing tests do not create authority.
+- **Memory:** search the live index, relevant history, task records, and repository owners before asking the operator to repeat context the project already bought.
+- **Evidence:** record observations with their procedure and limits. A worker report is a claim until checked; a passing test proves its assertions, not unspecified correctness.
+- **Compounding:** preserve useful lessons in the owner that changes future behavior. Reusable knowledge moves to repository docs, decisions, tests, runbooks, or packaged skills; independent unfinished outcomes receive their own task.
+- **Proportion:** choose the smallest complete solution and the lightest durable record set that preserves authority, continuity, and proof.
+
+## Operating states
+
+Ledger work moves through three explicit states:
+
+1. **Shaping:** resolve meaning, inspect existing context, research unknown facts, ratify assumptions, and establish scope, acceptance, specifications, and decisions. Shaping may conclude that no implementation is needed.
+2. **Orchestration:** select bounded Work Items and owners, sequence dependencies, commission implementation and independent review, reconcile findings, and judge closure. Do not launch overlapping writers or treat handoff reports as proof.
+3. **Execution:** own one acceptance gap or Work Item, change only that surface, journal material discoveries, gather criterion-matched evidence, and block when ambiguity would change behavior or acceptance.
+
+One session may wear these roles sequentially when separate agents are unnecessary or unavailable. Keep the handoffs explicit: shaping establishes authority, execution produces observations, and orchestration judges the combined record.
 
 ## Authority and storage
 
@@ -140,7 +161,7 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 7. If work pauses, blocks, or is cancelled, record that state honestly; never manufacture \`done\`.
 8. At each meaningful iteration and closure, promote durable knowledge to its real repository owner. Independent unfinished outcomes become separately indexed tasks rather than hidden scope expansion.
 
-When lifecycle skills are available, use the matching shaping, research, specification, planning, execution, Ralph, review, and distillation skill. The ledger contract above still governs agents that run without skills or extensions.
+When packaged workflow skills are available, \`ledger-brainstorming\` owns shaping, research, specification, and decisions; \`ledger-writing-plans\` owns plans and Work Items; execution skills maintain evidence and review state; \`ledger-finishing-a-development-branch\` owns distillation and closure. The ledger contract above still governs sessions that load none of those procedures.
 </ledger-workbench>`;
 
 export function appendLedgerSystemPrompt(systemPrompt: string): string {

@@ -1,6 +1,31 @@
 # Ledger task bundles
 
-`.ledger` is apple-pi's plain-Markdown workbench for non-trivial work. Each task is one self-contained directory whose name records when the task crystallized:
+Ledger is apple-pi's plain-Markdown authority, memory, execution record, and learning loop. It lets a cold-start human or agent recover what outcome is owned, what authorized it, what is settled, what happened, what the evidence proves, and what should happen next. The transcript can inform the current turn; it is not durable project state.
+
+Ledger is not a paperwork target, issue-tracker clone, or runtime database. The method applies to every task, while record depth scales with consequence. An exact typo or mechanical line edit can remain record-free. Work that creates or materially changes behavior, data meaning, an interface, persistence, side effects, a verification path, or a multi-session outcome benefits from one governing task.
+
+## Fundamental model
+
+- **Authority:** one task owns one coherent outcome. Active specifications and decisions govern intended semantics. Source and tests establish current behavior but cannot ratify a new product choice.
+- **Provenance:** every execution-changing assumption is record-backed, explicitly user-ratified, or blocking. Pressure, examples, worker confidence, polished artifacts, and passing tests do not create authority.
+- **Memory:** search live and historical tasks, supporting records, and repository owners before asking the operator to repay context the project already captured.
+- **Evidence:** observations include procedure and limits. Worker reports are claims; tests prove their assertions; review independently attempts to falsify completion.
+- **Compounding:** useful lessons move to the owner that changes future behavior—normal docs, decisions, tests, runbooks, packaged skills, or a new task. Task-specific history stays local.
+- **Proportion:** choose the smallest complete solution and the lightest record set that preserves authority, continuity, and proof.
+
+## Operating states
+
+Ledger separates three responsibilities even when one session performs them sequentially:
+
+1. **Shaping** resolves meaning, inspects existing context, researches unknown facts, ratifies assumptions, and establishes scope, acceptance, specifications, and decisions.
+2. **Orchestration** selects Work Items and owners, sequences dependencies, commissions bounded execution and independent review, reconciles findings, and judges closure.
+3. **Execution** owns one acceptance gap or Work Item, changes only that surface, journals material discoveries, gathers criterion-matched evidence, and blocks when ambiguity would change behavior or acceptance.
+
+Shaping establishes authority; execution produces observations; orchestration judges the combined record. Typed `Agent`, `pi_exec`, Ralph, and review are actuation choices inside that model, not alternate task systems.
+
+## Storage model
+
+Each task is one self-contained directory whose name records when the task crystallized:
 
 ```text
 .ledger/
@@ -21,7 +46,7 @@
 
 The exact task ID form is `YYYYMMDDhhmm-lowercase-kebab-slug`. The timestamp must be a valid calendar minute, and its date must match the `Created` header in `task.md`. A bundle contains exactly one executable root, `task.md`.
 
-The model is intentionally local to one outcome. The task carries its own shaping, execution ledger, evidence, review, and learning. It does not create a second global project wiki. When a result deserves to become durable project authority, it is distilled into the repository's normal docs, ADRs, handbook, tests, or discoverable skills.
+The model is intentionally local to one outcome. The task carries its shaping, execution Journal, evidence, review, retrospective, and distillation. It does not create a second global project wiki.
 
 ## Team and solo policies
 
@@ -183,27 +208,26 @@ Those tools refuse collisions and do not list, inspect, select, or execute exist
 
 ## Workflow skills
 
-Apple-pi packages the complete lifecycle as on-demand Pi skills:
+Every packaged skill is prefixed `ledger-` because it consumes or produces the same authority, provenance, evidence, and learning state. The prefix is a behavioral contract, not a second namespace around unrelated techniques.
 
-```text
-/skill:ledger-shape-task
-/skill:ledger-research-task
-/skill:ledger-specify-task
-/skill:ledger-plan-task
-/skill:ledger-execute-task
-/skill:pi-ralph
-/skill:ledger-distill-close-task
-```
+| State | Skills | Ledger responsibility |
+| --- | --- | --- |
+| Shaping | `ledger-brainstorming`, `ledger-writing-plans` | Search prior context, resolve ambiguity, ratify assumptions, and establish task/spec/decision/plan authority. |
+| Execution | `ledger-systematic-debugging`, `ledger-test-driven-development`, `ledger-executing-plans`, `ledger-pi-ralph` | Own one acceptance gap or Work Item, journal discoveries, and gather bounded evidence. |
+| Orchestration | `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents`, `ledger-pi-exec` | Sequence dependencies, bind cold-start handoffs, coordinate bounded workers, and reconcile their claims. |
+| Review | `ledger-requesting-code-review`, `ledger-pi-review`, `ledger-receiving-code-review`, `ledger-verification-before-completion` | Attempt to falsify completion, disposition findings, and map claims to fresh criterion evidence. |
+| Workspace and closure | `ledger-using-git-worktrees`, `ledger-finishing-a-development-branch` | Preserve isolation and continuity, distill learning, judge honest terminal state, and present operator-owned integration choices. |
+| Compounding | `ledger-writing-skills` | Turn repeated toil or instruction failures into empirically tested packaged procedures. |
 
 Typical flow:
 
 ```text
-shape → research as needed → specify/decide → plan → inspect → /skill:pi-ralph → /skill:pi-review → distill
+shape → research/specify as needed → plan → execute → review → verify → distill → operator integration
 ```
 
-Ralph is a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker with the Ralph system prompt and explicit write-capable tools; it implements one increment, updates ledger records, and dies. The calling session chooses the iteration count, then reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch. There is no judge and no `/ralph` command.
+The underlying runtime identifiers remain unchanged: `Agent` is typed collaboration, `pi_exec` is bounded composition, and `ledger_add` / `ledger_close` create or archive task structure. Ralph is implemented as a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker; the caller bounds the batch, then invokes `/skill:ledger-pi-review` separately and reconciles the Ledger before deciding on another batch.
 
-Not every task needs every record. The skills separate procedures; they do not require ceremony. A small but non-trivial task may need only `task.md`. Research, specs, decisions, plans, evidence records, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
+Not every task needs every record or skill. A small but non-trivial task may need only `task.md`, and exact trivial work may need no task mutation. Research, specs, decisions, plans, standalone evidence, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
 
 ## Distillation
 

@@ -35,6 +35,7 @@
     "components/tmux-sessions/scripts/",
     "components/tmux-sessions/pi_session_manager.tmux",
     "components/tmux-sessions/LICENSE",
+    "components/status-footer/src/",
     "extensions/",
     "skills/",
     "docs/",
@@ -51,10 +52,12 @@
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",
       "./extensions/ledger.ts",
+      "./extensions/workflow.ts",
       "./extensions/xai-hosted-tools.ts",
       "./extensions/xai-context-compaction.ts",
       "./extensions/notify.ts",
-      "./extensions/tmux-sessions.ts"
+      "./extensions/tmux-sessions.ts",
+      "./extensions/status-footer.ts"
     ],
     "skills": [
       "./skills"

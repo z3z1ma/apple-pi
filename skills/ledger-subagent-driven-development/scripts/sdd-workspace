@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Resolve the Ledger-owned directory for one plan's SDD artifacts.
+# Usage: sdd-workspace PLAN_FILE
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: sdd-workspace PLAN_FILE" >&2
+  exit 2
+fi
+
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+plans_dir=$(dirname "$plan")
+task_root=$(dirname "$plans_dir")
+[ "$(basename "$plans_dir")" = "plans" ] && [ -f "$task_root/task.md" ] \
+  || { echo "plan must be under a Ledger task's plans/ directory: $plan" >&2; exit 2; }
+
+slug=$(basename "$plan" .md)
+dir="$task_root/evidence/sdd/$slug"
+mkdir -p "$dir"
+cd "$dir" && pwd -P

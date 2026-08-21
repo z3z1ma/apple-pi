@@ -1,20 +1,20 @@
 # Review
 
-Review is a skill over `pi_exec`, not an extension. Load `/skill:pi-review`, select an executable reference shape, adapt its role-prompt templates and inputs to the change, then set `limits` so every worker fits. Role prompts are inlined as `systemPrompt` constants; workers remain untyped, read-only, and return typed values through `pi_exec_return`.
+Review is a skill over `pi_exec`, not an extension. Load `/skill:ledger-pi-review`, select an executable reference shape, adapt its role-prompt templates and inputs to the change, then set `limits` so every worker fits. Role prompts are inlined as `systemPrompt` constants; workers remain untyped, read-only, and return typed values through `pi_exec_return`.
 
 ```text
-/skill:pi-review
+/skill:ledger-pi-review
 ```
 
 ## Starting shapes
 
 | Reference | Scenario | Flow | Profiles |
 | --- | --- | --- | --- |
-| [`targeted-review.js`](../skills/pi-review/references/targeted-review.js) | A bounded question and its changed paths are already known. | One focused reviewer → independent verifier. | reviewer `quick`; verifier `balanced` |
-| [`plan-review-verify.js`](../skills/pi-review/references/plan-review-verify.js) | A multi-file or multi-contract change needs decomposition. | planner → partition-focused reviewers in parallel → verifier. | planner `balanced`; reviewers `quick`; verifier `deep` |
-| [`multi-lens-review.js`](../skills/pi-review/references/multi-lens-review.js) | A high-risk change has multiple known, independent contracts to challenge. | parallel lens reviewers → deep verifier. | reviewers `quick`; verifier `deep` |
-| [`security-baseline-review.js`](../skills/pi-review/references/security-baseline-review.js) | A security boundary needs independent attacker and defensive-control baselines. | parallel baselines → deep verifier. | baseline reviewers `balanced`; verifier `deep` |
-| [`residual-review-loop.js`](../skills/pi-review/references/residual-review-loop.js) | First-pass verification may identify a bounded set of material coverage gaps. | initial reviewer → balanced triage → residual reviewers → deep verifier. | reviewers `quick`; triage `balanced`; final verifier `deep` |
+| [`targeted-review.js`](../skills/ledger-pi-review/references/targeted-review.js) | A bounded question and its changed paths are already known. | One focused reviewer → independent verifier. | reviewer `quick`; verifier `balanced` |
+| [`plan-review-verify.js`](../skills/ledger-pi-review/references/plan-review-verify.js) | A multi-file or multi-contract change needs decomposition. | planner → partition-focused reviewers in parallel → verifier. | planner `balanced`; reviewers `quick`; verifier `deep` |
+| [`multi-lens-review.js`](../skills/ledger-pi-review/references/multi-lens-review.js) | A high-risk change has multiple known, independent contracts to challenge. | parallel lens reviewers → deep verifier. | reviewers `quick`; verifier `deep` |
+| [`security-baseline-review.js`](../skills/ledger-pi-review/references/security-baseline-review.js) | A security boundary needs independent attacker and defensive-control baselines. | parallel baselines → deep verifier. | baseline reviewers `balanced`; verifier `deep` |
+| [`residual-review-loop.js`](../skills/ledger-pi-review/references/residual-review-loop.js) | First-pass verification may identify a bounded set of material coverage gaps. | initial reviewer → balanced triage → residual reviewers → deep verifier. | reviewers `quick`; triage `balanced`; final verifier `deep` |
 
 Use `quick` only for a narrow, falsifiable investigation with concrete traces. A `balanced` verifier is appropriate for one bounded candidate stream. A verifier that reconciles partitions, parallel lenses, compound risks, or material uncertainty uses `deep`. These defaults choose model/thinking policy only; they do not grant tools or authority. See [model profiles](model-profiles.md) for profile ownership and availability.
 
@@ -42,4 +42,4 @@ All shapes accept `paths` (newline-separated changed paths), optional `compare` 
 
 The five shipped programs are useful topologies, not a closed catalog. Add another executable template only when its control flow is materially different—for example, an explicit residual loop, redundant independent baselines for a security boundary, or a staged migration review. For a different emphasis within an existing topology, adapt the prompt template and focus questions rather than fork the program.
 
-Findings must name a patch-introduced cause in an assigned path. See [`skills/pi-review`](../skills/pi-review) for the full procedure and [`docs/exec.md`](exec.md) for the guest runtime.
+Findings must name a patch-introduced cause in an assigned path. See [`skills/ledger-pi-review`](../skills/ledger-pi-review) for the full procedure and [`docs/exec.md`](exec.md) for the guest runtime.

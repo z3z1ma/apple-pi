@@ -79,6 +79,26 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Original notice: `Copyright (c) 2026 Takuya Matsuyama` (reproduced verbatim in `components/tmux-sessions/LICENSE`)
 - The bash picker, launcher, popup-in-popup handling, and bell forwarding are adapted from upstream and retargeted from Claude Code to Pi. Pi has no `claude agents --json` equivalent, so status comes from JSON records the apple-pi extension writes to disk (`agents.sh` reads those records and joins them to tmux panes) rather than from an external agent command. Session prefix, tmux options, and command default were renamed to the `pi`/`@pi_*` namespace.
 
+## obra/superpowers → apple-pi workflow and engineering skills
+
+- Source: <https://github.com/obra/superpowers>
+- Imported commit: `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`
+- Author named by the source package: Jesse Vincent
+- Local paths: `components/shared/src/workflow-system-prompt.ts`, `extensions/workflow.ts`, `skills/ledger-brainstorming/`, `skills/ledger-writing-plans/`, `skills/ledger-executing-plans/`, `skills/ledger-subagent-driven-development/`, `skills/ledger-dispatching-parallel-agents/`, `skills/ledger-systematic-debugging/`, `skills/ledger-test-driven-development/`, `skills/ledger-requesting-code-review/`, `skills/ledger-receiving-code-review/`, `skills/ledger-verification-before-completion/`, `skills/ledger-using-git-worktrees/`, `skills/ledger-finishing-a-development-branch/`, `skills/ledger-writing-skills/`, `tests/ledger-prompt-integration.test.ts`, `tests/package-load.mjs`
+- License: MIT
+- Original notice: `Copyright (c) 2025 Jesse Vincent`
+- The injected root prompt adapts upstream skill-routing behavior to Pi's native available-skills catalog and package discovery. The listed engineering skills retain the upstream process while translating storage, skill references, operator authority, Ledger ownership, and worktree integration to apple-pi. apple-pi retains maintenance responsibility for these adapted paths.
+
+## z3z1ma/10x → Ledger foundation
+
+- Source: <https://github.com/z3z1ma/10x>
+- Reviewed and adapted commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
+- Author and copyright holder named by the source: Alexander M. Butler
+- Local paths: `components/shared/src/ledger-system-prompt.ts`, `components/shared/src/workflow-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, every `skills/ledger-*/SKILL.md`, and `.ledger/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
+- License: MIT
+- Original notice: `Copyright (c) 2026 Alexander M. Butler`
+- apple-pi adapts 10x's durable-judgment concepts—authority and provenance, shaping/orchestration/execution separation, evidence limits, adversarial review, proportional records, retrospective compounding, and instruction evaluation—into the existing single-task Ledger bundle and `ledger-*` skill system. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.
+
 ## MIT license applying to the imported works
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

@@ -63,7 +63,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
 | Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
-| `skills/` | On-demand procedural guidance loaded by Pi | Review and Ralph are skills that author `pi_exec` programs, not hidden runtime engines. Ledger skills each own a specific lifecycle phase. |
+| `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with Ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
 | `.ledger/` | Optional task-local workbench for non-trivial work | It is execution state and evidence, not product runtime state. Storage/commit policy belongs to the repository owner. |
@@ -98,7 +98,9 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 ### Ledger, review, and Ralph
 
-- `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. It is not required ceremony for small changes.
+- Ledger is the shared authority, cold-start memory, execution record, and learning loop beneath every packaged `ledger-*` skill. It distinguishes shaping, orchestration, and execution even when one session performs them sequentially.
+- Execution-changing assumptions are record-backed, user-ratified, or blocking. Worker reports are claims; observations carry limits; review independently tries to falsify completion; closure reconciles acceptance evidence, blockers, dependencies, review, retrospective, and distillation.
+- `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. The method scales down to disciplined minimalism for exact trivial changes rather than requiring ceremony.
 - `ledger_add` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
 - Task status and evidence live in each task's `task.md`; `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
