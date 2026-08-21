@@ -13,3 +13,5 @@
 - `.ledger/history/202608202235-evaluate-superpowers-ledger-integration/task.md` — done — Evaluate Superpowers integration with Ledger — Study obra/superpowers at main and define an evidence-backed integration path for apple-pi's ledger, skills, Ralph, subagents, and Pi Exec.
 
 - `.ledger/history/202608202254-strengthen-ledger-workflow/task.md` — done — Strengthen Ledger workflow with evaluated Superpowers principles — Fuse Superpowers procedures and 10x durable judgment into 13 Ledger lifecycle skills while preserving Pi utility boundaries.
+
+- `.ledger/history/202608211154-colorize-input-card-editor/task.md` — done — Colorize the input card and custom editor — Add theme-aware semantic color and styling to the bottom information strip and Apple Pi custom editor while preserving native editing, responsive width, and component status integration.

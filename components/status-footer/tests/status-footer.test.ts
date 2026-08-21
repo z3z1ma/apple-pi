@@ -5,8 +5,29 @@ import { describe, expect, it, vi } from "vitest";
 import type { FooterSnapshot, TelemetrySession } from "../src/index.js";
 import { collectInputCardSnapshot, collectUsageTotals, InputCardEditor, renderInputCard } from "../src/index.js";
 
+const colorCodes: Record<string, number> = {
+	accent: 35,
+	dim: 90,
+	error: 31,
+	muted: 36,
+	success: 32,
+	text: 37,
+	warning: 33,
+	customMessageLabel: 95,
+	mdLink: 96,
+	syntaxFunction: 94,
+	syntaxKeyword: 95,
+	syntaxNumber: 91,
+	syntaxString: 92,
+	syntaxType: 96,
+	syntaxVariable: 93,
+	thinkingMedium: 93,
+	thinkingText: 97,
+};
+
 const theme = {
-	fg: (color: string, text: string) => `\u001b[3${color === "error" ? "1" : "2"}m${text}\u001b[0m`,
+	fg: (color: string, text: string) => `\u001b[${colorCodes[color] ?? 37}m${text}\u001b[0m`,
+	bold: (text: string) => `\u001b[1m${text}\u001b[22m`,
 } as unknown as Theme;
 
 function usage(input: number, output: number, cacheRead: number, cacheWrite: number, cost: number): Usage {
@@ -141,6 +162,53 @@ describe("input card rendering", () => {
 		expect(output).toContain("(auto)");
 		for (const status of completeSnapshot.statuses) expect(output.split(status.text).length - 1).toBe(1);
 		expect(output).not.toMatch(/(?:project|model|provider|thinking|ctx|cost):/i);
+	});
+
+	it("leaves native prompt text styling unchanged", () => {
+		const nativePrompt = "hello \u001b[7mworld\u001b[0m again";
+		const prompt = renderInputCard(completeSnapshot, theme, 80, [nativePrompt])[1]!;
+
+		expect(prompt).toContain(nativePrompt);
+		expect(prompt).not.toContain(`\u001b[35m${nativePrompt}`);
+	});
+
+	it("gives known component statuses and telemetry distinct semantic colors", () => {
+		const output = renderInputCard(completeSnapshot, theme, 240, [""]).join("\n");
+
+		expect(output).toContain("\u001b[33mMCP authenticating docs\u001b[0m");
+		expect(output).toContain("\u001b[94mMCP 3 servers\u001b[0m");
+		expect(output).toContain("\u001b[95mAdvisor reviewing · $0.42\u001b[0m");
+		expect(output).toContain("\u001b[32m2 running agents\u001b[0m");
+		expect(output).toContain("\u001b[36mExtension active\u001b[0m");
+		expect(output).toContain("\u001b[93m↑12k\u001b[0m");
+		expect(output).toContain("\u001b[32m↓4.0k\u001b[0m");
+		expect(output).toContain("\u001b[91mR8.0k\u001b[0m");
+		expect(output).toContain("\u001b[92mW2.0k\u001b[0m");
+		expect(output).toContain("\u001b[96mCH36.4%\u001b[0m");
+		expect(output).toContain("\u001b[33m$1.234 (sub)\u001b[0m");
+		expect(output).toContain("\u001b[95m(auto)\u001b[0m");
+	});
+
+	it("restores producer color after nested status styling resets", () => {
+		const advisorStatus = "\u001b[90m│\u001b[0m Advisor reviewing";
+		const snapshot = {
+			...completeSnapshot,
+			statuses: [{ key: "q-advisor", text: advisorStatus }],
+		};
+		const output = renderInputCard(snapshot, theme, 120, [""]).join("\n");
+
+		expect(output).toContain("\u001b[95m\u001b[90m│\u001b[0m\u001b[95m Advisor reviewing\u001b[0m");
+		expect(stripTerminalSequences(output).split("│ Advisor reviewing")).toHaveLength(2);
+	});
+
+	it("uses a safe theme role for an unknown future thinking level", () => {
+		const snapshot = {
+			...completeSnapshot,
+			model: { ...completeSnapshot.model!, thinkingLevel: "future" },
+		};
+		const output = renderInputCard(snapshot, theme, 120, [""]).join("\n");
+
+		expect(output).toContain("\u001b[97m · future\u001b[0m");
 	});
 
 	it("uses the full terminal width rather than capping or centering wide cards", () => {

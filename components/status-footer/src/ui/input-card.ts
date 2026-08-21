@@ -5,6 +5,7 @@ import {
 	CustomEditor as PiCustomEditor,
 	type ReadonlyFooterDataProvider,
 	type Theme,
+	type ThemeColor,
 } from "@earendil-works/pi-coding-agent";
 import {
 	type EditorTheme,
@@ -101,10 +102,35 @@ function orderedStatuses(statuses: readonly FooterStatus[]): FooterStatus[] {
 	});
 }
 
-function contextColor(percent: number | null): "error" | "warning" | "text" {
-	if (percent !== null && percent > 90) return "error";
-	if (percent !== null && percent > 70) return "warning";
-	return "text";
+function contextColor(percent: number | null): "error" | "muted" | "success" | "warning" {
+	if (percent === null) return "muted";
+	if (percent > 90) return "error";
+	if (percent > 70) return "warning";
+	return "success";
+}
+
+/** Apply a foreground while restoring it after cursor or producer-owned ANSI resets. */
+function fgPreservingNestedStyles(theme: Theme, color: Parameters<Theme["fg"]>[0], text: string): string {
+	const styledEmpty = theme.fg(color, "");
+	const styleStart = styledEmpty.replace(/\u001b\[(?:0|39)m/g, "");
+	return theme.fg(
+		color,
+		text.replace(/\u001b\[(?:0|39)m/g, (reset) => `${reset}${styleStart}`),
+	);
+}
+
+function statusColor(status: FooterStatus): ThemeColor {
+	const text = stripTerminalSequences(status.text).toLowerCase();
+	if (/\b(?:error|failed|failure)\b/.test(text)) return "error";
+	if (status.key === "mcp-auth") return "warning";
+	if (status.key === "mcp") return /\b(?:connecting|authenticating)\b/.test(text) ? "warning" : "syntaxFunction";
+	if (status.key === "q-advisor") return text.includes("reviewing") ? "customMessageLabel" : "muted";
+	if (status.key === "subagents") return /\b(?:queued|waiting|stopped)\b/.test(text) ? "warning" : "success";
+	return "muted";
+}
+
+function styleStatus(status: FooterStatus, theme: Theme): string {
+	return fgPreservingNestedStyles(theme, statusColor(status), sanitizeStatusText(status.text));
 }
 
 function joinSegments(segments: readonly RenderSegment[], separator: string): string {
@@ -196,7 +222,7 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 		const path = formatCwdForFooter(snapshot.cwd);
 		if (path) {
 			segments.push({
-				text: theme.fg("accent", path),
+				text: theme.fg("mdLink", path),
 				priority: 1,
 				essential: true,
 			});
@@ -204,28 +230,47 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 	}
 	if (snapshot.branch) {
 		segments.push({
-			text: theme.fg("muted", `⎇ ${cleanOneLine(snapshot.branch)}`),
+			text: theme.fg("syntaxString", `⎇ ${cleanOneLine(snapshot.branch)}`),
 			priority: 2,
 		});
 	}
 	if (snapshot.sessionName) {
 		segments.push({
-			text: theme.fg("dim", `@${cleanOneLine(snapshot.sessionName)}`),
+			text: theme.fg("syntaxVariable", `@${cleanOneLine(snapshot.sessionName)}`),
 			priority: 3,
 		});
 	}
 
-	const statuses = orderedStatuses(snapshot.statuses)
-		.map((status) => sanitizeStatusText(status.text))
-		.filter(Boolean);
+	const statuses = orderedStatuses(snapshot.statuses).filter((status) => sanitizeStatusText(status.text));
 	if (statuses.length > 0) {
 		segments.push({
-			text: statuses.join(COMPACT_SEPARATOR),
+			text: statuses.map((status) => styleStatus(status, theme)).join(theme.fg("dim", COMPACT_SEPARATOR)),
 			priority: 1,
 			essential: true,
 		});
 	}
 	return segments;
+}
+
+function thinkingColor(level: string): ThemeColor {
+	switch (level) {
+		case "off":
+			return "thinkingOff";
+		case "minimal":
+			return "thinkingMinimal";
+		case "low":
+			return "thinkingLow";
+		case "medium":
+			return "thinkingMedium";
+		case "high":
+			return "thinkingHigh";
+		case "xhigh":
+			return "thinkingXhigh";
+		case "max":
+			return "thinkingMax";
+		default:
+			return "thinkingText";
+	}
 }
 
 function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefined {
@@ -236,7 +281,7 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	const model = cleanOneLine(modelName);
 	if (!provider || !model) return undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
-	return `${theme.fg("text", model)}  ${theme.fg("muted", provider)}${thinking ? theme.fg("dim", ` · ${thinking}`) : ""}`;
+	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}`) : ""}`;
 }
 
 function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[] {
@@ -260,16 +305,16 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 	const usage = snapshot.usage;
 	if (usage) {
 		const tokenParts: string[] = [];
-		if (usage.input) tokenParts.push(`↑${formatTokens(usage.input)}`);
-		if (usage.output) tokenParts.push(`↓${formatTokens(usage.output)}`);
-		if (usage.cacheRead) tokenParts.push(`R${formatTokens(usage.cacheRead)}`);
-		if (usage.cacheWrite) tokenParts.push(`W${formatTokens(usage.cacheWrite)}`);
+		if (usage.input) tokenParts.push(theme.fg("syntaxVariable", `↑${formatTokens(usage.input)}`));
+		if (usage.output) tokenParts.push(theme.fg("success", `↓${formatTokens(usage.output)}`));
+		if (usage.cacheRead) tokenParts.push(theme.fg("syntaxNumber", `R${formatTokens(usage.cacheRead)}`));
+		if (usage.cacheWrite) tokenParts.push(theme.fg("syntaxString", `W${formatTokens(usage.cacheWrite)}`));
 		if ((usage.cacheRead > 0 || usage.cacheWrite > 0) && usage.latestCacheHitRate !== undefined) {
-			tokenParts.push(`CH${usage.latestCacheHitRate.toFixed(1)}%`);
+			tokenParts.push(theme.fg("syntaxType", `CH${usage.latestCacheHitRate.toFixed(1)}%`));
 		}
 		if (tokenParts.length > 0) {
 			segments.push({
-				text: theme.fg("dim", tokenParts.join(" ")),
+				text: tokenParts.join(" "),
 				priority: 3,
 			});
 		}
@@ -277,17 +322,17 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 
 	if (usage && (usage.cost !== 0 || snapshot.usingSubscription === true)) {
 		segments.push({
-			text: theme.fg("muted", `$${usage.cost.toFixed(3)}${snapshot.usingSubscription ? " (sub)" : ""}`),
+			text: theme.fg("warning", `$${usage.cost.toFixed(3)}${snapshot.usingSubscription ? " (sub)" : ""}`),
 			priority: 2,
 		});
 	} else if (snapshot.usingSubscription === true) {
 		segments.push({
-			text: theme.fg("muted", "$0.000 (sub)"),
+			text: theme.fg("warning", "$0.000 (sub)"),
 			priority: 2,
 		});
 	}
 	if (snapshot.autoCompactionEnabled === true) {
-		segments.push({ text: theme.fg("dim", "(auto)"), priority: 2 });
+		segments.push({ text: theme.fg("syntaxKeyword", "(auto)"), priority: 2 });
 	}
 	return segments;
 }
