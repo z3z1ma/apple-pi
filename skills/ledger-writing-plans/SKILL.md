@@ -160,7 +160,11 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later Work Items match what you defined in earlier Work Items? A function called `clearLayers()` in WI-003 but `clearFullLayers()` in WI-007 is a bug.
 
-If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+If you find issues, fix them inline. If you find a specification requirement with no Work Item, add the Work Item.
+
+## Independent Plan Review
+
+Load `ledger-requesting-code-review` and use its [executable review gate](../ledger-requesting-code-review/review-gate.md) in `plan` mode. Translate [plan-document-reviewer-prompt.md](plan-document-reviewer-prompt.md) into `question`, `checks`, plan `paths`, and governing `contextPaths`; pass [references/ledger-gate.js](../ledger-requesting-code-review/references/ledger-gate.js) as the `pi_exec` program. Record every typed observation and verified disposition in `task.md` Review. Resolve every critical or significant finding and re-run the bounded gate before offering execution. A remaining execution-changing authority gap returns to `ledger-brainstorming`; it is not a planning default.
 
 ## Execution Handoff
 
@@ -168,7 +172,7 @@ After saving the plan, offer execution choice:
 
 **"Plan complete and saved to `.ledger/<task-id>/plans/<filename>.md`. Two execution options:**
 
-**1. Agent-Driven (recommended)** - I dispatch a fresh typed `Agent` implementer per Work Item and run `ledger-pi-review` between Work Items
+**1. Agent-Driven (recommended)** - I dispatch a fresh typed `Agent` implementer per Work Item and run `pi-review` between Work Items
 
 **2. Inline Execution** - Execute Work Items in this session using ledger-executing-plans, batch execution with checkpoints
 

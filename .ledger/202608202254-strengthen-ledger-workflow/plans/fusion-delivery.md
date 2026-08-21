@@ -2,11 +2,11 @@ Status: active
 Created: 2026-08-20
 Updated: 2026-08-20
 
-# Delivery plan for the apple-pi Superpowers fusion
+# Delivery plan for the apple-pi Ledger engineering fusion
 
 ## Outcome
 
-Deliver one discoverable, root-session apple-pi workflow that retains Superpowers' full methodology and happy path at upstream commit `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`, while mapping all actions and durable state to Ledger, `Agent`, `pi_exec`, Ralph, `pi-review`, Advisor, and operator authority.
+Deliver one discoverable apple-pi Ledger workflow that retains Superpowers' full methodology at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`, adapts the durable-judgment substrate from 10x at `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`, prefixes the 13 incoming lifecycle skills `ledger-`, preserves the established Pi utility skill names, and maps actuation to Ledger, `Agent`, `pi_exec`, Ralph, independent review, Advisor, and operator authority.
 
 Implementation begins only after the operator approves this active specification and plan. The approval must cover the complete workflow, not merely the bootstrap.
 
@@ -26,11 +26,11 @@ Implementation begins only after the operator approves this active specification
 | `components/shared/src/workflow-system-prompt.ts` (new) | Root-only injected workflow prompt | Build an idempotent Superpowers-derived entry contract: catalog check, 1%-applicability skill loading, process priority, actual apple-pi action mapping, full happy path, and root-versus-worker boundary. It is the routing contract; there is no separate `using-apple-pi` skill. |
 | `extensions/workflow.ts` (new) | Root package registration | Append the injected prompt through `before_agent_start`; bootstrap failure remains visible. This extension is absent from explicit child/worker extension lists. |
 | `package.json`, `tests/package-load.mjs`, `tests/ledger-prompt-integration.test.ts` | Public surface and deterministic proof | Register/load the extension; test exact-once injection, prompt ordering, root-only isolation, package loading, and the actual catalog/applicability mapping. |
-| Existing Ledger lifecycle skills and new process skills | Complete retained methodology | Rework `ledger-shape-task`, `ledger-research-task`, `ledger-specify-task`, `ledger-plan-task`, `ledger-execute-task`, and `ledger-distill-close-task`; add dedicated close adaptations for debugging, TDD, verification, receiving review, worktrees, finishing, and writing skills. Add prompts/references only where a concrete workflow consumer loads them. |
-| `skills/pi-ralph/`, `skills/pi-review/` | Existing execution/review owners | Translate upstream execution/review behavior into their current owners: Agent SDD route and Ralph selection under `ledger-execute-task`; task/fix/final review topology in `pi-review`; retain bounded context, independent verification, and no implicit completion. |
+| `skills/ledger-*/` | Complete retained methodology | Replace the six stage-local lifecycle skills with one 16-skill Ledger-prefixed system. Each skill keeps its Superpowers procedure while declaring a distinct shaping, orchestration, execution, review, workspace, closure, or compounding role. |
+| `skills/pi-ralph/`, `skills/pi-review/`, `skills/pi-exec/` | Existing execution/review/composition owners | Keep their established names and responsibility boundaries. Ledger lifecycle skills may invoke them with task context; Pi Exec and Pi Review remain general, while Pi Ralph retains its existing prepared-Ledger-task contract. |
 | `docs/workflow.md` (new), `README.md`, `docs/ledger.md`, `docs/subagents.md`, `docs/exec.md` | Durable user/maintainer contract | Describe one happy path, exact route selection, artifact translation, operator integration choices, and root/bootstrap boundary. Update existing docs only where their stated behavior changes. |
 | `THIRD_PARTY_NOTICES.md` | Provenance | Add `obra/superpowers`, exact commit, MIT notice/copyright, and every local path containing literal or materially adapted source. |
-| Visual companion helpers and tests | Upstream material that cannot be silently dropped | First isolate upstream helper/security/protocol code into a dedicated planned increment. Port it only after exact review of its dependencies, licensing, local storage, authentication, and package inclusion. |
+| `skills/ledger-brainstorming/visual-companion.md`, `scripts/`, review prompts, focused tests | Optional visual and document-review support | Port the authenticated local visual loop without upstream branding/telemetry: durable HTML may live in task evidence while capability keys, URLs, events, PIDs, and logs remain ephemeral. Use Ledger-aware spec and plan review prompts.
 
 ## Sequence
 
@@ -57,7 +57,7 @@ Implementation begins only after the operator approves this active specification
    - Add root-session skill-behavior tests: no typed agent proxy; each changed behavior gets five fresh sandbox baseline/treatment repetitions and manual classification.
 
 5. **Build the authentic apple-pi execution and review paths.**
-   - Extend `ledger-execute-task` with an explicit route decision: typed Agent SDD for resumable per-WI collaboration, Ralph for bounded sequential fresh increments, and `pi_exec` for genuinely independent bounded fan-out.
+   - Route explicitly among `ledger-subagent-driven-development` for resumable per-WI collaboration, `pi-ralph` for caller-bounded fresh increments, `ledger-executing-plans` for direct sequential execution, and `pi-exec` / `ledger-dispatching-parallel-agents` for genuinely independent bounded fan-out.
    - Translate upstream implementer/task-reviewer/re-reviewer prompts into Agent invocation guidance and `pi-review` task-gate/fix-scoped/final-review templates. Keep reports as unverified input, retain verifier decisions, and preserve coverage-gap output.
    - Preserve status routing, context handoff, preflight interface review, fix escalation, and final review while recording only Ledger state. Significant unresolved findings block rather than become a controller “ruling.”
 
@@ -65,9 +65,10 @@ Implementation begins only after the operator approves this active specification
    - Add adapted worktree and finishing skills that preserve detection, consent, baseline verification, options, exact destructive confirmation, ownership-aware cleanup, and rationalization counters.
    - Translate all Git/forge effects into operator-authorized actions. No skill may automatically change `.gitignore`, commit, push, merge, open a PR, force-delete, or dispose of unowned work.
 
-7. **Port the visual companion as its own bounded increment.**
-   - Implement only after the preceding textual workflow has a functioning root entry and after focused security/license/source inspection.
-   - Preserve opt-in, authenticated local interactions, terminal-primary feedback, owner-bound cleanup, durable selected content, and restart/failure behavior; replace upstream branding/telemetry and `.superpowers` storage with apple-pi-owned equivalents.
+7. **Port the visual companion and document-review prompts.**
+   - Preserve just-in-time operator opt-in, authenticated local interactions, terminal-primary feedback, owner-bound cleanup, and durable visual evidence.
+   - Keep keys, URLs, events, PIDs, and logs in ephemeral runtime state; preserve only HTML under task evidence and selected semantics in specifications, decisions, or Journal.
+   - Replace upstream branding/telemetry and `.superpowers` storage with local apple-pi/Ledger owners and verify auth, path, lifecycle, and package behavior.
 
 8. **Close the package-level workflow.**
    - Update user-facing and maintainer docs, package loader assertions, and package contents.
@@ -78,11 +79,34 @@ Implementation begins only after the operator approves this active specification
 
 | Criterion | Proof before advancement |
 | --- | --- |
-| AC-001 | Exact source matrix covers all 14 skills, material role prompts/helpers/bootstrap surfaces, source revision, disposition, local owner, state translation, and attribution status. |
+| AC-001 | Exact source records cover Superpowers' workflow/support surfaces and 10x's adopted principles with pinned revisions, disposition, local owner, state translation, and attribution. |
 | AC-002 | Clean root session demonstrates automatic workflow discovery and the complete documented happy-path transitions; package/extension tests prove root-only, exact-once behavior. |
-| AC-003 | Tests and review show every referenced action maps to real apple-pi APIs; repository scan finds no `.superpowers` state, generic `Task`/`TodoWrite`, duplicate progress system, or self-authorizing controller. |
+| AC-003 | Tests and review show the 13 incoming lifecycle names begin `ledger-`, `pi-exec` / `pi-review` / `pi-ralph` remain unchanged, every action maps to a real apple-pi API, and scans find no `.superpowers`, `.10x`, old generic lifecycle aliases, accidental `ledger-pi-*` aliases, generic `Task`/`TodoWrite`, duplicate progress state, or self-authorizing controller. |
 | AC-004 | Five fresh disposable-root Git-sandbox repetitions per changed behavior include the complete prompt, environment, trace/final result, manual `meets`/`partial`/`misses` classification, and treatment comparison. |
 | AC-005 | Focused checks pass while iterating; before closure run `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run pack:check`, appropriate root workflow evaluations, and independent `pi-review`. |
+
+### Skill-authoring requirement ownership
+
+Every retained requirement from `ledger-writing-skills` is governed by WI-004. Evidence and review observations for these identifiers live under WI-004 rather than in a parallel checklist.
+
+| Requirement | Work Item | Requirement | Work Item |
+| --- | --- | --- | --- |
+| RED-001 | WI-004 | RED-002 | WI-004 |
+| RED-003 | WI-004 | RED-004 | WI-004 |
+| GREEN-001 | WI-004 | GREEN-002 | WI-004 |
+| GREEN-003 | WI-004 | GREEN-004 | WI-004 |
+| GREEN-005 | WI-004 | GREEN-006 | WI-004 |
+| GREEN-007 | WI-004 | GREEN-008 | WI-004 |
+| GREEN-009 | WI-004 | GREEN-010 | WI-004 |
+| GREEN-011 | WI-004 | GREEN-012 | WI-004 |
+| REFACTOR-001 | WI-004 | REFACTOR-002 | WI-004 |
+| REFACTOR-003 | WI-004 | REFACTOR-004 | WI-004 |
+| REFACTOR-005 | WI-004 | REFACTOR-006 | WI-004 |
+| REFACTOR-007 | WI-004 | REFACTOR-008 | WI-004 |
+| REFACTOR-009 | WI-004 | QUALITY-001 | WI-004 |
+| QUALITY-002 | WI-004 | QUALITY-003 | WI-004 |
+| QUALITY-004 | WI-004 | QUALITY-005 | WI-004 |
+| DEPLOY-001 | WI-004 | DEPLOY-002 | WI-004 |
 
 A failed bootstrap, missing skill/action mapping, rejected worker result, unresolved material review finding, inconclusive evaluation, stale evidence, test failure, or unexplained package-surface difference blocks the affected increment. It does not authorize a smaller silent implementation.
 

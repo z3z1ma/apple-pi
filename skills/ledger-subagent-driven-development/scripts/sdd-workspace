@@ -10,13 +10,38 @@ fi
 
 plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+[ ! -L "$plan" ] || { echo "refusing symlink plan file: $plan" >&2; exit 2; }
+
+root=$(git rev-parse --show-toplevel)
+root=$(cd "$root" && pwd -P)
+plan_dir=$(cd "$(dirname "$plan")" && pwd -P)
+plan="$plan_dir/$(basename "$plan")"
+case "$plan" in
+  "$root"/.ledger/*/plans/*) ;;
+  *) echo "plan must be under this repository's .ledger/<task>/plans/: $plan" >&2; exit 2 ;;
+esac
+
 plans_dir=$(dirname "$plan")
 task_root=$(dirname "$plans_dir")
-[ "$(basename "$plans_dir")" = "plans" ] && [ -f "$task_root/task.md" ] \
+[ "$(basename "$plans_dir")" = "plans" ] && [ -f "$task_root/task.md" ] && [ ! -L "$task_root/task.md" ] \
   || { echo "plan must be under a Ledger task's plans/ directory: $plan" >&2; exit 2; }
 
+safe_directory() {
+  local path="$1"
+  if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
+    echo "refusing unsafe SDD workspace path: $path" >&2
+    exit 2
+  fi
+  if [ ! -e "$path" ]; then
+    mkdir "$path"
+  fi
+}
+
 slug=$(basename "$plan" .md)
-dir="$task_root/evidence/sdd/$slug"
-mkdir -p "$dir"
+evidence="$task_root/evidence"
+sdd_root="$evidence/sdd"
+dir="$sdd_root/$slug"
+safe_directory "$evidence"
+safe_directory "$sdd_root"
+safe_directory "$dir"
 cd "$dir" && pwd -P

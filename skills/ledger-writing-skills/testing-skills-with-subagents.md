@@ -48,11 +48,11 @@ This is identical to TDD's "write failing test first" - you MUST see what agents
 
 **Process:**
 
-- [ ] **Create pressure scenarios** (3+ combined pressures)
-- [ ] **Run WITHOUT skill** - give agents realistic task with pressures
-- [ ] **Document choices and rationalizations** word-for-word
-- [ ] **Identify patterns** - which excuses appear repeatedly?
-- [ ] **Note effective pressures** - which scenarios trigger violations?
+- **Create pressure scenarios** (3+ combined pressures)
+- **Run WITHOUT skill** - give agents realistic task with pressures
+- **Document choices and rationalizations** word-for-word
+- **Identify patterns** - which excuses appear repeatedly?
+- **Note effective pressures** - which scenarios trigger violations?
 
 **Example:**
 
@@ -310,24 +310,24 @@ Meta-test: "Skill was clear, I should follow it"
 Before deploying skill, verify you followed RED-GREEN-REFACTOR:
 
 **RED Phase:**
-- [ ] Created pressure scenarios (3+ combined pressures)
-- [ ] Ran scenarios WITHOUT skill (baseline)
-- [ ] Documented agent failures and rationalizations verbatim
+- Created pressure scenarios (3+ combined pressures)
+- Ran scenarios WITHOUT skill (baseline)
+- Documented agent failures and rationalizations verbatim
 
 **GREEN Phase:**
-- [ ] Wrote skill addressing specific baseline failures
-- [ ] Ran scenarios WITH skill
-- [ ] Agent now complies
+- Wrote skill addressing specific baseline failures
+- Ran scenarios WITH skill
+- Agent now complies
 
 **REFACTOR Phase:**
-- [ ] Identified NEW rationalizations from testing
-- [ ] Added explicit counters for each loophole
-- [ ] Updated rationalization table
-- [ ] Updated red flags list
-- [ ] Updated description with violation symptoms
-- [ ] Re-tested - agent still complies
-- [ ] Meta-tested to verify clarity
-- [ ] Agent follows rule under maximum pressure
+- Identified NEW rationalizations from testing
+- Added explicit counters for each loophole
+- Updated rationalization table
+- Updated red flags list
+- Updated description with violation symptoms
+- Re-tested - agent still complies
+- Meta-tested to verify clarity
+- Agent follows rule under maximum pressure
 
 ## Common Mistakes (Same as TDD)
 

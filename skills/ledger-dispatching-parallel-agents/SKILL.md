@@ -69,16 +69,39 @@ Each agent gets:
 
 ### 3. Dispatch in Parallel
 
-Use one bounded `pi_exec` program with `parallel(...)` and `agents.run` for all three dispatches:
+Use one bounded `pi_exec` program with `parallel(...)` and `agents.run` for all three dispatches. Pass the following JavaScript as the tool's `code` argument, with `display` and limits on the `pi_exec` call itself:
 
-```text
-pi_exec agents.run worker: "Fix agent-tool-abort.test.ts failures"
-pi_exec agents.run worker: "Fix batch-completion-behavior.test.ts failures"
-pi_exec agents.run worker: "Fix tool-approval-race-conditions.test.ts failures"
-# All three run concurrently.
+```javascript
+const domains = [
+  { name: "agent-tool-abort", task: "Fix the scoped failures in agent-tool-abort.test.ts." },
+  { name: "batch-completion", task: "Fix the scoped failures in batch-completion-behavior.test.ts." },
+  { name: "approval-races", task: "Fix the scoped failures in tool-approval-race-conditions.test.ts." },
+];
+
+const results = await parallel(
+  domains,
+  (domain) => agents.run({
+    type: "Implement",
+    name: domain.name,
+    advisor: true,
+    task: domain.task,
+    context: {
+      governingTask: inputs.taskPath,
+      constraints: "Stay inside this domain; do not commit or integrate.",
+    },
+  }),
+  3,
+);
+
+return results.map((result, index) => ({
+  domain: domains[index].name,
+  status: result.status,
+  report: result.text,
+  error: result.error,
+}));
 ```
 
-`parallel(...)` makes the independence and concurrency bound explicit; sequential dependencies stay outside that fan-out.
+Supply `inputs.taskPath`, set an explicit `agentBudget`, `callBudget`, concurrency, and timeout, then reconcile every returned status and report before integration. `parallel(...)` makes the independence and concurrency bound explicit; sequential dependencies stay outside that fan-out.
 
 ### 4. Review and Integrate
 

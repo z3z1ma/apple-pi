@@ -8,9 +8,9 @@
 # Options:
 #   --task-dir <path>  Store session files under <task>/evidence/.storage/visual-companion/
 #                         instead of /tmp. Files persist after server stops.
-#   --host <bind-host>    Host/interface to bind (default: 127.0.0.1).
-#                         Use 0.0.0.0 in remote/containerized environments.
-#   --url-host <host>     Hostname shown in returned URL JSON.
+#   --host <bind-host>    Loopback host/interface to bind (default: 127.0.0.1).
+#                         Non-loopback binds are rejected; use an approved encrypted tunnel.
+#   --url-host <host>     Hostname shown in returned URL JSON for a loopback/tunnel endpoint.
 #   --idle-timeout-minutes <n>  Shut down after n minutes idle (default 240 = 4h).
 #   --open                Auto-open the browser on the first screen (use only
 #                         after the user approves the visual companion).
@@ -63,13 +63,30 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$URL_HOST" ]]; then
-  if [[ "$BIND_HOST" == "127.0.0.1" || "$BIND_HOST" == "localhost" ]]; then
-    URL_HOST="localhost"
-  else
-    URL_HOST="$BIND_HOST"
-  fi
+if [[ "$BIND_HOST" == "[::1]" ]]; then
+  BIND_HOST="::1"
 fi
+case "$BIND_HOST" in
+  127.0.0.1|::1) ;;
+  *)
+    echo '{"error": "--host must be loopback; use an operator-approved encrypted tunnel for remote access"}'
+    exit 1
+    ;;
+esac
+
+if [[ -z "$URL_HOST" ]]; then
+  URL_HOST="$BIND_HOST"
+fi
+if [[ "$URL_HOST" == "[::1]" ]]; then
+  URL_HOST="::1"
+fi
+case "$URL_HOST" in
+  127.0.0.1|::1) ;;
+  *)
+    echo '{"error": "--url-host must be a loopback endpoint; use the local side of an approved encrypted tunnel"}'
+    exit 1
+    ;;
+esac
 
 if [[ -n "$IDLE_TIMEOUT_MINUTES" ]]; then
   if ! [[ "$IDLE_TIMEOUT_MINUTES" =~ ^[0-9]+$ ]] || [[ "$IDLE_TIMEOUT_MINUTES" -lt 1 ]]; then
@@ -101,7 +118,7 @@ if [[ "$FOREGROUND" != "true" && "$FORCE_BACKGROUND" != "true" ]]; then
   fi
 fi
 
-# Session files (server.log, server-info, .last-token) embed the session key —
+# Runtime files (server.log, server-info, token) embed the session key —
 # keep everything this script and the server create owner-only.
 umask 077
 
@@ -149,25 +166,55 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
-# Resolve the harness PID (grandparent of this script).
-# $PPID is the ephemeral shell the harness spawned to run us — it dies
-# when this script exits. The harness itself is $PPID's parent.
-OWNER_PID="$(ps -o ppid= -p "$PPID" 2>/dev/null | tr -d ' ')"
-if [[ -z "$OWNER_PID" || "$OWNER_PID" == "1" ]]; then
-  OWNER_PID="$PPID"
+process_has_pi_session() {
+  local pid="$1"
+  [[ -n "${PI_SESSION_ID:-}" ]] || return 1
+  if [[ -r "/proc/$pid/environ" ]]; then
+    tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -Fqx "PI_SESSION_ID=$PI_SESSION_ID"
+    return $?
+  fi
+  ps eww -p "$pid" -o command= 2>/dev/null | grep -Fq "PI_SESSION_ID=$PI_SESSION_ID"
+}
+
+find_pi_owner_pid() {
+  local current="$PPID"
+  local matched=""
+  while [[ -n "$current" && "$current" =~ ^[0-9]+$ && "$current" -gt 1 ]]; do
+    if process_has_pi_session "$current"; then
+      matched="$current"
+    elif [[ -n "$matched" ]]; then
+      break
+    fi
+    local parent
+    parent="$(ps -o ppid= -p "$current" 2>/dev/null | tr -d ' ')"
+    [[ -n "$parent" && "$parent" != "$current" ]] || break
+    current="$parent"
+  done
+  printf '%s\n' "$matched"
+}
+
+# Bind lifecycle ownership to the highest ancestor carrying this exact Pi
+# session ID. Wrapper shells inherit it but disappear immediately; their Pi
+# parent remains. When identity discovery is unavailable, rely on idle timeout
+# rather than guessing an unrelated grandparent.
+OWNER_PID="$(find_pi_owner_pid)"
+OWNER_ID=""
+if [[ -n "$OWNER_PID" ]]; then
+  OWNER_ID="$(ps -o lstart= -p "$OWNER_PID" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)"
+  if [[ -z "$OWNER_ID" ]]; then
+    OWNER_PID=""
+  fi
 fi
 
 # Windows/MSYS2: Node.js cannot see POSIX PIDs from the MSYS2 namespace.
-# Passing a PID node cannot verify causes server to log owner-pid-invalid
-# and self-terminate at the 60-second lifecycle check. Clear it so the
-# watchdog is disabled and the idle timeout becomes the only shutdown trigger.
 if is_windows_like_shell; then
   OWNER_PID=""
+  OWNER_ID=""
 fi
 
 # Foreground mode for environments that reap detached/background processes.
 if [[ "$FOREGROUND" == "true" ]]; then
-  env LEDGER_VISUAL_DIR="$SESSION_DIR" LEDGER_VISUAL_CONTENT_DIR="$CONTENT_DIR" LEDGER_VISUAL_STATE_DIR="$STATE_DIR" LEDGER_VISUAL_HOST="$BIND_HOST" LEDGER_VISUAL_URL_HOST="$URL_HOST" LEDGER_VISUAL_OWNER_PID="$OWNER_PID" node server.cjs "--ledger-visual-server-id=$SERVER_ID" &
+  env LEDGER_VISUAL_DIR="$SESSION_DIR" LEDGER_VISUAL_CONTENT_DIR="$CONTENT_DIR" LEDGER_VISUAL_STATE_DIR="$STATE_DIR" LEDGER_VISUAL_HOST="$BIND_HOST" LEDGER_VISUAL_URL_HOST="$URL_HOST" LEDGER_VISUAL_OWNER_PID="$OWNER_PID" LEDGER_VISUAL_OWNER_ID="$OWNER_ID" node server.cjs "--ledger-visual-server-id=$SERVER_ID" &
   SERVER_PID=$!
   echo "$SERVER_PID" > "$PID_FILE"
   wait "$SERVER_PID"
@@ -176,7 +223,7 @@ fi
 
 # Start server, capturing output to log file
 # Use nohup to survive shell exit; disown to remove from job table
-nohup env LEDGER_VISUAL_DIR="$SESSION_DIR" LEDGER_VISUAL_CONTENT_DIR="$CONTENT_DIR" LEDGER_VISUAL_STATE_DIR="$STATE_DIR" LEDGER_VISUAL_HOST="$BIND_HOST" LEDGER_VISUAL_URL_HOST="$URL_HOST" LEDGER_VISUAL_OWNER_PID="$OWNER_PID" node server.cjs "--ledger-visual-server-id=$SERVER_ID" > "$LOG_FILE" 2>&1 &
+nohup env LEDGER_VISUAL_DIR="$SESSION_DIR" LEDGER_VISUAL_CONTENT_DIR="$CONTENT_DIR" LEDGER_VISUAL_STATE_DIR="$STATE_DIR" LEDGER_VISUAL_HOST="$BIND_HOST" LEDGER_VISUAL_URL_HOST="$URL_HOST" LEDGER_VISUAL_OWNER_PID="$OWNER_PID" LEDGER_VISUAL_OWNER_ID="$OWNER_ID" node server.cjs "--ledger-visual-server-id=$SERVER_ID" > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 disown "$SERVER_PID" 2>/dev/null
 echo "$SERVER_PID" > "$PID_FILE"

@@ -1,6 +1,6 @@
-Status: active
+Status: done
 Created: 2026-08-20
-Updated: 2026-08-20
+Updated: 2026-08-21
 
 # Fresh-context Ledger workflow baseline evaluation
 
@@ -42,17 +42,31 @@ Six initial pilots (B-001 through B-006) used a fresh `Plan` child with `quick` 
 
 A subsequent B-001 root-session smoke run used `pi --no-session --approve -p` with normal tools in a copied sandbox and corrected the fixture without creating Ledger ceremony. It is also insufficient as the baseline: the copy excluded `.git`, so its attempted Git-status observation failed, and it covers only one scenario. It is retained as method evidence, not a scored result.
 
+### Valid root treatment and observed repair
+
+On 2026-08-21, a clean initialized Git sandbox exercised an ambiguous notification request with normal root package discovery. The first run loaded `ledger-brainstorming` from its absolute package catalog location, preserved the no-write and no-guess boundary, but unnecessarily wrapped one structured question in `pi_exec`; that composition could not capture the registered extension tool and produced a visible error before the agent recovered in text. The run was classified `partial`.
+
+The skill was corrected to direct the root session to call `ask_user_question` directly when structured choices help and to avoid wrapping a single interaction in `pi_exec`. A fresh sandbox treatment then loaded the same exact skill location, inspected the repository, produced zero tool errors and no mutation, classified the request as architectural, and asked which failure trigger should govern before designing notification delivery. The treatment was classified `meets`.
+
+The complete procedure, bounded trace, classification, and limits are recorded in `../evidence/root-workflow-acceptance.md`.
+
 ## Conclusions
 
-No scenario has a valid scored baseline yet. The corrected disposable-root-session method is required before using any result to change behavior-shaping source.
+The corrected method produced five sequential normal-package-discovery treatment runs for each B-001–B-006 scenario. The trace-derived classifier paired tool starts with their actual outcomes and recorded **30 meets / 0 partial / 0 misses**; the historical baseline recorded **17 meets / 8 partial / 5 misses**. A separate contamination check validated all 30 treatment prompts, fixtures, cwd evidence, changed paths, final responses, and scenario markers. The earlier Pi Exec-wrapped interaction was superseded by the direct root-question repair and clean reruns.
 
 ## Limits
 
 - This evaluates behavior only for the current root Pi profile, package installation, and disposable sandbox conditions; it does not establish every model/profile/harness combination.
 - A final answer is evidence of the stated first action, not proof of a complete multi-turn implementation trajectory.
-- A pilot can reveal a gap but cannot establish repeatability; five fresh repetitions are required before behavior-shaping source changes.
+- The treatment establishes repeatability for five runs per B-001–B-006 scenario on one configured provider/model; it does not establish every model/profile/harness combination.
+- The scenarios establish the first decisive action and bounded mutation behavior, not one complete multi-turn design-to-integration trajectory.
+- Raw JSONL remains local under `/tmp`; `evidence/root-workflow-matrix.json` retains normalized paired traces and `evidence/root-workflow-contamination.json` retains the 30-run isolation check.
 
 ## Related Records
 
 - `.ledger/202608202254-strengthen-ledger-workflow/task.md`
+- `.ledger/202608202254-strengthen-ledger-workflow/evidence/root-workflow-acceptance.md`
+- `.ledger/202608202254-strengthen-ledger-workflow/evidence/root-workflow-matrix.md`
+- `.ledger/202608202254-strengthen-ledger-workflow/evidence/root-workflow-matrix.json`
+- `.ledger/202608202254-strengthen-ledger-workflow/evidence/root-workflow-contamination.json`
 - `.ledger/202608202235-evaluate-superpowers-ledger-integration/research/superpowers-main-methodology.md`

@@ -5,7 +5,7 @@ description: "Use when completing a Ledger Work Item, implementing a major featu
 
 # Requesting Code Review
 
-Use `ledger-pi-review` to catch issues before they cascade. Reviewers receive precisely crafted contract and diff context, never the producer's session history.
+Use `pi-review` to catch issues before they cascade. Reviewers receive precisely crafted contract and diff context, never the producer's session history.
 
 **Core principle:** Review early, review often.
 
@@ -33,7 +33,11 @@ Record the governing task/Work Item, changed paths, and the comparison boundary.
 
 **2. Run independent review:**
 
-Load `ledger-pi-review` from its available-skills catalog location and select the smallest topology that covers this change.
+Load `pi-review` from its available-skills catalog location and select the smallest topology that covers this change.
+
+For bounded specification, plan, Work Item, or scoped-fix Ledger gates, use the executable adapter in [review-gate.md](review-gate.md): read [references/ledger-gate.js](references/ledger-gate.js), pass its complete body to `pi_exec`, and supply the documented strict inputs. Do not dispatch the adjacent prose templates as free-form workers; translate their rubric into the adapter's `question`, `checks`, `paths`, and `contextPaths`. `fix` mode also requires typed `priorObservations` JSON so existing IDs are preserved.
+
+Whole-change/final review uses `pi-review`'s full [plan-review-verify.js](../pi-review/references/plan-review-verify.js) topology with changed-path partitioning, fresh reviewers per focus, an independent verifier, and explicit coverage-gap accounting. Never substitute the bounded single-reviewer adapter for that gate.
 
 **Inputs:**
 - `{DESCRIPTION}` - Brief summary of what you built
@@ -55,14 +59,14 @@ Load `ledger-pi-review` from its available-skills catalog location and select th
 
 You: Let me request code review before proceeding.
 
-[Run `ledger-pi-review` with the task contract and bounded diff]
+[Run the executable Ledger review gate through `pi-review` with the task contract and bounded diff]
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
   PLAN_OR_REQUIREMENTS: WI-002 from .ledger/<task-id>/plans/deployment-plan.md
   CHANGED_PATHS: src/index.ts, tests/index.test.ts
   COMPARE: HEAD
   CHECKS: npm test -- tests/index.test.ts (14/14 passed)
 
-[`ledger-pi-review` verifier returns]:
+[`pi-review` verifier returns]:
   Strengths: Clean architecture, real tests
   Issues:
     Important: Missing progress indicators
@@ -77,7 +81,7 @@ You: [Fix progress indicators]
 
 | Excuse | Reality |
 |--------|---------|
-| "I'll just review the diff myself instead of dispatching a reviewer" | You're the coordinator — reviewing the diff inline burns the context window you need to keep driving the work. Run `ledger-pi-review`: the diff and the evaluation live in its context, and only the findings come back to you. |
+| "I'll just review the diff myself instead of dispatching a reviewer" | You're the coordinator — reviewing the diff inline burns the context window you need to keep driving the work. Run `pi-review`: the diff and the evaluation live in its context, and only the findings come back to you. |
 | "The reviewer needs my whole session history to understand the change" | Hand it precisely crafted context, never your session's history. That keeps the reviewer on the work product, not your thought process. |
 
 ## Red Flags

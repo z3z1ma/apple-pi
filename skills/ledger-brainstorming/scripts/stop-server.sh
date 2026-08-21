@@ -1,26 +1,40 @@
 #!/usr/bin/env bash
 # Stop the Ledger visual companion server and clean up
-# Usage: stop-server.sh <session_dir>
+# Usage: stop-server.sh [--status] <session_dir>
 #
-# Kills the server process. Only deletes session directory if it's
-# under /tmp (ephemeral). Persistent Ledger evidence directories are
-# kept so mockups can be reviewed later.
+# Kills the server process and deletes its direct-child /tmp runtime directory.
+# Persistent Ledger evidence directories are kept so mockups can be reviewed later.
+# --status checks the PID plus per-start server instance ID without changing state.
 
-SESSION_DIR="$1"
+STATUS_ONLY="false"
+if [[ "${1:-}" == "--status" ]]; then
+  STATUS_ONLY="true"
+  shift
+fi
+SESSION_DIR="${1:-}"
 
 if [[ -z "$SESSION_DIR" ]]; then
-  echo '{"error": "Usage: stop-server.sh <session_dir>"}'
+  echo '{"error": "Usage: stop-server.sh [--status] <session_dir>"}'
+  exit 1
+fi
+
+if ! [[ "$SESSION_DIR" =~ ^/tmp/ledger-visual-[^/]+$ ]] || [[ -L "$SESSION_DIR" ]] || [[ ! -d "$SESSION_DIR" ]]; then
+  echo '{"error": "session_dir must be an existing direct /tmp/ledger-visual-* runtime directory"}'
   exit 1
 fi
 
 STATE_DIR="${SESSION_DIR}/state"
+if [[ -L "$STATE_DIR" ]] || [[ ! -d "$STATE_DIR" ]]; then
+  echo '{"error": "runtime state directory is missing or unsafe"}'
+  exit 1
+fi
 PID_FILE="${STATE_DIR}/server.pid"
 SERVER_ID_FILE="${STATE_DIR}/server-instance-id"
 
-mark_stopped() {
-  local reason="$1"
-  rm -f "${STATE_DIR}/server-info"
-  printf '{"reason":"%s","timestamp":%s}\n' "$reason" "$(date +%s)" > "${STATE_DIR}/server-stopped"
+cleanup_ephemeral_runtime() {
+  if [[ "$SESSION_DIR" =~ ^/tmp/ledger-visual-[^/]+$ ]]; then
+    rm -rf -- "$SESSION_DIR"
+  fi
 }
 
 read_expected_server_id() {
@@ -70,14 +84,25 @@ is_ledger_visual_server() {
   return 0
 }
 
+if [[ "$STATUS_ONLY" == "true" ]]; then
+  if [[ -f "$PID_FILE" ]]; then
+    pid=$(cat "$PID_FILE")
+    if is_ledger_visual_server "$pid"; then
+      echo '{"status": "running"}'
+      exit 0
+    fi
+  fi
+  echo '{"status": "stale"}'
+  exit 1
+fi
+
 if [[ -f "$PID_FILE" ]]; then
   pid=$(cat "$PID_FILE")
 
   # Refuse to signal a PID we can't prove is our server. A stale pid file may
   # point at an unrelated process after a reboot/PID wraparound.
   if ! is_ledger_visual_server "$pid"; then
-    rm -f "$PID_FILE" "$SERVER_ID_FILE"
-    mark_stopped "stale_pid"
+    cleanup_ephemeral_runtime
     echo '{"status": "stale_pid"}'
     exit 0
   fi
@@ -106,15 +131,10 @@ if [[ -f "$PID_FILE" ]]; then
     exit 1
   fi
 
-  rm -f "$PID_FILE" "$SERVER_ID_FILE" "${STATE_DIR}/server.log"
-  mark_stopped "stop-server.sh"
-
-  # Only delete ephemeral /tmp directories
-  if [[ "$SESSION_DIR" == /tmp/* ]]; then
-    rm -rf "$SESSION_DIR"
-  fi
+  cleanup_ephemeral_runtime
 
   echo '{"status": "stopped"}'
 else
+  cleanup_ephemeral_runtime
   echo '{"status": "not_running"}'
 fi

@@ -3,7 +3,7 @@ export const LEDGER_WORKFLOW_SYSTEM_PROMPT_TAG = "ledger-workflow";
 export const LEDGER_WORKFLOW_SYSTEM_PROMPT = `<ledger-workflow>
 # apple-pi Ledger workflow
 
-Ledger is apple-pi's shared authority, memory, evidence, and learning substrate. It makes the engineering skills one system rather than a catalog of unrelated techniques. Apply its reasoning to every task; create or mutate a task bundle only when ambiguity, behavioral consequence, risk, coordination, or continuity justifies durable state. Exact trivial work stays exact and small.
+Ledger is apple-pi's shared authority, memory, evidence, and learning substrate. It makes the fused lifecycle skills one system while general Pi utilities such as \`pi-exec\` and \`pi-review\` retain their own responsibility boundaries. Apply its reasoning to every task; create or mutate a task bundle only when ambiguity, behavioral consequence, risk, coordination, or continuity justifies durable state. Exact trivial work stays exact and small.
 
 Pi discovers skills when the session starts and lists them in the system prompt's \`<available_skills>\` catalog. Each entry contains a name, description, and location. Package skills are available wherever Pi is opened because apple-pi registers its \`skills/\` directory in \`package.json\`.
 
@@ -18,9 +18,9 @@ The catalog location is the authoritative path. Skill-relative references resolv
 
 Common routes:
 
-- New features, components, and behavior changes: \`ledger-brainstorming\` before implementation.
-- Bugs, failing tests, and unexpected behavior: \`ledger-systematic-debugging\`.
-- Features and bug fixes with testable behavior: \`ledger-test-driven-development\`.
+- New features, components, and behavior changes: \`ledger-brainstorming\` before implementation. A requested new validation or changed rule is shaping work, not a bug merely because the current code lacks it.
+- Bugs, failing tests, and unexpected behavior against an accepted contract: \`ledger-systematic-debugging\`.
+- Features and bug fixes with testable behavior: \`ledger-test-driven-development\` only after the shaping/design approval gate is satisfied.
 - Code-review feedback: \`ledger-receiving-code-review\`.
 - Completion or correctness claims: \`ledger-verification-before-completion\`.
 - Isolated feature work: \`ledger-using-git-worktrees\`.
@@ -29,7 +29,9 @@ Common routes:
 - Independent fan-out: \`ledger-dispatching-parallel-agents\`; review requests: \`ledger-requesting-code-review\`.
 - Integration choices and Ledger closure: \`ledger-finishing-a-development-branch\`.
 - Creating or changing Agent Skills: \`ledger-writing-skills\`.
-- Programmatic composition: \`ledger-pi-exec\`; fresh bounded implementation loops: \`ledger-pi-ralph\`; independent change review: \`ledger-pi-review\`.
+- Programmatic composition: \`pi-exec\`; fresh bounded implementation loops: \`pi-ralph\`; independent change review: \`pi-review\`.
+
+When operator input is needed, call the root \`ask_user_question\` tool directly when structured choices help. Never wrap a single user interaction in \`pi_exec\`; composition is not an interaction fallback.
 
 Use one governing Ledger task for one coherent outcome. Search its live and historical records before asking the operator to repeat settled context. Keep execution-changing assumptions record-backed, user-ratified, or blocking. Treat worker reports as claims, observations as evidence within stated limits, and review as an attempt to falsify completion. At meaningful handoffs and closure, preserve the lesson in its real durable owner.
 

@@ -12,14 +12,15 @@ Bugs often manifest deep in the call stack (git init in wrong directory, file cr
 digraph when_to_use {
     "Bug appears deep in stack?" [shape=diamond];
     "Can trace backwards?" [shape=diamond];
-    "Fix at symptom point" [shape=box];
+    "Stop and gather evidence or add temporary instrumentation" [shape=box];
     "Trace to original trigger" [shape=box];
-    "BETTER: Also add defense-in-depth" [shape=box];
+    "Evaluate demonstrated bypasses and trust boundaries" [shape=box];
 
     "Bug appears deep in stack?" -> "Can trace backwards?" [label="yes"];
     "Can trace backwards?" -> "Trace to original trigger" [label="yes"];
-    "Can trace backwards?" -> "Fix at symptom point" [label="no - dead end"];
-    "Trace to original trigger" -> "BETTER: Also add defense-in-depth";
+    "Can trace backwards?" -> "Stop and gather evidence or add temporary instrumentation" [label="no - evidence gap"];
+    "Stop and gather evidence or add temporary instrumentation" -> "Can trace backwards?" [label="new evidence"];
+    "Trace to original trigger" -> "Evaluate demonstrated bypasses and trust boundaries";
 }
 ```
 
@@ -63,36 +64,25 @@ const context = setupCoreTest(); // Returns { tempDir: '' }
 Project.create('name', context.tempDir); // Accessed before beforeEach!
 ```
 
-## Adding Stack Traces
+## Adding Temporary Trace Markers
 
-When you can't trace manually, add instrumentation:
+When manual tracing stalls, add the smallest redacted marker at the suspected boundary:
 
 ```typescript
-// Before the problematic operation
 async function gitInit(directory: string) {
-  const stack = new Error().stack;
-  console.error('DEBUG git init:', {
-    directory,
-    cwd: process.cwd(),
-    nodeEnv: process.env.NODE_ENV,
-    stack,
+  console.error('DEBUG git-init-boundary', {
+    correlationId: 'investigation-1',
+    stage: 'workspace-manager',
+    directoryPresent: directory.length > 0,
+    directoryIsAbsolute: isAbsolute(directory),
+    matchesExpectedRoot: directory.startsWith(expectedTestRoot),
   });
 
   await execFileAsync('git', ['init'], { cwd: directory });
 }
 ```
 
-**Critical:** Use `console.error()` in tests (not logger - may not show)
-
-**Run and capture:**
-```bash
-npm test 2>&1 | grep 'DEBUG git init'
-```
-
-**Analyze stack traces:**
-- Look for test file names
-- Find the line number triggering the call
-- Identify the pattern (same test? same parameter?)
+Use synthetic IDs, stage names, booleans, counts, shapes, and exit status. Never dump raw paths, environment variables, payloads, credentials, personal data, or full stacks into logs/transcripts. Run the focused reproduction, identify the failing boundary, then remove the marker unless an existing observability contract owns it.
 
 ## Finding Which Test Causes Pollution
 
@@ -121,11 +111,7 @@ Runs tests one-by-one, stops at first polluter. See script for usage.
 
 **Fix:** Made tempDir a getter that throws if accessed before beforeEach
 
-**Also added defense-in-depth:**
-- Layer 1: Project.create() validates directory
-- Layer 2: WorkspaceManager validates not empty
-- Layer 3: NODE_ENV guard refuses git init outside tmpdir
-- Layer 4: Stack trace logging before git init
+**Additional checks in this example:** Evidence showed independent entry, business-logic, and test-environment bypasses, so those boundaries received focused validation. Stack tracing was temporary investigation instrumentation and should be removed unless an existing observability contract requires it.
 
 ## Key Principle
 
@@ -136,8 +122,9 @@ digraph principle {
     "Trace backwards" [shape=box];
     "Is this the source?" [shape=diamond];
     "Fix at source" [shape=box];
-    "Add validation at each layer" [shape=box];
-    "Bug impossible" [shape=doublecircle];
+    "Demonstrated bypass or high-cost boundary?" [shape=diamond];
+    "Add one justified boundary check" [shape=box];
+    "Verify accepted invariant" [shape=doublecircle];
     "NEVER fix just the symptom" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
 
     "Found immediate cause" -> "Can trace one level up?";
@@ -146,24 +133,26 @@ digraph principle {
     "Trace backwards" -> "Is this the source?";
     "Is this the source?" -> "Trace backwards" [label="no - keeps going"];
     "Is this the source?" -> "Fix at source" [label="yes"];
-    "Fix at source" -> "Add validation at each layer";
-    "Add validation at each layer" -> "Bug impossible";
+    "Fix at source" -> "Demonstrated bypass or high-cost boundary?";
+    "Demonstrated bypass or high-cost boundary?" -> "Add one justified boundary check" [label="yes"];
+    "Demonstrated bypass or high-cost boundary?" -> "Verify accepted invariant" [label="no"];
+    "Add one justified boundary check" -> "Verify accepted invariant";
 }
 ```
 
 **NEVER fix just where the error appears.** Trace back to find the original trigger.
 
-## Stack Trace Tips
+## Trace-Marker Tips
 
-**In tests:** Use `console.error()` not logger - logger may be suppressed
-**Before operation:** Log before the dangerous operation, not after it fails
-**Include context:** Directory, cwd, environment variables, timestamps
-**Capture stack:** `new Error().stack` shows complete call chain
+**Before operation:** Observe the selected boundary before the dangerous operation, not after it fails.
+**Minimize:** Record only the redacted property needed to distinguish current hypotheses.
+**Correlate:** Use a synthetic run/stage identifier rather than user, path, or payload values.
+**Remove:** Delete temporary instrumentation after localization unless permanent observability is already part of the accepted contract.
 
 ## Real-World Impact
 
 From debugging session (2025-10-03):
 - Found root cause through 5-level trace
 - Fixed at source (getter validation)
-- Added 4 layers of defense
+- Added the independently justified boundary checks found by the investigation
 - 1847 tests passed, zero pollution

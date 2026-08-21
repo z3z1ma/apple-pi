@@ -13,7 +13,7 @@ Which principles from `z3z1ma/10x` should become fundamental Ledger behavior in 
 - Inspected `https://github.com/z3z1ma/10x` at commit `4616e5c07d6f9b82fb299ef18446280ab6f1e09d` on 2026-08-21.
 - Read `README.md`, `SKILL.md`, `autoresearch/README.md`, `autoresearch/program.md`, and `LICENSE` completely.
 - Compared the source model with `docs/ledger.md`, `components/shared/src/ledger-system-prompt.ts`, the active Superpowers fusion specification, and the current 16 packaged skills.
-- Treated source language as evidence. The operator's request to make every packaged skill Ledger-prefixed and meaningfully Ledger-backed authorizes the adapted product behavior.
+- Treated source language as evidence. The operator authorized Ledger-prefixing and meaningful Ledger integration for the 13 incoming lifecycle skills, while preserving the existing Pi Exec, Pi Review, and Pi Ralph names and boundaries.
 
 ## Findings
 
@@ -59,7 +59,7 @@ The executor records surprises and friction while in the weeds. At meaningful it
 | `.10x/` record graph | One task-local `.ledger/<task>/` bundle and live/history indexes |
 | Ticket | `task.md`; Work Items are implementation decomposition, not separate tickets |
 | Outer loop | `ledger-brainstorming`, `ledger-writing-plans` |
-| Orchestration | `ledger-executing-plans`, `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents`, `ledger-pi-exec`, `ledger-pi-ralph`, `ledger-requesting-code-review`, `ledger-pi-review` |
+| Orchestration | `ledger-executing-plans`, `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents`, `pi-exec`, `pi-ralph`, `ledger-requesting-code-review`, `pi-review` |
 | Inner loop | Debugging, TDD, direct execution, and Ralph procedures operating on one Work Item or acceptance gap |
 | Evidence/review/retro | Canonical sections in `task.md`; standalone evidence only when an observation outlives a routine check |
 | Knowledge/skills | Task-local `knowledge/` and `skills/`, distilled to normal repository owners or packaged `ledger-*` skills |
@@ -67,10 +67,10 @@ The executor records surprises and friction while in the weeds. At meaningful it
 
 ## Conclusions
 
-- Prefix every packaged skill name and directory with `ledger-`. The prefix signals that the skill participates in one authority, provenance, evidence, and learning system rather than acting as an isolated technique.
-- Keep underlying runtime names authentic: the tool remains `pi_exec`, typed collaboration remains `Agent`, and the review/Ralph skills become `ledger-pi-review` and `ledger-pi-ralph` without renaming runtime APIs.
+- Prefix the 13 incoming Superpowers-derived lifecycle skill names and directories with `ledger-`. The prefix signals that they absorb the former Ledger stages and share one authority, provenance, evidence, and learning system.
+- Preserve the established `pi-exec` and `pi-review` names and general contracts; Ledger lifecycle skills may invoke them with task context without redefining them. Preserve `pi-ralph` under its existing name and prepared-Ledger-task contract.
 - Strengthen the injected Ledger contract with the three operating states, provenance classes, search-before-shaping, evidence semantics, closure definition, compounding, and proportional minimalism.
-- Give every skill a specific Ledger role rather than copying one generic paragraph everywhere.
+- Give each fused lifecycle skill a specific Ledger role rather than copying one generic paragraph everywhere.
 - Preserve Superpowers' procedure bodies, pressure tests, rationalization counters, and examples; use 10x as the authority/context substrate underneath those execution disciplines.
 
 ## Limits
@@ -78,3 +78,4 @@ The executor records surprises and friction while in the weeds. At meaningful it
 - This research did not run 10x's autoresearch harness or import its Python tooling. The operator asked for philosophical adaptation, and apple-pi already owns its runtime and evaluation boundary.
 - The source's separate `.10x/` hierarchy, parent tickets, and categorical prohibition on implementation in the same turn are not copied. Ledger's one-task bundle, proportional ceremony, explicit authorization, and current operator-approved task remain authoritative.
 - External GitHub contents may change after the inspected commit; this record is pinned to the revision above.
+- The initial all-skills prefix conclusion was corrected by the operator on 2026-08-21; `decisions/ledger-prefix-boundary.md` is the naming authority.

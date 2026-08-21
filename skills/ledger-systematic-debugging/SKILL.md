@@ -73,41 +73,22 @@ You MUST complete each phase before proceeding to the next.
 
 4. **Gather Evidence in Multi-Component Systems**
 
-   **WHEN system has multiple components (CI → build → signing, API → service → database):**
+   **WHEN existing evidence cannot localize a failure across components (CI → build → signing, API → service → database):**
 
-   **BEFORE proposing fixes, add diagnostic instrumentation:**
+   Add the smallest temporary observation at the specific boundaries needed to falsify the current hypotheses:
    ```
-   For EACH component boundary:
-     - Log what data enters component
-     - Log what data exits component
-     - Verify environment/config propagation
-     - Check state at each layer
+   For each selected boundary:
+     - Record a synthetic correlation ID and stage name
+     - Record data shape/count/status, never secret or personal values
+     - Verify only the configuration key's presence/source needed by the hypothesis
+     - Capture success/failure at entry and exit
 
-   Run once to gather evidence showing WHERE it breaks
-   THEN analyze evidence to identify failing component
-   THEN investigate that specific component
-   ```
-
-   **Example (multi-layer system):**
-   ```bash
-   # Layer 1: Workflow
-   echo "=== Secrets available in workflow: ==="
-   echo "IDENTITY: ${IDENTITY:+SET}${IDENTITY:-UNSET}"
-
-   # Layer 2: Build script
-   echo "=== Env vars in build script: ==="
-   env | grep IDENTITY || echo "IDENTITY not in environment"
-
-   # Layer 3: Signing script
-   echo "=== Keychain state: ==="
-   security list-keychains
-   security find-identity -v
-
-   # Layer 4: Actual signing
-   codesign --sign "$IDENTITY" --verbose=4 "$APP"
+   Run once to locate the failing boundary
+   Remove temporary instrumentation after the investigation unless an existing observability contract owns it
+   THEN investigate the failing component
    ```
 
-   **This reveals:** Which layer fails (secrets → workflow ✓, workflow → build ✗)
+   **Safe example:** report `IDENTITY_PRESENT=true|false`, the selected configuration source, and the signing command's exit code. Do not dump the environment, keychain identities, tokens, payload bodies, or credentials into logs.
 
 5. **Trace Data Flow**
 
@@ -269,14 +250,14 @@ If you catch yourself thinking:
 
 ## When Process Reveals "No Root Cause"
 
-If systematic investigation reveals issue is truly environmental, timing-dependent, or external:
+If systematic investigation shows the issue is environmental, timing-dependent, or external:
 
-1. You've completed the process
-2. Document what you investigated
-3. Implement appropriate handling (retry, timeout, error message)
-4. Add monitoring/logging for future investigation
+1. Document what was reproduced, ruled out, and remains unverified.
+2. Identify the actual system boundary and current owner.
+3. If an existing contract already defines retry, timeout, error, or observability behavior, implement the smallest compliant fix and verify it.
+4. Otherwise return to shaping: retry policy, timeout, user-facing failure behavior, and permanent monitoring are product/operational decisions, not defaults invented by debugging.
 
-**But:** 95% of "no root cause" cases are incomplete investigation.
+**But:** Most "no root cause" cases are incomplete investigation. Do not manufacture handling merely to make the investigation look complete.
 
 ## Supporting Techniques
 

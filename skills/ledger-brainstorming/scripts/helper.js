@@ -22,25 +22,13 @@
   let everConnected = false;
   let tombstoneShown = false;
 
-  function sessionKey() {
-    try {
-      return window.sessionStorage && window.sessionStorage.getItem('ledger-visual-session-key');
-    } catch (e) {}
-    return null;
-  }
-
   function websocketUrl() {
-    const key = sessionKey();
-    return 'ws://' + window.location.host + (key ? '/?key=' + encodeURIComponent(key) : '');
+    const scheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    return scheme + window.location.host + '/';
   }
 
   function reloadAfterRecovery() {
-    const key = sessionKey();
-    if (key) {
-      window.location.replace('/?key=' + encodeURIComponent(key));
-    } else {
-      window.location.reload();
-    }
+    window.location.reload();
   }
 
   // Reflect connection state in the frame's status pill (absent on full-doc screens).

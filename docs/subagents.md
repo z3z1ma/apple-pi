@@ -11,7 +11,7 @@ Built-in types:
 | `Explore` | Local recon: where is X? | read-only |
 | `Research` | External docs via MCP and cited sources; not local recon | read-only |
 | `Plan` | How-to-implement across modules | read-only |
-| `Counsel` | Should we / root cause / YAGNI. Not Advisor, not ledger-pi-review | read-only |
+| `Counsel` | Should we / root cause / YAGNI. Not Advisor, not pi-review | read-only |
 | `Implement` | Bounded specified writes. No research, no UI taste | write |
 | `Design` | User-visible layout, interaction, polish | write |
 

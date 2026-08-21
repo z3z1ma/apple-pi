@@ -1,181 +1,93 @@
-# Code Reviewer Prompt Template
+# Whole-Change Reviewer Prompt Template
 
-Use this template when dispatching a code reviewer subagent.
+Use this template as rubric material for `pi-review`'s full [plan-review-verify.js](../pi-review/references/plan-review-verify.js) topology after all planned Work Items are complete. Do not use the bounded Ledger review adapter. Adapt this contract into the fresh planner, per-focus reviewer, and independent verifier prompts while retaining their strict schemas, changed-path coverage checks, worker-failure reporting, and coverage-gap accounting. For the one allowed final fix re-review, pass every prior final observation through `inputs.priorFindings`; require complete `priorDecisionCoverage` and one `priorDisposition` per stable ID.
 
-**Purpose:** Review completed work against requirements and code quality standards before it cascades into more work.
+**Purpose:** Attempt to falsify that the complete BASE-to-worktree change satisfies the governing Ledger contract and is safe to integrate.
 
 ```
-Subagent (general-purpose):
-  description: "Review code changes"
+`pi-review` worker guidance:
+  description: "Review complete Ledger change"
+  profile: [PROFILE — REQUIRED]
   prompt: |
-    You are a Senior Code Reviewer with expertise in software architecture,
-    design patterns, and best practices. Your job is to review completed work
-    against its plan or requirements and identify issues before they cascade.
+    You are independently reviewing one complete change. Review first for contract compliance, then for correctness, maintainability, tests, compatibility, security, and operational risk. Your work is read-only.
 
-    ## What Was Implemented
+    ## Governing Context
+
+    Task root: [TASK_FILE]
+    Active specification and decisions: [CONTRACT_PATHS]
+    Active plan: [PLAN_FILE]
+    Deferred minors and recorded rulings: [DEFERRED_AND_RULINGS]
+
+    ## Claimed Outcome
 
     [DESCRIPTION]
 
-    ## Requirements / Plan
+    Treat this description and implementer reports as unverified claims. Active specifications and decisions define intended semantics. Tests and current source are evidence, not authority for an unratified choice.
 
-    [PLAN_OR_REQUIREMENTS]
+    ## Complete Change
 
-    ## Git Range to Review
+    Comparison: [BASE]..WORKTREE
+    Review package: [DIFF_FILE]
 
-    **Base:** [BASE_SHA]
-    **Head:** [HEAD_SHA]
+    Read the package once. It contains tracked status and patches plus every non-ignored untracked text or binary patch. If it is missing or unreadable, report the evidence gap; the controller must regenerate it with the owning skill's review-package helper because plain `git diff` omits untracked files.
 
-    ```bash
-    git diff --stat [BASE_SHA]..[HEAD_SHA]
-    git diff [BASE_SHA]..[HEAD_SHA]
-    ```
+    Inspect code outside the package only for a concrete reachable risk, and name that risk and the focused check. Do not mutate the working tree, index, HEAD, branch, task, or review package. Do not dispatch another worker.
 
-    ## Read-Only Review
+    ## What To Challenge
 
-    Your review is read-only on this checkout. Do not mutate the working tree, the index, HEAD, or branch state in any way. Use tools like `git show`, `git diff`, and `git log` to inspect history. If you need a working copy of a different revision, check it out into a separate temporary directory (e.g. `git worktree add /tmp/review-[SHA] [SHA]`) — never move HEAD on this checkout.
+    **Contract:** missing, extra, misunderstood, or unratified behavior; acceptance criteria without implementation evidence; deviations from active decisions.
 
-    ## You Do Not Dispatch Subagents
+    **Correctness:** reachable wrong results, incomplete error paths, data loss, races, lifecycle faults, and boundary cases.
 
-    Do all of this review yourself. Never spawn a subagent to review part
-    of the diff, and never spawn another reviewer for a second opinion.
-    This process already provides every review seat the work gets; a
-    reviewer you spawn duplicates one of them at full cost, and its
-    verdict counts for nothing. If the diff feels too large for one
-    pass, review it in passes yourself and say so in your report.
+    **Design:** unclear ownership, accidental coupling, duplicate responsibility, speculative abstraction, and integration drift.
 
-    ## What to Check
+    **Tests:** assertions that do not exercise production behavior, missing durable regressions, weakened or bypassed oracles, and unsupported claims of coverage.
 
-    **Plan alignment:**
-    - Does the implementation match the plan / requirements?
-    - Are deviations justified improvements, or problematic departures?
-    - Is all planned functionality present?
-
-    **Code quality:**
-    - Clean separation of concerns?
-    - Proper error handling?
-    - Type safety where applicable?
-    - DRY without premature abstraction?
-    - Edge cases handled?
-
-    **Architecture:**
-    - Sound design decisions?
-    - Reasonable scalability and performance?
-    - Security concerns?
-    - Integrates cleanly with surrounding code?
-
-    **Testing:**
-    - Tests verify real behavior, not mocks?
-    - Edge cases covered?
-    - Integration tests where they matter?
-    - All tests passing?
-
-    **Production readiness:**
-    - Migration strategy if schema changed?
-    - Backward compatibility considered?
-    - Documentation complete?
-    - No obvious bugs?
+    **Operations and compatibility:** migration, cleanup, cancellation, security, permissions, packaging, and observable compatibility consequences introduced by this change.
 
     ## Calibration
 
-    Categorize issues by actual severity. Not everything is Critical.
-    Acknowledge what was done well before listing issues — accurate praise
-    helps the implementer trust the rest of the feedback.
+    - `critical`: data loss, security boundary failure, destructive behavior, or broadly unusable result.
+    - `significant`: reachable incorrect behavior, missed requirement, fragile integration, or maintainability damage that blocks trust.
+    - `minor`: bounded polish or low-cost improvement that does not block the owned outcome.
+    - `nit`: optional style preference.
 
-    If you find significant deviations from the plan, flag them specifically
-    so the implementer can confirm whether the deviation was intentional.
-    If you find issues with the plan itself rather than the implementation,
-    say so.
+    Every finding names a changed line or omission, trigger, observable impact, and smallest coherent fix. Assign stable IDs in report order (`OBS-WI-###-01`, `OBS-WI-###-02`, ...), including out-of-scope observations. Do not inflate severity and do not report speculative risks without a reachable path. Acknowledge concrete strengths before findings.
 
-    ## Output Format
+    `critical` and `significant` findings are material blockers while unresolved. The controller records every observation as open in the governing task Review, then appends a durable `Disposition:` or links a new owned Ledger task. A summary verdict never replaces per-observation state.
+
+    ## Output
+
+    ### Contract verdict
+    **Compliance:** Pass | Concerns | Fail
+    **Unverifiable criteria:** [AC ids and missing evidence, or None]
 
     ### Strengths
-    [What's well done? Be specific.]
+    [Specific evidence-backed strengths]
 
-    ### Issues
+    ### Findings
+    [Observation ID, severity, file:line, trigger, evidence, impact, smallest coherent fix]
 
-    #### Critical (Must Fix)
-    [Bugs, security issues, data loss risks, broken functionality]
+    ### Out-of-Scope Observations
+    [Observation ID, calibrated severity, trigger/evidence/impact, suggested owner and revisit condition; `None` if none. Location outside the diff never downgrades severity.]
 
-    #### Important (Should Fix)
-    [Architecture problems, missing features, poor error handling, test gaps]
+    ### Deferred and ruling assessment
+    [Which recorded items remain acceptable or now block integration]
 
-    #### Minor (Nice to Have)
-    [Code style, optimization opportunities, documentation polish]
+    ### Residual risk
+    [What this review could not establish]
 
-    For each issue:
-    - File:line reference
-    - What's wrong
-    - Why it matters
-    - How to fix (if not obvious)
-
-    ### Recommendations
-    [Improvements for code quality, architecture, or process]
-
-    ### Assessment
-
-    **Ready to merge?** [Yes | No | With fixes]
-
-    **Reasoning:** [1-2 sentence technical assessment]
-
-    ## Critical Rules
-
-    **DO:**
-    - Categorize by actual severity
-    - Be specific (file:line, not vague)
-    - Explain WHY each issue matters
-    - Acknowledge strengths
-    - Give a clear verdict
-
-    **DON'T:**
-    - Say "looks good" without checking
-    - Mark nitpicks as Critical
-    - Give feedback on code you didn't actually read
-    - Be vague ("improve error handling")
-    - Avoid giving a clear verdict
+    ### Verdict
+    **Change quality:** Approved | Needs fixes | Blocked
 ```
 
 **Placeholders:**
-- `[DESCRIPTION]` — brief summary of what was built
-- `[PLAN_OR_REQUIREMENTS]` — what it should do (plan file path, task text, or requirements)
-- `[BASE_SHA]` — starting commit
-- `[HEAD_SHA]` — ending commit
 
-**Reviewer returns:** Strengths, Issues (Critical / Important / Minor), Recommendations, Assessment
+- `[PROFILE]` — use a profile proportionate to the whole-change risk.
+- `[TASK_FILE]`, `[CONTRACT_PATHS]`, `[PLAN_FILE]` — governing Ledger paths.
+- `[DEFERRED_AND_RULINGS]` — exact relevant task Journal/Review lines.
+- `[DESCRIPTION]` — concise claimed outcome.
+- `[BASE]` — comparison boundary recorded before execution.
+- `[DIFF_FILE]` — complete BASE-to-worktree review package.
 
-## Example Output
-
-```
-### Strengths
-- Clean database schema with proper migrations (db.ts:15-42)
-- Comprehensive test coverage (18 tests, all edge cases)
-- Good error handling with fallbacks (summarizer.ts:85-92)
-
-### Issues
-
-#### Important
-1. **Missing help text in CLI wrapper**
-   - File: index-conversations:1-31
-   - Issue: No --help flag, users won't discover --concurrency
-   - Fix: Add --help case with usage examples
-
-2. **Date validation missing**
-   - File: search.ts:25-27
-   - Issue: Invalid dates silently return no results
-   - Fix: Validate ISO format, throw error with example
-
-#### Minor
-1. **Progress indicators**
-   - File: indexer.ts:130
-   - Issue: No "X of Y" counter for long operations
-   - Impact: Users don't know how long to wait
-
-### Recommendations
-- Add progress reporting for user experience
-- Consider config file for excluded projects (portability)
-
-### Assessment
-
-**Ready to merge: With fixes**
-
-**Reasoning:** Core implementation is solid with good architecture and tests. Important issues (help text, date validation) are easily fixed and don't affect core functionality.
-```
+The full topology returns typed reviewer candidates and independently verified decisions. The controller assigns stable `OBS-...` IDs, records every observation in `task.md` Review with calibrated severity, trigger/evidence/impact, and `status: open`, then appends a `Disposition:` or owned follow-up task for each. Unresolved `critical`/`significant` findings, missing path coverage, failed focuses, omitted decisions, or material coverage gaps block integration. The controller owns any fix or integration decision.

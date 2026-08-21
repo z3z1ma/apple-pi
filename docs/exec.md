@@ -4,7 +4,7 @@
 
 `pi_exec` is deliberately available only to the root session. Interactive subagents do not receive it, even when their extension configuration explicitly selects the runtime; nested delegation must use their ownership- and depth-scoped `Agent` tools. This prevents child sessions from bypassing those limits through `agents.run` or the captured root extension-tool catalog.
 
-The packaged [`ledger-pi-exec`](../skills/ledger-pi-exec) skill has the guest signatures and the common authoring mistakes. Write programs from the live signatures on the `pi_exec` `code` parameter.
+The packaged [`pi-exec`](../skills/pi-exec) skill has the guest signatures and the common authoring mistakes. Write programs from the live signatures on the `pi_exec` `code` parameter.
 
 ## Saved project programs
 

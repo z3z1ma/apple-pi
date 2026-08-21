@@ -1,5 +1,5 @@
 ---
-name: ledger-pi-ralph
+name: pi-ralph
 description: "Use only when the operator explicitly asks to run or continue fresh-context Ralph iterations over a prepared Ledger task."
 ---
 
@@ -7,11 +7,7 @@ description: "Use only when the operator explicitly asks to run or continue fres
 
 Ralph is an outer loop around a fresh coding agent. The repository is memory. The ledger is the durable pin. Each iteration receives a new context window, chooses one increment, acts, hits ordinary project backpressure, updates ledger records, and dies. The next iteration starts clean.
 
-The calling session is the controller. It chooses how many iterations to run for the given task, commissions reviews with `/skill:ledger-pi-review`, edits the ledger, and may start another bounded batch.
-
-## Ledger State: Fresh Execution
-
-Each worker executes one smallest coherent unfinished acceptance gap or Work Item from a cold start. It reads the task and bound context, records observed progress and blockers, and hands back without claiming overall closure, committing, integrating, or spawning another controller. The root session remains orchestration authority: it inspects the durable record, commissions independent review, reconciles evidence and findings, and decides whether another batch is justified.
+The calling session is the controller. It chooses how many iterations to run for the given task, commissions reviews with `/skill:pi-review`, edits the ledger, and may start another bounded batch.
 
 ## Choose a reference
 
@@ -88,9 +84,9 @@ The default sequence is:
 1. The caller prepares the goal, stack, adapted prompt, and iteration count.
 2. `ralph.js` runs fresh coding workers sequentially until the requested bound, a worker failure, a terminal task status, or the adaptable low-mutation escape heuristic.
 3. The workers maintain ledger memory; the caller interprets the bounded result.
-4. After the batch, the caller separately runs `/skill:ledger-pi-review`, records findings, and decides whether another bounded batch is warranted.
+4. After the batch, the caller separately runs `/skill:pi-review`, records findings, and decides whether another bounded batch is warranted.
 
-Keep review, planning, verification, and completion outside default Ralph. `ledger-requesting-code-review` and `ledger-pi-review` own review; `ledger-writing-plans` and `ledger-executing-plans` own ordinary plan lifecycle; `ledger-finishing-a-development-branch` owns closure and integration choices.
+Keep review, planning, verification, and completion outside default Ralph. `ledger-requesting-code-review` and `pi-review` own review; `ledger-writing-plans` and `ledger-executing-plans` own ordinary plan lifecycle; `ledger-finishing-a-development-branch` owns closure and integration choices.
 
 Choose `ralph-reviewed.js` only when the caller explicitly wants the advanced increment-then-review composition. That composition is an example of tighter coupling, not a reason to make default Ralph judge progress or to replace the caller-controlled default review step.
 

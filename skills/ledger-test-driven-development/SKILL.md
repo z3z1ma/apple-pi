@@ -17,6 +17,10 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 The active specification or task Acceptance Criteria define the behavior; tests do not invent it. Map RED and GREEN observations to the owned Work Item or `AC-###` criterion, including the command, expected failure, actual failure, passing result, and limits. A passing test proves its assertions only. If writing the test requires choosing unratified product semantics, stop execution, record the blocker, and return to `ledger-brainstorming` rather than laundering the guess through a green suite.
 
+## Entry Gate
+
+TDD is an implementation technique, not permission to bypass shaping. For a requested new feature, validation, or behavior change, first confirm that `ledger-brainstorming` established the proportional Ledger contract and the operator approved the design that was actually presented. A general instruction such as “start work now” does not approve an unseen design. If that gate is absent, stop before RED and return to shaping. A reproduced bug against an already accepted contract follows `ledger-systematic-debugging` instead.
+
 ## When to Use
 
 **Always:**

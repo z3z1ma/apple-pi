@@ -1,11 +1,11 @@
-// Advanced example: Ralph increments with an inlined ledger-pi-review spine.
-// Not the default. Prefer /skill:ledger-pi-ralph then /skill:ledger-pi-review.
+// Advanced example: Ralph increments with an inlined pi-review spine.
+// Not the default. Prefer /skill:pi-ralph then /skill:pi-review.
 const READ_ONLY = ["read", "grep", "find", "ls"];
 const RALPH_TOOLS = [...READ_ONLY, "bash", "edit", "write"];
 // Adapt these review prompt references to the increment before inlining them; preserve their output contracts.
-const PLANNER = "<adapt skills/ledger-pi-review/references/planner.md for this increment and inline it here>";
-const REVIEWER = "<adapt skills/ledger-pi-review/references/reviewer.md for each focus and inline it here>";
-const VERIFIER = "<adapt skills/ledger-pi-review/references/verifier.md for this increment; require priorCoverageGapIdsAssessed and priorRiskIdsAssessed to include only supplied gaps or risks that independent evidence resolves, then inline it here>";
+const PLANNER = "<adapt skills/pi-review/references/planner.md for this increment and inline it here>";
+const REVIEWER = "<adapt skills/pi-review/references/reviewer.md for each focus and inline it here>";
+const VERIFIER = "<adapt skills/pi-review/references/verifier.md for this increment; require priorCoverageGapIdsAssessed and priorRiskIdsAssessed to include only supplied gaps or risks that independent evidence resolves, then inline it here>";
 // Adapt references/increment.md for this goal and its reviewed-loop feedback, then inline it here.
 const RALPH = "<adapt references/increment.md for this goal, supplied review findings and coverage gaps, and the reviewed loop; inline it here>";
 

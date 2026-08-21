@@ -628,46 +628,51 @@ helper1, helper2, step3, pattern4
 
 Deploying untested skills = deploying untested code. It's a violation of quality standards.
 
-## Skill Creation Checklist (TDD Adapted)
+## Skill Creation Work-Item Mapping (TDD Adapted)
 
-**IMPORTANT: Create a todo for EACH checklist item below.**
+For every applicable identifier below, add a task/plan mapping row `<requirement ID> → <governing WI-###>`. Record its observations under that Work Item in Journal/Evidence/Review. The identifiers are traceability keys, not a second completion surface.
 
 **RED Phase - Write Failing Test:**
-- [ ] Create pressure scenarios (3+ combined pressures for discipline skills)
-- [ ] Run scenarios WITHOUT skill - document baseline behavior verbatim
-- [ ] Identify patterns in rationalizations/failures
+- `RED-001` Create pressure scenarios (3+ combined pressures for discipline skills).
+- `RED-002` Run scenarios WITHOUT skill - document baseline behavior verbatim.
+- `RED-003` Identify patterns in rationalizations/failures.
+- `RED-004` Note which combined pressures actually trigger violations.
 
 **GREEN Phase - Write Minimal Skill:**
-- [ ] Name uses only letters, numbers, hyphens (no parentheses/special chars)
-- [ ] YAML frontmatter with required `name` and `description` fields (max 1024 chars; see [spec](https://agentskills.io/specification))
-- [ ] Description starts with "Use when..." and includes specific triggers/symptoms
-- [ ] Description written in third person
-- [ ] Keywords throughout for search (errors, symptoms, tools)
-- [ ] Clear overview with core principle
-- [ ] Address specific baseline failures identified in RED
-- [ ] Guidance form matches the failure type (see Match the Form to the Failure)
-- [ ] For behavior-shaping guidance: wording micro-tested against a no-guidance control (5+ reps, every flagged match read manually) — N/A for pure reference skills
-- [ ] Code inline OR link to separate file
-- [ ] One excellent example (not multi-language)
-- [ ] Run scenarios WITH skill - verify agents now comply
+- `GREEN-001` Name uses only letters, numbers, hyphens (no parentheses/special chars).
+- `GREEN-002` YAML frontmatter has required `name` and `description` fields (max 1024 chars; see [spec](https://agentskills.io/specification)).
+- `GREEN-003` Description starts with "Use when..." and includes specific triggers/symptoms.
+- `GREEN-004` Description is written in third person.
+- `GREEN-005` Keywords throughout cover errors, symptoms, and tools for search.
+- `GREEN-006` Overview states a clear core principle.
+- `GREEN-007` Guidance addresses the specific baseline failures identified in RED.
+- `GREEN-008` Guidance form matches the failure type (see Match the Form to the Failure).
+- `GREEN-009` For behavior-shaping guidance, wording is micro-tested against a no-guidance control (5+ reps, every flagged match read manually); N/A for pure reference skills.
+- `GREEN-010` Code is inline OR linked to a real separate file.
+- `GREEN-011` Include one excellent example (not multi-language).
+- `GREEN-012` Run scenarios WITH skill and verify agents now comply.
 
 **REFACTOR Phase - Close Loopholes:**
-- [ ] Identify NEW rationalizations from testing
-- [ ] Add explicit counters (if discipline skill)
-- [ ] Build rationalization table from all test iterations
-- [ ] Create red flags list
-- [ ] Re-test until bulletproof
+- `REFACTOR-001` Identify NEW rationalizations from testing.
+- `REFACTOR-002` Add explicit counters when this is a discipline skill.
+- `REFACTOR-003` Build a rationalization table from all test iterations.
+- `REFACTOR-004` Create a red-flags list.
+- `REFACTOR-005` Update the skill description with observed violation symptoms when they improve discovery.
+- `REFACTOR-006` Re-test and confirm the agent still complies after every loophole change.
+- `REFACTOR-007` Meta-test the instructions for clarity and unambiguous retrieval.
+- `REFACTOR-008` Verify the agent follows the rule under the maximum-pressure scenario.
+- `REFACTOR-009` Re-test until bulletproof.
 
 **Quality Checks:**
-- [ ] Small flowchart only if decision non-obvious
-- [ ] Quick reference table
-- [ ] Common mistakes section
-- [ ] No narrative storytelling
-- [ ] Supporting files only for tools or heavy reference
+- `QUALITY-001` Small flowchart only if the decision is non-obvious.
+- `QUALITY-002` Quick-reference table.
+- `QUALITY-003` Common-mistakes section.
+- `QUALITY-004` No narrative storytelling.
+- `QUALITY-005` Supporting files only for tools or heavy reference.
 
 **Deployment:**
-- [ ] Present commit or publication as an operator-owned integration choice
-- [ ] Consider contributing back via PR (if broadly useful)
+- `DEPLOY-001` Present commit or publication as an operator-owned integration choice.
+- `DEPLOY-002` Consider contributing back via PR when broadly useful, with operator authorization.
 
 ## Discovery Workflow
 

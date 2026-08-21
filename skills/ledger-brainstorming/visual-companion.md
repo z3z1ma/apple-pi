@@ -32,18 +32,24 @@ The server watches a directory for HTML files and serves the newest one to the b
 
 ## Starting a Session
 
+Derive the helper directory from the exact `<location>` used to load this skill. Do not resolve helpers from the current working directory or construct a package-relative skill path.
+
 ```bash
-# Start AFTER the user approves the companion. --open auto-opens their browser on
-# the first screen; --task-dir persists mockups and enables same-port restart.
-scripts/start-server.sh --task-dir /path/to/project/.ledger/<task-id> --open
+SKILL_MD="<exact available-skills location ending in /ledger-brainstorming/SKILL.md>"
+SKILL_DIR="$(cd "$(dirname "$SKILL_MD")" && pwd -P)"
+
+# Start AFTER the operator approves the companion. --open auto-opens their browser on
+# the first screen; --task-dir persists visual evidence under the owning task.
+"$SKILL_DIR/scripts/start-server.sh" --task-dir /path/to/project/.ledger/<task-id> --open
 
 # Returns: {"type":"server-started","port":52341,
-#           "url":"http://localhost:52341/?key=ab12…",
+#           "url":"http://127.0.0.1:52341/?key=ab12…",
+#           "session_dir":"/tmp/ledger-visual-12345-1706000000",
 #           "screen_dir":"/path/to/project/.ledger/<task-id>/evidence/.storage/visual-companion/12345-1706000000/content",
 #           "state_dir":"/tmp/ledger-visual-12345-1706000000/state"}
 ```
 
-Save `screen_dir` and `state_dir` from the response. With `--open`, the browser opens itself when you push the first screen — you don't need to ask the user to open it, but still share the URL as a fallback (headless/remote setups won't auto-open).
+Save `session_dir`, `screen_dir`, and `state_dir` from the response. With `--open`, the browser opens itself when you push the first screen — you don't need to ask the user to open it, but still share the URL as a fallback (headless/remote setups won't auto-open).
 
 **The URL contains a session key (`?key=…`).** The server rejects any request
 without it, so always give the user the **complete** URL from the `url` field —
@@ -61,21 +67,12 @@ without repeating it.
 
 Use the `bash` tool only after the operator accepts the companion. The default launcher backgrounds the server and returns its JSON connection record. If the environment reaps detached processes, use `--foreground` through a persistent terminal mechanism instead. The URL is a secret-bearing local capability; keep it in the session and never copy it into source, logs, commits, or external services.
 
-A non-loopback bind exposes the authenticated server beyond the local host. Use it only after the operator explicitly approves that network exposure, keep the complete keyed URL private, and stop the server as soon as the visual question is finished:
-
-```bash
-scripts/start-server.sh \
-  --task-dir /path/to/project/.ledger/<task-id> \
-  --host 0.0.0.0 \
-  --url-host localhost
-```
-
-Use `--url-host` to control what hostname is printed in the returned URL JSON.
+The server refuses non-loopback bind and display hosts because the capability key must not cross an unencrypted network connection. For a remote Pi session, keep the server and returned URL on loopback and use the local side of an operator-approved encrypted port forward. `--url-host` accepts only loopback spellings; it does not authorize network exposure or make plaintext HTTP secure. Never bind the companion to `0.0.0.0`.
 
 ## The Loop
 
 1. **Check server is alive**, then **write HTML** to a new file in `screen_dir`:
-   - **Required: confirm the server is alive before referring to the URL or pushing a screen.** Check that `$STATE_DIR/server-info` exists and `$STATE_DIR/server-stopped` does not. If it has shut down, restart it with the same `--task-dir` and give the operator the newly returned complete URL. The server auto-exits after 4 hours idle (configurable with `--idle-timeout-minutes`).
+   - **Required: confirm the server is alive before referring to the URL or pushing a screen.** Run `"$SKILL_DIR/scripts/stop-server.sh" --status "$session_dir"`; it verifies both the PID and this start's private server instance ID without printing the capability URL. Treat any nonzero result as stale: run `stop-server.sh` normally for that `session_dir`, restart with the same `--task-dir`, save the new `session_dir`, and give the operator the newly returned complete URL. The server auto-exits after 4 hours idle (configurable with `--idle-timeout-minutes`).
    - Use semantic filenames: `platform.html`, `visual-style.html`, `layout.html`
    - **Never reuse filenames** — each screen gets a fresh file
    - Use your file-creation tool — **never use cat/heredoc** (dumps noise into terminal)
@@ -244,7 +241,7 @@ If `$STATE_DIR/events` doesn't exist, the user didn't interact with the browser 
 - **Explain the question on each page** — "Which layout feels more professional?" not just "Pick one"
 - **Iterate before advancing** — if feedback changes current screen, write a new version
 - **2-4 options max** per screen
-- **Use real content when it matters** — for a photography portfolio, use actual images (Unsplash). Placeholder content obscures design issues.
+- **Use representative local or synthetic content when it matters** — do not fetch remote assets without explicit operator approval. Generic placeholders can obscure design issues, so preserve realistic shape without leaking project data.
 - **Keep mockups simple** — focus on layout and structure, not pixel-perfect design
 
 ## File Naming
@@ -257,12 +254,12 @@ If `$STATE_DIR/events` doesn't exist, the user didn't interact with the browser 
 ## Cleaning Up
 
 ```bash
-scripts/stop-server.sh $SESSION_DIR
+"$SKILL_DIR/scripts/stop-server.sh" "$session_dir"
 ```
 
 If the session used `--task-dir`, mockup HTML persists under that task's `evidence/.storage/visual-companion/` directory. Record selected conclusions in the task specification, decision, or Journal; HTML is evidence, not semantic authority. Runtime state and browser events are always deleted from `/tmp` on stop.
 
 ## Reference
 
-- Frame template (CSS reference): `scripts/frame-template.html`
-- Helper script (client-side): `scripts/helper.js`
+- Frame template (CSS reference): `$SKILL_DIR/scripts/frame-template.html`
+- Helper script (client-side): `$SKILL_DIR/scripts/helper.js`

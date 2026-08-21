@@ -1,12 +1,12 @@
 # Task Reviewer Prompt Template
 
-Use this template as `ledger-pi-review` worker guidance. The reviewer reads one Work Item's BASE-to-worktree package and returns two verdicts: spec compliance and code quality.
+Use this template as the rubric for `ledger-requesting-code-review`'s [executable review gate](../ledger-requesting-code-review/review-gate.md) in `work-item` mode. Do not dispatch it as a free-form worker. Put changed files in `paths`; put the brief, report, unique BASE-to-worktree package, and governing records in `contextPaths`; translate this rubric into `question` and `checks`.
 
 **Purpose:** Verify one task's implementation matches its requirements (nothing
 more, nothing less) and is well-built (clean, tested, maintainable)
 
 ```
-`ledger-pi-review` worker guidance:
+`pi-review` worker guidance:
   description: "Review WI-### (spec + quality)"
   profile: [PROFILE — REQUIRED: choose per SKILL.md Model Selection]
   prompt: |
@@ -33,7 +33,7 @@ more, nothing less) and is well-built (clean, tested, maintainable)
 
     Read the diff file once — it contains tracked status and patches plus every non-ignored untracked file patch, including binary patches. It is your complete view of the Work Item change. The diff's context lines ARE the changed files: do not Read a changed file separately unless a hunk you must judge is cut off mid-function — and say so in your report. Do not re-run git commands.
 
-    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE [BASE_SHA]`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
+    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE BASE`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
     Do not crawl the broader codebase. Inspect code outside the diff only
     to evaluate a concrete risk you can name — one focused check per named
     risk, and name both the risk and what you checked in your report.
@@ -129,10 +129,10 @@ more, nothing less) and is well-built (clean, tested, maintainable)
     "yes." A tight report that cites lines gives the controller everything
     it needs.
 
-    Your final message is the report itself: begin directly with the
-    spec-compliance verdict. Every line is a verdict, a finding with
-    file:line, or a check you ran — no preamble, no process narration,
-    no closing summary.
+    Return through the executable gate's strict schema: overall readiness in
+    `verdict`, strengths/coverage checks in `notes`, and every issue or
+    out-of-scope observation in `observations`. Do not return a parallel
+    free-form report.
 
     ## Calibration
 
@@ -148,7 +148,17 @@ more, nothing less) and is well-built (clean, tested, maintainable)
     plan-mandated. The plan's authorship does not grade its own work; the
     human decides.
     Acknowledge what was done well before listing issues — accurate praise
-    helps the implementer trust the rest of the feedback.
+    helps the implementer trust the rest of the feedback. `Task quality: Approved`
+    may coexist with calibrated Minor observations, which still require durable
+    dispositions. Use `Needs fixes` for any Critical/Important quality defect or
+    evidence gap that prevents trusting the Work Item.
+
+    Give every issue and out-of-scope observation a stable ID in report order:
+    `OBS-WI-###-01`, `OBS-WI-###-02`, and so on. Each observation retains its
+    calibrated severity, trigger, evidence, impact, and recommendation through
+    fix rounds. The controller records an open Review entry for every ID and a
+    later `Disposition:` or owned follow-up task; a summary count is not a
+    substitute.
 
     ## Output Format
 
@@ -169,8 +179,15 @@ more, nothing less) and is well-built (clean, tested, maintainable)
     #### Important (Should Fix)
     #### Minor (Nice to Have)
 
-    For each issue: file:line, what's wrong, why it matters, how to fix
-    (if not obvious).
+    For each issue: observation ID, file:line, trigger, evidence, impact, and
+    smallest coherent fix.
+
+    ### Out-of-Scope Observations
+
+    Findings discovered outside the Work Item diff, each with observation ID,
+    calibrated severity, trigger/evidence/impact, suggested owner, and revisit
+    condition. Location outside the diff never downgrades severity. `None` if
+    there are none.
 
     ### Assessment
 
@@ -193,5 +210,4 @@ more, nothing less) and is well-built (clean, tested, maintainable)
   package to (`scripts/review-package PLAN_FILE BASE` prints the unique
   path it wrote; the package never enters the controller's context)
 
-**Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues
-(Critical/Important/Minor), Task quality verdict
+**Gate mapping:** Spec Compliance and task quality determine the typed `verdict`; Strengths and unverifiable checks become `notes`; Issues and Out-of-Scope Observations become typed observations with independent verifier decisions.

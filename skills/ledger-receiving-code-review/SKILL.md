@@ -48,6 +48,8 @@ IF any item is unclear:
   STOP - do not implement anything yet
   ASK for clarification on unclear items
 
+When structured choices help in a root session, call `ask_user_question` directly. Never wrap a single clarification in `pi_exec`; composition is not an interaction fallback.
+
 WHY: Items may be related. Partial understanding = wrong implementation.
 ```
 
@@ -206,4 +208,4 @@ You understand 1,2,3,6. Unclear on 4,5.
 
 ## GitHub Thread Replies
 
-When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
+A GitHub reply is an external write and requires explicit operator authorization. Without it, draft the technical response locally for approval. When authorized to reply to an inline review comment, use its thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not a top-level PR comment.

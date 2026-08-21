@@ -1,11 +1,11 @@
 # Specification Reviewer Prompt Template
 
-Use this template as `ledger-pi-review` worker guidance after an architectural specification is written and self-reviewed.
+Use this template as the rubric for `ledger-requesting-code-review`'s [executable review gate](../ledger-requesting-code-review/review-gate.md) in `specification` mode after an architectural specification is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into the gate's `question` and `checks`, put the specification in `paths`, and put governing records in `contextPaths`.
 
 **Purpose:** Attempt to falsify that the active specification is complete, internally consistent, ratified, and ready for implementation planning.
 
 ```
-`ledger-pi-review` worker guidance:
+`pi-review` worker guidance:
   description: "Review Ledger specification"
   profile: [PROFILE — REQUIRED]
   prompt: |
@@ -57,4 +57,4 @@ Use this template as `ledger-pi-review` worker guidance after an architectural s
 - `[SPEC_FILE]` — active specification path.
 - `[REFERENCE_PATHS]` — smallest relevant active decision and research paths.
 
-Record the verified verdict and findings in the task's Review section. The worker does not edit the specification or close the task.
+The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in the task Review; any `materialBlockers` entry blocks planning readiness. The workers do not edit the specification or close the task.

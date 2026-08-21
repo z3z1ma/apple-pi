@@ -92,7 +92,7 @@ git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
 ```
 
-**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place.
+**Sandbox denial:** If `git worktree add` fails with a permission error, stop and report `Blocked`. Ask the operator to choose: continue in the current checkout despite losing isolation, use an operator-selected external path, or stop. Approval to create a worktree is not approval to write in a possibly dirty current checkout; do not run setup, baseline tests, or implementation there until the operator explicitly chooses it.
 
 ## Step 2: Project Setup
 
@@ -147,7 +147,7 @@ Ready to implement <feature-name>
 | Both exist | Use `.worktrees/` |
 | Neither exists | Check instruction file, then default `.worktrees/` |
 | Directory not ignored | Use an external location or request approval for `.gitignore` |
-| Permission error on create | Sandbox fallback, work in place |
+| Permission error on create | Stop blocked; ask whether to work in place, use an external path, or stop |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
 

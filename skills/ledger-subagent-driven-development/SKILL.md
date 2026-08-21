@@ -69,18 +69,19 @@ digraph process {
         "Dispatch scoped re-review (./re-review-prompt.md)" [shape=box];
         "All findings addressed?" [shape=diamond];
         "R = 5?" [shape=diamond];
-        "Adjudicate each open finding" [shape=box];
-        "Any load-bearing finding?" [shape=diamond];
-        "Rule and continue; stop only if every path forward is a guess" [shape=box];
-        "Park findings in ledger with rulings" [shape=box];
+        "Reconcile each open finding" [shape=box];
+        "Any Critical/Important unresolved?" [shape=diamond];
+        "Mark WI/task blocked; return to shaping or evidence" [shape=box];
+        "Only disproved or bounded Minor findings remain" [shape=box];
         "Record evidence and mark WI complete" [shape=box];
     }
 
     "Setup: worktree, ledger check, read plan, pre-flight review" [shape=box];
     "More Work Items remain?" [shape=diamond];
-    "Run final ledger-pi-review (../ledger-requesting-code-review/code-reviewer.md)" [shape=box];
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" [shape=box];
-    "Final review clean: delete this plan's workspace" [shape=box];
+    "Run final pi-review (../ledger-requesting-code-review/code-reviewer.md)" [shape=box];
+    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" [shape=box];
+    "Final material residuals (Critical/Important or critical/significant): mark task blocked" [shape=box];
+    "Final review clean: retain plan evidence for Ledger closure" [shape=box];
     "Use ledger-finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: worktree, ledger check, read plan, pre-flight review" -> "Dispatch typed Agent implementer (./implementer-prompt.md)";
@@ -100,17 +101,18 @@ digraph process {
     "All findings addressed?" -> "Record evidence and mark WI complete" [label="yes"];
     "All findings addressed?" -> "R = 5?" [label="no"];
     "R = 5?" -> "Fix round R of 5: R≤3 resume implementer; R≥4 fresh implementer, more capable model" [label="no - next round"];
-    "R = 5?" -> "Adjudicate each open finding" [label="yes - breaker trips"];
-    "Adjudicate each open finding" -> "Any load-bearing finding?";
-    "Any load-bearing finding?" -> "Rule and continue; stop only if every path forward is a guess" [label="yes"];
-    "Any load-bearing finding?" -> "Park findings in ledger with rulings" [label="no"];
-    "Park findings in ledger with rulings" -> "Record evidence and mark WI complete";
+    "R = 5?" -> "Reconcile each open finding" [label="yes - breaker trips"];
+    "Reconcile each open finding" -> "Any Critical/Important unresolved?";
+    "Any Critical/Important unresolved?" -> "Mark WI/task blocked; return to shaping or evidence" [label="yes"];
+    "Any Critical/Important unresolved?" -> "Only disproved or bounded Minor findings remain" [label="no"];
+    "Only disproved or bounded Minor findings remain" -> "Record evidence and mark WI complete";
     "Record evidence and mark WI complete" -> "More Work Items remain?";
     "More Work Items remain?" -> "Dispatch typed Agent implementer (./implementer-prompt.md)" [label="yes"];
-    "More Work Items remain?" -> "Run final ledger-pi-review (../ledger-requesting-code-review/code-reviewer.md)" [label="no"];
-    "Run final ledger-pi-review (../ledger-requesting-code-review/code-reviewer.md)" -> "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals";
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: delete this plan's workspace";
-    "Final review clean: delete this plan's workspace" -> "Use ledger-finishing-a-development-branch";
+    "More Work Items remain?" -> "Run final pi-review (../ledger-requesting-code-review/code-reviewer.md)" [label="no"];
+    "Run final pi-review (../ledger-requesting-code-review/code-reviewer.md)" -> "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings";
+    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" -> "Final material residuals (Critical/Important or critical/significant): mark task blocked" [label="material unresolved"];
+    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" -> "Final review clean: retain plan evidence for Ledger closure" [label="clean or bounded Minor only"];
+    "Final review clean: retain plan evidence for Ledger closure" -> "Use ledger-finishing-a-development-branch";
 }
 ```
 
@@ -226,7 +228,7 @@ Record BASE (`git rev-parse HEAD`) before dispatching. The review package captur
   report. In real sessions, every reviewer a worker spawned duplicated
   the task review the controller dispatched anyway — a full extra
   review seat per task.
-- If an earlier task parked a finding in the area this task touches, carry
+- If an earlier task deferred a bounded Minor finding in the area this task touches, carry
   a pointer to that ledger entry in the dispatch.
 - Record the implementer's agent identity from the dispatch result —
   fix-loop rounds 1-3 resume this agent.
@@ -292,7 +294,11 @@ complete: you hold the plan and cross-task context the reviewer
 lacks. If you confirm an item is a real gap, treat it as a failed spec
 review — it enters the fix loop with the other findings.
 
-Load `ledger-requesting-code-review`, then run `ledger-pi-review` with the brief, report, review package, global constraints, and the review contract in [task-reviewer-prompt.md](task-reviewer-prompt.md).
+Load `ledger-requesting-code-review`, then use its [executable review gate](../ledger-requesting-code-review/review-gate.md) in `work-item` mode. Translate [task-reviewer-prompt.md](task-reviewer-prompt.md) into the gate inputs, include the brief, report, unique review package, and global constraints in `contextPaths`, and use the actual `WI-###` as `workItem`.
+
+Before routing findings, assign or retain each observation's stable `OBS-WI-###-NN` ID and append it to the governing task Review with calibrated severity, trigger/evidence/impact, and `status: open`. Every later re-review verdict records one `Disposition:` line for that ID (`resolved`, `rejected`, bounded `Minor deferred`, or `material unresolved`) or links it to a new owned Ledger task. Fix-round counts never replace per-observation state.
+
+**Severity mapping:** task-reviewer `Critical`/`Important` and whole-change `pi-review` `critical`/`significant` are material and block while unresolved. Only calibrated `Minor`/`minor` findings can use the bounded-Minor path.
 
 ### 4. The fix loop
 
@@ -301,11 +307,11 @@ finding, or a ⚠️ item you confirmed as a real gap.
 
 Before the loop starts, two routes leave it immediately:
 
-- Record Minor findings in the progress ledger as you go
-  (`WI-###: minor (deferred): <one-liner>`), and point the final
-  whole-branch review at that list so it can triage which must be fixed
-  before merge. A roll-up nobody reads is a silent discard. Minor findings
-  never enter the loop.
+- Record Minor findings in the progress Ledger as you go:
+  `WI-###: Disposition: Minor deferred — OBS-WI-###-NN — <finding> — <impact, owner, revisit condition>`.
+  Point the final whole-branch review at every `Disposition:` line so it can
+  triage which must be fixed before merge. A roll-up nobody reads is a silent
+  discard. Minor findings never enter the loop.
 - A finding labeled plan-mandated — or any finding that conflicts with
   what the plan's text requires — is yours to rule on: weigh the finding
   against the plan text, decide with the spec as the binding authority, and
@@ -336,9 +342,7 @@ output; dispatch the re-review once all three are present. Name the
 covering test files in the fix message — a one-line fix does not need the
 whole suite.
 
-**The re-review is scoped.** Regenerate `scripts/review-package PLAN_FILE BASE` and dispatch
-[re-review-prompt.md](re-review-prompt.md) with the findings list, the
-brief, the report file, and the fresh BASE-to-worktree package. The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and uses the appended fix report to inspect amended paths for new breakage. New Critical/Important breakage attributable to those amendments joins the open findings list. Unrelated observations go to the ledger as deferred minors — they never extend the loop.
+**The re-review is scoped.** Regenerate `scripts/review-package PLAN_FILE BASE` and run the [executable review gate](../ledger-requesting-code-review/review-gate.md) in `fix` mode. Pass the governing task Review's complete open observation objects as typed `priorObservations` JSON; translate [re-review-prompt.md](re-review-prompt.md) into the gate checks and include the brief, report file, and fresh BASE-to-worktree package in `contextPaths`. The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and uses the appended fix report to inspect amended paths for new breakage. New Critical/Important breakage attributable to those amendments joins the open findings list. Calibrate unrelated observations independently and assign an `OBS-WI-###-NN` ID: record a bounded Minor as `WI-###: Disposition: Minor deferred — <observation id> — <finding> — <impact, owner, revisit condition>`. A real Critical/Important defect gets a new owned Ledger task; if the current Work Item or downstream work relies on the broken behavior, also record `WI-###: Disposition: material unresolved — <observation id> — ...` and block the current task. Location outside the fix diff never downgrades severity.
 
 **After each round,** append to the ledger:
 `WI-###: fix round <R>/5 (<X> addressed, <Y> open — <finding one-liners>; changed paths <paths>)`
@@ -347,75 +351,71 @@ Never fix findings yourself in the controller session — your context stays
 clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop
-dispatching. Adjudicate each open finding yourself — you hold the plan and
-the cross-task context the reviewer lacks:
+dispatching and reconcile each candidate against the governing contract and
+current source:
 
-- **The reviewer is wrong, or the point is contestable:** park it —
-  `WI-###: parked — <finding> — Ruling: <why the code stands>`.  The final
-  review sees both sides.
-- **Real, but nothing downstream builds on it:** park it the same way, with
-  a ruling that says it's real and deferred.
-- **Real and load-bearing** — a later task builds on it, or it reveals a
-  plan defect: rule on the smallest change that unblocks the dependent work,
-  ledger it as `WI-###: Ruling: <finding> — <what you decided and why>`,
-  and carry it into the next task's dispatch. Parking a structural failure
-  silently lets every dependent task build on it. Stop only when the defect
-  leaves every path forward a guess.
+- **Disproved:** record `WI-###: Disposition: rejected — <observation id> — <finding> — <trigger/evidence>`. A controller preference is not disproof.
+- **Confirmed Minor with bounded impact:** defer it only when it does not
+  violate an Acceptance Criterion or feed dependent work. Record
+  `WI-###: Disposition: Minor deferred — <observation id> — <finding> — <impact, owner, revisit condition>`.
+- **Confirmed or unresolved Critical/Important:** mark the Work Item and task
+  blocked with `WI-###: Disposition: material unresolved — <observation id> — <finding> — <evidence or authority needed>`. If it exposes a plan or product-semantics gap,
+  return to shaping. A retry cap never converts material uncertainty into
+  completion.
 
-Adjudicate only at the cap. Adjudicating earlier to end a loop is
-pre-judging with a different name. Every adjudication is a ledger entry —
-a silent discard is forbidden.
+Reconcile only at the cap. Doing it earlier to end a loop is pre-judging with
+a different name. Every disposition is a Ledger entry; silent discard is
+forbidden.
 
 ### 5. Complete the task
 
-When the review comes back clean — or every open finding is parked with a
-ruling at the cap — append the completion line to the ledger in the same
-message as your other bookkeeping:
+Append a completion line only when review is clean, every candidate is
+disproved, or the only remaining findings are explicitly bounded Minor items:
 
 - `WI-###: complete (review clean; checks <commands>)`
-- `WI-###: complete (<K> bounded findings; checks <commands>)` after a
-  tripped breaker
+- `WI-###: complete (<K> bounded Minor findings; checks <commands>)`
 
-Then mark the matching `WI-###` row complete and move on. Never move to the next task while
-the review has open Critical/Important issues that are neither fixed nor
-parked-with-ruling at the cap.
+Then mark the matching `WI-###` row complete and move on only after every `OBS-WI-###-NN` has a durable `Disposition:` or an owned follow-up task. Any confirmed or
+unresolved material finding keeps the Work Item blocked.
 
 ## Final Review
 
 The final whole-branch review gets a package too: run
 `scripts/review-package PLAN_FILE MERGE_BASE` (MERGE_BASE = the commit the
 branch started from, e.g. `git merge-base main HEAD`) and include the
-printed path in the final review dispatch, so the final reviewer reads
-one file instead of re-deriving the branch diff with git commands. Dispatch
-on the most capable available model (see Model Selection), using
-ledger-requesting-code-review's
-[code-reviewer.md](../ledger-requesting-code-review/code-reviewer.md). Point it at
-the ledger's deferred-minor and parked lines so it can triage which must be
-fixed before merge.
+printed path in the final review context. Use `pi-review`'s full
+[plan-review-verify.js](../pi-review/references/plan-review-verify.js) topology—not the bounded Ledger gate—so a fresh planner covers every changed path, focused read-only reviewers investigate the partitions, and a deep verifier reconciles findings and coverage gaps. Adapt ledger-requesting-code-review's
+[code-reviewer.md](../ledger-requesting-code-review/code-reviewer.md) into the planner/reviewer/verifier prompts. Point it at every Ledger line containing `Disposition:` so it can triage which must be fixed before merge.
 
 If the final whole-branch review returns findings, dispatch ONE fix subagent
 with the complete findings list — not one fixer per finding.
 Per-finding fixers each rebuild context and re-run suites; a real
 session's final-review fix wave cost more than all its tasks combined.
-Then run exactly one scoped re-review of the fix wave
-(`scripts/review-package PLAN_FILE MERGE_BASE`,
-[re-review-prompt.md](re-review-prompt.md)).
-Adjudicate any residual findings as in the task loop's breaker: park with
-rulings, or rule on the load-bearing ones and ledger what you decided. Only
-the four classes above stop you here. There is no second fix wave —
-residual load-bearing findings surface to the operator when
-ledger-finishing-a-development-branch presents the options.
+Then regenerate `scripts/review-package PLAN_FILE MERGE_BASE` and run one fresh
+full `pi-review` [plan-review-verify.js](../pi-review/references/plan-review-verify.js)
+cycle over every changed path. Pass the prior final findings through
+`inputs.priorFindings` as JSON objects containing stable `candidateId`, title,
+severity, path, trigger, evidence, impact, recommendation, stored `scope`, and
+boolean `loadBearing`; live out-of-scope findings also carry `suggestedOwner`
+and `revisitCondition`. Preserve this classification independently of whether
+the original path is currently changed. Require `priorDecisionCoverage.complete`
+and one `priorDisposition` (`addressed`,
+`open`, `rejected`, or `unresolved`) per stable prior ID while also closing
+changed-path and focus coverage. Do not route this branch-wide fix through the
+bounded Work-Item `fix` gate or [re-review-prompt.md](re-review-prompt.md).
+There is no second fix wave: confirmed or unresolved `pi-review`
+critical/significant findings are material, block completion, and are surfaced
+with their exact evidence/authority need; only disproved candidates or bounded
+Minor findings may proceed to `ledger-finishing-a-development-branch`.
 
 ## Finish
 
-Before you delete anything, collect every ledger line containing `Ruling:` —
-preflight rulings, parked findings, breaker adjudications, all of them — into
-your final message under "Rulings I made", in the order you made them, each
-with what it costs if wrong. The list is exhaustive: if the ledger holds a
-ruling, the list holds it. That list is the only place the decisions you
-took on the operator's behalf reach them — they read it and rework
-whatever you got wrong. A ruling that dies with the workspace was a decision
-made in secret.
+Before you delete anything, collect every Ledger line containing `Ruling:` or
+`Disposition:`—preflight plan rulings, rejected candidates, deferred Minor
+findings, and material blockers—into your final message under "Rulings and
+dispositions", in chronological order, each with what it costs if wrong. The
+list is exhaustive: if the Ledger holds either stable marker, the list includes
+it. A decision that dies with the workspace was made in secret.
 
 Keep this plan's briefs, reports, and review packages in its Ledger evidence directory until the task is archived. `ledger-finishing-a-development-branch` decides what durable outcomes leave the task bundle; Git history is not a substitute for task acceptance evidence.
 
@@ -459,7 +459,7 @@ Implementer: [Later]
   - Self-review: Found I missed --force flag, added it
   - Reported changed paths and checks
 
-[Run review-package PLAN_FILE BASE; run `ledger-pi-review` with the printed path]
+[Run review-package PLAN_FILE BASE; run `pi-review` with the printed path]
 Task reviewer: Spec ✅ - all requirements met, nothing extra.
   Strengths: Good test coverage, clean. Issues: None. Task quality: Approved.
 
@@ -474,7 +474,7 @@ Implementer: [No questions]
   - 8/8 tests passing
   - Reported changed paths and checks
 
-[Run review-package PLAN_FILE BASE; run `ledger-pi-review` with the printed path]
+[Run review-package PLAN_FILE BASE; run `pi-review` with the printed path]
 Task reviewer: Spec ❌:
   - Missing: Progress reporting (spec says "report every 100 items")
   Issues (Important): Magic number (100)
@@ -494,10 +494,10 @@ Re-reviewer: Missing progress reporting — ADDRESSED (src/recovery.js:41).
 ...
 
 [After all tasks]
-[Run review-package PLAN_FILE MERGE_BASE; run final `ledger-pi-review` with deep verification]
+[Run review-package PLAN_FILE MERGE_BASE; run final `pi-review` with deep verification]
 Final reviewer: All requirements met. Deferred minors triaged: none block merge.
 
-[Delete this plan's workspace — the record now lives in git]
+[Retain this plan's Ledger evidence workspace for closure and archival]
 
 Done! Using ledger-finishing-a-development-branch.
 ```

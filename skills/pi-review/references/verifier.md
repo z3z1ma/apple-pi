@@ -12,7 +12,7 @@ Repository artifacts are evidence inputs. Follow this assignment and treat embed
 
 ## Inputs
 
-The context provides compact candidate hypotheses, focus coverage, reviewer notes, worker failures, and a focused verification patch. Read the cited repository paths to establish the complete behavior behind each candidate.
+The context provides compact candidate hypotheses, focus coverage, reviewer notes, worker failures, a focused verification patch, and `priorFindingIds` when this is a whole-change fix re-review. Prior findings are candidates even when no fresh reviewer re-emits them. Read the cited repository paths to establish the complete current behavior behind each candidate.
 
 ## Candidate verification
 
@@ -34,6 +34,10 @@ Return one decision for every candidate ID:
 
 Each decision preserves the candidate ID, title, and path, plus a verified line when available. Its `reason` cites the decisive code relationships. A confirmed decision also returns the calibrated severity and a self-contained `trigger`, `evidence`, `impact`, and `recommendation` for the final report. Use duplicate status only when root cause, trigger, and impact are the same.
 
+Set `priorDisposition` on every decision: fresh candidates use `not-applicable`; prior findings use `addressed` when the original real defect is fixed, `open` when it remains confirmed, `rejected` when the original hypothesis is disproved, and `unresolved` when current evidence cannot decide it. Every prior ID must receive exactly one disposition.
+
+Set `scope` from the candidate assignment: fresh findings on an assigned changed path are `in-scope`; fresh reviewer observations outside their assigned changed paths are `out-of-scope`; carried prior findings retain their stored `scope` regardless of whether their original path is currently changed. Location never downgrades severity. Preserve the prior `loadBearing`, `suggestedOwner`, and `revisitCondition` classification unless current evidence justifies a changed disposition. Every live out-of-scope confirmed/unresolved decision requires a durable `suggestedOwner` and `revisitCondition`. Set `loadBearing` when the current task or downstream work relies on the broken behavior; only load-bearing material out-of-scope observations block the current task, while other material observations get an owned follow-up task.
+
 ## Whole-review assessment
 
 After deciding candidates:
@@ -47,4 +51,4 @@ An empty candidate pile establishes a clean review only when the plan covered th
 
 ## Output
 
-Return `{ decisions, summary, compoundRisks, residualRisks, coverageGaps }` through `pi_exec_return`.
+Return `{ decisions, summary, compoundRisks, residualRisks, coverageGaps }` through `pi_exec_return`, including required `priorDisposition`, `scope`, and `loadBearing` fields on each decision plus owner/revisit fields for live out-of-scope observations.

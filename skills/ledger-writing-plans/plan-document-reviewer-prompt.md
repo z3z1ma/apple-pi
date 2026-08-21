@@ -1,49 +1,58 @@
 # Plan Document Reviewer Prompt Template
 
-Use this template when dispatching a plan document reviewer subagent.
+Use this template as the rubric for `ledger-requesting-code-review`'s [executable review gate](../ledger-requesting-code-review/review-gate.md) in `plan` mode after the active plan is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into `question` and `checks`, put the plan in `paths`, and put the task/spec/decisions in `contextPaths`.
 
-**Purpose:** Verify the plan is complete, matches the spec, and has proper task decomposition.
-
-**Dispatch after:** The complete plan is written.
+**Purpose:** Attempt to falsify that a cold-start executor can implement the plan without guessing or violating the governing Ledger contract.
 
 ```
-Subagent (general-purpose):
-  description: "Review plan document"
+`pi-review` worker guidance:
+  description: "Review Ledger implementation plan"
+  profile: [PROFILE — REQUIRED]
   prompt: |
-    You are a plan document reviewer. Verify this plan is complete and ready for implementation.
+    You are independently reviewing one Ledger implementation plan. Your work is read-only.
 
-    **Plan to review:** [PLAN_FILE_PATH]
-    **Spec for reference:** [SPEC_FILE_PATH]
+    Task root: [TASK_FILE]
+    Active specification and decisions: [CONTRACT_PATHS]
+    Plan: [PLAN_FILE]
 
-    ## What to Check
+    Read those files and only the focused source surfaces needed to verify a concrete plan claim. The specification and active decisions govern behavior; the plan must translate them into implementation mechanics without inventing semantics.
 
-    | Category | What to Look For |
-    |----------|------------------|
-    | Completeness | TODOs, placeholders, incomplete tasks, missing steps |
-    | Spec Alignment | Plan covers spec requirements, no major scope creep |
-    | Task Decomposition | Tasks have clear boundaries, steps are actionable |
-    | Buildability | Could an engineer follow this plan without getting stuck? |
+    ## What To Challenge
+
+    | Category | What to look for |
+    | --- | --- |
+    | Completeness | TODOs, placeholders, missing paths/interfaces/steps, unowned docs or packaging surfaces |
+    | Contract coverage | Every relevant `AC-###` and required scenario has an owning Work Item and falsifying check |
+    | Provenance | Steps that choose behavior not ratified by the task, specification, or decision |
+    | Decomposition | Stable `WI-###` boundaries, explicit dependencies, no overlapping writers, independently observable outcomes |
+    | Buildability | A cold-start executor can locate owners, make the change, observe RED when feasible, and verify GREEN |
+    | Integration | Cross-module seams, migration/order requirements, cleanup, and recovery are sequenced |
+    | Proportion | No speculative abstractions, duplicate state, or work without a production consumer |
 
     ## Calibration
 
-    **Only flag issues that would cause real problems during implementation.**
-    An implementer building the wrong thing or getting stuck is an issue.
-    Minor wording, stylistic preferences, and "nice to have" suggestions are not.
+    Flag issues that would make an executor build the wrong thing, get stuck, overwrite another owner, or produce evidence that cannot prove acceptance. Minor wording and stylistic preferences are not findings. Do not solve open product semantics inside the review; identify the exact authority gap and criterion it blocks.
 
-    Approve unless there are serious gaps — missing requirements from the spec,
-    contradictory steps, placeholder content, or tasks so vague they can't be acted on.
+    ## Output
 
-    ## Output Format
+    ### Verdict
+    **Execution readiness:** Approved | Concerns | Blocked
 
-    ## Plan Review
+    ### Coverage
+    List each relevant `AC-###` and its owning Work Item/check. Name missing or duplicate ownership.
 
-    **Status:** Approved | Issues Found
+    ### Findings
+    For each finding: severity (`critical | significant | minor`), Work Item/step, evidence, execution consequence, and smallest correction.
 
-    **Issues (if any):**
-    - [Task X, Step Y]: [specific issue] - [why it matters for implementation]
-
-    **Recommendations (advisory, do not block approval):**
-    - [suggestions for improvement]
+    ### Residual risk
+    State what this document review could not establish.
 ```
 
-**Reviewer returns:** Status, Issues (if any), Recommendations
+**Placeholders:**
+
+- `[PROFILE]` — choose a profile proportionate to plan complexity.
+- `[TASK_FILE]` — governing task root.
+- `[CONTRACT_PATHS]` — active specification and decision paths.
+- `[PLAN_FILE]` — active plan path.
+
+The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in `task.md` Review; any `materialBlockers` entry blocks execution readiness. The workers do not edit the plan or begin execution.

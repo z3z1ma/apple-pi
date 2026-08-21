@@ -1,0 +1,377 @@
+{
+  "status": "passed",
+  "runsChecked": 30,
+  "failures": [],
+  "checks": [
+    {
+      "run": "B-001/01",
+      "changedPaths": [
+        "README.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-001/01/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-001/02",
+      "changedPaths": [
+        "README.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-001/02/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-001/03",
+      "changedPaths": [
+        "README.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-001/03/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-001/04",
+      "changedPaths": [
+        "README.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-001/04/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-001/05",
+      "changedPaths": [
+        "README.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-001/05/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-002/01",
+      "changedPaths": [
+        ".ledger/202608210508-reject-empty-import-batch-ids/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-002/01/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-002/01/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-002/02",
+      "changedPaths": [
+        ".ledger/202608210509-reject-empty-import-batch-ids/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-002/02/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-002/03",
+      "changedPaths": [
+        ".ledger/202608210510-reject-empty-import-batch-ids/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-002/03/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-002/04",
+      "changedPaths": [
+        ".ledger/202608210510-reject-empty-import-batch-ids/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-002/04/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-002/04/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-002/05",
+      "changedPaths": [
+        ".ledger/202608210511-reject-empty-import-batch-ids/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-002/05/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-002/05/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-003/01",
+      "changedPaths": [
+        ".ledger/202608210529-replace-compaction-strategy/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-003/01/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-003/01/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-003/02",
+      "changedPaths": [
+        ".ledger/202608210530-replace-compaction-strategy/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-003/02/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-003/02/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-003/03",
+      "changedPaths": [
+        ".ledger/202608210531-replace-compaction-strategy/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-003/03/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-003/03/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-003/04",
+      "changedPaths": [
+        ".ledger/202608210531-replace-compaction-strategy/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-003/04/repo",
+      "observedCwdReferences": [
+        "'/private/tmp/apple-pi-root-eval/treatment-normal/B-003/04/repo/.ledger/INDEX.md'\"}],",
+        "'/private/tmp/apple-pi-root-eval/treatment-normal/B-003/04/repo/.ledger/history/INDEX.md'\"}],",
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-003/04/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-003/05",
+      "changedPaths": [
+        ".ledger/202608210532-replace-compaction-strategy/task.md",
+        ".ledger/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-003/05/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-004/01",
+      "changedPaths": [
+        "src/count.js"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-004/01/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-004/01/repo\\n\\n---",
+        "(file:///private/tmp/apple-pi-root-eval/treatment-normal/B-004/01/repo/test/count.test.js:4:37)\\n"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-004/02",
+      "changedPaths": [
+        "src/count.js"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-004/02/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-004/02/repo\\n\\n--",
+        "(file:///private/tmp/apple-pi-root-eval/treatment-normal/B-004/02/repo/test/count.test.js:4:37)\\n"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-004/03",
+      "changedPaths": [
+        "src/count.js"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-004/03/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-004/03/repo\\n\\n--",
+        "(file:///private/tmp/apple-pi-root-eval/treatment-normal/B-004/03/repo/test/count.test.js:4:37)\\n"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-004/04",
+      "changedPaths": [
+        "src/count.js"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-004/04/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-004/04/repo\\n\\n---",
+        "(file:///private/tmp/apple-pi-root-eval/treatment-normal/B-004/04/repo/test/count.test.js:4:37)\\n"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-004/05",
+      "changedPaths": [
+        "src/count.js"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-004/05/repo",
+      "observedCwdReferences": [
+        "'/private/tmp/apple-pi-root-eval/treatment-normal/B-004/05/repo/.ledger/INDEX.md'\"}],",
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-004/05/repo\\n\\n---",
+        "(file:///private/tmp/apple-pi-root-eval/treatment-normal/B-004/05/repo/test/count.test.js:4:37)\\n"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-005/01",
+      "changedPaths": [
+        ".ledger/202608210300-verify/task.md",
+        ".ledger/INDEX.md",
+        ".ledger/history/202608210300-verify/task.md",
+        ".ledger/history/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-005/01/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-005/02",
+      "changedPaths": [
+        ".ledger/202608210300-verify/task.md",
+        ".ledger/INDEX.md",
+        ".ledger/history/202608210300-verify/task.md",
+        ".ledger/history/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-005/02/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-005/03",
+      "changedPaths": [
+        ".ledger/202608210300-verify/task.md",
+        ".ledger/INDEX.md",
+        ".ledger/history/202608210300-verify/task.md",
+        ".ledger/history/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-005/03/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-005/03/repo\\n.ledger/202608210300-verify/task.md\\n.ledger/INDEX.md\\n\\n---"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-005/04",
+      "changedPaths": [
+        ".ledger/202608210300-verify/task.md",
+        ".ledger/INDEX.md",
+        ".ledger/history/202608210300-verify/task.md",
+        ".ledger/history/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-005/04/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-005/04/repo\\n.ledger/202608210300-verify/task.md\\n.ledger/INDEX.md\\n\\n---",
+        "---\\nmain\\n/private/tmp/apple-pi-root-eval/treatment-normal/B-005/04/repo\\n56c471c"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-005/05",
+      "changedPaths": [
+        ".ledger/202608210300-verify/task.md",
+        ".ledger/INDEX.md",
+        ".ledger/history/202608210300-verify/task.md",
+        ".ledger/history/INDEX.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-005/05/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-005/05/repo\\n.ledger/202608210300-verify/task.md\\n.ledger/INDEX.md\\n\\n---"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-006/01",
+      "changedPaths": [
+        ".ledger/202608210301-review/task.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-006/01/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-006/01/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-006/02",
+      "changedPaths": [
+        ".ledger/202608210301-review/task.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-006/02/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-006/02/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-006/03",
+      "changedPaths": [
+        ".ledger/202608210301-review/task.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-006/03/repo",
+      "observedCwdReferences": [],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-006/04",
+      "changedPaths": [],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-006/04/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-006/04/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    },
+    {
+      "run": "B-006/05",
+      "changedPaths": [
+        ".ledger/202608210301-review/task.md"
+      ],
+      "expectedCwdSuffix": "apple-pi-root-eval/treatment-normal/B-006/05/repo",
+      "observedCwdReferences": [
+        "\"/private/tmp/apple-pi-root-eval/treatment-normal/B-006/05/repo\\n\\n--"
+      ],
+      "result": "passed",
+      "problems": []
+    }
+  ]
+}

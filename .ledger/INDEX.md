@@ -17,4 +17,4 @@
 
 - `.ledger/202608182330-protect-vcc-finished-turn-deliverable/task.md` — Protect finished-turn deliverables in VCC compaction — Rewrite VCC cut, subsequent-compact, and compile so long-horizon analyses survive ambient and follow-up compaction instead of being mid-cycle sliced, shredded to a stub tail, or 200-word compiled.
 
-- `.ledger/202608202254-strengthen-ledger-workflow/task.md` — Strengthen Ledger workflow with evaluated Superpowers principles — Evaluate and selectively adapt portable Superpowers workflow principles into existing Ledger skills without adding a second runtime or state authority.
+- `.ledger/202608202254-strengthen-ledger-workflow/task.md` — Strengthen Ledger workflow with evaluated Superpowers principles — Fuse Superpowers procedures and 10x durable judgment into 13 Ledger lifecycle skills while preserving Pi utility boundaries.

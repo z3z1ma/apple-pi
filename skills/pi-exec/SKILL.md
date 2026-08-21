@@ -1,15 +1,11 @@
 ---
-name: ledger-pi-exec
-description: "Use when authoring or troubleshooting JavaScript passed to pi_exec, especially for composed tools, bound context, parallel or pipeline stages, captured extensions, MCP, or disposable workers."
+name: pi-exec
+description: "Author or troubleshoot JavaScript passed to pi_exec. Use when asked to compose Pi tools, fetch, captured extension or MCP calls, parallel or pipeline stages, or agent workers in one program; bind context or outputSchema; or fix guest-runtime errors such as invalid pi.* arguments, missing pi_exec_return, or 'display is not defined'. Not for ordinary direct tool calls or interactive Agent collaboration."
 ---
 
 # Pi Exec Guest API
 
 `pi_exec` runs a JavaScript async-function body. Intermediate tool output stays inside the worker; only the returned value enters the main context.
-
-## Ledger State: Bounded Composition
-
-Use `pi_exec` when orchestration or evidence gathering benefits from programmatic composition, not as a second workflow engine. Bind the governing task and smallest necessary records as explicit context, preserve worker traces and failures, and return only the compact observations the controller needs to update Journal, Evidence, Review, or blockers. Parallel readers may fan out; dependent stages remain ordered; writers never overlap on the same ownership surface. The program does not create task authority, close a task, or authorize external effects.
 
 Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
 

@@ -208,16 +208,18 @@ Those tools refuse collisions and do not list, inspect, select, or execute exist
 
 ## Workflow skills
 
-Every packaged skill is prefixed `ledger-` because it consumes or produces the same authority, provenance, evidence, and learning state. The prefix is a behavioral contract, not a second namespace around unrelated techniques.
+The 13 incoming lifecycle skills are prefixed `ledger-` because they absorb the former stage-local Ledger skills. The established Pi utility skills keep their existing names and general responsibility boundaries.
 
-| State | Skills | Ledger responsibility |
+| State | Ledger lifecycle skills | Responsibility |
 | --- | --- | --- |
 | Shaping | `ledger-brainstorming`, `ledger-writing-plans` | Search prior context, resolve ambiguity, ratify assumptions, and establish task/spec/decision/plan authority. |
-| Execution | `ledger-systematic-debugging`, `ledger-test-driven-development`, `ledger-executing-plans`, `ledger-pi-ralph` | Own one acceptance gap or Work Item, journal discoveries, and gather bounded evidence. |
-| Orchestration | `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents`, `ledger-pi-exec` | Sequence dependencies, bind cold-start handoffs, coordinate bounded workers, and reconcile their claims. |
-| Review | `ledger-requesting-code-review`, `ledger-pi-review`, `ledger-receiving-code-review`, `ledger-verification-before-completion` | Attempt to falsify completion, disposition findings, and map claims to fresh criterion evidence. |
+| Execution | `ledger-systematic-debugging`, `ledger-test-driven-development`, `ledger-executing-plans` | Own one acceptance gap or Work Item, journal discoveries, and gather bounded evidence. |
+| Orchestration | `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents` | Sequence dependencies, bind cold-start handoffs, coordinate bounded workers, and reconcile their claims. |
+| Review | `ledger-requesting-code-review`, `ledger-receiving-code-review`, `ledger-verification-before-completion` | Commission review, disposition findings, and map claims to fresh criterion evidence. |
 | Workspace and closure | `ledger-using-git-worktrees`, `ledger-finishing-a-development-branch` | Preserve isolation and continuity, distill learning, judge honest terminal state, and present operator-owned integration choices. |
 | Compounding | `ledger-writing-skills` | Turn repeated toil or instruction failures into empirically tested packaged procedures. |
+
+The lifecycle may invoke independent Pi skills without renaming or redefining them: `pi-exec` remains general composition guidance, `pi-review` remains general code review, and `pi-ralph` remains the existing fresh-context loop for prepared Ledger tasks.
 
 Typical flow:
 
@@ -225,7 +227,7 @@ Typical flow:
 shape → research/specify as needed → plan → execute → review → verify → distill → operator integration
 ```
 
-The underlying runtime identifiers remain unchanged: `Agent` is typed collaboration, `pi_exec` is bounded composition, and `ledger_add` / `ledger_close` create or archive task structure. Ralph is implemented as a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker; the caller bounds the batch, then invokes `/skill:ledger-pi-review` separately and reconciles the Ledger before deciding on another batch.
+The runtime identifiers remain unchanged: `Agent` is typed collaboration, `pi_exec` is bounded composition, and `ledger_add` / `ledger_close` create or archive task structure. Ralph is implemented as a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker; the caller bounds the batch, then invokes `/skill:pi-review` separately and reconciles the Ledger before deciding on another batch.
 
 Not every task needs every record or skill. A small but non-trivial task may need only `task.md`, and exact trivial work may need no task mutation. Research, specs, decisions, plans, standalone evidence, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
 

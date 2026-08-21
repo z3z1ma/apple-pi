@@ -1,12 +1,12 @@
 # Scoped Re-Review Prompt Template
 
-Use this template as `ledger-pi-review` worker guidance after a fix round. The re-reviewer verifies the findings against the current BASE-to-worktree package and checks the amended paths for new breakage. It is not a fresh review — the full review already happened.
+Use this template as the rubric for `ledger-requesting-code-review`'s [executable review gate](../ledger-requesting-code-review/review-gate.md) in `fix` mode after a fix round. Supply the governing task Review's complete open observation objects as typed `priorObservations` JSON, put the fresh unique BASE-to-worktree package and reports in `contextPaths`, and translate this rubric into `question` and `checks`. Do not dispatch it as a free-form worker. The gate preserves every prior ID, independently verifies addressed/not-addressed status, and reports fix-caused or out-of-scope observations without downgrading severity.
 
 **Purpose:** Verify each finding from the previous review was addressed, and
 that the fix itself broke nothing.
 
 ```
-`ledger-pi-review` worker guidance:
+`pi-review` worker guidance:
   description: "Re-review WI-### fix round R"
   profile: [PROFILE — REQUIRED: choose per SKILL.md Model Selection]
   prompt: |
@@ -32,7 +32,7 @@ that the fix itself broke nothing.
 
     Read the diff file once — it contains tracked status and patches plus every non-ignored untracked file patch, including binary patches. Use the findings and the appended fix report to focus on the amended paths. Do not re-run git commands.
 
-    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE [BASE_SHA]`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
+    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE BASE`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
 
     Your review is read-only on this checkout. Do not mutate the working
     tree, the index, HEAD, or branch state in any way.
@@ -69,10 +69,12 @@ that the fix itself broke nothing.
 
     ### Finding Verdicts
 
-    For each finding in The Findings Under Verification, in order:
-    - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED, with file:line
-      evidence. "Attempted" is not addressed: the specific defect must no
-      longer exist.
+    For each finding in The Findings Under Verification, in order, retain its
+    stable observation ID:
+    - **[OBS-WI-###-NN — finding one-liner]** — ADDRESSED | NOT ADDRESSED,
+      with file:line evidence. "Attempted" is not addressed: the specific
+      defect must no longer exist. The controller records a `Disposition:`
+      for each ID after this verdict.
 
     ### New Breakage in the Fix Diff
 
@@ -81,8 +83,12 @@ that the fix itself broke nothing.
 
     ### Out-of-Scope Observations
 
-    Issues you noticed entirely outside the fix diff. Non-blocking; the
-    controller ledgers these for the final review. "None" if none.
+    Issues you noticed entirely outside the fix diff. They do not change the
+    scoped fix verdict, but retain their calibrated severity. For each, give a
+    one-line finding, Critical/Important/Minor severity, trigger, impact,
+    suggested owner, and revisit condition. The controller records bounded
+    Minors as `Disposition: Minor deferred`; real material defects get a new
+    owned Ledger task and block this task when load-bearing. "None" if none.
 
     ### Verdict
 

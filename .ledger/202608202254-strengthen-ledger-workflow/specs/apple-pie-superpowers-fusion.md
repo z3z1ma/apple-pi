@@ -2,17 +2,17 @@ Status: active
 Created: 2026-08-20
 Updated: 2026-08-20
 
-# apple-pi Superpowers workflow fusion
+# apple-pi Ledger engineering workflow fusion
 
 ## Purpose And Authority
 
-Define the behavior of the user-ratified fusion of `obra/superpowers` main at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797` with apple-pi. This specification is governed by `decisions/fusion-scope.md`. It supersedes the preceding principles-only recommendation for the succeeding implementation work.
+Define the behavior of the user-ratified fusion of `obra/superpowers` at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`, `z3z1ma/10x` at `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`, and apple-pi. This specification is governed by `decisions/fusion-scope.md` and `decisions/ledger-first-skill-identity.md`.
 
 ## Actors And Boundaries
 
 - **Operator:** owns product intent, design approval, implementation authorization, integration choices, and any external or destructive action.
 - **Root apple-pi session:** owns the active workflow, discovers and loads the applicable fused skill, maintains current intent, and chooses an apple-pi primitive without inventing unavailable capability.
-- **Ledger:** is the only durable task and workflow state. It owns task authority, supporting records, evidence, review disposition, and distillation.
+- **Ledger:** is the only durable workflow state and the shared epistemic substrate beneath the fused lifecycle skills. It owns authority and provenance, cold-start memory, task state, evidence limits, review disposition, retrospective, and distillation across explicit shaping, orchestration, and execution roles.
 - **`Agent`:** provides typed, persistent, ownership-scoped collaboration sessions. It replaces generic Superpowers `Task` assumptions when long-lived specialist interaction, resume, steering, or explicit child ownership is required.
 - **`pi_exec`:** provides bounded disposable composition, structured model workers, fan-out, reduction, explicit context, budgets, and traces. It owns parallel investigation/review graphs and programmatic fresh-worker orchestration.
 - **Ralph:** remains the fresh-context implementation-loop owner; the fused workflow may add a clearly bounded advanced composition only when it preserves caller batch control and independent review semantics.
@@ -23,9 +23,9 @@ Define the behavior of the user-ratified fusion of `obra/superpowers` main at `b
 
 ### Complete methodology inventory
 
-The delivered workflow MUST provide a discoverable apple-pi equivalent for each upstream Superpowers skill: `using-superpowers`, `brainstorming`, `writing-plans`, `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `using-git-worktrees`, `finishing-a-development-branch`, and `writing-skills`.
+The delivered workflow MUST expose exactly 16 packaged skills. The 13 incoming lifecycle skills are `ledger-brainstorming`, `ledger-writing-plans`, `ledger-executing-plans`, `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents`, `ledger-systematic-debugging`, `ledger-test-driven-development`, `ledger-requesting-code-review`, `ledger-receiving-code-review`, `ledger-verification-before-completion`, `ledger-using-git-worktrees`, `ledger-finishing-a-development-branch`, and `ledger-writing-skills`. The established `pi-review`, `pi-ralph`, and `pi-exec` names and general responsibility boundaries remain unchanged.
 
-Each supporting role prompt, script, check, and state artifact that materially causes an upstream workflow behavior MUST be traceable either to retained/adapted apple-pi text, an existing apple-pi primitive, or an explicit incompatible-boundary rationale. The implementation MUST NOT treat pre-existing apple-pi documentation as a substitute without this traceability.
+Each Superpowers procedure, role prompt, script, check, and material helper MUST be traceable to retained/adapted apple-pi text, a real apple-pi primitive, or an explicit incompatible-boundary rationale. Each fused lifecycle skill MUST have a distinct Ledger role and apply the 10x-derived authority/provenance, operating-state, evidence, proportionality, and compounding fundamentals without copying `.10x/` or adding a second state tree. Ledger skills may invoke Pi Exec, Pi Review, or Pi Ralph without redefining those utility skills.
 
 ### Happy path
 
@@ -53,9 +53,9 @@ A fused skill MUST name real apple-pi actions and must not imply a generic `Task
 
 ### Text and attribution fidelity
 
-The fusion SHOULD retain upstream language wherever its behavior and authority remain valid. Changes to wording MUST be limited to apple-pi terminology, actual tool/action mapping, Ledger ownership, higher-priority safety constraints, or clarity required by the new composed workflow. The traceability matrix MUST identify the source passage and disposition for every material deletion, relocation, or alteration.
+The fusion SHOULD retain Superpowers language wherever its behavior and authority remain valid. Changes to wording are for apple-pi terminology, actual tool/action mapping, Ledger/10x-derived ownership, higher-priority safety constraints, or clarity required by the composed workflow. The traceability matrix identifies material source and disposition.
 
-Any literal upstream text in the package MUST carry the upstream MIT attribution in `THIRD_PARTY_NOTICES.md`.
+Close or literal adaptations from Superpowers and 10x MUST carry both pinned MIT attributions in `THIRD_PARTY_NOTICES.md`. No upstream telemetry, branding, `.superpowers`, `.10x`, or foreign harness API ships.
 
 ### Evaluation
 
@@ -71,7 +71,8 @@ Behavior-shaping skill changes MUST have fresh-context baseline and treatment ev
 
 ## Given-When-Then Scenarios
 
-- **Given** a normal root session begins a non-trivial request, **when** the request has a matching fused workflow, **then** the workflow is discoverable and directs the agent to scope/design/approval rather than immediately writing code.
+- **Given** a normal root session begins a non-trivial request, **when** the request has a matching workflow, **then** the root prompt routes to the exact `ledger-*` catalog location and the loaded skill establishes its Ledger operating state before action.
+- **Given** an exact trivial request, **when** no durable state is needed, **then** Ledger fundamentals still govern authority and evidence without creating task ceremony.
 - **Given** an approved multi-step outcome, **when** the agent reaches execution, **then** it creates or follows one Ledger task and uses bounded Ralph, `Agent`, or `pi_exec` work according to their real ownership rather than a duplicate Superpowers workspace.
 - **Given** two genuinely independent investigations, **when** parallelism is useful, **then** the controller uses bounded `pi_exec` fan-out with self-contained context and combined verification; dependent writers remain sequential.
 - **Given** a regression with an unknown cause, **when** an agent begins repair, **then** it captures reproduction and a falsifiable hypothesis before production mutation or explains why that evidence is unavailable.
@@ -89,19 +90,22 @@ Behavior-shaping skill changes MUST have fresh-context baseline and treatment ev
 
 ## Exclusions
 
-- A verbatim second copy of Superpowers or a compatibility wrapper beside a different apple-pi workflow.
+- A verbatim second copy of Superpowers or 10x, old unprefixed skill aliases, `.superpowers` or `.10x` state, or a compatibility wrapper beside the Ledger workflow.
 - Generic agent/task APIs that do not exist in apple-pi.
 - Unbounded, self-authorizing agents; silent tool fallbacks; unowned external effects; and disposal of uncommitted work.
 
 ## Assumptions And Provenance
 
-- The operator explicitly requested near-wholesale retention and enhancement of the upstream methodology, adapted to Ledger, `Agent`, and `pi_exec`.
-- Upstream source behavior and language are evidence, not overriding authority; the operator's instruction and higher-priority safety constraints govern conflicts.
+- The operator explicitly requested near-wholesale retention of Superpowers procedures, adaptation of 10x philosophy, a `ledger-` prefix for the incoming lifecycle skills, and complete implementation through Ledger, `Agent`, and `pi_exec`; Pi Exec and Pi Review remain unprefixed and general, and Pi Ralph keeps its existing name.
+- Upstream behavior and language are evidence, not overriding authority; the operator's instruction and higher-priority safety constraints govern conflicts.
 - Exact source mapping and implementation decomposition remain planning work; this specification authorizes no production edit by itself.
 
 ## Related Records
 
 - `.ledger/202608202254-strengthen-ledger-workflow/decisions/fusion-scope.md`
+- `.ledger/202608202254-strengthen-ledger-workflow/decisions/ledger-prefix-boundary.md`
+- `.ledger/202608202254-strengthen-ledger-workflow/decisions/ledger-first-skill-identity.md` (superseded)
+- `.ledger/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
 - `.ledger/202608202235-evaluate-superpowers-ledger-integration/research/superpowers-main-methodology.md`
 - `docs/ledger.md`
 - `docs/subagents.md`

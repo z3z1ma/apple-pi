@@ -79,7 +79,7 @@ async function waitFor<T>(
 }
 ```
 
-See `condition-based-waiting-example.ts` in this directory for complete implementation with domain-specific helpers (`waitForEvent`, `waitForEventCount`, `waitForEventMatch`) from actual debugging session.
+Adapt the generic polling helper above into domain-specific helpers such as `waitForEvent`, `waitForEventCount`, or `waitForEventMatch`. Keep the getter and predicate owned by the real subsystem; do not copy a foreign project-specific implementation.
 
 ## Common Mistakes
 

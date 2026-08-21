@@ -11,19 +11,21 @@ Start by classifying how much process the request needs, then work through your 
 
 ## Ledger State: Shaping
 
-Search live and historical Ledger tasks, active records, and repository authority before asking the operator to repeat context. Separate facts from choices: every execution-changing assumption must be record-backed, explicitly user-ratified, or blocking. Ask only questions whose answers change the next safe action, pair them with a concrete recommendation, and record a decision, specification, research finding, or task only when context has crystallized enough to serve a cold-start consumer. Shaping may conclude that deletion, reuse, documentation, or no code is the smallest complete answer.
+Search live and historical Ledger tasks, active records, and repository authority before asking the operator to repeat context. Separate facts from choices: every execution-changing assumption must be record-backed, explicitly user-ratified, or blocking. Ask only questions whose answers change the next safe action and pair them with a concrete recommendation. When structured choices help, call the root `ask_user_question` tool directly; do not wrap a single user interaction in `pi_exec`. Record a decision, specification, research finding, or task only when context has crystallized enough to serve a cold-start consumer. Shaping may conclude that deletion, reuse, documentation, or no code is the smallest complete answer.
 
 <HARD-GATE>
 Do NOT invoke any implementation skill, write any code, scaffold any
 project, or take any implementation action until you have told the
 operator what you intend and they have approved it. This applies
 to EVERY task on EVERY path below — the ceremony scales with the task;
-the approval gate never does.
+the approval gate never does. A request to “start now” authorizes beginning the workflow; it does not approve a design the operator has not yet seen.
 </HARD-GATE>
 
 ## Ledger Workbench
 
 Use one Ledger bundle for a non-trivial outcome. Before creating anything, search `.ledger/INDEX.md`, live task roots, and `.ledger/history/INDEX.md`. Extend an existing task when its Scope and Acceptance Criteria already own the outcome. Use `ledger_add` only when a new non-trivial outcome needs a cold-start contract.
+
+A bounded production-behavior change is still non-trivial when it spans implementation and executable coverage or otherwise needs acceptance evidence. Create or reuse a minimal task root before implementation; bounded means no separate specification or plan document, not no durable contract. Keep that task live while approval is pending—do not delete it merely to restore a clean worktree or because no production edit has happened yet. Reserve record-free work for truly reversible one-offs whose removal would not leave production behavior incorrect or untested.
 
 A task root contains exactly one level-one title and these sections in order:
 
@@ -71,7 +73,8 @@ override it:
   this repo: a new flag, a small endpoint, a one-file fix.
   Understanding the kind of app is not enough — bounded means the flow
   you are changing is already here to read. If there is no existing
-  flow to change, the task is not bounded. Ask the clarifying
+  flow to change, the task is not bounded. For a non-trivial behavior
+  change, create or reuse a minimal Ledger task, then ask the clarifying
   questions that matter, present a short design IN CHAT (a few
   sentences to a few short paragraphs), and STOP. Implementation
   starts only after the operator says yes to that design — a
@@ -105,6 +108,8 @@ artifact, never the approval.
 | "I understand this kind of app, so it's bounded" | Bounded measures the repo, not your familiarity. A new project has no existing flow — it is architectural. |
 | "The spike works, so I'll keep the code" | A spike's output is an answer. Keeping the code is a new request — classify it. |
 | "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
+| "They said start now, so the design is approved" | Starting the workflow is not approval of an unseen design. Present the design, then wait. |
+| "No code changed, so I should delete the task before waiting" | The live task is the cold-start contract for the pending approval; keep it until it is completed or explicitly cancelled. |
 | "They approved the spike, so the follow-up change is approved too" | Each task gets its own classification and its own approval. |
 
 ## Visual Companion
@@ -126,10 +131,11 @@ Classify first, announce the path, then complete the applicable checklist in ord
 
 **Bounded:**
 1. **Explore project context** — check files, docs, recent commits
-2. **Ask clarifying questions** — one at a time, the ones that matter
-3. **Present short design in chat** — approach, files touched, testing
-4. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
-5. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
+2. **Establish the contract** — create or reuse a minimal Ledger task for a non-trivial behavior change; no separate spec or plan document
+3. **Ask clarifying questions** — one at a time, the ones that matter
+4. **Present short design in chat** — approach, files touched, testing
+5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
+6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
 
 **Architectural:**
 1. **Explore project context** — check files, docs, recent commits
@@ -138,7 +144,7 @@ Classify first, announce the path, then complete the applicable checklist in ord
 4. **Present design** — in sections scaled to their complexity, get user approval after each section
 5. **Write the active specification** — use the governing Ledger task's `specs/` directory
 6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-7. **Independent spec review** — use [spec-document-reviewer-prompt.md](spec-document-reviewer-prompt.md) through `ledger-pi-review`; resolve material findings
+7. **Independent spec review** — load `ledger-requesting-code-review`, use its [executable review gate](../ledger-requesting-code-review/review-gate.md) in `specification` mode, translate [spec-document-reviewer-prompt.md](spec-document-reviewer-prompt.md) into the gate inputs, and resolve material findings
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation planning** — load `ledger-writing-plans` and create the source-backed plan
 
@@ -189,7 +195,7 @@ digraph ledger-brainstorming {
 }
 ```
 
-**Terminal states are path-bound.** Architectural work moves from ledger-brainstorming to `ledger-writing-plans`. Bounded work proceeds through the normal development workflow after approval, without a plan document. A spike ends with a reported recommendation.
+**Terminal states are path-bound.** Architectural work moves from ledger-brainstorming to `ledger-writing-plans`. Bounded work proceeds through the normal development workflow after approval, using its minimal Ledger task but no plan document. A spike ends with a reported recommendation.
 
 ## The Process
 

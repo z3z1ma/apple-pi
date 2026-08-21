@@ -4,20 +4,13 @@
 
 When you fix a bug caused by invalid data, adding validation at one place feels sufficient. But that single check can be bypassed by different code paths, refactoring, or mocks.
 
-**Core principle:** Validate at EVERY layer data passes through. Make the bug structurally impossible.
+**Core principle:** Fix the source, then add another validation boundary only when a demonstrated bypass path or high-cost invariant justifies it.
 
-## Why Multiple Layers
+## When Multiple Layers Are Justified
 
-Single validation: "We fixed the bug"
-Multiple layers: "We made the bug impossible"
+A second check is useful when a real producer can bypass the first, when a trust boundary changes, or when failure cost warrants independent enforcement. Do not duplicate the same policy everywhere or add logging as if it were validation. Each added layer needs a production consumer, a concrete bypass or risk, and an executable check.
 
-Different layers catch different cases:
-- Entry validation catches most bugs
-- Business logic catches edge cases
-- Environment guards prevent context-specific dangers
-- Debug logging helps when other layers fail
-
-## The Four Layers
+Possible layers include:
 
 ### Layer 1: Entry Point Validation
 **Purpose:** Reject obviously invalid input at API boundary
@@ -69,29 +62,31 @@ async function gitInit(directory: string) {
 }
 ```
 
-### Layer 4: Debug Instrumentation
-**Purpose:** Capture context for forensics
+### Layer 4: Temporary Redacted Instrumentation
+**Purpose:** Distinguish a demonstrated evidence gap during investigation
 
 ```typescript
 async function gitInit(directory: string) {
-  const stack = new Error().stack;
-  logger.debug('About to git init', {
-    directory,
-    cwd: process.cwd(),
-    stack,
+  logger.debug('git-init boundary', {
+    correlationId: 'investigation-1',
+    directoryPresent: directory.length > 0,
+    directoryIsAbsolute: isAbsolute(directory),
+    matchesExpectedRoot: directory.startsWith(expectedTestRoot),
   });
   // ... proceed
 }
 ```
 
+Remove the marker after localization unless an existing observability contract owns it. Never log raw paths, environments, payloads, credentials, personal data, or full stacks.
+
 ## Applying the Pattern
 
 When you find a bug:
 
-1. **Trace the data flow** - Where does bad value originate? Where used?
-2. **Map all checkpoints** - List every point data passes through
-3. **Add validation at each layer** - Entry, business, environment, debug
-4. **Test each layer** - Try to bypass layer 1, verify layer 2 catches it
+1. **Trace the data flow** — identify the origin, consumers, and actual trust boundaries.
+2. **Fix the root cause** — preserve the accepted contract at its production owner.
+3. **Test plausible bypasses** — determine whether another real path can avoid that fix.
+4. **Add only justified boundaries** — for each extra check, name its consumer, bypass/risk, failure behavior, and focused test. Product choices such as retry, timeout, or user-facing error policy return to shaping unless already authoritative.
 
 ## Example from Session
 
@@ -107,16 +102,10 @@ Bug: Empty `projectDir` caused `git init` in source code
 - Layer 1: `Project.create()` validates not empty/exists/writable
 - Layer 2: `WorkspaceManager` validates projectDir not empty
 - Layer 3: `WorktreeManager` refuses git init outside tmpdir in tests
-- Layer 4: Stack trace logging before git init
+- Layer 4: Temporary redacted boundary marker to localize the demonstrated gap
 
 **Result:** All 1847 tests passed, bug impossible to reproduce
 
 ## Key Insight
 
-All four layers were necessary. During testing, each layer caught bugs the others missed:
-- Different code paths bypassed entry validation
-- Mocks bypassed business logic checks
-- Edge cases on different platforms needed environment guards
-- Debug logging identified structural misuse
-
-**Don't stop at one validation point.** Add checks at every layer.
+In the example above, evidence showed several independent bypass paths, so several checks were warranted. That is an observed case, not a universal four-layer mandate. Stop when the source fix and justified boundary checks make the accepted invariant hold; speculative validation and permanent debug logging are not robustness.

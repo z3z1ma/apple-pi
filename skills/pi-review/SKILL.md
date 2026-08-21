@@ -1,15 +1,11 @@
 ---
-name: ledger-pi-review
-description: "Use whenever code review is the primary task, including requests to review, inspect, audit, assess, critique, validate, verify, or sanity-check diffs, commits, branches, implementations, tests, configuration, schemas, or generated code."
+name: pi-review
+description: Default code-review skill. Use for any request to review, inspect, audit, assess, critique, validate, verify, or sanity-check code, implementations, or code changes for correctness, regressions, bugs, security, compatibility, completeness, maintainability, or operational risk. Applies to pull requests, commits, diffs, patches, branches, working-tree changes, refactors, migrations, fixes, tests, configuration, schemas, and generated code. Choose this skill whenever code review is the primary task, even if the user does not explicitly say "code review."
 ---
 
 # Review
 
 Produce a small set of independently verified findings about a change. Each finding must connect a changed line or omission to a reachable, observable consequence.
-
-## Ledger State: Independent Review
-
-The governing task defines the intended outcome; active specifications and decisions define semantics; the diff and repository behavior provide evidence. Review is a fresh falsification role, not repeated execution or automatic authority. Give workers only the contract and bounded change evidence they need. Reconcile verified findings, rejected candidates, coverage gaps, verdict, and residual risk into `task.md` Review. The review program neither edits implementation nor marks the task done.
 
 ## Prepare the review
 
@@ -102,11 +98,11 @@ Budget for the roles in the selected shape: one planner when partitioning, one `
 
 ## Planned composition ownership
 
-`[references/plan-review-verify.js](references/plan-review-verify.js)` is the canonical planned-review composition. It owns planner validation against `inputs.paths`, per-focus patch collection between stages, read-only reviewer fan-out, bounded verifier context, and decision/coverage reporting. The standard library supplies normalized evidence, serialized-size packing, assignment coverage, and ID reconciliation; it does not replace those controller-owned boundaries. Keep the adapted `PLANNER`, `REVIEWER`, and `VERIFIER` prompts inlined with their explicit profile and read-only tool assignments.
+`[references/plan-review-verify.js](references/plan-review-verify.js)` is the canonical planned-review composition. It owns planner validation against `inputs.paths`, per-focus patch collection between stages, read-only reviewer fan-out, bounded verifier context, and decision/coverage reporting. For a whole-change fix re-review, pass optional `inputs.priorFindings` as a JSON array of stable IDs plus title, severity, path, trigger, evidence, impact, recommendation, stored `scope`, and boolean `loadBearing`; live out-of-scope priors also carry `suggestedOwner` and `revisitCondition`. Those priors retain their stored scope independently of whether the original path is currently changed, are bound to planning/focus context, cannot be clipped from verification, and must each receive a typed `priorDisposition` alongside fresh candidates. The standard library supplies normalized evidence, serialized-size packing, assignment coverage, and ID reconciliation; it does not replace those controller-owned boundaries. Keep the adapted `PLANNER`, `REVIEWER`, and `VERIFIER` prompts inlined with their explicit profile and read-only tool assignments.
 
 ## Ralph boundary
 
-`ledger-pi-review` owns review composition and finding semantics. `ledger-pi-ralph` owns the caller-bounded fresh-context implementation loop, and its default loop remains separate from review. `[references/ralph-reviewed.js](../ledger-pi-ralph/references/ralph-reviewed.js)` is an opt-in advanced example that composes a Ralph increment with this review spine; it is not a default workflow or permission to make review implicit.
+`pi-review` owns review composition and finding semantics. `pi-ralph` owns the caller-bounded fresh-context implementation loop, and its default loop remains separate from review. `[references/ralph-reviewed.js](../pi-ralph/references/ralph-reviewed.js)` is an opt-in advanced example that composes a Ralph increment with this review spine; it is not a default workflow or permission to make review implicit.
 
 ## Extend the shapes deliberately
 

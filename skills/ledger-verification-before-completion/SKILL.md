@@ -26,10 +26,10 @@ If you haven't run the verification command in this message, you cannot claim it
 ## The Gate Function
 
 ```
-BEFORE claiming any status or expressing satisfaction:
+BEFORE making an empirical success, correctness, completion, or integration-readiness claim:
 
-1. IDENTIFY: What command proves this claim?
-2. RUN: Execute the FULL command (fresh, complete)
+1. IDENTIFY: What procedure proves this exact claim?
+2. RUN: Execute the claim-matched procedure fresh and completely. Broad completion claims require the full relevant suite; narrow intermediate claims require the narrow falsifying check.
 3. READ: Full output, check exit code, count failures
 4. VERIFY: Does output confirm the claim?
    - If NO: State actual status with evidence
@@ -110,15 +110,15 @@ Skip any step = lying, not verifying
 ## When To Apply
 
 **ALWAYS before:**
-- ANY variation of success/completion claims
-- ANY expression of satisfaction
-- ANY positive statement about work state
-- Committing, PR creation, task completion
-- Moving to next task
-- Delegating to agents
+- Any empirical success, correctness, completion, fixed, passing, or ready claim
+- Committing, PR creation, task completion, or irreversible integration
+- Moving to the next Work Item on the claim that the current one is complete
+- Accepting an agent or reviewer report as true
+
+Delegation itself is governed by authority, scope, and handoff readiness; it does not require pretending the delegated work is already verified. Ordinary factual progress updates cite the observation they report without running a disproportionate full suite.
 
 **Rule applies to:**
 - Exact phrases
 - Paraphrases and synonyms
-- Implications of success
-- ANY communication suggesting completion/correctness
+- Implications of success or correctness
+- Any communication that could cause downstream work or integration to rely on an empirical claim

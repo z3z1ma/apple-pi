@@ -7,7 +7,13 @@ const path = require('path');
 
 const OPCODES = { TEXT: 0x01, CLOSE: 0x08, PING: 0x09, PONG: 0x0A };
 const WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const MAX_FRAME_PAYLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_FRAME_PAYLOAD_BYTES = 64 * 1024;
+const MAX_EVENT_PAYLOAD_BYTES = 16 * 1024;
+const MAX_EVENTS_FILE_BYTES = 1024 * 1024;
+const MAX_ACCEPTED_EVENTS = 1000;
+const MAX_LOG_BYTES = 1024 * 1024;
+const MAX_LOG_RECORD_BYTES = 4096;
+const MAX_WEBSOCKET_CLIENTS = 8;
 
 function computeAcceptKey(clientKey) {
   return crypto.createHash('sha1').update(clientKey + WS_MAGIC).digest('base64');
@@ -40,12 +46,17 @@ function encodeFrame(opcode, payload) {
 function decodeFrame(buffer) {
   if (buffer.length < 2) return null;
 
+  const firstByte = buffer[0];
   const secondByte = buffer[1];
-  const opcode = buffer[0] & 0x0F;
+  const opcode = firstByte & 0x0F;
+  const finalFrame = (firstByte & 0x80) !== 0;
+  const reservedBits = firstByte & 0x70;
   const masked = (secondByte & 0x80) !== 0;
   let payloadLen = secondByte & 0x7F;
   let offset = 2;
 
+  if (reservedBits !== 0) throw new Error('WebSocket extensions are not supported');
+  if (!finalFrame) throw new Error('Fragmented WebSocket messages are not supported');
   if (!masked) throw new Error('Client frames must be masked');
 
   if (payloadLen === 126) {
@@ -64,6 +75,12 @@ function decodeFrame(buffer) {
 
   if (payloadLen > MAX_FRAME_PAYLOAD_BYTES) {
     throw new Error('WebSocket frame payload exceeds maximum allowed size');
+  }
+  if (opcode >= OPCODES.CLOSE && payloadLen > 125) {
+    throw new Error('WebSocket control frame payload exceeds 125 bytes');
+  }
+  if (opcode === OPCODES.CLOSE && payloadLen === 1) {
+    throw new Error('WebSocket close frame payload must be empty or include a status code');
   }
 
   const maskOffset = offset;
@@ -97,13 +114,24 @@ function preferredPort() {
   return randomPort();
 }
 let PORT = preferredPort();
-const HOST = process.env.LEDGER_VISUAL_HOST || '127.0.0.1';
-const URL_HOST = process.env.LEDGER_VISUAL_URL_HOST || (HOST === '127.0.0.1' ? 'localhost' : HOST);
+const rawHost = process.env.LEDGER_VISUAL_HOST || '127.0.0.1';
+const HOST = rawHost === '[::1]' ? '::1' : rawHost;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1']);
+if (!LOOPBACK_HOSTS.has(HOST)) {
+  throw new Error('Ledger visual companion only binds to loopback; use an operator-approved encrypted tunnel for remote access');
+}
+const rawUrlHost = process.env.LEDGER_VISUAL_URL_HOST || HOST;
+const URL_HOST = rawUrlHost === '[::1]' ? '::1' : rawUrlHost;
+if (!LOOPBACK_HOSTS.has(URL_HOST)) {
+  throw new Error('Ledger visual companion only emits loopback URLs; use the local endpoint of an operator-approved encrypted tunnel');
+}
 const SESSION_DIR = process.env.LEDGER_VISUAL_DIR || '/tmp/ledger-visual';
 const CONTENT_DIR = process.env.LEDGER_VISUAL_CONTENT_DIR || path.join(SESSION_DIR, 'content');
 const STATE_DIR = process.env.LEDGER_VISUAL_STATE_DIR || path.join(SESSION_DIR, 'state');
 const APPLE_PI_VERSION = readApplePiVersion();
+const ownerIdentity = process.env.LEDGER_VISUAL_OWNER_ID || null;
 let ownerPid = process.env.LEDGER_VISUAL_OWNER_PID ? Number(process.env.LEDGER_VISUAL_OWNER_PID) : null;
+if (ownerPid && !ownerIdentity) ownerPid = null;
 
 // Per-session secret key. The companion is reachable by any local browser tab
 // and, when bound to a non-loopback host, by any host that can route to it.
@@ -177,17 +205,11 @@ h1 { color: #333; } p { color: #666; } code { background: #f0f0f0; padding: 0.1e
 <p>This page needs the full URL your coding agent gave you, including the
 <code>?key=&hellip;</code> part. Copy the complete URL and open it again.</p></body></html>`;
 
-function bootstrapPage(key) {
-  const jsonKey = JSON.stringify(String(key));
+function bootstrapPage() {
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Opening Ledger Visual Companion</title></head>
-<body>
-<script>
-try { sessionStorage.setItem('ledger-visual-session-key', ${jsonKey}); } catch (e) {}
-location.replace('/');
-</script>
-</body>
+<body><script>location.replace('/');</script></body>
 </html>`;
 }
 
@@ -196,6 +218,27 @@ const helperScript = fs.readFileSync(path.join(__dirname, 'helper.js'), 'utf-8')
 const helperInjection = '<script>\n' + helperScript + '\n</script>';
 
 // ========== Helper Functions ==========
+
+let emittedLogBytes = 0;
+let logLimitReported = false;
+function emitLog(record, error = false) {
+  let line = JSON.stringify(record);
+  if (Buffer.byteLength(line) > MAX_LOG_RECORD_BYTES) {
+    line = JSON.stringify({ type: 'log-record-truncated', original_type: record && record.type ? record.type : 'unknown' });
+  }
+  const bytes = Buffer.byteLength(line) + 1;
+  if (emittedLogBytes + bytes > MAX_LOG_BYTES) {
+    if (!logLimitReported) {
+      logLimitReported = true;
+      const limitLine = JSON.stringify({ type: 'log-limit-reached', limit_bytes: MAX_LOG_BYTES });
+      emittedLogBytes += Buffer.byteLength(limitLine) + 1;
+      console.error(limitLine);
+    }
+    return;
+  }
+  emittedLogBytes += bytes;
+  (error ? console.error : console.log)(line);
+}
 
 function readApplePiVersion() {
   const root = path.join(__dirname, '../../..');
@@ -380,7 +423,7 @@ function handleRequest(req, res) {
   const keyFromQuery = queryKey(req.url);
   if (req.method === 'GET' && pathname === '/' && keyFromQuery && timingSafeEqualStr(keyFromQuery, TOKEN)) {
     res.writeHead(200, securityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
-    res.end(bootstrapPage(keyFromQuery));
+    res.end(bootstrapPage());
   } else if (req.method === 'GET' && pathname === '/') {
     const screenFile = getNewestScreen();
     let html = screenFile
@@ -421,6 +464,7 @@ const clients = new Set();
 
 function handleUpgrade(req, socket) {
   if (!isAuthorized(req) || !isAllowedWebSocketOrigin(req)) { socket.destroy(); return; }
+  if (clients.size >= MAX_WEBSOCKET_CLIENTS) { socket.destroy(); return; }
 
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
@@ -435,6 +479,7 @@ function handleUpgrade(req, socket) {
 
   let buffer = Buffer.alloc(0);
   clients.add(socket);
+  socket.setTimeout(WEBSOCKET_IDLE_TIMEOUT_MS, () => socket.destroy());
 
   socket.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -444,7 +489,6 @@ function handleUpgrade(req, socket) {
         result = decodeFrame(buffer);
       } catch (e) {
         socket.end(encodeFrame(OPCODES.CLOSE, Buffer.alloc(0)));
-        clients.delete(socket);
         return;
       }
       if (!result) break;
@@ -456,7 +500,6 @@ function handleUpgrade(req, socket) {
           break;
         case OPCODES.CLOSE:
           socket.end(encodeFrame(OPCODES.CLOSE, Buffer.alloc(0)));
-          clients.delete(socket);
           return;
         case OPCODES.PING:
           socket.write(encodeFrame(OPCODES.PONG, result.payload));
@@ -467,7 +510,6 @@ function handleUpgrade(req, socket) {
           const closeBuf = Buffer.alloc(2);
           closeBuf.writeUInt16BE(1003);
           socket.end(encodeFrame(OPCODES.CLOSE, closeBuf));
-          clients.delete(socket);
           return;
         }
       }
@@ -478,26 +520,52 @@ function handleUpgrade(req, socket) {
   socket.on('error', () => clients.delete(socket));
 }
 
+let acceptedEventCount = 0;
+let eventLimitReported = false;
+
 function handleMessage(text) {
+  if (Buffer.byteLength(text) > MAX_EVENT_PAYLOAD_BYTES) return;
+
   let event;
   try {
     event = JSON.parse(text);
   } catch (e) {
-    console.error('Failed to parse WebSocket message:', e.message);
     return;
   }
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return;
   touchActivity();
-  console.log(JSON.stringify({ source: 'user-event', ...event }));
-  if (event && event.choice) {
+
+  if (acceptedEventCount >= MAX_ACCEPTED_EVENTS) {
+    if (!eventLimitReported) {
+      eventLimitReported = true;
+      emitLog({ type: 'event-limit-reached', limit: MAX_ACCEPTED_EVENTS }, true);
+    }
+    return;
+  }
+  acceptedEventCount += 1;
+  emitLog({ source: 'user-event', type: typeof event.type === 'string' ? event.type.slice(0, 64) : 'unknown' });
+
+  const choice = typeof event.choice === 'string'
+    ? event.choice
+    : event.type === 'choice' && typeof event.value === 'string'
+      ? event.value
+      : null;
+  if (choice && choice.length <= 512) {
+    const serialized = JSON.stringify({ ...event, choice });
+    if (Buffer.byteLength(serialized) > MAX_EVENT_PAYLOAD_BYTES) return;
     const eventsFile = path.join(STATE_DIR, 'events');
-    fs.appendFileSync(eventsFile, JSON.stringify(event) + '\n');
+    let currentSize = 0;
+    try { currentSize = fs.statSync(eventsFile).size; } catch (e) { /* first event */ }
+    if (currentSize + Buffer.byteLength(serialized) + 1 <= MAX_EVENTS_FILE_BYTES) {
+      fs.appendFileSync(eventsFile, serialized + '\n');
+    }
   }
 }
 
 function broadcast(msg) {
   const frame = encodeFrame(OPCODES.TEXT, Buffer.from(JSON.stringify(msg)));
   for (const socket of clients) {
-    try { socket.write(frame); } catch (e) { clients.delete(socket); }
+    try { socket.write(frame); } catch (e) { socket.destroy(); }
   }
 }
 
@@ -509,7 +577,7 @@ function maybeOpenBrowser() {
   if (browserOpened) return;
   browserOpened = true;
   if (!process.env.LEDGER_VISUAL_OPEN) return; // opt-in: only after the user approves the companion
-  if (HOST !== '127.0.0.1' && HOST !== 'localhost') return;
+  if (!LOOPBACK_HOSTS.has(HOST)) return;
   if (clients.size > 0) return; // the user already opened it
   const url = companionUrl(); // must carry the key or the gate 403s it
   const cp = require('child_process');
@@ -527,6 +595,10 @@ function maybeOpenBrowser() {
 const IDLE_TIMEOUT_MS = (() => {
   const ms = Number(process.env.LEDGER_VISUAL_IDLE_TIMEOUT_MS);
   return Number.isFinite(ms) && ms > 0 ? ms : 4 * 60 * 60 * 1000;
+})();
+const WEBSOCKET_IDLE_TIMEOUT_MS = (() => {
+  const ms = Number(process.env.LEDGER_VISUAL_WS_IDLE_TIMEOUT_MS);
+  return Number.isFinite(ms) && ms > 0 ? ms : 15 * 60 * 1000;
 })();
 // How often the watchdog checks for owner-death / idleness. Configurable mainly
 // so tests can run fast; production default is 60s.
@@ -575,19 +647,22 @@ function startServer() {
         knownFiles.add(filename);
         const eventsFile = path.join(STATE_DIR, 'events');
         if (fs.existsSync(eventsFile)) fs.unlinkSync(eventsFile);
-        console.log(JSON.stringify({ type: 'screen-added', file: filePath }));
+        emitLog({ type: 'screen-added', file: filePath });
         maybeOpenBrowser();
       } else {
-        console.log(JSON.stringify({ type: 'screen-updated', file: filePath }));
+        emitLog({ type: 'screen-updated', file: filePath });
       }
 
       broadcast({ type: 'reload' });
     }, 100));
   });
-  watcher.on('error', (err) => console.error('fs.watch error:', err.message));
+  watcher.on('error', (err) => emitLog({ type: 'fs-watch-error', error: err.message }, true));
 
-  function shutdown(reason) {
-    console.log(JSON.stringify({ type: 'server-stopped', reason }));
+  let shuttingDown = false;
+  function shutdown(reason, cleanupRuntime = false) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    emitLog({ type: 'server-stopped', reason });
     const infoFile = path.join(STATE_DIR, 'server-info');
     if (fs.existsSync(infoFile)) fs.unlinkSync(infoFile);
     fs.writeFileSync(
@@ -601,18 +676,35 @@ function startServer() {
     for (const socket of clients) {
       try { socket.destroy(); } catch (e) { /* already gone */ }
     }
-    server.close(() => process.exit(0));
+    server.close(() => {
+      if (cleanupRuntime && /^\/tmp\/ledger-visual-[^/]+$/.test(SESSION_DIR)) {
+        try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+      }
+      process.exit(0);
+    });
+  }
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+
+  function currentProcessIdentity(pid) {
+    try {
+      return require('child_process').execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+    } catch (e) {
+      return '';
+    }
   }
 
   function ownerAlive() {
     if (!ownerPid) return true;
-    try { process.kill(ownerPid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+    try { process.kill(ownerPid, 0); }
+    catch (e) { return e.code === 'EPERM'; }
+    return !ownerIdentity || currentProcessIdentity(ownerPid) === ownerIdentity;
   }
 
   // Periodically exit if the owner process died or we've been idle too long.
   const lifecycleCheck = setInterval(() => {
-    if (!ownerAlive()) shutdown('owner process exited');
-    else if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) shutdown('idle timeout');
+    if (!ownerAlive()) shutdown('owner process exited', true);
+    else if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) shutdown('idle timeout', true);
   }, LIFECYCLE_CHECK_MS);
   lifecycleCheck.unref();
 
@@ -623,7 +715,7 @@ function startServer() {
     try { process.kill(ownerPid, 0); }
     catch (e) {
       if (e.code !== 'EPERM') {
-        console.log(JSON.stringify({ type: 'owner-pid-invalid', pid: ownerPid, reason: 'dead at startup' }));
+        emitLog({ type: 'owner-pid-invalid', pid: ownerPid, reason: 'dead at startup' });
         ownerPid = null;
       }
     }
@@ -650,10 +742,10 @@ function startServer() {
     }
     const info = JSON.stringify({
       type: 'server-started', port: Number(PORT), host: HOST,
-      url_host: URL_HOST, url: companionUrl(),
+      url_host: URL_HOST, url: companionUrl(), session_dir: SESSION_DIR,
       screen_dir: CONTENT_DIR, state_dir: STATE_DIR, idle_timeout_ms: IDLE_TIMEOUT_MS
     });
-    console.log(info);
+    emitLog(JSON.parse(info));
     // server-info embeds the key — keep it owner-only.
     fs.writeFileSync(path.join(STATE_DIR, 'server-info'), info + '\n', { mode: 0o600 });
   }
@@ -689,5 +781,11 @@ module.exports = {
   decodeFrame,
   browserLauncherForPlatform,
   OPCODES,
-  MAX_FRAME_PAYLOAD_BYTES
+  MAX_FRAME_PAYLOAD_BYTES,
+  MAX_EVENT_PAYLOAD_BYTES,
+  MAX_EVENTS_FILE_BYTES,
+  MAX_ACCEPTED_EVENTS,
+  MAX_LOG_BYTES,
+  MAX_WEBSOCKET_CLIENTS,
+  WEBSOCKET_IDLE_TIMEOUT_MS
 };

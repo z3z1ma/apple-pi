@@ -1,50 +1,87 @@
 #!/usr/bin/env bash
-# Generate a Ledger-owned review package for the current worktree diff,
+# Generate a unique Ledger-owned review package for the current worktree diff,
 # including every non-ignored untracked file.
-# Usage: review-package PLAN_FILE BASE [OUTFILE]
+# Usage: review-package PLAN_FILE BASE
 set -euo pipefail
 
-if [ $# -lt 2 ] || [ $# -gt 3 ]; then
-  echo "usage: review-package PLAN_FILE BASE [OUTFILE]" >&2
+if [ $# -ne 2 ]; then
+  echo "usage: review-package PLAN_FILE BASE" >&2
   exit 2
 fi
 
 plan=$1
 base=$2
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
-
-if [ $# -eq 3 ]; then
-  out=$3
-else
-  dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
-  out="$dir/review-$(git rev-parse --short "$base")-worktree.diff"
-fi
 
 root=$(git rev-parse --show-toplevel)
 root=$(cd "$root" && pwd -P)
-out_dir=$(dirname "$out")
-out_abs=$(cd "$out_dir" && pwd -P)/$(basename "$out")
-out_repo_path=
-case "$out_abs" in
-  "$root"/*) out_repo_path=${out_abs#"$root"/} ;;
-esac
-if [ -n "$out_repo_path" ] && git -C "$root" ls-files --error-unmatch -- "$out_repo_path" >/dev/null 2>&1; then
-  echo "refusing to overwrite tracked review package path: $out_repo_path" >&2
+plan_dir=$(cd "$(dirname "$plan")" && pwd -P)
+plan_abs="$plan_dir/$(basename "$plan")"
+if [[ -L "$plan_abs" ]]; then
+  echo "refusing symlink plan file: $plan" >&2
   exit 2
 fi
+case "$plan_abs" in
+  "$root"/.ledger/*/plans/*) ;;
+  *) echo "plan file must be under this repository's .ledger/<task>/plans/: $plan" >&2; exit 2 ;;
+esac
+git -C "$root" rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
 
-# Snapshot the untracked set before opening the output file. An explicit
-# OUTFILE may itself be non-ignored and already exist, so exclude it by its
-# repository-relative path rather than relying on creation order.
+script_dir=$(cd "$(dirname "$0")" && pwd -P)
+dir=$("$script_dir/sdd-workspace" "$plan_abs")
+dir=$(cd "$dir" && pwd -P)
+dir_repo_path=${dir#"$root"/}
+if [ "$dir_repo_path" = "$dir" ]; then
+  echo "review package must remain inside the repository Ledger workspace" >&2
+  exit 2
+fi
+short_base=$(git -C "$root" rev-parse --short "$base")
+umask 077
+tmp_out=$(mktemp "$dir/.review-package.tmp.XXXXXX")
+tmp_repo_path=${tmp_out#"$root"/}
+if [ "$tmp_repo_path" = "$tmp_out" ]; then
+  rm -f -- "$tmp_out"
+  echo "review package must remain inside the repository Ledger workspace" >&2
+  exit 2
+fi
+complete=false
+final_out=""
+trap 'if [ "$complete" != true ]; then rm -f -- "$tmp_out" ${final_out:+"$final_out"}; fi' EXIT
+
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    echo "no SHA-256 tool available for review-package identity" >&2
+    return 1
+  fi
+}
+
+# A prior package is helper-owned only while its content hash matches the
+# full SHA-256 embedded in its filename. Replaced, symlinked, or merely
+# package-like caller files remain visible to the review.
 untracked=()
 while IFS= read -r -d '' path; do
-  [ -n "$out_repo_path" ] && [ "$path" = "$out_repo_path" ] && continue
+  [ "$path" = "$tmp_repo_path" ] && continue
+  name=$(basename "$path")
+  if [[ "$path" == "$dir_repo_path/"* ]] && [[ "$name" =~ ^review-[0-9a-f]+-worktree-([0-9a-f]{64})\.diff$ ]] && [ ! -L "$root/$path" ] && [ -f "$root/$path" ]; then
+    expected_digest=${BASH_REMATCH[1]}
+    actual_digest=$(sha256_file "$root/$path")
+    IFS= read -r first_line < "$root/$path" || true
+    second_line=$(sed -n '2p' "$root/$path")
+    if [ "$actual_digest" = "$expected_digest" ] && [[ "$first_line" == "# Review package: "* ]] && [[ "$second_line" == "# Package ID: .review-package.tmp."* ]]; then
+      continue
+    fi
+  fi
   untracked+=("$path")
 done < <(git -C "$root" ls-files --others --exclude-standard -z)
 
+package_id=$(basename "$tmp_out")
 {
   echo "# Review package: ${base}..WORKTREE"
+  echo "# Package ID: ${package_id}"
   echo
   echo "## Working-tree status"
   git -C "$root" -c core.quotePath=true status --short --untracked-files=no
@@ -80,6 +117,16 @@ done < <(git -C "$root" ls-files --others --exclude-standard -z)
       exit "$status"
     fi
   done
-} > "$out_abs"
+} > "$tmp_out"
 
-echo "wrote ${out_abs}: $(wc -c < "$out_abs" | tr -d ' ') bytes"
+package_digest=$(sha256_file "$tmp_out")
+final_out="$dir/review-${short_base}-worktree-${package_digest}.diff"
+if [ -e "$final_out" ] || [ -L "$final_out" ]; then
+  echo "refusing to overwrite existing review package: $final_out" >&2
+  exit 2
+fi
+mv "$tmp_out" "$final_out"
+tmp_out=""
+complete=true
+trap - EXIT
+echo "wrote ${final_out}: $(wc -c < "$final_out" | tr -d ' ') bytes"

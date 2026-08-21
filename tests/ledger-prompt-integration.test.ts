@@ -38,6 +38,11 @@ describe("ledger system prompt distribution", () => {
 		expect(occurrences(twice, marker)).toBe(1);
 		expect(twice).toContain("ledger_add");
 		expect(twice).toContain("ledger_close");
+		expect(twice).toContain("**Provenance:**");
+		expect(twice).toContain("1. **Shaping:**");
+		expect(twice).toContain("2. **Orchestration:**");
+		expect(twice).toContain("3. **Execution:**");
+		expect(twice).toContain("A worker report is a claim");
 	});
 
 	it("appends the root workflow bootstrap exactly once", () => {
@@ -50,6 +55,8 @@ describe("ledger system prompt distribution", () => {
 		expect(twice).toContain("`ledger-brainstorming`");
 		expect(twice).toContain("`ledger-systematic-debugging`");
 		expect(twice).toContain("`ledger-verification-before-completion`");
+		expect(twice).toContain("`pi-exec`");
+		expect(twice).not.toContain("`brainstorming`");
 		const collision = appendLedgerWorkflowSystemPrompt("Project text mentions <ledger-workflow> as an example.");
 		expect(collision).toContain("`<available_skills>` catalog");
 		expect(occurrences(collision, "# apple-pi Ledger workflow")).toBe(1);

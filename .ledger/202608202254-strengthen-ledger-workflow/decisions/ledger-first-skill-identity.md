@@ -1,8 +1,10 @@
-Status: active
+Status: superseded
 Created: 2026-08-21
 Updated: 2026-08-21
 
 # Make Ledger the identity and substrate of every packaged skill
+
+Superseded by `ledger-prefix-boundary.md` after the operator clarified that the prefix applies only to the incoming fused lifecycle skills, not the pre-existing Pi Exec or Pi Review skills.
 
 ## Context
 
@@ -27,9 +29,9 @@ Every packaged skill is Ledger-prefixed and participates in the same durable wor
 - `ledger-using-git-worktrees`
 - `ledger-finishing-a-development-branch`
 - `ledger-writing-skills`
-- `ledger-pi-review`
-- `ledger-pi-ralph`
-- `ledger-pi-exec`
+- `pi-review`
+- `pi-ralph`
+- `pi-exec`
 
 The prefix is a behavioral promise, not decoration. Each skill must name its Ledger state, inputs, evidence, blockers, and handoff or explain why the current action is trivial enough not to require a task mutation.
 
@@ -42,7 +44,7 @@ Ledger is defined as apple-pi's epistemic and execution substrate:
 5. **Compounding:** discoveries become the correct durable owner, recurring toil becomes a skill, independent follow-up becomes a task, and task-specific history remains local.
 6. **Proportion:** exact trivial work stays exact and avoids record ceremony; ambiguity, behavioral consequence, risk, and multi-session cost determine record depth.
 
-Underlying runtime identifiers remain unchanged. `pi_exec`, `Agent`, `ledger_add`, and `ledger_close` are actual tools; Ralph and review procedures are exposed through `ledger-pi-ralph` and `ledger-pi-review`. No compatibility aliases or duplicate old skill directories ship because this skill surface has not yet been released.
+Underlying runtime identifiers remain unchanged. `pi_exec`, `Agent`, `ledger_add`, and `ledger_close` are actual tools; Ralph and review procedures are exposed through `pi-ralph` and `pi-review`. No compatibility aliases or duplicate old skill directories ship because this skill surface has not yet been released.
 
 ## Authority And Provenance
 
