@@ -276,14 +276,14 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Nested Agent Result",
 		description:
-			"Check an owned child, waiting until it settles by default. wait_seconds may choose an uncapped positive finite timeout; 0 checks immediately, and an expired wait returns control while the child continues. Use transcript_tail for a bounded recent conversation slice; it cannot be combined with a positive wait.",
+			"Wait for an owned child result; omit yield_seconds to wait until it settles. If an explicit yield is necessary, use a very large yield_seconds value (normally 3,600 seconds or more): this returns as soon as the child finishes. yield_seconds is not a child timeout; reaching it only yields control while the still-running child continues untouched. Set it to 0 only for an immediate status check. Use transcript_tail for a bounded recent conversation slice; it cannot be combined with a positive yield.",
 		parameters: Type.Object({
 			agent_id: Type.String(),
-			wait_seconds: Type.Optional(
+			yield_seconds: Type.Optional(
 				Type.Number({
 					minimum: 0,
 					description:
-						"Seconds to wait before yielding control. Omit to wait until settlement (or to take an immediate transcript_tail snapshot); 0 always checks immediately, and positive finite values have no application maximum.",
+						"Seconds to wait before yielding control, not a child timeout. Omit to wait until settlement (or to take an immediate transcript_tail snapshot). If you set it, use a very large positive value (normally 3,600 seconds or more) because this call returns as soon as the child settles; 0 only checks immediately. A yielded call leaves the queued or running child working.",
 				}),
 			),
 			transcript_tail: Type.Optional(
@@ -298,25 +298,25 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		execute: async (_toolCallId, params, signal) => {
 			let waitMode: ResultWaitMode;
 			try {
-				waitMode = resolveResultWaitMode(params.wait_seconds, params.transcript_tail !== undefined);
+				waitMode = resolveResultWaitMode(params.yield_seconds, params.transcript_tail !== undefined);
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), true);
 			}
-			if (params.transcript_tail !== undefined && waitMode.kind === "timed") {
-				return textResult("transcript_tail cannot be combined with a positive wait_seconds value.", true);
+			if (params.transcript_tail !== undefined && waitMode.kind === "yield") {
+				return textResult("transcript_tail cannot be combined with a positive yield_seconds value.", true);
 			}
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId))
 				return textResult("Nested agent not found or not owned by this parent.", true);
-			let waitExpiredSeconds: number | undefined;
+			let yieldedSeconds: number | undefined;
 			if (waitMode.kind !== "immediate" && (record.status === "queued" || record.status === "running")) {
 				const outcome = await waitForAgentSettlement(record, waitMode, signal);
-				if (outcome === "timed-out" && waitMode.kind === "timed") waitExpiredSeconds = waitMode.seconds;
+				if (outcome === "yielded" && waitMode.kind === "yield") yieldedSeconds = waitMode.seconds;
 			}
 			let output =
 				params.transcript_tail === undefined ? formatRecord(record, false) : `Agent ${record.id} is ${record.status}.`;
-			if (waitExpiredSeconds !== undefined && (record.status === "queued" || record.status === "running")) {
-				output += `\n\nWait limit (${waitExpiredSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
+			if (yieldedSeconds !== undefined && (record.status === "queued" || record.status === "running")) {
+				output += `\n\nYield interval (${yieldedSeconds}s) reached; the child is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.`;
 			}
 			if (params.transcript_tail !== undefined && record.session) {
 				const tail = Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));

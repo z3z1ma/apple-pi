@@ -523,7 +523,7 @@ Answer the task.
 			expect(queuedAgentId).toBeTruthy();
 			const queuedSnapshot = await checkResult.execute(
 				"public-agent-queued-check",
-				{ agent_id: queuedAgentId, wait_seconds: 0 },
+				{ agent_id: queuedAgentId, yield_seconds: 0 },
 				undefined,
 			);
 			expect(queuedSnapshot.content[0].text).toContain(`Agent ${queuedAgentId} is queued.`);
@@ -580,7 +580,7 @@ RELOADED ROLE MUST NOT RUN.
 			expect(sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"))).toBe(true);
 			const queuedResult = await checkResult.execute(
 				"public-agent-queued-result",
-				{ agent_id: queuedAgentId, wait_seconds: 5 },
+				{ agent_id: queuedAgentId, yield_seconds: 5 },
 				undefined,
 			);
 			expect(queuedResult.content[0].text).toContain("QUEUED-SNAPSHOT-DONE");
@@ -681,10 +681,10 @@ RELOADED ROLE MUST NOT RUN.
 				});
 			const queuedResumeTimeout = await checkResult.execute(
 				"public-agent-queued-resume-timeout",
-				{ agent_id: awaitedAgentId, wait_seconds: 0.01 },
+				{ agent_id: awaitedAgentId, yield_seconds: 0.01 },
 				undefined,
 			);
-			expect(queuedResumeTimeout.content[0].text).toContain("Wait limit (0.01s) reached");
+			expect(queuedResumeTimeout.content[0].text).toContain("Yield interval (0.01s) reached");
 			expect(queuedResumeSettled).toBe(false);
 
 			const stopped = await stopTool.execute("public-agent-stop", { agent_id: stoppableAgentId });

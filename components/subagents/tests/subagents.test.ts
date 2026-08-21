@@ -339,17 +339,17 @@ describe("owned subagent surface", () => {
 		expect(buildFullParentContext(ctx)).toContain("earlier decision");
 	});
 
-	it("stops queued result polling after its requested wait expires", async () => {
+	it("stops queued result polling after its requested yield interval expires", async () => {
 		vi.useFakeTimers();
 		const record = { status: "queued" as const };
-		const waiting = waitForAgentSettlement(record, { kind: "timed", seconds: 0.01 });
+		const waiting = waitForAgentSettlement(record, { kind: "yield", seconds: 0.01 });
 		await vi.advanceTimersByTimeAsync(10);
-		expect(await waiting).toBe("timed-out");
+		expect(await waiting).toBe("yielded");
 		await vi.advanceTimersByTimeAsync(50);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
-	it("formats timeout output with instructions to call get_subagent_result again", async () => {
+	it("reports that a yielded child continues working", async () => {
 		const record = {
 			id: "child-wait-timeout",
 			parentAgentId: "parent-1",
@@ -370,15 +370,15 @@ describe("owned subagent surface", () => {
 		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
 		const result = await resultTool.execute(
 			"check-child",
-			{ agent_id: "child-wait-timeout", wait_seconds: 0.01 },
+			{ agent_id: "child-wait-timeout", yield_seconds: 0.01 },
 			undefined,
 		);
 		expect(result.content[0].text).toContain(
-			"Wait limit (0.01s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.",
+			"Yield interval (0.01s) reached; the child is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.",
 		);
 	});
 
-	it("waits for an owned nested child when wait_seconds is omitted", async () => {
+	it("waits for an owned nested child when yield_seconds is omitted", async () => {
 		let settleChild: (() => void) | undefined;
 		const record = {
 			id: "child-indefinite-wait",
@@ -429,7 +429,7 @@ describe("owned subagent surface", () => {
 		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
 		const result = await resultTool.execute(
 			"invalid-wait",
-			{ agent_id: "child", wait_seconds: Number.POSITIVE_INFINITY },
+			{ agent_id: "child", yield_seconds: Number.POSITIVE_INFINITY },
 			undefined,
 		);
 		expect(result.isError).toBe(true);
@@ -437,13 +437,13 @@ describe("owned subagent surface", () => {
 		expect(getRecord).not.toHaveBeenCalled();
 	});
 
-	it("distinguishes indefinite, immediate, transcript snapshot, and uncapped timed waits", () => {
+	it("distinguishes indefinite, immediate, transcript snapshot, and finite yield intervals", () => {
 		expect(resolveResultWaitMode(undefined)).toEqual({ kind: "indefinite" });
 		expect(resolveResultWaitMode(undefined, true)).toEqual({ kind: "immediate" });
 		expect(resolveResultWaitMode(0)).toEqual({ kind: "immediate" });
 		expect(resolveResultWaitMode(-0)).toEqual({ kind: "immediate" });
-		expect(resolveResultWaitMode(1.9)).toEqual({ kind: "timed", seconds: 1.9 });
-		expect(resolveResultWaitMode(301)).toEqual({ kind: "timed", seconds: 301 });
+		expect(resolveResultWaitMode(1.9)).toEqual({ kind: "yield", seconds: 1.9 });
+		expect(resolveResultWaitMode(301)).toEqual({ kind: "yield", seconds: 301 });
 		for (const invalid of [-1, "1", Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
 			expect(() => resolveResultWaitMode(invalid)).toThrow(/finite number greater than or equal to 0/);
 		}
@@ -470,10 +470,10 @@ describe("owned subagent surface", () => {
 		expect(await waiting).toBe("settled");
 	});
 
-	it("accepts waits above 300 seconds without expiring at the old cap", async () => {
+	it("accepts large yield intervals without expiring at the old cap", async () => {
 		vi.useFakeTimers();
 		const record = { status: "running" as const, promise: new Promise<void>(() => {}) };
-		const waiting = waitForAgentSettlement(record, { kind: "timed", seconds: 301 });
+		const waiting = waitForAgentSettlement(record, { kind: "yield", seconds: 301 });
 		let outcome: string | undefined;
 		waiting.then((value) => {
 			outcome = value;
@@ -481,18 +481,32 @@ describe("owned subagent surface", () => {
 		await vi.advanceTimersByTimeAsync(300_000);
 		expect(outcome).toBeUndefined();
 		await vi.advanceTimersByTimeAsync(1_000);
-		expect(await waiting).toBe("timed-out");
+		expect(await waiting).toBe("yielded");
 	});
 
-	it("releases the caller abort listener when a timed wait expires", async () => {
+	it("returns on settlement before a very large yield interval elapses", async () => {
+		let settle: (() => void) | undefined;
+		const record: { status: "running" | "completed"; promise: Promise<void> } = {
+			status: "running",
+			promise: new Promise<void>((resolve) => {
+				settle = resolve;
+			}),
+		};
+		const waiting = waitForAgentSettlement(record, { kind: "yield", seconds: 3_600 });
+		record.status = "completed";
+		settle?.();
+		expect(await waiting).toBe("settled");
+	});
+
+	it("releases the caller abort listener when a yield interval expires", async () => {
 		vi.useFakeTimers();
 		const controller = new AbortController();
 		const addListener = vi.spyOn(controller.signal, "addEventListener");
 		const removeListener = vi.spyOn(controller.signal, "removeEventListener");
 		const record = { status: "running" as const, promise: new Promise<void>(() => {}) };
-		const waiting = waitForAgentSettlement(record, { kind: "timed", seconds: 0.01 }, controller.signal);
+		const waiting = waitForAgentSettlement(record, { kind: "yield", seconds: 0.01 }, controller.signal);
 		await vi.advanceTimersByTimeAsync(10);
-		expect(await waiting).toBe("timed-out");
+		expect(await waiting).toBe("yielded");
 		expect(addListener).toHaveBeenCalledTimes(1);
 		expect(removeListener).toHaveBeenCalledTimes(1);
 	});
@@ -506,7 +520,7 @@ describe("owned subagent surface", () => {
 		expect(record.status).toBe("running");
 	});
 
-	it("requires explicit nested invocation choices and an optional uncapped wait duration", () => {
+	it("requires explicit nested invocation choices and an optional uncapped yield interval", () => {
 		const tools = createNestedSubagentTools({
 			manager: {} as any,
 			pi: {} as any,
@@ -534,11 +548,12 @@ describe("owned subagent surface", () => {
 		expect(agentSchema.properties).not.toHaveProperty("model");
 		expect(agentSchema.properties).not.toHaveProperty("thinking");
 		expect(agentSchema.properties.advisor.description).toContain("definition's Advisor default");
-		expect(resultSchema.required).not.toContain("wait_seconds");
-		expect(resultSchema.properties.wait_seconds.minimum).toBe(0);
-		expect(resultSchema.properties.wait_seconds).not.toHaveProperty("maximum");
-		expect(resultSchema.properties.wait_seconds.description).toContain("Omit to wait until settlement");
-		expect(resultSchema.properties.wait_seconds.description).toContain("no application maximum");
+		expect(resultSchema.required).not.toContain("yield_seconds");
+		expect(resultSchema.properties.yield_seconds.minimum).toBe(0);
+		expect(resultSchema.properties.yield_seconds).not.toHaveProperty("maximum");
+		expect(resultSchema.properties.yield_seconds.description).toContain("very large positive value");
+		expect(resultSchema.properties.yield_seconds.description).toContain("not a child timeout");
+		expect(resultSchema.properties).not.toHaveProperty("wait_seconds");
 	});
 
 	it("sanitizes settings to the retained orchestration controls", () => {

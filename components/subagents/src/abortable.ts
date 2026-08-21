@@ -42,18 +42,18 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 	});
 }
 
-export type ResultWaitMode = { kind: "immediate" } | { kind: "indefinite" } | { kind: "timed"; seconds: number };
+export type ResultWaitMode = { kind: "immediate" } | { kind: "indefinite" } | { kind: "yield"; seconds: number };
 
 export type ActiveResultWaitMode = Exclude<ResultWaitMode, { kind: "immediate" }>;
-export type AgentSettlementOutcome = "settled" | "timed-out";
+export type AgentSettlementOutcome = "settled" | "yielded";
 
-/** Resolve omission separately from an explicit immediate or finite timed wait. */
-export function resolveResultWaitMode(seconds: unknown, transcriptSnapshot = false): ResultWaitMode {
-	if (seconds === undefined) return transcriptSnapshot ? { kind: "immediate" } : { kind: "indefinite" };
-	if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
-		throw new Error("wait_seconds must be a finite number greater than or equal to 0.");
+/** Resolve omission separately from an explicit immediate check or finite yield interval. */
+export function resolveResultWaitMode(yieldSeconds: unknown, transcriptSnapshot = false): ResultWaitMode {
+	if (yieldSeconds === undefined) return transcriptSnapshot ? { kind: "immediate" } : { kind: "indefinite" };
+	if (typeof yieldSeconds !== "number" || !Number.isFinite(yieldSeconds) || yieldSeconds < 0) {
+		throw new Error("yield_seconds must be a finite number greater than or equal to 0.");
 	}
-	return seconds === 0 ? { kind: "immediate" } : { kind: "timed", seconds };
+	return yieldSeconds === 0 ? { kind: "immediate" } : { kind: "yield", seconds: yieldSeconds };
 }
 
 type WaitableAgent = {
@@ -66,21 +66,21 @@ function isPending(record: WaitableAgent): boolean {
 }
 
 // Node timers overflow above this implementation limit. Chaining chunks keeps
-// the public finite wait uncapped without turning a very large wait into 1 ms.
+// the public finite yield interval uncapped without turning a very large interval into 1 ms.
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const QUEUED_POLL_INTERVAL_MS = 50;
 
-function createTimedExpiry(seconds: number): { promise: Promise<"timed-out">; cancel: () => void } {
+function createYieldExpiry(seconds: number): { promise: Promise<"yielded">; cancel: () => void } {
 	let remainingSeconds = seconds;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let cancelled = false;
-	const promise = new Promise<"timed-out">((resolve) => {
+	const promise = new Promise<"yielded">((resolve) => {
 		const schedule = () => {
 			const delayMs = Math.min(MAX_TIMER_DELAY_MS, remainingSeconds * 1_000);
 			timer = setTimeout(() => {
 				if (cancelled) return;
 				remainingSeconds -= delayMs / 1_000;
-				if (remainingSeconds <= 0) resolve("timed-out");
+				if (remainingSeconds <= 0) resolve("yielded");
 				else schedule();
 			}, delayMs);
 		};
@@ -95,7 +95,7 @@ function createTimedExpiry(seconds: number): { promise: Promise<"timed-out">; ca
 	};
 }
 
-/** Wait until settlement or an optional finite deadline without cancelling the child. */
+/** Wait until settlement or an optional finite yield interval without cancelling the child. */
 export async function waitForAgentSettlement(
 	record: WaitableAgent,
 	mode: ActiveResultWaitMode,
@@ -116,14 +116,14 @@ export async function waitForAgentSettlement(
 		return "settled";
 	})();
 
-	const expiry = mode.kind === "timed" ? createTimedExpiry(mode.seconds) : undefined;
+	const expiry = mode.kind === "yield" ? createYieldExpiry(mode.seconds) : undefined;
 	try {
 		if (!expiry) {
 			await abortable(settled, signal);
 			return "settled";
 		}
 		const outcome = await abortable(Promise.race([settled, expiry.promise]), signal);
-		return outcome === "timed-out" && isPending(record) ? "timed-out" : "settled";
+		return outcome === "yielded" && isPending(record) ? "yielded" : "settled";
 	} finally {
 		closed = true;
 		expiry?.cancel();

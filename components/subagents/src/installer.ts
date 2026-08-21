@@ -664,14 +664,14 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 			label: "Get Subagent Result",
 			description:
-				"Check a subagent, waiting until it settles by default. Settled final output is returned in full. wait_seconds may choose an uncapped positive finite timeout; 0 checks immediately, and an expired wait returns control while the agent continues. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive wait.",
+				"Wait for a subagent result; omit yield_seconds to wait until it settles and receive its full final output. If an explicit yield is necessary, use a very large yield_seconds value (normally 3,600 seconds or more): this returns as soon as the agent finishes. yield_seconds is not an agent timeout; reaching it only yields control while the still-running agent continues untouched. Set it to 0 only for an immediate status check. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive yield.",
 			parameters: Type.Object({
 				agent_id: Type.String(),
-				wait_seconds: Type.Optional(
+				yield_seconds: Type.Optional(
 					Type.Number({
 						minimum: 0,
 						description:
-							"Seconds to wait before yielding control. Omit to wait until settlement (or to take an immediate transcript_tail snapshot); 0 always checks immediately, and positive finite values have no application maximum.",
+							"Seconds to wait before yielding control, not an agent timeout. Omit to wait until settlement (or to take an immediate transcript_tail snapshot). If you set it, use a very large positive value (normally 3,600 seconds or more) because this call returns as soon as the agent settles; 0 only checks immediately. A yielded call leaves the queued or running agent working.",
 					}),
 				),
 				verbose: Type.Boolean({
@@ -690,13 +690,13 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal) {
 				let waitMode: ResultWaitMode;
 				try {
-					waitMode = resolveResultWaitMode(params.wait_seconds, params.transcript_tail !== undefined);
+					waitMode = resolveResultWaitMode(params.yield_seconds, params.transcript_tail !== undefined);
 				} catch (error) {
 					return textResult(error instanceof Error ? error.message : String(error), undefined, true);
 				}
-				if (params.transcript_tail !== undefined && (params.verbose || waitMode.kind === "timed")) {
+				if (params.transcript_tail !== undefined && (params.verbose || waitMode.kind === "yield")) {
 					return textResult(
-						"transcript_tail cannot be combined with verbose or a positive wait_seconds value.",
+						"transcript_tail cannot be combined with verbose or a positive yield_seconds value.",
 						undefined,
 						true,
 					);
@@ -704,10 +704,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const record = manager.getRecord(params.agent_id);
 				if (!record || record.parentAgentId || record.internalOwner)
 					return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
-				let waitExpiredSeconds: number | undefined;
+				let yieldedSeconds: number | undefined;
 				if (waitMode.kind !== "immediate" && (record.status === "queued" || record.status === "running")) {
 					const outcome = await waitForAgentSettlement(record, waitMode, signal);
-					if (outcome === "timed-out" && waitMode.kind === "timed") waitExpiredSeconds = waitMode.seconds;
+					if (outcome === "yielded" && waitMode.kind === "yield") yieldedSeconds = waitMode.seconds;
 				}
 				const settled = record.status !== "queued" && record.status !== "running";
 				if (settled && params.transcript_tail === undefined) {
@@ -718,8 +718,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					!settled || params.transcript_tail !== undefined
 						? `Agent ${record.id} is ${record.status}.`
 						: record.result || record.error || "No output.";
-				if (waitExpiredSeconds !== undefined && !settled) {
-					output += ` Wait limit (${waitExpiredSeconds}s) reached; it continues in the background. Please call get_subagent_result again to continue waiting.`;
+				if (yieldedSeconds !== undefined && !settled) {
+					output += ` Yield interval (${yieldedSeconds}s) reached; the agent is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.`;
 				}
 				if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
 					const tail =
