@@ -24,22 +24,26 @@ Do not load these program prompts dynamically with `skills.body`; copy the relev
 The default program requires these string inputs:
 
 - `goal`: a non-empty, caller-owned outcome. Keep the worker task short and put only this goal in it.
-- `stack`: newline-separated repository paths, normally `.ledger/INDEX.md`, the prepared `.ledger/<id>/task.md`, and a small plan or authority file the fresh worker should open first. Paths are passed through `context`, not dumped into the task.
-- `iterations`: a canonical positive safe-integer string. The caller chooses the batch bound; omit no default, use no fractional or exponential form, and do not rely on a hidden loop cap.
+- `task`: the prepared `.ledger/<id>/task.md` whose `Status` is authoritative for early termination. The controller adds it to every worker's stack.
+- `stack`: newline-separated repository paths, normally `.ledger/INDEX.md` plus a small plan or authority file the fresh worker should open first. Paths are passed through `context`, not dumped into the task.
+- `iterations`: a canonical positive safe-integer string. The caller chooses the maximum batch bound; omit no default and use no fractional or exponential form.
 
 The program returns an honest bounded result:
 
 ```javascript
 {
-  status: "completed" | "failed",
+  status: "completed" | "failed" | "stopped",
+  stopReason?: "task-done" | "task-blocked" | "low-mutation",
   requestedIterations: number,
   completedIterations: number,
   failedAt?: number,
+  lowMutationStreak?: number,
+  lastMutationScore?: number,
   failures: [{ iteration: number, error: string }],
 }
 ```
 
-`completedIterations` counts only workers that returned successfully. `failedAt` identifies the first failed worker, and the default loop stops there. The result reports worker execution only; it does not judge repository progress or claim that the ledger task is done.
+`completedIterations` counts only workers that returned successfully. `failedAt` identifies the first failed worker, and the default loop stops there. It also checks the explicit task before and after every worker: `done` and `blocked` stop the batch with the matching reason. The template's small, adaptable heuristic ignores `.ledger` edits, compares the tracked patch, and fingerprints untracked paths so repeated edits to an existing untracked file count as mutation; it stops after consecutive low-mutation increments. These early exits return execution evidence, not an independent judgment that the ledger status is correct.
 
 ## Worker roles, profiles, and tools
 
@@ -60,7 +64,8 @@ Each default iteration calls `agents.run` only after the previous call settles:
   },
   inputs: {
     goal: "Implement the prepared task. Choose the single most important unfinished increment.",
-    stack: ".ledger/INDEX.md\n.ledger/<task-id>/task.md\n.ledger/<task-id>/plans/implementation.md",
+    task: ".ledger/<task-id>/task.md",
+    stack: ".ledger/INDEX.md\n.ledger/<task-id>/plans/implementation.md",
     iterations: "4",
   },
 }
@@ -77,7 +82,7 @@ The worker should read the ledger first, inspect current files, choose one unfin
 The default sequence is:
 
 1. The caller prepares the goal, stack, adapted prompt, and iteration count.
-2. `ralph.js` runs fresh coding workers sequentially until the requested bound or the first worker failure.
+2. `ralph.js` runs fresh coding workers sequentially until the requested bound, a worker failure, a terminal task status, or the adaptable low-mutation escape heuristic.
 3. The workers maintain ledger memory; the caller interprets the bounded result.
 4. After the batch, the caller separately runs `/skill:pi-review`, records findings, and decides whether another bounded batch is warranted.
 

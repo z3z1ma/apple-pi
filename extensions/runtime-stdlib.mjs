@@ -3,11 +3,7 @@
  * after the explicit Pi bridges are installed; it has no ambient host authority.
  */
 export const STDLIB_SETUP_SOURCE = String.raw`
-  const stdAgent = agent;
-  const stdRunAgent = agents.run;
-  const stdParallel = parallel;
   const stdPi = pi;
-  let nextEvidenceId = 1;
 
   const fail = (message) => { throw new TypeError(message); };
   const requireArray = (value, name) => { if (!Array.isArray(value)) fail(name + " expects an array"); };
@@ -98,6 +94,7 @@ export const STDLIB_SETUP_SOURCE = String.raw`
       compare,
       ...(paths ? { paths: [...paths] } : {}),
       status,
+      statusText: status.entries.map((entry) => entry.index + entry.worktree + " " + entry.path + (entry.from ? " <- " + entry.from : "")).join("\n"),
       stat,
       patch,
       changedFiles: unique(nameStatus.flatMap((entry) => entry.from ? [entry.from, entry.path] : [entry.path])),
@@ -107,6 +104,7 @@ export const STDLIB_SETUP_SOURCE = String.raw`
       nameStatus,
     };
   };
+  const gitPatch = async (options = {}) => gitOutput(["diff", "--no-ext-diff", "--unified=3", options.compare || "HEAD", ...gitPaths(options.paths)]);
 
   const textClip = (value, options = {}) => {
     const text = String(value ?? "");
@@ -160,8 +158,15 @@ export const STDLIB_SETUP_SOURCE = String.raw`
   const contextFit = (value, options = {}) => {
     const maxSerializedChars = options.maxSerializedChars === undefined ? 48_000 : options.maxSerializedChars;
     if (!Number.isInteger(maxSerializedChars) || maxSerializedChars < 2) fail("std.context.fit expects maxSerializedChars >= 2");
+    const flags = options.flags === undefined ? {} : options.flags;
+    requireObject(flags, "std.context.fit flags");
     const slots = [];
     const tree = materializeContext(value, slots);
+    if (Object.keys(flags).length && (!tree || typeof tree !== "object" || Array.isArray(tree) || CONTEXT_SLOTS.has(tree))) fail("std.context.fit flags require an unmarked object root");
+    for (const [key, path] of Object.entries(flags)) {
+      if (typeof path !== "string") fail("std.context.fit flags values must be slot paths");
+      tree[key] = false;
+    }
     const current = () => resolveContext(tree);
     const size = () => measure(current());
     const dropped = [];
@@ -181,6 +186,10 @@ export const STDLIB_SETUP_SOURCE = String.raw`
         if (!truncated.includes(slot.path)) truncated.push(slot.path);
       }
     }
+    for (const [key, path] of Object.entries(flags)) {
+      if (!slots.some((slot) => slot.path === path)) fail("std.context.fit flags references unknown slot " + path);
+      tree[key] = truncated.includes(path);
+    }
     const result = current();
     const serializedChars = measure(result);
     if (serializedChars > maxSerializedChars) throw new Error("std.context.fit cannot meet the context budget without dropping required data");
@@ -191,41 +200,28 @@ export const STDLIB_SETUP_SOURCE = String.raw`
     const maxSerializedChars = options.maxSerializedChars === undefined ? 48_000 : options.maxSerializedChars;
     const priority = options.priority || "priority";
     const id = options.id || "id";
-    const ordered = [...items].sort((left, right) => Number(idFor(right, priority) || 0) - Number(idFor(left, priority) || 0));
+    const fields = options.fields === undefined ? {} : options.fields;
+    requireObject(fields, "std.context.pack fields");
+    for (const [field, maxChars] of Object.entries(fields)) {
+      if (!Number.isInteger(maxChars) || maxChars < 0) fail("std.context.pack fields." + field + " must be a non-negative integer");
+    }
+    const clipped = [];
+    const prepared = items.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const copy = { ...item };
+      for (const [field, maxChars] of Object.entries(fields)) {
+        if (typeof copy[field] !== "string") continue;
+        const result = textClip(copy[field], { maxChars });
+        copy[field] = result.text;
+        if (result.truncated) clipped.push("$[" + index + "]." + field);
+      }
+      return copy;
+    });
+    const ordered = [...prepared].sort((left, right) => Number(idFor(right, priority) || 0) - Number(idFor(left, priority) || 0));
     const kept = [];
     const omitted = [];
     for (const item of ordered) (measure([...kept, item]) <= maxSerializedChars ? kept : omitted).push(item);
-    return { items: kept, omitted, omittedIds: omitted.map((item) => idFor(item, id)).filter((value) => value !== undefined), serializedChars: measure(kept) };
-  };
-  const contextPartition = (items, options = {}) => {
-    requireArray(items, "std.context.partition");
-    const maxSerializedChars = options.maxSerializedChars === undefined ? 48_000 : options.maxSerializedChars;
-    const batches = [];
-    let batch = [];
-    for (const item of items) {
-      if (measure([item]) > maxSerializedChars) throw new Error("std.context.partition item exceeds the context budget");
-      if (batch.length && measure([...batch, item]) > maxSerializedChars) { batches.push(batch); batch = []; }
-      batch.push(item);
-    }
-    if (batch.length) batches.push(batch);
-    return batches;
-  };
-
-  const evidenceItem = (item = {}) => {
-    requireObject(item, "std.evidence.item");
-    return Object.freeze({ id: item.id || "ev-" + nextEvidenceId++, kind: item.kind || "text", source: item.source || "program", locator: item.locator || {}, content: String(item.content || ""), truncated: Boolean(item.truncated) });
-  };
-  const evidenceBundle = (items) => ({ items: asArray(items).map((item) => evidenceItem(item)) });
-  const evidenceIndex = (bundle) => Object.fromEntries(asArray(bundle && bundle.items).map((item) => [item.id, item]));
-  const evidenceRequire = (bundle, ids) => {
-    const index = evidenceIndex(bundle);
-    const missing = asArray(ids).filter((id) => !index[id]);
-    if (missing.length) throw new Error("Missing required evidence: " + missing.join(", "));
-    return asArray(ids).map((id) => index[id]);
-  };
-  const evidencePack = (bundle, options = {}) => {
-    const result = contextPack(asArray(bundle && bundle.items), { ...options, id: "id" });
-    return { bundle: evidenceBundle(result.items), omittedIds: result.omittedIds, serializedChars: result.serializedChars };
+    return { items: kept, omitted, omittedIds: omitted.map((item) => idFor(item, id)).filter((value) => value !== undefined), clipped, serializedChars: measure(kept) };
   };
 
   const coverageCompare = (expected, actual, options = {}) => {
@@ -241,11 +237,6 @@ export const STDLIB_SETUP_SOURCE = String.raw`
     const unexpected = actual.filter((item) => !expectedSet.has(idFor(item, key)));
     const duplicates = actual.filter((item) => (counts.get(idFor(item, key)) || 0) > 1);
     return { covered, missing, unexpected, duplicates, complete: missing.length === 0 && unexpected.length === 0 && duplicates.length === 0 };
-  };
-  const coverageRequireComplete = (expected, actual, options) => {
-    const result = coverageCompare(expected, actual, options);
-    if (!result.complete) throw new Error("Coverage incomplete: missing=" + result.missing.length + ", unexpected=" + result.unexpected.length + ", duplicates=" + result.duplicates.length);
-    return result;
   };
   const reconcileById = (base, overlays, options = {}) => {
     requireArray(base, "std.reconcile.byId"); requireArray(overlays, "std.reconcile.byId");
@@ -267,53 +258,9 @@ export const STDLIB_SETUP_SOURCE = String.raw`
       const overlay = grouped.get(idFor(item, key)) && grouped.get(idFor(item, key))[0];
       if (!overlay) return item;
       if (options.overlay === false) return overlay;
-      return item && typeof item === "object" && !Array.isArray(item) && typeof overlay === "object" && !Array.isArray(overlay)
-        ? { ...item, ...overlay }
-        : overlay;
+      return item && typeof item === "object" && !Array.isArray(item) && typeof overlay === "object" && !Array.isArray(overlay) ? { ...item, ...overlay } : overlay;
     });
     return { values, unknownIds, missingIds, duplicateIds };
-  };
-  const reconcileOneToOne = (expected, actual, options = {}) => {
-    const key = options.id || options.key || ((value) => value);
-    const coverage = coverageCompare(expected, actual, { id: key });
-    return { pairs: reconcileById(expected, actual, { id: key, overlay: true }).values, ...coverage };
-  };
-
-  const agentsPlanFanoutReduce = async (input, options = {}) => {
-    requireObject(options, "std.agents.planFanoutReduce");
-    const planSpec = options.plan; const fanoutSpec = options.fanout; const reduceSpec = options.reduce;
-    requireObject(planSpec, "std.agents.planFanoutReduce plan"); requireObject(fanoutSpec, "std.agents.planFanoutReduce fanout"); requireObject(reduceSpec, "std.agents.planFanoutReduce reduce");
-    if (typeof planSpec.prompt !== "string" || !planSpec.prompt) fail("std.agents.planFanoutReduce plan.prompt is required");
-    if (typeof planSpec.profile !== "string" || !planSpec.profile) fail("std.agents.planFanoutReduce plan.profile is required");
-    if (typeof fanoutSpec.profile !== "string" || !fanoutSpec.profile) fail("std.agents.planFanoutReduce fanout.profile is required");
-    if (typeof reduceSpec.prompt !== "string" || !reduceSpec.prompt) fail("std.agents.planFanoutReduce reduce.prompt is required");
-    if (typeof reduceSpec.profile !== "string" || !reduceSpec.profile) fail("std.agents.planFanoutReduce reduce.profile is required");
-    const planOutputSchema = planSpec.outputSchema || {
-      type: "object",
-      properties: {
-        fanout: {
-          type: "array",
-          minItems: 1,
-          items: {
-            type: "object",
-            properties: { prompt: { type: "string", minLength: 1 }, name: { type: "string" }, context: { type: "object", additionalProperties: true } },
-            required: ["prompt"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["fanout"],
-      additionalProperties: false,
-    };
-    const plan = await stdAgent({ task: planSpec.prompt, profile: planSpec.profile, tools: planSpec.tools, systemPrompt: planSpec.systemPrompt, context: { input, ...(planSpec.context || {}) }, outputSchema: planOutputSchema });
-    const items = plan && plan.fanout;
-    requireArray(items, "std.agents.planFanoutReduce planner result fanout");
-    const results = await stdParallel(items, async (item, index) => {
-      if (!item || typeof item !== "object" || typeof item.prompt !== "string" || !item.prompt) fail("std.agents.planFanoutReduce planner fanout items require prompt");
-      return stdRunAgent({ name: item.name || "fanout-" + (index + 1), task: item.prompt, profile: fanoutSpec.profile, tools: fanoutSpec.tools, systemPrompt: fanoutSpec.systemPrompt, context: { input, plan, ...(fanoutSpec.context || {}), ...(item.context || {}) }, outputSchema: fanoutSpec.outputSchema });
-    }, fanoutSpec.concurrency);
-    const value = await stdAgent({ task: reduceSpec.prompt, profile: reduceSpec.profile, tools: reduceSpec.tools, systemPrompt: reduceSpec.systemPrompt, context: { input, plan, results, ...(reduceSpec.context || {}) }, outputSchema: reduceSpec.outputSchema });
-    return { plan, results, value };
   };
 
   const fsRead = (path, options = {}) => stdPi.read({ path, ...options });
@@ -371,26 +318,6 @@ export const STDLIB_SETUP_SOURCE = String.raw`
     };
   };
 
-  const READ_ONLY_AGENT_TOOLS = Object.freeze(["read", "grep", "find", "ls"]);
-  const onlyReadOnlyTools = (tools, name) => {
-    if (tools === undefined) return [...READ_ONLY_AGENT_TOOLS];
-    requireArray(tools, name + " tools");
-    const disallowed = tools.filter((tool) => !READ_ONLY_AGENT_TOOLS.includes(tool));
-    if (disallowed.length) throw new Error(name + " permits only read, grep, find, ls; use raw agent/agents.run for other tools");
-    return [...tools];
-  };
-  const devEvidence = (options) => repoChangeNeighborhood({ compare: options.compare, paths: options.paths });
-  const devAnalyzeChange = async (options = {}) => {
-    if (typeof options.instruction !== "string" || !options.instruction.trim()) fail("std.dev.analyzeChange requires instruction");
-    if (!options.schema) fail("std.dev.analyzeChange requires schema");
-    return stdAgent({ task: options.instruction, profile: options.profile || "balanced", tools: onlyReadOnlyTools(options.tools, "std.dev.analyzeChange"), context: { evidence: await devEvidence(options) }, outputSchema: options.schema });
-  };
-  const devAnalyzeFailure = async (options = {}) => {
-    if (typeof options.instruction !== "string" || !options.instruction.trim()) fail("std.dev.analyzeFailure requires instruction");
-    if (!options.schema) fail("std.dev.analyzeFailure requires schema");
-    if (options.failure === undefined && options.logs === undefined) fail("std.dev.analyzeFailure requires failure or logs");
-    return stdAgent({ task: options.instruction, profile: options.profile || "balanced", tools: onlyReadOnlyTools(options.tools, "std.dev.analyzeFailure"), context: { failure: options.failure, logs: options.logs, evidence: await devEvidence(options) }, outputSchema: options.schema });
-  };
   const devFindRelevantTests = async (options = {}, commands) => {
     const neighborhood = await repoChangeNeighborhood({ compare: options.compare, paths: options.paths, include: ["tests"] });
     return { files: neighborhood.change.changedFiles, tests: neighborhood.tests || {}, commands: commands || await repoCommands() };
@@ -419,17 +346,57 @@ export const STDLIB_SETUP_SOURCE = String.raw`
     return { status: result.ok ? "passed" : "failed", command, output: result.output, selectedTests, tests };
   };
 
+  const schemaFrom = (shape) => {
+    if (typeof shape === "string") {
+      const optional = shape.endsWith("?");
+      const type = optional ? shape.slice(0, -1) : shape;
+      const primitive = { string: "string", int: "integer", number: "number", boolean: "boolean" }[type];
+      if (!primitive) fail("std.schema supports string, int, number, boolean, enums, arrays, and nested objects");
+      return { schema: { type: primitive }, optional };
+    }
+    if (Array.isArray(shape)) {
+      if (shape.length > 1 && shape.every((value) => typeof value === "string")) return { schema: { enum: [...shape] }, optional: false };
+      if (shape.length !== 1) fail("std.schema arrays must be a 2+ string enum or a single item shape");
+      return { schema: { type: "array", items: schemaFrom(shape[0]).schema }, optional: false };
+    }
+    requireObject(shape, "std.schema shape");
+    const constrainedType = ["string", "int", "number"].find((type) => Object.keys(shape).length === 1 && shape[type] && typeof shape[type] === "object");
+    if (constrainedType) {
+      const constraints = shape[constrainedType];
+      requireObject(constraints, "std.schema constraints");
+      const keys = constrainedType === "string" ? ["minLength", "maxLength"] : ["minimum", "maximum"];
+      if (Object.keys(constraints).some((key) => !keys.includes(key) || !Number.isFinite(constraints[key]) || (constrainedType === "string" && (!Number.isInteger(constraints[key]) || constraints[key] < 0)))) fail("std.schema " + constrainedType + " constraints are " + keys.join("/"));
+      return { schema: { type: { string: "string", int: "integer", number: "number" }[constrainedType], ...constraints }, optional: false };
+    }
+    if (shape.array && typeof shape.array === "object" && Array.isArray(shape.items) && shape.items.length === 1 && Object.keys(shape).every((key) => key === "array" || key === "items")) {
+      const constraints = shape.array;
+      if (Object.keys(constraints).some((key) => !["minItems", "maxItems"].includes(key) || !Number.isInteger(constraints[key]) || constraints[key] < 0)) fail("std.schema array constraints are non-negative integer minItems/maxItems");
+      return { schema: { type: "array", items: schemaFrom(shape.items[0]).schema, ...constraints }, optional: false };
+    }
+    const properties = {};
+    const required = [];
+    for (const [rawKey, child] of Object.entries(shape)) {
+      const optionalKey = rawKey.endsWith("?");
+      const key = optionalKey ? rawKey.slice(0, -1) : rawKey;
+      if (!key) fail("std.schema property names cannot be empty");
+      const compiled = schemaFrom(child);
+      properties[key] = compiled.schema;
+      if (!optionalKey && !compiled.optional) required.push(key);
+    }
+    return { schema: { type: "object", properties, required, additionalProperties: false }, optional: false };
+  };
+  const stdSchema = (shape) => schemaFrom(shape).schema;
+
   const freeze = (object) => Object.freeze(object);
   Object.defineProperty(globalThis, "std", {
     value: freeze({
-      git: freeze({ change: gitChange }),
+      git: freeze({ change: gitChange, patch: gitPatch }),
       repo: freeze({ changeNeighborhood: repoChangeNeighborhood }),
-      context: freeze({ required: contextRequired, clippable: contextClippable, droppable: contextDroppable, fit: contextFit, pack: contextPack, partition: contextPartition }),
-      evidence: freeze({ item: evidenceItem, bundle: evidenceBundle, pack: evidencePack, require: evidenceRequire }),
-      coverage: freeze({ compare: coverageCompare, requireComplete: coverageRequireComplete }),
-      reconcile: freeze({ byId: reconcileById, oneToOne: reconcileOneToOne }),
-      agents: freeze({ planFanoutReduce: agentsPlanFanoutReduce }),
-      dev: freeze({ analyzeChange: devAnalyzeChange, analyzeFailure: devAnalyzeFailure, findRelevantTests: devFindRelevantTests, runRelevantTests: devRunRelevantTests }),
+      context: freeze({ required: contextRequired, clippable: contextClippable, droppable: contextDroppable, fit: contextFit, pack: contextPack }),
+      coverage: freeze({ compare: coverageCompare }),
+      reconcile: freeze({ byId: reconcileById }),
+      dev: freeze({ findRelevantTests: devFindRelevantTests, runRelevantTests: devRunRelevantTests }),
+      schema: stdSchema,
     }),
     writable: false,
     configurable: false,

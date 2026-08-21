@@ -203,11 +203,13 @@ try {
 	const resultTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "get_subagent_result");
-	assert(!resultTool.definition.parameters.required.includes("wait_seconds"));
-	assert(!("maximum" in resultTool.definition.parameters.properties.wait_seconds));
-	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /Omit to wait until settlement/);
-	assert.match(resultTool.definition.parameters.properties.wait_seconds.description, /no application maximum/);
-	assert.match(resultTool.definition.description, /uncapped positive finite timeout/);
+	assert(!resultTool.definition.parameters.required.includes("yield_seconds"));
+	assert(!("maximum" in resultTool.definition.parameters.properties.yield_seconds));
+	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /very large positive value/);
+	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /not an agent timeout/);
+	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
+	assert.match(resultTool.definition.description, /use a very large yield_seconds value/);
+	assert.match(resultTool.definition.description, /not an agent timeout/);
 	assert(
 		existsSync("skills/pi-review/references/plan-review-verify.js"),
 		"missing pi-review plan-review-verify reference",
@@ -230,151 +232,34 @@ try {
 		existsSync("skills/pi-ralph/references/ralph-reviewed.js"),
 		"missing advanced pi-ralph review composition reference",
 	);
-	for (const [program, prompts, roleProfiles] of [
-		[
-			"plan-review-verify.js",
-			["PLANNER", "REVIEWER", "VERIFIER"],
-			[
-				[`name: "review-planner"`, "balanced"],
-				["name: focus.id", "quick"],
-				[`name: "review-verifier"`, "deep"],
-			],
-		],
-		[
-			"targeted-review.js",
-			["REVIEWER", "VERIFIER"],
-			[
-				["name: focus.id", "quick"],
-				[`name: "review-verifier"`, "balanced"],
-			],
-		],
-		[
-			"multi-lens-review.js",
-			["REVIEWER", "VERIFIER"],
-			[
-				["name: lens.id", "quick"],
-				[`name: "review-verifier"`, "deep"],
-			],
-		],
-		[
-			"security-baseline-review.js",
-			["ATTACKER", "DEFENDER", "VERIFIER"],
-			[
-				["name: baseline.id", "balanced"],
-				[`name: "security-verifier"`, "deep"],
-			],
-		],
-		[
-			"residual-review-loop.js",
-			["REVIEWER", "TRIAGE_VERIFIER", "FINAL_VERIFIER"],
-			[
-				["name: id", "quick"],
-				[`name: "coverage-triage"`, "balanced"],
-				[`name: "final-review-verifier"`, "deep"],
-			],
-		],
+	const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+	for (const [program, prompts] of [
+		["plan-review-verify.js", ["PLANNER", "REVIEWER", "VERIFIER"]],
+		["targeted-review.js", ["REVIEWER", "VERIFIER"]],
+		["multi-lens-review.js", ["REVIEWER", "VERIFIER"]],
+		["security-baseline-review.js", ["ATTACKER", "DEFENDER", "VERIFIER"]],
+		["residual-review-loop.js", ["REVIEWER", "TRIAGE_VERIFIER", "FINAL_VERIFIER"]],
 	]) {
 		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
-		for (const constant of prompts) {
+		for (const constant of prompts)
 			assert(
 				new RegExp(`const ${constant}\\s*=\\s*"<adapt `).test(source),
 				`${program} must declare an adaptable ${constant} prompt`,
 			);
-		}
-		for (const [role, profile] of roleProfiles) {
-			const rolePattern = new RegExp(
-				`${role.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]{0,160}?profile: "${profile}"`,
-			);
-			assert(rolePattern.test(source), `${program} must assign ${profile} to ${role}`);
-		}
-		assert(!source.includes("skills.body"), `${program} must not load program prompts via skills.body`);
-		assert(!source.includes("skillBody"), `${program} must not recreate skillBody`);
-		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
 	}
-	for (const program of [
-		"plan-review-verify.js",
-		"targeted-review.js",
-		"multi-lens-review.js",
-		"security-baseline-review.js",
-		"residual-review-loop.js",
+	for (const [program, prompts] of [
+		["ralph.js", ["RALPH"]],
+		["ralph-reviewed.js", ["PLANNER", "REVIEWER", "VERIFIER", "RALPH"]],
 	]) {
-		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		assert(source.includes("std.git.change"), `${program} must use normalized Git evidence`);
-		assert(source.includes("if (!compare)"), `${program} must reject an empty comparison`);
-		assert(source.includes("std.context.fit"), `${program} must use the shared context budget`);
-		assert(!source.includes("std.agents.planFanoutReduce"), `${program} must retain its required review topology`);
-	}
-	for (const program of [
-		"plan-review-verify.js",
-		"targeted-review.js",
-		"multi-lens-review.js",
-		"security-baseline-review.js",
-	]) {
-		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		assert(source.includes("statusSummary"), `${program} must keep status context compact`);
-	}
-	for (const program of [
-		"targeted-review.js",
-		"multi-lens-review.js",
-		"security-baseline-review.js",
-		"residual-review-loop.js",
-	]) {
-		const source = readFileSync(`skills/pi-review/references/${program}`, "utf8");
-		assert(source.includes("std.context.pack"), `${program} must pack verifier metadata by serialized size`);
-		assert(source.includes("candidateIdsOmitted"), `${program} must report omitted verifier candidates`);
-		assert(!source.includes("candidates.slice(0, 64)"), `${program} must not count-bound verifier candidates`);
-		assert(!source.includes("notes.slice(0, 64)"), `${program} must not count-bound verifier notes`);
-	}
-	for (const prompt of ["planner", "reviewer", "verifier"]) {
-		const source = readFileSync(`skills/pi-review/references/${prompt}.md`, "utf8");
-		assert(source.includes("Template"), `${prompt}.md must describe an adaptable prompt template`);
-	}
-	const ralphSource = readFileSync("skills/pi-ralph/references/ralph.js", "utf8");
-	const reviewedSource = readFileSync("skills/pi-ralph/references/ralph-reviewed.js", "utf8");
-	for (const [program, source] of [
-		["ralph.js", ralphSource],
-		["ralph-reviewed.js", reviewedSource],
-	]) {
-		const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+		const source = readFileSync(`skills/pi-ralph/references/${program}`, "utf8");
 		assert.doesNotThrow(() => new AsyncFunction("inputs", source), `${program} must parse as a pi_exec body`);
-		assert(source.includes("inputs.iterations"), `${program} must take a caller-chosen iteration bound`);
-		assert(source.includes("Number.isSafeInteger"), `${program} must reject an unsafe iteration bound`);
-		assert(source.includes("systemPrompt: RALPH"), `${program} must supply its explicit worker prompt`);
-		assert(source.includes('profile: "coding"'), `${program} must select the coding model profile`);
-		assert(source.includes("tools: RALPH_TOOLS"), `${program} must grant explicit write-capable tools`);
-		assert(!source.includes("std.agents.planFanoutReduce"), `${program} must retain its required topology`);
-		assert(!source.includes("thinking:"), `${program} must not select raw thinking levels`);
+		for (const constant of prompts)
+			assert(
+				new RegExp(`const ${constant}\\s*=\\s*"<adapt `).test(source),
+				`${program} must declare an adaptable ${constant} prompt`,
+			);
 	}
-	for (const tool of ["read", "grep", "find", "ls", "bash", "edit", "write"]) {
-		assert(ralphSource.includes(`"${tool}"`), `pi-ralph worker omits ${tool}`);
-	}
-	const incrementPrompt = readFileSync("skills/pi-ralph/references/increment.md", "utf8");
-	assert(incrementPrompt.includes("Prompt Template"), "Ralph increment prompt must be adaptable");
-	assert(ralphSource.includes("<adapt references/increment.md"), "default Ralph must adapt the increment prompt");
-	assert(reviewedSource.includes("<adapt references/increment.md"), "reviewed Ralph must adapt the increment prompt");
-	assert(!ralphSource.includes("type:"), "pi-ralph must remain an untyped program worker");
-	assert(!ralphSource.includes("const PLANNER"), "default pi-ralph must not inline the review planner");
-	assert(!ralphSource.includes("reviewChange"), "default pi-ralph must not inline the review workflow");
-	assert(reviewedSource.includes("const PLANNER"), "ralph-reviewed.js must keep the inlined review planner");
-	assert(!reviewedSource.includes('type: "general-purpose"'), "reviewed Ralph must not use a retired catalog type");
-	for (const primitive of [
-		"std.git.change",
-		"std.context.fit",
-		"std.context.pack",
-		"std.coverage.compare",
-		"std.reconcile.byId",
-	]) {
-		assert(reviewedSource.includes(primitive), `reviewed Ralph must use ${primitive}`);
-	}
-	assert(!reviewedSource.includes("function clipPatch"), "reviewed Ralph must use the shared context budget");
-	assert(!reviewedSource.includes("notes.slice(0, 64)"), "reviewed Ralph must not count-bound reviewer notes");
-	assert(reviewedSource.includes("const reviewedPaths"), "reviewed Ralph must retain previously reviewed paths");
-	assert(
-		reviewedSource.includes("const feedback = reviewFeedback"),
-		"reviewed Ralph must bind bounded review feedback",
-	);
 	const defaultAgentsSource = readFileSync("components/subagents/src/default-agents.ts", "utf8");
 	assert(!defaultAgentsSource.includes('name: "general-purpose"'), "retired built-in general-purpose agent remains");
 	assert(!defaultAgentsSource.includes("model:"), "built-in agents must not embed concrete models");

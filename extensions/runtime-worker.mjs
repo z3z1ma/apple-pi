@@ -217,10 +217,18 @@ const setup = new vm.Script(
       return (args = {}) => genericCall(String(property), args);
     },
   });
-  const runAgent = (request) => call(
-    "agents.run",
-    typeof request === "string" ? { task: request } : request,
-  );
+  const hasContextMark = (value) => {
+    if (value && typeof value === "object" && CONTEXT_MARKS.get(value)) return true;
+    if (Array.isArray(value)) return value.some(hasContextMark);
+    return Boolean(value && typeof value === "object" && Object.values(value).some(hasContextMark));
+  };
+  const runAgent = async (request) => {
+    const prepared = typeof request === "string" ? { task: request } : request;
+    if (!prepared || typeof prepared !== "object" || !hasContextMark(prepared.context)) return call("agents.run", prepared);
+    const fitted = contextFit(prepared.context);
+    const result = await call("agents.run", { ...prepared, context: fitted.value });
+    return { ...result, context: { truncated: fitted.truncated, dropped: fitted.dropped, serializedChars: fitted.serializedChars } };
+  };
   globalThis.agents = Object.freeze({ run: runAgent });
   globalThis.skills = Object.freeze({
     list: () => call("skills.list", {}),

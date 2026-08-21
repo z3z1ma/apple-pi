@@ -69,8 +69,8 @@ function clampLimit(value: number | undefined, fallback: number, min: number, ma
 
 /** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
 export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
-	const hasWorkers = /\bagent\s*\(|\bagents\.run\s*\(|\bstd\b/.test(code);
-	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(|\bstd\b/.test(code);
+	const hasWorkers = /\bagent\s*\(|\bagents\.run\s*\(|\bstd\.dev\b/.test(code);
+	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(|\bstd\.dev\b/.test(code);
 	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
 	const derived: ProgramEnvelope = {
 		callBudget,

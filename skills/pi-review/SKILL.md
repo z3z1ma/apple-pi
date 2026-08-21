@@ -110,7 +110,7 @@ The references are starting points, not a fixed review workflow. Add a JavaScrip
 
 Every new shape must state its scenario, input contract, role/profile matrix, independent verification point, failure/coverage reporting, and agent budget. Keep raw provider names and `thinking` values out of templates; use only named inference profiles.
 
-Planner, reviewer, and verifier are review-program roles via `systemPrompt`. Do not set `agents.run` `type` to `Counsel`, `Plan`, or another catalog lane for those workers. Catalog types are for interactive specialists and composed graphs, not this review spine. Do not force these shapes through `std.agents.planFanoutReduce`: planned review requires controller validation and per-focus patch collection between stages, while the other shapes have fixed or conditional fan-out that the helper does not express.
+Planner, reviewer, and verifier are review-program roles via `systemPrompt`. Do not set `agents.run` `type` to `Counsel`, `Plan`, or another catalog lane for those workers. Catalog types are for interactive specialists and composed graphs, not this review spine. Keep the controller validation and per-focus patch collection explicit with `parallel`, `agent`, and `agents.run`.
 
 ## Finding standard
 

@@ -28,42 +28,17 @@ if (files.length === 0) throw new Error("inputs.paths is required (newline-separ
 if (lenses.length < 2) throw new Error("inputs.lenses requires at least two independently useful lenses");
 if (!compare) throw new Error("inputs.compare is required");
 
-function statusSummary(status) {
-  return status.entries.map((entry) => `${entry.index}${entry.worktree} ${entry.path}${entry.from ? ` <- ${entry.from}` : ""}`).join("\n");
-}
 
-function compactText(value, limit) {
-  const text = String(value || "");
-  return text.length <= limit ? text : `${text.slice(0, limit)}…`;
-}
 
-function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
-  const fitted = std.context.fit(
-    {
-      ...base,
-      [patchKey]: std.context.clippable(patch, {
-        maxChars: maxPatchChars,
-        strategy: "head-tail",
-        marker: "\n\n[... patch clipped for worker context ...]\n\n",
-      }),
-      [truncatedKey]: false,
-    },
-    { maxSerializedChars: 47900 },
-  );
-  return { ...fitted.value, [truncatedKey]: fitted.truncated.includes(`$.${patchKey}`) };
-}
 
 const change = await std.git.change({ compare, paths: files });
 const rawPatch = change.patch;
-const changeStatus = statusSummary(change.status);
+const changeStatus = change.statusText;
 const { untrackedFiles } = change;
-const reviewPatch = contextWithPatch(
-  { files, contextFiles, background, compare, untrackedFiles },
-  "patch",
-  "patchTruncated",
-  rawPatch,
-  16000,
-);
+const reviewPatch = std.context.fit(
+  { ...{ files, contextFiles, background, compare, untrackedFiles }, ["patch"]: std.context.clippable(rawPatch, { maxChars: 16000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["patchTruncated"]: `$.${"patch"}` } },
+).value;
 
 const reviews = await parallel(
   lenses,
@@ -85,38 +60,7 @@ const reviews = await parallel(
       systemPrompt: REVIEWER,
       task: "Investigate this independent high-risk review lens and return the typed review result.",
       context: { ...reviewPatch, focus },
-      outputSchema: {
-        type: "object",
-        required: ["findings", "notes"],
-        properties: {
-          findings: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["title", "severity", "path", "trigger", "evidence", "impact", "recommendation"],
-              properties: {
-                title: { type: "string" },
-                severity: { type: "string", enum: ["critical", "significant", "minor"] },
-                path: { type: "string" },
-                startLine: { type: "integer", minimum: 1 },
-                endLine: { type: "integer", minimum: 1 },
-                trigger: { type: "string" },
-                evidence: { type: "string" },
-                impact: { type: "string" },
-                recommendation: { type: "string" },
-              },
-            },
-          },
-          notes: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["topic", "observation"],
-              properties: { topic: { type: "string" }, observation: { type: "string" } },
-            },
-          },
-        },
-      },
+      outputSchema: std.schema({"findings":[{"title":"string","severity":["critical","significant","minor"],"path":"string","startLine?":{"int":{"minimum":1}},"endLine?":{"int":{"minimum":1}},"trigger":"string","evidence":"string","impact":"string","recommendation":"string"}],"notes":[{"topic":"string","observation":"string"}]}),
     });
     return {
       lens,
@@ -152,24 +96,25 @@ const focusCoverage = reviews.map((review) => ({
 const verifierCandidates = std.context.pack(
   candidates.map((candidate) => ({
     ...candidate,
-    title: compactText(candidate.title, 180),
-    trigger: compactText(candidate.trigger, 500),
-    evidence: compactText(candidate.evidence, 700),
-    impact: compactText(candidate.impact, 400),
-    recommendation: compactText(candidate.recommendation, 300),
+    title: candidate.title,
+    trigger: candidate.trigger,
+    evidence: candidate.evidence,
+    impact: candidate.impact,
+    recommendation: candidate.recommendation,
   })),
   {
+    fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 },
     maxSerializedChars: 12000,
     id: "candidateId",
     priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
   },
 );
 const verifierNotes = std.context.pack(
-  reviews.flatMap((review) => review.notes.map((note, index) => ({ id: `${review.lens.id}-note-${index + 1}`, focusId: review.lens.id, topic: compactText(note.topic, 160), observation: compactText(note.observation, 400) }))),
-  { maxSerializedChars: 8000 },
+  reviews.flatMap((review) => review.notes.map((note, index) => ({ id: `${review.lens.id}-note-${index + 1}`, focusId: review.lens.id, topic: note.topic, observation: note.observation }))),
+  { fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 }, maxSerializedChars: 8000 },
 );
-const verifierContext = contextWithPatch(
-  {
+const verifierContext = std.context.fit(
+  { ...{
     files,
     untrackedFiles,
     background,
@@ -184,12 +129,9 @@ const verifierContext = contextWithPatch(
     failedFocuses,
     uncoveredFiles: [],
     truncatedFocuses: reviewPatch.patchTruncated ? lenses.map((lens) => lens.id) : [],
-  },
-  "verificationPatch",
-  "verificationPatchTruncated",
-  rawPatch,
-  8000,
-);
+  }, ["verificationPatch"]: std.context.clippable(rawPatch, { maxChars: 8000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["verificationPatchTruncated"]: `$.${"verificationPatch"}` } },
+).value;
 
 const meta = await agent({
   name: "review-verifier",
@@ -198,37 +140,7 @@ const meta = await agent({
   systemPrompt: VERIFIER,
   task: "Independently verify every candidate, deduplicate lenses, and assess high-risk review coverage.",
   context: verifierContext,
-  outputSchema: {
-    type: "object",
-    required: ["decisions", "summary", "compoundRisks", "residualRisks", "coverageGaps"],
-    properties: {
-      decisions: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["candidateId", "title", "path", "status", "reason"],
-          properties: {
-            candidateId: { type: "string" },
-            title: { type: "string" },
-            path: { type: "string" },
-            startLine: { type: "integer", minimum: 1 },
-            status: { type: "string", enum: ["confirmed", "rejected", "unresolved", "duplicate"] },
-            severity: { type: "string", enum: ["critical", "significant", "minor"] },
-            duplicateOf: { type: "string" },
-            trigger: { type: "string" },
-            evidence: { type: "string" },
-            impact: { type: "string" },
-            recommendation: { type: "string" },
-            reason: { type: "string" },
-          },
-        },
-      },
-      summary: { type: "string" },
-      compoundRisks: { type: "array", items: { type: "string" } },
-      residualRisks: { type: "array", items: { type: "string" } },
-      coverageGaps: { type: "array", items: { type: "string" } },
-    },
-  },
+  outputSchema: std.schema({"decisions":[{"candidateId":"string","title":"string","path":"string","startLine?":{"int":{"minimum":1}},"status":["confirmed","rejected","unresolved","duplicate"],"severity?":["critical","significant","minor"],"duplicateOf?":"string","trigger?":"string","evidence?":"string","impact?":"string","recommendation?":"string","reason":"string"}],"summary":"string","compoundRisks":["string"],"residualRisks":["string"],"coverageGaps":["string"]}),
 });
 
 const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));

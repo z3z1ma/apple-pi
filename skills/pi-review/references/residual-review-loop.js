@@ -17,97 +17,14 @@ const compare = (inputs.compare || "HEAD").trim();
 if (files.length === 0 || !question) throw new Error("inputs.paths and inputs.question are required");
 if (!compare) throw new Error("inputs.compare is required");
 
-function compactText(value, limit) {
-  const text = String(value || "");
-  return text.length <= limit ? text : `${text.slice(0, limit)}…`;
-}
-function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
-  const fitted = std.context.fit(
-    {
-      ...base,
-      [patchKey]: std.context.clippable(patch, {
-        maxChars: maxPatchChars,
-        strategy: "head-tail",
-        marker: "\n\n[... patch clipped for worker context ...]\n\n",
-      }),
-      [truncatedKey]: false,
-    },
-    { maxSerializedChars: 47900 },
-  );
-  return { ...fitted.value, [truncatedKey]: fitted.truncated.includes(`$.${patchKey}`) };
-}
 const change = await std.git.change({ compare, paths: files });
 const { patch, untrackedFiles } = change;
-const reviewContext = contextWithPatch(
-  { files, compare, background, untrackedFiles },
-  "patch",
-  "patchTruncated",
-  patch,
-  16000,
-);
-const findingSchema = {
-  type: "object",
-  required: ["findings", "notes"],
-  properties: {
-    findings: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["title", "severity", "path", "trigger", "evidence", "impact", "recommendation"],
-        properties: {
-          title: { type: "string" },
-          severity: { type: "string", enum: ["critical", "significant", "minor"] },
-          path: { type: "string" },
-          startLine: { type: "integer", minimum: 1 },
-          endLine: { type: "integer", minimum: 1 },
-          trigger: { type: "string" },
-          evidence: { type: "string" },
-          impact: { type: "string" },
-          recommendation: { type: "string" },
-        },
-      },
-    },
-    notes: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["topic", "observation"],
-        properties: { topic: { type: "string" }, observation: { type: "string" } },
-      },
-    },
-  },
-};
-const verdictSchema = {
-  type: "object",
-  required: ["decisions", "summary", "compoundRisks", "residualRisks", "coverageGaps"],
-  properties: {
-    decisions: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["candidateId", "title", "path", "status", "reason"],
-        properties: {
-          candidateId: { type: "string" },
-          title: { type: "string" },
-          path: { type: "string" },
-          startLine: { type: "integer", minimum: 1 },
-          status: { type: "string", enum: ["confirmed", "rejected", "unresolved", "duplicate"] },
-          severity: { type: "string", enum: ["critical", "significant", "minor"] },
-          duplicateOf: { type: "string" },
-          trigger: { type: "string" },
-          evidence: { type: "string" },
-          impact: { type: "string" },
-          recommendation: { type: "string" },
-          reason: { type: "string" },
-        },
-      },
-    },
-    summary: { type: "string" },
-    compoundRisks: { type: "array", items: { type: "string" } },
-    residualRisks: { type: "array", items: { type: "string" } },
-    coverageGaps: { type: "array", items: { type: "string" } },
-  },
-};
+const reviewContext = std.context.fit(
+  { ...{ files, compare, background, untrackedFiles }, ["patch"]: std.context.clippable(patch, { maxChars: 16000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["patchTruncated"]: `$.${"patch"}` } },
+).value;
+const findingSchema = std.schema({"findings":[{"title":"string","severity":["critical","significant","minor"],"path":"string","startLine?":{"int":{"minimum":1}},"endLine?":{"int":{"minimum":1}},"trigger":"string","evidence":"string","impact":"string","recommendation":"string"}],"notes":[{"topic":"string","observation":"string"}]});
+const verdictSchema = std.schema({"decisions":[{"candidateId":"string","title":"string","path":"string","startLine?":{"int":{"minimum":1}},"status":["confirmed","rejected","unresolved","duplicate"],"severity?":["critical","significant","minor"],"duplicateOf?":"string","trigger?":"string","evidence?":"string","impact?":"string","recommendation?":"string","reason":"string"}],"summary":"string","compoundRisks":["string"],"residualRisks":["string"],"coverageGaps":["string"]});
 const initialFocus = {
   id: "initial",
   title: question,
@@ -148,12 +65,13 @@ const initialCandidates = candidatesFor(initial);
 const triageCandidates = std.context.pack(
   initialCandidates.map((candidate) => ({
     ...candidate,
-    evidence: compactText(candidate.evidence, 700),
-    trigger: compactText(candidate.trigger, 500),
-    impact: compactText(candidate.impact, 400),
-    recommendation: compactText(candidate.recommendation, 300),
+    evidence: candidate.evidence,
+    trigger: candidate.trigger,
+    impact: candidate.impact,
+    recommendation: candidate.recommendation,
   })),
   {
+    fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 },
     maxSerializedChars: 12000,
     id: "candidateId",
     priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
@@ -162,10 +80,10 @@ const triageCandidates = std.context.pack(
 const triageNotes = std.context.pack(
   initial.notes.map((note, index) => ({
     id: `initial-review-note-${index + 1}`,
-    topic: compactText(note.topic, 160),
-    observation: compactText(note.observation, 400),
+    topic: note.topic,
+    observation: note.observation,
   })),
-  { maxSerializedChars: 8000 },
+  { fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 }, maxSerializedChars: 8000 },
 );
 const triage = await agent({
   name: "coverage-triage",
@@ -173,8 +91,8 @@ const triage = await agent({
   tools: READ_ONLY,
   systemPrompt: TRIAGE_VERIFIER,
   task: "Verify initial candidates and identify only material residual coverage gaps that need a second focused pass.",
-  context: contextWithPatch(
-    {
+  context: std.context.fit(
+  { ...{
       files,
       compare,
       background,
@@ -196,12 +114,9 @@ const triage = await agent({
         initial.status === "completed" ? [] : [{ id: initial.id, error: initial.error || "worker failed" }],
       uncoveredFiles: [],
       truncatedFocuses: reviewContext.patchTruncated ? [initial.id] : [],
-    },
-    "verificationPatch",
-    "verificationPatchTruncated",
-    patch,
-    8000,
-  ),
+    }, ["verificationPatch"]: std.context.clippable(patch, { maxChars: 8000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["verificationPatchTruncated"]: `$.${"verificationPatch"}` } },
+).value,
   outputSchema: verdictSchema,
 });
 const residualQuestions = triage.coverageGaps || [];
@@ -228,12 +143,13 @@ const failedFocuses = allReviews
 const finalCandidates = std.context.pack(
   candidates.map((candidate) => ({
     ...candidate,
-    evidence: compactText(candidate.evidence, 700),
-    trigger: compactText(candidate.trigger, 500),
-    impact: compactText(candidate.impact, 400),
-    recommendation: compactText(candidate.recommendation, 300),
+    evidence: candidate.evidence,
+    trigger: candidate.trigger,
+    impact: candidate.impact,
+    recommendation: candidate.recommendation,
   })),
   {
+    fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 },
     maxSerializedChars: 12000,
     id: "candidateId",
     priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
@@ -244,14 +160,14 @@ const finalNotes = std.context.pack(
     review.notes.map((note, index) => ({
       id: `${review.id}-note-${index + 1}`,
       focusId: review.id,
-      topic: compactText(note.topic, 160),
-      observation: compactText(note.observation, 400),
+      topic: note.topic,
+      observation: note.observation,
     })),
   ),
-  { maxSerializedChars: 8000 },
+  { fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 }, maxSerializedChars: 8000 },
 );
-const finalContext = contextWithPatch(
-  {
+const finalContext = std.context.fit(
+  { ...{
     files,
     compare,
     background,
@@ -272,12 +188,9 @@ const finalContext = contextWithPatch(
     truncatedFocuses: reviewContext.patchTruncated ? allReviews.map((review) => review.id) : [],
     initialCoverageGaps: attemptedCoverageGaps,
     deferredCoverageGaps,
-  },
-  "verificationPatch",
-  "verificationPatchTruncated",
-  patch,
-  8000,
-);
+  }, ["verificationPatch"]: std.context.clippable(patch, { maxChars: 8000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["verificationPatchTruncated"]: `$.${"verificationPatch"}` } },
+).value;
 const meta = await agent({
   name: "final-review-verifier",
   profile: "deep",

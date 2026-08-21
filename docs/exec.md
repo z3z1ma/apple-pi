@@ -51,99 +51,50 @@ return parallel(files, async (name) => {
 
 ## Guest standard library
 
-`std` is deliberately small. A function belongs here only when it adds material semantics beyond JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, or `pipeline`. The live `code` parameter documents the complete input and output type of every exposed function.
+`std` is deliberately small. A function belongs here only when it adds material semantics beyond JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, or `pipeline`. The live `code` parameter documents complete input/output types.
 
 | Namespace | Contract |
 | --- | --- |
-| `git` | `change()` concurrently gathers and normalizes status, patch, statistics, changed paths, untracked paths, renames, and line totals. |
-| `repo` | `changeNeighborhood()` adds requested definitions, references, neighboring tests, configuration, and ownership evidence for changed files. |
-| `context` | Required/clippable/droppable markers plus serialized-budget fitting, priority packing, and budget partitioning. |
-| `evidence` | Stable provenance items, bundles, budget packing, and required-ID validation. |
-| `coverage`, `reconcile` | ID/identity coverage checks and one-to-one overlay reconciliation with explicit missing, unknown, and duplicate metadata. |
-| `agents` | Only `planFanoutReduce()`: a typed planner-created fan-out followed by a typed reducer. |
-| `dev` | Generic schema-first change/failure analysis over collected repository evidence, plus relevant-test discovery/execution. |
+| `git` | `change()` gathers normalized status, compact `statusText`, patch, statistics, changed paths, untracked paths, renames, and line totals. `patch()` gathers only a unified diff. |
+| `repo` | `changeNeighborhood()` adds requested definitions, references, neighboring tests, configuration, and ownership evidence. |
+| `context` | Required/clippable/droppable markers, serialized-budget fitting with optional truncation flags, and priority packing with per-field clipping. |
+| `coverage`, `reconcile` | Explicit coverage comparison and ID-based overlay reconciliation. |
+| `dev` | Relevant-test discovery and bounded execution. |
+| `schema` | Strict JSON Schema from terse object shapes. |
 
-There are intentionally no `std` wrappers for assertions, collections, text splitting, shell, filesystem reads, HTTP, ordinary graphs, single agents, generic semantic prompts, or writes. Use JavaScript and the already-documented guest APIs directly. `std.git`, `std.repo`, evidence collection, and development analysis are read-only. `std.dev.runRelevantTests` is the only function that directly executes a host command by design: it first discovers neighboring test paths, injects those paths into the command, and reports the real status/output. `std.agents.planFanoutReduce` can also perform caller-authorized effects when a stage is explicitly granted `bash`, `edit`, or `write`; it adds no authority of its own.
-
-### Evidence and context
-
-Use `std.context.fit` instead of reimplementing serialized-size clipping. Required fields either fit or fail; clippable strings shrink by priority; droppable fields are removed first. The return reports exactly what changed.
+There are intentionally no wrappers for assertions, collections, text clipping, shell, filesystem reads, HTTP, ordinary graphs, single agents, generic semantic prompts, provenance, or writes. `std.git`, `std.repo`, and `std.context` are read-only. `std.dev.runRelevantTests` is the only direct host-command executor: custom commands require `{tests}` and `maxTests` defaults to 128, failing rather than truncating.
 
 ```javascript
 const change = await std.git.change({ compare: "HEAD", paths: files });
 const planning = std.context.fit({
   files: std.context.required(files),
-  status: std.context.required(change.status),
-  patch: std.context.clippable(change.patch, {
-    priority: 100,
-    maxChars: 12_000,
-    strategy: "head-tail",
-  }),
-  history: std.context.droppable(history, { priority: 10 }),
-}, { maxSerializedChars: 48_000 });
-
-const evidence = std.evidence.bundle([
-  std.evidence.item({
-    kind: "git-diff",
-    source: "git",
-    locator: { compare: change.compare, paths: change.paths },
-    content: planning.value.patch,
-    truncated: planning.truncated.includes("$.patch"),
-  }),
-]);
+  patch: std.context.clippable(change.patch, { maxChars: 12_000, priority: 100 }),
+}, { maxSerializedChars: 16_000, flags: { patchTruncated: "$.patch" } });
+const workers = await parallel(files, (path) => agents.run({
+  task: "Inspect this changed path.",
+  context: { path, ...planning.value },
+  outputSchema: std.schema({ path: "string", risk: "string" }),
+}), 2);
 ```
 
-Evidence items have stable IDs, kind, source, locator, content, and truncation state. Use `std.evidence.require`, `std.evidence.pack`, and `std.reconcile.byId` to preserve provenance and coverage across workers.
+Flags require an unmarked object root so they cannot disappear behind a root mark.
 
-### Planner-created fan-out
-
-`planFanoutReduce` is the one retained worker topology because the planner-created task list, failure-preserving fan-out envelopes, three explicit profiles, and typed reducer are materially more than `parallel` plus `agents.run`.
+`std.context.pack` clips selected string fields before serialized-size packing and returns their original paths in `clipped`:
 
 ```javascript
-const workflow = await std.agents.planFanoutReduce(change, {
-  plan: {
-    prompt: PLANNER,
-    profile: "balanced",
-    tools: READ_ONLY,
-    // Defaults to { fanout: [{ prompt, context?, name? }] }.
-  },
-  fanout: {
-    profile: "quick",
-    tools: READ_ONLY,
-    concurrency: 6,
-    outputSchema: reviewerSchema,
-  },
-  reduce: {
-    prompt: REDUCER,
-    profile: "deep",
-    tools: READ_ONLY,
-    outputSchema: verdictSchema,
-  },
+const candidates = std.context.pack(rows, {
+  maxSerializedChars: 12_000,
+  id: "id",
+  priority: "severity",
+  fields: { title: 180, evidence: 700 },
 });
 ```
 
-Task policy remains in supplied prompts and schemas. For fixed fan-out, retries, pipelines, or one-off typed calls, use `parallel`, `pipeline`, `agent`, and `agents.run` directly.
+Marks nested anywhere in an `agent()` or `agents.run()` context are automatically fitted to the default channel budget before attachment. Plain contexts are unchanged. `agents.run()` reports automatic `context.truncated`, `context.dropped`, and `context.serializedChars`; use `std.context.fit` when the program needs explicit control or in-context flags.
 
-### Evidence-backed development analysis
+`std.schema({ id: "int", title: "string", note: "string?", severity: ["high", "low"], findings: ["string"], line: { int: { minimum: 1 } }, paths: { array: { minItems: 1 }, items: ["string"] } })` compiles to strict JSON Schema: fields are required unless suffixed with `?`, objects reject extra fields, two-or-more string arrays are enums, and a one-item array defines items. The constrained forms preserve numeric validation.
 
-`std.dev.analyzeChange` and `analyzeFailure` require both an instruction and output schema. They collect repository evidence and bind it to one read-only worker instead of offering many overlapping prompt aliases.
-
-```javascript
-const risk = await std.dev.analyzeChange({
-  compare: "HEAD",
-  paths: files,
-  instruction: "Identify compatibility risks and cite the changed paths that support each conclusion.",
-  schema: {
-    type: "object",
-    properties: {
-      risks: { type: "array", items: { type: "string" } },
-    },
-    required: ["risks"],
-  },
-});
-```
-
-Use `std.dev.findRelevantTests()` for discovery without execution. `std.dev.runRelevantTests()` executes only the discovered neighboring test paths, forwarding them after `--` to the package `test:unit` / `test` script. For a custom runner, pass a command template such as `npx vitest run {tests}`; `{tests}` is required and is replaced with shell-quoted paths. The global `maxTests` limit defaults to 128; exceeding it fails instead of silently truncating the suite. No tests or runnable command produces an explicit `not_run` result. Use `pi.write`, `pi.edit`, and `pi.bash` directly for other authorized effects; `std` does not duplicate them.
+Use `std.dev.findRelevantTests()` for discovery without execution. `std.dev.runRelevantTests()` executes only discovered neighboring tests, forwarding them after `--` to package `test:unit` / `test`, or replacing `{tests}` in a supplied command template. No tests or runnable command produces an explicit `not_run` result. Use `pi.write`, `pi.edit`, and `pi.bash` directly for other authorized effects.
 
 ## Envelope, fetch, and traces
 

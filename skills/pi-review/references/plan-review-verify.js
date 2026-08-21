@@ -14,57 +14,19 @@ const compare = (inputs.compare || "HEAD").trim();
 if (files.length === 0) throw new Error("inputs.paths is required (newline-separated repository paths)");
 if (!compare) throw new Error("inputs.compare is required");
 
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
-}
 
-async function gitOutput(command) {
-  const result = await pi.bash({ command });
-  if (!result.ok) throw new Error(result.output || `Git command failed: ${command}`);
-  return result.output;
-}
 
-function statusSummary(status) {
-  return status.entries.map((entry) => `${entry.index}${entry.worktree} ${entry.path}${entry.from ? ` <- ${entry.from}` : ""}`).join("\n");
-}
 
-function compactText(value, limit) {
-  const text = String(value || "");
-  return text.length <= limit ? text : `${text.slice(0, limit)}…`;
-}
 
-function contextWithPatch(base, patchKey, truncatedKey, patch, maxPatchChars) {
-  const fitted = std.context.fit(
-    {
-      ...base,
-      [patchKey]: std.context.clippable(patch, {
-        maxChars: maxPatchChars,
-        strategy: "head-tail",
-        marker: "\n\n[... patch clipped for worker context ...]\n\n",
-      }),
-      [truncatedKey]: false,
-    },
-    { maxSerializedChars: 47900 },
-  );
-  return { ...fitted.value, [truncatedKey]: fitted.truncated.includes(`$.${patchKey}`) };
-}
-
-async function patchFor(paths) {
-  const pathArgs = paths.map(shellQuote).join(" ");
-  return gitOutput(`git diff --no-ext-diff --unified=3 ${shellQuote(compare)} -- ${pathArgs}`);
-}
 
 const change = await std.git.change({ compare, paths: files });
 const rawPlanningPatch = change.patch;
-const changeStatus = statusSummary(change.status);
+const changeStatus = change.statusText;
 const { untrackedFiles } = change;
-const planningContext = contextWithPatch(
-  { files, untrackedFiles, background, compare, changeStatus, changeStat: change.stat },
-  "changePatch",
-  "changePatchTruncated",
-  rawPlanningPatch,
-  12000,
-);
+const planningContext = std.context.fit(
+  { ...{ files, untrackedFiles, background, compare, changeStatus, changeStat: change.stat }, ["changePatch"]: std.context.clippable(rawPlanningPatch, { maxChars: 12000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["changePatchTruncated"]: `$.${"changePatch"}` } },
+).value;
 
 const plan = await agent({
   name: "review-planner",
@@ -73,42 +35,7 @@ const plan = await agent({
   systemPrompt: PLANNER,
   task: "Partition the change and define focused investigations. Return the typed plan.",
   context: planningContext,
-  outputSchema: {
-    type: "object",
-    required: ["summary", "partitions"],
-    properties: {
-      summary: { type: "string" },
-      partitions: {
-        type: "array",
-        minItems: 1,
-        items: {
-          type: "object",
-          required: ["title", "files", "contextFiles", "rationale", "focuses"],
-          properties: {
-            title: { type: "string" },
-            files: { type: "array", minItems: 1, items: { type: "string" } },
-            contextFiles: { type: "array", items: { type: "string" } },
-            rationale: { type: "string" },
-            focuses: {
-              type: "array",
-              minItems: 1,
-              items: {
-                type: "object",
-                required: ["title", "priority", "question", "checks", "rationale"],
-                properties: {
-                  title: { type: "string" },
-                  priority: { type: "string", enum: ["high", "medium", "low"] },
-                  question: { type: "string" },
-                  checks: { type: "array", minItems: 1, items: { type: "string" } },
-                  rationale: { type: "string" },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
+  outputSchema: std.schema({"summary":"string","partitions":{"array":{"minItems":1},"items":[{"title":"string","files":{"array":{"minItems":1},"items":["string"]},"contextFiles":["string"],"rationale":"string","focuses":{"array":{"minItems":1},"items":[{"title":"string","priority":["high","medium","low"],"question":"string","checks":{"array":{"minItems":1},"items":["string"]},"rationale":"string"}]}}]}}),
 });
 
 const selectedPaths = new Set(files);
@@ -151,19 +78,16 @@ const reviews = await parallel(
   async (focus) => {
     let reviewContext;
     try {
-      const rawPatch = await patchFor(focus.targetFiles);
-      reviewContext = contextWithPatch(
-        {
+      const rawPatch = await std.git.patch({ compare, paths: focus.targetFiles });
+      reviewContext = std.context.fit(
+  { ...{
           focus,
           background,
           compare,
           untrackedFiles: untrackedFiles.filter((path) => focus.targetFiles.includes(path)),
-        },
-        "patch",
-        "patchTruncated",
-        rawPatch,
-        16000,
-      );
+        }, ["patch"]: std.context.clippable(rawPatch, { maxChars: 16000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["patchTruncated"]: `$.${"patch"}` } },
+).value;
     } catch (error) {
       return { focus, status: "failed", findings: [], notes: [], patchTruncated: false, error: String(error) };
     }
@@ -175,41 +99,7 @@ const reviews = await parallel(
       systemPrompt: REVIEWER,
       task: "Investigate the assigned partition focus and return the typed review result.",
       context: reviewContext,
-      outputSchema: {
-        type: "object",
-        required: ["findings", "notes"],
-        properties: {
-          findings: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["title", "severity", "path", "trigger", "evidence", "impact", "recommendation"],
-              properties: {
-                title: { type: "string" },
-                severity: { type: "string", enum: ["critical", "significant", "minor"] },
-                path: { type: "string" },
-                startLine: { type: "integer", minimum: 1 },
-                endLine: { type: "integer", minimum: 1 },
-                trigger: { type: "string" },
-                evidence: { type: "string" },
-                impact: { type: "string" },
-                recommendation: { type: "string" },
-              },
-            },
-          },
-          notes: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["topic", "observation"],
-              properties: {
-                topic: { type: "string" },
-                observation: { type: "string" },
-              },
-            },
-          },
-        },
-      },
+      outputSchema: std.schema({"findings":[{"title":"string","severity":["critical","significant","minor"],"path":"string","startLine?":{"int":{"minimum":1}},"endLine?":{"int":{"minimum":1}},"trigger":"string","evidence":"string","impact":"string","recommendation":"string"}],"notes":[{"topic":"string","observation":"string"}]}),
     });
 
     return {
@@ -253,23 +143,24 @@ const focusCoverage = reviews.map((review) => ({
 }));
 const candidatePaths = [...new Set(candidates.map((candidate) => candidate.path))];
 let rawVerificationPatch = "";
-if (candidatePaths.length > 0) rawVerificationPatch = await patchFor(candidatePaths);
+if (candidatePaths.length > 0) rawVerificationPatch = await std.git.patch({ compare, paths: candidatePaths });
 const verifierCandidates = std.context.pack(
   candidates.map((candidate) => ({
     candidateId: candidate.candidateId,
     focusId: candidate.focusId,
     scopeValid: candidate.scopeValid,
-    title: compactText(candidate.title, 180),
+    title: candidate.title,
     severity: candidate.severity,
     path: candidate.path,
     startLine: candidate.startLine,
     endLine: candidate.endLine,
-    trigger: compactText(candidate.trigger, 500),
-    evidence: compactText(candidate.evidence, 700),
-    impact: compactText(candidate.impact, 400),
-    recommendation: compactText(candidate.recommendation, 300),
+    trigger: candidate.trigger,
+    evidence: candidate.evidence,
+    impact: candidate.impact,
+    recommendation: candidate.recommendation,
   })),
   {
+    fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 },
     maxSerializedChars: 12000,
     id: "candidateId",
     priority: (candidate) => (candidate.severity === "critical" ? 3 : candidate.severity === "significant" ? 2 : 1),
@@ -279,13 +170,13 @@ const verifierNotes = std.context.pack(
   notes.map((note, index) => ({
     id: `${note.focusId}-note-${index + 1}`,
     focusId: note.focusId,
-    topic: compactText(note.topic, 160),
-    observation: compactText(note.observation, 400),
+    topic: note.topic,
+    observation: note.observation,
   })),
-  { maxSerializedChars: 8000, id: "id" },
+  { fields: { title: 180, trigger: 500, evidence: 700, impact: 400, recommendation: 300, topic: 160, observation: 400, message: 700, reason: 300 }, maxSerializedChars: 8000, id: "id" },
 );
-const verifierContext = contextWithPatch(
-  {
+const verifierContext = std.context.fit(
+  { ...{
     files,
     untrackedFiles,
     background,
@@ -305,12 +196,9 @@ const verifierContext = contextWithPatch(
     uncoveredFiles,
     truncatedFocuses,
     planningPatchTruncated: planningContext.changePatchTruncated,
-  },
-  "verificationPatch",
-  "verificationPatchTruncated",
-  rawVerificationPatch,
-  8000,
-);
+  }, ["verificationPatch"]: std.context.clippable(rawVerificationPatch, { maxChars: 8000, strategy: "head-tail", marker: "\n\n[... patch clipped for worker context ...]\n\n" }) },
+  { flags: { ["verificationPatchTruncated"]: `$.${"verificationPatch"}` } },
+).value;
 
 const meta = await agent({
   name: "review-verifier",
@@ -319,37 +207,7 @@ const meta = await agent({
   systemPrompt: VERIFIER,
   task: "Verify every candidate and assess the review coverage. Return the typed verdict.",
   context: verifierContext,
-  outputSchema: {
-    type: "object",
-    required: ["decisions", "summary", "compoundRisks", "residualRisks", "coverageGaps"],
-    properties: {
-      decisions: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["candidateId", "title", "path", "status", "reason"],
-          properties: {
-            candidateId: { type: "string" },
-            title: { type: "string" },
-            path: { type: "string" },
-            startLine: { type: "integer", minimum: 1 },
-            status: { type: "string", enum: ["confirmed", "rejected", "unresolved", "duplicate"] },
-            severity: { type: "string", enum: ["critical", "significant", "minor"] },
-            duplicateOf: { type: "string" },
-            trigger: { type: "string" },
-            evidence: { type: "string" },
-            impact: { type: "string" },
-            recommendation: { type: "string" },
-            reason: { type: "string" },
-          },
-        },
-      },
-      summary: { type: "string" },
-      compoundRisks: { type: "array", items: { type: "string" } },
-      residualRisks: { type: "array", items: { type: "string" } },
-      coverageGaps: { type: "array", items: { type: "string" } },
-    },
-  },
+  outputSchema: std.schema({"decisions":[{"candidateId":"string","title":"string","path":"string","startLine?":{"int":{"minimum":1}},"status":["confirmed","rejected","unresolved","duplicate"],"severity?":["critical","significant","minor"],"duplicateOf?":"string","trigger?":"string","evidence?":"string","impact?":"string","recommendation?":"string","reason":"string"}],"summary":"string","compoundRisks":["string"],"residualRisks":["string"],"coverageGaps":["string"]}),
 });
 
 const decisionReconciliation = std.reconcile.byId(candidates, meta.decisions, { id: "candidateId" });
