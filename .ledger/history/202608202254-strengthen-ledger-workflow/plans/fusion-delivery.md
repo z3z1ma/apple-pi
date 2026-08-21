@@ -1,6 +1,6 @@
-Status: active
+Status: done
 Created: 2026-08-20
-Updated: 2026-08-20
+Updated: 2026-08-21
 
 # Delivery plan for the apple-pi Ledger engineering fusion
 
@@ -9,6 +9,10 @@ Updated: 2026-08-20
 Deliver one discoverable apple-pi Ledger workflow that retains Superpowers' full methodology at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`, adapts the durable-judgment substrate from 10x at `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`, prefixes the 13 incoming lifecycle skills `ledger-`, preserves the established Pi utility skill names, and maps actuation to Ledger, `Agent`, `pi_exec`, Ralph, independent review, Advisor, and operator authority.
 
 Implementation begins only after the operator approves this active specification and plan. The approval must cover the complete workflow, not merely the bootstrap.
+
+## Closure Ruling
+
+On 2026-08-21, after two final whole-change review executions failed in infrastructure and all implementation, evaluation, focused review, validation, and package evidence had been recorded, the operator explicitly cancelled the remaining final-review gate and directed closure. No clean final whole-change review verdict is claimed; the missing verdict remains a documented evidence limit.
 
 ## Current-System Evidence
 

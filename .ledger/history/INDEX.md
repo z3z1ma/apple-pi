@@ -11,3 +11,5 @@
 - `.ledger/history/202608202232-redesign-input-area-information-layout/task.md` — done — Redesign the Pi input-area information layout — Replace apple-pi's default footer composition with a responsive, status-preserving custom input-area layout inspired by Zentui and selected Powerline presentation patterns.
 
 - `.ledger/history/202608202235-evaluate-superpowers-ledger-integration/task.md` — done — Evaluate Superpowers integration with Ledger — Study obra/superpowers at main and define an evidence-backed integration path for apple-pi's ledger, skills, Ralph, subagents, and Pi Exec.
+
+- `.ledger/history/202608202254-strengthen-ledger-workflow/task.md` — done — Strengthen Ledger workflow with evaluated Superpowers principles — Fuse Superpowers procedures and 10x durable judgment into 13 Ledger lifecycle skills while preserving Pi utility boundaries.

@@ -1,4 +1,4 @@
-Status: active
+Status: done
 Created: 2026-08-20
 Updated: 2026-08-21
 
@@ -29,7 +29,7 @@ Deliver one complete Ledger-native apple-pi engineering system by fusing the Sup
 - [x] WI-001: Record the operator-ratified fusion scope and an active behavioral specification that supersedes the principles-only recommendation.
 - [x] WI-002: Build the upstream-to-Apple-Pie traceability matrix, including every material source instruction, role prompt, script, artifact, and explicit translation rationale.
 - [x] WI-003: Plan the canonical fused skill topology, bootstrap/entry behavior, Ledger record mapping, Agent/Pi Exec/Ralph/review composition, worktree/integration authority, attribution, and evaluation strategy.
-- [ ] WI-004: Implement and empirically evaluate the approved fused workflow in the planned increments.
+- [x] WI-004: Implement and empirically evaluate the approved fused workflow in the planned increments.
 
 ## References
 
@@ -87,10 +87,11 @@ Deliver one complete Ledger-native apple-pi engineering system by fusing the Sup
 - 2026-08-21: Reopened the task after closure review showed the evidence did not satisfy the still-active delivery plan: AC-004 requires five fresh repetitions per changed behavior, AC-005 requires final independent `pi-review`, and the visual traceability requires broader path/lifecycle coverage than the initial test supplied.
 - 2026-08-21: Completed five sequential normal-discovery treatment repetitions for B-001–B-006 (30/30 meets with contamination validation), expanded the visual companion to 14 protocol/security/lifecycle tests, and resolved focused independent review findings across lifecycle, SDD packaging, bounded gates, and whole-change prior reconciliation.
 - 2026-08-21: Two final full-review executions failed in infrastructure before returning a verdict (context limit, then WebSocket error). After the final advisor correction preserved stored scope/load-bearing ownership metadata for carried prior findings, the operator explicitly directed commit and push rather than another review iteration.
+- 2026-08-21: Operator explicitly cancelled the remaining whole-change review gate, accepted the recorded evidence limit, and directed task closure, commit, and push. No final whole-change review verdict is claimed.
 
 ## Blockers
 
-Strict Ledger closure remains blocked only on a completed final independent whole-change `pi-review` verdict. The sequential 30-run root evaluation and 14-test visual protocol/lifecycle coverage are complete; two final full-review executions failed in infrastructure before producing a verdict. The operator authorized committing and pushing this active state with that evidence limit explicit.
+None. The operator explicitly cancelled the remaining final whole-change review gate after two infrastructure failures and accepted closure with the missing verdict recorded as an evidence limit.
 
 ## Evidence
 
@@ -113,12 +114,15 @@ Strict Ledger closure remains blocked only on a completed final independent whol
 - 2026-08-21: Peer advisories confirmed three integration defects: the first naming pass incorrectly prefixed Pi Exec/Review/Ralph and altered Pi utility discovery descriptions; visual helper commands depended on cwd and cleanup lacked a returned session path; frontmatter descriptions summarized procedure instead of triggers. The corrected implementation restores Pi utility names/descriptions and boundaries, prefixes only the 13 incoming lifecycle skills, resolves helpers from the catalog location, returns `session_dir`, and keeps mechanics in skill bodies.
 - 2026-08-21: Closure review rejected the `done` claim because the active plan's five-repetition behavior gate and final independent `pi-review` had not run, while the visual test covered only a narrow authenticated happy path rather than the retained protocol, path, owner/idle, stale-state, restart, and cleanup boundaries. The task was moved back to the live index without superseding those requirements.
 - 2026-08-21: Final advisor finding resolved: whole-change `priorFindings` now require and preserve stored `scope`, `loadBearing`, and out-of-scope owner/revisit metadata independently of whether the original path remains changed; verifier decisions validate against that stored classification.
+- 2026-08-21: Disposition: operator-cancelled gate — the final independent whole-change review produced no verdict because both executions failed in infrastructure. The operator explicitly accepted this limit and directed closure; this is not recorded as a clean review.
 
 ## Retrospective
 
 Bulk substitutions are unsafe for skill ports because names appear simultaneously as public discovery identifiers, runtime concepts, executable filenames, relative links, and historical source labels. Surgical adaptation plus native skill-loader validation caught failures that text search alone could not. The live root treatment also showed that correct high-level reasoning can still contain a broken action mapping; behavior-shaping instructions need executable acceptance, not only prompt assertions.
 
 Ledger and runtime state need different trust levels. Persisting visual HTML as task evidence is useful, while persisting capability URLs, tokens, events, PIDs, or logs would leak secrets into a potentially committed workbench. Splitting those owners made the visual companion safer and simpler to reason about.
+
+The final review phase consumed disproportionate time and quota through repeated widening and infrastructure retries. Future large reviews need an explicit iteration budget, one operator checkpoint when the budget is exhausted, and a clear distinction between a missing verdict and an implementation defect.
 
 ## Distillation
 
