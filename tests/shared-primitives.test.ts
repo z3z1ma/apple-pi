@@ -84,8 +84,8 @@ describe("exclusive leases", () => {
 	});
 
 	it("fails closed on an unreadable file lock", () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-ralph-lease-agent-"));
-		const project = mkdtempSync(join(tmpdir(), "apple-pi-ralph-lease-project-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "apple-ralph-lease-agent-"));
+		const project = mkdtempSync(join(tmpdir(), "apple-ralph-lease-project-"));
 		roots.push(agentDir, project);
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		const release = acquireExclusiveLease("ralph", project, "seed", messages);

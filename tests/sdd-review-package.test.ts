@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const reviewPackageScript = resolve("skills/ledger-subagent-driven-development/scripts/review-package");
+const reviewPackageScript = resolve("skills/work-item-orchestration/scripts/review-package");
 const tempDirs: string[] = [];
 
 function run(cwd: string, command: string, args: string[]): string {

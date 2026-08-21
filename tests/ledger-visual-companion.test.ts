@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const skillDir = resolve("skills/ledger-brainstorming");
+const skillDir = resolve("skills/task-shaping");
 const scripts = join(skillDir, "scripts");
 const serverScript = join(scripts, "server.cjs");
 const require = createRequire(import.meta.url);

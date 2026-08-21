@@ -62,7 +62,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
-| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in `skills/ledger-*`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with Ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
@@ -98,13 +98,13 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 ### Ledger, review, and Ralph
 
-- Ledger is the shared authority, cold-start memory, execution record, and learning loop beneath every packaged `ledger-*` skill. It distinguishes shaping, orchestration, and execution even when one session performs them sequentially.
+- Ledger is the shared authority, cold-start memory, execution record, and learning loop beneath the packaged lifecycle skills. It distinguishes shaping, orchestration, and execution even when one session performs them sequentially.
 - Execution-changing assumptions are record-backed, user-ratified, or blocking. Worker reports are claims; observations carry limits; review independently tries to falsify completion; closure reconciles acceptance evidence, blockers, dependencies, review, retrospective, and distillation.
 - `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. The method scales down to disciplined minimalism for exact trivial changes rather than requiring ceremony.
 - `ledger_add` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
 - Task status and evidence live in each task's `task.md`; `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
-- Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and ledger reconciliation.
+- Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and integration; prepared Ledger tasks are one supported state owner, not a requirement for the general loop.
 - Durable lessons leave the task bundle for their real owner: normal docs, tests, an ADR convention, a runbook, or a reusable skill.
 
 ### External integrations
@@ -126,7 +126,7 @@ Use the narrowest production owner:
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
 - Stable maintainer conventions or architecture rationale: `docs/`.
-- Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedure in `skills/ledger-*`, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
+- Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.
 - Task-specific investigation, decisions, or evidence: the governing `.ledger` bundle, not production code.
 

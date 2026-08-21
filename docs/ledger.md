@@ -208,18 +208,18 @@ Those tools refuse collisions and do not list, inspect, select, or execute exist
 
 ## Workflow skills
 
-The 13 incoming lifecycle skills are prefixed `ledger-` because they absorb the former stage-local Ledger skills. The established Pi utility skills keep their existing names and general responsibility boundaries.
+Thirteen descriptively named lifecycle skills absorb the former stage-local Ledger skills without adding a `ledger-` prefix. The general `pi-exec`, `review`, and `ralph` skills keep distinct responsibility boundaries.
 
 | State | Ledger lifecycle skills | Responsibility |
 | --- | --- | --- |
-| Shaping | `ledger-brainstorming`, `ledger-writing-plans` | Search prior context, resolve ambiguity, ratify assumptions, and establish task/spec/decision/plan authority. |
-| Execution | `ledger-systematic-debugging`, `ledger-test-driven-development`, `ledger-executing-plans` | Own one acceptance gap or Work Item, journal discoveries, and gather bounded evidence. |
-| Orchestration | `ledger-subagent-driven-development`, `ledger-dispatching-parallel-agents` | Sequence dependencies, bind cold-start handoffs, coordinate bounded workers, and reconcile their claims. |
-| Review | `ledger-requesting-code-review`, `ledger-receiving-code-review`, `ledger-verification-before-completion` | Commission review, disposition findings, and map claims to fresh criterion evidence. |
-| Workspace and closure | `ledger-using-git-worktrees`, `ledger-finishing-a-development-branch` | Preserve isolation and continuity, distill learning, judge honest terminal state, and present operator-owned integration choices. |
-| Compounding | `ledger-writing-skills` | Turn repeated toil or instruction failures into empirically tested packaged procedures. |
+| Shaping | `task-shaping`, `implementation-planning` | Search prior context, resolve ambiguity, ratify assumptions, and establish task/spec/decision/plan authority. |
+| Execution | `root-cause-debugging`, `test-first-development`, `plan-execution` | Own one acceptance gap or Work Item, journal discoveries, and gather bounded evidence. |
+| Orchestration | `work-item-orchestration`, `parallel-orchestration` | Sequence dependencies, bind cold-start handoffs, coordinate bounded workers, and reconcile their claims. |
+| Review | `review-commissioning`, `review-reconciliation`, `completion-verification` | Commission review, disposition findings, and map claims to fresh criterion evidence. |
+| Workspace and closure | `workspace-isolation`, `task-closure` | Preserve isolation and continuity, distill learning, judge honest terminal state, and present operator-owned integration choices. |
+| Compounding | `skill-authoring` | Turn repeated toil or instruction failures into empirically tested packaged procedures. |
 
-The lifecycle may invoke independent Pi skills without renaming or redefining them: `pi-exec` remains general composition guidance, `pi-review` remains general code review, and `pi-ralph` remains the existing fresh-context loop for prepared Ledger tasks.
+The lifecycle may invoke independent skills without redefining them: `pi-exec` remains general composition guidance, `review` remains general code review, and `ralph` provides bounded fresh-context loops for either caller-owned goals or prepared Ledger tasks.
 
 Typical flow:
 
@@ -227,7 +227,7 @@ Typical flow:
 shape → research/specify as needed → plan → execute → review → verify → distill → operator integration
 ```
 
-The runtime identifiers remain unchanged: `Agent` is typed collaboration, `pi_exec` is bounded composition, and `ledger_add` / `ledger_close` create or archive task structure. Ralph is implemented as a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker; the caller bounds the batch, then invokes `/skill:pi-review` separately and reconciles the Ledger before deciding on another batch.
+The runtime identifiers remain unchanged: `Agent` is typed collaboration, `pi_exec` is bounded composition, and `ledger_add` / `ledger_close` create or archive task structure. Ralph is implemented as a `pi_exec` skill, not an extension. Each iteration is a fresh program-only worker; the caller bounds the batch, then invokes `/skill:review` separately and reconciles the Ledger before deciding on another batch.
 
 Not every task needs every record or skill. A small but non-trivial task may need only `task.md`, and exact trivial work may need no task mutation. Research, specs, decisions, plans, standalone evidence, knowledge, and candidate skills appear only when they materially govern execution or preserve a finding worth its storage cost.
 

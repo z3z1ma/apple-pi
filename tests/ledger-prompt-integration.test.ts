@@ -52,11 +52,10 @@ describe("ledger system prompt distribution", () => {
 		expect(twice).toContain("`<available_skills>` catalog");
 		expect(twice).toContain("catalog entry's exact `<location>`");
 		expect(twice).toContain("wherever Pi is opened");
-		expect(twice).toContain("`ledger-brainstorming`");
-		expect(twice).toContain("`ledger-systematic-debugging`");
-		expect(twice).toContain("`ledger-verification-before-completion`");
+		expect(twice).toContain("`task-shaping`");
+		expect(twice).toContain("`root-cause-debugging`");
+		expect(twice).toContain("`completion-verification`");
 		expect(twice).toContain("`pi-exec`");
-		expect(twice).not.toContain("`brainstorming`");
 		const collision = appendLedgerWorkflowSystemPrompt("Project text mentions <ledger-workflow> as an example.");
 		expect(collision).toContain("`<available_skills>` catalog");
 		expect(occurrences(collision, "# apple-pi Ledger workflow")).toBe(1);

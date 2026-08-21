@@ -161,7 +161,7 @@ Review, routine evidence, Journal, Blockers, Retrospective, and Distillation rem
 7. If work pauses, blocks, or is cancelled, record that state honestly; never manufacture \`done\`.
 8. At each meaningful iteration and closure, promote durable knowledge to its real repository owner. Independent unfinished outcomes become separately indexed tasks rather than hidden scope expansion.
 
-When packaged workflow skills are available, \`ledger-brainstorming\` owns shaping, research, specification, and decisions; \`ledger-writing-plans\` owns plans and Work Items; execution skills maintain evidence and review state; \`ledger-finishing-a-development-branch\` owns distillation and closure. The ledger contract above still governs sessions that load none of those procedures.
+When packaged workflow skills are available, \`task-shaping\` owns shaping, research, specification, and decisions; \`implementation-planning\` owns plans and Work Items; execution skills maintain evidence and review state; \`task-closure\` owns distillation and closure. The ledger contract above still governs sessions that load none of those procedures.
 </ledger-workbench>`;
 
 export function appendLedgerSystemPrompt(systemPrompt: string): string {

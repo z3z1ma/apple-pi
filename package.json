@@ -1,7 +1,7 @@
 {
   "name": "apple-pi",
   "version": "0.1.0",
-  "description": "Alex's integrated Pi system: advice, context, execution, subagents, review-as-pi_exec, and ledger-backed Ralph loops as pi_exec.",
+  "description": "Alex's integrated Pi system: advice, context, execution, subagents, review-as-pi_exec, and bounded Ralph loops as pi_exec.",
   "type": "module",
   "license": "MIT",
   "keywords": [

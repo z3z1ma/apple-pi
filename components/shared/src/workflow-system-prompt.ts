@@ -3,7 +3,7 @@ export const LEDGER_WORKFLOW_SYSTEM_PROMPT_TAG = "ledger-workflow";
 export const LEDGER_WORKFLOW_SYSTEM_PROMPT = `<ledger-workflow>
 # apple-pi Ledger workflow
 
-Ledger is apple-pi's shared authority, memory, evidence, and learning substrate. It makes the fused lifecycle skills one system while general Pi utilities such as \`pi-exec\` and \`pi-review\` retain their own responsibility boundaries. Apply its reasoning to every task; create or mutate a task bundle only when ambiguity, behavioral consequence, risk, coordination, or continuity justifies durable state. Exact trivial work stays exact and small.
+Ledger is apple-pi's shared authority, memory, evidence, and learning substrate. It makes the fused lifecycle skills one system while general Pi utilities such as \`pi-exec\` and \`review\` retain their own responsibility boundaries. Apply its reasoning to every task; create or mutate a task bundle only when ambiguity, behavioral consequence, risk, coordination, or continuity justifies durable state. Exact trivial work stays exact and small.
 
 Pi discovers skills when the session starts and lists them in the system prompt's \`<available_skills>\` catalog. Each entry contains a name, description, and location. Package skills are available wherever Pi is opened because apple-pi registers its \`skills/\` directory in \`package.json\`.
 
@@ -18,18 +18,18 @@ The catalog location is the authoritative path. Skill-relative references resolv
 
 Common routes:
 
-- New features, components, and behavior changes: \`ledger-brainstorming\` before implementation. A requested new validation or changed rule is shaping work, not a bug merely because the current code lacks it.
-- Bugs, failing tests, and unexpected behavior against an accepted contract: \`ledger-systematic-debugging\`.
-- Features and bug fixes with testable behavior: \`ledger-test-driven-development\` only after the shaping/design approval gate is satisfied.
-- Code-review feedback: \`ledger-receiving-code-review\`.
-- Completion or correctness claims: \`ledger-verification-before-completion\`.
-- Isolated feature work: \`ledger-using-git-worktrees\`.
-- Implementation planning: \`ledger-writing-plans\`.
-- Sequential plan execution: \`ledger-executing-plans\`; fresh typed implementation with per-item review: \`ledger-subagent-driven-development\`.
-- Independent fan-out: \`ledger-dispatching-parallel-agents\`; review requests: \`ledger-requesting-code-review\`.
-- Integration choices and Ledger closure: \`ledger-finishing-a-development-branch\`.
-- Creating or changing Agent Skills: \`ledger-writing-skills\`.
-- Programmatic composition: \`pi-exec\`; fresh bounded implementation loops: \`pi-ralph\`; independent change review: \`pi-review\`.
+- New features, components, and behavior changes: \`task-shaping\` before implementation. A requested new validation or changed rule is shaping work, not a bug merely because the current code lacks it.
+- Bugs, failing tests, and unexpected behavior against an accepted contract: \`root-cause-debugging\`.
+- Features and bug fixes with testable behavior: \`test-first-development\` only after the shaping/design approval gate is satisfied.
+- Code-review feedback: \`review-reconciliation\`.
+- Completion or correctness claims: \`completion-verification\`.
+- Isolated feature work: \`workspace-isolation\`.
+- Implementation planning: \`implementation-planning\`.
+- Sequential plan execution: \`plan-execution\`; fresh typed implementation with per-item review: \`work-item-orchestration\`.
+- Independent fan-out: \`parallel-orchestration\`; review requests: \`review-commissioning\`.
+- Integration choices and Ledger closure: \`task-closure\`.
+- Creating or changing Agent Skills: \`skill-authoring\`.
+- Programmatic composition: \`pi-exec\`; fresh bounded implementation loops: \`ralph\`; independent change review: \`review\`.
 
 When operator input is needed, call the root \`ask_user_question\` tool directly when structured choices help. Never wrap a single user interaction in \`pi_exec\`; composition is not an interaction fallback.
 
