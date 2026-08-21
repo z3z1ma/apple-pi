@@ -41,6 +41,7 @@ import {
 	piExecGuestApiContract,
 	STD_GUEST_API_FUNCTIONS,
 } from "../extensions/runtime-api.js";
+import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
 import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
@@ -869,15 +870,17 @@ describe("pi_exec agent binding", () => {
 	});
 
 	it("parses a catalog type and keeps untyped workers generic", () => {
-		expect(parseAgentRequest({ task: "map auth", type: "  Explore  ", profile: "deep" })).toEqual({
+		expect(parseAgentRequest({ task: "map auth", type: "  Explore  ", profile: "deep", advisor: true })).toEqual({
 			task: "map auth",
 			type: "Explore",
 			profile: "deep",
+			advisor: true,
 		});
 		expect(parseAgentRequest({ task: "judge", systemPrompt: "REVIEWER" }).type).toBeUndefined();
-		expect(agentOperationArgs({ task: "map auth", type: "Explore" })).toEqual({
+		expect(agentOperationArgs({ task: "map auth", type: "Explore", advisor: false })).toEqual({
 			task: "map auth",
 			type: "Explore",
+			advisor: false,
 		});
 	});
 
@@ -886,6 +889,7 @@ describe("pi_exec agent binding", () => {
 		expect(() => parseAgentRequest({ task: "inspect", profile: " deep" })).toThrow(/unpadded/);
 		expect(() => parseAgentRequest({ task: "inspect", model: "xai/raw" })).toThrow(/raw model\/thinking/);
 		expect(() => parseAgentRequest({ task: "inspect", thinking: "high" })).toThrow(/raw model\/thinking/);
+		expect(() => parseAgentRequest({ task: "inspect", advisor: "on" })).toThrow(/advisor must be a boolean/);
 	});
 
 	it("resolves catalog defaults and explicit profile overrides for agents.run", async () => {
@@ -917,7 +921,7 @@ describe("pi_exec agent binding", () => {
 		};
 		try {
 			const untyped = await resolveExecWorker({ task: "inspect" }, { cwd });
-			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"] });
+			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"], advisor: false });
 
 			const custom = await resolveExecWorker(
 				{ task: "review this diff", systemPrompt: "REVIEWER" },
@@ -945,6 +949,7 @@ describe("pi_exec agent binding", () => {
 
 			const implement = await resolveExecWorker({ task: "apply the spec", type: "Implement" }, options);
 			expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
+			expect(implement.advisor).toBe(true);
 			expect(implement.model).toBe("xai/coder");
 			expect(implement.thinking).toBe("high");
 
@@ -955,6 +960,9 @@ describe("pi_exec agent binding", () => {
 			expect(overridden.tools).toEqual(["read", "edit"]);
 			expect(overridden.thinking).toBe("xhigh");
 			expect(overridden.model).toBe("anthropic/deep");
+
+			const optedOut = await resolveExecWorker({ task: "apply the spec", type: "Implement", advisor: false }, options);
+			expect(optedOut.advisor).toBe(false);
 
 			await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, options)).rejects.toThrow(
 				/Unknown or disabled agent type/,
@@ -1089,7 +1097,7 @@ describe("pi_exec agent binding", () => {
 		expect(resolveStructuredOutput(undefined, { id: 7 })).toEqual({});
 	});
 
-	it("injects the worker-only return extension without host extensions", () => {
+	it("injects Advisor for an enabled worker and preserves explicit extension isolation", () => {
 		const schema = {
 			type: "object",
 			properties: { id: { type: "number" } },
@@ -1097,17 +1105,18 @@ describe("pi_exec agent binding", () => {
 			additionalProperties: false,
 		};
 		const prepared = prepareAgentSpawn(
-			{ task: "judge", outputSchema: schema },
-			{ tools: ["read", "grep"], projectTrusted: false },
+			{ task: "apply the spec", outputSchema: schema },
+			{ tools: ["read", "edit"], projectTrusted: false, advisor: true },
 		);
 		try {
 			const toolsFlag = prepared.args.indexOf("--tools");
-			expect(prepared.args[toolsFlag + 1]).toBe(`read,grep,${PI_EXEC_RETURN_TOOL}`);
+			expect(prepared.args[toolsFlag + 1]).toBe(`read,edit,${PI_EXEC_RETURN_TOOL}`);
 			expect(prepared.args).toContain("--no-extensions");
 			expect(prepared.args).toContain("--no-approve");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
+				ADVISOR_EXTENSION_PATH,
 				WORKER_RETURN_EXTENSION_PATH,
 			]);
 			expect(prepared.args.join("\0")).toContain(OUTPUT_SCHEMA_GUIDANCE);

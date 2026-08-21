@@ -8,6 +8,14 @@ interface AgentInvocationParams {
 	system_prompt?: string;
 }
 
+/** An explicit invocation value overrides the agent definition default. */
+export function resolveAgentAdvisor(
+	agentConfig: AgentConfig | undefined,
+	requestedAdvisor: boolean | undefined,
+): boolean {
+	return requestedAdvisor ?? agentConfig?.advisor ?? agentConfig?.name.toLowerCase() === "implement";
+}
+
 export function resolveAgentInvocationConfig(
 	agentConfig: AgentConfig | undefined,
 	params: AgentInvocationParams,
@@ -28,7 +36,7 @@ export function resolveAgentInvocationConfig(
 		// Context inheritance belongs to each invocation. Advisor may have a trusted
 		// definition default; an explicit invocation boolean wins, including false.
 		inheritContext: params.inherit_context === true,
-		advisor: params.advisor ?? agentConfig?.advisor ?? false,
+		advisor: resolveAgentAdvisor(agentConfig, params.advisor),
 		runInBackground: params.run_in_background === true,
 		isolated: params.isolated === true,
 	};

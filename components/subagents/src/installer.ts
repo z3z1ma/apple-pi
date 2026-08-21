@@ -427,7 +427,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			`The parent session is a senior engineer who may implement. In the live <${TEAM_SYSTEM_PROMPT_TAG}> block, choose a teammate by its own description and use its configured inference profile unless the invocation needs an explicit profile override. If no teammate fits, keep the work in the parent session.`,
 			"Do not launch overlapping writers. Do not retry an unchanged rejected task.",
 			`Use the Agent tool for collaboration and pi_exec agents.run for program graphs. Agent subagent_type and agents.run type select a teammate; profile selects an available inference profile. Pair profile with Agent's system_prompt or agents.run's systemPrompt for dynamic specialization. Additional guidance cannot grant capabilities.`,
-			"The persistent Advisor reviews the root session. Child sessions load it only when their agent definition enables it or the invocation explicitly sets advisor true; built-in Implement enables it by default, and advisor false disables that default for one new session.",
+			"The persistent Advisor reviews the root session. Implement runs its Advisor sidecar by default; set advisor false to explicitly opt out for one new session. Other types follow their agent-definition Advisor default.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({

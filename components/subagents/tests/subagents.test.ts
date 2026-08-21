@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
 import { selectAgentModel } from "../src/agent-runner.js";
-import { buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
+import { BUILTIN_TOOL_NAMES, buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
@@ -278,8 +278,36 @@ describe("owned subagent surface", () => {
 		expect(resolved).not.toHaveProperty("thinking");
 	});
 
+	it("enables Advisor only for write-capable default agents", () => {
+		const advisorDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.advisor === true);
+		expect(advisorDefaults).not.toHaveLength(0);
+		for (const config of advisorDefaults) {
+			const tools = config.builtinToolNames ?? BUILTIN_TOOL_NAMES;
+			expect(
+				tools.some((tool) => (tool === "edit" || tool === "write") && !config.disallowedTools?.includes(tool)),
+			).toBe(true);
+		}
+	});
+
 	it("uses agent Advisor defaults while preserving explicit invocation overrides", () => {
 		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ advisor: true });
+		expect(
+			resolveAgentInvocationConfig(
+				{
+					name: "Implement",
+					description: "Custom implementation agent",
+					builtinToolNames: ["read", "edit"],
+					extensions: false,
+					skills: false,
+					systemPrompt: "Implement the assigned task.",
+					promptMode: "replace",
+				},
+				{},
+			),
+		).toMatchObject({ advisor: true });
+		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, advisor: false }, {})).toMatchObject({
+			advisor: false,
+		});
 		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ advisor: false });
 		expect(
 			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
