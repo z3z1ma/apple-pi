@@ -58,7 +58,7 @@ export const capturedTools = (): CapturedTool[] => {
 	const byName = new Map<string, CapturedTool>();
 	for (const registered of hub()?.latest ?? []) {
 		const definition = registered.definition;
-		if (definition.name === "pi_exec" || byName.has(definition.name)) continue;
+		if (definition.name === "pi_exec" || definition.name === "pi_exec_program" || byName.has(definition.name)) continue;
 		byName.set(definition.name, {
 			name: definition.name,
 			description: definition.description,

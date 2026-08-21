@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +15,7 @@ import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
+import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
 import runtime, {
 	aggregateUsage,
 	deriveProgramEnvelope,
@@ -39,8 +49,10 @@ import {
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
 	piExecGuestApiContract,
+	savedProgramsSystemPromptContribution,
 } from "../extensions/runtime-api.js";
-import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
+import { listSavedPrograms, readSavedProgram } from "../extensions/runtime-saved-programs.js";
+import { capturedTools } from "../extensions/runtime-tools.js";
 import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
@@ -1093,17 +1105,22 @@ describe("pi_exec agent binding", () => {
 
 describe("pi_exec tool", () => {
 	const register = () => {
-		let tool: any;
+		const tools = new Map<string, any>();
 		let resultHandler: any;
 		runtime({
 			registerTool(value: any) {
-				tool = value;
+				tools.set(value.name, value);
 			},
 			on(event: string, handler: any) {
 				if (event === "tool_result") resultHandler = handler;
 			},
 		} as any);
-		return { tool, resultHandler };
+		return {
+			tool: tools.get("pi_exec"),
+			discoverProgramsTool: tools.get("pi_discover_programs"),
+			execProgramTool: tools.get("pi_exec_program"),
+			resultHandler,
+		};
 	};
 
 	it("publishes a live guest catalog on the registered tool", () => {
@@ -1131,11 +1148,104 @@ describe("pi_exec tool", () => {
 			},
 		};
 		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [{ tools: new Map([["echo_value", { definition: echo }]]) }];
+		const exec = { ...echo, name: "pi_exec" };
+		const savedProgram = { ...echo, name: "pi_exec_program" };
+		runner.extensions = [
+			{
+				tools: new Map([
+					["echo_value", { definition: echo }],
+					["pi_exec", { definition: exec }],
+					["pi_exec_program", { definition: savedProgram }],
+				]),
+			},
+		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 
+		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
 		expect(tool.description).toContain("extensions.echo_value({ value: string })");
+		expect(tool.description).not.toContain("extensions.pi_exec_program");
+	});
+
+	it("discovers and executes project-local programs using their JSDoc descriptions", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-programs-"));
+		try {
+			const programsDir = join(dir, ".pi", "programs");
+			mkdirSync(programsDir, { recursive: true });
+			writeFileSync(
+				join(programsDir, "echo-input.js"),
+				"/**\n * @description Return the named input unchanged.\n */\nreturn inputs.value;",
+				"utf8",
+			);
+			const { discoverProgramsTool, execProgramTool, resultHandler } = register();
+			expect(discoverProgramsTool).toBeDefined();
+			expect(execProgramTool).toBeDefined();
+			expect(execProgramTool.executionMode).toBe("sequential");
+			expect(discoverProgramsTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.discoverSnippet);
+			expect(discoverProgramsTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
+			expect(execProgramTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.executeSnippet);
+			expect(execProgramTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
+			expect(execProgramTool.parameters.properties.name.pattern).toBe("^[a-z0-9]+(?:-[a-z0-9]+)*$");
+			const discovered = await discoverProgramsTool.execute("discover", {}, undefined, undefined, { cwd: dir });
+			expect(JSON.parse(discovered.content[0].text)).toEqual([
+				{ name: "echo-input", description: "Return the named input unchanged." },
+			]);
+
+			const result = await execProgramTool.execute(
+				"program",
+				{ name: "echo-input", inputs: { value: "saved result" } },
+				undefined,
+				undefined,
+				{ cwd: dir },
+			);
+			expect(result.content[0].text).toBe("saved result");
+			expect(result.details.activity).toMatchObject({
+				name: "echo-input",
+				description: "Return the named input unchanged.",
+			});
+			await expect(
+				execProgramTool.execute("invalid", { name: "../echo-input" }, undefined, undefined, { cwd: dir }),
+			).rejects.toThrow(/program name must contain/);
+
+			writeFileSync(
+				join(programsDir, "failure.js"),
+				"/**\n * @description Fail to exercise saved-program error reporting.\n */\nthrow new Error('expected failure');",
+				"utf8",
+			);
+			await expect(
+				execProgramTool.execute("saved-failure", { name: "failure" }, undefined, undefined, { cwd: dir }),
+			).rejects.toThrow("expected failure");
+			const failure = resultHandler({ toolName: "pi_exec_program", toolCallId: "saved-failure", isError: true });
+			expect(failure.details.trace.outcome).toBe("failed");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects malformed and out-of-project program directories", () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-programs-boundary-"));
+		try {
+			const programsDir = join(dir, ".pi", "programs");
+			mkdirSync(programsDir, { recursive: true });
+			writeFileSync(join(programsDir, "missing-description.js"), "return 1;", "utf8");
+			expect(() => listSavedPrograms(dir)).toThrow(/must begin with a JSDoc @description/);
+			expect(() => readSavedProgram(dir, "missing-description")).toThrow(/must begin with a JSDoc @description/);
+			expect(() => readSavedProgram(dir, "a".repeat(121))).toThrow(/program name must contain/);
+
+			rmSync(join(programsDir, "missing-description.js"));
+			writeFileSync(
+				join(programsDir, "empty-description.js"),
+				"/**\n * @description\n * @returns nothing\n */\nreturn 1;",
+				"utf8",
+			);
+			expect(() => listSavedPrograms(dir)).toThrow(/must begin with a JSDoc @description/);
+
+			rmSync(programsDir, { recursive: true });
+			symlinkSync("../..", programsDir);
+			expect(() => listSavedPrograms(dir)).toThrow(/must resolve within the project/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	it("bounds broad Promise.all fan-out through the harness-owned envelope", async () => {

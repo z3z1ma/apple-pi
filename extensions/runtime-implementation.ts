@@ -10,6 +10,7 @@ import {
 	createLsToolDefinition,
 	createReadToolDefinition,
 	createWriteToolDefinition,
+	defineTool,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type ToolDefinition,
@@ -37,7 +38,14 @@ import {
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 	piExecToolDescription,
+	savedProgramsSystemPromptContribution,
 } from "./runtime-api.js";
+import {
+	listSavedPrograms,
+	MAX_PROGRAM_NAME_CHARS,
+	PROJECT_PROGRAM_NAME,
+	readSavedProgram,
+} from "./runtime-saved-programs.js";
 import { listSkills, readSkillBody } from "./runtime-skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
@@ -394,14 +402,14 @@ export default function runtime(pi: ExtensionAPI): void {
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
 	pi.on("tool_result", (event) => {
-		if (event.toolName !== "pi_exec" || !event.isError) return;
+		if ((event.toolName !== "pi_exec" && event.toolName !== "pi_exec_program") || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
 		if (!failure) return;
 		failedDetails.delete(event.toolCallId);
 		return failure;
 	});
 
-	pi.registerTool({
+	const piExecTool = defineTool({
 		name: "pi_exec",
 		label: "Pi Exec",
 		executionMode: "sequential",
@@ -789,6 +797,63 @@ export default function runtime(pi: ExtensionAPI): void {
 					}
 				}
 			}
+		},
+	});
+	pi.registerTool(piExecTool);
+
+	pi.registerTool({
+		name: "pi_discover_programs",
+		label: "Discover Pi Exec Programs",
+		description:
+			"List project-local reusable pi_exec programs from .pi/programs. Each program is named by its normalized filename and described by its JSDoc @description.",
+		promptSnippet: savedProgramsSystemPromptContribution.discoverSnippet,
+		promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
+		parameters: Type.Object({}),
+		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			const programs = listSavedPrograms(ctx.cwd);
+			return {
+				content: [{ type: "text", text: JSON.stringify(programs, null, 2) }],
+				details: { programs },
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "pi_exec_program",
+		label: "Pi Exec Program",
+		executionMode: "sequential",
+		description:
+			"Execute a named project-local pi_exec program from .pi/programs/<name>.js. The program name is its normalized filename without .js; its JSDoc @description supplies the execution label.",
+		promptSnippet: savedProgramsSystemPromptContribution.executeSnippet,
+		promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
+		parameters: Type.Object({
+			name: Type.String({
+				minLength: 1,
+				maxLength: MAX_PROGRAM_NAME_CHARS,
+				pattern: PROJECT_PROGRAM_NAME.source,
+				description: "Lowercase-kebab program filename without the .js extension.",
+			}),
+			inputs: Type.Optional(
+				Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
+					description: "Named strings available to the saved program as inputs.<key>.",
+				}),
+			),
+			limits: piExecTool.parameters.properties.limits,
+		}),
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			const program = readSavedProgram(ctx.cwd, params.name);
+			return piExecTool.execute(
+				toolCallId,
+				{
+					code: program.code,
+					...(params.inputs ? { inputs: params.inputs } : {}),
+					...(params.limits ? { limits: params.limits } : {}),
+					display: { name: program.name, description: program.description },
+				},
+				signal,
+				onUpdate,
+				ctx,
+			);
 		},
 	});
 }

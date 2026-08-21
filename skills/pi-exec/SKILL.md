@@ -177,6 +177,7 @@ return agent({
 ## Authoring rules
 
 - Use `pi_exec` for branching, reduction, or already-justified fan-out. Use direct tools for straightforward sequential inspection.
+- Persist a composition only when it is reusable within this project: write its async-function body to `.pi/programs/<lowercase-kebab-name>.js` beginning with a one-line JSDoc `@description`, then use `pi_discover_programs` and `pi_exec_program({ name })`. Do not save one-off programs.
 - Await every host call. Do not start a call and return before it settles.
 - Keep dependent search → read and edit → verify steps sequential. Never concurrently edit the same file.
 - Return a compact value. Do not dump raw file bodies back into the main context.

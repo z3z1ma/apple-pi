@@ -97,6 +97,8 @@ try {
 		"session_search",
 		"memory_source",
 		"pi_exec",
+		"pi_discover_programs",
+		"pi_exec_program",
 		"mcp",
 		"Agent",
 		"get_subagent_result",

@@ -6,6 +6,23 @@
 
 The packaged [`pi-exec`](../skills/pi-exec) skill has the guest signatures and the common authoring mistakes. Write programs from the live signatures on the `pi_exec` `code` parameter.
 
+## Saved project programs
+
+When a composition is reusable in one project, save its **async-function body** in `.pi/programs/<lowercase-kebab-name>.js`. Do not persist one-off programs. A saved program must begin with a one-line JSDoc `@description`; the normalized filename is its name and the description is its discoverable label:
+
+```javascript
+/**
+ * @description List changed TypeScript paths for a quick review pass.
+ */
+const change = await std.git.change({ paths: ["components"] });
+return change.changedFiles.filter((path) => path.endsWith(".ts"));
+```
+
+- `pi_discover_programs({})` lists the valid saved programs as `{ name, description }` without evaluating them.
+- `pi_exec_program({ name, inputs?, limits? })` loads and executes `.pi/programs/<name>.js` with the same bounded guest runtime as `pi_exec`. The JSDoc description supplies its execution label; `inputs` and `limits` have the same contracts as `pi_exec`.
+
+Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it.
+
 ## Guest surface
 
 Available globals:
