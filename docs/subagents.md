@@ -15,7 +15,7 @@ Built-in types:
 | `Implement` | Bounded specified writes. No research, no UI taste | write |
 | `Design` | User-visible layout, interaction, polish | write |
 
-One isolated, known-path, low-risk action stays in the parent. If no specialist lane fits, keep the work in the parent session rather than delegating to an ambiguous catch-all. Review and Ralph remain program-specific workers with explicit `systemPrompt` values and must not be retargeted onto catalog types. Unknown, disabled, missing, and ambiguous agent types always fail closed; dispatch never substitutes a different agent.
+One isolated, known-path, low-risk action stays in the parent. If no specialist lane fits, keep the work in the parent session rather than delegating to an ambiguous catch-all. Treat every dispatch as a potentially large model/context expense: prefer one complete handoff, let the parent validate and fix ordinary issues, and conclude nits in the parent. Review and Ralph remain explicitly chosen program-specific workers with `systemPrompt` values and must not be retargeted onto catalog types. Unknown, disabled, missing, and ambiguous agent types always fail closed; dispatch never substitutes a different agent.
 
 ## Definitions
 

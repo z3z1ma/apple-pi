@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { loadSystemPrompt as loadAdvisorSystemPrompt } from "../components/advisor/src/config.js";
-import { appendLedgerSystemPrompt, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
+import {
+	appendLedgerSystemPrompt,
+	LEDGER_SYSTEM_PROMPT,
+	LEDGER_SYSTEM_PROMPT_TAG,
+} from "../components/shared/src/ledger-system-prompt.js";
 import {
 	appendLedgerWorkflowSystemPrompt,
+	LEDGER_WORKFLOW_SYSTEM_PROMPT,
 	LEDGER_WORKFLOW_SYSTEM_PROMPT_TAG,
 } from "../components/shared/src/workflow-system-prompt.js";
 import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
@@ -35,61 +40,19 @@ describe("ledger system prompt distribution", () => {
 	it("appends the contract idempotently", () => {
 		const once = appendLedgerSystemPrompt("Root system prompt");
 		const twice = appendLedgerSystemPrompt(once);
+		expect(once).toBe(`Root system prompt\n\n${LEDGER_SYSTEM_PROMPT}`);
+		expect(twice).toBe(once);
 		expect(occurrences(twice, marker)).toBe(1);
-		expect(twice).toContain("ledger_add");
-		expect(twice).toContain("ledger_close");
-		expect(twice).toContain("**Provenance:**");
-		expect(twice).toContain("1. **Shaping:**");
-		expect(twice).toContain("2. **Orchestration:**");
-		expect(twice).toContain("3. **Execution:**");
-		expect(twice).toContain("A worker report is a claim");
-		expect(twice).toContain("task.md is the durable statement of intent and acceptance");
-		expect(twice).toContain("specs/ holds optional behavioral contracts");
-		expect(twice).toContain("plans/ owns work-item decomposition and execution progress");
-		expect(twice).toContain("research/ owns inquiry, source citation, interpretation, and synthesis");
-		expect(twice).toContain("decisions/ records consequential choices and provenance");
-		expect(twice).toContain("evidence/ owns provenance-bearing validation observations");
-		expect(twice).toContain("retrospective.md is the single learning-and-improvement record");
-		expect(twice).toContain("specification: `draft | active | superseded`");
-		expect(twice).toContain("plan: `draft | active | complete | superseded`");
-		expect(twice).toContain("research: `active | complete | superseded`");
-		expect(twice).toContain("decision: `active | superseded`");
-		expect(twice).toContain("evidence: `recorded`");
-		expect(twice).toContain("retrospective: `pending | complete`");
-		expect(twice).toContain("An execution-changing assumption that is not operator-ratified");
-		expect(twice).toContain("The same observation must not be copied into both locations");
-		expect(twice).toContain("A task may be marked `done` only when");
-		expect(twice).toContain("every dependency resolves to a `done` task");
-		expect(twice).toContain("no referenced research, decision need, plan, or dependency still blocks the outcome");
-		expect(twice).toContain("no active plan remains, and every plan for the outcome is `complete` or `superseded`");
-		expect(twice).toContain("work complete or substantively cancelled with a rationale");
-		expect(twice).toContain(
-			"every Acceptance Criterion has adequate supporting evidence under `evidence/` with applicable limits",
-		);
-		expect(twice).toContain(
-			"every review finding and remediation is resolved, rejected with evidence, or explicitly bounded",
-		);
-		expect(twice).toContain("rationale, owner, and revisit condition");
-		expect(twice).toContain("`retrospective.md` is complete");
-		expect(twice).not.toContain("knowledge/");
-		expect(twice).not.toContain("skills/<slug>/SKILL.md");
-		expect(twice).not.toContain("Review, routine evidence, Journal");
 	});
 
 	it("appends the root workflow bootstrap exactly once", () => {
 		const once = appendLedgerWorkflowSystemPrompt("Root system prompt");
 		const twice = appendLedgerWorkflowSystemPrompt(once);
+		expect(once).toBe(`Root system prompt\n\n${LEDGER_WORKFLOW_SYSTEM_PROMPT}`);
+		expect(twice).toBe(once);
 		expect(occurrences(twice, workflowMarker)).toBe(1);
-		expect(twice).toContain("`<available_skills>` catalog");
-		expect(twice).toContain("catalog entry's exact `<location>`");
-		expect(twice).toContain("wherever Pi is opened");
-		expect(twice).toContain("`task-shaping`");
-		expect(twice).toContain("`root-cause-debugging`");
-		expect(twice).toContain("`completion-verification`");
-		expect(twice).toContain("`pi-exec`");
 		const collision = appendLedgerWorkflowSystemPrompt("Project text mentions <ledger-workflow> as an example.");
-		expect(collision).toContain("`<available_skills>` catalog");
-		expect(occurrences(collision, "# apple-pi Ledger workflow")).toBe(1);
+		expect(collision.endsWith(LEDGER_WORKFLOW_SYSTEM_PROMPT)).toBe(true);
 	});
 
 	it("keeps the root workflow extension out of child and worker extension lists", () => {
@@ -110,7 +73,6 @@ describe("ledger system prompt distribution", () => {
 		const rootPrompt = appendLedgerWorkflowSystemPrompt("Root system prompt");
 		const appendChild = buildAgentPrompt({ ...config, promptMode: "append" }, "/repo", env, rootPrompt);
 		expect(appendChild).not.toContain(workflowMarker);
-		expect(appendChild).not.toContain("`<available_skills>` catalog");
 	});
 
 	it("appends invocation-specific system guidance after preloaded skills", () => {

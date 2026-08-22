@@ -6,13 +6,13 @@ My own personal [Pi](https://github.com/badlogic/pi-mono) package: advisor, ques
 
 This is my coding harness. It's the result of spending a lot of time working with AI on real code and distilling what actually matters down to the simplest thing that works.
 
-[Ledger](docs/ledger.md) is the workflow spine. It is not just task storage: `task.md` preserves shaped intent and acceptance, specifications optionally govern behavior, plans own execution progress, `evidence/` preserves validation and review observations, and one top-level `retrospective.md` connects learning to concrete project improvements. Exact trivial work stays trivial; consequential or multi-session work gets one bounded task whose records make the next decision cheaper. Thirteen descriptively named lifecycle skills apply the same ontology through shaping, orchestration, execution, review, and closure. The general `pi-exec`, `review`, and `ralph` skills retain distinct responsibility boundaries.
+[Ledger](docs/ledger.md) is optional continuity for consequential, coordinated, or multi-session work. Clear bounded instructions execute directly; tasks, specifications, plans, evidence, and retrospectives are added only when they make the next decision cheaper. The workflow skills scale from a fast root-session edit to durable orchestration without turning lifecycle artifacts into the product. The general `pi-exec`, `review`, and `ralph` skills retain distinct responsibility boundaries.
 
-The workflow combines the pressure-tested software-engineering procedures adapted from [Superpowers](https://github.com/obra/superpowers) with the durable-judgment philosophy adapted from [10x](https://github.com/z3z1ma/10x), then maps both onto apple-pi's real tools: typed `Agent`, bounded `pi_exec`, fresh Ralph workers, independent review, and operator-controlled integration.
+The workflow combines lessons adapted from [Superpowers](https://github.com/obra/superpowers) and [10x](https://github.com/z3z1ma/10x) with a modern progressive default: build the smallest useful increment, validate it cheaply, and escalate process only when concrete ambiguity, risk, coordination, or observed failure earns it. Typed `Agent`, bounded `pi_exec`, Ralph, and independent review are opt-in leverage rather than automatic gates.
 
 The [advisor](docs/advisor.md) has done more for session quality than anything else I've tried. A persistent second model watches the transcript and sends severity-tagged corrections as the main agent works. You can run a cheaper model for implementation and a stronger model as advisor. The cheaper model makes mistakes; the advisor catches them before they compound. Fewer mistakes means simpler review cycles, which means less wasted context and fewer dead-end trajectories. It runs automatically and stays read-only — it advises, it doesn't take over.
 
-[`pi_exec`](docs/exec.md) is the composition layer. Instead of every tool call being a round trip through the model, the agent writes a bounded JavaScript function that calls tools — read, grep, bash, edit, fetch, MCP, nested model workers — with ordinary control flow. Intermediate output stays in the disposable worker. Only the compact return value enters the parent context. [Review](skills/review) is a `pi_exec` program that plans focuses, fans out parallel workers across partitions of a diff, and runs an independent verifier. [Ralph](skills/ralph) provides bounded fresh-context loops for a general caller-owned goal or a prepared Ledger task, using repository state as memory between iterations. [Skills](skills) prescribe these compositions so the agent doesn't rediscover the workflow every session. Its deliberately small frozen guest `std` library supplies only execution semantics that materially improve on existing guest APIs: normalized change evidence, context budgets and provenance, coverage/reconciliation, one planner-created fan-out topology, and schema-first repository analysis. Ordinary shell, file, HTTP, graph, agent, and mutation work stays on the existing JavaScript and `pi_exec` APIs.
+[`pi_exec`](docs/exec.md) is the composition layer. Instead of every tool call being a round trip through the model, the agent writes a bounded JavaScript function that calls tools — read, grep, bash, edit, fetch, MCP, nested model workers — with ordinary control flow. Intermediate output stays in the disposable worker. Only the compact return value enters the parent context. [Review](skills/review) defaults to direct bounded inspection and can opt into one independent reviewer or exceptional multi-lens programs when risk warrants their cost. [Ralph](skills/ralph) provides explicitly requested bounded fresh-context loops. [Skills](skills) guide work without forcing every available capability into every task. The frozen guest `std` library supplies bounded execution primitives such as normalized Git evidence, context budgets, coverage, reconciliation, and relevant-test selection.
 
 [Agents](docs/subagents.md) are typed specialist lanes — Explore, Research, Plan, Counsel, Implement, and Design — each with tool scope, a semantic [model profile](docs/model-profiles.md), and a role prompt. An Explore agent that can only read is different from an Implement agent that can write. The user-global profile map owns provider/model/thinking policy, so several fast workloads can share `quick` while architecture work uses `deep`. The same catalog serves both the interactive `Agent` tool and `pi_exec` `agents.run`. Custom agents are Markdown files with YAML frontmatter.
 
@@ -57,20 +57,20 @@ Add `-l` for project-local activation. Pi loads every extension from this one pa
 
 Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs.
 
-- [`/skill:task-shaping`](skills/task-shaping) — shape Ledger authority, investigate uncertainty, specify behavior, and approve a design
-- [`/skill:implementation-planning`](skills/implementation-planning) — turn a shaped task, active decisions, and an optional specification into source-backed Ledger Work Items
-- [`/skill:plan-execution`](skills/plan-execution) — execute an authorized plan sequentially and maintain Ledger evidence
-- [`/skill:work-item-orchestration`](skills/work-item-orchestration) — fresh typed implementers with per-Work-Item and final review gates
-- [`/skill:parallel-orchestration`](skills/parallel-orchestration) — bounded fan-out over independent domains
-- [`/skill:root-cause-debugging`](skills/root-cause-debugging) — investigate root cause before fixing a failure
-- [`/skill:test-first-development`](skills/test-first-development) — run the red-green-refactor cycle for behavior changes
-- [`/skill:review-commissioning`](skills/review-commissioning) — request independent review through `review`
-- [`/skill:review-reconciliation`](skills/review-reconciliation) — verify review feedback before implementing it
-- [`/skill:completion-verification`](skills/completion-verification) — gather fresh evidence before completion claims
-- [`/skill:workspace-isolation`](skills/workspace-isolation) — establish an approved isolated workspace
-- [`/skill:task-closure`](skills/task-closure) — complete the retrospective, judge closure, and present integration choices
-- [`/skill:skill-authoring`](skills/skill-authoring) — develop Agent Skills through pressure-tested behavior
-- [`/skill:review`](skills/review) — plan focuses, fan out reviewers, verify findings
+- [`/skill:task-shaping`](skills/task-shaping) — collaborate on genuinely unresolved product or architecture choices
+- [`/skill:implementation-planning`](skills/implementation-planning) — plan settled multi-step work when sequencing or ownership adds value
+- [`/skill:plan-execution`](skills/plan-execution) — execute an authorized plan directly in the root session
+- [`/skill:work-item-orchestration`](skills/work-item-orchestration) — delegate substantial independent Work Items when the cost is justified
+- [`/skill:parallel-orchestration`](skills/parallel-orchestration) — parallelize substantial non-overlapping domains
+- [`/skill:root-cause-debugging`](skills/root-cause-debugging) — find and fix a failure from the cheapest discriminating evidence
+- [`/skill:test-first-development`](skills/test-first-development) — use focused test-first checks where they improve feedback
+- [`/skill:review-commissioning`](skills/review-commissioning) — commission one risk-justified independent review
+- [`/skill:review-reconciliation`](skills/review-reconciliation) — validate feedback once and handle fixes in the root
+- [`/skill:completion-verification`](skills/completion-verification) — match fresh verification breadth to the claim
+- [`/skill:workspace-isolation`](skills/workspace-isolation) — isolate work when overlap or destructive experimentation warrants it
+- [`/skill:task-closure`](skills/task-closure) — verify, archive, and follow the operator's integration direction
+- [`/skill:skill-authoring`](skills/skill-authoring) — write concise Agent Skills with progressive validation
+- [`/skill:review`](skills/review) — inspect directly or use the smallest justified independent topology
 - [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared Ledger tasks
 - [`/skill:pi-exec`](skills/pi-exec) — author bounded `pi_exec` programs
 

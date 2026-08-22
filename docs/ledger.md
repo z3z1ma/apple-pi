@@ -2,7 +2,7 @@
 
 Ledger is apple-pi's plain-Markdown workbench for consequential or multi-session work. It preserves authority, cold-start context, execution state, observed evidence, independent review, and retrospective learning without turning the transcript or product runtime into a task database.
 
-Use the lightest form that preserves the outcome. Exact typo, formatting, and one-line mechanical work can remain record-free. Work that changes behavior, interfaces, persistence, side effects, verification paths, or spans sessions normally needs one governing task.
+Use the lightest form that preserves the outcome. Clear, bounded, reversible work executes directly even when it changes behavior. Create a governing task when consequential ambiguity, coordination, high-risk evidence, handoff, or multi-session continuity makes durable state valuable.
 
 ## Mental model
 
@@ -23,8 +23,8 @@ Evidence records what was observed and how. It does not become product authority
 Ledger work moves through three roles, even when one session performs them sequentially:
 
 1. **Shaping** establishes task intent, outcome, scope, non-goals, Acceptance Criteria, constraints, and references. It may produce research, decisions, and an optional specification.
-2. **Orchestration** creates an executable plan, selects bounded Work Items and owners, sequences dependencies, commissions implementation and independent review, and judges closure.
-3. **Execution** owns one plan Work Item or acceptance gap, changes only that surface, updates plan progress, and writes observed verification or review material under `evidence/`.
+2. **Orchestration** optionally creates a plan, selects substantial Work Items and owners, sequences dependencies, and chooses risk-based review when coordination warrants it.
+3. **Execution** delivers coherent increments in the root session or through deliberately chosen workers, updating durable progress/evidence only when another session needs it.
 
 Semantic ambiguity returns to shaping. Execution does not invent product choices merely because a convenient implementation exists.
 
@@ -154,7 +154,7 @@ Status: `active | superseded`. Only an active decision governs current execution
 
 ### Evidence — `evidence/**/*.md`
 
-`evidence/` is the task's validation laboratory notebook and captured-artifact boundary. Routine and exceptional observations used to validate acceptance, behavior, implementation, environments, or reviews belong there rather than in `task.md`.
+`evidence/` is available for load-bearing validation observations and captured artifacts that a future session needs. Routine successful commands do not require evidence files; the repository state and concise report are often sufficient.
 
 An evidence note must identify:
 
@@ -213,14 +213,7 @@ The retrospective synthesizes rather than duplicates evidence. A substantive exp
 
 ## Completion and archival
 
-A task may be marked `done` only when:
-
-- every dependency resolves to a `done` task;
-- no referenced research, decision need, plan, or dependency still blocks the outcome;
-- no active plan remains, and every plan for the outcome is `complete` or `superseded`, with its work complete or substantively cancelled with a rationale;
-- every Acceptance Criterion has adequate supporting evidence under `evidence/` with applicable limits;
-- every review finding and remediation is resolved, rejected with evidence, or explicitly bounded with rationale, owner, and revisit condition; and
-- `retrospective.md` is complete.
+A task may be marked `done` when its promised outcome exists, dependencies and material blockers are resolved, any active plan is complete or superseded honestly, and verification is adequate for the claims and risk. Review records, detailed evidence notes, and retrospective depth are required only when the task actually used them; unused artifact categories are not closure gates.
 
 A paused or blocked task keeps an honest non-terminal status. Archival through `ledger_close` is a separate operator-owned action after closure readiness is established.
 
@@ -230,11 +223,11 @@ The packaged lifecycle skills specialize this model:
 
 | Activity | Primary skills | Ledger effect |
 | --- | --- | --- |
-| Shape intent and semantics | `task-shaping`, `root-cause-debugging` | Complete `task.md`; create research, decisions, or an optional specification when needed. |
-| Plan implementation | `implementation-planning` | Create an active plan whose Work Items and state own execution progress. |
-| Execute and orchestrate | `plan-execution`, `work-item-orchestration`, `parallel-orchestration`, `test-first-development`, `workspace-isolation`, `ralph` | Update plan state and write observed results under `evidence/`. |
-| Review and verify | `review-commissioning`, `review-reconciliation`, `completion-verification` | Store observations and dispositions in evidence; track remediation in the plan. |
-| Learn and close | `task-closure`, `skill-authoring` | Complete `retrospective.md`, improve real project owners, then present archival/integration choices. |
+| Shape intent and semantics | `task-shaping`, `root-cause-debugging` | Use conversation first; create durable records only when uncertainty or continuity warrants them. |
+| Plan implementation | `implementation-planning` | Plan substantial dependent work; direct bounded changes skip this phase. |
+| Execute and orchestrate | `plan-execution`, `work-item-orchestration`, `parallel-orchestration`, `test-first-development`, `workspace-isolation`, `ralph` | Prefer root execution; delegate or persist evidence only when the benefit is concrete. |
+| Review and verify | `review-commissioning`, `review-reconciliation`, `completion-verification` | Match one-pass review and fresh checks to actual risk and claims. |
+| Learn and close | `task-closure`, `skill-authoring` | Preserve useful learning and follow explicit integration direction without another approval gate. |
 
 The skills guide agents; they do not create a second runtime task engine or state store.
 

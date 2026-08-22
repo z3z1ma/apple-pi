@@ -1,100 +1,57 @@
 ---
 name: review-commissioning
-description: "Use when completing a Ledger Work Item, implementing a major feature, or before integration to request independent code review."
+description: "Use when the operator requests independent review or a completed change has a concrete costly or hard-to-observe risk that warrants fresh eyes."
 ---
 
-# Requesting Code Review
+# Commission One Useful Review
 
-Use `review` to catch issues before they cascade. Reviewers receive precisely crafted contract and diff context, never the producer's session history.
+Independent review is an expensive risk-control tool. Use it when its expected value exceeds its context, latency, and integration cost.
 
-**Core principle:** Review early, review often.
+## When to commission
 
-## Ledger State: Adversarial Review
+Good reasons:
 
-Review attempts to falsify a specification, plan, Work Item, or whole-change claim. Give the reviewer the smallest governing contract, comparison boundary, complete changed-file package, and criterion or risk it must challenge; withhold producer deliberation unless contractual. Record observations, verifier dispositions, coverage gaps, verdict, and residual risk in the owning review evidence note. Track resulting remediation/blocking state in the active plan. Review does not repeat execution verification and does not close or repair the task by itself.
+- the operator asks for review;
+- authorization, security, compatibility, migration, concurrency, cleanup, or persistent-data behavior could fail at high cost;
+- a large integrated change has a subtle contract difficult to verify locally;
+- the root agent is genuinely stuck after gathering evidence.
 
-## When to Request Review
+Small reversible changes with adequate checks rely on root inspection and the persistent Advisor. Independent review serves the concrete reasons above.
 
-**Mandatory:**
-- After each task in subagent-driven development
-- After completing major feature
-- Before merge to main
+## One-shot contract
 
-**Optional but valuable:**
-- When stuck (fresh perspective)
-- Before refactoring (baseline check)
-- After fixing complex bug
+Prepare one complete review assignment:
 
-## How to Request
+- intended behavior and exact risk questions;
+- comparison boundary and changed paths;
+- relevant contract/source paths;
+- checks already run and their results;
+- known limitations that affect interpretation.
 
-**1. Bound the change:**
+Use the smallest review shape that answers the question. A single read-only reviewer is the default. Multi-lens, planner/reviewer/verifier, or security baselines are reserved for explicitly high-risk changes with genuinely independent questions.
 
-Record the governing task/Work Item, changed paths, and the comparison boundary. For uncommitted work use the working tree against `HEAD` or the Work Item's recorded base; for committed ranges use explicit base and head revisions.
+The reviewer should return all material findings in one pass, each with path, trigger, evidence, impact, severity, and smallest correction. It should avoid stylistic preferences and speculative hardening.
 
-**2. Run independent review:**
+## Reconcile once
 
-Load `review` from its available-skills catalog location and select the smallest topology that covers this change.
+The root agent owns the result:
 
-For bounded specification, plan, Work Item, or scoped-fix Ledger gates, use the executable adapter in [review-gate.md](review-gate.md): read [references/ledger-gate.js](references/ledger-gate.js), pass its complete body to `pi_exec`, and supply the documented strict inputs. Do not dispatch the adjacent prose templates as free-form workers; translate their rubric into the adapter's `question`, `checks`, `paths`, and `contextPaths`. `fix` mode also requires typed `priorObservations` JSON so existing IDs are preserved.
+1. Verify each material finding against current source and governing intent.
+2. Reject false positives with evidence.
+3. Fix confirmed issues directly.
+4. Treat nits as optional; take them only when cheap and clearly better.
+5. Rerun the affected checks.
 
-Whole-change/final review uses `review`'s full `plan-review-verify.js` topology with changed-path partitioning, fresh reviewers per focus, an independent verifier, and explicit coverage-gap accounting. Never substitute the bounded single-reviewer adapter for that gate.
+Nits and ordinary disagreements conclude in the root. One scoped follow-up review serves a material high-risk fix that remains difficult to verify through code and tests. Otherwise the root's reconciliation ends the review.
 
-**Inputs:**
-- `{DESCRIPTION}` - Brief summary of what you built
-- `{PLAN_OR_REQUIREMENTS}` - Governing task, Work Item, spec, and plan paths
-- `{CHANGED_PATHS}` - Exact review perimeter
-- `{COMPARE}` - Revision boundary when applicable
-- `{CHECKS}` - Commands already run and their observed results
+## Ledger
 
-**3. Act on feedback:**
-- Fix Critical issues immediately
-- Fix Important issues before proceeding
-- Note Minor issues for later
-- Push back if reviewer is wrong (with reasoning)
+When a Ledger task already uses durable review evidence, record only material findings, dispositions, and residual risk needed by a future session. Adapter/schema failure falls back once to a plain bounded review when the risk still justifies review.
 
-## Example
+## Severity
 
-```
-[Just completed WI-002: Add verification function]
+- `critical`: realistic security compromise, data loss/corruption, or catastrophic outage.
+- `significant`: reachable contract break or operational failure that should block completion.
+- `minor`: bounded issue that can be fixed directly or deferred without another cycle.
 
-You: Let me request code review before proceeding.
-
-[Run the executable Ledger review gate through `review` with the task contract and bounded diff]
-  DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  PLAN_OR_REQUIREMENTS: WI-002 from .ledger/<task-id>/plans/deployment-plan.md
-  CHANGED_PATHS: src/index.ts, tests/index.test.ts
-  COMPARE: HEAD
-  CHECKS: npm test -- tests/index.test.ts (14/14 passed)
-
-[`review` verifier returns]:
-  Strengths: Clean architecture, real tests
-  Issues:
-    Important: Missing progress indicators
-    Minor: Magic number (100) for reporting interval
-  Assessment: Ready to proceed
-
-You: [Fix progress indicators]
-[Record the disposition in review evidence, update remediation/state in the active plan, continue to WI-003]
-```
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "I'll just review the diff myself instead of dispatching a reviewer" | You're the coordinator — reviewing the diff inline burns the context window you need to keep driving the work. Run `review`: the diff and the evaluation live in its context, and only the findings come back to you. |
-| "The reviewer needs my whole session history to understand the change" | Hand it precisely crafted context, never your session's history. That keeps the reviewer on the work product, not your thought process. |
-
-## Red Flags
-
-**Never:**
-- Skip review because "it's simple"
-- Ignore Critical issues
-- Proceed with unfixed Important issues
-- Argue with valid technical feedback
-
-**If reviewer wrong:**
-- Push back with technical reasoning
-- Show code/tests that prove it works
-- Request clarification
-
-Record confirmed findings, rejected candidates, unresolved evidence, coverage limits, and dispositions in the owning review evidence note; record their execution consequences in the active plan.
+Review is complete when the root has reconciled the one-pass findings and rerun relevant checks. It does not require reviewer approval of the fixes unless the original risk explicitly warranted the scoped follow-up.

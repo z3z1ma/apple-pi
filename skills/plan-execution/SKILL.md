@@ -1,73 +1,60 @@
 ---
 name: plan-execution
-description: "Use when you have an authorized Ledger implementation plan to execute sequentially with review checkpoints."
+description: "Use when an authorized implementation plan should be executed sequentially in the root session."
 ---
 
-# Executing Plans
+# Execute Plans Inline
 
-## Overview
+The root session implements the plan directly. Keep momentum, use the plan as a map rather than a ceremony, and deliver verified increments without asking the operator to reconfirm work they already authorized.
 
-Load the governing Ledger task and plan, review critically, execute every Work Item, maintain observed evidence and review state, and report when complete.
+## Start
 
-**Announce at start:** "I'm using the plan-execution skill to implement this plan."
+1. Read the plan and only the governing records needed for the next ready Work Item.
+2. Confirm dependencies and current repository state.
+3. Resolve reversible implementation details yourself.
+4. Begin immediately when the operator has authorized implementation.
 
-## Ledger State: Execution
+A separate pre-flight review serves a concrete high-risk uncertainty named by the plan. When the plan is stale, repair it briefly or execute the still-valid intent.
 
-Own one Work Item or acceptance gap at a time. The plan supplies commander's intent; the task, active specifications when present, and decisions supply semantic authority. Keep Work Item state, progress, replanning, cancellation, and blocking conditions in the active plan; write observations with commands and limits to linked evidence notes. Pull execution back to shaping when new ambiguity could change behavior or acceptance. Out-of-scope findings need an existing owner, a new bounded task, or a substantive no-action rationale; they do not silently expand the current task.
+## Execute
 
-## The Process
+For each coherent increment:
 
-### Step 1: Load and Review Plan
-1. Confirm operator authorization for the named task.
-2. Read `.ledger/INDEX.md`, `task.md`, the active plan, active specs and decisions, and relevant repository authority.
-3. Enumerate the selected Work Item's linked implementation, test, and review evidence; read open dispositions, prior limits, and deferred blockers, then reconcile them with current repository state before resuming or activating work.
-4. Resolve dependencies and verify that no referenced research, decision need, plan, or dependency still blocks the selected Work Item.
-5. Ensure an isolated workspace when required: use `workspace-isolation` to create one or verify the existing one.
-6. Review the plan critically for stale source assumptions, conflicting interfaces, missing failure behavior, and unowned side effects.
-7. Raise material concerns before starting; when ready, set task Status to `active`, confirm the `WI-###` entry in the active plan, and set that Work Item to `active`.
+1. Implement the smallest behavior that leaves the repository useful.
+2. Use a failing test first when it cheaply proves a new invariant or reproduces a bug; otherwise use the most direct relevant check.
+3. Inspect the bounded diff and run the named verification.
+4. Fix ordinary defects, nits, formatting, and integration issues yourself.
+5. Update Work Item state only when the plan is serving as shared continuity.
+6. Continue to the next ready increment without a progress approval gate.
 
-### Step 2: Execute Work Items
+Load another process skill only when it is the primary next action.
 
-For each Work Item:
-1. Set the Work Item to `active` in the plan; record any changed execution approach under its `Replanning` field.
-2. Load every applicable process skill from the available-skills catalog.
-3. Follow each plan step exactly; use `test-first-development` for testable behavior.
-4. Run the specified verification and inspect the bounded diff.
-5. Use `review-commissioning` when the Work Item has a review gate.
-6. Mark the plan's `WI-###` state `complete` only after implementation, checks, and review pass.
-7. Reconcile recovered prior evidence and newly observed commands/results, mapped `AC-###` criteria, limits, review findings, and dispositions in the Work Item's evidence links; keep remediation progress in the plan.
+## Review tiers
 
-A complete Work Item is implementation progress; Acceptance Criteria require their own observed evidence.
+A Work Item is not blocked on review unless the plan explicitly assigns a justified tier:
 
-### Step 3: Complete Development
+- `Review: none` — root inspection and checks.
+- `Review: one-pass` — one independent review after the coherent change is complete.
+- `Review: staged` — bounded extra review for a named high-cost risk.
 
-After all tasks complete and verified:
-- Announce: "I'm using the task-closure skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use task-closure
-- Follow that skill to verify tests, present options, execute choice
+After review, validate findings and make normal corrections in the root session. Nits conclude there. Rerun affected checks after fixes. A second reviewer or follow-up review serves new material risk.
 
-## When to Stop and Ask for Help
+## Ledger
 
-**STOP executing immediately when:**
-- Hit a blocker (missing dependency, test fails, instruction unclear)
-- Plan has critical gaps preventing starting
-- You don't understand an instruction
-- Verification fails repeatedly
+When Ledger is in use, keep plan state concise: active, blocked, complete, or cancelled; evidence notes preserve only observations another session needs.
 
-**Ask for clarification rather than guessing.**
+## Stop conditions
 
-## When to Revisit Earlier Steps
+Stop only for:
 
-**Return to Review (Step 1) when:**
-- Partner updates the plan based on your feedback
-- Fundamental approach needs rethinking
+- irreversible or destructive action;
+- missing authority for external side effects;
+- a security-sensitive decision;
+- unresolved product meaning that changes acceptance;
+- repeated failure that invalidates the approach.
 
-**Don't force through blockers** - stop and ask.
+Otherwise change the method, fix the issue, and continue.
 
-## Remember
-- Review plan critically first
-- Follow plan steps exactly
-- Don't skip verifications
-- Reference skills when plan says to
-- Stop when blocked, don't guess
-- Use `workspace-isolation` when isolation is required; the operator owns branch and worktree creation
+## Finish
+
+Run the fresh checks that support the claims you will make. If the operator already directed commit, push, merge, or closure, execute that authorized action after verification. Otherwise report the completed work and available integration state concisely.

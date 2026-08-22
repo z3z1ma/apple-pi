@@ -1,199 +1,60 @@
 ---
 name: parallel-orchestration
-description: "Use when facing 2+ independent Ledger Work Items or problem domains that can be worked on without shared state or sequential dependencies."
+description: "Use when two or more substantial, non-overlapping problem domains can progress independently and parallel delegation clearly saves time."
 ---
 
-# Dispatching Parallel Agents
+# Parallelize Only Real Independence
 
-## Overview
+Parallel agents are expensive. Use them when independent work can genuinely overlap without repeated context loading, shared writes, or coordination churn.
 
-You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
+## Entry test
 
-When you have multiple unrelated failures (different test files, different subsystems, different bugs), investigating them sequentially wastes time. Each investigation is independent and can happen in parallel.
+Parallelize only when all are true:
 
-**Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
+- at least two substantial domains are independently actionable;
+- each has clear ownership and a self-contained outcome;
+- writers have disjoint files and mutable state;
+- the root session can integrate the results;
+- expected wall-clock savings exceed dispatch and reconciliation cost.
 
-## Ledger State: Orchestration
+Several tiny edits, sequential dependencies, speculative investigations, and work the root can finish quickly stay in the root session.
 
-Parallelism follows the governing task graph; it does not create a second task system. Read the task, active plan, active records, Work Items, and dependency edges before dispatch. Fan out only domains that can produce independent observations or non-overlapping writes. Bind each worker to one question or Work Item, require its changed paths or findings and evidence limits, and reconcile each claim into its owning plan state, research/decision record, evidence note, or separately owned follow-up. A worker report is a claim until the controller checks it against repository state.
+## Dispatch once per domain
 
-## When to Use
+Give each worker one complete assignment containing:
 
-```dot
-digraph when_to_use {
-    "Multiple failures?" [shape=diamond];
-    "Are they independent?" [shape=diamond];
-    "Single agent investigates all" [shape=box];
-    "One agent per problem domain" [shape=box];
-    "Can they work in parallel?" [shape=diamond];
-    "Sequential agents" [shape=box];
-    "Parallel dispatch" [shape=box];
+- outcome and exact owned paths;
+- relevant contract and interfaces;
+- non-goals;
+- checks to run;
+- report format;
+- no-child-delegation rule.
 
-    "Multiple failures?" -> "Are they independent?" [label="yes"];
-    "Are they independent?" -> "Single agent investigates all" [label="no - related"];
-    "Are they independent?" -> "Can they work in parallel?" [label="yes"];
-    "Can they work in parallel?" -> "Parallel dispatch" [label="yes"];
-    "Can they work in parallel?" -> "Sequential agents" [label="no - shared state"];
-}
-```
+Use the fewest agents that cover the independent domains. Batch same-shape edits and assign disjoint writer ownership.
 
-**Use when:**
-- 3+ test files failing with different root causes
-- Multiple subsystems broken independently
-- Each problem can be understood without context from others
-- No shared state between investigations
+## Root coordination
 
-**Don't use when:**
-- Failures are related (fix one might fix others)
-- Need to understand full system state
-- Agents would interfere with each other
+While workers run, the root may inspect shared integration surfaces or prepare non-overlapping work. Results arrive through bounded waits; review begins after implementation settles.
 
-## The Pattern
+When results arrive:
 
-### 1. Identify Independent Domains
+1. inspect each actual diff and report;
+2. verify boundaries and interfaces;
+3. resolve ordinary integration issues and nits in the root;
+4. run combined relevant checks;
+5. commission at most one integrated review only when the final risk tier warrants it.
 
-Group failures by what's broken:
-- File A tests: Tool approval flow
-- File B tests: Batch completion behavior
-- File C tests: Abort functionality
+Minor feedback concludes in the root. Resume a worker for a materially incomplete assignment where its retained context remains the cheapest path.
 
-Each domain is independent - fixing tool approval doesn't affect abort tests.
+## Failure handling
 
-### 2. Create Focused Agent Tasks
+- one worker fails: preserve successful independent results and take over or retry with changed context;
+- dependency discovered: stop parallel writes and sequence the remaining work;
+- conflict discovered: choose one owner and reconcile in the root;
+- scope ambiguity: ask only if it changes observable behavior or authority.
 
-Each agent gets:
-- **Specific scope:** One test file or subsystem
-- **Clear goal:** Make these tests pass
-- **Constraints:** Don't change other code
-- **Expected output:** Summary of what you found and fixed
+## Ledger
 
-### 3. Dispatch in Parallel
+When a Ledger plan exists, record owners and dependency edges when they help recovery. Worker reports are claims; concise validated outcomes are enough.
 
-Use one bounded `pi_exec` program with `parallel(...)` and `agents.run` for all three dispatches. Pass the following JavaScript as the tool's `code` argument, with `display` and limits on the `pi_exec` call itself:
-
-```javascript
-const domains = [
-  { name: "agent-tool-abort", task: "Fix the scoped failures in agent-tool-abort.test.ts." },
-  { name: "batch-completion", task: "Fix the scoped failures in batch-completion-behavior.test.ts." },
-  { name: "approval-races", task: "Fix the scoped failures in tool-approval-race-conditions.test.ts." },
-];
-
-const results = await parallel(
-  domains,
-  (domain) => agents.run({
-    type: "Implement",
-    name: domain.name,
-    advisor: true,
-    task: domain.task,
-    systemPrompt: "Implement only the assigned non-overlapping domain. Do not dispatch subagents, perform independent review, integrate changes, commit, push, or publish. Return changed paths, checks, observations, and limits to the controller.",
-    context: {
-      governingTask: inputs.taskPath,
-      activePlan: inputs.planPath,
-      relevantEvidence: inputs.evidencePaths,
-      constraints: "Stay inside this domain and preserve unrelated working-tree state.",
-    },
-  }),
-  3,
-);
-
-return results.map((result, index) => ({
-  domain: domains[index].name,
-  status: result.status,
-  report: result.text,
-  error: result.error,
-}));
-```
-
-Supply `inputs.taskPath`, `inputs.planPath`, and newline-separated `inputs.evidencePaths`; set an explicit `agentBudget`, `callBudget`, concurrency, and timeout. Give each worker only evidence relevant to its domain, then reconcile every returned status and report before any review or integration. `parallel(...)` makes the independence and concurrency bound explicit; sequential dependencies stay outside that fan-out.
-
-### 4. Review and Integrate
-
-When agents return:
-- Treat each report as a claim; inspect changed paths and verify domains did not overlap
-- Record Work Item progress, blockers, and replanning in the active plan
-- Record commands, test observations, and limits in linked evidence notes; route reusable inquiry to research/decisions
-- Run the relevant combined suite and record its output in evidence
-- Commission the normal independent Work Item or whole-change review over the combined package
-- Integrate only after review findings are reconciled and the active plan permits it
-
-## Agent Prompt Structure
-
-Good agent prompts are:
-1. **Focused** - One clear problem domain
-2. **Self-contained** - All context needed to understand the problem
-3. **Specific about output** - What should the agent return?
-
-```markdown
-Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
-
-1. "should abort tool with partial output capture" - expects 'interrupted at' in message
-2. "should handle mixed completed and aborted tools" - fast tool aborted instead of completed
-3. "should properly track pendingToolCount" - expects 3 results but gets 0
-
-These are timing/race condition issues. Your task:
-
-1. Read the test file and understand what each test verifies
-2. Identify root cause - timing issues or actual bugs?
-3. Fix by:
-   - Replacing arbitrary timeouts with event-based waiting
-   - Fixing bugs in abort implementation if found
-   - Adjusting test expectations if testing changed behavior
-
-Do NOT just increase timeouts - find the real issue.
-
-Return: Summary of what you found and what you fixed.
-```
-
-## Common Mistakes
-
-**❌ Too broad:** "Fix all the tests" - agent gets lost
-**✅ Specific:** "Fix agent-tool-abort.test.ts" - focused scope
-
-**❌ No context:** "Fix the race condition" - agent doesn't know where
-**✅ Context:** Paste the error messages and test names
-
-**❌ No constraints:** Agent might refactor everything
-**✅ Constraints:** "Do NOT change production code" or "Fix tests only"
-
-**❌ Vague output:** "Fix it" - you don't know what changed
-**✅ Specific:** "Return summary of root cause and changes"
-
-## When NOT to Use
-
-**Related failures:** Fixing one might fix others - investigate together first
-**Need full context:** Understanding requires seeing entire system
-**Exploratory debugging:** You don't know what's broken yet
-**Shared state:** Agents would interfere (editing same files, using same resources)
-
-## Real Example from Session
-
-**Scenario:** 6 test failures across 3 files after major refactoring
-
-**Failures:**
-- agent-tool-abort.test.ts: 3 failures (timing issues)
-- batch-completion-behavior.test.ts: 2 failures (tools not executing)
-- tool-approval-race-conditions.test.ts: 1 failure (execution count = 0)
-
-**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions
-
-**Dispatch:**
-```
-Agent 1 → Fix agent-tool-abort.test.ts
-Agent 2 → Fix batch-completion-behavior.test.ts
-Agent 3 → Fix tool-approval-race-conditions.test.ts
-```
-
-**Results:**
-- Agent 1: Replaced timeouts with event-based waiting
-- Agent 2: Fixed event structure bug (threadId in wrong place)
-- Agent 3: Added wait for async tool execution to complete
-
-**Integration:** All fixes independent, no conflicts, full suite green
-
-## Verification
-
-After agents return:
-1. **Review each summary** - Understand what changed
-2. **Check for conflicts** - Did agents edit same code?
-3. **Run full suite** - Verify all fixes work together
-4. **Spot check** - Agents can make systematic errors
+Parallel orchestration ends after integration and combined checks. It does not imply per-worker review, re-review, or a final multi-agent tribunal.

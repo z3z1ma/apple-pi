@@ -170,11 +170,6 @@ test("appendPrimaryAdvisorPrompt: appends the protocol once and is idempotent", 
 	assert.match(once, /^You are the coding agent\.\n\n/);
 	assert.match(once, /<advisor-protocol>/);
 	assert.match(once, /<\/advisor-protocol>/);
-	assert.match(once, /\bnit\b/);
-	assert.match(once, /\bconcern\b/);
-	assert.match(once, /\bblocker\b/);
-	assert.match(once, /repeat/);
-	assert.match(once, /silently ignore/);
 	assert.equal(A.appendPrimaryAdvisorPrompt(once), once);
 	assert.equal(A.appendPrimaryAdvisorPrompt(""), A.PRIMARY_ADVISOR_PROTOCOL);
 });

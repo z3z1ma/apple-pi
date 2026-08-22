@@ -100,10 +100,10 @@ Use `ralph-ledger.js` when a prepared Ledger task owns intent and acceptance, an
 
 Adapt `ledger-increment.md` with the task terminology, acceptance criteria, relevant paths, implementation constraints, likely failure modes, and fastest relevant checks. Preserve its one-increment boundary, Ledger-memory contract, ordinary-tool boundary, no-commit rule, and no-review rule.
 
-## Review ownership
+## Caller ownership
 
-Default Ralph does not plan, review, verify, or close the overall goal. After a Ledger batch, the caller records observed results and review findings under `evidence/`, reconciles progress/remediation in the active plan, and decides whether another bounded batch is useful.
+Default Ralph supplies bounded fresh-context implementation increments. After a batch, the caller inspects the repository state, runs the relevant checks, handles ordinary fixes in the root session, and decides whether another batch is useful. Ledger progress or evidence is persisted only when it has continuity value for a later session.
 
-Use `ralph-ledger-review.js` only when the operator explicitly requests the tighter increment-then-review Ledger composition. Adapt the planner, reviewer, and verifier prompt contracts from the `review` skill and inline them in the program. This advanced example does not replace the normal separation between implementation and independent review.
+The active plan's risk tier governs any independent review: `none` uses caller validation, `one-pass` commissions one complete review after the coherent change, and `staged` applies only to its named high-cost risk. Nits conclude in the root session.
 
-For Ledger work, `review-commissioning` owns bounded specification, plan, Work Item, and fix gates; `implementation-planning` and `plan-execution` own ordinary plan lifecycle; `task-closure` owns closure and integration choices. `ledger_add` only creates tasks and `ledger_close` only archives them.
+`ralph-ledger-review.js` remains an explicitly opt-in advanced composition for an operator who specifically requests increment-then-review coupling. Ordinary Ralph and Ledger execution use `implementation-planning`, `plan-execution`, and `task-closure` only when those phases are actually needed. `ledger_add` creates tasks and `ledger_close` archives them.

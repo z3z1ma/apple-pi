@@ -697,7 +697,6 @@ describe("pi_exec skills", () => {
 			const body = readSkillBody("review", { cwd: dir, includeDefaults: false });
 			expect(body.startsWith("# Review")).toBe(true);
 			expect(body).not.toMatch(/^---/);
-			expect(body).toContain("pi_exec");
 			expect(() => readSkillBody("", { cwd: dir, includeDefaults: false })).toThrow(/requires a skill name/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });

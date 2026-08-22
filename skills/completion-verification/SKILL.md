@@ -1,124 +1,53 @@
 ---
 name: completion-verification
-description: "Use when about to claim Ledger-governed work is complete, fixed, passing, or ready for integration."
+description: "Use when about to make an empirical claim that work is complete, fixed, passing, or ready for integration."
 ---
 
-# Verification Before Completion
+# Verify Before Claiming Completion
 
-## Overview
+Evidence must match the claim. Verification should be fresh, direct, and proportionate.
 
-**Core principle:** Evidence before claims, always.
+## The check
 
-**Violating the letter of this rule is violating the spirit of this rule.**
+Before an empirical success claim:
 
-## Ledger State: Closure Evidence
+1. Identify the cheapest procedure that could falsify that exact claim.
+2. Run it on the current tree.
+3. Read the output and exit status.
+4. Inspect the actual changed or expected artifact when existence/content matters.
+5. State the result and its limits.
 
-Verification is the evidence half of closure, not closure by itself. Identify the governing task and map each claim to the relevant `AC-###`, exact procedure, observed result, evidence-note path, and limit. Routine and exceptional validation observations both belong under `evidence/`; `task.md` retains its shaped contract: intent, outcome, scope, non-goals, acceptance, constraints, and references. Before a task can be marked done, verify every dependency is `done`; no referenced research, decision need, plan, or dependency blocks the outcome; no active plan remains and every plan is `complete` or `superseded` with all work complete or substantively cancelled with rationale; every Acceptance Criterion has adequate evidence under `evidence/` with applicable limits; every review finding and remediation is resolved, rejected with evidence, or explicitly bounded with rationale, owner, and revisit condition; and `retrospective.md` is complete.
+Examples:
 
-## The Iron Law
+- “loader test passes” requires the loader test, not the full suite.
+- “all tests pass” requires the full relevant suite.
+- “the skill exists and is packaged” requires checking the file, loader discovery, and package contents.
+- “bug fixed” requires exercising the original symptom or a regression test.
+- “agent completed” requires inspecting the diff and relevant checks, not trusting its report.
 
-```
-NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
-```
+## Breadth follows the claim and risk
 
-If you haven't run the verification command in this message, you cannot claim it passes.
+Use a focused check for a focused change. Run broader suites when the change has broad reach, integration risk, or the operator requests them. Verification-only machinery earns its place through a production consumer or concrete high-cost failure.
 
-## The Gate Function
+When a check cannot run, say `Not verified` and why. This limits the claim; it does not require inventing a fallback success state.
 
-```
-BEFORE making an empirical success, correctness, completion, or integration-readiness claim:
+## Review and delegation
 
-1. IDENTIFY: What procedure proves this exact claim?
-2. RUN: Execute the claim-matched procedure fresh and completely. Broad completion claims require the full relevant suite; narrow intermediate claims require the narrow falsifying check.
-3. READ: Full output, check exit code, count failures
-4. VERIFY: Does output confirm the claim?
-   - If NO: State actual status with evidence
-   - If YES: State claim WITH evidence
-5. ONLY THEN: Make the claim
+Advisor, agent, and reviewer reports are useful claims, not proof. Validate material points once. Completion does not require an independent review unless the operator requested it or the change's concrete risk tier requires it.
 
-Skip any step = lying, not verifying
-```
+Nits and optional cleanup remain optional; confirmed material defects block completion.
 
-## Common Failures
+## Ledger
 
-| Claim | Requires | Not Sufficient |
-|-------|----------|----------------|
-| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
-| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
-| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
-| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
-| Regression test works | Red-green cycle verified | Test passes once |
-| Agent completed | VCS diff shows changes | Agent reports "success" |
-| Requirements met | Line-by-line checklist | Tests passing |
+If a Ledger task is active, map only its load-bearing Acceptance Criteria to adequate observations. A concise task may close from the verified repository state and a short retrospective.
 
-## Red Flags - STOP
+## Before integration
 
-- Using "should", "probably", "seems to"
-- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
-- About to commit/push/PR without verification
-- Trusting agent success reports
-- Relying on partial verification
-- Thinking "just this once"
-- Tired and wanting work over
-- **ANY wording implying success without having run verification**
+Check the staged/committed paths so unrelated work is not included. If the operator explicitly authorized commit, push, merge, or publication, proceed after verification without asking again.
 
-## Rationalization Prevention
+Then report:
 
-| Excuse | Reality |
-|--------|---------|
-| "Should work now" | RUN the verification |
-| "I'm confident" | Confidence ≠ evidence |
-| "Just this once" | No exceptions |
-| "Linter passed" | Linter ≠ compiler |
-| "Agent said success" | Verify independently |
-| "I'm tired" | Exhaustion ≠ excuse |
-| "Partial check is enough" | Partial proves nothing |
-| "Different words so rule doesn't apply" | Spirit over letter |
-
-## Key Patterns
-
-**Tests:**
-```
-✅ [Run test command] [See: 34/34 pass] "All tests pass"
-❌ "Should pass now" / "Looks correct"
-```
-
-**Regression tests (TDD Red-Green):**
-```
-✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
-❌ "I've written a regression test" (without red-green verification)
-```
-
-**Build:**
-```
-✅ [Run build] [See: exit 0] "Build passes"
-❌ "Linter passed" (linter doesn't check compilation)
-```
-
-**Requirements:**
-```
-✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
-❌ "Tests pass, phase complete"
-```
-
-**Agent delegation:**
-```
-✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
-❌ Trust agent report
-```
-
-## When To Apply
-
-**ALWAYS before:**
-- Any empirical success, correctness, completion, fixed, passing, or ready claim
-- Committing, PR creation, task completion, or irreversible integration
-- Moving to the next Work Item on the claim that the current one is complete
-- Accepting an agent or reviewer report as true
-
-Delegation itself is governed by authority, scope, and handoff readiness; it does not require pretending the delegated work is already verified. Ordinary factual progress updates cite the observation they report without running a disproportionate full suite.
-
-**Rule applies to:**
-- Exact phrases
-- Paraphrases and synonyms
-- Implications of success or correctness
-- Any communication that could cause downstream work or integration to rely on an empirical claim
+- what changed;
+- checks run and results;
+- what remains unverified;
+- material residual risk.
