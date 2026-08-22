@@ -16,4 +16,5 @@ Additional boundaries:
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
 - **One compaction hook.** Observational memory does not register a compact hook. It appends its packet on the `context` event after any compaction entry.
 - **Session ledger is authoritative.** Compaction projects memory but does not relocate it.
+- **Backlog is parked session state, not a second task system.** It follows Pi session branches. The model may take an item when it begins active work; promotion into Ledger still requires an explicit human/model decision and successful task creation. Human management owns editing, arbitrary deletion, and ordering. The backlog is not stored as a repository file.
 - **No compatibility implementation.** There is one current path, not old/new variants.

@@ -139,6 +139,7 @@ const completeSnapshot: FooterSnapshot = {
 	statuses: [
 		{ key: "subagents", text: "2 running agents" },
 		{ key: "q-advisor", text: "Advisor reviewing · $0.42" },
+		{ key: "backlog", text: "backlog 3" },
 		{ key: "mcp-auth", text: "MCP authenticating docs" },
 		{ key: "mcp", text: "MCP 3 servers" },
 		{ key: "unknown", text: "Extension active" },
@@ -201,6 +202,7 @@ describe("input card rendering", () => {
 
 		expect(output).toContain("\u001b[33mMCP authenticating docs\u001b[0m");
 		expect(output).toContain("\u001b[94mMCP 3 servers\u001b[0m");
+		expect(output).toContain("\u001b[36mbacklog 3\u001b[0m");
 		expect(output).toContain("\u001b[95mAdvisor reviewing · $0.42\u001b[0m");
 		expect(output).toContain("\u001b[32m2 running agents\u001b[0m");
 		expect(output).toContain("\u001b[36mExtension active\u001b[0m");

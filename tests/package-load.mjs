@@ -18,6 +18,7 @@ try {
 		[
 			"extensions/pi-advisor.ts",
 			"extensions/ask-user-question.ts",
+			"extensions/backlog.ts",
 			"extensions/context.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
@@ -35,7 +36,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 13);
+	assert.equal(result.extensions.length, 14);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -98,6 +99,7 @@ try {
 		"mcp",
 		"mcp-auth",
 		"agents",
+		"backlog",
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
@@ -106,6 +108,9 @@ try {
 	}
 	for (const tool of [
 		"ask_user_question",
+		"backlog_add",
+		"backlog_list",
+		"backlog_take",
 		"session_search",
 		"memory_source",
 		"pi_exec",

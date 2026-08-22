@@ -16,6 +16,8 @@
     "extensions/**/*.ts",
     "components/advisor/src/**/*.ts",
     "components/ask-user-question/src/**/*.ts",
+    "components/backlog/src/**/*.ts",
+    "components/backlog/tests/**/*.ts",
     "components/shared/src/**/*.ts",
     "components/session-search/src/**/*.ts",
     "components/memory/src/**/*.ts",

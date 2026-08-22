@@ -55,6 +55,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
 | `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses the user-global `deep` model profile; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
+| `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed Ledger promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
 | `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the observational-memory packet. |
 | `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
 | `components/xai-context-compaction/` | xAI server-side Responses compaction | Owns `session_before_compact` for xAI Responses models; injects the newest opaque item on later requests. |
@@ -125,6 +126,7 @@ Use the narrowest production owner:
 - Terminal rendering for a component: that component's `ui/` modules.
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
+- Session backlog behavior and UI: `components/backlog/`; keep its state in Pi session entries rather than repository files.
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.

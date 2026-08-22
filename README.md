@@ -1,6 +1,6 @@
 # apple-pi 🥧
 
-My own personal [Pi](https://github.com/badlogic/pi-mono) package: advisor, questions, context, exec, subagents, and the workflow skills I actually use.
+My own personal [Pi](https://github.com/badlogic/pi-mono) package: advisor, questions, session backlog, context, exec, subagents, and the workflow skills I actually use.
 
 ## Why this exists
 
@@ -42,6 +42,7 @@ Add `-l` for project-local activation. Pi loads every extension from this one pa
 
 - [`/advisor`](docs/advisor.md) — persistent read-only peer review
 - [`ask_user_question`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
+- [Session backlog](docs/backlog.md) — model-assisted parking with a human-owned `/backlog` manager
 - [Context](docs/context.md) — xAI / Pi compaction, observational memory, `session_search`, and `memory_source`
 - [`pi_exec`](docs/exec.md) — bounded JavaScript guest for programmatic tool composition, reusable `.pi/programs` (`pi_discover_programs` / `pi_exec_program`)
 - [`mcp`](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)

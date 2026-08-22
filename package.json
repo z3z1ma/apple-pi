@@ -21,6 +21,7 @@
   "files": [
     "components/advisor/src/",
     "components/ask-user-question/src/",
+    "components/backlog/src/",
     "components/shared/src/",
     "components/session-search/src/",
     "components/memory/src/",
@@ -47,6 +48,7 @@
     "extensions": [
       "./extensions/pi-advisor.ts",
       "./extensions/ask-user-question.ts",
+      "./extensions/backlog.ts",
       "./extensions/context.ts",
       "./extensions/runtime.ts",
       "./extensions/mcp.ts",
