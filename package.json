@@ -51,6 +51,7 @@
       "./extensions/ask-user-question.ts",
       "./extensions/backlog.ts",
       "./extensions/context.ts",
+      "./extensions/auto-compact.ts",
       "./extensions/runtime.ts",
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",

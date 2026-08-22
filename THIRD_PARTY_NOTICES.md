@@ -29,6 +29,17 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Local path: `components/session-search/` (recall only); integration in `extensions/session-search.ts` and `extensions/context.ts`
 - License: MIT, as declared by the source README. The imported commit did not contain a standalone license file or separate copyright notice.
 
+## pi-auto-compact → Proactive overflow guard
+
+- Source: <https://github.com/tmustier/pi-auto-compact>
+- Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
+- Upstream version at import: `0.1.9`
+- Author named by the source package: Thomas Mustier
+- Local paths: `components/memory/src/hooks/overflow-guard.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
+- License: MIT
+- Original notice: `Copyright (c) 2026 Thomas Mustier`
+- apple-pi adapts the one-shot provider stream interception that turns an oversized post-tool continuation into a local synthetic context overflow, allowing Pi to compact and retry the same run without sending the intercepted request upstream. It reuses apple-pi's existing observational-memory threshold settings and omits upstream's separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
+
 ## pi-observational-memory
 
 - Source: <https://github.com/elpapi42/pi-observational-memory>

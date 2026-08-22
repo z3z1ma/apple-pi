@@ -270,7 +270,7 @@ export const GUEST_HELPER_SIGNATURES: string[] = [
 	'omit type for a generic read-only worker; tools then default to ["read","grep","find","ls"]; tools must be chosen from AgentTool',
 	"Review planner/reviewer/verifier and Ralph stay custom systemPrompt workers — do not set type for those program-specific workers",
 	"agent(...) and agents.run(...) are pi_exec workers for composition. Interactive subagent tools are intentionally unavailable through extensions.*.",
-	"Workers load the ledger and session_search extensions. They do not load pi_exec or the subagent manager, and they cannot call MCP. Call those in the program, then bind the compact result as context.",
+	"Workers load the proactive overflow guard, ledger, and session_search extensions. They do not load pi_exec or the subagent manager, and they cannot call MCP. Call those in the program, then bind the compact result as context.",
 	"context is JSON-cloned to a temp file and attached as @file (not stuffed into task/argv). Prefer agents.run for fan-out (does not throw).",
 	"Pass file paths in context or task; the worker already has read. Do not dump file bodies into task.",
 	"outputSchema is a JSON Schema object. The worker must call pi_exec_return; agents.run.value / agent() receive those arguments. Never JSON.parse assistant text.",
