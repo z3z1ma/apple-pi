@@ -152,7 +152,7 @@ try {
 		"task-closure",
 		"skill-authoring",
 	];
-	const piUtilitySkills = ["pi-exec", "review", "ralph"];
+	const piUtilitySkills = ["pi-exec", "review", "ralph", "llm-wiki"];
 	const packagedSkills = [...ledgerLifecycleSkills, ...piUtilitySkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
