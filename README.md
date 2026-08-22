@@ -38,26 +38,51 @@ pi install /absolute/path/to/apple-pi
 
 Add `-l` for project-local activation. Pi loads every extension from this one package.
 
-## Extensions
+## What's in the harness
 
-- [`/advisor`](docs/advisor.md) — persistent read-only peer review
-- [`ask_user_question`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
-- [Session backlog](docs/backlog.md) — model-assisted parking with a human-owned `/backlog` manager
+I think about the package in four groups. They are all installed together, but each has a different job and most of them stay out of the way until they are useful.
+
+### Working with the agent
+
+These are the pieces I interact with directly while a session is running.
+
+- [`Advisor`](docs/advisor.md) — persistent read-only peer review
+- [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
+- [Custom Footer](docs/status-footer.md) — responsive model, context, cost, Git, and live extension status
+
+### Keeping context and work straight
+
+These handle continuity at different timescales without turning everything into one task system.
+
+- [Context](docs/context.md) — Observational memory, `session_search`, and `memory_source`
+- [Session Backlog](docs/backlog.md) — model-assisted parking with a human-owned `/backlog` manager
 - [To-dos](docs/todos.md) — active-execution checklist, `/todos` manager, branch snapshots, and owned subagent runs
-- [Context](docs/context.md) — xAI / Pi compaction, observational memory, `session_search`, and `memory_source`
-- [`pi_exec`](docs/exec.md) — bounded JavaScript guest for programmatic tool composition, reusable `.pi/programs` (`pi_discover_programs` / `pi_exec_program`)
-- [`mcp`](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
-- [`Agent`](docs/subagents.md) — `/agents`, FleetView, and specialist lanes
-- [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` contract
+- [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory
+
+### Running and delegating work
+
+These give the agent more leverage when a task actually benefits from composition or another context.
+
+- [Pi Exec](docs/exec.md) — bounded JavaScript guest for programmatic tool composition and reusable `.pi/programs`
+- [Subagents](docs/subagents.md) — typed specialist lanes, background runs, `/agents`, and FleetView
+- [MCP](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
+
+### Terminal and provider edges
+
+These are the smaller integrations that make the whole setup feel like one harness on my machine.
+
+- [Notify](docs/notify.md) — native macOS completion notifications (`/notify-setup`, `/notify-test`) with Ghostty/tmux click-to-focus
+- [Tmux sessions](docs/tmux-sessions.md) — publishes per-session `busy`/`idle`/`waiting` status to disk (`/pi-sessions`) for the bundled picker, launcher, and bell forwarding
 - [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
 - [xAI context compaction](docs/context.md) — server-side `/responses/compact` plus opaque-item injection on later Grok Responses requests
-- [Notify](docs/notify.md) — native macOS completion notifications (`/notify-setup`, `/notify-test`) with Ghostty/tmux click-to-focus
-- [Tmux sessions](docs/tmux-sessions.md) — publishes per-session `busy`/`idle`/`waiting` status to disk (`/pi-sessions`) for the bundled tmux picker, launcher, and bell forwarding
-- [Input card](docs/status-footer.md) — TUI-only Zentui-style prompt card with responsive model, context, cost, Git, and live extension status presentation
 
 ## Skills
 
-Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs.
+Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs. They are procedures the agent can load when the situation calls for them, not a pipeline every request has to follow.
+
+### Workflow skills
+
+These cover the path from figuring out what the work means through implementation, verification, and integration.
 
 - [`/skill:task-shaping`](skills/task-shaping) — collaborate on genuinely unresolved product or architecture choices
 - [`/skill:implementation-planning`](skills/implementation-planning) — plan settled multi-step work when sequencing or ownership adds value
@@ -71,10 +96,24 @@ Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it 
 - [`/skill:completion-verification`](skills/completion-verification) — match fresh verification breadth to the claim
 - [`/skill:workspace-isolation`](skills/workspace-isolation) — isolate work when overlap or destructive experimentation warrants it
 - [`/skill:task-closure`](skills/task-closure) — verify, archive, and follow the operator's integration direction
-- [`/skill:skill-authoring`](skills/skill-authoring) — write concise Agent Skills with progressive validation
+
+### Review and iteration
+
+These provide bounded ways to inspect a change or make progress through fresh-context iterations.
+
 - [`/skill:review`](skills/review) — inspect directly or use the smallest justified independent topology
 - [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared Ledger tasks
+
+### Harness authoring
+
+These help build the reusable procedures and composition programs that extend the harness itself.
+
 - [`/skill:pi-exec`](skills/pi-exec) — author bounded `pi_exec` programs
+- [`/skill:skill-authoring`](skills/skill-authoring) — write concise Agent Skills with progressive validation
+
+### Project knowledge
+
+- [`/skill:llm-wiki`](skills/llm-wiki) — maintain durable project-local knowledge in `.wiki/`
 
 ## Development
 
