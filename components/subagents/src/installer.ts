@@ -73,7 +73,7 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
-	// Child sessions load ledger, session_search, and MCP via explicit `-e` and never create
+	// Child sessions load the overflow guard, ledger, session_search, and MCP via explicit `-e` and never create
 	// a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 

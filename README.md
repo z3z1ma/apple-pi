@@ -40,7 +40,7 @@ These are the pieces I interact with directly while a session is running.
 
 These handle continuity at different timescales without turning everything into one task system.
 
-- [Memory](docs/context.md) — Observational memory, `session_search`, and `memory_source`
+- [Memory](docs/context.md) — Pre-provider auto-compaction, observational memory, `session_search`, and `memory_source`
 - [Session Backlog](docs/backlog.md) — model-assisted parking with a human-owned `/backlog` manager
 - [To-dos](docs/todos.md) — active-execution checklist, `/todos` manager, branch snapshots, and owned subagent runs
 - [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory

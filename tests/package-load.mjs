@@ -20,6 +20,7 @@ try {
 			"extensions/ask-user-question.ts",
 			"extensions/backlog.ts",
 			"extensions/context.ts",
+			"extensions/auto-compact.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
@@ -37,7 +38,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 15);
+	assert.equal(result.extensions.length, 16);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -50,6 +51,13 @@ try {
 	assert(
 		result.extensions.some((extension) => extension.path.endsWith("status-footer.ts")),
 		"missing input card extension",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("auto-compact.ts") && (extension.handlers.get("turn_end")?.length ?? 0) > 0,
+		),
+		"missing proactive auto-compaction guard",
 	);
 	assert(
 		result.extensions.some(

@@ -2,9 +2,11 @@
 
 Compaction has one hook owner. On an xAI model using `openai-responses`, [`extensions/xai-context-compaction.ts`](../extensions/xai-context-compaction.ts) handles `/compact`, automatic compaction, and overflow recovery by calling xAI's `POST /responses/compact`. Other models leave `session_before_compact` unset so Pi's default summarizer runs.
 
+[`extensions/auto-compact.ts`](../extensions/auto-compact.ts) prevents an oversized post-tool continuation from reaching the provider. When context usage reaches Pi's model-specific native `context window - reserve` boundary, it arms the active provider stream. The next request containing that tool batch receives a local synthetic context-overflow response instead of an upstream call. Pi then uses its native overflow path to compact and retry the same agent run without adding a user message. The guard is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers; it follows Pi's effective `compaction.enabled` setting and the observational-memory `passive` setting. Once over threshold, failure to install the provider wrapper aborts the run rather than allowing an unguarded oversized request.
+
 After any compaction entry exists, observational memory appends its current fold to the **tail** of the live conversation via the `context` event. That packet is the same for xAI compaction, Pi default summarization, and any compact-hook fallback that still writes a compaction entry.
 
-The curator pipeline, `/om:*` commands, and `memory_source` register only on the **root** session. Child sessions (subagents, `pi_exec` workers) load `session_search` and never start observer/reflector/curator work. The advisor session also does not run observational memory: after its own compaction summary it inserts a **read-only** copy of the parent fold, and its `memory_source` / `session_search` tools stay bound to the primary session.
+The curator pipeline, `/om:*` commands, and `memory_source` register only on the **root** session. Ordinary subagents and `pi_exec` workers load `session_search` without starting observer/reflector/curator work; the internal BTW child loads only the overflow guard. The advisor session also does not run observational memory: after its own compaction summary it inserts a **read-only** copy of the parent fold, and its `memory_source` / `session_search` tools stay bound to the primary session.
 
 ## xAI server-side compaction
 
@@ -24,7 +26,7 @@ Completions-routed Grok is left to Pi default compaction.
 
 `registerMemoryContextPacket` runs on every context rebuild after a compaction entry exists. It projects the ledger to the latest compaction's `firstKeptEntryId` and appends one custom message (`om.memory.packet`) at the end of `event.messages`. The injection is idempotent for that rebuild. The ledger itself stays in Pi session JSONL.
 
-A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. Observational memory's fallback still requests compact on `agent_settled` after Pi auto-compaction, and skips when the live branch already ends at a compaction entry.
+A single curator pass starts after a root-session `turn_end`, not at `agent_start`, so it does not share the provider with the opening completion of a user turn. It launches when uncovered source tokens reach `observeAfterTokens` (default 20,000), then observes, reflects, retires, and drops in one model call. `reflectAfterTokens` remains in settings as unused compatibility and does not launch work. The observation-pool target is an inner drop budget, not a second clock. A new `agent_start` aborts an in-flight memory run. The provider guard is the primary same-turn trigger after tool results. Observational memory retains a source-token fallback on `agent_settled` for contexts where provider usage was unavailable, and skips when the live branch already ends at a compaction entry.
 
 Commands and tools:
 
