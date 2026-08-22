@@ -1,0 +1,42 @@
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+ ❯ tests/ledger-add.test.ts (5 tests | 1 failed) 60ms
+     × creates the full structural bundle and index row 17ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/ledger-add.test.ts > ledger add > creates the full structural bundle and index row
+AssertionError: expected [ 'decisions', 'evidence', …(6) ] to deeply equal [ 'decisions', 'evidence', …(5) ]
+
+- Expected
++ Received
+
+  [
+    "decisions",
+    "evidence",
++   "knowledge",
+    "plans",
+    "research",
+-   "retrospective.md",
++   "skills",
+    "specs",
+    "task.md",
+  ]
+
+ ❯ tests/ledger-add.test.ts:36:61
+     34|    indexPath: ".ledger/INDEX.md",
+     35|   });
+     36|   expect(readdirSync(join(root, result.bundlePath)).sort()).toEqual(
+       |                                                             ^
+     37|    ["decisions", "evidence", "plans", "research", "retrospective.md", …
+     38|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  16:44:31
+   Duration  10.08s (transform 49ms, setup 0ms, import 9.70s, tests 60ms, environment 0ms)
+

@@ -1,0 +1,40 @@
+
+> apple-pi@0.1.0 format:check
+> biome format components extensions tests docs README.md package.json tsconfig.json vitest.config.ts biome.json
+
+components/memory/src/session-ledger/projection.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+    163 163 │   ): CompactionProjection {
+    164 164 │     const projection = fullProjection(entries, firstKeptEntryId);
+    165     │ - → const·observationTokens·=·projection.observations.reduce(
+    166     │ - → → (total,·observation)·=>·total·+·observation.tokenCount,
+    167     │ - → → 0,
+    168     │ - → );
+        165 │ + → const·observationTokens·=·projection.observations.reduce((total,·observation)·=>·total·+·observation.tokenCount,·0);
+    169 166 │     const fullFold = observationTokens >= config.observationsPoolMaxTokens;
+    170 167 │   
+  
+
+components/memory/tests/drain.test.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+    127 127 │         },
+    128 128 │       };
+    129     │ - → → await·expect(
+    130     │ - → → → drainAgentStream(stream,·()·=>·{},·controller.signal),
+    131     │ - → → ).rejects.toMatchObject({
+        129 │ + → → await·expect(drainAgentStream(stream,·()·=>·{},·controller.signal)).rejects.toMatchObject({
+    132 130 │         name: "AbortError",
+    133 131 │         message: CONSOLIDATION_ABORT_REASON.timeout,
+  
+
+Checked 223 files in 220ms. No fixes applied.
+Found 2 errors.
+format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

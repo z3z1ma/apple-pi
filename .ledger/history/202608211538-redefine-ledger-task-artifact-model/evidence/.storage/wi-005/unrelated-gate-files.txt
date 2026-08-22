@@ -1,0 +1,10 @@
+components/memory/src/session-ledger/projection.ts
+  head:    9cb7fef013ff6ea9aab72d44e9dd65fec1d9b03d
+  current: 9cb7fef013ff6ea9aab72d44e9dd65fec1d9b03d
+components/memory/tests/drain.test.ts
+  head:    4d82f731238fbef3916c73fc9f83e7a43d2cb732
+  current: 4d82f731238fbef3916c73fc9f83e7a43d2cb732
+extensions/runtime-api.ts
+  head:    c4b11986731c9d7b67a8e44419746a7bde917ef2
+  current: c4b11986731c9d7b67a8e44419746a7bde917ef2
+status:

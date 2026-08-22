@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  16:55:38
+   Duration  2.70s (transform 470ms, setup 0ms, import 2.63s, tests 3ms, environment 0ms)
+

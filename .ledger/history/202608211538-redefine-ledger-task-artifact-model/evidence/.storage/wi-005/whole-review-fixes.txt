@@ -1,0 +1,8 @@
+skills/task-shaping/SKILL.md:52:Architectural work stores the approved behavior under `specs/` with Purpose and Authority, Actors and Boundaries, Required Behavior, Error and Failure Behavior, scenarios, Acceptance Mapping, Exclusions, Assumptions and Provenance, and Related Records. Active specifications and active decisions govern current execution semantics; research informs them but never authorizes product choices.
+skills/plan-execution/SKILL.md:23:3. Enumerate the selected Work Item's linked implementation, test, and review evidence; read open dispositions, prior limits, and deferred blockers, then reconcile them with current repository state before resuming or activating work.
+skills/implementation-planning/plan-document-reviewer-prompt.md:16:    Relevant research provenance and limits: [RESEARCH_PATHS]
+skills/implementation-planning/plan-document-reviewer-prompt.md:57:- `[RESEARCH_PATHS]` — smallest relevant active/complete research records that source plan assumptions, implementation facts, or limits; use `None` when no research is load-bearing.
+skills/parallel-orchestration/SKILL.md:88:    systemPrompt: "Implement only the assigned non-overlapping domain. Do not dispatch subagents, perform independent review, integrate changes, commit, push, or publish. Return changed paths, checks, observations, and limits to the controller.",
+skills/parallel-orchestration/SKILL.md:91:      activePlan: inputs.planPath,
+skills/parallel-orchestration/SKILL.md:92:      relevantEvidence: inputs.evidencePaths,
+skills/parallel-orchestration/SKILL.md:116:- Commission the normal independent Work Item or whole-change review over the combined package

@@ -43,3 +43,7 @@
 - `.ledger/history/202608211051-rename-skills-generalize-ralph/task.md` — cancelled — Rename workflow skills and generalize Ralph — Replace Superpowers-derived public skill names with concise 10x-aligned names, remove relative cross-skill references, and split Ralph into general and Ledger-specific bounded iteration programs.
 
 - `.ledger/history/202608211655-integrate-fleet-hint-into-input-card/task.md` — done — Integrate Fleet navigation hint into the input card — Move the active-agent navigation hint out of its dedicated below-editor row and right-align it opposite model/provider/thinking metadata in the Apple Pi input card.
+
+- `.ledger/history/202608211538-redefine-ledger-task-artifact-model/task.md` — done — Redefine Ledger task artifact model — Make task.md own durable intent, plans own progress, evidence act as laboratory notes, and one top-level retrospective drive project improvement
+
+- `.ledger/history/202608211615-implement-first-class-llm-wiki/task.md` — done — Implement a first-class LLM wiki — Design and build a packaged LLM wiki workflow with durable source provenance, compounding Markdown knowledge, safe querying, and only the supporting runtime components apple-pi actually needs.

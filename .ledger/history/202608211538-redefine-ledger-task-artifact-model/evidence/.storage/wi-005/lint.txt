@@ -1,0 +1,41 @@
+
+> apple-pi@0.1.0 lint
+> biome lint components extensions tests
+
+extensions/runtime-api.ts:243:386 lint/suspicious/noTemplateCurlyInString ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected template string placeholder.
+  
+    241 │ 	"type Coverage<T> = { covered: T[], missing: T[], unexpected: T[], duplicates: T[], complete: boolean }; std.coverage.compare<T>(expected: T[], actual: T[], { id?: Key<T>, key?: Key<T> }?) → Coverage<T>. id and key are aliases.",
+    242 │ 	"std.reconcile.byId<T, U>(base: T[], overlays: U[], { id?: Key<T>, key?: Key<T>, overlay?: boolean }?) → { values: Array<T | U>, unknownIds: unknown[], missingIds: unknown[], duplicateIds: unknown[] }. id and key are aliases; byId defaults to the 'id' field.",
+  > 243 │ ...}; type SchemaShape = SchemaPrimitive | `${SchemaPrimitive}?` | [SchemaShape] | [string, string, ......
+        │                                             ^^^^^^^^^^^^^^^^^^
+    244 │ 	"std.dev.findRelevantTests(options?: GitOptions) → Promise<{ files: string[], tests: Record<string, string[]>, commands: Record<string, string> }>. Discovers changed files, neighboring tests including __tests__, and package commands without executing tests.",
+    245 │ 	"std.dev.runRelevantTests({ command?: string, timeout?: number, compare?: string, paths?: string[]...
+  
+  i Turn the string into a template string.
+  
+
+components/memory/tests/drain.test.ts:26:3 lint/correctness/useYield ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × This generator function doesn't contain yield.
+  
+    24 │ function failingStream(error: Error): AsyncIterable<unknown> & { result: () => Promise<unknown> } {
+    25 │ 	return {
+  > 26 │ 		async *[Symbol.asyncIterator]() {
+       │ 		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  > 27 │ 			throw error;
+  > 28 │ 		},
+       │ 		^
+    29 │ 		result: async () => ({}),
+    30 │ 	};
+  
+
+Checked 220 files in 54ms. No fixes applied.
+Found 1 error.
+Found 1 warning.
+lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

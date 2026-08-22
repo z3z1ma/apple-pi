@@ -1,0 +1,86 @@
+[
+  {
+    "candidateId": "FINAL-01",
+    "title": "Shaping guidance omits active decisions from the execution authority rule",
+    "severity": "significant",
+    "path": "skills/task-shaping/SKILL.md",
+    "trigger": "An architectural task has an active decision not fully restated in its specification.",
+    "evidence": "The shaping procedure said only an active specification governs execution while the governing model makes active decisions authoritative too.",
+    "impact": "A cold-start shaper could replace a ratified decision with a technical default.",
+    "recommendation": "State that active specifications and active decisions govern current execution semantics and research is non-authoritative.",
+    "scope": "in-scope",
+    "loadBearing": true
+  },
+  {
+    "candidateId": "FINAL-02",
+    "title": "Plan-review template does not carry active research into reviewer context",
+    "severity": "significant",
+    "path": "skills/implementation-planning/plan-document-reviewer-prompt.md",
+    "trigger": "A plan relies on an implementation fact or assumption sourced in research.",
+    "evidence": "The template included task/specification/decisions but omitted relevant research and its limits.",
+    "impact": "A plan could pass provenance review without the reviewer seeing the source or limits of a load-bearing fact.",
+    "recommendation": "Include the smallest relevant research paths while preserving research as non-authoritative provenance.",
+    "scope": "in-scope",
+    "loadBearing": true
+  },
+  {
+    "candidateId": "FINAL-03",
+    "title": "Sequential plan execution does not recover linked evidence before resuming",
+    "severity": "significant",
+    "path": "skills/plan-execution/SKILL.md",
+    "trigger": "Execution resumes after interruption, compaction, or a prior review/fix round.",
+    "evidence": "The preflight read task/plan/specification/decisions but did not require reading Work Item evidence, open dispositions, or prior limits.",
+    "impact": "A resumed controller could miss blockers, repeat work, or complete a Work Item without governing evidence.",
+    "recommendation": "Read and reconcile linked implementation/test/review evidence before activating or completing the Work Item.",
+    "scope": "in-scope",
+    "loadBearing": true
+  },
+  {
+    "candidateId": "FINAL-04",
+    "title": "Parallel orchestration example omits plan/evidence handoff and independent review",
+    "severity": "significant",
+    "path": "skills/parallel-orchestration/SKILL.md",
+    "trigger": "The documented parallel implementation example is used for independent Ledger domains.",
+    "evidence": "Workers received only task context and the integration path skipped plan/evidence reconciliation and independent review.",
+    "impact": "Parallel work could use a weaker second orchestration protocol and integrate unreviewed claims without durable provenance.",
+    "recommendation": "Pass plan/evidence context, forbid subdelegation/review/integration, reconcile claims into owners, and require independent review.",
+    "scope": "in-scope",
+    "loadBearing": true
+  },
+  {
+    "candidateId": "FINAL-05",
+    "title": "Existing-worktree path can skip durable workspace provenance",
+    "severity": "minor",
+    "path": "skills/workspace-isolation/SKILL.md",
+    "trigger": "Execution starts in an existing linked worktree.",
+    "evidence": "A reviewer claimed the skip-to-setup path omitted a repeated record step.",
+    "impact": "Potential workspace recovery ambiguity.",
+    "recommendation": "No required change; the unconditional Ledger State rule already covers every branch.",
+    "scope": "in-scope",
+    "loadBearing": false
+  },
+  {
+    "candidateId": "FINAL-06",
+    "title": "Ralph worker and caller both claim ownership of observed Ledger results",
+    "severity": "significant",
+    "path": "skills/ralph/SKILL.md",
+    "trigger": "A prepared Ledger Ralph batch runs and the caller reconciles afterward.",
+    "evidence": "A reviewer treated sequential worker updates and caller post-batch verification as competing writers.",
+    "impact": "Potential duplicated observations.",
+    "recommendation": "No ownership change; workers preserve inter-iteration memory and callers record independent post-batch verification/review.",
+    "scope": "in-scope",
+    "loadBearing": false
+  },
+  {
+    "candidateId": "FINAL-07",
+    "title": "Closure failure handling is scoped to tests instead of all required gates",
+    "severity": "significant",
+    "path": "skills/task-closure/SKILL.md",
+    "trigger": "Tests pass while another Acceptance-Criterion-required verification gate fails.",
+    "evidence": "A reviewer claimed Step 1 could treat green tests as sufficient despite the later complete terminal predicate.",
+    "impact": "Potential false closure if later reconciliation were ignored.",
+    "recommendation": "No required correction; Step 2 maps every AC to fresh evidence and stops integration when any terminal condition is unmet.",
+    "scope": "in-scope",
+    "loadBearing": false
+  }
+]

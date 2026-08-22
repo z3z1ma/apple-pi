@@ -1,0 +1,2 @@
+124:+The standard directories may remain empty when the task has no concrete artifact of that type. Supporting records stay inside their owning bundle. Cross-task edges point only to another task root. Do not add parallel legacy directories, schema versions, migration layers, or fallback formats.
+711:+- a migration or compatibility system for archived task formats; or

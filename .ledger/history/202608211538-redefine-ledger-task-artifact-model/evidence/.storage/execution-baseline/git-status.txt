@@ -1,0 +1,16 @@
+## main...origin/main
+ M .ledger/INDEX.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/evidence/.storage/execution-baseline/git-status.txt
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/evidence/plan-fix-verification.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/evidence/plan-review.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/evidence/specification-fix-verification.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/evidence/specification-review.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/plans/2026-08-21-ledger-artifact-model.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/retrospective.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/specs/ledger-artifact-model.md
+?? .ledger/202608211538-redefine-ledger-task-artifact-model/task.md
+?? .ledger/202608211615-implement-first-class-llm-wiki/decisions/project-local-wiki-boundary.md
+?? .ledger/202608211615-implement-first-class-llm-wiki/decisions/simple-local-source-retention.md
+?? .ledger/202608211615-implement-first-class-llm-wiki/research/reference-implementations.md
+?? .ledger/202608211615-implement-first-class-llm-wiki/specs/llm-wiki.md
+?? .ledger/202608211615-implement-first-class-llm-wiki/task.md

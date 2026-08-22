@@ -1,0 +1,138 @@
+
+> apple-pi@0.1.0 test
+> npm run test:unit && npm run test:advisor && npm run test:loader
+
+
+> apple-pi@0.1.0 test:unit
+> vitest run
+
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+
+ Test Files  70 passed (70)
+      Tests  695 passed (695)
+   Start at  17:59:53
+   Duration  13.59s (transform 3.26s, setup 0ms, import 141.08s, tests 26.01s, environment 3ms)
+
+
+> apple-pi@0.1.0 test:advisor
+> PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/advisor/tests/advisor.test.mjs
+
+  ok   isHighSeverity: only concern/blocker are held + reconfirmed
+  ok   nextBackoffMs: base, doubling, capped, guarded
+  ok   formatAdvisorFooterText: labels reviewing vs idle, always shows cost
+  ok   isTerminalTurn: terminal iff the assistant message made no tool calls
+  ok   isLowSignalTurn: read-only is low-signal; user/error/mutation/command are not
+  ok   formatReconfirmPreamble: empty when nothing held, else lists held notes
+  ok   parseAdvisorTestArgs: valid severities + multiword note
+  ok   parseAdvisorTestArgs: rejects bad input
+  ok   appendPrimaryAdvisorPrompt: appends the protocol once and is idempotent
+  ok   formatAdvisoryContent: wraps with severity + guidance, escapes XML
+  ok   formatAdvisoryContent: omits severity attr when absent (plain nit)
+  ok   formatAdvisoryContent: stale option tags advice as about an earlier step
+  ok   formatAdvisoryContent: finalAnswer appends self-contained-final-answer guidance
+  ok   formatTurnDelta: includes user, thinking, text, tool call + result
+  ok   formatTurnDelta: successful write omits content and addresses the result
+  ok   formatTurnDelta: failed write keeps a truncated attempted body
+  ok   formatUserBash: receipt without body, omitted when excluded
+  ok   bindBashAppendObserver: pushes persisted bashExecution, not user messages
+  ok   formatTurnDelta: a multi-line bash command rides verbatim (no \n escaping)
+  ok   formatTurnDelta: edits render as compact header + result diff (no raw old/new blobs)
+  ok   formatTurnDelta: a failed edit (no diff) keeps its attempted args for diagnosis
+  ok   formatTurnDelta: a multi-line failed edit preserves real newlines in old/new
+  ok   formatTurnDelta: a multi-line string NESTED in a non-edits container survives verbatim
+  ok   formatTurnDelta: an ERROR result with a diff keeps args + error text (untrusted diff dropped)
+  ok   formatTurnDelta: observation receipts keep loci and counts, not bodies
+  ok   formatTurnDelta: a failed read keeps the error text
+  ok   formatActiveSessionContext: user bash follows the same receipt rules
+  ok   formatTurnDelta: marks tool errors
+  ok   formatTurnDelta: empty turn ⇒ empty string
+  ok   seed: recent users are current plus two completed requests, labeled as implementer-bound
+  ok   seed: recent trajectory keeps last implementing-agent turns and user bash
+  ok   compact hook reseeds and keeps no prior advisor deltas
+  ok   compact hook includes recent trajectory in the reseed
+  ok   compact hook keeps the reseed and stores an xAI item when compact succeeds
+  ok   compact hook omits the parent fold from the reseed summary
+  ok   parent memory packet sits after the compaction summary and is idempotent
+  ok   advisor parent-memory hook does not register the OM pipeline
+  ok   runtime: a thrown first prompt keeps the seed for the retry
+  ok   default advisor prompt names primary-bound recall tools
+  ok   primary-bound memory_source resolves the primary branch, not the caller ctx
+  ok   primary-bound session_search reads the primary session file, not the caller ctx
+  ok   buildReviewMessages: header turn + one single-block user turn per delta, content verbatim
+  ok   formatActiveSessionContext: renders Pi's active context verbatim and excludes prior advisories
+  ok   buildReviewMessages: re-prime context precedes but is distinct from the new update
+  ok   the global deep profile and trusted project WATCHDOG have separate authority
+  ok   AdviseTool: records, dedups, and escalates by severity rank
+  ok   AdviseTool: held notes (onAdvice→false) stay unrecorded so they can re-fire
+  ok   AdviseTool: markDelivered records dedup at the real delivery point
+  ok   runTurnBlock: non-terminal with nothing held → no block, streak resets
+  ok   runTurnBlock: non-terminal with only queued nits does not block
+  ok   runTurnBlock: non-terminal + held + settled → delivers survivors, resets streak
+  ok   runTurnBlock: non-terminal + held + timeout → keeps held, doubles streak
+  ok   runTurnBlock: terminal blocks unconditionally (even with nothing held)
+  ok   runTurnBlock: never notifies an unresolved 'catching up'/'waiting up to' wait — the footer owns that signal
+  ok   runTurnBlock: terminal timeout → delivers held best-effort (current, not stale)
+  ok   runTurnBlock: passes { terminal } through to deliverHeld (settled + timeout paths)
+  ok   runTurnBlock: aborted (user Escape) → keeps held + streak, no delivery
+  ok   runTurnBlock: non-terminal + failed reconfirm → keeps held unconfirmed, backs off
+  ok   runTurnBlock: terminal + failed reconfirm → best-effort delivers
+  ok   runTurnBlock: terminal + timeout → only concerns/blockers ship best-effort; nits stay held
+  ok   integration: a nit is delivered during review, not held, never blocks
+  ok   integration: a queued nit enters terminal reconfirmation and surviving advice restates
+  ok   integration: terminal timeout requeue does not fake reconfirmation when late review recants
+  ok   integration: terminal timeout delivers a nit that the late review genuinely re-raises
+  ok   integration: terminal turn — a nit from the lagging previous-turn review is held, reconfirmed by the final turn's review, then delivered
+  ok   integration: terminal turn — a lagging-review nit the final turn's review does NOT re-raise is dropped
+  ok   integration: terminal turn — a nit from the final turn's OWN review lands at settle (no mid-review steer)
+  ok   integration (regression): a reconfirm-as-nit followed by a provider error survives the retry (no premature dedup)
+  ok   integration: blocker held on turn 1, survives reconfirm, delivered after terminal block
+  ok   integration: a blocker first raised ON the terminal turn is caught + delivered (Q1)
+  ok   integration (F1): advice from an orphaned review is dropped without poisoning fresh-epoch dedup
+  ok   integration (F2): a held blocker re-raised as a nit is kept, not de-escalated
+  ok   integration: held blocker is dropped when the reconfirm review recants
+  ok   integration (regression): a held note survives push() and blocks + delivers mid-run
+  ok   integration (regression): terminal timeout delivers a held note stuck mid-reconfirm
+  ok   runtime.waitUntilSettled: settles on drain, times out, and aborts
+  ok   runtime: low-signal pushes stay pending and do not start a review
+  ok   runtime: a high-signal delta drains the deferred queue
+  ok   runtime: held high-priority or terminal forces drain of low-signal pending
+  ok   runtime: backlog and deferral timer drain low-signal pending
+  ok   runtime: onSettled fires after a review even if more low-signal work is still pending
+  ok   runtime.waitUntilSettled: a dropped (3x-failed) review resolves 'failed', held preserved
+  ok   runtime.waitUntilSettled: a provider error (stopReason, no throw) resolves 'failed', held preserved
+  ok   runtime.reprime: stays passive and supplies active context to exactly the next successful review
+  ok   runtime.reprime: an in-flight history rewrite clears the old advisor transcript after abort unwinds
+  ok   runtime.waitUntilSettled: reset() cancels a pending waiter as 'aborted' immediately
+  ok   runtime.waitUntilSettled: a truncated review retries 3 times then fails, without resetting the agent
+  ok   runtime.waitUntilSettled: a later successful review still prunes recanted holds
+  ok   runtime: a concern/blocker held by a DISCARDED overflowed attempt is rolled back, not kept (finding #1)
+  ok   runtime: overflow rollback restores pre-existing held severity by value
+  ok   runtime: attempt-only queued advice is rolled back after reactive overflow
+  ok   runtime: overflow rollback does not resurrect advice concurrently drained at a boundary
+  ok   runtime: one queue dedupes, escalates, splits nits, and resets
+  ok   runtime: the reactive rollback keeps PRE-EXISTING held notes, dropping only the discarded attempt's adds (finding #1)
+  ok   runtime: does not privately reset when context is a large fraction of the window
+  ok   runtime: bound session records each prompt including a self-compaction replay
+  ok   runtime: unbound session writes no usage records
+  ok   runtime.acceptingAdvice: an in-flight review orphaned by reset() stops accepting advice
+  ok   runtime queue: re-raising advice at higher severity escalates it
+  ok   extension loads + registers /advisor command, advisory renderer, and branch lifecycle hook
+  ok   agent-core ordering: a steer queued during streaming is inserted after that assistant turn_end
+  ok   lifecycle: before_agent_start appends the primary protocol only while enabled
+  ok   lifecycle: primary compact leaves the advisor alone; identity change does not dump primary context
+  ok   lifecycle: a direct late nit after terminal turn_end restates
+  ok   lifecycle: a direct late nit after non-terminal turn_end does not restate
+  ok   render: advisory card shows severity tag + note text
+  ok   render: plain nit shows NIT tag
+  ok   render: advisory card has a left border on both the heading and body lines
+  ok   render: multiple advisory notes in one message render as separate bordered cards
+  ok   E2E (skipped: set ADVISOR_E2E=1 to run the pi harness)
+
+110/110 passed
+
+> apple-pi@0.1.0 test:loader
+> node tests/package-load.mjs
+
+apple-pi: all extension entrypoints loaded

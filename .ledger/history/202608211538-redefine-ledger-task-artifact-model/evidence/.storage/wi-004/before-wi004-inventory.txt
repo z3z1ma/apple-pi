@@ -1,0 +1,261 @@
+108:skills/test-first-development/SKILL.md:16:## Ledger State: Executable Evidence
+109:skills/test-first-development/SKILL.md:18:The active specification or task Acceptance Criteria define the behavior; tests do not invent it. Map RED and GREEN observations to the owned Work Item or `AC-###` criterion, including the command, expected failure, actual failure, passing result, and limits. A passing test proves its assertions only. If writing the test requires choosing unratified product semantics, stop execution, record the blocker, and return to `task-shaping` rather than laundering the guess through a green suite.
+121:skills/plan-execution/SKILL.md:3:description: "Use when you have an authorized Ledger implementation plan to execute sequentially with review checkpoints."
+122:skills/plan-execution/SKILL.md:10:Load the governing Ledger task and plan, review critically, execute every Work Item, maintain observed evidence and review state, and report when complete.
+123:skills/plan-execution/SKILL.md:16:Own one Work Item or acceptance gap at a time. The plan supplies commander's intent; active specifications and decisions supply semantic authority. Journal material progress and discoveries when observed, keep evidence tied to commands and limits, and pull execution back to shaping when new ambiguity could change behavior or acceptance. Out-of-scope findings need an existing owner, a new bounded task, or a substantive no-action rationale; they do not silently expand the current task.
+124:skills/plan-execution/SKILL.md:20:### Step 1: Load and Review Plan
+125:skills/plan-execution/SKILL.md:23:3. Resolve dependencies and verify Blockers is honestly `None.`.
+126:skills/plan-execution/SKILL.md:25:5. Review the plan critically for stale source assumptions, conflicting interfaces, missing failure behavior, and unowned side effects.
+127:skills/plan-execution/SKILL.md:26:6. Raise material concerns before starting; when ready, set Status to `active`, confirm the `WI-###` rows in `task.md`, and record the execution start in Journal.
+128:skills/plan-execution/SKILL.md:28:### Step 2: Execute Work Items
+129:skills/plan-execution/SKILL.md:30:For each Work Item:
+130:skills/plan-execution/SKILL.md:31:1. Record the Work Item as started in Journal.
+131:skills/plan-execution/SKILL.md:35:5. Use `review-commissioning` when the Work Item has a review gate.
+132:skills/plan-execution/SKILL.md:36:6. Mark the `WI-###` row complete only after implementation, checks, and review pass.
+133:skills/plan-execution/SKILL.md:37:7. Record commands, results, mapped `AC-###` criteria, limits, confirmed findings, and dispositions in Evidence and Review.
+134:skills/plan-execution/SKILL.md:39:A complete Work Item is implementation progress; Acceptance Criteria require their own observed evidence.
+135:skills/plan-execution/SKILL.md:51:- Hit a blocker (missing dependency, test fails, instruction unclear)
+136:skills/plan-execution/SKILL.md:60:**Return to Review (Step 1) when:**
+137:skills/plan-execution/SKILL.md:64:**Don't force through blockers** - stop and ask.
+138:skills/plan-execution/SKILL.md:67:- Review plan critically first
+139:skills/parallel-orchestration/SKILL.md:3:description: "Use when facing 2+ independent Ledger Work Items or problem domains that can be worked on without shared state or sequential dependencies."
+140:skills/parallel-orchestration/SKILL.md:18:Parallelism follows the governing task graph; it does not create a second task system. Read the task, active records, Work Items, and dependency edges before dispatch. Fan out only domains that can produce independent observations or non-overlapping writes. Bind each worker to one question or Work Item, require its changed paths or findings and evidence limits, and reconcile every result into the owning task's Journal, Evidence, Review, Blockers, or follow-up ownership. A worker report is a claim until the controller checks it against repository state.
+141:skills/parallel-orchestration/SKILL.md:106:### 4. Review and Integrate
+142:skills/parallel-orchestration/SKILL.md:191:1. **Review each summary** - Understand what changed
+228:skills/ralph/SKILL.md:8:Ralph is a caller-controlled outer loop around fresh coding workers. The repository carries implementation state between iterations; the caller supplies the goal, bounds the run, interprets the result, and retains review and integration authority.
+229:skills/ralph/SKILL.md:16:- [`references/ralph-ledger-review.js`](references/ralph-ledger-review.js) is an advanced, explicitly opt-in Ledger composition that couples each increment to an inlined Review spine.
+230:skills/ralph/SKILL.md:56:- **Context:** only the caller-supplied stack and, for reviewed runs, bounded review feedback.
+231:skills/ralph/SKILL.md:83:Use `ralph-ledger.js` when a prepared Ledger task owns scope, acceptance, evidence, and blockers.
+232:skills/ralph/SKILL.md:101:Adapt `ledger-increment.md` with the task terminology, acceptance criteria, relevant paths, implementation constraints, likely failure modes, and fastest relevant checks. Preserve its one-increment boundary, Ledger-memory contract, ordinary-tool boundary, no-commit rule, and no-review rule.
+233:skills/ralph/SKILL.md:103:## Review ownership
+234:skills/ralph/SKILL.md:105:Default Ralph does not plan, review, verify, or close the overall goal. After a batch, the caller loads `review` when independent review is warranted, records any durable findings in the real state owner, and decides whether another bounded batch is useful.
+235:skills/ralph/SKILL.md:107:Use `ralph-ledger-review.js` only when the operator explicitly requests the tighter increment-then-review Ledger composition. Adapt the planner, reviewer, and verifier prompt contracts from the `review` skill and inline them in the program. This advanced example does not replace the normal separation between implementation and independent review.
+236:skills/ralph/SKILL.md:109:For Ledger work, `review-commissioning` owns bounded specification, plan, Work Item, and fix gates; `implementation-planning` and `plan-execution` own ordinary plan lifecycle; `task-closure` owns closure and integration choices. `ledger_add` only creates tasks and `ledger_close` only archives them.
+273:skills/work-item-orchestration/implementer-prompt.md:28:    - Dependencies or assumptions
+274:skills/work-item-orchestration/implementer-prompt.md:40:    5. Self-review (see below)
+275:skills/work-item-orchestration/implementer-prompt.md:46:    It's always OK to pause and clarify. Don't guess or make assumptions.
+276:skills/work-item-orchestration/implementer-prompt.md:54:    implement part of the task, and above all never spawn a reviewer to
+277:skills/work-item-orchestration/implementer-prompt.md:55:    check your work. Self-review (below) means reading your own diff.
+278:skills/work-item-orchestration/implementer-prompt.md:56:    Review is the controller's job: after you report, it dispatches a
+279:skills/work-item-orchestration/implementer-prompt.md:57:    fresh reviewer against your diff. A reviewer you spawn duplicates
+280:skills/work-item-orchestration/implementer-prompt.md:58:    that review at full cost, and its approval counts for nothing in
+281:skills/work-item-orchestration/implementer-prompt.md:59:    the process. If you catch yourself thinking "an independent review
+282:skills/work-item-orchestration/implementer-prompt.md:60:    would strengthen my report" — that review is already scheduled.
+283:skills/work-item-orchestration/implementer-prompt.md:93:    ## Before Reporting Back: Self-Review
+284:skills/work-item-orchestration/implementer-prompt.md:95:    Review your work with fresh eyes. Ask yourself:
+285:skills/work-item-orchestration/implementer-prompt.md:118:    If you find issues during self-review, fix them now before reporting.
+286:skills/work-item-orchestration/implementer-prompt.md:120:    ## After Review Findings
+287:skills/work-item-orchestration/implementer-prompt.md:122:    If the task review finds issues, you will be resumed with the findings.
+288:skills/work-item-orchestration/implementer-prompt.md:125:    ran, the command, and the output. Reviewers will not re-run tests for
+289:skills/work-item-orchestration/implementer-prompt.md:126:    you — your report is the test evidence. Then reply with the same short
+290:skills/work-item-orchestration/implementer-prompt.md:134:    - **TDD Evidence** (if TDD was required for this task):
+291:skills/work-item-orchestration/implementer-prompt.md:138:    - Self-review findings (if any)
+328:skills/work-item-orchestration/task-reviewer-prompt.md:1:# Task Reviewer Prompt Template
+329:skills/work-item-orchestration/task-reviewer-prompt.md:3:Use this template as the rubric for `review-commissioning`'s executable review gate in `work-item` mode. Do not dispatch it as a free-form worker. Put changed files in `paths`; put the brief, report, unique BASE-to-worktree package, and governing records in `contextPaths`; translate this rubric into `question` and `checks`.
+330:skills/work-item-orchestration/task-reviewer-prompt.md:9:`review` worker guidance:
+331:skills/work-item-orchestration/task-reviewer-prompt.md:10:  description: "Review WI-### (spec + quality)"
+332:skills/work-item-orchestration/task-reviewer-prompt.md:13:    You are reviewing one task's implementation: first whether it matches its
+333:skills/work-item-orchestration/task-reviewer-prompt.md:15:    not a merge review — a broad whole-branch review happens separately after
+334:skills/work-item-orchestration/task-reviewer-prompt.md:29:    ## Diff Under Review
+335:skills/work-item-orchestration/task-reviewer-prompt.md:34:    Read the diff file once — it contains tracked status and patches plus every non-ignored untracked file patch, including binary patches. It is your complete view of the Work Item change. The diff's context lines ARE the changed files: do not Read a changed file separately unless a hunk you must judge is cut off mid-function — and say so in your report. Do not re-run git commands.
+336:skills/work-item-orchestration/task-reviewer-prompt.md:36:    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE BASE`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
+337:skills/work-item-orchestration/task-reviewer-prompt.md:44:    Your review is read-only on this checkout. Do not mutate the working
+338:skills/work-item-orchestration/task-reviewer-prompt.md:49:    Do all of this review yourself. Never spawn a subagent to review part
+339:skills/work-item-orchestration/task-reviewer-prompt.md:50:    of the diff, and never spawn another reviewer for a second opinion.
+340:skills/work-item-orchestration/task-reviewer-prompt.md:51:    This process already provides every review seat the work gets; a
+341:skills/work-item-orchestration/task-reviewer-prompt.md:52:    reviewer you spawn duplicates one of them at full cost, and its
+342:skills/work-item-orchestration/task-reviewer-prompt.md:54:    pass, review it in passes yourself and say so in your report.
+343:skills/work-item-orchestration/task-reviewer-prompt.md:68:    evidence for exactly this code. Do not re-run the suite to confirm their
+344:skills/work-item-orchestration/task-reviewer-prompt.md:79:    Evidence you cannot see is not evidence that doesn't exist. If the
+345:skills/work-item-orchestration/task-reviewer-prompt.md:80:    report or its test evidence looks truncated, or you cannot locate the
+346:skills/work-item-orchestration/task-reviewer-prompt.md:84:    verification; illegibility of the evidence is not invalidation of it.
+347:skills/work-item-orchestration/task-reviewer-prompt.md:127:    Your report should point at evidence: file:line references for every
+348:skills/work-item-orchestration/task-reviewer-prompt.md:154:    evidence gap that prevents trusting the Work Item.
+349:skills/work-item-orchestration/task-reviewer-prompt.md:157:    `OBS-WI-###-01`, `OBS-WI-###-02`, and so on. Each observation retains its
+350:skills/work-item-orchestration/task-reviewer-prompt.md:158:    calibrated severity, trigger, evidence, impact, and recommendation through
+351:skills/work-item-orchestration/task-reviewer-prompt.md:159:    fix rounds. The controller records an open Review entry for every ID and a
+352:skills/work-item-orchestration/task-reviewer-prompt.md:182:    For each issue: observation ID, file:line, trigger, evidence, impact, and
+353:skills/work-item-orchestration/task-reviewer-prompt.md:187:    Findings discovered outside the Work Item diff, each with observation ID,
+354:skills/work-item-orchestration/task-reviewer-prompt.md:188:    calibrated severity, trigger/evidence/impact, suggested owner, and revisit
+355:skills/work-item-orchestration/task-reviewer-prompt.md:200:- `[PROFILE]` — REQUIRED: reviewer profile per SKILL.md Model Selection
+356:skills/work-item-orchestration/task-reviewer-prompt.md:201:- `[BRIEF_FILE]` — REQUIRED: the Work Item brief file (`scripts/task-brief PLAN_FILE WI_ID` prints the path; same file the implementer worked from)
+357:skills/work-item-orchestration/task-reviewer-prompt.md:208:- `[BASE_SHA]` — worktree comparison boundary recorded before this Work Item
+358:skills/work-item-orchestration/task-reviewer-prompt.md:209:- `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review
+359:skills/work-item-orchestration/task-reviewer-prompt.md:210:  package to (`scripts/review-package PLAN_FILE BASE` prints the unique
+396:skills/work-item-orchestration/re-review-prompt.md:1:# Scoped Re-Review Prompt Template
+397:skills/work-item-orchestration/re-review-prompt.md:3:Use this template as the rubric for `review-commissioning`'s executable review gate in `fix` mode after a fix round. Supply the governing task Review's complete open observation objects as typed `priorObservations` JSON, put the fresh unique BASE-to-worktree package and reports in `contextPaths`, and translate this rubric into `question` and `checks`. Do not dispatch it as a free-form worker. The gate preserves every prior ID, independently verifies addressed/not-addressed status, and reports fix-caused or out-of-scope observations without downgrading severity.
+398:skills/work-item-orchestration/re-review-prompt.md:5:**Purpose:** Verify each finding from the previous review was addressed, and
+399:skills/work-item-orchestration/re-review-prompt.md:9:`review` worker guidance:
+400:skills/work-item-orchestration/re-review-prompt.md:10:  description: "Re-review WI-### fix round R"
+401:skills/work-item-orchestration/re-review-prompt.md:13:    You are re-reviewing one task's fix round. A previous review produced
+402:skills/work-item-orchestration/re-review-prompt.md:30:    **Work Item boundary:** [BASE_SHA]..WORKTREE
+403:skills/work-item-orchestration/re-review-prompt.md:35:    If the package is missing or unreadable, report the evidence gap to the controller. The controller regenerates it with `scripts/review-package PLAN_FILE BASE`; a plain `git diff` is not an equivalent fallback because it omits untracked files.
+404:skills/work-item-orchestration/re-review-prompt.md:37:    Your review is read-only on this checkout. Do not mutate the working
+405:skills/work-item-orchestration/re-review-prompt.md:42:    Do all of this review yourself. Never spawn a subagent to review part
+406:skills/work-item-orchestration/re-review-prompt.md:43:    of the diff, and never spawn another reviewer for a second opinion.
+407:skills/work-item-orchestration/re-review-prompt.md:44:    This process already provides every review seat the work gets; a
+408:skills/work-item-orchestration/re-review-prompt.md:45:    reviewer you spawn duplicates one of them at full cost, and its
+409:skills/work-item-orchestration/re-review-prompt.md:47:    pass, review it in passes yourself and say so in your report.
+410:skills/work-item-orchestration/re-review-prompt.md:51:    Your scope is the findings list and the paths named in the appended fix report. Verdict every finding. Inspect those amended paths for new problems the fix introduced. Do NOT re-review other parts of the BASE-to-worktree package: report unrelated observations under Out-of-Scope Observations — they do not block this Work Item or extend the loop. A broad
+411:skills/work-item-orchestration/re-review-prompt.md:52:    whole-branch review happens after all tasks are complete.
+412:skills/work-item-orchestration/re-review-prompt.md:74:    - **[OBS-WI-###-NN — finding one-liner]** — ADDRESSED | NOT ADDRESSED,
+413:skills/work-item-orchestration/re-review-prompt.md:75:      with file:line evidence. "Attempted" is not addressed: the specific
+414:skills/work-item-orchestration/re-review-prompt.md:100:- `[PROFILE]` — REQUIRED: reviewer profile per SKILL.md Model Selection; scoped re-reviews of small fix diffs take a quick-to-balanced profile
+415:skills/work-item-orchestration/re-review-prompt.md:103:  previous review, copied verbatim, one per bullet
+416:skills/work-item-orchestration/re-review-prompt.md:105:- `[BASE_SHA]` — the worktree comparison boundary recorded before this Work Item
+417:skills/work-item-orchestration/re-review-prompt.md:106:- `[DIFF_FILE]` — the path `scripts/review-package PLAN_FILE BASE` printed
+418:skills/work-item-orchestration/re-review-prompt.md:108:**Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED),
+419:skills/workspace-isolation/SKILL.md:16:A worktree isolates execution; it does not fork task authority. Record the selected workspace and branch in the governing task Journal, then read the same task and active records from inside the new workspace before implementation. Preserve existing uncommitted work and project-local Ledger storage policy. Creation, branch changes, cleanup, and deletion remain operator-controlled consequential actions unless the operator has explicitly authorized the exact operation.
+480:skills/root-cause-debugging/SKILL.md:16:Start from the governing task or create one only when the defect is non-trivial and unowned. Record the reproduction, falsifiable hypothesis, observations, and limits while they are fresh. Promote an investigation to `research/` when its versions, dead ends, or external findings are worth not repeating; routine evidence stays in `task.md`. A diagnosis that would change accepted behavior, scope, or acceptance pulls execution back into shaping and becomes a blocker rather than an implementation guess.
+481:skills/root-cause-debugging/SKILL.md:74:4. **Gather Evidence in Multi-Component Systems**
+482:skills/root-cause-debugging/SKILL.md:76:   **WHEN existing evidence cannot localize a failure across components (CI → build → signing, API → service → database):**
+483:skills/root-cause-debugging/SKILL.md:126:   - What assumptions does it make?
+484:skills/root-cause-debugging/SKILL.md:222:- "Will it show us...?" - You should have added evidence gathering
+485:skills/root-cause-debugging/SKILL.md:246:| **1. Root Cause** | Read errors, reproduce, check changes, gather evidence | Understand WHAT and WHY |
+499:skills/ralph/references/ledger-increment.md:3:Adapt this reference before inlining it into a Ralph program. Replace the generic goal language with the batch goal's terminology, contracts, risk surfaces, repository paths, and fastest relevant checks. Preserve the fresh-context, one-increment, ledger-memory, no-commit, and no-review boundaries unless the calling program explicitly owns a different contract.
+500:skills/ralph/references/ledger-increment.md:9:Do not infer that the overall task is complete merely because one increment or one batch ends. Do not invent follow-up work when the goal is already satisfied. Stop after one coherent increment; the caller decides whether another bounded iteration or a separate review is appropriate.
+501:skills/ralph/references/ledger-increment.md:15:- **Repository**: inspect current files, existing changes, and ordinary project contracts before editing. Treat repository instructions and task records as evidence and follow their applicable boundaries.
+502:skills/ralph/references/ledger-increment.md:25:5. Update the durable ledger task records with the material change, evidence, remaining work, blockers, and any retrospective or distillation that the task contract requires.
+503:skills/ralph/references/ledger-increment.md:33:You may read and write the repository through the tools granted by the Ralph program. Leave implementation changes uncommitted. Do not commit, push, reset, hide changes, or claim that a review was performed. Review remains a caller-owned `/skill:review` step for the default loop.
+504:skills/work-item-orchestration/SKILL.md:3:description: "Use when executing an authorized Ledger implementation plan whose Work Items are sufficiently independent for fresh typed Agent implementers in the current session."
+505:skills/work-item-orchestration/SKILL.md:8:Execute the active plan by dispatching a fresh typed `Agent` implementer per Work Item, an independent review (spec compliance + code quality) after each, and a broad whole-change review at the end.
+506:skills/work-item-orchestration/SKILL.md:10:**Why Agent children:** You delegate Work Items to typed agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed. They receive a self-contained handoff rather than the root session's history, preserving root context for coordination.
+507:skills/work-item-orchestration/SKILL.md:12:**Core principle:** Fresh implementer per Work Item + Work-Item review (spec + quality) + broad final review = high quality, fast iteration
+508:skills/work-item-orchestration/SKILL.md:18:The root session orchestrates; each typed implementer executes exactly one Work Item. The task, active records, plan, brief, and recorded comparison base are the handoff—not the controller's conversation. Implementer reports remain claims until the independent Work-Item review checks the complete BASE-to-worktree package. The controller alone reconciles Journal, Evidence, Review, blockers, follow-up ownership, and task closure.
+509:skills/work-item-orchestration/SKILL.md:24:Five classes stop execution: an irreversible or destructive operation; a security-sensitive action; a side effect outside this worktree that requires authority (such as merge, push, or publish); an unresolved assumption that could change behavior or acceptance; and a plan so broken that every path forward is a guess. Record the blocker and return that question to shaping.
+510:skills/work-item-orchestration/SKILL.md:31:    "Work Items mostly independent?" [shape=diamond];
+511:skills/work-item-orchestration/SKILL.md:37:    "Have implementation plan?" -> "Work Items mostly independent?" [label="yes"];
+512:skills/work-item-orchestration/SKILL.md:39:    "Work Items mostly independent?" -> "Stay in this session?" [label="yes"];
+513:skills/work-item-orchestration/SKILL.md:40:    "Work Items mostly independent?" -> "Manual execution or brainstorm first" [label="no - tightly coupled"];
+514:skills/work-item-orchestration/SKILL.md:48:- Fresh typed `Agent` implementer per Work Item (no context pollution)
+515:skills/work-item-orchestration/SKILL.md:49:- Review after each task (spec compliance + code quality), broad review at the end
+516:skills/work-item-orchestration/SKILL.md:63:        "Implementer implements, tests, reports, self-reviews" [shape=box];
+517:skills/work-item-orchestration/SKILL.md:64:        "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)" [shape=box];
+518:skills/work-item-orchestration/SKILL.md:69:        "Dispatch scoped re-review (./re-review-prompt.md)" [shape=box];
+519:skills/work-item-orchestration/SKILL.md:74:        "Mark WI/task blocked; return to shaping or evidence" [shape=box];
+520:skills/work-item-orchestration/SKILL.md:76:        "Record evidence and mark WI complete" [shape=box];
+521:skills/work-item-orchestration/SKILL.md:79:    "Setup: worktree, ledger check, read plan, pre-flight review" [shape=box];
+522:skills/work-item-orchestration/SKILL.md:80:    "More Work Items remain?" [shape=diamond];
+523:skills/work-item-orchestration/SKILL.md:81:    "Run final review (../review-commissioning/code-reviewer.md)" [shape=box];
+524:skills/work-item-orchestration/SKILL.md:82:    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" [shape=box];
+525:skills/work-item-orchestration/SKILL.md:84:    "Final review clean: retain plan evidence for Ledger closure" [shape=box];
+526:skills/work-item-orchestration/SKILL.md:87:    "Setup: worktree, ledger check, read plan, pre-flight review" -> "Dispatch typed Agent implementer (./implementer-prompt.md)";
+527:skills/work-item-orchestration/SKILL.md:90:    "Answer questions, provide context" -> "Implementer implements, tests, reports, self-reviews";
+528:skills/work-item-orchestration/SKILL.md:91:    "Implementer asks questions?" -> "Implementer implements, tests, reports, self-reviews" [label="no"];
+529:skills/work-item-orchestration/SKILL.md:92:    "Implementer implements, tests, reports, self-reviews" -> "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)";
+530:skills/work-item-orchestration/SKILL.md:93:    "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)" -> "Spec ✅ and quality approved?";
+531:skills/work-item-orchestration/SKILL.md:94:    "Spec ✅ and quality approved?" -> "Record evidence and mark WI complete" [label="yes"];
+532:skills/work-item-orchestration/SKILL.md:99:    "Fix round R of 5: R≤3 resume implementer; R≥4 fresh implementer, more capable model" -> "Dispatch scoped re-review (./re-review-prompt.md)";
+533:skills/work-item-orchestration/SKILL.md:100:    "Dispatch scoped re-review (./re-review-prompt.md)" -> "All findings addressed?";
+534:skills/work-item-orchestration/SKILL.md:101:    "All findings addressed?" -> "Record evidence and mark WI complete" [label="yes"];
+535:skills/work-item-orchestration/SKILL.md:106:    "Any Critical/Important unresolved?" -> "Mark WI/task blocked; return to shaping or evidence" [label="yes"];
+536:skills/work-item-orchestration/SKILL.md:108:    "Only disproved or bounded Minor findings remain" -> "Record evidence and mark WI complete";
+537:skills/work-item-orchestration/SKILL.md:109:    "Record evidence and mark WI complete" -> "More Work Items remain?";
+538:skills/work-item-orchestration/SKILL.md:110:    "More Work Items remain?" -> "Dispatch typed Agent implementer (./implementer-prompt.md)" [label="yes"];
+539:skills/work-item-orchestration/SKILL.md:111:    "More Work Items remain?" -> "Run final review (../review-commissioning/code-reviewer.md)" [label="no"];
+540:skills/work-item-orchestration/SKILL.md:112:    "Run final review (../review-commissioning/code-reviewer.md)" -> "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings";
+541:skills/work-item-orchestration/SKILL.md:113:    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" -> "Final material residuals (Critical/Important or critical/significant): mark task blocked" [label="material unresolved"];
+542:skills/work-item-orchestration/SKILL.md:114:    "Final findings? ONE fix dispatch, one full plan-review-verify rerun with priorFindings" -> "Final review clean: retain plan evidence for Ledger closure" [label="clean or bounded Minor only"];
+543:skills/work-item-orchestration/SKILL.md:115:    "Final review clean: retain plan evidence for Ledger closure" -> "Use task-closure";
+544:skills/work-item-orchestration/SKILL.md:123:Read `.ledger/INDEX.md`, the governing `task.md`, the active plan, and every active referenced specification and decision. Confirm implementation authorization, dependency readiness, and `Blockers: None.` Set task Status to `active` when execution begins.
+545:skills/work-item-orchestration/SKILL.md:125:Conversation memory does not survive compaction. In real sessions, controllers that lost their place have re-dispatched entire completed Work Item sequences — the single most expensive failure observed. The task's `WI-###` rows, Journal, Evidence, and Review are the recovery map. After compaction, trust those records and current repository evidence over recollection.
+546:skills/work-item-orchestration/SKILL.md:127:Each plan owns an artifact directory under its Ledger bundle. Run `scripts/sdd-workspace PLAN_FILE`; it validates that the plan lives under `.ledger/<task-id>/plans/` and prints `.ledger/<task-id>/evidence/sdd/<plan-basename>/`. Briefs, reports, and review packages for this plan stay there. Progress remains in `task.md`, not in another progress file.
+547:skills/work-item-orchestration/SKILL.md:129:Read the plan once, note its context and Global Constraints, and reconcile its Work Items with `task.md`. If the plan names a Spec, read that too: the spec is the authority the plan argues from, and conflicts inside the plan resolve against it. A plan with no reachable spec gets a Journal entry saying so — rulings made without one are provisional.
+548:skills/work-item-orchestration/SKILL.md:133:- Work Items that contradict each other or the plan's Global Constraints;
+549:skills/work-item-orchestration/SKILL.md:134:- anything the plan explicitly mandates that the review rubric treats as a defect.
+550:skills/work-item-orchestration/SKILL.md:136:The scan's output is a table, not a verdict. One row for every pair of Work Items that share a file or interface: the two Work Items, what one produces against what the other consumes, and what you found. One row for every Work Item: whether its own text agrees with itself. "The scan is clean" without those rows is not a scan you ran.
+551:skills/work-item-orchestration/SKILL.md:138:Record the table in the active plan or task Journal. Resolve each conflict before execution — the spec is the binding authority, the plan is its argument. Consequential choices go under `decisions/`; execution implications go in Journal. Then dispatch WI-001. The review loop remains the net for conflicts that only emerge from implementation.
+552:skills/work-item-orchestration/SKILL.md:149:The final whole-branch review is one of these — dispatch it on the most
+553:skills/work-item-orchestration/SKILL.md:152:**Review tasks**: choose the model with the same judgment, scaled to the
+554:skills/work-item-orchestration/SKILL.md:154:most capable model; a subtle concurrency change does. Scoped re-reviews of
+555:skills/work-item-orchestration/SKILL.md:160:**Always specify the profile explicitly when dispatching `Agent`.** An omitted profile inherits the configured agent profile, which may not match the Work Item. Profiles select model/thinking policy; the `Implement` type supplies the role and capabilities.
+556:skills/work-item-orchestration/SKILL.md:165:floor for reviewers and for implementers working from prose descriptions.
+557:skills/work-item-orchestration/SKILL.md:181:its change, send the whole batch to a single subagent, and review its diff
+558:skills/work-item-orchestration/SKILL.md:183:judgment, its own tests, or its own review surface.
+559:skills/work-item-orchestration/SKILL.md:191:While you have local work — ledger updates, packaging the next review,
+560:skills/work-item-orchestration/SKILL.md:202:Record BASE (`git rev-parse HEAD`) before dispatching. The review package captures the current worktree diff against this unchanged boundary.
+561:skills/work-item-orchestration/SKILL.md:217:  (brief `…/WI-###-brief.md` → report `…/WI-###-report.md`) and put it in
+562:skills/work-item-orchestration/SKILL.md:227:  not helpers, and never a reviewer. Review arrives from you, after the
+563:skills/work-item-orchestration/SKILL.md:228:  report. In real sessions, every reviewer a worker spawned duplicated
+564:skills/work-item-orchestration/SKILL.md:229:  the task review the controller dispatched anyway — a full extra
+565:skills/work-item-orchestration/SKILL.md:230:  review seat per task.
+566:skills/work-item-orchestration/SKILL.md:243:**DONE:** Generate the review package (`scripts/review-package PLAN_FILE BASE`, from this skill's directory — it prints the Ledger-owned file path containing the complete BASE-to-worktree change, including non-ignored untracked text and binary files), then dispatch the task reviewer with the printed path.
+567:skills/work-item-orchestration/SKILL.md:245:**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+568:skills/work-item-orchestration/SKILL.md:249:**BLOCKED:** The implementer cannot complete the task. Assess the blocker:
+569:skills/work-item-orchestration/SKILL.md:261:### 3. Review the task
+570:skills/work-item-orchestration/SKILL.md:263:Per-task reviews are task-scoped gates. The broad review happens once, at the
+571:skills/work-item-orchestration/SKILL.md:264:final whole-branch review. Never skip the task review, and never accept a
+572:skills/work-item-orchestration/SKILL.md:266:required. Implementer self-review never replaces the task review; both are
+573:skills/work-item-orchestration/SKILL.md:269:- Hand the reviewer its change as a file: run this skill's `scripts/review-package PLAN_FILE BASE` and pass the printed path. The output never enters your own context. The reviewer sees tracked status and patches plus every non-ignored untracked file patch, including binary patches, in one Read call. Use the BASE recorded before dispatching the implementer. Never dispatch a task reviewer without this package; plain `git diff` omits untracked files.
+574:skills/work-item-orchestration/SKILL.md:270:- **Reviewer inputs:** the task reviewer gets three paths — the same brief
+575:skills/work-item-orchestration/SKILL.md:271:  file, the report file, and the review package — plus the global
+576:skills/work-item-orchestration/SKILL.md:273:- The global-constraints block you hand the reviewer is its attention
+577:skills/work-item-orchestration/SKILL.md:277:  Y"). The reviewer's template already carries the process rules (YAGNI,
+578:skills/work-item-orchestration/SKILL.md:278:  test hygiene, review method) — the constraints block is for what THIS
+579:skills/work-item-orchestration/SKILL.md:282:- Do not ask a reviewer to re-run tests the implementer already ran on the
+580:skills/work-item-orchestration/SKILL.md:283:  same code — the implementer's report carries the test evidence
+581:skills/work-item-orchestration/SKILL.md:284:- Do not pre-judge findings for the reviewer — never instruct a reviewer to
+582:skills/work-item-orchestration/SKILL.md:286:  false positive, let the reviewer raise it and adjudicate it in the review
+583:skills/work-item-orchestration/SKILL.md:289:  pre-judging, usually to spare yourself a review loop.
+584:skills/work-item-orchestration/SKILL.md:290:The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
+585:skills/work-item-orchestration/SKILL.md:292:review, but you must resolve each one yourself before marking the task
+586:skills/work-item-orchestration/SKILL.md:293:complete: you hold the plan and cross-task context the reviewer
+587:skills/work-item-orchestration/SKILL.md:295:review — it enters the fix loop with the other findings.
+588:skills/work-item-orchestration/SKILL.md:297:Load `review-commissioning`, then use its executable review gate in `work-item` mode. Translate [task-reviewer-prompt.md](task-reviewer-prompt.md) into the gate inputs, include the brief, report, unique review package, and global constraints in `contextPaths`, and use the actual `WI-###` as `workItem`.
+589:skills/work-item-orchestration/SKILL.md:299:Before routing findings, assign or retain each observation's stable `OBS-WI-###-NN` ID and append it to the governing task Review with calibrated severity, trigger/evidence/impact, and `status: open`. Every later re-review verdict records one `Disposition:` line for that ID (`resolved`, `rejected`, bounded `Minor deferred`, or `material unresolved`) or links it to a new owned Ledger task. Fix-round counts never replace per-observation state.
+590:skills/work-item-orchestration/SKILL.md:301:**Severity mapping:** task-reviewer `Critical`/`Important` and whole-change `review` `critical`/`significant` are material and block while unresolved. Only calibrated `Minor`/`minor` findings can use the bounded-Minor path.
+591:skills/work-item-orchestration/SKILL.md:305:The loop triggers when the review reports spec ❌, any Critical or Important
+592:skills/work-item-orchestration/SKILL.md:311:  `WI-###: Disposition: Minor deferred — OBS-WI-###-NN — <finding> — <impact, owner, revisit condition>`.
+593:skills/work-item-orchestration/SKILL.md:312:  Point the final whole-branch review at every `Disposition:` line so it can
+594:skills/work-item-orchestration/SKILL.md:322:scoped re-review. Five rounds maximum per task:
+595:skills/work-item-orchestration/SKILL.md:339:and returns the short contract. Before re-dispatching the reviewer, confirm
+596:skills/work-item-orchestration/SKILL.md:341:output; dispatch the re-review once all three are present. Name the
+597:skills/work-item-orchestration/SKILL.md:345:**The re-review is scoped.** Regenerate `scripts/review-package PLAN_FILE BASE` and run the executable review gate in `fix` mode. Pass the governing task Review's complete open observation objects as typed `priorObservations` JSON; translate [re-review-prompt.md](re-review-prompt.md) into the gate checks and include the brief, report file, and fresh BASE-to-worktree package in `contextPaths`. The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and uses the appended fix report to inspect amended paths for new breakage. New Critical/Important breakage attributable to those amendments joins the open findings list. Calibrate unrelated observations independently and assign an `OBS-WI-###-NN` ID: record a bounded Minor as `WI-###: Disposition: Minor deferred — <observation id> — <finding> — <impact, owner, revisit condition>`. A real Critical/Important defect gets a new owned Ledger task; if the current Work Item or downstream work relies on the broken behavior, also record `WI-###: Disposition: material unresolved — <observation id> — ...` and block the current task. Location outside the fix diff never downgrades severity.
+598:skills/work-item-orchestration/SKILL.md:348:`WI-###: fix round <R>/5 (<X> addressed, <Y> open — <finding one-liners>; changed paths <paths>)`
+599:skills/work-item-orchestration/SKILL.md:351:clean for coordination, and controller fixes skip review.
+600:skills/work-item-orchestration/SKILL.md:353:**The breaker.** When round 5's re-review still leaves findings open, stop
+601:skills/work-item-orchestration/SKILL.md:357:- **Disproved:** record `WI-###: Disposition: rejected — <observation id> — <finding> — <trigger/evidence>`. A controller preference is not disproof.
+602:skills/work-item-orchestration/SKILL.md:360:  `WI-###: Disposition: Minor deferred — <observation id> — <finding> — <impact, owner, revisit condition>`.
+603:skills/work-item-orchestration/SKILL.md:361:- **Confirmed or unresolved Critical/Important:** mark the Work Item and task
+604:skills/work-item-orchestration/SKILL.md:362:  blocked with `WI-###: Disposition: material unresolved — <observation id> — <finding> — <evidence or authority needed>`. If it exposes a plan or product-semantics gap,
+605:skills/work-item-orchestration/SKILL.md:372:Append a completion line only when review is clean, every candidate is
+606:skills/work-item-orchestration/SKILL.md:375:- `WI-###: complete (review clean; checks <commands>)`
+607:skills/work-item-orchestration/SKILL.md:376:- `WI-###: complete (<K> bounded Minor findings; checks <commands>)`
+608:skills/work-item-orchestration/SKILL.md:378:Then mark the matching `WI-###` row complete and move on only after every `OBS-WI-###-NN` has a durable `Disposition:` or an owned follow-up task. Any confirmed or
+609:skills/work-item-orchestration/SKILL.md:379:unresolved material finding keeps the Work Item blocked.
+610:skills/work-item-orchestration/SKILL.md:381:## Final Review
+611:skills/work-item-orchestration/SKILL.md:383:The final whole-branch review gets a package too: run
+612:skills/work-item-orchestration/SKILL.md:384:`scripts/review-package PLAN_FILE MERGE_BASE` (MERGE_BASE = the commit the
+613:skills/work-item-orchestration/SKILL.md:386:printed path in the final review context. Use `review`'s full
+614:skills/work-item-orchestration/SKILL.md:387:`plan-review-verify.js` topology—not the bounded Ledger gate—so a fresh planner covers every changed path, focused read-only reviewers investigate the partitions, and a deep verifier reconciles findings and coverage gaps. Adapt review-commissioning's
+615:skills/work-item-orchestration/SKILL.md:388:`review-commissioning`'s `code-reviewer.md` into the planner/reviewer/verifier prompts. Point it at every Ledger line containing `Disposition:` so it can triage which must be fixed before merge.
+616:skills/work-item-orchestration/SKILL.md:390:If the final whole-branch review returns findings, dispatch ONE fix subagent
+617:skills/work-item-orchestration/SKILL.md:393:session's final-review fix wave cost more than all its tasks combined.
+618:skills/work-item-orchestration/SKILL.md:394:Then regenerate `scripts/review-package PLAN_FILE MERGE_BASE` and run one fresh
+619:skills/work-item-orchestration/SKILL.md:395:full `review` `plan-review-verify.js`
+620:skills/work-item-orchestration/SKILL.md:398:severity, path, trigger, evidence, impact, recommendation, stored `scope`, and
+621:skills/work-item-orchestration/SKILL.md:405:bounded Work-Item `fix` gate or [re-review-prompt.md](re-review-prompt.md).
+622:skills/work-item-orchestration/SKILL.md:406:There is no second fix wave: confirmed or unresolved `review`
+623:skills/work-item-orchestration/SKILL.md:408:with their exact evidence/authority need; only disproved candidates or bounded
+624:skills/work-item-orchestration/SKILL.md:415:findings, and material blockers—into your final message under "Rulings and
+625:skills/work-item-orchestration/SKILL.md:420:Keep this plan's briefs, reports, and review packages in its Ledger evidence directory until the task is archived. `task-closure` decides what durable outcomes leave the task bundle; Git history is not a substitute for task acceptance evidence.
+626:skills/work-item-orchestration/SKILL.md:428:| "Close enough on spec compliance" | Reviewer found spec gaps = not done. Fix or hit the cap and adjudicate — those are the only exits. |
+627:skills/work-item-orchestration/SKILL.md:429:| "I'll fix it myself, dispatching is overhead" | Controller fixes pollute your context and skip review. Resume the implementer. |
+628:skills/work-item-orchestration/SKILL.md:431:| "The reviewer will just find something new anyway" | Scoped re-reviews verify fixes; they cannot wander. New findings on untouched code go to the ledger, not the loop. |
+629:skills/work-item-orchestration/SKILL.md:433:| "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
+630:skills/work-item-orchestration/SKILL.md:434:| "Reviews slow the loop down" | The loop without reviews is just unverified churn. Reviews are the loop's brakes and steering. |
+631:skills/work-item-orchestration/SKILL.md:436:| "The implementer spawned its own reviewer — free extra assurance" | It's a duplicate seat reviewing the same diff; the task review is the gate. A worker-spawned reviewer is a defect to flag, not rigor. |
+632:skills/work-item-orchestration/SKILL.md:446:[Reconcile `WI-###` rows in task.md]
+633:skills/work-item-orchestration/SKILL.md:459:  - Self-review: Found I missed --force flag, added it
+634:skills/work-item-orchestration/SKILL.md:462:[Run review-package PLAN_FILE BASE; run `review` with the printed path]
+635:skills/work-item-orchestration/SKILL.md:463:Task reviewer: Spec ✅ - all requirements met, nothing extra.
+636:skills/work-item-orchestration/SKILL.md:466:[Ledger: WI-001 complete (changed paths recorded, checks passed, review clean)]
+637:skills/work-item-orchestration/SKILL.md:477:[Run review-package PLAN_FILE BASE; run `review` with the printed path]
+638:skills/work-item-orchestration/SKILL.md:478:Task reviewer: Spec ❌:
+639:skills/work-item-orchestration/SKILL.md:486:[Regenerate review-package PLAN_FILE BASE; dispatch scoped re-review]
+640:skills/work-item-orchestration/SKILL.md:487:Re-reviewer: Missing progress reporting — ADDRESSED (src/recovery.js:41).
+641:skills/work-item-orchestration/SKILL.md:491:[Ledger Review: WI-002 fix round 1/5 (2 addressed, 0 open; changed paths recorded)]
+642:skills/work-item-orchestration/SKILL.md:492:[Ledger: WI-002 complete (checks passed, review clean)]
+643:skills/work-item-orchestration/SKILL.md:497:[Run review-package PLAN_FILE MERGE_BASE; run final `review` with deep verification]
+644:skills/work-item-orchestration/SKILL.md:498:Final reviewer: All requirements met. Deferred minors triaged: none block merge.
+645:skills/work-item-orchestration/SKILL.md:500:[Retain this plan's Ledger evidence workspace for closure and archival]

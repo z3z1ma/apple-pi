@@ -1,0 +1,1 @@
+5:skills/task-shaping/SKILL.md:56:Specification-review observations, verifier dispositions, coverage gaps, and residual risk belong in an evidence note. Material remediation returns to shaping and updates the specification or decision; it never becomes a task-root Review section.

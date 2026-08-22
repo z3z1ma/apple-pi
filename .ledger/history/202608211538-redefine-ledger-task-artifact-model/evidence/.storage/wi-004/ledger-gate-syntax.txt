@@ -1,0 +1,1 @@
+ledger-gate.js async-body syntax: valid

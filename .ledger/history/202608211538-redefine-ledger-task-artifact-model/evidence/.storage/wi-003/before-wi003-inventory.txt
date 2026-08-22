@@ -1,0 +1,92 @@
+213:skills/task-shaping/spec-document-reviewer-prompt.md:1:# Specification Reviewer Prompt Template
+214:skills/task-shaping/spec-document-reviewer-prompt.md:3:Use this template as the rubric for `review-commissioning`'s executable review gate in `specification` mode after an architectural specification is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into the gate's `question` and `checks`, put the specification in `paths`, and put governing records in `contextPaths`.
+215:skills/task-shaping/spec-document-reviewer-prompt.md:8:`review` worker guidance:
+216:skills/task-shaping/spec-document-reviewer-prompt.md:9:  description: "Review Ledger specification"
+217:skills/task-shaping/spec-document-reviewer-prompt.md:12:    You are independently reviewing one active Ledger specification for planning readiness. Your work is read-only.
+218:skills/task-shaping/spec-document-reviewer-prompt.md:20:    Read those files. Treat active decisions and explicitly user-ratified task assumptions as semantic authority. Treat current source and tests as evidence of present behavior, not authority for a new choice.
+219:skills/task-shaping/spec-document-reviewer-prompt.md:28:    | Provenance | Execution-changing assumptions that are neither record-backed nor user-ratified |
+220:skills/task-shaping/spec-document-reviewer-prompt.md:32:    | Verifiability | Scenarios or criteria that cannot produce observable evidence |
+221:skills/task-shaping/spec-document-reviewer-prompt.md:36:    Flag only issues that could make planning or implementation materially wrong. Minor wording and style differences are not findings. Do not invent missing product semantics; identify the exact ambiguity and the decision it blocks. A polished document and a passing test cannot ratify an assumption.
+222:skills/task-shaping/spec-document-reviewer-prompt.md:44:    For each finding: severity (`critical | significant | minor`), section, evidence, implementation consequence, and smallest corrective action.
+223:skills/task-shaping/spec-document-reviewer-prompt.md:47:    List every execution-changing assumption that still needs a record or operator ratification. `None` if empty.
+224:skills/task-shaping/spec-document-reviewer-prompt.md:50:    State what this document review could not establish.
+225:skills/task-shaping/spec-document-reviewer-prompt.md:60:The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in the task Review; any `materialBlockers` entry blocks planning readiness. The workers do not edit the specification or close the task.
+298:skills/implementation-planning/plan-document-reviewer-prompt.md:1:# Plan Document Reviewer Prompt Template
+299:skills/implementation-planning/plan-document-reviewer-prompt.md:3:Use this template as the rubric for `review-commissioning`'s executable review gate in `plan` mode after the active plan is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into `question` and `checks`, put the plan in `paths`, and put the task/spec/decisions in `contextPaths`.
+300:skills/implementation-planning/plan-document-reviewer-prompt.md:8:`review` worker guidance:
+301:skills/implementation-planning/plan-document-reviewer-prompt.md:9:  description: "Review Ledger implementation plan"
+302:skills/implementation-planning/plan-document-reviewer-prompt.md:12:    You are independently reviewing one Ledger implementation plan. Your work is read-only.
+303:skills/implementation-planning/plan-document-reviewer-prompt.md:25:    | Contract coverage | Every relevant `AC-###` and required scenario has an owning Work Item and falsifying check |
+304:skills/implementation-planning/plan-document-reviewer-prompt.md:27:    | Decomposition | Stable `WI-###` boundaries, explicit dependencies, no overlapping writers, independently observable outcomes |
+305:skills/implementation-planning/plan-document-reviewer-prompt.md:34:    Flag issues that would make an executor build the wrong thing, get stuck, overwrite another owner, or produce evidence that cannot prove acceptance. Minor wording and stylistic preferences are not findings. Do not solve open product semantics inside the review; identify the exact authority gap and criterion it blocks.
+306:skills/implementation-planning/plan-document-reviewer-prompt.md:42:    List each relevant `AC-###` and its owning Work Item/check. Name missing or duplicate ownership.
+307:skills/implementation-planning/plan-document-reviewer-prompt.md:45:    For each finding: severity (`critical | significant | minor`), Work Item/step, evidence, execution consequence, and smallest correction.
+308:skills/implementation-planning/plan-document-reviewer-prompt.md:48:    State what this document review could not establish.
+309:skills/implementation-planning/plan-document-reviewer-prompt.md:58:The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in `task.md` Review; any `materialBlockers` entry blocks execution readiness. The workers do not edit the plan or begin execution.
+310:skills/implementation-planning/SKILL.md:10:Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each Work Item, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized Work Items. DRY. YAGNI. TDD. Frequent verified increments; the operator owns commits.
+311:skills/implementation-planning/SKILL.md:20:A plan is the cold-start bridge from ratified behavior to bounded execution. It must preserve why each Work Item exists, its dependencies and integration points, the exact source surfaces it owns, the failure that proves RED, and the observation that can prove done. Plans may choose reversible implementation mechanics; they may not turn examples, current accidents, or technical convenience into product authority. If a Work Item still requires an execution-changing semantic choice, return it to `task-shaping` instead of hiding the choice in implementation steps.
+312:skills/implementation-planning/SKILL.md:26:Read `task.md`, active specifications, decisions, research, and relevant source. Dependencies resolve first at `.ledger/<task-id>/task.md`, then `.ledger/history/<task-id>/task.md`, and must be `done`. Planning begins when Scope and Non-goals form a perimeter, stable `AC-###` criteria cover success and failure behavior, execution-changing assumptions are sourced or operator-ratified, and Blockers is honestly `None.`.
+313:skills/implementation-planning/SKILL.md:38:Before defining Work Items, map out which files will be created or modified and what each one is responsible for. This is where decomposition decisions get locked in.
+314:skills/implementation-planning/SKILL.md:45:This structure informs the task decomposition. Each Work Item should produce self-contained changes that make sense independently.
+315:skills/implementation-planning/SKILL.md:49:A Work Item is the smallest unit that carries its own test cycle and is worth a
+316:skills/implementation-planning/SKILL.md:50:fresh reviewer's gate. When drawing Work-Item boundaries: fold setup,
+317:skills/implementation-planning/SKILL.md:51:configuration, scaffolding, and documentation steps into the Work Item whose
+318:skills/implementation-planning/SKILL.md:52:deliverable needs them; split only where a reviewer could meaningfully
+319:skills/implementation-planning/SKILL.md:53:reject one Work Item while approving its neighbor. Each Work Item ends with an
+320:skills/implementation-planning/SKILL.md:76:> **For executors:** REQUIRED SUB-SKILL: Use work-item-orchestration (recommended) or plan-execution to implement this plan Work-Item by Work-Item. `task.md` owns the canonical `WI-###` checklist.
+321:skills/implementation-planning/SKILL.md:91:values copied verbatim from the spec. Every Work Item's requirements implicitly
+322:skills/implementation-planning/SKILL.md:100:### WI-###: [Component Name]
+323:skills/implementation-planning/SKILL.md:108:- Consumes: [what this task uses from earlier Work Items — exact signatures]
+324:skills/implementation-planning/SKILL.md:109:- Produces: [what later Work Items rely on — exact function names, parameter
+325:skills/implementation-planning/SKILL.md:111:  block is how they learn the names and types neighboring Work Items use.]
+326:skills/implementation-planning/SKILL.md:140:Update the governing Ledger Work Item, Evidence, and Journal with the observed RED/GREEN results. The operator decides whether and when to commit.
+327:skills/implementation-planning/SKILL.md:149:- "Similar to WI-###" (repeat the code — the engineer may be reading Work Items out of order)
+328:skills/implementation-planning/SKILL.md:153:## Self-Review
+329:skills/implementation-planning/SKILL.md:161:**3. Type consistency:** Do the types, method signatures, and property names you used in later Work Items match what you defined in earlier Work Items? A function called `clearLayers()` in WI-003 but `clearFullLayers()` in WI-007 is a bug.
+330:skills/implementation-planning/SKILL.md:163:If you find issues, fix them inline. If you find a specification requirement with no Work Item, add the Work Item.
+331:skills/implementation-planning/SKILL.md:165:## Independent Plan Review
+332:skills/implementation-planning/SKILL.md:167:Load `review-commissioning` and use its executable review gate in `plan` mode. Translate [plan-document-reviewer-prompt.md](plan-document-reviewer-prompt.md) into `question`, `checks`, plan `paths`, and governing `contextPaths`; pass `references/ledger-gate.js` from that skill as the `pi_exec` program. Record every typed observation and verified disposition in `task.md` Review. Resolve every critical or significant finding and re-run the bounded gate before offering execution. A remaining execution-changing authority gap returns to `task-shaping`; it is not a planning default.
+333:skills/implementation-planning/SKILL.md:175:**1. Agent-Driven (recommended)** - I dispatch a fresh typed `Agent` implementer per Work Item and run `review` between Work Items
+334:skills/implementation-planning/SKILL.md:177:**2. Inline Execution** - Execute Work Items in this session using plan-execution, batch execution with checkpoints
+335:skills/implementation-planning/SKILL.md:183:- Fresh typed implementer per Work Item + independent review
+336:skills/implementation-planning/SKILL.md:187:- Batch execution with checkpoints for review
+346:skills/task-shaping/SKILL.md:14:Search live and historical Ledger tasks, active records, and repository authority before asking the operator to repeat context. Separate facts from choices: every execution-changing assumption must be record-backed, explicitly user-ratified, or blocking. Ask only questions whose answers change the next safe action and pair them with a concrete recommendation. When structured choices help, call the root `ask_user_question` tool directly; do not wrap a single user interaction in `pi_exec`. Record a decision, specification, research finding, or task only when context has crystallized enough to serve a cold-start consumer. Shaping may conclude that deletion, reuse, documentation, or no code is the smallest complete answer.
+347:skills/task-shaping/SKILL.md:28:A bounded production-behavior change is still non-trivial when it spans implementation and executable coverage or otherwise needs acceptance evidence. Create or reuse a minimal task root before implementation; bounded means no separate specification or plan document, not no durable contract. Keep that task live while approval is pending—do not delete it merely to restore a clean worktree or because no production edit has happened yet. Reserve record-free work for truly reversible one-offs whose removal would not leave production behavior incorrect or untested.
+348:skills/task-shaping/SKILL.md:35:- Work Items with stable `WI-###` identifiers when implementation decomposition is useful
+349:skills/task-shaping/SKILL.md:37:- Assumptions
+350:skills/task-shaping/SKILL.md:38:- Journal
+351:skills/task-shaping/SKILL.md:39:- Blockers
+352:skills/task-shaping/SKILL.md:40:- Evidence
+353:skills/task-shaping/SKILL.md:41:- Review
+354:skills/task-shaping/SKILL.md:42:- Retrospective
+355:skills/task-shaping/SKILL.md:43:- Distillation
+356:skills/task-shaping/SKILL.md:45:Keep task state honest: `Status` is `open`, `active`, `blocked`, `done`, or `cancelled`; dependencies use canonical `.ledger/<task-id>/task.md` identities; Evidence and Review contain observations rather than predictions. Create supporting records only when the workflow consumes them.
+357:skills/task-shaping/SKILL.md:49:When a fact or assumption changes the design, write one focused record under `research/` with Question or Hypothesis, Motivation, Sources and Methods, Findings, Conclusions, Limits, and Related Records. Record source revision and access date, contradictions, null results, confidence, and the difference between observation and inference. Research informs decisions; the operator ratifies product semantics.
+358:skills/task-shaping/SKILL.md:53:Architectural work stores the approved behavior under `specs/` with Purpose and Authority, Actors and Boundaries, Required Behavior, Error and Failure Behavior, scenarios, Acceptance Mapping, Exclusions, Assumptions and Provenance, and Related Records. Only an `active` spec governs execution.
+359:skills/task-shaping/SKILL.md:57:Use `knowledge/` only for task-local vocabulary or constraints that later iterations repeatedly need. Durable project knowledge moves to its real repository owner during finishing.
+360:skills/task-shaping/SKILL.md:97:it and get approval. "Simple" tasks are where unexamined assumptions
+361:skills/task-shaping/SKILL.md:119:Start nothing until the operator accepts. On acceptance, read [visual-companion.md](visual-companion.md) and follow its authenticated, terminal-primary loop. Visual HTML may persist under the task's evidence storage; tokens, URLs, PIDs, logs, and browser events remain ephemeral. Record selected semantics in the specification, decision, or Journal because visual artifacts are evidence, not authority.
+362:skills/task-shaping/SKILL.md:146:6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+363:skills/task-shaping/SKILL.md:147:7. **Independent spec review** — load `review-commissioning`, use its executable review gate in `specification` mode, translate [spec-document-reviewer-prompt.md](spec-document-reviewer-prompt.md) into the gate inputs, and resolve material findings
+364:skills/task-shaping/SKILL.md:148:8. **User reviews written spec** — ask user to review the spec file before proceeding
+365:skills/task-shaping/SKILL.md:168:    "Spec self-review\n(fix inline)" [shape=box];
+366:skills/task-shaping/SKILL.md:169:    "Independent spec review" [shape=box];
+367:skills/task-shaping/SKILL.md:170:    "User reviews spec?" [shape=diamond];
+368:skills/task-shaping/SKILL.md:189:    "Write design doc" -> "Spec self-review\n(fix inline)";
+369:skills/task-shaping/SKILL.md:190:    "Spec self-review\n(fix inline)" -> "Independent spec review";
+370:skills/task-shaping/SKILL.md:191:    "Independent spec review" -> "Write design doc" [label="material findings"];
+371:skills/task-shaping/SKILL.md:192:    "Independent spec review" -> "User reviews spec?" [label="ready"];
+372:skills/task-shaping/SKILL.md:193:    "User reviews spec?" -> "Write design doc" [label="changes requested"];
+373:skills/task-shaping/SKILL.md:194:    "User reviews spec?" -> "Load implementation-planning" [label="approved"];
+374:skills/task-shaping/SKILL.md:251:- Keep the task root's References and Journal current.
+375:skills/task-shaping/SKILL.md:254:**Spec Self-Review:**
+376:skills/task-shaping/SKILL.md:262:Fix any issues inline. No need to re-review — just fix and move on.
+377:skills/task-shaping/SKILL.md:264:**User Review Gate:**
+378:skills/task-shaping/SKILL.md:265:After the spec review loop passes, ask the user to review the written spec before proceeding:
+379:skills/task-shaping/SKILL.md:267:> "Spec written to `<path>`. Please review it and let me know if you want changes before implementation planning."
+380:skills/task-shaping/SKILL.md:269:Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+427:skills/task-shaping/visual-companion.md:42:# the first screen; --task-dir persists visual evidence under the owning task.
+428:skills/task-shaping/visual-companion.md:48:#           "screen_dir":"/path/to/project/.ledger/<task-id>/evidence/.storage/visual-companion/12345-1706000000/content",
+429:skills/task-shaping/visual-companion.md:64:**Storage boundary:** With `--task-dir`, HTML content persists under the task's `evidence/.storage/visual-companion/` directory. Authentication tokens, URLs, browser events, PIDs, and logs stay under `/tmp` and are removed on stop; never copy them into Ledger records. Without `--task-dir`, content is ephemeral too. Respect the repository's existing Ledger storage policy; this skill never edits `.gitignore`.
+430:skills/task-shaping/visual-companion.md:180:  <div class="mockup-header">Preview: Dashboard Layout</div>
+431:skills/task-shaping/visual-companion.md:260:If the session used `--task-dir`, mockup HTML persists under that task's `evidence/.storage/visual-companion/` directory. Record selected conclusions in the task specification, decision, or Journal; HTML is evidence, not semantic authority. Runtime state and browser events are always deleted from `/tmp` on stop.
