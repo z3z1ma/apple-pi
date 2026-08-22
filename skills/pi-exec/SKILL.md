@@ -7,7 +7,7 @@ description: "Author or troubleshoot JavaScript passed to pi_exec. Use when aske
 
 `pi_exec` runs a JavaScript async-function body. Intermediate tool output stays inside the worker; only the returned value enters the main context.
 
-Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
+Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and eligible captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Interactive subagent tools are deliberately excluded; use `agent()` or `agents.run()` instead. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
 
 `display`, `inputs`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
 
@@ -48,7 +48,7 @@ The live `code` parameter lists every host signature, including web methods and 
 
 - `await fetch(input: string | URL | Request, init?: RequestInit)` → `Response` (10 MiB body cap)
 - `await skills.list()` → `[{ name, description }]` — session skills (package, project, user). `await skills.body({ name })` → SKILL.md body with frontmatter stripped. Throws if the skill is missing.
-- `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — captured extension tools only, not `pi.*`
+- `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — eligible captured extension tools only, not `pi.*` or the interactive `Agent`, result, steer, and stop tools
 - `await extensions.<name>(args)` → `{ text, content, details, usage? }`
 - `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, advisor?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
@@ -69,7 +69,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, `TextEncoder`, `TextDecoder`, `DOMException`, `atob`, `btoa`, `structuredClone`
 - No `process`, `require`, `Buffer`, direct filesystem API, or shell global is available. Use `pi.*`, `fetch`, or captured extension tools for host effects.
 
-`agent` / `agents.run` are pi_exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. `extensions.Agent({...})` is the interactive subagent tool for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog. They are not the same API.
+`agent` / `agents.run` are Pi Exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. The root session's `Agent`, `get_subagent_result`, `steer_subagent`, and `stop_subagent` tools are for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog, but the interactive tools are intentionally unavailable through Pi Exec's generic extension bridge.
 
 ## Gather, bind, then run workers
 

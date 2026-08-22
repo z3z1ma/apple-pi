@@ -15,6 +15,7 @@ import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
+import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
 import { ADVISOR_EXTENSION_PATH } from "../extensions/pi-advisor.js";
 import runtime, {
 	aggregateUsage,
@@ -1060,12 +1061,14 @@ describe("pi_exec tool", () => {
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		const exec = { ...echo, name: "pi_exec" };
 		const savedProgram = { ...echo, name: "pi_exec_program" };
+		const subagentTools = Object.values(SUBAGENT_TOOL_NAMES).map((name) => [name, { definition: { ...echo, name } }]);
 		runner.extensions = [
 			{
 				tools: new Map([
 					["echo_value", { definition: echo }],
 					["pi_exec", { definition: exec }],
 					["pi_exec_program", { definition: savedProgram }],
+					...subagentTools,
 				]),
 			},
 		];
@@ -1074,6 +1077,9 @@ describe("pi_exec tool", () => {
 		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
 		expect(tool.description).toContain("extensions.echo_value({ value: string })");
+		for (const name of Object.values(SUBAGENT_TOOL_NAMES)) {
+			expect(tool.parameters.properties.code.description).not.toContain(`extensions.${name}(`);
+		}
 	});
 
 	it("discovers and executes project-local programs using their JSDoc descriptions", async () => {
@@ -1195,30 +1201,38 @@ describe("pi_exec tool", () => {
 		expect(result.content[0].text).toBe("x".repeat(75_000));
 	});
 
-	it("preserves full Agent tool results across the extension bridge", async () => {
-		const output = "x".repeat(75_000);
+	it("rejects subagent tools across the extension bridge", async () => {
 		const definition = {
-			name: "get_subagent_result",
+			name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 			label: "Get Subagent Result",
 			description: "Return a completed subagent result.",
 			parameters: Type.Object({}),
 			async execute() {
-				return { content: [{ type: "text", text: output }], details: {} };
+				return { content: [{ type: "text", text: "should not run" }], details: {} };
 			},
 		};
+		const echo = { ...definition, name: "echo_value" };
 		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [{ tools: new Map([[definition.name, { definition }]]) }];
+		runner.extensions = [
+			{
+				tools: new Map([
+					[definition.name, { definition }],
+					[echo.name, { definition: echo }],
+				]),
+			},
+		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 
 		const { tool } = register();
-		const result = await tool.execute(
-			"large-agent-result",
-			{ code: `return (await extensions.get_subagent_result({})).text;` },
-			undefined,
-			undefined,
-			{ cwd: process.cwd() },
-		);
-		expect(result.content[0].text).toBe(output);
+		await expect(
+			tool.execute(
+				"subagent-extension-call",
+				{ code: `return extensions.get_subagent_result({});` },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			),
+		).rejects.toThrow("Unknown extension tool: get_subagent_result");
 	});
 
 	it("scales the envelope from optional tool-call limits and clamps to package maxima", () => {

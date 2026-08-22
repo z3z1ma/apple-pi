@@ -22,7 +22,6 @@ import {
 	type ProgramEnvelope,
 	type ProgramEnvelopeLimits,
 } from "../components/shared/src/runtime-envelope.js";
-import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
 import {
 	agentOperationArgs,
 	PI_EXEC_RETURN_TOOL,
@@ -107,7 +106,6 @@ const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhi
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
-const FULL_EXTENSION_RESULT_TOOLS = new Set<string>([SUBAGENT_TOOL_NAMES.AGENT, SUBAGENT_TOOL_NAMES.GET_RESULT]);
 
 export const aggregateUsage = (usages: Usage[]): Usage => ({
 	input: usages.reduce((total, usage) => total + usage.input, 0),
@@ -666,14 +664,10 @@ export default function runtime(pi: ExtensionAPI): void {
 						operation.args = args;
 						emit();
 						const result = await invokeDefinition(tool.definition, args, operation, runtimeSignal);
-						const fullResult = FULL_EXTENSION_RESULT_TOOLS.has(name);
-						const rawText = resultText(result);
-						const text = fullResult
-							? rawText
-							: bounded(rawText, MAX_GUEST_TOOL_RESULT_CHARS, `${operation.ref} output`).value;
+						const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${operation.ref} output`).value;
 						value = {
 							text,
-							content: portableValue(result.content, fullResult ? Number.POSITIVE_INFINITY : undefined),
+							content: portableValue(result.content),
 							details: portableValue(result.details),
 							...(result.usage ? { usage: result.usage } : {}),
 						};

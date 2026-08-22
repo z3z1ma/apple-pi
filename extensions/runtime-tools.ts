@@ -1,5 +1,6 @@
 import { ExtensionRunner, type RegisteredTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { inChildSessionContext } from "../components/subagents/src/child-context.js";
+import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
 
 interface ToolCaptureHub {
 	children: WeakSet<ExtensionRunner>;
@@ -7,6 +8,7 @@ interface ToolCaptureHub {
 }
 
 const CAPTURE_HUB = Symbol.for("apple-pi.registered-tool-capture.v1");
+const EXCLUDED_TOOL_NAMES = new Set(["pi_exec", "pi_exec_program", ...Object.values(SUBAGENT_TOOL_NAMES)]);
 
 /**
  * Observe Pi's public registered-tool assembly point. Pi exposes custom-tool
@@ -58,7 +60,7 @@ export const capturedTools = (): CapturedTool[] => {
 	const byName = new Map<string, CapturedTool>();
 	for (const registered of hub()?.latest ?? []) {
 		const definition = registered.definition;
-		if (definition.name === "pi_exec" || definition.name === "pi_exec_program" || byName.has(definition.name)) continue;
+		if (EXCLUDED_TOOL_NAMES.has(definition.name) || byName.has(definition.name)) continue;
 		byName.set(definition.name, {
 			name: definition.name,
 			description: definition.description,

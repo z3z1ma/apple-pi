@@ -30,7 +30,7 @@ Available globals:
 - `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
 - `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, and `DOMException`
 - `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `structuredClone`, and `queueMicrotask`
-- `tools.list/search/describe/call` and `extensions.<tool>(args)` for registered Pi extension tools only. The `pi_exec` `code` parameter lists every guest signature, including captured extension tools such as the MCP gateway, before the program is written.
+- `tools.list/search/describe/call` and `extensions.<tool>(args)` for eligible registered Pi extension tools. Interactive subagent tools (`Agent`, result retrieval, steering, and stopping) are excluded because `agent()` / `agents.run()` is the runtime-owned worker abstraction. The `pi_exec` `code` parameter lists every available guest signature, including captured extension tools such as the MCP gateway, before the program is written.
 - `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agents.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
 - ordinary JavaScript branching, loops, `reduce`, and `Promise.all`, plus `parallel(items, mapper, concurrency)` and `pipeline(items, ...stages)`
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
@@ -125,7 +125,7 @@ Pi Exec derives a default envelope from program shape: host calls, fan-out concu
 
 In TUI mode, `pi_exec` has a bounded code-preview card, live queued/running/completed call rows, elapsed time, agent activity, expandable results, and a temporary activity widget above the editor. This deliberately replaces Fabric's much larger activity store/dashboard with one execution-local view.
 
-Registered extension tools are captured at Pi's registered-tool assembly point. apple-pi's MCP adapter registers its token-efficient `mcp` gateway there, so `pi_exec` can discover and invoke MCP calls with the same loops, branching, pipelines, and fan-out used for core tools. Provider-private capabilities that are not represented as Pi tools remain outside the bridge because Pi 0.84 has no public nested provider-tool execution API.
+Eligible extension tools are captured at Pi's registered-tool assembly point. The interactive subagent surface is deliberately filtered out: programs use `agent()` / `agents.run()` rather than `Agent`, `get_subagent_result`, `steer_subagent`, or `stop_subagent`. apple-pi's MCP adapter registers its token-efficient `mcp` gateway there, so `pi_exec` can discover and invoke MCP calls with the same loops, branching, pipelines, and fan-out used for core tools. Provider-private capabilities that are not represented as Pi tools remain outside the bridge because Pi 0.84 has no public nested provider-tool execution API.
 
 Nested operations are not separate top-level Pi tool calls, so policy extensions driven solely by `tool_call` events see the outer `pi_exec` call rather than each nested operation. Captured tool definitions and core overrides still execute their own enforcement behavior; installations requiring an outer per-call gate should gate or disable `pi_exec` as one capability.
 
