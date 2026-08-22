@@ -29,6 +29,8 @@
     "components/tmux-sessions/src/**/*.ts",
     "components/tmux-sessions/tests/**/*.ts",
     "components/status-footer/src/**/*.ts",
-    "components/status-footer/tests/**/*.ts"
+    "components/status-footer/tests/**/*.ts",
+    "components/todos/src/**/*.ts",
+    "components/todos/tests/**/*.ts"
   ]
 }

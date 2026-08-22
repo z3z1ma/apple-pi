@@ -19,6 +19,7 @@ Authority is split deliberately:
 - `docs/` owns user-facing feature contracts. `docs/boundaries.md` records adopted and deliberately rejected ideas.
 - `docs/development.md` owns coding and module conventions.
 - `docs/ledger.md` owns the durable `.ledger` workflow.
+- `docs/todos.md` owns active-execution checklist semantics, storage, and its boundary with backlog and Ledger.
 - Tests own executable invariants, but a test can still encode an obsolete contract; compare it with current product documentation and instructions.
 - This file explains how those pieces fit together. Keep it conceptual so ordinary feature additions do not require updating it.
 
@@ -30,9 +31,10 @@ At a high level, the package adds five kinds of capability to Pi:
 
 1. **Turn assistance and interaction** — a persistent read-only advisor and a structured user-question tool.
 2. **Context continuity** — xAI server-side or Pi default compaction, model-generated observational memory, and two complementary recall paths.
-3. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
-4. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops.
-5. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
+3. **Execution tracking** — branch-aware active to-dos, distinct from parked backlog ideas and durable Ledger records.
+4. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
+5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops.
+6. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
 
 The design goal is an integrated Pi environment with one implementation of each responsibility. Features that are intentionally delegated to Pi or a dependency should not be copied locally.
 
@@ -55,7 +57,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
 | `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses the user-global `deep` model profile; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
-| `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed Ledger promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
+| `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
+| `components/todos/` | Branch-aware active-execution checklist, `/todos`, reminder/cleanup lifecycle, and managed subagent execution | To-dos are ephemeral execution state, not Ledger acceptance evidence. Default snapshots follow session branches; trusted shared-project state is explicitly opted in and safely locked. |
 | `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the observational-memory packet. |
 | `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
 | `components/xai-context-compaction/` | xAI server-side Responses compaction | Owns `session_before_compact` for xAI Responses models; injects the newest opaque item on later requests. |
@@ -127,6 +130,7 @@ Use the narrowest production owner:
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
 - Session backlog behavior and UI: `components/backlog/`; keep its state in Pi session entries rather than repository files.
+- Active to-do behavior, persistence, UI, and execution: `components/todos/`; preserve its explicit session/project storage and managed-subagent boundaries.
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.

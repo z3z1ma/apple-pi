@@ -48,6 +48,17 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Original notice: `Copyright (c) 2026 tintinweb`
 - Adopted code was substantially reduced and integrated. Retained responsibilities include Markdown agent discovery, Pi AgentSession execution, foreground/background management, nested delegation, result/steering tools, usage and compaction tracking, widgets, FleetView, and the conversation viewer. Worktree isolation, scheduling, prompt mentions, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy were removed.
 
+## pi-tasks → To-dos
+
+- Source: <https://github.com/tintinweb/pi-tasks>
+- Imported commit: `86a559cf5e378cc21fa0c7015a92c358e7227094`
+- Upstream version at import: `0.8.0`
+- Author named by the source package: tintinweb
+- Local paths: `components/todos/`, `extensions/todos.ts`, `docs/todos.md`, `components/shared/src/workflow-system-prompt.ts`, `tests/ledger-prompt-integration.test.ts`, `tests/package-load.mjs`
+- License: MIT
+- Original notice: `Copyright (c) 2026 tintinweb`
+- apple-pi adapts the upstream active-checklist model, dependency validation/display, branch-aware snapshots, safe shared-project persistence concepts, data-only settings, reminders, auto-clear, manager/widget concepts, and execution cascade. It replaces upstream aliases and external execution paths with lowercase native tools and apple-pi's owned managed-subagent service; it does not retain the generic process tracker, compatibility storage, arbitrary metadata, independently stored reverse edges, or reference media.
+
 ## pi-notify → Notify
 
 - Source: <https://github.com/Async23/pi-packages/tree/main/packages/notify>

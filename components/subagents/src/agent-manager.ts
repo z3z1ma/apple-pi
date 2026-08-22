@@ -784,26 +784,11 @@ export class AgentManager {
 
 	/** Abort all running and queued agents immediately. */
 	abortAll(): number {
+		const activeIds = [...this.agents.values()]
+			.filter((record) => record.status === "running" || record.status === "queued")
+			.map((record) => record.id);
 		let count = 0;
-		// Clear queued agents first
-		for (const queued of this.queue) {
-			const record = this.agents.get(queued.id);
-			if (record) {
-				record.status = "stopped";
-				record.completedAt = Date.now();
-				count++;
-			}
-		}
-		this.queue = [];
-		// Abort running agents
-		for (const record of this.agents.values()) {
-			if (record.status === "running") {
-				record.abortController?.abort();
-				record.status = "stopped";
-				record.completedAt = Date.now();
-				count++;
-			}
-		}
+		for (const id of activeIds) if (this.abort(id, "external_cancellation")) count++;
 		return count;
 	}
 

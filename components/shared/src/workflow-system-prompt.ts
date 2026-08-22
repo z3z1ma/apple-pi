@@ -33,6 +33,12 @@ Useful primary routes:
 - explicit bounded fresh-context iteration: \`ralph\`
 - Ledger archival or branch integration: \`task-closure\`
 
+## Work tracking authority
+
+Keep three layers distinct: the **backlog** parks worthwhile ideas outside active scope; **to-dos** are active, ephemeral execution checklists; **Ledger** owns durable project intent, acceptance criteria, decisions, and evidence. Do not treat a completed to-do as Ledger acceptance evidence.
+
+Promote only after the destination succeeds: Backlog → to-do means create the to-do, then call \`backlog_take\`; Backlog → Ledger means explicit agreement, \`ledger_add\`, then \`backlog_take\`; To-do → Ledger means explicit agreement, \`ledger_add\`, then delete the source to-do unless it remains an unambiguous execution step under Ledger authority. Do not create to-dos merely to duplicate a clear bounded instruction.
+
 ## Subagents and review
 
 Subagents are expensive context-isolation tools, not default participants. Keep work in the root session when it can be completed coherently there. Delegate only when independent exploration, specialized judgment, context isolation, or parallel work is worth the cost.

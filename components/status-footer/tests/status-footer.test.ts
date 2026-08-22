@@ -342,4 +342,19 @@ describe("input card telemetry", () => {
 		expect(snapshot.model?.name).toBe("GPT Test");
 		expect(snapshot.model?.providerName).toBe("OpenAI");
 	});
+	it("orders todos after backlog and before advisor and subagents", () => {
+		const snapshot = {
+			...completeSnapshot,
+			statuses: [
+				{ key: "subagents", text: "agents 1" },
+				{ key: "todos", text: "todos 2" },
+				{ key: "q-advisor", text: "advisor idle" },
+				{ key: "backlog", text: "backlog 1" },
+			],
+		};
+		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 240, ["prompt"]).join("\n"));
+		expect(output.indexOf("backlog 1")).toBeLessThan(output.indexOf("todos 2"));
+		expect(output.indexOf("todos 2")).toBeLessThan(output.indexOf("advisor idle"));
+		expect(output.indexOf("advisor idle")).toBeLessThan(output.indexOf("agents 1"));
+	});
 });

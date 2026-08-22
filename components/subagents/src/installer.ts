@@ -106,6 +106,14 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	let manager!: AgentManager;
 	let widget!: AgentWidget;
 	let fleet!: FleetList;
+	const backgroundCompletions = new Map<string, (record: AgentRecord) => void>();
+	const lifecycleCancelledIds = new Set<string>();
+	const settleBackgroundCompletion = (record: AgentRecord) => {
+		const resolve = backgroundCompletions.get(record.id);
+		if (!resolve) return;
+		backgroundCompletions.delete(record.id);
+		resolve(record);
+	};
 
 	const finishUi = (record: AgentRecord) => {
 		widget.markFinished(record.id);
@@ -179,7 +187,13 @@ export default function installSubagents(pi: ExtensionAPI): void {
 
 	manager = new AgentManager(
 		(record) => {
+			settleBackgroundCompletion(record);
+			const lifecycleCancelled = lifecycleCancelledIds.delete(record.id);
 			if (record.parentAgentId) return;
+			if (lifecycleCancelled) {
+				finishUi(record);
+				return;
+			}
 			if (record.internalOwner) {
 				finishUi(record);
 				return;
@@ -219,6 +233,73 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	fleet = new FleetList(manager, activityById);
 
 	const managedService: ManagedSubagentService = {
+		startBackground(ctx, request) {
+			bindSessionContext(ctx);
+			const dispatch = resolveSpawnType(request.type);
+			if (!dispatch.ok) throw new Error(dispatch.message);
+			const agentConfig = getAgentConfig(dispatch.type);
+			if (!agentConfig) throw new Error(`Unknown or disabled agent type: "${request.type}"`);
+			const resolved = resolveAgentProfile({
+				registry: ctx.modelRegistry,
+				parentModel: ctx.model,
+				parentThinking: ctx.thinkingLevel,
+				config: agentConfig,
+				explicitProfile: request.profile,
+			});
+			if (resolved.error) throw new Error(resolved.error);
+			const invocation = resolveAgentInvocationConfig(agentConfig, { run_in_background: true });
+			const maxTurns = normalizeMaxTurns(invocation.maxTurns ?? getDefaultMaxTurns());
+			const tracker = createActivityTracker(
+				maxTurns,
+				() => {
+					widget.update();
+					fleet.update();
+				},
+				request.onActivity,
+			);
+			const id = manager.spawn(pi, ctx, dispatch.type, request.prompt, {
+				description: request.description,
+				agentConfig,
+				model: resolved.model,
+				modelResolved: true,
+				maxTurns,
+				systemPrompt: invocation.systemPrompt,
+				isolated: invocation.isolated,
+				inheritContext: false,
+				advisor: invocation.advisor,
+				thinkingLevel: resolved.thinkingLevel,
+				cwd: request.cwd,
+				isBackground: true,
+				onToolActivity: tracker.callbacks.onToolActivity,
+				onTextDelta: tracker.callbacks.onTextDelta,
+				onTurnEnd: tracker.callbacks.onTurnEnd,
+				onAssistantUsage: (usage) => {
+					tracker.callbacks.onAssistantUsage(usage);
+					request.onAssistantUsage?.(usage);
+				},
+				onSessionCreated: tracker.callbacks.onSessionCreated,
+				invocation: {
+					modelName: resolved.model ? `${resolved.model.provider}/${resolved.model.id}` : undefined,
+					profile: resolved.profile,
+					systemPrompt: invocation.systemPrompt,
+					thinking: resolved.thinkingLevel,
+					maxTurns,
+					isolated: invocation.isolated,
+					inheritContext: false,
+					advisor: invocation.advisor,
+					runInBackground: true,
+				},
+			});
+			activityById.set(id, tracker.state);
+			const record = manager.getRecord(id);
+			if (!record) throw new Error("Managed agent record was not created");
+			const completion = new Promise<AgentRecord>((resolve) => backgroundCompletions.set(id, resolve));
+			return {
+				id,
+				completion,
+				abort: () => manager.abort(id),
+			};
+		},
 		async runFresh(ctx, request) {
 			let id: string | undefined;
 			let liveTokens = 0;
@@ -376,22 +457,36 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			widget.onTurnStart();
 		}
 	});
-	pi.on("session_before_switch", () => {
+	const prepareSessionNavigation = () => {
+		for (const record of manager.listAgents()) {
+			if (record.status !== "running" && record.status !== "queued") continue;
+			record.resultConsumed = true;
+			lifecycleCancelledIds.add(record.id);
+		}
 		manager.abortAll();
-		manager.clearCompleted(false);
 		for (const timer of pendingNotifications.values()) clearTimeout(timer);
 		pendingNotifications.clear();
 		if (batchTimer) clearTimeout(batchTimer);
 		batchTimer = undefined;
 		currentBatch = [];
 		groupJoin.dispose();
+		widget.update();
+		fleet.update();
+	};
+	pi.on("session_before_switch", prepareSessionNavigation);
+	pi.on("session_before_fork", prepareSessionNavigation);
+	pi.on("session_before_tree", prepareSessionNavigation);
+	pi.on("session_tree", () => {
+		for (const timer of pendingNotifications.values()) clearTimeout(timer);
+		pendingNotifications.clear();
+		manager.clearCompleted(false);
 		activityById.clear();
 		widget.update();
 		fleet.update();
 	});
 	pi.on("session_shutdown", async () => {
+		prepareSessionNavigation();
 		uninstallManagedService();
-		manager.abortAll();
 		for (const timer of pendingNotifications.values()) clearTimeout(timer);
 		pendingNotifications.clear();
 		if (batchTimer) clearTimeout(batchTimer);

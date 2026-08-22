@@ -6,6 +6,8 @@ Use the lightest form that preserves the outcome. Clear, bounded, reversible wor
 
 ## Mental model
 
+Ledger is the durable layer in a three-layer work model: [backlog](backlog.md) parks session-local ideas, [to-dos](todos.md) track active ephemeral execution, and Ledger owns durable intent, acceptance, decisions, and evidence. A Ledger task may use to-dos as a checklist, but a completed to-do is never acceptance evidence. Promote a to-do only by explicit agreement and successful `ledger_add`; delete its source only afterwards unless it remains an unambiguous execution step under Ledger authority.
+
 One task owns one coherent observable outcome. Its artifacts have distinct provenance:
 
 - `task.md` preserves shaped intent and acceptance; it is not a progress dashboard.
@@ -236,7 +238,7 @@ The skills guide agents; they do not create a second runtime task engine or stat
 Ledger is intentionally not:
 
 - a parser-backed task database or global operations dashboard;
-- a product runtime store;
+- a product runtime store or active-execution checklist (use [to-dos](todos.md));
 - an issue-tracker mirror;
 - an ambient active-task pointer;
 - a candidate-skill discovery directory;

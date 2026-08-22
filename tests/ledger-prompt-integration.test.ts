@@ -53,6 +53,9 @@ describe("ledger system prompt distribution", () => {
 		expect(occurrences(twice, workflowMarker)).toBe(1);
 		const collision = appendLedgerWorkflowSystemPrompt("Project text mentions <ledger-workflow> as an example.");
 		expect(collision.endsWith(LEDGER_WORKFLOW_SYSTEM_PROMPT)).toBe(true);
+		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("Keep three layers distinct");
+		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("Backlog → to-do");
+		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("completed to-do as Ledger acceptance evidence");
 	});
 
 	it("keeps the root workflow extension out of child and worker extension lists", () => {

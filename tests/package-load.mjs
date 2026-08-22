@@ -30,13 +30,14 @@ try {
 			"extensions/notify.ts",
 			"extensions/tmux-sessions.ts",
 			"extensions/status-footer.ts",
+			"extensions/todos.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 14);
+	assert.equal(result.extensions.length, 15);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -103,6 +104,7 @@ try {
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
+		"todos",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
@@ -122,6 +124,14 @@ try {
 		"steer_subagent",
 		"ledger_add",
 		"ledger_close",
+		"todo_create",
+		"todo_list",
+		"todo_get",
+		"todo_update",
+		"todo_delete",
+		"todo_execute",
+		"todo_output",
+		"todo_stop",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
@@ -142,6 +152,9 @@ try {
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert(manifest.pi.extensions.includes("./extensions/workflow.ts"), "package manifest omits root workflow extension");
+	assert(manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest omits todos extension");
+	assert(manifest.files.includes("components/todos/src/"), "package manifest omits todos source");
+	assert(manifest.files.includes("docs/"), "package manifest omits todo documentation");
 	const ledgerLifecycleSkills = [
 		"task-shaping",
 		"implementation-planning",

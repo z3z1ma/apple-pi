@@ -55,8 +55,27 @@ export interface ManagedAgentRequest {
 	onActivity?: (activity: HarnessBoundedActivity) => void;
 }
 
+export interface ManagedBackgroundRequest {
+	type: string;
+	description: string;
+	prompt: string;
+	/** Optional catalog profile; type, model, and policy are resolved by the subagent owner. */
+	profile?: string;
+	cwd?: string;
+	onActivity?: (activity: HarnessBoundedActivity) => void;
+	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+}
+
+export interface ManagedBackgroundRun {
+	id: string;
+	completion: Promise<AgentRecord>;
+	abort(): boolean;
+}
+
 export interface ManagedSubagentService {
 	runFresh(ctx: ExtensionContext, request: ManagedAgentRequest): Promise<AgentRecord>;
+	/** Start one ordinary public background AgentRecord through the owned manager. */
+	startBackground(ctx: ExtensionContext, request: ManagedBackgroundRequest): ManagedBackgroundRun;
 	abort(agentId: string): boolean;
 }
 

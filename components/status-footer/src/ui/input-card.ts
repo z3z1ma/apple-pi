@@ -25,7 +25,7 @@ import { collectUsageTotals } from "../usage.js";
 
 const SEGMENT_SEPARATOR = "  ·  ";
 const COMPACT_SEPARATOR = " · ";
-const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "q-advisor", "subagents"];
+const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-advisor", "subagents"];
 const FLEET_NAVIGATION_STATUS = "subagents-navigation";
 
 interface RenderSegment {

@@ -4,9 +4,9 @@ The session backlog is a lightweight parking place for concrete work discovered 
 
 The intended distinction is:
 
-- active execution steps belong in the current work or a future to-do facility;
+- active execution steps belong in [to-dos](todos.md);
 - backlog items are intentionally parked for later consideration;
-- Ledger tasks are durable commitments with an explicit lifecycle and acceptance criteria.
+- [Ledger](ledger.md) tasks are durable commitments with an explicit lifecycle and acceptance criteria.
 
 ## Model tools
 
@@ -31,7 +31,7 @@ Run `/backlog` in the TUI to open the backlog manager. The selected item shows i
 - `d` asks for confirmation and deletes it.
 - Escape or Ctrl+C closes the manager.
 
-The model may choose to begin active work on a listed item; promotion to Ledger remains an explicit human/model decision. Once either transition has actually happened, the model uses `backlog_take` to remove the parked item without requiring a separate trip through the manager.
+The model may choose to begin active work on a listed item. For Backlog → to-do, it first creates the to-do and calls `backlog_take` only after that succeeds. For Backlog → Ledger, promotion remains an explicit human/model decision: call `ledger_add` first, then `backlog_take` only after success. Neither transition requires a separate trip through the manager once it has actually happened.
 
 ## Persistence and branching
 
