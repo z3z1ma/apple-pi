@@ -26,6 +26,7 @@ import { collectUsageTotals } from "../usage.js";
 const SEGMENT_SEPARATOR = "  ·  ";
 const COMPACT_SEPARATOR = " · ";
 const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "q-advisor", "subagents"];
+const FLEET_NAVIGATION_STATUS = "subagents-navigation";
 
 interface RenderSegment {
 	text: string;
@@ -241,7 +242,9 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 		});
 	}
 
-	const statuses = orderedStatuses(snapshot.statuses).filter((status) => sanitizeStatusText(status.text));
+	const statuses = orderedStatuses(snapshot.statuses).filter(
+		(status) => status.key !== FLEET_NAVIGATION_STATUS && sanitizeStatusText(status.text),
+	);
 	if (statuses.length > 0) {
 		segments.push({
 			text: statuses.map((status) => styleStatus(status, theme)).join(theme.fg("dim", COMPACT_SEPARATOR)),
@@ -282,6 +285,20 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	if (!provider || !model) return undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
 	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}`) : ""}`;
+}
+
+function fleetNavigationHint(snapshot: FooterSnapshot, theme: Theme): string | undefined {
+	const status = snapshot.statuses.find((candidate) => candidate.key === FLEET_NAVIGATION_STATUS);
+	const text = status ? sanitizeStatusText(status.text) : "";
+	return text ? theme.fg("dim", text) : undefined;
+}
+
+function renderMetadataRow(snapshot: FooterSnapshot, theme: Theme, width: number): string | undefined {
+	const metadata = modelMetadata(snapshot, theme);
+	const hint = fleetNavigationHint(snapshot, theme);
+	if (!metadata) return undefined;
+	if (!hint || visibleWidth(metadata) + visibleWidth(hint) + 1 > width) return fitToWidth(metadata, width);
+	return `${metadata}${" ".repeat(width - visibleWidth(metadata) - visibleWidth(hint))}${hint}`;
 }
 
 function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[] {
@@ -380,7 +397,7 @@ export function renderInputCard(
 	const rows: string[] = [rule];
 	for (const line of prompt) rows.push(cardContent(line, width));
 
-	const metadata = modelMetadata(snapshot, theme);
+	const metadata = renderMetadataRow(snapshot, theme, width);
 	if (metadata) {
 		// A breathing row separates thought from quiet model context without
 		// putting either inside a hard terminal-glyph box.

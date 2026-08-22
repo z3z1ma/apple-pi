@@ -41,3 +41,5 @@
 - `.ledger/history/202608182330-protect-vcc-finished-turn-deliverable/task.md` — cancelled — Protect finished-turn deliverables in VCC compaction — Rewrite VCC cut, subsequent-compact, and compile so long-horizon analyses survive ambient and follow-up compaction instead of being mid-cycle sliced, shredded to a stub tail, or 200-word compiled.
 
 - `.ledger/history/202608211051-rename-skills-generalize-ralph/task.md` — cancelled — Rename workflow skills and generalize Ralph — Replace Superpowers-derived public skill names with concise 10x-aligned names, remove relative cross-skill references, and split Ralph into general and Ledger-specific bounded iteration programs.
+
+- `.ledger/history/202608211655-integrate-fleet-hint-into-input-card/task.md` — done — Integrate Fleet navigation hint into the input card — Move the active-agent navigation hint out of its dedicated below-editor row and right-align it opposite model/provider/thinking metadata in the Apple Pi input card.

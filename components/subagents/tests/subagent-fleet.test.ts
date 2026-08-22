@@ -60,6 +60,8 @@ interface Harness {
 	overlayOpened: () => boolean;
 	/** Whether the most recently opened overlay's `done` was invoked (closed). */
 	overlayClosed: () => boolean;
+	/** Current footer status published for a key. */
+	statusText: (key: string) => string | undefined;
 	/** Simulate the viewer closing itself (Esc → done); flushes the close microtask. */
 	closeOverlay: () => Promise<void>;
 	/** The fake `tui` handed to the widget factory; tests set `focusedComponent` on it. */
@@ -74,6 +76,7 @@ function harness(agents: AgentRecord[]): Harness {
 	let closed = false;
 	let overlayDone: ((r: undefined) => void) | undefined;
 	let overlayComponent: { handleInput(data: string): void } | undefined;
+	const statuses = new Map<string, string>();
 	const fakeTui = { requestRender: () => {}, terminal: { columns: 120, rows: 40 } };
 
 	const ui: FleetUICtx = {
@@ -87,6 +90,10 @@ function harness(agents: AgentRecord[]): Harness {
 			};
 		},
 		getEditorText: () => editorText,
+		setStatus: (key, text) => {
+			if (text === undefined) statuses.delete(key);
+			else statuses.set(key, text);
+		},
 		notify: () => {},
 		custom: ((factory: any) => {
 			opened = true;
@@ -121,6 +128,7 @@ function harness(agents: AgentRecord[]): Harness {
 		},
 		overlayOpened: () => opened,
 		overlayClosed: () => closed,
+		statusText: (key) => statuses.get(key),
 		closeOverlay: async () => {
 			overlayDone?.(undefined);
 			await Promise.resolve();
@@ -169,8 +177,8 @@ describe("FleetList navigation", () => {
 		const h = harness([makeRecord()]);
 		const res = h.press(DOWN);
 		expect(res).toEqual({ consume: true });
-		// main selected, list active → nav hint shown
-		expect(h.render().some((l) => l.includes("enter view"))).toBe(true);
+		// main selected, list active → integrated nav hint updated
+		expect(h.statusText("subagents-navigation")).toContain("enter view");
 	});
 
 	it("also activates on ← (matches the '← for agents' hint)", () => {
@@ -212,28 +220,58 @@ describe("FleetList navigation", () => {
 		h.press(DOWN); // activate, index 0
 		expect(h.press(UP)).toEqual({ consume: true });
 		// back to inactive hint
-		expect(h.render().some((l) => l.includes("← for agents"))).toBe(true);
+		expect(h.statusText("subagents-navigation")).toContain("← for agents");
 	});
 
 	it("Esc deactivates", () => {
 		const h = harness([makeRecord()]);
 		h.press(DOWN);
 		expect(h.press(ESC)).toEqual({ consume: true });
-		expect(h.render().some((l) => l.includes("← for agents"))).toBe(true);
+		expect(h.statusText("subagents-navigation")).toContain("← for agents");
 	});
 
 	it("passes non-nav keys through and cancels navigation", () => {
 		const h = harness([makeRecord()]);
 		h.press(DOWN);
 		expect(h.press(RIGHT)).toBeUndefined();
-		expect(h.render().some((l) => l.includes("← for agents"))).toBe(true);
+		expect(h.statusText("subagents-navigation")).toContain("← for agents");
 	});
 
-	it("ignores all input while disabled and hides the widget", () => {
+	it("ignores all input while disabled and clears the widget and integrated hint", () => {
 		const h = harness([makeRecord()]);
+		expect(h.statusText("subagents-navigation")).toBeDefined();
+
 		h.fleet.setEnabled(false);
+
 		expect(h.press(DOWN)).toBeUndefined();
 		expect(h.render()).toEqual([]);
+		expect(h.statusText("subagents-navigation")).toBeUndefined();
+	});
+
+	it("moves the integrated hint immediately when rebound to a replacement UI", () => {
+		const statuses = [new Map<string, string>(), new Map<string, string>()];
+		const makeUi = (index: number): FleetUICtx => ({
+			setWidget: () => {},
+			onTerminalInput: () => () => {},
+			getEditorText: () => "",
+			setStatus: (key, text) => {
+				if (text === undefined) statuses[index]!.delete(key);
+				else statuses[index]!.set(key, text);
+			},
+			notify: () => {},
+			custom: (() => new Promise<undefined>(() => {})) as FleetUICtx["custom"],
+		});
+		const fleet = new FleetList(fakeManager([makeRecord()]), new Map());
+
+		fleet.setUICtx(makeUi(0));
+		fleet.update();
+		expect(statuses[0]!.get("subagents-navigation")).toContain("← for agents");
+
+		fleet.setUICtx(makeUi(1));
+
+		expect(statuses[0]!.get("subagents-navigation")).toBeUndefined();
+		expect(statuses[1]!.get("subagents-navigation")).toContain("← for agents");
+		fleet.dispose();
 	});
 
 	it("re-arms the refresh timer when the list is re-shown (toggle off→on)", () => {
@@ -247,6 +285,7 @@ describe("FleetList navigation", () => {
 				setWidget: () => {},
 				onTerminalInput: () => () => {},
 				getEditorText: () => "",
+				setStatus: () => {},
 				notify: () => {},
 				custom: (() => new Promise<undefined>(() => {})) as FleetUICtx["custom"],
 			});
@@ -298,8 +337,8 @@ describe("FleetList vs other focused components (#123)", () => {
 		expect(h.press(DOWN)).toBeUndefined();
 		expect(h.press(ENTER)).toBeUndefined();
 		expect(h.press(ESC)).toBeUndefined();
-		// and the list dropped back to its inactive hint
-		expect(h.render().some((l) => l.includes("← for agents"))).toBe(true);
+		// and the integrated hint dropped back to its inactive state
+		expect(h.statusText("subagents-navigation")).toContain("← for agents");
 	});
 
 	it("still activates when the prompt editor has focus", () => {
@@ -320,17 +359,22 @@ describe("FleetList rendering", () => {
 		expect(getDisplayName("retired-type")).toBe("retired-type");
 		expect(hasAgentBadge("retired-type")).toBe(false);
 	});
-	it("renders main + agent rows with markers, type, description and right-aligned stats", () => {
+	it("publishes navigation guidance and starts the widget directly with the roster", () => {
 		const h = harness([makeRecord({ description: "Sleep then report 1" })]);
 		const lines = h.render(120);
-		// hint + blank + main + one agent
-		expect(lines[0]).toContain("← for agents");
+
+		expect(h.statusText("subagents-navigation")).toBe("esc to interrupt · ← for agents · ↓ to manage");
+		expect(lines[0]).toContain("main");
+		expect(lines.join("\n")).not.toContain("← for agents");
 		expect(lines.find((l) => l.includes("main"))).toContain("●"); // main selected by default
 		const agentLine = lines.find((l) => l.includes("Sleep then report 1"))!;
 		expect(agentLine).toContain("○");
 		expect(agentLine).toContain(getDisplayName("Explore"));
 		expect(agentLine).toContain("↓ 13.1k tokens");
 		expect(agentLine).toMatch(/\d+s · ↓/); // "<seconds>s · ↓ ..." (timing-agnostic)
+
+		h.press(DOWN);
+		expect(h.statusText("subagents-navigation")).toBe("↑↓ select · enter view · esc back");
 	});
 
 	it("orders agents earliest-launched first (top)", () => {
@@ -393,7 +437,7 @@ describe("FleetList overlay lifecycle", () => {
 		h.press(DOWN); // active, index 0 (main)
 		h.press(ENTER);
 		expect(h.overlayOpened()).toBe(false); // never opened an overlay
-		expect(h.render().some((l) => l.includes("← for agents"))).toBe(true);
+		expect(h.statusText("subagents-navigation")).toContain("← for agents");
 	});
 
 	it("keeps the cursor on the viewed agent after closing, even if the list reordered", async () => {

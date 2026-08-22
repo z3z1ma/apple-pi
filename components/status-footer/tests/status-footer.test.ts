@@ -164,6 +164,30 @@ describe("input card rendering", () => {
 		expect(output).not.toMatch(/(?:project|model|provider|thinking|ctx|cost):/i);
 	});
 
+	it("right-aligns Fleet navigation opposite model metadata without duplicating it in the strip", () => {
+		const hint = "esc to interrupt · ← for agents · ↓ to manage";
+		const snapshot = {
+			...completeSnapshot,
+			statuses: [...completeSnapshot.statuses, { key: "subagents-navigation", text: hint }],
+		};
+		const lines = renderInputCard(snapshot, theme, 120, [""]);
+		const plainLines = lines.map(stripTerminalSequences);
+		const metadata = plainLines.find((line) => line.includes("GPT Test"))!;
+
+		expect(metadata.trimStart()).toMatch(/^GPT Test {2}OpenAI · high/);
+		expect(metadata.trimEnd().endsWith(hint)).toBe(true);
+		expect(plainLines.join("\n").split(hint)).toHaveLength(2);
+
+		const narrow = renderInputCard(snapshot, theme, 36, [""]).map(stripTerminalSequences);
+		expect(narrow.some((line) => line.includes("GPT Test  OpenAI · high"))).toBe(true);
+		expect(narrow.join("\n")).not.toContain("esc to interrupt");
+
+		const withoutModel = renderInputCard({ ...snapshot, model: undefined }, theme, 120, [""])
+			.map(stripTerminalSequences)
+			.join("\n");
+		expect(withoutModel).not.toContain(hint);
+	});
+
 	it("leaves native prompt text styling unchanged", () => {
 		const nativePrompt = "hello \u001b[7mworld\u001b[0m again";
 		const prompt = renderInputCard(completeSnapshot, theme, 80, [nativePrompt])[1]!;

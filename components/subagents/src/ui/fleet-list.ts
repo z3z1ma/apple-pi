@@ -27,6 +27,10 @@ const MAX_AGENT_ROWS = 5;
 const TICK_MS = 1_000;
 /** How long a finished agent lingers in the list before it drops out. */
 const FINISHED_LINGER_MS = 4000;
+/** Footer status consumed by the Apple Pi input card's metadata row. */
+const FLEET_NAVIGATION_STATUS = "subagents-navigation";
+const INACTIVE_HINT = "esc to interrupt · ← for agents · ↓ to manage";
+const ACTIVE_HINT = "↑↓ select · enter view · esc back";
 
 /** Minimal UI surface the FleetView needs from `ctx.ui` (structural subset). */
 export type FleetUICtx = {
@@ -39,6 +43,7 @@ export type FleetUICtx = {
 	): void;
 	onTerminalInput(handler: (data: string) => { consume?: boolean; data?: string } | undefined): () => void;
 	getEditorText(): string;
+	setStatus(key: string, text: string | undefined): void;
 	notify(message: string, type?: "info" | "warning" | "error"): void;
 	custom<T>(
 		factory: (
@@ -88,6 +93,7 @@ export class FleetList {
 	private inputUnsub: (() => void) | undefined;
 	private widgetRegistered = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
+	private lastHintText: string | undefined;
 
 	private enabled = true;
 	/** Whether arrow keys currently navigate the list (vs. flow to the editor). */
@@ -116,10 +122,13 @@ export class FleetList {
 	setUICtx(ui: FleetUICtx): void {
 		if (ui === this.ui) return;
 		this.inputUnsub?.();
+		if (this.ui && this.lastHintText !== undefined) this.ui.setStatus(FLEET_NAVIGATION_STATUS, undefined);
+		this.lastHintText = undefined;
 		this.ui = ui;
 		this.widgetRegistered = false;
 		this.tui = undefined;
 		this.inputUnsub = ui.onTerminalInput((data) => this.handleKey(data));
+		this.update();
 	}
 
 	/** Ensure the re-render timer is running (called when an agent spawns). */
@@ -148,6 +157,8 @@ export class FleetList {
 		}
 		this.viewingAgentId = undefined;
 		if (this.ui && this.widgetRegistered) this.ui.setWidget(FLEET_KEY, undefined);
+		if (this.ui && this.lastHintText !== undefined) this.ui.setStatus(FLEET_NAVIGATION_STATUS, undefined);
+		this.lastHintText = undefined;
 		this.widgetRegistered = false;
 		this.tui = undefined;
 		this.active = false;
@@ -161,6 +172,10 @@ export class FleetList {
 		const hasAgents = this.enabled && this.agentRecords().length > 0;
 
 		if (!hasAgents) {
+			if (this.lastHintText !== undefined) {
+				this.ui.setStatus(FLEET_NAVIGATION_STATUS, undefined);
+				this.lastHintText = undefined;
+			}
 			if (this.widgetRegistered) {
 				this.ui.setWidget(FLEET_KEY, undefined);
 				this.widgetRegistered = false;
@@ -176,6 +191,11 @@ export class FleetList {
 		}
 
 		this.clampSelection();
+		const hint = this.active ? ACTIVE_HINT : INACTIVE_HINT;
+		if (hint !== this.lastHintText) {
+			this.ui.setStatus(FLEET_NAVIGATION_STATUS, hint);
+			this.lastHintText = hint;
+		}
 		this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
 
 		if (!this.widgetRegistered) {
@@ -387,10 +407,7 @@ export class FleetList {
 		// (e.g. on terminal resize) never loses the selection marker.
 		const sel = Math.min(this.selectedIndex, agents.length);
 
-		const hint = this.active ? "↑↓ select · enter view · esc back" : "esc to interrupt · ← for agents · ↓ to manage";
 		const lines: string[] = [];
-		lines.push(truncateToWidth(`  ${theme.fg("dim", hint)}`, width));
-		lines.push("");
 		lines.push(truncateToWidth(`  ${this.bullet(0, sel, theme)} main`, width));
 
 		// Window the agent rows so the selected one stays visible.
