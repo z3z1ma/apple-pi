@@ -65,6 +65,22 @@ async function openBacklogManager(
 		);
 		if (!action || action.type === "close") return;
 
+		if (action.type === "create") {
+			const title = await ctx.ui.editor("Backlog title", "");
+			if (title === undefined) continue;
+			const description = await ctx.ui.editor("Backlog description", "");
+			if (description === undefined) continue;
+			try {
+				const added = addBacklogItem(getState(), { title, description });
+				setState(added.state);
+				selectedId = added.item.id;
+				persist();
+			} catch (error) {
+				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+			}
+			continue;
+		}
+
 		selectedId = action.id;
 		if (action.type === "move") {
 			setState(moveBacklogItem(getState(), action.id, action.direction));
@@ -249,7 +265,7 @@ export function installBacklog(pi: ExtensionAPI): void {
 	);
 
 	pi.registerCommand("backlog", {
-		description: "Browse, edit, delete, and manually reorder the session backlog",
+		description: "Create, browse, edit, delete, and manually reorder the session backlog",
 		handler: async (_args, ctx) =>
 			openBacklogManager(
 				ctx,

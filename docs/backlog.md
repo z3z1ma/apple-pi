@@ -25,6 +25,7 @@ The model should use it only for concrete, worthwhile work outside the active sc
 
 Run `/backlog` in the TUI to open the backlog manager. The selected item shows its full title and description.
 
+- `c` creates an item by prompting for its title and optional description.
 - Up/Down selects an item.
 - Shift+Up/Shift+Down changes its persistent manual rank.
 - `e` edits its title and description.

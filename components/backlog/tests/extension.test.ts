@@ -13,6 +13,37 @@ type RegisteredTool = {
 };
 
 describe("backlog extension", () => {
+	it("creates an item from the human backlog manager", async () => {
+		const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> }>();
+		const appendEntry = vi.fn();
+		const custom = vi.fn().mockResolvedValueOnce({ type: "create" }).mockResolvedValueOnce({ type: "close" });
+		const editor = vi.fn().mockResolvedValueOnce("Human note").mockResolvedValueOnce("Remember this later");
+		const pi = {
+			appendEntry,
+			on: vi.fn(),
+			registerTool: vi.fn(),
+			registerCommand(name: string, command: { handler: (args: string, ctx: any) => Promise<void> }) {
+				commands.set(name, command);
+			},
+		} as unknown as ExtensionAPI;
+
+		installBacklog(pi);
+		await commands.get("backlog")?.handler("", {
+			mode: "tui",
+			ui: { custom, editor, setStatus: vi.fn(), notify: vi.fn() },
+		});
+
+		expect(editor).toHaveBeenNthCalledWith(1, "Backlog title", "");
+		expect(editor).toHaveBeenNthCalledWith(2, "Backlog description", "");
+		expect(appendEntry).toHaveBeenCalledWith(
+			BACKLOG_STATE_ENTRY,
+			expect.objectContaining({
+				nextId: 2,
+				items: [expect.objectContaining({ id: 1, title: "Human note", description: "Remember this later" })],
+			}),
+		);
+	});
+
 	it("registers add/read/take tools, publishes the count, and persists mutations", async () => {
 		const tools = new Map<string, RegisteredTool>();
 		const commands = new Map<string, unknown>();

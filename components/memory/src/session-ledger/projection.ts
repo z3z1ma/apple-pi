@@ -162,10 +162,7 @@ export function buildCompactionProjection(
 	config: CompactionProjectionConfig,
 ): CompactionProjection {
 	const projection = fullProjection(entries, firstKeptEntryId);
-	const observationTokens = projection.observations.reduce(
-		(total, observation) => total + observation.tokenCount,
-		0,
-	);
+	const observationTokens = projection.observations.reduce((total, observation) => total + observation.tokenCount, 0);
 	const fullFold = observationTokens >= config.observationsPoolMaxTokens;
 
 	const details: MemoryDetails = {

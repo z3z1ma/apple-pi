@@ -152,7 +152,7 @@ describe("BacklogManagerComponent", () => {
 		expect(tui.requestRender).toHaveBeenCalledTimes(4);
 	});
 
-	it("dispatches actions for shift+up/down, e, d, escape, ctrl+c", () => {
+	it("dispatches actions for create, shift+up/down, edit, delete, and close", () => {
 		const tui = mockTui();
 		const theme = mockTheme();
 		const actions: BacklogManagerAction[] = [];
@@ -160,29 +160,26 @@ describe("BacklogManagerComponent", () => {
 
 		const component = new BacklogManagerComponent(tui, theme, SAMPLE_ITEMS, 2, done);
 
-		// Move up (shift+up)
+		component.handleInput("c");
+		expect(actions).toEqual([{ type: "create" }]);
+
 		component.handleInput("\x1b[1;2A");
-		expect(actions).toEqual([{ type: "move", id: 2, direction: "up" }]);
+		expect(actions[1]).toEqual({ type: "move", id: 2, direction: "up" });
 
-		// Move down (shift+down)
 		component.handleInput("\x1b[1;2B");
-		expect(actions[1]).toEqual({ type: "move", id: 2, direction: "down" });
+		expect(actions[2]).toEqual({ type: "move", id: 2, direction: "down" });
 
-		// Edit (e)
 		component.handleInput("e");
-		expect(actions[2]).toEqual({ type: "edit", id: 2 });
+		expect(actions[3]).toEqual({ type: "edit", id: 2 });
 
-		// Delete (d)
 		component.handleInput("d");
-		expect(actions[3]).toEqual({ type: "delete", id: 2 });
+		expect(actions[4]).toEqual({ type: "delete", id: 2 });
 
-		// Escape closes
 		component.handleInput("\x1b");
-		expect(actions[4]).toEqual({ type: "close" });
-
-		// Ctrl+c closes
-		component.handleInput("\x03");
 		expect(actions[5]).toEqual({ type: "close" });
+
+		component.handleInput("\x03");
+		expect(actions[6]).toEqual({ type: "close" });
 	});
 
 	it("handles empty backlog input gracefully — only close keys act", () => {
@@ -193,17 +190,20 @@ describe("BacklogManagerComponent", () => {
 
 		const component = new BacklogManagerComponent(tui, theme, [], undefined, done);
 
-		// Navigation and action keys do nothing
+		component.handleInput("c");
+		expect(actions).toEqual([{ type: "create" }]);
+
+		// Item-specific keys do nothing
 		component.handleInput("j");
 		component.handleInput("k");
 		component.handleInput("e");
 		component.handleInput("d");
 		component.handleInput("\x1b[1;2A");
-		expect(actions).toEqual([]);
+		expect(actions).toEqual([{ type: "create" }]);
 
 		// Escape closes
 		component.handleInput("\x1b");
-		expect(actions).toEqual([{ type: "close" }]);
+		expect(actions).toEqual([{ type: "create" }, { type: "close" }]);
 	});
 
 	it("caches rendered lines and invalidates on request", () => {

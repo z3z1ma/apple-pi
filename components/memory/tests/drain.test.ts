@@ -126,9 +126,7 @@ describe("drainAgentStream", () => {
 				return {};
 			},
 		};
-		await expect(
-			drainAgentStream(stream, () => {}, controller.signal),
-		).rejects.toMatchObject({
+		await expect(drainAgentStream(stream, () => {}, controller.signal)).rejects.toMatchObject({
 			name: "AbortError",
 			message: CONSOLIDATION_ABORT_REASON.timeout,
 		});

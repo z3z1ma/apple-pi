@@ -12,6 +12,7 @@ import type { BacklogItem } from "../state.js";
 
 export type BacklogManagerAction =
 	| { type: "close" }
+	| { type: "create" }
 	| { type: "edit"; id: number }
 	| { type: "delete"; id: number }
 	| { type: "move"; id: number; direction: "up" | "down" };
@@ -45,6 +46,11 @@ export class BacklogManagerComponent implements Component {
 
 		if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
 			this.done({ type: "close" });
+			return;
+		}
+
+		if (matchesKey(data, "c")) {
+			this.done({ type: "create" });
 			return;
 		}
 
@@ -139,7 +145,7 @@ export class BacklogManagerComponent implements Component {
 		if (this.items.length === 0) {
 			lines.push("");
 			addPrefixed("  ", this.theme.fg("muted", "No items in session backlog."));
-			addPrefixed("  ", this.theme.fg("dim", "Use backlog_add to park out-of-scope ideas and tasks."));
+			addPrefixed("  ", this.theme.fg("dim", "Press c to create one, or use backlog_add while working."));
 			lines.push("");
 		} else {
 			lines.push("");
@@ -190,8 +196,8 @@ export class BacklogManagerComponent implements Component {
 
 		const footerHelp =
 			this.items.length === 0
-				? " Esc / Ctrl+C Close"
-				: " ↑/↓ Select  ·  Shift+↑/↓ Move  ·  e Edit  ·  d Delete  ·  Esc Close";
+				? " c Create  ·  Esc / Ctrl+C Close"
+				: " c Create  ·  ↑/↓ Select  ·  Shift+↑/↓ Move  ·  e Edit  ·  d Delete  ·  Esc Close";
 		addPrefixed(" ", this.theme.fg("dim", footerHelp));
 		lines.push(safeLine(this.theme.fg("accent", "─".repeat(renderWidth))));
 
