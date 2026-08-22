@@ -75,7 +75,7 @@ Stop and ask only for:
 
 - irreversible or destructive actions;
 - external publication, deployment, or material cost without authority;
-- security-sensitive choices;
+- unresolved security-sensitive choices that change trust, permissions, credentials, or exposure;
 - unresolved product meaning that changes observable behavior;
 - scope materially beyond what the operator requested.
 

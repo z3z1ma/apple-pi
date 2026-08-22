@@ -23,19 +23,19 @@ For each coherent increment:
 1. Implement the smallest behavior that leaves the repository useful.
 2. Use a failing test first when it cheaply proves a new invariant or reproduces a bug; otherwise use the most direct relevant check.
 3. Inspect the bounded diff and run the named verification.
-4. Fix ordinary defects, nits, formatting, and integration issues yourself.
+4. Fix ordinary defects, formatting, integration issues, and any cheap clearly useful nits yourself.
 5. Update Work Item state only when the plan is serving as shared continuity.
 6. Continue to the next ready increment without a progress approval gate.
 
 Load another process skill only when it is the primary next action.
 
-## Review tiers
+## Optional review
 
-A Work Item is not blocked on review unless the plan explicitly assigns a justified tier:
+Root inspection and checks are sufficient unless the plan names an independent review:
 
-- `Review: none` — root inspection and checks.
-- `Review: one-pass` — one independent review after the coherent change is complete.
-- `Review: staged` — bounded extra review for a named high-cost risk.
+- no `Review` field — root inspection and checks;
+- `Review: one-pass — <risk>` — one independent review after the coherent change is complete;
+- `Review: staged — <risk>` — bounded extra review for a named high-cost risk.
 
 After review, validate findings and make normal corrections in the root session. Nits conclude there. Rerun affected checks after fixes. A second reviewer or follow-up review serves new material risk.
 
@@ -49,7 +49,7 @@ Stop only for:
 
 - irreversible or destructive action;
 - missing authority for external side effects;
-- a security-sensitive decision;
+- an unresolved security-sensitive choice that changes trust, permissions, credentials, or exposure;
 - unresolved product meaning that changes acceptance;
 - repeated failure that invalidates the approach.
 

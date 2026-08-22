@@ -64,7 +64,7 @@ Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it 
 - [`/skill:parallel-orchestration`](skills/parallel-orchestration) — parallelize substantial non-overlapping domains
 - [`/skill:root-cause-debugging`](skills/root-cause-debugging) — find and fix a failure from the cheapest discriminating evidence
 - [`/skill:test-first-development`](skills/test-first-development) — use focused test-first checks where they improve feedback
-- [`/skill:review-commissioning`](skills/review-commissioning) — commission one risk-justified independent review
+- [`/skill:review-commissioning`](skills/review-commissioning) — add one risk-justified independent reviewer during ongoing work
 - [`/skill:review-reconciliation`](skills/review-reconciliation) — validate feedback once and handle fixes in the root
 - [`/skill:completion-verification`](skills/completion-verification) — match fresh verification breadth to the claim
 - [`/skill:workspace-isolation`](skills/workspace-isolation) — isolate work when overlap or destructive experimentation warrants it

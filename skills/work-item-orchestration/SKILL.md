@@ -44,19 +44,18 @@ The root session remains the senior engineer. It:
 
 - validates the worker's claims against the diff and checks;
 - integrates the result;
-- fixes ordinary omissions, nits, formatting, and small regressions itself;
+- fixes ordinary omissions, formatting, small regressions, and any cheap clearly useful nits itself;
 - updates any shared plan or Ledger state;
 - decides whether a reported concern is material.
 
 The root handles routine feedback. Resume or replace a worker when it is genuinely blocked on missing context, the implementation is materially incomplete, or a distinct unresolved problem still benefits from its context.
 
-## Review policy
+## Optional review
 
-Follow the plan's explicit risk tier:
+Root inspection and named checks are enough when the plan has no `Review` field. When it names one:
 
-- `Review: none` — root inspection and named checks are enough.
-- `Review: one-pass` — commission one fresh review of the complete coherent change after implementation.
-- `Review: staged` — use the smallest staged review justified by the named high-cost risk.
+- `Review: one-pass — <risk>` — commission one fresh review of the complete coherent change after implementation.
+- `Review: staged — <risk>` — use the smallest staged review justified by the named high-cost risk.
 
 Per-Work-Item review is not automatic. Separate specification and quality verdicts are not automatic. Final whole-change review is not automatic.
 
@@ -70,10 +69,10 @@ A commissioned reviewer gets the full bounded change and all important review qu
 4. Dispatch once when justified.
 5. Inspect the actual diff and run or confirm the named checks.
 6. Resolve ordinary findings directly.
-7. Apply the plan's review tier.
+7. Apply any review the plan explicitly justifies.
 8. Mark progress and continue without asking the operator to reconfirm.
 
-Stop only for destructive/irreversible action, security-sensitive authority, external side effects, unresolved product meaning, or a plan too broken to execute safely.
+Stop only for destructive or irreversible action, missing authority for external side effects, an unresolved security-sensitive choice that changes trust or exposure, unresolved product meaning, or a plan too broken to execute safely.
 
 ## Failure handling
 
@@ -84,4 +83,4 @@ Stop only for destructive/irreversible action, security-sensitive authority, ext
 
 ## Completion
 
-A batch is complete when the intended behavior is present, named checks pass, and any material risk-tier review is resolved. Keep the final report concise: changed paths, checks, material decisions, and remaining risk. Review packages or evidence records appear only when the active plan uses them for continuity.
+A batch is complete when the intended behavior is present, available named checks pass, unavailable checks are reported with their evidence limits and residual risk, and any explicitly justified review is resolved. Keep the final report concise: changed paths, checks, material decisions, and remaining risk. Review packages or evidence records appear only when the active plan uses them for continuity.

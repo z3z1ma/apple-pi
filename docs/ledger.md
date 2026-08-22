@@ -20,13 +20,13 @@ Evidence records what was observed and how. It does not become product authority
 
 ## Lifecycle
 
-Ledger work moves through three roles, even when one session performs them sequentially:
+Ledger supports three activities without making them sequential gates:
 
-1. **Shaping** establishes task intent, outcome, scope, non-goals, Acceptance Criteria, constraints, and references. It may produce research, decisions, and an optional specification.
+1. **Shaping** establishes the intent and observable outcome needed to execute safely. It may add scope, non-goals, Acceptance Criteria, constraints, research, decisions, or a specification when they matter.
 2. **Orchestration** optionally creates a plan, selects substantial Work Items and owners, sequences dependencies, and chooses risk-based review when coordination warrants it.
-3. **Execution** delivers coherent increments in the root session or through deliberately chosen workers, updating durable progress/evidence only when another session needs it.
+3. **Execution** delivers coherent increments in the root session or through deliberately chosen workers, updating durable progress or evidence only when another session needs it.
 
-Semantic ambiguity returns to shaping. Execution does not invent product choices merely because a convenient implementation exists.
+A task uses only the activities that help deliver its outcome. Semantic ambiguity returns to the operator rather than being hidden by a convenient implementation.
 
 ## Storage model
 
@@ -66,7 +66,7 @@ Required inputs are a one-line title and description. An optional lowercase keba
 
 `ledger_close` archives one live bundle as `done` or `cancelled`. It updates `Status` in `task.md` when needed, moves the entire bundle under `.ledger/history/`, removes its live-index row, and appends a history-index row.
 
-It does not decide whether the task is complete. Closure readiness is established by the task, plan, evidence, review dispositions, dependencies, and retrospective before the operator authorizes archival.
+It does not decide whether the task is complete. Closure readiness comes from the promised outcome, unresolved blockers or dependencies, and verification proportionate to the claim. Plans, evidence, review dispositions, and the retrospective participate only when the task actually used them.
 
 Read and edit existing Ledger files with ordinary repository tools.
 
@@ -114,7 +114,7 @@ Pending shaping.
 
 `Depends-On: .ledger/<task-id>/task.md` is an optional header immediately after `Updated`. Multiple dependencies are comma-separated and retain their live identity paths. Resolve a dependency first at its live path, then under `.ledger/history/`; it is ready only when the resolved task exists and has Status `done`. Dependency cycles are invalid.
 
-Shaping replaces every placeholder before planning or execution. Task status is `open | active | blocked | done | cancelled`. When a task is blocked, the owning plan, research record, decision need, or dependency describes the condition and `References` links it.
+Before execution, replace the placeholders that govern the work and remove unused placeholder bullets rather than manufacturing ritual content. Make intent and outcome actionable; define any load-bearing Acceptance Criteria that improve verification, or remove the scaffolded criterion when none adds value. Task status is `open | active | blocked | done | cancelled`. When a task is blocked, the owning plan, research record, decision need, or dependency describes the condition and `References` links it.
 
 Acceptance Criteria use stable `AC-###` identifiers and describe observable outcomes or durable invariants. Completing a plan Work Item does not itself prove acceptance.
 
@@ -171,7 +171,7 @@ Status: `recorded`.
 
 ## Retrospective
 
-Every task has one top-level `retrospective.md`. It is the single learning-and-improvement record:
+Every generated task has one top-level `retrospective.md` scaffold available as its single learning-and-improvement record. Use it when the task produces learning worth preserving; its mere presence is not a closure obligation:
 
 ```markdown
 Status: pending
@@ -201,7 +201,7 @@ Pending completion of the undertaking.
 Pending completion of the undertaking.
 ```
 
-Closure replaces every placeholder and sets Status to `complete`.
+When the retrospective is useful, replace its placeholders and set Status to `complete`. Otherwise leave the scaffold untouched; do not invent lessons to satisfy the template.
 
 - `Summary` explains how execution unfolded relative to intent and plan.
 - `What Worked` captures practices and decisions worth retaining.
@@ -209,7 +209,7 @@ Closure replaces every placeholder and sets Status to `complete`.
 - `Learnings` states generalizable conclusions supported by task experience and evidence.
 - `Improvements` identifies actual changes made to durable owners such as `AGENTS.md`, documentation, tests, runbooks, configured skills, or a separately owned follow-up task.
 
-The retrospective synthesizes rather than duplicates evidence. A substantive explanation that no durable promotion was warranted is acceptable.
+The retrospective synthesizes rather than duplicates evidence. When a retrospective is otherwise useful, a substantive explanation that no durable promotion was warranted is acceptable.
 
 ## Completion and archival
 

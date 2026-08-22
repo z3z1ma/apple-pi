@@ -28,20 +28,19 @@ Each Work Item should state:
 - outcome and exact owned paths;
 - dependencies and interfaces that later work relies on;
 - implementation steps at the level needed by the executor;
-- the cheapest check that can falsify completion;
-- risk level and review policy.
+- the cheapest check that can falsify completion.
 
-Use this review field:
+Root inspection and named checks are the default and need no review metadata. Add a field only when independent review answers a named risk:
 
 ```text
-Review: none | one-pass | staged
+Review: one-pass — <named risk>
+Review: staged — <named high-cost risk>
 ```
 
-- `none`: reversible, locally bounded work with adequate checks.
 - `one-pass`: meaningful integration or correctness risk where one fresh review adds value.
 - `staged`: security, destructive migration, persistent-data compatibility, difficult rollback, or another explicitly named high-cost risk.
 
-Most Work Items should be `none`. A plan must explain why `staged` is worth the cost.
+Most Work Items omit the field. A plan explains why any independent review is worth its cost.
 
 ## Plan format
 
@@ -60,7 +59,6 @@ Updated: YYYY-MM-DD
 ### WI-001: Outcome
 State: open
 Dependencies: None
-Review: none
 Files:
 - Modify: path
 Checks:
@@ -73,7 +71,7 @@ Use `open | active | blocked | complete | cancelled` for Work Item state. Keep i
 
 ## Detail level
 
-A cold-start executor must understand contractual values, interfaces, and failure behavior, but the plan does not need to reproduce obvious code or every two-minute action. Point to authoritative source and tests instead of pasting large implementations. Avoid placeholders whose resolution would change behavior.
+Give a cold-start executor the contractual values, interfaces, and failure behavior it cannot safely infer, but do not reproduce obvious code or every two-minute action. Point to authoritative source and tests instead of pasting large implementations. Avoid placeholders whose resolution would change behavior.
 
 Self-check once for:
 

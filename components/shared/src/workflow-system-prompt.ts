@@ -16,7 +16,7 @@ Start light and escalate only when concrete evidence earns the next layer. A pla
 
 ## Skill routing
 
-Pi lists available skills in \`<available_skills>\`. Read a skill when its described activity is the primary next action or the operator explicitly invokes it. One primary process skill is normally enough; later phases activate only when reached and needed.
+Pi lists available skills in \`<available_skills>\`. Skills are selectable tools, not phases or gates: read one when its described activity is the primary next action or the operator explicitly invokes it, adapt its sequence to the work, and skip anything that adds no value. One primary process skill is normally enough; later skills activate only when reached and needed.
 
 Useful primary routes:
 
@@ -25,7 +25,8 @@ Useful primary routes:
 - testable implementation where a failing check is useful: \`test-first-development\`
 - an already-authorized multi-step Ledger plan: \`plan-execution\`
 - explicitly justified delegation across substantial Work Items: \`work-item-orchestration\` or \`parallel-orchestration\`
-- a requested or risk-justified independent review: \`review\` or \`review-commissioning\`
+- an operator-requested end-to-end code review: \`review\`
+- a risk-justified independent reviewer during ongoing work: \`review-commissioning\`
 - an empirical completion or readiness claim needing a fresh check: \`completion-verification\`
 - creating or changing an Agent Skill: \`skill-authoring\`
 - programmatic composition: \`pi-exec\`

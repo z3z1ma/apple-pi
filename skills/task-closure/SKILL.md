@@ -27,7 +27,7 @@ For an active task:
 1. Confirm the promised outcome exists in the repository or other authoritative target.
 2. Resolve material blockers and dependencies.
 3. Mark substantial active plan work complete, cancelled, or superseded honestly.
-4. Complete a short retrospective only when the bundle includes one; focus on useful learning, not ritual sections.
+4. Complete the retrospective only when it captures learning or improvements worth preserving; a scaffold alone creates no obligation.
 5. Set `done` when the outcome is delivered; use `cancelled` when the operator abandons it.
 6. Call `ledger_close` only when archival is authorized.
 
@@ -37,11 +37,7 @@ Closure uses the records the task actually needed and verifies the actual delive
 
 If the operator explicitly says commit, push, merge, create a PR, publish, or keep the branch, that is the choice. Execute it after verification without presenting another menu.
 
-If no integration direction exists, present only the choices that apply:
-
-1. Commit/merge locally
-2. Push or create a pull request
-3. Keep the worktree/branch as-is
+If no integration action was requested, leave Git state unchanged and report it. Ask for a specific choice only when the operator requested integration but the intended action remains ambiguous.
 
 Discarding work requires explicit confirmation.
 

@@ -104,6 +104,6 @@ Adapt `ledger-increment.md` with the task terminology, acceptance criteria, rele
 
 Default Ralph supplies bounded fresh-context implementation increments. After a batch, the caller inspects the repository state, runs the relevant checks, handles ordinary fixes in the root session, and decides whether another batch is useful. Ledger progress or evidence is persisted only when it has continuity value for a later session.
 
-The active plan's risk tier governs any independent review: `none` uses caller validation, `one-pass` commissions one complete review after the coherent change, and `staged` applies only to its named high-cost risk. Nits conclude in the root session.
+Caller validation is the default. An active plan may explicitly add `Review: one-pass — <risk>` for one complete review after the coherent change or `Review: staged — <risk>` for a named high-cost risk. Nits conclude in the root session.
 
 `ralph-ledger-review.js` remains an explicitly opt-in advanced composition for an operator who specifically requests increment-then-review coupling. Ordinary Ralph and Ledger execution use `implementation-planning`, `plan-execution`, and `task-closure` only when those phases are actually needed. `ledger_add` creates tasks and `ledger_close` archives them.

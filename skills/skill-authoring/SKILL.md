@@ -94,7 +94,7 @@ When editing an existing skill:
 1. Identify the concrete behavior or retrieval gap.
 2. Make the smallest change that addresses it.
 3. Run the loader/package check and any directly relevant example.
-4. Stop after the loader/package check; a behavioral campaign is reserved for risk or observed failure.
+4. For an ordinary guidance change, stop after the loader/package check; add behavioral evaluation only for concrete risk or an observed failure.
 
 ## Completion
 

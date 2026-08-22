@@ -170,7 +170,6 @@ try {
 	}
 	for (const visualPath of [
 		"skills/task-shaping/visual-companion.md",
-		"skills/task-shaping/spec-document-reviewer-prompt.md",
 		"skills/task-shaping/scripts/frame-template.html",
 		"skills/task-shaping/scripts/helper.js",
 		"skills/task-shaping/scripts/server.cjs",

@@ -1,17 +1,17 @@
 ---
 name: review-commissioning
-description: "Use when the operator requests independent review or a completed change has a concrete costly or hard-to-observe risk that warrants fresh eyes."
+description: "Use when ongoing work needs a deliberately commissioned independent reviewer for a concrete costly or hard-to-observe risk. For an operator-requested end-to-end code review, use review."
 ---
 
 # Commission One Useful Review
 
-Independent review is an expensive risk-control tool. Use it when its expected value exceeds its context, latency, and integration cost.
+This skill helps the root agent add fresh eyes during ongoing work. Independent review is an expensive risk-control tool, not a lifecycle stage; use it when its expected value exceeds its context, latency, and integration cost.
 
 ## When to commission
 
 Good reasons:
 
-- the operator asks for review;
+- the operator asks specifically for an independent reviewer during ongoing work;
 - authorization, security, compatibility, migration, concurrency, cleanup, or persistent-data behavior could fail at high cost;
 - a large integrated change has a subtle contract difficult to verify locally;
 - the root agent is genuinely stuck after gathering evidence.
@@ -46,7 +46,7 @@ Nits and ordinary disagreements conclude in the root. One scoped follow-up revie
 
 ## Ledger
 
-When a Ledger task already uses durable review evidence, record only material findings, dispositions, and residual risk needed by a future session. Adapter/schema failure falls back once to a plain bounded review when the risk still justifies review.
+When a Ledger task already uses durable review evidence, record only material findings, dispositions, and residual risk needed by a future session. If a preferred review mechanism fails, use another bounded mechanism only when the original risk still justifies the cost.
 
 ## Severity
 

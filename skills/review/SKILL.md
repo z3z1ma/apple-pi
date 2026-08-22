@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use when the operator asks to review, inspect, audit, assess, critique, validate, verify, or sanity-check code or changes, or when a concrete high-cost risk justifies independent review."
+description: "Use when the operator requests a defect-focused review, audit, critique, or sanity-check of code or changes. For empirical completion claims and running checks, use completion-verification."
 ---
 
 # Review Changes Once, Well

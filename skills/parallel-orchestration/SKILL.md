@@ -34,7 +34,7 @@ Use the fewest agents that cover the independent domains. Batch same-shape edits
 
 ## Root coordination
 
-While workers run, the root may inspect shared integration surfaces or prepare non-overlapping work. Results arrive through bounded waits; review begins after implementation settles.
+While workers run, the root may inspect shared integration surfaces or prepare non-overlapping work. Results arrive through bounded waits; any risk-justified review begins after implementation settles.
 
 When results arrive:
 
@@ -42,7 +42,7 @@ When results arrive:
 2. verify boundaries and interfaces;
 3. resolve ordinary integration issues and nits in the root;
 4. run combined relevant checks;
-5. commission at most one integrated review only when the final risk tier warrants it.
+5. commission at most one integrated review only when a concrete final risk warrants it.
 
 Minor feedback concludes in the root. Resume a worker for a materially incomplete assignment where its retained context remains the cheapest path.
 
@@ -57,4 +57,4 @@ Minor feedback concludes in the root. Resume a worker for a materially incomplet
 
 When a Ledger plan exists, record owners and dependency edges when they help recovery. Worker reports are claims; concise validated outcomes are enough.
 
-Parallel orchestration ends after integration and combined checks. It does not imply per-worker review, re-review, or a final multi-agent tribunal.
+Parallel orchestration ends after the results are reconciled and combined checks run. Commit, merge, or other integration remains operator-directed; parallel work does not imply per-worker review, re-review, or a final multi-agent tribunal.
