@@ -5,6 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
 import { selectAgentModel } from "../src/agent-runner.js";
 import { BUILTIN_TOOL_NAMES, buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
+import {
+	BTW_AGENT_CONFIG,
+	buildBtwInjection,
+	buildBtwParentSnapshot,
+	buildBtwPrompt,
+	formatBtwUserMessage,
+	getLatestBtwExchange,
+} from "../src/btw.js";
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
@@ -52,6 +60,102 @@ describe("owned subagent surface", () => {
 
 	it("uses the quick profile for the built-in read-only explorer", () => {
 		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({ profile: "quick" });
+	});
+
+	it("keeps BTW private and read-only", () => {
+		expect(BTW_AGENT_CONFIG).toMatchObject({
+			builtinToolNames: ["read", "grep", "find", "ls"],
+			extensions: false,
+			skills: false,
+			advisor: false,
+			persistSession: false,
+			promptMode: "replace",
+		});
+	});
+
+	it("gives each BTW visit an append-only, bounded conversation snapshot", () => {
+		const branch = [
+			{ id: "1", type: "message", message: { role: "user", content: [{ type: "text", text: "older context" }] } },
+			{
+				id: "2",
+				type: "message",
+				message: { role: "toolResult", content: [{ type: "text", text: "private tool output" }] },
+			},
+			{
+				id: "3",
+				type: "message",
+				message: { role: "assistant", content: [{ type: "text", text: "latest answer" }] },
+			},
+		];
+		const first = buildBtwParentSnapshot(branch);
+		const prompt = buildBtwPrompt(first.context, "side question");
+		expect(first.cursor).toBe("3");
+		expect(prompt).toContain("older context");
+		expect(prompt).toContain("latest answer");
+		expect(prompt).toContain("side question");
+		expect(prompt).not.toContain("private tool output");
+		expect(formatBtwUserMessage(prompt)).toBe("side question");
+		const markerInContext = buildBtwPrompt(
+			"[Parent user]\nThe source contains <btw-question>not the visible question</btw-question>.",
+			"actual side question",
+		);
+		expect(formatBtwUserMessage(markerInContext)).toBe("actual side question");
+
+		const nextBranch = [
+			...branch,
+			{ id: "4", type: "message", message: { role: "user", content: "new root question" } },
+			{ id: "5", type: "message", message: { role: "assistant", content: [{ type: "text", text: "new progress" }] } },
+		];
+		const delta = buildBtwParentSnapshot(
+			[
+				...nextBranch,
+				{
+					id: "6",
+					type: "message",
+					message: { role: "user", content: buildBtwInjection({ question: "q", answer: "a" }) },
+				},
+			],
+			first.cursor,
+		);
+		expect(delta.context).toContain("new root question");
+		expect(delta.context).toContain("new progress");
+		expect(delta.context).not.toContain("older context");
+		expect(delta.context).not.toContain("[BTW side conversation]");
+		expect(delta.cursor).toBe("6");
+
+		const compacted = buildBtwParentSnapshot([
+			{ id: "1", type: "message", message: { role: "user", content: "superseded context" } },
+			{ id: "2", type: "compaction", summary: "current summary" },
+			{ id: "3", type: "message", message: { role: "user", content: "after compaction" } },
+		]);
+		expect(compacted.context).toContain("current summary");
+		expect(compacted.context).toContain("after compaction");
+		expect(compacted.context).not.toContain("superseded context");
+
+		const bounded = buildBtwParentSnapshot([
+			{ id: "1", type: "message", message: { role: "user", content: "x".repeat(20_000) } },
+		]);
+		expect(bounded.context.length).toBeLessThanOrEqual(12_000);
+	});
+
+	it("extracts only the latest completed BTW exchange for injection", () => {
+		const messages = [
+			{ role: "user", content: buildBtwPrompt("root context", "Why is this failing?") },
+			{ role: "assistant", content: [{ type: "text", text: "Because the guard is inverted." }], stopReason: "stop" },
+			{ role: "user", content: "Can you be more specific?" },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "The condition on line 12 is reversed." }],
+				stopReason: "stop",
+			},
+		];
+		const exchange = getLatestBtwExchange(messages);
+		expect(exchange).toEqual({
+			question: "Can you be more specific?",
+			answer: "The condition on line 12 is reversed.",
+		});
+		expect(buildBtwInjection(exchange!)).toContain("The condition on line 12 is reversed.");
+		expect(buildBtwInjection(exchange!)).not.toContain("Because the guard is inverted.");
 	});
 
 	it("registers the specialist catalog as built-ins with lane-specific tools", () => {

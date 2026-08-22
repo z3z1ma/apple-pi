@@ -56,6 +56,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 			registerMessageRenderer: () => {},
 			registerTool: () => {},
 			registerCommand: () => {},
+			registerShortcut: () => {},
 			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
 			events: { emit: () => {}, on: () => () => {} },
 			sendMessage: () => {},
@@ -328,6 +329,7 @@ Answer the task.
 			registerMessageRenderer: () => {},
 			registerTool: (tool: any) => tools.set(tool.name, tool),
 			registerCommand: () => {},
+			registerShortcut: () => {},
 			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
 			events: { emit: () => {}, on: () => () => {} },
 			sendMessage: (message: any) => {
@@ -719,6 +721,7 @@ RELOADED ROLE MUST NOT RUN.
 			registerMessageRenderer: () => {},
 			registerTool: (tool: any) => tools.set(tool.name, tool),
 			registerCommand: () => {},
+			registerShortcut: () => {},
 			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
 			events: { emit: () => {}, on: () => () => {} },
 			sendMessage: () => {},

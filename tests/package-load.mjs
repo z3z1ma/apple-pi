@@ -100,6 +100,7 @@ try {
 		"mcp",
 		"mcp-auth",
 		"agents",
+		"btw",
 		"backlog",
 		"notify-setup",
 		"notify-test",

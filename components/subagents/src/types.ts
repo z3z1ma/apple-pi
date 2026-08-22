@@ -74,6 +74,8 @@ export interface AgentRecord {
 	maxSubagentDepth?: number;
 	/** Internal orchestrator ownership; records with this marker are never publicly resumed or steered. */
 	internalOwner?: string;
+	/** Keep a settled in-memory session until the owning root session is disposed. */
+	retainUntilSessionEnd?: boolean;
 	/** Controller-owned termination attribution; absent for ordinary successful agents. */
 	terminationCause?: AgentTerminationCause;
 }

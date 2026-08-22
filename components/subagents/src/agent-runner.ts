@@ -148,6 +148,8 @@ export interface RunOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
+	/** Disable the standard ledger, session-search, MCP, and optional Advisor child extensions. */
+	loadStandardChildExtensions?: boolean;
 	signal?: AbortSignal;
 	isolated?: boolean;
 	inheritContext?: boolean;
@@ -372,13 +374,17 @@ export async function runAgent(
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
-	// Same `--no-extensions` plus `-e` contract as pi_exec workers. Children
-	// also load MCP, and the advisor sidecar when requested. Suppress
+	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
+	// Ordinary children load ledger, session search, MCP, and optional Advisor;
+	// narrowly owned internal sessions may opt out of all of them. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to
 	// the task prompt below. Agent-definition `extensions:` is ignored.
-	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(options.advisor === true);
+	const { noExtensions, additionalExtensionPaths } =
+		options.loadStandardChildExtensions === false
+			? { noExtensions: true as const, additionalExtensionPaths: [] }
+			: childSessionExtensions(options.advisor === true);
 
 	const loader = new DefaultResourceLoader({
 		cwd: configCwd,

@@ -10,6 +10,7 @@ import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
+import { registerBtwCommand } from "./btw.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
 import {
 	getAgentConversation,
@@ -231,6 +232,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	);
 	widget = new AgentWidget(manager, activityById, () => widgetMode);
 	fleet = new FleetList(manager, activityById);
+	registerBtwCommand(pi, manager);
 
 	const managedService: ManagedSubagentService = {
 		startBackground(ctx, request) {

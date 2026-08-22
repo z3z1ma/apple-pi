@@ -33,6 +33,7 @@ These are the pieces I interact with directly while a session is running.
 
 - [`Advisor`](docs/advisor.md) — persistent read-only peer review
 - [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
+- [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
 - [Custom Footer](docs/status-footer.md) — responsive model, context, cost, Git, and live extension status
 
 ### Keeping context and work straight

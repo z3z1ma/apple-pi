@@ -112,8 +112,12 @@ export interface SpawnOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
+	/** Disable standard child extensions for a narrowly owned internal session. */
+	loadStandardChildExtensions?: boolean;
 	/** Capability owner; internal records cannot be resumed or steered through public tools. */
 	internalOwner?: string;
+	/** Keep the settled in-memory record until this manager's root session ends. */
+	retainUntilSessionEnd?: boolean;
 	isolated?: boolean;
 	inheritContext?: boolean;
 	advisor?: boolean;
@@ -153,6 +157,8 @@ export interface SpawnOptions {
 }
 
 interface ResumeOptions {
+	/** Capability owner allowed to resume an internal record. Public callers leave this unset. */
+	internalOwner?: string;
 	/**
 	 * Run the resumed turn detached in the background: return immediately with
 	 * the record still "running" (or "queued" at the concurrency limit) and
@@ -250,6 +256,7 @@ export class AgentManager {
 			parentAgentId: options.parentAgentId,
 			maxSubagentDepth: options.maxSubagentDepth,
 			internalOwner: options.internalOwner,
+			retainUntilSessionEnd: options.retainUntilSessionEnd,
 		};
 		this.agents.set(id, record);
 
@@ -310,6 +317,7 @@ export class AgentManager {
 			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
 			customTools: options.customTools,
+			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
 			advisor: options.advisor,
@@ -508,7 +516,7 @@ export class AgentManager {
 		options?: ResumeOptions,
 	): Promise<AgentRecord | undefined> {
 		const record = this.agents.get(id);
-		if (!record?.session || record.internalOwner) return undefined;
+		if (!record?.session || (record.internalOwner && record.internalOwner !== options?.internalOwner)) return undefined;
 
 		// Background resume: settle asynchronously and notify on completion exactly
 		// like a background spawn, returning immediately with the record still
@@ -699,9 +707,9 @@ export class AgentManager {
 	 * session is created. Returns false if the agent can't accept steering
 	 * (unknown id, or no longer running/queued).
 	 */
-	steer(id: string, message: string): boolean {
+	steer(id: string, message: string, internalOwner?: string): boolean {
 		const record = this.agents.get(id);
-		if (!record || record.internalOwner) return false;
+		if (!record || (record.internalOwner && record.internalOwner !== internalOwner)) return false;
 		if (record.status !== "running" && record.status !== "queued") return false;
 		if (record.session) {
 			record.session.steer(message).catch(() => {});
@@ -718,6 +726,15 @@ export class AgentManager {
 
 	listAgents(): AgentRecord[] {
 		return [...this.agents.values()].sort((a, b) => b.startedAt - a.startedAt);
+	}
+
+	/** Remove an owned internal record immediately, including its in-memory session. */
+	discardInternal(id: string, internalOwner: string): boolean {
+		const record = this.agents.get(id);
+		if (!record || record.internalOwner !== internalOwner) return false;
+		this.abort(id);
+		this.removeRecord(id, record);
+		return true;
 	}
 
 	abort(id: string, cause: AgentTerminationCause = "operator_stop"): boolean {
@@ -757,7 +774,7 @@ export class AgentManager {
 	private cleanup() {
 		const cutoff = Date.now() - 10 * 60_000;
 		for (const [id, record] of this.agents) {
-			if (record.status === "running" || record.status === "queued") continue;
+			if (record.status === "running" || record.status === "queued" || record.retainUntilSessionEnd) continue;
 			if ((record.completedAt ?? 0) >= cutoff) continue;
 			this.removeRecord(id, record);
 		}
