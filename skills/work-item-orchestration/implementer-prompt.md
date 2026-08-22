@@ -18,7 +18,11 @@ Agent:
 
     ## Context
 
+    Active plan: [PLAN_FILE]
+    Prior evidence relevant to this Work Item: [EVIDENCE_PATHS]
     [Scene-setting: where this fits, dependencies, architectural context]
+
+    Read the plan's Global Constraints and this Work Item's state/dependencies. Read only the listed prior evidence needed for a concrete dependency, ruling, or deferred finding; do not ingest unrelated task history.
 
     ## Before You Begin
 
@@ -39,6 +43,8 @@ Agent:
     4. Report changed paths and leave commit authority with the controller
     5. Self-review (see below)
     6. Report back
+
+    The active plan owns Work Item state and the controller owns Ledger reconciliation. Do not add progress, evidence, review, or blocker sections to `task.md`; put full implementation/check details in [REPORT_FILE] for the controller to record in plan and evidence owners.
 
     Work from: [directory]
 

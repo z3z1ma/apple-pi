@@ -13,7 +13,7 @@ Code review requires technical evaluation, not emotional performance.
 
 ## Ledger State: Review Reconciliation
 
-The governing task's Review section owns each confirmed finding, rejection, ambiguity, fix, and residual limit. Feedback is a candidate claim until checked against the diff, active specifications and decisions, current source, and observed behavior. A confirmed finding becomes a bounded fix under the same owner when it is in scope; a new independent outcome gets a task or a substantive no-action rationale. Feedback that conflicts with ratified semantics returns to shaping instead of silently superseding authority.
+The owning review evidence note preserves each candidate, verifier disposition, rejection, ambiguity, and residual limit. Feedback is a claim until checked against the diff, governing task/specification/decisions, current source, and observed behavior. Confirmed in-scope remediation belongs in the active plan and links back to review evidence; an independent outcome gets its own task or a substantive no-action rationale. Feedback that conflicts with ratified semantics returns to shaping instead of silently superseding authority.
 
 ## The Response Pattern
 

@@ -34,12 +34,74 @@ describe("ledger add", () => {
 			indexPath: ".ledger/INDEX.md",
 		});
 		expect(readdirSync(join(root, result.bundlePath)).sort()).toEqual(
-			["decisions", "evidence", "knowledge", "plans", "research", "skills", "specs", "task.md"].sort(),
+			["decisions", "evidence", "plans", "research", "retrospective.md", "specs", "task.md"].sort(),
 		);
+		for (const directory of ["decisions", "evidence", "plans", "research", "specs"]) {
+			expect(statSync(join(root, result.bundlePath, directory)).isDirectory()).toBe(true);
+		}
+		expect(statSync(join(root, result.taskPath)).isFile()).toBe(true);
+		expect(statSync(join(root, result.bundlePath, "retrospective.md")).isFile()).toBe(true);
 		const task = readFileSync(join(root, result.taskPath), "utf8");
-		expect(task).toContain("Status: open\nCreated: 2026-08-17\nUpdated: 2026-08-17");
-		expect(task).toContain("# Implement bounded behavior");
-		expect(task).toContain("Shaping is incomplete; replace every placeholder before execution.");
+		expect(task).toBe(`Status: open
+Created: 2026-08-17
+Updated: 2026-08-17
+
+# Implement bounded behavior
+
+## Intent
+
+Pending shaping.
+
+## Outcome
+
+Pending shaping.
+
+## Scope
+
+Pending shaping.
+
+## Non-goals
+
+- Pending shaping.
+
+## Acceptance Criteria
+
+- AC-001: Pending shaping.
+
+## Constraints
+
+- Pending shaping.
+
+## References
+
+- Pending shaping.
+`);
+		expect(readFileSync(join(root, result.bundlePath, "retrospective.md"), "utf8")).toBe(`Status: pending
+Created: 2026-08-17
+Updated: 2026-08-17
+
+# Retrospective
+
+## Summary
+
+Pending completion of the undertaking.
+
+## What Worked
+
+Pending completion of the undertaking.
+
+## What Could Improve
+
+Pending completion of the undertaking.
+
+## Learnings
+
+Pending completion of the undertaking.
+
+## Improvements
+
+Pending completion of the undertaking.
+`);
 		expect(readFileSync(join(root, result.indexPath), "utf8")).toContain(
 			"- `.ledger/202608170905-implement-bounded-behavior/task.md` — Implement bounded behavior — Keep one production owner for the requested outcome",
 		);

@@ -13,7 +13,7 @@ description: "Use when encountering a bug, test failure, or unexpected behavior 
 
 ## Ledger State: Execution Through Investigation
 
-Start from the governing task or create one only when the defect is non-trivial and unowned. Record the reproduction, falsifiable hypothesis, observations, and limits while they are fresh. Promote an investigation to `research/` when its versions, dead ends, or external findings are worth not repeating; routine evidence stays in `task.md`. A diagnosis that would change accepted behavior, scope, or acceptance pulls execution back into shaping and becomes a blocker rather than an implementation guess.
+Start from the governing task or create one only when the defect is non-trivial and unowned. Keep investigation progress or blocking state in the active plan and record reproductions, falsifiable hypotheses, observations, procedures, and limits under `evidence/` while fresh. Promote inquiry and synthesis to `research/` when versions, dead ends, or external findings are worth not repeating; link any acceptance-supporting experiments rather than copying them. A diagnosis that would change accepted behavior, scope, or acceptance pulls execution back into shaping and becomes a blocker rather than an implementation guess.
 
 ## The Iron Law
 

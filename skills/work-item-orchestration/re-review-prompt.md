@@ -1,6 +1,6 @@
 # Scoped Re-Review Prompt Template
 
-Use this template as the rubric for `review-commissioning`'s executable review gate in `fix` mode after a fix round. Supply the governing task Review's complete open observation objects as typed `priorObservations` JSON, put the fresh unique BASE-to-worktree package and reports in `contextPaths`, and translate this rubric into `question` and `checks`. Do not dispatch it as a free-form worker. The gate preserves every prior ID, independently verifies addressed/not-addressed status, and reports fix-caused or out-of-scope observations without downgrading severity.
+Use this template as the rubric for `review-commissioning`'s executable review gate in `fix` mode after a fix round. Supply the Work Item review evidence note's complete open observation objects as typed `priorObservations` JSON, put the fresh unique BASE-to-worktree package and reports in `contextPaths`, and translate this rubric into `question` and `checks`. Do not dispatch it as a free-form worker. The gate preserves every prior ID, independently verifies addressed/not-addressed status, and reports fix-caused or out-of-scope observations without downgrading severity.
 
 **Purpose:** Verify each finding from the previous review was addressed, and
 that the fix itself broke nothing.
@@ -17,6 +17,8 @@ that the fix itself broke nothing.
     ## The Task
 
     Read the task brief: [BRIEF_FILE]
+    Active plan: [PLAN_FILE]
+    Owning Work Item review evidence note: [REVIEW_EVIDENCE_FILE]
 
     ## The Findings Under Verification
 
@@ -73,8 +75,7 @@ that the fix itself broke nothing.
     stable observation ID:
     - **[OBS-WI-###-NN — finding one-liner]** — ADDRESSED | NOT ADDRESSED,
       with file:line evidence. "Attempted" is not addressed: the specific
-      defect must no longer exist. The controller records a `Disposition:`
-      for each ID after this verdict.
+      defect must no longer exist. The controller records each disposition in the Work Item review evidence note and updates remediation state in the active plan after this verdict.
 
     ### New Breakage in the Fix Diff
 
@@ -86,9 +87,12 @@ that the fix itself broke nothing.
     Issues you noticed entirely outside the fix diff. They do not change the
     scoped fix verdict, but retain their calibrated severity. For each, give a
     one-line finding, Critical/Important/Minor severity, trigger, impact,
-    suggested owner, and revisit condition. The controller records bounded
-    Minors as `Disposition: Minor deferred`; real material defects get a new
-    owned Ledger task and block this task when load-bearing. "None" if none.
+    suggested owner, and revisit condition. The controller records every
+    observation and disposition in the Work Item review evidence note. Bounded
+    Minors use `Disposition: Minor deferred`; real independent material defects
+    get a new owned Ledger task, while the active plan records the follow-up,
+    remediation, and any Work Item blocking owner. Set task Status to `blocked`
+    only when the recorded condition blocks the task outcome. "None" if none.
 
     ### Verdict
 
@@ -99,6 +103,8 @@ that the fix itself broke nothing.
 **Placeholders:**
 - `[PROFILE]` — REQUIRED: reviewer profile per SKILL.md Model Selection; scoped re-reviews of small fix diffs take a quick-to-balanced profile
 - `[BRIEF_FILE]` — the task brief file (same file the implementer worked from)
+- `[PLAN_FILE]` — the active plan that owns remediation and blocking state
+- `[REVIEW_EVIDENCE_FILE]` — the evidence note containing every prior observation and disposition
 - `[FINDINGS]` — the Critical/Important findings and spec gaps from the
   previous review, copied verbatim, one per bullet
 - `[REPORT_FILE]` — the implementer's report file (fix reports appended)

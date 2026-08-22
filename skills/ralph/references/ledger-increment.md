@@ -11,7 +11,7 @@ Do not infer that the overall task is complete merely because one increment or o
 ## Inputs
 
 - **Goal**: the caller's bounded outcome. Use it to choose work, but do not rewrite its scope.
-- **Context**: repository paths supplied by the caller, normally the small ledger index, the task record, and any plan or authority the next worker should inspect first. Follow links only as needed.
+- **Context**: repository paths supplied by the caller, normally the small Ledger index, the intent-focused task root, the active plan that owns progress/blockers, and any semantic authority the next worker should inspect first. Follow links only as needed.
 - **Repository**: inspect current files, existing changes, and ordinary project contracts before editing. Treat repository instructions and task records as evidence and follow their applicable boundaries.
 
 The caller may adapt this prompt with task-specific acceptance criteria, vocabulary, implementation constraints, known failure modes, and validation commands. Keep those additions concrete and subordinate to the goal and ledger contract.
@@ -22,7 +22,7 @@ The caller may adapt this prompt with task-specific acceptance criteria, vocabul
 2. Select one unfinished increment with a clear observable outcome. Do not parallelize or combine unrelated increments.
 3. Implement the increment with the repository's ordinary tools and conventions. Preserve unrelated working-tree changes.
 4. Run the fastest relevant checks as backpressure, and distinguish checks that passed, failed, or were skipped.
-5. Update the durable ledger task records with the material change, evidence, remaining work, blockers, and any retrospective or distillation that the task contract requires.
+5. Update the active plan with the material progress, remaining work, replanning, or blocking state. Write commands and observations with limits to a linked evidence note. Do not update `retrospective.md`; closure owns that synthesis.
 
 ## Output
 

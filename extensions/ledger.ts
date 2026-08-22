@@ -18,7 +18,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
 
-const SUPPORTING_DIRECTORIES = ["specs", "plans", "research", "decisions", "evidence", "knowledge", "skills"] as const;
+const SUPPORTING_DIRECTORIES = ["specs", "plans", "research", "decisions", "evidence"] as const;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CLOSED_STATUSES = ["done", "cancelled"] as const;
@@ -109,6 +109,14 @@ Updated: ${date}
 
 # ${title}
 
+## Intent
+
+Pending shaping.
+
+## Outcome
+
+Pending shaping.
+
 ## Scope
 
 Pending shaping.
@@ -121,41 +129,42 @@ Pending shaping.
 
 - AC-001: Pending shaping.
 
-## Work Items
+## Constraints
 
-- [ ] WI-001: Pending shaping.
+- Pending shaping.
 
 ## References
 
 - Pending shaping.
+`;
+}
 
-## Assumptions
+function retrospectiveTemplate(date: string): string {
+	return `Status: pending
+Created: ${date}
+Updated: ${date}
 
-- Pending shaping.
+# Retrospective
 
-## Journal
+## Summary
 
-- ${date}: Created the task bundle; shaping remains incomplete.
+Pending completion of the undertaking.
 
-## Blockers
+## What Worked
 
-Shaping is incomplete; replace every placeholder before execution.
+Pending completion of the undertaking.
 
-## Evidence
+## What Could Improve
 
-Pending.
+Pending completion of the undertaking.
 
-## Review
+## Learnings
 
-Pending.
+Pending completion of the undertaking.
 
-## Retrospective
+## Improvements
 
-Pending.
-
-## Distillation
-
-Pending.
+Pending completion of the undertaking.
 `;
 }
 
@@ -250,6 +259,7 @@ export async function addLedgerTask(
 	const bundleAbsolute = join(ledgerPath, taskId);
 	const historyBundleAbsolute = join(ledgerPath, "history", taskId);
 	const taskAbsolute = join(bundleAbsolute, "task.md");
+	const retrospectiveAbsolute = join(bundleAbsolute, "retrospective.md");
 	const bundlePath = `.ledger/${taskId}`;
 	const taskPath = `${bundlePath}/task.md`;
 
@@ -268,6 +278,7 @@ export async function addLedgerTask(
 		createdBundle = true;
 		for (const directory of SUPPORTING_DIRECTORIES) mkdirSync(join(bundleAbsolute, directory));
 		writeFileSync(taskAbsolute, taskTemplate(title, date), { encoding: "utf8", flag: "wx" });
+		writeFileSync(retrospectiveAbsolute, retrospectiveTemplate(date), { encoding: "utf8", flag: "wx" });
 		appendFileSync(indexAbsolute, `\n- \`${taskPath}\` — ${title} — ${description}\n`, "utf8");
 		return { taskId, bundlePath, taskPath, indexPath: LIVE_INDEX };
 	} catch (error) {

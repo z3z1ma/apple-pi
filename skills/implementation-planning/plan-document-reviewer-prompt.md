@@ -1,6 +1,6 @@
 # Plan Document Reviewer Prompt Template
 
-Use this template as the rubric for `review-commissioning`'s executable review gate in `plan` mode after the active plan is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into `question` and `checks`, put the plan in `paths`, and put the task/spec/decisions in `contextPaths`.
+Use this template as the rubric for `review-commissioning`'s executable review gate in `plan` mode after the active plan is written and self-reviewed. Do not dispatch it as a free-form worker; translate its categories into `question` and `checks`, put the plan in `paths`, and put the task, active specification/decisions, and smallest relevant research records in `contextPaths`.
 
 **Purpose:** Attempt to falsify that a cold-start executor can implement the plan without guessing or violating the governing Ledger contract.
 
@@ -12,10 +12,11 @@ Use this template as the rubric for `review-commissioning`'s executable review g
     You are independently reviewing one Ledger implementation plan. Your work is read-only.
 
     Task root: [TASK_FILE]
-    Active specification and decisions: [CONTRACT_PATHS]
+    Active specification when present, plus active decisions: [CONTRACT_PATHS]
+    Relevant research provenance and limits: [RESEARCH_PATHS]
     Plan: [PLAN_FILE]
 
-    Read those files and only the focused source surfaces needed to verify a concrete plan claim. The specification and active decisions govern behavior; the plan must translate them into implementation mechanics without inventing semantics.
+    Read those files and only the focused source surfaces needed to verify a concrete plan claim. The task, active specification when present, and active decisions govern behavior; research supplies factual provenance and limits but is not semantic authority. A bounded plan may use `Spec: None` only when no meaningful behavior, invariant, error handling, or failure semantics require an independent contract; the plan must not invent semantics.
 
     ## What To Challenge
 
@@ -52,7 +53,8 @@ Use this template as the rubric for `review-commissioning`'s executable review g
 
 - `[PROFILE]` — choose a profile proportionate to plan complexity.
 - `[TASK_FILE]` — governing task root.
-- `[CONTRACT_PATHS]` — active specification and decision paths.
+- `[CONTRACT_PATHS]` — active specification path when present and the smallest relevant active decision paths; use the task root plus decisions for a valid `Spec: None` bounded plan.
+- `[RESEARCH_PATHS]` — smallest relevant active/complete research records that source plan assumptions, implementation facts, or limits; use `None` when no research is load-bearing.
 - `[PLAN_FILE]` — active plan path.
 
-The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in `task.md` Review; any `materialBlockers` entry blocks execution readiness. The workers do not edit the plan or begin execution.
+The gate returns typed observations plus independent verifier decisions. Record every observation, disposition, coverage gap, and residual risk in a plan-review evidence note under `evidence/`; any `materialBlockers` entry blocks execution readiness. Track remediation in the active plan. The workers do not edit the plan or begin execution.

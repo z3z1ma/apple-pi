@@ -6,7 +6,7 @@ My own personal [Pi](https://github.com/badlogic/pi-mono) package: advisor, ques
 
 This is my coding harness. It's the result of spending a lot of time working with AI on real code and distilling what actually matters down to the simplest thing that works.
 
-[Ledger](docs/ledger.md) is the workflow spine. It is not just task storage: it carries authority, provenance, cold-start memory, observed evidence, independent review, and retrospective learning through shaping, orchestration, and execution. Exact trivial work stays trivial; consequential or multi-session work gets one bounded task whose records make the next decision cheaper. Thirteen descriptively named lifecycle skills absorb the old Ledger stages without exposing a `ledger-` naming layer. The general `pi-exec`, `review`, and `ralph` skills retain distinct responsibility boundaries.
+[Ledger](docs/ledger.md) is the workflow spine. It is not just task storage: `task.md` preserves shaped intent and acceptance, specifications optionally govern behavior, plans own execution progress, `evidence/` preserves validation and review observations, and one top-level `retrospective.md` connects learning to concrete project improvements. Exact trivial work stays trivial; consequential or multi-session work gets one bounded task whose records make the next decision cheaper. Thirteen descriptively named lifecycle skills apply the same ontology through shaping, orchestration, execution, review, and closure. The general `pi-exec`, `review`, and `ralph` skills retain distinct responsibility boundaries.
 
 The workflow combines the pressure-tested software-engineering procedures adapted from [Superpowers](https://github.com/obra/superpowers) with the durable-judgment philosophy adapted from [10x](https://github.com/z3z1ma/10x), then maps both onto apple-pi's real tools: typed `Agent`, bounded `pi_exec`, fresh Ralph workers, independent review, and operator-controlled integration.
 
@@ -58,7 +58,7 @@ Add `-l` for project-local activation. Pi loads every extension from this one pa
 Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs.
 
 - [`/skill:task-shaping`](skills/task-shaping) — shape Ledger authority, investigate uncertainty, specify behavior, and approve a design
-- [`/skill:implementation-planning`](skills/implementation-planning) — turn an approved specification into source-backed Ledger Work Items
+- [`/skill:implementation-planning`](skills/implementation-planning) — turn a shaped task, active decisions, and an optional specification into source-backed Ledger Work Items
 - [`/skill:plan-execution`](skills/plan-execution) — execute an authorized plan sequentially and maintain Ledger evidence
 - [`/skill:work-item-orchestration`](skills/work-item-orchestration) — fresh typed implementers with per-Work-Item and final review gates
 - [`/skill:parallel-orchestration`](skills/parallel-orchestration) — bounded fan-out over independent domains
@@ -68,7 +68,7 @@ Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it 
 - [`/skill:review-reconciliation`](skills/review-reconciliation) — verify review feedback before implementing it
 - [`/skill:completion-verification`](skills/completion-verification) — gather fresh evidence before completion claims
 - [`/skill:workspace-isolation`](skills/workspace-isolation) — establish an approved isolated workspace
-- [`/skill:task-closure`](skills/task-closure) — distill and close Ledger state, then present integration choices
+- [`/skill:task-closure`](skills/task-closure) — complete the retrospective, judge closure, and present integration choices
 - [`/skill:skill-authoring`](skills/skill-authoring) — develop Agent Skills through pressure-tested behavior
 - [`/skill:review`](skills/review) — plan focuses, fan out reviewers, verify findings
 - [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared Ledger tasks

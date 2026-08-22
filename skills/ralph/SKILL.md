@@ -80,7 +80,7 @@ The repository is the shared memory. The caller must make the goal concrete enou
 
 ## Ledger loop
 
-Use `ralph-ledger.js` when a prepared Ledger task owns scope, acceptance, evidence, and blockers.
+Use `ralph-ledger.js` when a prepared Ledger task owns intent and acceptance, an active plan owns unfinished increments and blocking state, and `evidence/` owns observations.
 
 ```javascript
 {
@@ -102,7 +102,7 @@ Adapt `ledger-increment.md` with the task terminology, acceptance criteria, rele
 
 ## Review ownership
 
-Default Ralph does not plan, review, verify, or close the overall goal. After a batch, the caller loads `review` when independent review is warranted, records any durable findings in the real state owner, and decides whether another bounded batch is useful.
+Default Ralph does not plan, review, verify, or close the overall goal. After a Ledger batch, the caller records observed results and review findings under `evidence/`, reconciles progress/remediation in the active plan, and decides whether another bounded batch is useful.
 
 Use `ralph-ledger-review.js` only when the operator explicitly requests the tighter increment-then-review Ledger composition. Adapt the planner, reviewer, and verifier prompt contracts from the `review` skill and inline them in the program. This advanced example does not replace the normal separation between implementation and independent review.
 

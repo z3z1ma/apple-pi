@@ -17,7 +17,7 @@ You write test cases (pressure scenarios in fresh disposable root Pi sessions), 
 
 ## Ledger State: Compounding The Method
 
-Create or change a skill only when recurring toil, a repeated failure mode, or a durable procedure has a future consumer. The governing task records the targeted failure, behavioral hypothesis, baseline, candidate, treatment observations, regressions that must not move, and promotion decision. Task-local candidate skills live under `.ledger/<task>/skills/`; the package skill becomes canonical only after focused root-session evaluation, review, attribution, and package validation. A one-off lesson belongs in Retrospective or normal documentation, not a new skill.
+Create or change a skill only when recurring toil, a repeated failure mode, or a durable procedure has a future consumer. The governing task owns intent/acceptance, the active plan owns authoring/evaluation progress, and evidence notes preserve the behavioral hypothesis, baseline, treatment observations, regressions, review, and promotion result. Create the candidate directly in its intended configured owner—package `skills/`, trusted-project `.pi/skills/` or `.agents/skills/`, or a personal skill directory—rather than inside the Ledger bundle. A one-off lesson belongs in `retrospective.md` or normal documentation, not a new skill.
 
 **REQUIRED BACKGROUND:** You MUST understand test-first-development before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
 
@@ -630,7 +630,7 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 
 ## Skill Creation Work-Item Mapping (TDD Adapted)
 
-For every applicable identifier below, add a task/plan mapping row `<requirement ID> → <governing WI-###>`. Record its observations under that Work Item in Journal/Evidence/Review. The identifiers are traceability keys, not a second completion surface.
+For every applicable identifier below, add a plan mapping row `<requirement ID> → <governing WI-###>`. Record progress/state in that Work Item, treatment observations in a named evidence note, and reviewer observations/dispositions in review evidence. The identifiers are traceability keys, not a second completion surface.
 
 **RED Phase - Write Failing Test:**
 - `RED-001` Create pressure scenarios (3+ combined pressures for discipline skills).

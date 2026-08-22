@@ -18,8 +18,10 @@ more, nothing less) and is well-built (clean, tested, maintainable)
     ## What Was Requested
 
     Read the task brief: [BRIEF_FILE]
+    Active plan: [PLAN_FILE]
+    Prior implementation/review evidence relevant to this Work Item: [EVIDENCE_PATHS]
 
-    Global constraints from the spec/design that bind this task:
+    Global constraints from the governing task, plan, and specification when present:
     [GLOBAL_CONSTRAINTS]
 
     ## What the Implementer Claims They Built
@@ -156,9 +158,9 @@ more, nothing less) and is well-built (clean, tested, maintainable)
     Give every issue and out-of-scope observation a stable ID in report order:
     `OBS-WI-###-01`, `OBS-WI-###-02`, and so on. Each observation retains its
     calibrated severity, trigger, evidence, impact, and recommendation through
-    fix rounds. The controller records an open Review entry for every ID and a
-    later `Disposition:` or owned follow-up task; a summary count is not a
-    substitute.
+    fix rounds. The controller records every ID and later disposition in a
+    Work-Item review evidence note, and tracks remediation in the active plan;
+    a summary count is not a substitute.
 
     ## Output Format
 
@@ -199,8 +201,10 @@ more, nothing less) and is well-built (clean, tested, maintainable)
 **Placeholders:**
 - `[PROFILE]` — REQUIRED: reviewer profile per SKILL.md Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the Work Item brief file (`scripts/task-brief PLAN_FILE WI_ID` prints the path; same file the implementer worked from)
+- `[PLAN_FILE]` — REQUIRED: the active plan that owns Work Item state, dependencies, rulings, and remediation
+- `[EVIDENCE_PATHS]` — relevant prior implementation/review evidence paths, or `None`
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from
-  the plan's Global Constraints section or the spec: exact values, formats,
+  the plan's Global Constraints and governing task/specification when present: exact values, formats,
   and stated relationships between components (not process rules — those
   are already in this template)
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed

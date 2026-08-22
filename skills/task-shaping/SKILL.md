@@ -25,36 +25,35 @@ the approval gate never does. A request to “start now” authorizes beginning 
 
 Use one Ledger bundle for a non-trivial outcome. Before creating anything, search `.ledger/INDEX.md`, live task roots, and `.ledger/history/INDEX.md`. Extend an existing task when its Scope and Acceptance Criteria already own the outcome. Use `ledger_add` only when a new non-trivial outcome needs a cold-start contract.
 
-A bounded production-behavior change is still non-trivial when it spans implementation and executable coverage or otherwise needs acceptance evidence. Create or reuse a minimal task root before implementation; bounded means no separate specification or plan document, not no durable contract. Keep that task live while approval is pending—do not delete it merely to restore a clean worktree or because no production edit has happened yet. Reserve record-free work for truly reversible one-offs whose removal would not leave production behavior incorrect or untested.
+A bounded production-behavior change is still non-trivial when it spans implementation and executable coverage or otherwise needs acceptance evidence. Create or reuse a minimal task root before implementation. Bounded work may omit a separate specification only when no meaningful behavior, invariant, error handling, or failure semantics need an independent contract; it still needs a proportionate active plan to own execution progress. Keep that task live while approval is pending—do not delete it merely to restore a clean worktree or because no production edit has happened yet. Reserve record-free work for truly reversible one-offs whose removal would not leave production behavior incorrect or untested.
 
 A task root contains exactly one level-one title and these sections in order:
 
+- Intent
+- Outcome
 - Scope
 - Non-goals
 - Acceptance Criteria with stable `AC-###` identifiers
-- Work Items with stable `WI-###` identifiers when implementation decomposition is useful
+- Constraints
 - References
-- Assumptions
-- Journal
-- Blockers
-- Evidence
-- Review
-- Retrospective
-- Distillation
 
-Keep task state honest: `Status` is `open`, `active`, `blocked`, `done`, or `cancelled`; dependencies use canonical `.ledger/<task-id>/task.md` identities; Evidence and Review contain observations rather than predictions. Create supporting records only when the workflow consumes them.
+`task.md` richly preserves what shaping established and what observable outcome the undertaking owns. It does not own Work Items, execution progress, assumptions logs, evidence, review, or retrospective learning. Keep task `Status` honest (`open | active | blocked | done | cancelled`), preserve canonical `.ledger/<task-id>/task.md` dependency identities, and link every governing supporting record from References.
+
+An execution-changing assumption that is not operator-ratified must be investigated in research, settled in a decision or specification, or remain blocking. The owning record describes the condition; the task root links it rather than growing a lifecycle log.
 
 ### Research
 
-When a fact or assumption changes the design, write one focused record under `research/` with Question or Hypothesis, Motivation, Sources and Methods, Findings, Conclusions, Limits, and Related Records. Record source revision and access date, contradictions, null results, confidence, and the difference between observation and inference. Research informs decisions; the operator ratifies product semantics.
+When a fact or assumption changes the design, write one focused record under `research/` with Question or Hypothesis, Motivation, Sources and Methods, Analysis, Findings, Conclusions, Limits, and Related Records. Record source revision and access date, contradictions, null results, confidence, and the difference between observation and inference. Research owns inquiry, citation, interpretation, and synthesis; it informs decisions but does not authorize product semantics.
+
+Executed experiments or environment observations used to validate acceptance belong under `evidence/` and are linked from research. Do not copy the same observation into both locations.
 
 ### Specifications and Decisions
 
-Architectural work stores the approved behavior under `specs/` with Purpose and Authority, Actors and Boundaries, Required Behavior, Error and Failure Behavior, scenarios, Acceptance Mapping, Exclusions, Assumptions and Provenance, and Related Records. Only an `active` spec governs execution.
+Architectural work stores the approved behavior under `specs/` with Purpose and Authority, Actors and Boundaries, Required Behavior, Error and Failure Behavior, scenarios, Acceptance Mapping, Exclusions, Assumptions and Provenance, and Related Records. Active specifications and active decisions govern current execution semantics; research informs them but never authorizes product choices.
 
 Use `decisions/` for consequential or costly-to-reverse choices. Record Context, Decision, Authority and Provenance, steelmanned Alternatives, Consequences, Limits and Revisit Conditions, and Related Records. Supersede a changed decision instead of silently rewriting its history.
 
-Use `knowledge/` only for task-local vocabulary or constraints that later iterations repeatedly need. Durable project knowledge moves to its real repository owner during finishing.
+Specification-review observations, verifier dispositions, coverage gaps, and residual risk belong in an evidence note. Material remediation returns to shaping and updates the specification or decision; it never becomes a task-root Review section.
 
 ## Three Paths
 
@@ -79,7 +78,9 @@ override it:
   sentences to a few short paragraphs), and STOP. Implementation
   starts only after the operator says yes to that design — a
   bounded task's approval is as hard a gate as an architectural
-  one. No spec file, no implementation plan document.
+  one. Omit a separate specification only when no meaningful behavior,
+  invariant, error handling, or failure semantics need an independent
+  contract; after approval, create a proportionate active plan before implementation.
 - **Architectural** — new projects, new subsystems, changes that
   restructure how components fit together or alter interfaces others
   depend on. Follow the full process: questions, approaches, sectioned
@@ -116,7 +117,7 @@ artifact, never the approval.
 
 Offer the browser companion only when the first genuinely visual question would be clearer shown than described—mockups, layout comparisons, diagrams, spatial relationships, or design polish. Do not offer it merely because the topic is a UI. Send the offer as its own message: **"Some of the questions coming up would be easier to answer visually. I can open a local browser companion to show options and collect clicks. Want to use it?"**
 
-Start nothing until the operator accepts. On acceptance, read [visual-companion.md](visual-companion.md) and follow its authenticated, terminal-primary loop. Visual HTML may persist under the task's evidence storage; tokens, URLs, PIDs, logs, and browser events remain ephemeral. Record selected semantics in the specification, decision, or Journal because visual artifacts are evidence, not authority.
+Start nothing until the operator accepts. On acceptance, read [visual-companion.md](visual-companion.md) and follow its authenticated, terminal-primary loop. Visual HTML may persist under the task's evidence storage; tokens, URLs, PIDs, logs, and browser events remain ephemeral. Record selected semantics in the specification or decision and link the visual artifact from an evidence note; visual artifacts are evidence, not authority.
 
 ## Checklist
 
@@ -131,11 +132,11 @@ Classify first, announce the path, then complete the applicable checklist in ord
 
 **Bounded:**
 1. **Explore project context** — check files, docs, recent commits
-2. **Establish the contract** — create or reuse a minimal Ledger task for a non-trivial behavior change; no separate spec or plan document
+2. **Establish the contract** — create or reuse a minimal Ledger task for a non-trivial behavior change; omit a separate specification only when no meaningful behavior, invariant, error handling, or failure semantics need an independent contract
 3. **Ask clarifying questions** — one at a time, the ones that matter
 4. **Present short design in chat** — approach, files touched, testing
 5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
-6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
+6. **Plan and implement** — use `implementation-planning` to create a proportionate active plan, then execute it through the normal development workflow (TDD applies)
 
 **Architectural:**
 1. **Explore project context** — check files, docs, recent commits
@@ -158,7 +159,7 @@ digraph task-shaping {
     "Present short design in chat" [shape=box];
     "Human approves?" [shape=diamond];
     "Investigate; report recommendation" [shape=doublecircle];
-    "Implement via normal workflow (no plan doc)" [shape=doublecircle];
+    "Create proportionate plan; implement" [shape=doublecircle];
     "Explore project context" [shape=box];
     "Ask clarifying questions" [shape=box];
     "Propose 2-3 approaches" [shape=box];
@@ -178,7 +179,7 @@ digraph task-shaping {
     "Ask clarifying questions (bounded)" -> "Present short design in chat";
     "Present short design in chat" -> "Human approves?";
     "Human approves?" -> "Investigate; report recommendation" [label="spike: yes"];
-    "Human approves?" -> "Implement via normal workflow (no plan doc)" [label="bounded: yes"];
+    "Human approves?" -> "Create proportionate plan; implement" [label="bounded: yes"];
     "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
     "Explore project context" -> "Ask clarifying questions";
     "Ask clarifying questions" -> "Propose 2-3 approaches";
@@ -195,7 +196,7 @@ digraph task-shaping {
 }
 ```
 
-**Terminal states are path-bound.** Architectural work moves from task-shaping to `implementation-planning`. Bounded work proceeds through the normal development workflow after approval, using its minimal Ledger task but no plan document. A spike ends with a reported recommendation.
+**Terminal states are path-bound.** Architectural work moves from task-shaping to `implementation-planning` with an active specification. Bounded non-trivial work also moves to `implementation-planning` with a proportionate plan; it may omit a separate specification only when no meaningful behavior, invariant, error handling, or failure semantics need an independent contract. A spike ends with a reported recommendation.
 
 ## The Process
 
@@ -248,7 +249,7 @@ is the whole process.
 **Documentation:**
 
 - Write the validated design to the governing Ledger task's `specs/` directory.
-- Keep the task root's References and Journal current.
+- Keep the task root's References current; shaping progress belongs in the owning research, specification, or decision record, and later execution progress belongs in the active plan.
 - Use a writing skill from the available-skills catalog when applicable.
 
 **Spec Self-Review:**

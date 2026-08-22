@@ -15,7 +15,7 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 ## Ledger State: Executable Evidence
 
-The active specification or task Acceptance Criteria define the behavior; tests do not invent it. Map RED and GREEN observations to the owned Work Item or `AC-###` criterion, including the command, expected failure, actual failure, passing result, and limits. A passing test proves its assertions only. If writing the test requires choosing unratified product semantics, stop execution, record the blocker, and return to `task-shaping` rather than laundering the guess through a green suite.
+The active specification or task Acceptance Criteria define the behavior; tests do not invent it. Write RED and GREEN observations to a named evidence note and link it from the plan's owning Work Item or `AC-###` mapping, including the command, expected failure, actual failure, passing result, and limits. Keep execution state in the plan. A passing test proves its assertions only. If writing the test requires choosing unratified product semantics, stop execution, record the blocking condition and owner in the active plan, link the relevant evidence/research/decision record, and return to `task-shaping` rather than laundering the guess through a green suite.
 
 ## Entry Gate
 

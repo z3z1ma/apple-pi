@@ -46,7 +46,7 @@ Use newline-separated repository paths. For an SDD Work Item or fix review, incl
 
 The adjacent templates define the mode-specific rubric. Translate their sections into `question`, `checks`, `paths`, and `contextPaths`; do not ask a free-form worker to improvise a second review protocol.
 
-For `fix` mode, serialize the governing task Review's open observations into `inputs.priorObservations`. Each object must retain at least `observationId`, `severity`, `path`, `trigger`, `evidence`, `impact`, and `recommendation`. The program rejects missing/duplicate prior IDs, requires addressed/not-addressed verdicts for every supplied ID, and allocates any new IDs after the largest prior suffix.
+For `fix` mode, serialize the Work Item review evidence note's open observations into `inputs.priorObservations`. Each object must retain `observationId`, `severity`, `path`, `trigger`, `evidence`, `impact`, `recommendation`, and `reviewEvidencePath`. Include that owning evidence-note path in `contextPaths`. The program rejects missing/duplicate prior IDs or an unbound evidence owner, requires addressed/not-addressed verdicts for every supplied ID, returns the typed prior observations with their provenance, and allocates any new IDs after the largest prior suffix.
 
 ## Whole-Change Boundary
 
@@ -54,9 +54,9 @@ Final whole-change review uses `review`'s full `plan-review-verify.js` topology:
 
 ## Durable Result Mapping
 
-1. Append every returned observation to the governing task Review with its stable `OBS-...` ID, calibrated severity, trigger/evidence/impact, and `status: open`.
-2. Reconcile every verifier decision. Record `Disposition: rejected` for disproved candidates; confirmed candidates remain open through fixes; unresolved candidates remain explicit.
+1. Record every returned observation in the owning review evidence note with its stable `OBS-...` ID, calibrated severity, trigger/evidence/impact, and `status: open`; track remediation state in the active plan.
+2. Reconcile every verifier decision in that evidence note. Record `Disposition: rejected` for disproved candidates; confirmed candidates remain open through fixes; unresolved candidates remain explicit.
 3. A bounded Minor may become `Disposition: Minor deferred` with impact, owner, and revisit condition.
-4. An out-of-scope material defect gets a new owned Ledger task and blocks the current task when load-bearing.
-5. Any `materialBlockers` entry blocks Work Item/task advancement. A summary verdict never overrides it.
+4. An out-of-scope material defect gets a new owned Ledger task; the active plan records the follow-up and any Work Item blocking owner. Set task Status to `blocked` only when the task outcome is blocked.
+5. Any `materialBlockers` entry blocks Work Item advancement in the active plan; task advancement is blocked only when the task-level predicate is met. A summary verdict never overrides it.
 6. Record coverage gaps, omitted IDs, failed workers, or truncated evidence. Missing decision coverage is a failed gate.

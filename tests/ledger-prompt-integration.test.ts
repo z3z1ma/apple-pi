@@ -43,6 +43,37 @@ describe("ledger system prompt distribution", () => {
 		expect(twice).toContain("2. **Orchestration:**");
 		expect(twice).toContain("3. **Execution:**");
 		expect(twice).toContain("A worker report is a claim");
+		expect(twice).toContain("task.md is the durable statement of intent and acceptance");
+		expect(twice).toContain("specs/ holds optional behavioral contracts");
+		expect(twice).toContain("plans/ owns work-item decomposition and execution progress");
+		expect(twice).toContain("research/ owns inquiry, source citation, interpretation, and synthesis");
+		expect(twice).toContain("decisions/ records consequential choices and provenance");
+		expect(twice).toContain("evidence/ owns provenance-bearing validation observations");
+		expect(twice).toContain("retrospective.md is the single learning-and-improvement record");
+		expect(twice).toContain("specification: `draft | active | superseded`");
+		expect(twice).toContain("plan: `draft | active | complete | superseded`");
+		expect(twice).toContain("research: `active | complete | superseded`");
+		expect(twice).toContain("decision: `active | superseded`");
+		expect(twice).toContain("evidence: `recorded`");
+		expect(twice).toContain("retrospective: `pending | complete`");
+		expect(twice).toContain("An execution-changing assumption that is not operator-ratified");
+		expect(twice).toContain("The same observation must not be copied into both locations");
+		expect(twice).toContain("A task may be marked `done` only when");
+		expect(twice).toContain("every dependency resolves to a `done` task");
+		expect(twice).toContain("no referenced research, decision need, plan, or dependency still blocks the outcome");
+		expect(twice).toContain("no active plan remains, and every plan for the outcome is `complete` or `superseded`");
+		expect(twice).toContain("work complete or substantively cancelled with a rationale");
+		expect(twice).toContain(
+			"every Acceptance Criterion has adequate supporting evidence under `evidence/` with applicable limits",
+		);
+		expect(twice).toContain(
+			"every review finding and remediation is resolved, rejected with evidence, or explicitly bounded",
+		);
+		expect(twice).toContain("rationale, owner, and revisit condition");
+		expect(twice).toContain("`retrospective.md` is complete");
+		expect(twice).not.toContain("knowledge/");
+		expect(twice).not.toContain("skills/<slug>/SKILL.md");
+		expect(twice).not.toContain("Review, routine evidence, Journal");
 	});
 
 	it("appends the root workflow bootstrap exactly once", () => {

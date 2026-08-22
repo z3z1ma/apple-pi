@@ -11,7 +11,7 @@ Use `review` to catch issues before they cascade. Reviewers receive precisely cr
 
 ## Ledger State: Adversarial Review
 
-Review attempts to falsify the owning task's completion claim. Give the reviewer the smallest governing contract, comparison boundary, complete changed-file package, and criterion or risk it must challenge; withhold the producer's deliberation unless it is contractual. Record confirmed findings, rejected candidates with evidence, coverage gaps, verdict, and residual risk in `task.md` Review. Review does not repeat execution verification and does not close or repair the task by itself.
+Review attempts to falsify a specification, plan, Work Item, or whole-change claim. Give the reviewer the smallest governing contract, comparison boundary, complete changed-file package, and criterion or risk it must challenge; withhold producer deliberation unless contractual. Record observations, verifier dispositions, coverage gaps, verdict, and residual risk in the owning review evidence note. Track resulting remediation/blocking state in the active plan. Review does not repeat execution verification and does not close or repair the task by itself.
 
 ## When to Request Review
 
@@ -74,7 +74,7 @@ You: Let me request code review before proceeding.
   Assessment: Ready to proceed
 
 You: [Fix progress indicators]
-[Record review disposition; continue to WI-003]
+[Record the disposition in review evidence, update remediation/state in the active plan, continue to WI-003]
 ```
 
 ## Common Rationalizations
@@ -97,4 +97,4 @@ You: [Fix progress indicators]
 - Show code/tests that prove it works
 - Request clarification
 
-Record confirmed findings, rejected candidates, unresolved evidence, and coverage limits in the governing Ledger task.
+Record confirmed findings, rejected candidates, unresolved evidence, coverage limits, and dispositions in the owning review evidence note; record their execution consequences in the active plan.

@@ -13,7 +13,7 @@ description: "Use when about to claim Ledger-governed work is complete, fixed, p
 
 ## Ledger State: Closure Evidence
 
-Verification is the evidence half of closure, not closure by itself. Identify the governing task and map each claim to the relevant `AC-###`, command or observation, and limit. The orchestrator also checks dependencies, Blockers, Work Items, review disposition, follow-up ownership, Retrospective, and Distillation before marking a task done. Keep routine results in `task.md`; create `evidence/` records only for observations that another task or future investigation will need.
+Verification is the evidence half of closure, not closure by itself. Identify the governing task and map each claim to the relevant `AC-###`, exact procedure, observed result, evidence-note path, and limit. Routine and exceptional validation observations both belong under `evidence/`; `task.md` retains its shaped contract: intent, outcome, scope, non-goals, acceptance, constraints, and references. Before a task can be marked done, verify every dependency is `done`; no referenced research, decision need, plan, or dependency blocks the outcome; no active plan remains and every plan is `complete` or `superseded` with all work complete or substantively cancelled with rationale; every Acceptance Criterion has adequate evidence under `evidence/` with applicable limits; every review finding and remediation is resolved, rejected with evidence, or explicitly bounded with rationale, owner, and revisit condition; and `retrospective.md` is complete.
 
 ## The Iron Law
 

@@ -23,7 +23,7 @@ A plan is the cold-start bridge from ratified behavior to bounded execution. It 
 
 Find the owning task through `.ledger/INDEX.md`, live task roots, and `.ledger/history/INDEX.md`. Extend the existing owner when its Scope and Acceptance Criteria cover the outcome. For new non-trivial work, use `ledger_add`, then complete task-shaping before planning.
 
-Read `task.md`, active specifications, decisions, research, and relevant source. Dependencies resolve first at `.ledger/<task-id>/task.md`, then `.ledger/history/<task-id>/task.md`, and must be `done`. Planning begins when Scope and Non-goals form a perimeter, stable `AC-###` criteria cover success and failure behavior, execution-changing assumptions are sourced or operator-ratified, and Blockers is honestly `None.`.
+Read `task.md`, active specifications, decisions, research, and relevant source. Dependencies resolve first at `.ledger/<task-id>/task.md`, then `.ledger/history/<task-id>/task.md`, and must be `done`. Planning begins when Intent, Outcome, Scope, Non-goals, Acceptance Criteria, Constraints, and References are shaped; execution-changing assumptions are sourced or operator-ratified; and no referenced research, decision need, plan, or dependency still blocks the outcome.
 
 Planning maps settled behavior to implementation. It does not settle product semantics with convenient technical defaults.
 
@@ -31,7 +31,7 @@ Planning maps settled behavior to implementation. It does not settle product sem
 
 ## Scope Check
 
-If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during task-shaping. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the governing task or specification covers multiple independent subsystems, shaping should have split them into separately owned outcomes. If it did not, stop and suggest separate tasks/plans rather than hiding the decomposition in one execution document. Each plan should produce working, testable software on its own.
 
 ## File Structure
 
@@ -73,7 +73,7 @@ Updated: YYYY-MM-DD
 
 # [Feature Name] Implementation Plan
 
-> **For executors:** REQUIRED SUB-SKILL: Use work-item-orchestration (recommended) or plan-execution to implement this plan Work-Item by Work-Item. `task.md` owns the canonical `WI-###` checklist.
+> **For executors:** REQUIRED SUB-SKILL: Use work-item-orchestration (recommended) or plan-execution to implement this plan Work-Item by Work-Item. This plan owns the canonical `WI-###` execution state.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -81,15 +81,11 @@ Updated: YYYY-MM-DD
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Spec:** [path to the spec/design doc this plan implements — the plan
-argues from the spec, so the spec travels with it; executors read both]
+**Spec:** [path to the active specification, or `None — task.md and active decisions govern this bounded plan` when no independent behavioral contract is required]
 
 ## Global Constraints
 
-[The spec's project-wide requirements — version floors, dependency limits,
-naming and copy rules, platform requirements — one line each, with exact
-values copied verbatim from the spec. Every Work Item's requirements implicitly
-include this section.]
+[Project-wide requirements from the governing task, active specification when present, and active decisions — version floors, dependency limits, naming/copy rules, and platform requirements. Copy exact contractual values. Every Work Item implicitly includes this section.]
 
 ---
 ```
@@ -98,6 +94,16 @@ include this section.]
 
 ````markdown
 ### WI-###: [Component Name]
+
+**State:** open
+
+**Dependencies:** None.
+
+**Replanning:** None.
+
+**Cancellation:** Not applicable.
+
+**Evidence:** Added when observed evidence exists.
 
 **Files:**
 - Create: `exact/path/to/file.py`
@@ -137,8 +143,10 @@ Expected: PASS
 
 **Step 5: Record the verified increment**
 
-Update the governing Ledger Work Item, Evidence, and Journal with the observed RED/GREEN results. The operator decides whether and when to commit.
+Update this plan's Work Item state and evidence link. Write the observed RED/GREEN commands, results, source state, and limits to the named evidence note under `evidence/`. The operator decides whether and when to commit.
 ````
+
+Work Item state is `open | active | blocked | complete | cancelled`. Each Work Item names its dependencies explicitly. When execution changes course, update `Replanning` with the superseded approach, observed reason, replacement, and effect on later Work Items. A cancelled Work Item sets State to `cancelled` and replaces `Cancellation` with a substantive rationale. Blocking state, replanning, cancellation, and progress remain in the active plan; the observations that justify them remain in linked evidence notes.
 
 ## No Placeholders
 
@@ -154,7 +162,7 @@ Every step must contain the actual content an engineer needs. These are **plan f
 
 After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
 
-**1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
+**1. Contract coverage:** Map every relevant task Acceptance Criterion and, when present, every specification requirement to an owning Work Item and check. A bounded plan with `Spec: None` argues from `task.md` and active decisions; verify that no meaningful behavior, invariant, error handling, or failure semantics actually require an independent specification.
 
 **2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
 
@@ -164,7 +172,7 @@ If you find issues, fix them inline. If you find a specification requirement wit
 
 ## Independent Plan Review
 
-Load `review-commissioning` and use its executable review gate in `plan` mode. Translate [plan-document-reviewer-prompt.md](plan-document-reviewer-prompt.md) into `question`, `checks`, plan `paths`, and governing `contextPaths`; pass `references/ledger-gate.js` from that skill as the `pi_exec` program. Record every typed observation and verified disposition in `task.md` Review. Resolve every critical or significant finding and re-run the bounded gate before offering execution. A remaining execution-changing authority gap returns to `task-shaping`; it is not a planning default.
+Load `review-commissioning` and use its executable review gate in `plan` mode. Translate [plan-document-reviewer-prompt.md](plan-document-reviewer-prompt.md) into `question`, `checks`, plan `paths`, and governing `contextPaths`; pass `references/ledger-gate.js` from that skill as the `pi_exec` program. Record every typed observation, verified disposition, coverage gap, and residual risk in a plan-review evidence note under `evidence/`. Track remediation as plan work. Resolve every critical or significant finding and re-run the bounded gate before offering execution. A remaining execution-changing authority gap returns to `task-shaping`; it is not a planning default.
 
 ## Execution Handoff
 

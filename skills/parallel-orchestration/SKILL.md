@@ -15,7 +15,7 @@ When you have multiple unrelated failures (different test files, different subsy
 
 ## Ledger State: Orchestration
 
-Parallelism follows the governing task graph; it does not create a second task system. Read the task, active records, Work Items, and dependency edges before dispatch. Fan out only domains that can produce independent observations or non-overlapping writes. Bind each worker to one question or Work Item, require its changed paths or findings and evidence limits, and reconcile every result into the owning task's Journal, Evidence, Review, Blockers, or follow-up ownership. A worker report is a claim until the controller checks it against repository state.
+Parallelism follows the governing task graph; it does not create a second task system. Read the task, active plan, active records, Work Items, and dependency edges before dispatch. Fan out only domains that can produce independent observations or non-overlapping writes. Bind each worker to one question or Work Item, require its changed paths or findings and evidence limits, and reconcile each claim into its owning plan state, research/decision record, evidence note, or separately owned follow-up. A worker report is a claim until the controller checks it against repository state.
 
 ## When to Use
 
@@ -85,9 +85,12 @@ const results = await parallel(
     name: domain.name,
     advisor: true,
     task: domain.task,
+    systemPrompt: "Implement only the assigned non-overlapping domain. Do not dispatch subagents, perform independent review, integrate changes, commit, push, or publish. Return changed paths, checks, observations, and limits to the controller.",
     context: {
       governingTask: inputs.taskPath,
-      constraints: "Stay inside this domain; do not commit or integrate.",
+      activePlan: inputs.planPath,
+      relevantEvidence: inputs.evidencePaths,
+      constraints: "Stay inside this domain and preserve unrelated working-tree state.",
     },
   }),
   3,
@@ -101,15 +104,17 @@ return results.map((result, index) => ({
 }));
 ```
 
-Supply `inputs.taskPath`, set an explicit `agentBudget`, `callBudget`, concurrency, and timeout, then reconcile every returned status and report before integration. `parallel(...)` makes the independence and concurrency bound explicit; sequential dependencies stay outside that fan-out.
+Supply `inputs.taskPath`, `inputs.planPath`, and newline-separated `inputs.evidencePaths`; set an explicit `agentBudget`, `callBudget`, concurrency, and timeout. Give each worker only evidence relevant to its domain, then reconcile every returned status and report before any review or integration. `parallel(...)` makes the independence and concurrency bound explicit; sequential dependencies stay outside that fan-out.
 
 ### 4. Review and Integrate
 
 When agents return:
-- Read each summary
-- Verify fixes don't conflict
-- Run full test suite
-- Integrate all changes
+- Treat each report as a claim; inspect changed paths and verify domains did not overlap
+- Record Work Item progress, blockers, and replanning in the active plan
+- Record commands, test observations, and limits in linked evidence notes; route reusable inquiry to research/decisions
+- Run the relevant combined suite and record its output in evidence
+- Commission the normal independent Work Item or whole-change review over the combined package
+- Integrate only after review findings are reconciled and the active plan permits it
 
 ## Agent Prompt Structure
 

@@ -17,7 +17,7 @@ Use this template as the rubric for `review-commissioning`'s executable review g
     Specification: [SPEC_FILE]
     Active decisions and research: [REFERENCE_PATHS]
 
-    Read those files. Treat active decisions and explicitly user-ratified task assumptions as semantic authority. Treat current source and tests as evidence of present behavior, not authority for a new choice.
+    Read those files. Treat active decisions, active specifications, and explicitly operator-ratified task Constraints as semantic authority. Treat current source and tests as evidence of present behavior, not authority for a new choice.
 
     ## What To Challenge
 
@@ -57,4 +57,4 @@ Use this template as the rubric for `review-commissioning`'s executable review g
 - `[SPEC_FILE]` — active specification path.
 - `[REFERENCE_PATHS]` — smallest relevant active decision and research paths.
 
-The gate returns typed observations plus independent verifier decisions. Record every observation and disposition in the task Review; any `materialBlockers` entry blocks planning readiness. The workers do not edit the specification or close the task.
+The gate returns typed observations plus independent verifier decisions. Record every observation, disposition, coverage gap, and residual risk in a specification-review evidence note under `evidence/`; any `materialBlockers` entry blocks planning readiness. Track resulting remediation in the shaping record or specification. The workers do not edit the specification or close the task.

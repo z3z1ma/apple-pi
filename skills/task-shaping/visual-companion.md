@@ -257,7 +257,7 @@ If `$STATE_DIR/events` doesn't exist, the user didn't interact with the browser 
 "$SKILL_DIR/scripts/stop-server.sh" "$session_dir"
 ```
 
-If the session used `--task-dir`, mockup HTML persists under that task's `evidence/.storage/visual-companion/` directory. Record selected conclusions in the task specification, decision, or Journal; HTML is evidence, not semantic authority. Runtime state and browser events are always deleted from `/tmp` on stop.
+If the session used `--task-dir`, mockup HTML persists under that task's `evidence/.storage/visual-companion/` directory. Record selected conclusions in the task specification or decision and link the HTML from an evidence note; HTML is evidence, not semantic authority. Runtime state and browser events are always deleted from `/tmp` on stop.
 
 ## Reference
 

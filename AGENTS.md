@@ -99,10 +99,10 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 ### Ledger, review, and Ralph
 
 - Ledger is the shared authority, cold-start memory, execution record, and learning loop beneath the packaged lifecycle skills. It distinguishes shaping, orchestration, and execution even when one session performs them sequentially.
-- Execution-changing assumptions are record-backed, user-ratified, or blocking. Worker reports are claims; observations carry limits; review independently tries to falsify completion; closure reconciles acceptance evidence, blockers, dependencies, review, retrospective, and distillation.
+- Execution-changing assumptions are record-backed, user-ratified, or blocking. Worker reports are claims; observations carry limits; review independently tries to falsify completion; closure reconciles acceptance evidence, dependencies, blocking records, active-plan state, review dispositions, and the retrospective.
 - `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. The method scales down to disciplined minimalism for exact trivial changes rather than requiring ceremony.
 - `ledger_add` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
-- Task status and evidence live in each task's `task.md`; `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
+- Task intent, acceptance, and status live in `task.md`; execution progress lives in plans, validation and review observations live under `evidence/`, and learning/improvement lives in `retrospective.md`. `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
 - Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and integration; prepared Ledger tasks are one supported state owner, not a requirement for the general loop.
 - Durable lessons leave the task bundle for their real owner: normal docs, tests, an ADR convention, a runbook, or a reusable skill.

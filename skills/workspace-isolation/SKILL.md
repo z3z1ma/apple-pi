@@ -13,7 +13,7 @@ Ensure work happens in an isolated workspace. Prefer your platform's native work
 
 ## Ledger State: Workspace Continuity
 
-A worktree isolates execution; it does not fork task authority. Record the selected workspace and branch in the governing task Journal, then read the same task and active records from inside the new workspace before implementation. Preserve existing uncommitted work and project-local Ledger storage policy. Creation, branch changes, cleanup, and deletion remain operator-controlled consequential actions unless the operator has explicitly authorized the exact operation.
+A worktree isolates execution; it does not fork task authority. Record the selected workspace and branch in the active plan, then read the same task, plan, and active records from inside the new workspace before implementation. Preserve existing uncommitted work and project-local Ledger storage policy. Creation, branch changes, cleanup, and deletion remain operator-controlled consequential actions unless the operator has explicitly authorized the exact operation.
 
 **Announce at start:** "I'm using the workspace-isolation skill to set up an isolated workspace."
 

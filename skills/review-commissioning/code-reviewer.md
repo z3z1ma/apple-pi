@@ -54,7 +54,7 @@ Use this template as rubric material for `review`'s full `plan-review-verify.js`
 
     Every finding names a changed line or omission, trigger, observable impact, and smallest coherent fix. Assign stable IDs in report order (`OBS-WI-###-01`, `OBS-WI-###-02`, ...), including out-of-scope observations. Do not inflate severity and do not report speculative risks without a reachable path. Acknowledge concrete strengths before findings.
 
-    `critical` and `significant` findings are material blockers while unresolved. The controller records every observation as open in the governing task Review, then appends a durable `Disposition:` or links a new owned Ledger task. A summary verdict never replaces per-observation state.
+    `critical` and `significant` findings are material blockers while unresolved. The controller records every observation as open in the whole-change review evidence note, then appends a durable disposition or links a new owned Ledger task. The active plan records remediation, follow-up, and blocking effects. A summary verdict never replaces per-observation state.
 
     ## Output
 
@@ -85,9 +85,9 @@ Use this template as rubric material for `review`'s full `plan-review-verify.js`
 
 - `[PROFILE]` — use a profile proportionate to the whole-change risk.
 - `[TASK_FILE]`, `[CONTRACT_PATHS]`, `[PLAN_FILE]` — governing Ledger paths.
-- `[DEFERRED_AND_RULINGS]` — exact relevant task Journal/Review lines.
+- `[DEFERRED_AND_RULINGS]` — exact relevant active-plan rulings and review-evidence dispositions.
 - `[DESCRIPTION]` — concise claimed outcome.
 - `[BASE]` — comparison boundary recorded before execution.
 - `[DIFF_FILE]` — complete BASE-to-worktree review package.
 
-The full topology returns typed reviewer candidates and independently verified decisions. The controller assigns stable `OBS-...` IDs, records every observation in `task.md` Review with calibrated severity, trigger/evidence/impact, and `status: open`, then appends a `Disposition:` or owned follow-up task for each. Unresolved `critical`/`significant` findings, missing path coverage, failed focuses, omitted decisions, or material coverage gaps block integration. The controller owns any fix or integration decision.
+The full topology returns typed reviewer candidates and independently verified decisions. The controller assigns stable `OBS-...` IDs, records every observation in the whole-change review evidence note with calibrated severity, trigger/evidence/impact, and `status: open`, then appends a disposition or owned follow-up task for each. The active plan records remediation and blocking state. Unresolved `critical`/`significant` findings, missing path coverage, failed focuses, omitted decisions, or material coverage gaps block integration. The controller owns any fix or integration decision.

@@ -11,7 +11,7 @@ description: "Use when implementation is complete, checks and review are resolve
 
 ## Ledger State: Closure And Compounding
 
-Finishing joins two decisions that must not be confused. First, judge the task from acceptance evidence, review disposition, blockers, dependencies, follow-up ownership, Retrospective, and Distillation. Then present the operator-owned Git or forge integration choices. The executor captures what surprised or cost time; the controller routes reusable judgment to repository docs, decisions, tests, runbooks, or packaged skills. Task-specific history stays in the bundle. Integration success cannot retroactively manufacture task evidence, and a done task does not authorize merge, push, PR, or cleanup.
+Finishing joins two decisions that must not be confused. First, judge the task from Acceptance Criteria evidence, dependencies, owning blocking records, completed/superseded plans, review dispositions, follow-up ownership, and the top-level `retrospective.md`. Then present operator-owned Git or forge integration choices. The retrospective synthesizes what worked, what should improve, learnings, and concrete improvements to repository docs, decisions, tests, runbooks, configured skills, or separately owned tasks. Task-specific history stays in the bundle. Integration success cannot manufacture task evidence, and a done task does not authorize merge, push, PR, or cleanup.
 
 **Announce at start:** "I'm using the task-closure skill to complete this work."
 
@@ -19,13 +19,12 @@ Finishing joins two decisions that must not be confused. First, judge the task f
 
 Run the project's full test suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
 
-**If tests fail**, report the failures and stop — the menu comes after a green suite:
+**If tests fail**, record the exact command, source state, failures, attribution evidence, and limits under `evidence/` before deciding ownership.
 
-```
-Tests failing (<N> failures). Must fix before completing:
+- If the failure is caused by this change, required by an Acceptance Criterion, or makes integration unsafe, record the blocking effect in the active plan, report `Partial` or `Blocked`, and stop before the integration menu.
+- If the failure is demonstrably present in byte-identical `HEAD` files outside this task's perimeter and acceptance does not require that gate, link a separately owned follow-up (or record an explicit owner/revisit condition) and continue to Step 2 to reconcile this task. Do not repair unrelated files merely to manufacture green. Integration readiness remains bounded by the known failure unless the operator explicitly accepts that baseline.
 
-[Show failures]
-```
+A nonzero suite never becomes a passing claim; attribution determines ownership, not whether the observation is recorded.
 
 **If tests pass:** continue to Step 2.
 
@@ -33,9 +32,9 @@ Tests failing (<N> failures). Must fix before completing:
 
 Before presenting integration as complete, reconcile the governing Ledger task.
 
-1. Read Evidence, Review, Retrospective, Distillation, research Limits, decisions, and task-local knowledge.
-2. Map each Acceptance Criterion to fresh observed evidence and its limits.
-3. Confirm dependencies remain done, Blockers is `None.`, Work Items are complete or substantively cancelled, and material review findings are resolved or explicitly bounded.
+1. Read `task.md`, every plan, validation/review evidence notes, `retrospective.md`, research limits, active specifications, and decisions.
+2. Map each Acceptance Criterion to fresh evidence-note paths, exact procedures, observed results, and limits.
+3. Confirm dependencies remain done; no referenced research, decision need, plan, or dependency blocks the outcome; no active plan remains; all plan work is complete or substantively cancelled with rationale; and material review findings are resolved, rejected with evidence, or explicitly bounded with rationale, owner, and revisit condition.
 4. Classify each durable outcome by its real owner:
    - product or system contract → normal repository documentation;
    - consequential architecture choice → the repository's decision or ADR location;
@@ -44,9 +43,9 @@ Before presenting integration as complete, reconcile the governing Ledger task.
    - independent unfinished outcome → a new Ledger task with any required dependency;
    - task-specific history → remain in the task bundle.
 5. Update the existing authoritative owner instead of creating a parallel copy. External publication requires operator authorization.
-6. Write a substantive Retrospective and record every completed promotion, pending owner, or durable no-promotion rationale in Distillation.
+6. Complete the one top-level `retrospective.md`: Summary, What Worked, What Could Improve, Learnings, and Improvements. `Improvements` records every completed owner change, separately owned follow-up, or substantive no-promotion rationale; then set retrospective Status to `complete`.
 
-Set `Status: done` only when the acceptance, dependency, blocker, Work Item, review, retrospective, and distillation conditions are all satisfied. A paused or blocked task preserves its findings and explicit next owner without manufacturing completion. If these conditions are not met, report `Partial` or `Blocked` and stop before the integration menu.
+Set task `Status: done` only when every dependency is `done`; no referenced research, decision need, plan, or dependency blocks the outcome; no active plan remains and every plan is `complete` or `superseded` with all work complete or substantively cancelled with rationale; every Acceptance Criterion has adequate evidence under `evidence/` with applicable limits; every review finding and remediation is resolved, rejected with evidence, or explicitly bounded with rationale, owner, and revisit condition; and `retrospective.md` is complete. A paused or blocked task preserves its findings and explicit next owner without manufacturing completion. If these conditions are not met, report `Partial` or `Blocked` and stop before the integration menu.
 
 When the operator authorizes archival, call `ledger_close` with `done` or `cancelled`. The tool moves the bundle and updates the live/history indexes; it does not judge completeness.
 
