@@ -19,7 +19,7 @@ return change.changedFiles.filter((path) => path.endsWith(".ts"));
 ```
 
 - `pi_discover_programs({})` lists the valid saved programs as `{ name, description }` without evaluating them.
-- `pi_exec_program({ name, inputs?, limits? })` loads and executes `.pi/programs/<name>.js` with the same bounded guest runtime as `pi_exec`. The JSDoc description supplies its execution label; `inputs` and `limits` have the same contracts as `pi_exec`.
+- `pi_exec_program({ name, inputs?, state?, limits? })` loads and executes `.pi/programs/<name>.js` with the same bounded guest runtime as `pi_exec`. The JSDoc description supplies its execution label; `inputs`, `state`, and `limits` have the same contracts as `pi_exec`.
 
 Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it.
 
@@ -34,7 +34,9 @@ Available globals:
 - `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agents.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
 - ordinary JavaScript branching, loops, `reduce`, and `Promise.all`, plus `parallel(items, mapper, concurrency)` and `pipeline(items, ...stages)`
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
-- `inputs.<key>` for separately supplied strings, and `print(...)`/`console.log(...)`
+- `inputs.<key>` for separately supplied strings, mutable `state` for reusable serialized data, and `print(...)`/`console.log(...)`
+
+`state` starts empty unless the tool call passes a state ID returned by an earlier call. When a successful program changes it, the result includes a new `state: <id>` line; pass that ID as the next call's `state` parameter. IDs are immutable and scoped to the live root session, so one snapshot can seed independent calls; failed and read-only calls create nothing. State accepts JSON objects, arrays, and primitives and rejects values that would serialize lossily. Snapshots stay in process memory and do not survive an extension or process restart.
 
 `display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima.
 

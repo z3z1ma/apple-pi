@@ -133,6 +133,7 @@ sandbox.__setTimeout = guestSetTimeout;
 sandbox.__setInterval = guestSetInterval;
 sandbox.__clearTimer = guestClearTimer;
 sandbox.__inputs = workerData.inputs ?? {};
+sandbox.__state = workerData.state ?? {};
 installWebHostHelpers(sandbox);
 const context = vm.createContext(sandbox, {
 	name: "apple-pi-exec",
@@ -151,6 +152,7 @@ const setup = new vm.Script(
   const cancelTimeout = globalThis.__clearTimer;
   const webSync = globalThis.__webSync;
   const providedInputs = JSON.parse(JSON.stringify(globalThis.__inputs));
+  const providedState = JSON.parse(JSON.stringify(globalThis.__state));
   delete globalThis.__hostCall;
   delete globalThis.__cancelHostCall;
   delete globalThis.__print;
@@ -159,6 +161,7 @@ const setup = new vm.Script(
   delete globalThis.__clearTimer;
   delete globalThis.__webSync;
   delete globalThis.__inputs;
+  delete globalThis.__state;
 
   const NativePromise = Promise;
   const nativePromiseThen = Promise.prototype.then;
@@ -192,6 +195,12 @@ const setup = new vm.Script(
   }
   globalThis.pi = Object.freeze(piApi);
   globalThis.inputs = Object.freeze(providedInputs);
+  Object.defineProperty(globalThis, "state", {
+    enumerable: true,
+    configurable: false,
+    writable: false,
+    value: providedState,
+  });
   const displayError = () => {
     throw new Error("display is a pi_exec tool parameter, not a program global. Pass display: { name, description } on the pi_exec call.");
   };
@@ -297,6 +306,54 @@ ${STDLIB_SETUP_SOURCE}
 );
 
 const errorText = (error) => (error instanceof Error ? error.stack || error.message : String(error));
+const initialState = JSON.stringify(workerData.state ?? {});
+const snapshotState = new vm.Script(
+	`(() => {
+  const seen = new Set();
+  const validate = (value) => {
+    const type = typeof value;
+    if (value === null || type === "string" || type === "boolean") return;
+    if (type === "number") {
+      if (!Number.isFinite(value) || Object.is(value, -0)) {
+        throw new TypeError("state contains a number that JSON cannot preserve");
+      }
+      return;
+    }
+    if (type !== "object") throw new TypeError("state contains a value that JSON cannot preserve");
+    if (seen.has(value)) throw new TypeError("state contains a repeated or cyclic object reference");
+    seen.add(value);
+    if (Array.isArray(value)) {
+      const keys = Reflect.ownKeys(value);
+      if (keys.length !== value.length + 1 || keys.some((key) => typeof key !== "string")) {
+        throw new TypeError("state contains a sparse array or symbol key");
+      }
+      for (let index = 0; index < value.length; index++) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor?.enumerable || !("value" in descriptor)) {
+          throw new TypeError("state contains a sparse array or accessor");
+        }
+        validate(descriptor.value);
+      }
+    } else {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new TypeError("state contains a non-plain object");
+      }
+      for (const key of Reflect.ownKeys(value)) {
+        if (typeof key !== "string") throw new TypeError("state contains a symbol key");
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !("value" in descriptor)) {
+          throw new TypeError("state contains an accessor or non-enumerable property");
+        }
+        validate(descriptor.value);
+      }
+    }
+  };
+  validate(state);
+  return JSON.stringify(state);
+})()`,
+	{ filename: "pi-exec-state.js" },
+);
 
 try {
 	setup.runInContext(context, { timeout: 1_000 });
@@ -315,8 +372,22 @@ try {
 					});
 					return;
 				}
+				let stateJson;
 				try {
-					parentPort.postMessage({ type: "done", value });
+					stateJson = snapshotState.runInContext(context);
+				} catch (error) {
+					parentPort.postMessage({
+						type: "failed",
+						error: `pi_exec state is not JSON-serializable: ${errorText(error)}`,
+					});
+					return;
+				}
+				try {
+					parentPort.postMessage({
+						type: "done",
+						value,
+						...(stateJson !== initialState ? { state: JSON.parse(stateJson), stateChanged: true } : {}),
+					});
 				} catch (error) {
 					parentPort.postMessage({
 						type: "failed",

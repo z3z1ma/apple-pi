@@ -26,8 +26,8 @@ import runtime, {
 	readSkillBody,
 } from "../extensions/runtime.js";
 import {
-	agentOperationArgs,
 	AUTO_COMPACT_EXTENSION_PATH,
+	agentOperationArgs,
 	CODEX_FAST_EXTENSION_PATH,
 	CONTEXT_GUIDANCE,
 	LEDGER_EXTENSION_PATH,
@@ -1042,6 +1042,7 @@ describe("pi_exec tool", () => {
 		const { tool } = register();
 		expect(tool.promptGuidelines).toEqual([...PI_EXEC_PROMPT_GUIDELINES]);
 		expect(tool.parameters.properties.display.description).toBe(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION);
+		expect(tool.parameters.properties.state.description).toContain("state snapshot");
 		expect(tool.description).toContain(PI_EXEC_DESCRIPTION);
 		expect(tool.description).toContain("pi.read({");
 		expect(tool.description).toContain("outputSchema?");
@@ -1052,6 +1053,7 @@ describe("pi_exec tool", () => {
 		expect(tool.parameters.properties.code.description).toContain("std.context.fit<T>(");
 		expect(tool.parameters.properties.code.description).toContain("outputSchema?: object");
 		expect(tool.parameters.properties.code.description).toContain("value?: JSONValue");
+		expect(tool.parameters.properties.code.description).toContain("state: Record<string, JSONValue>");
 
 		const echo = {
 			name: "echo_value",
@@ -1203,6 +1205,146 @@ describe("pi_exec tool", () => {
 			cwd: process.cwd(),
 		});
 		expect(result.content[0].text).toBe("x".repeat(75_000));
+	});
+
+	it("returns a state id when guest state changes and resumes it explicitly", async () => {
+		const { tool } = register();
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-a" } };
+		const increment = `state.count = (state.count ?? 0) + 1; return state.count;`;
+
+		const first = await tool.execute("state-1", { code: increment }, undefined, undefined, ctx);
+		const firstState = first.details.stateId;
+		expect(first.content[0].text).toBe("1");
+		expect(first.content[1].text).toBe(`state: ${firstState}`);
+
+		await expect(
+			tool.execute("state-other-session", { code: `return state.count;`, state: firstState }, undefined, undefined, {
+				cwd: process.cwd(),
+				sessionManager: { getSessionId: () => "session-b" },
+			}),
+		).rejects.toThrow(`Unknown pi_exec state: ${firstState}`);
+
+		const second = await tool.execute("state-2", { code: increment, state: firstState }, undefined, undefined, ctx);
+		const secondState = second.details.stateId;
+		expect(second.content[0].text).toBe("2");
+		expect(secondState).not.toBe(firstState);
+
+		const sibling = await tool.execute(
+			"state-sibling",
+			{ code: increment, state: firstState },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(sibling.content[0].text).toBe("2");
+		expect(sibling.details.stateId).not.toBe(secondState);
+
+		const readOnly = await tool.execute(
+			"state-read",
+			{ code: `return state.count;`, state: secondState },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(readOnly.content).toEqual([{ type: "text", text: "2" }]);
+		expect(readOnly.details.stateId).toBeUndefined();
+
+		await expect(
+			tool.execute(
+				"state-failure",
+				{ code: `state.count = 99; throw new Error("stop");`, state: secondState },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow("stop");
+		const afterFailure = await tool.execute(
+			"state-3",
+			{ code: increment, state: secondState },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(afterFailure.content[0].text).toBe("3");
+	});
+
+	it("does not reuse expired state ids after the runtime reloads", async () => {
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-reload" } };
+		const firstRuntime = register().tool;
+		const first = await firstRuntime.execute(
+			"state-before-reload",
+			{ code: `state.value = "old"; return state.value;` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const secondRuntime = register().tool;
+		const second = await secondRuntime.execute(
+			"state-after-reload",
+			{ code: `state.value = "new"; return state.value;` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(second.details.stateId).not.toBe(first.details.stateId);
+		await expect(
+			secondRuntime.execute(
+				"stale-state",
+				{ code: `return state.value;`, state: first.details.stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(`Unknown pi_exec state: ${first.details.stateId}`);
+	});
+
+	it("keeps resumed state inside the guest realm and rejects lossy JSON values", async () => {
+		const { tool } = register();
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-state-safety" } };
+		const created = await tool.execute(
+			"state-create",
+			{ code: `state.rows = [{ id: 1 }, { id: 2 }]; return state.rows.length;` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const stateId = created.details.stateId;
+
+		const resumed = await tool.execute(
+			"state-resume",
+			{ code: `return state.rows.map((row) => row.id);`, state: stateId },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(JSON.parse(resumed.content[0].text)).toEqual([1, 2]);
+		await expect(
+			tool.execute(
+				"state-host-escape",
+				{ code: `return state.constructor.constructor("return process")();`, state: stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/Code generation from strings disallowed/);
+		await expect(
+			tool.execute(
+				"state-date",
+				{ code: `state.when = new Date(); return true;`, state: stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/state contains a non-plain object/);
+		await expect(
+			tool.execute(
+				"state-alias",
+				{ code: `state.left = {}; state.right = state.left; return true;`, state: stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/repeated or cyclic object reference/);
 	});
 
 	it("rejects subagent tools across the extension bridge", async () => {

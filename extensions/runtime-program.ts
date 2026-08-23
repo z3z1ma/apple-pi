@@ -25,11 +25,12 @@ export async function executeProgram(
 	signal?: AbortSignal,
 	onLog?: (values: unknown[]) => void,
 	memoryMb = 128,
+	state: unknown = {},
 ): Promise<ProgramExecution> {
 	if (signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted" };
 	const controller = new AbortController();
 	const worker = new Worker(new URL("./runtime-worker.mjs", import.meta.url), {
-		workerData: { code, inputs },
+		workerData: { code, inputs, state },
 		resourceLimits: { maxOldGenerationSizeMb: memoryMb, stackSizeMb: 4 },
 	});
 	const hostTasks = new Set<Promise<void>>();
@@ -104,7 +105,11 @@ export async function executeProgram(
 			}
 			if (message.type === "done") {
 				void Promise.all([...hostTasks]).then(() => {
-					finish({ outcome: "succeeded", value: message.value });
+					finish({
+						outcome: "succeeded",
+						value: message.value,
+						...(message.stateChanged ? { state: message.state, stateChanged: true } : {}),
+					});
 				});
 			}
 		});

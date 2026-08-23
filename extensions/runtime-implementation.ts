@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
@@ -106,6 +107,34 @@ const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhi
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
+
+interface ProgramStateStore {
+	snapshots: Map<string, Map<string, unknown>>;
+	prefix: string;
+	nextId: number;
+}
+
+function restoreProgramState(
+	store: ProgramStateStore,
+	sessionId: string | undefined,
+	stateId: string | undefined,
+): unknown {
+	if (!stateId) return {};
+	const snapshots = sessionId ? store.snapshots.get(sessionId) : undefined;
+	if (!snapshots?.has(stateId)) throw new Error(`Unknown pi_exec state: ${stateId}`);
+	return snapshots.get(stateId);
+}
+
+function saveProgramState(store: ProgramStateStore, sessionId: string, state: unknown): string {
+	let snapshots = store.snapshots.get(sessionId);
+	if (!snapshots) {
+		snapshots = new Map();
+		store.snapshots.set(sessionId, snapshots);
+	}
+	const stateId = `${store.prefix}.${(store.nextId++).toString(36)}`;
+	snapshots.set(stateId, state);
+	return stateId;
+}
 
 export const aggregateUsage = (usages: Usage[]): Usage => ({
 	input: usages.reduce((total, usage) => total + usage.input, 0),
@@ -399,6 +428,11 @@ export default function runtime(pi: ExtensionAPI): void {
 		captureError = error instanceof Error ? error.message : String(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
+	const stateStore: ProgramStateStore = {
+		snapshots: new Map(),
+		prefix: randomBytes(6).toString("base64url"),
+		nextId: 1,
+	};
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && event.toolName !== "pi_exec_program") || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
@@ -421,6 +455,13 @@ export default function runtime(pi: ExtensionAPI): void {
 			inputs: Type.Optional(
 				Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
 					description: "Named strings available to the program as inputs.<key>.",
+				}),
+			),
+			state: Type.Optional(
+				Type.String({
+					minLength: 1,
+					maxLength: 64,
+					description: "Resume the live-session state snapshot returned by an earlier successful call.",
 				}),
 			),
 			display: Type.Optional(
@@ -737,6 +778,8 @@ export default function runtime(pi: ExtensionAPI): void {
 			};
 
 			try {
+				const stateSessionId = params.state ? ctx.sessionManager.getSessionId() : undefined;
+				const initialState = restoreProgramState(stateStore, stateSessionId, params.state);
 				const timeoutMs = envelope.timeoutSeconds * 1_000;
 				const result = await executeProgram(
 					params.code,
@@ -746,6 +789,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					signal,
 					(values) => logs.push(values.map(displayValue).join(" ")),
 					envelope.memoryMb,
+					initialState,
 				);
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
@@ -770,12 +814,18 @@ export default function runtime(pi: ExtensionAPI): void {
 					});
 					throw new Error(result.error ?? `pi_exec ${result.outcome}`);
 				}
+				const stateId = result.stateChanged
+					? saveProgramState(stateStore, stateSessionId ?? ctx.sessionManager.getSessionId(), result.state)
+					: undefined;
 				const output = [logs.length > 0 ? `Logs:\n${logs.join("\n")}` : "", displayValue(result.value)]
 					.filter(Boolean)
 					.join("\n\n");
 				return {
-					content: [{ type: "text", text: output }],
-					details: { trace, logs, activity: finalActivity, policy: envelope },
+					content: [
+						{ type: "text" as const, text: output },
+						...(stateId ? [{ type: "text" as const, text: `state: ${stateId}` }] : []),
+					],
+					details: { trace, logs, activity: finalActivity, policy: envelope, ...(stateId ? { stateId } : {}) },
 					...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
 				};
 			} finally {
@@ -832,6 +882,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					description: "Named strings available to the saved program as inputs.<key>.",
 				}),
 			),
+			state: piExecTool.parameters.properties.state,
 			limits: piExecTool.parameters.properties.limits,
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -841,6 +892,7 @@ export default function runtime(pi: ExtensionAPI): void {
 				{
 					code: program.code,
 					...(params.inputs ? { inputs: params.inputs } : {}),
+					...(params.state ? { state: params.state } : {}),
 					...(params.limits ? { limits: params.limits } : {}),
 					display: { name: program.name, description: program.description },
 				},

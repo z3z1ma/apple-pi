@@ -27,6 +27,8 @@ export interface ExecutionOperation {
 
 export interface ProgramExecution {
 	value?: unknown;
+	state?: unknown;
+	stateChanged?: boolean;
 	outcome: ExecutionOutcome;
 	error?: string;
 }

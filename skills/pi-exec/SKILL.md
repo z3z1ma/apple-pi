@@ -9,7 +9,7 @@ description: "Author or troubleshoot JavaScript passed to pi_exec. Use when aske
 
 Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and eligible captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Interactive subagent tools are deliberately excluded; use `agent()` or `agents.run()` instead. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
 
-`display`, `inputs`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
+`display`, `inputs`, `state`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
 
 ```javascript
 // Tool arguments — not guest code
@@ -17,11 +17,12 @@ Write the program from the **live signatures on the `pi_exec` `code` parameter**
   code: "...",
   display: { name: "Audit runtime surfaces", description: "Collect matching files." },
   inputs: { root: "extensions" },
+  state: "AbCdEf12.1", // optional ID returned after an earlier call changed state
   limits: { agentBudget: 32, callBudget: 256, concurrency: 8, timeoutSeconds: 1800 },
 }
 ```
 
-Inside `code`, read `inputs.root`; every supplied input value is a string, and a missing key is `undefined`. Never write `display.name = ...` or `display.description = ...`. Never assign `limits` inside the program. Omitted limit fields keep the shape-derived default; values clamp to package maxima.
+Inside `code`, read `inputs.root`; every supplied input value is a string, and a missing key is `undefined`. Use the mutable `state` object for expensive JSON data worth reusing: a successful mutation returns a new state ID, which can be passed as the next call's `state` parameter. Never write `display.name = ...` or `display.description = ...`. Never assign `limits` inside the program. Omitted limit fields keep the shape-derived default; values clamp to package maxima.
 
 ## Core tools
 
@@ -177,6 +178,7 @@ return agent({
 ## Authoring rules
 
 - Use `pi_exec` for branching, reduction, or already-justified fan-out. Use direct tools for straightforward sequential inspection.
+- Mutate `state` only for data worth reusing across calls. Returned IDs are immutable and live-session-only; pass one as the tool's `state` parameter to resume or branch from it.
 - Persist a composition only when it is reusable within this project: write its async-function body to `.pi/programs/<lowercase-kebab-name>.js` beginning with a one-line JSDoc `@description`, then use `pi_discover_programs` and `pi_exec_program({ name })`. Do not save one-off programs.
 - Await every host call. Do not start a call and return before it settles.
 - Keep dependent search → read and edit → verify steps sequential. Never concurrently edit the same file.
