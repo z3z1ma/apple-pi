@@ -23,8 +23,12 @@ function eventsStream(events: unknown[]): AsyncIterable<unknown> & { result: () 
 
 function failingStream(error: Error): AsyncIterable<unknown> & { result: () => Promise<unknown> } {
 	return {
-		async *[Symbol.asyncIterator]() {
-			throw error;
+		[Symbol.asyncIterator]() {
+			return {
+				async next() {
+					throw error;
+				},
+			};
 		},
 		result: async () => ({}),
 	};
