@@ -165,6 +165,22 @@ describe("input card rendering", () => {
 		expect(output).not.toMatch(/(?:project|model|provider|thinking|ctx|cost):/i);
 	});
 
+	it("shows a lightning bolt beside thinking when Codex fast mode is active", () => {
+		const snapshot: FooterSnapshot = {
+			...completeSnapshot,
+			model: { ...completeSnapshot.model!, provider: "openai-codex" },
+			fastModeEnabled: true,
+			statuses: [...completeSnapshot.statuses, { key: "fast-mode", text: "fast" }],
+		};
+		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
+
+		expect(output).toContain("OpenAI · high ⚡");
+		expect(output).not.toMatch(/\bfast\b/);
+		expect(
+			stripTerminalSequences(renderInputCard({ ...snapshot, fastModeEnabled: false }, theme, 120, [""]).join("\n")),
+		).not.toContain("⚡");
+	});
+
 	it("right-aligns Fleet navigation opposite model metadata without duplicating it in the strip", () => {
 		const hint = "esc to interrupt · ← for agents · ↓ to manage";
 		const snapshot = {

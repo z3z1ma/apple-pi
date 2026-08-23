@@ -34,6 +34,7 @@ export interface FooterSnapshot {
 	usage?: FooterUsageTotals;
 	usingSubscription?: boolean;
 	autoCompactionEnabled?: boolean;
+	fastModeEnabled?: boolean;
 	availableProviderCount?: number;
 	statuses: readonly FooterStatus[];
 }

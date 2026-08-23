@@ -28,6 +28,7 @@ import runtime, {
 import {
 	agentOperationArgs,
 	AUTO_COMPACT_EXTENSION_PATH,
+	CODEX_FAST_EXTENSION_PATH,
 	CONTEXT_GUIDANCE,
 	LEDGER_EXTENSION_PATH,
 	OUTPUT_SCHEMA_GUIDANCE,
@@ -937,6 +938,7 @@ describe("pi_exec agent binding", () => {
 			expect(prepared.args).toContain("--no-approve");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				AUTO_COMPACT_EXTENSION_PATH,
+				CODEX_FAST_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				ADVISOR_EXTENSION_PATH,

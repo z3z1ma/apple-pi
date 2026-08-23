@@ -27,6 +27,7 @@ const SEGMENT_SEPARATOR = "  ·  ";
 const COMPACT_SEPARATOR = " · ";
 const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-advisor", "subagents"];
 const FLEET_NAVIGATION_STATUS = "subagents-navigation";
+const FAST_MODE_STATUS = "fast-mode";
 
 interface RenderSegment {
 	text: string;
@@ -243,7 +244,8 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 	}
 
 	const statuses = orderedStatuses(snapshot.statuses).filter(
-		(status) => status.key !== FLEET_NAVIGATION_STATUS && sanitizeStatusText(status.text),
+		(status) =>
+			status.key !== FLEET_NAVIGATION_STATUS && status.key !== FAST_MODE_STATUS && sanitizeStatusText(status.text),
 	);
 	if (statuses.length > 0) {
 		segments.push({
@@ -284,7 +286,8 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	const model = cleanOneLine(modelName);
 	if (!provider || !model) return undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
-	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}`) : ""}`;
+	const fast = snapshot.fastModeEnabled && snapshot.model.provider === "openai-codex" ? " ⚡" : "";
+	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}${fast}`) : ""}`;
 }
 
 function fleetNavigationHint(snapshot: FooterSnapshot, theme: Theme): string | undefined {
@@ -513,6 +516,7 @@ export function collectInputCardSnapshot(
 		usage,
 		usingSubscription,
 		autoCompactionEnabled: safeRead(() => session.autoCompactionEnabled),
+		fastModeEnabled: modelProvider === "openai-codex" && statusMap?.has(FAST_MODE_STATUS) === true,
 		availableProviderCount,
 		statuses,
 	};

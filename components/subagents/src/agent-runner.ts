@@ -17,6 +17,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
+import { CODEX_FAST_EXTENSION_PATH } from "../../../extensions/codex-fast.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
 import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
@@ -57,7 +58,7 @@ export { SUBAGENT_TOOL_NAMES };
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
 
-/** Child sessions: no discovery; explicit safety/context extensions, MCP, and optional advisor. */
+/** Child sessions: no discovery; explicit fast-mode/safety/context extensions, MCP, and optional advisor. */
 export function childSessionExtensions(
 	advisor = false,
 	standard = true,
@@ -65,7 +66,7 @@ export function childSessionExtensions(
 	noExtensions: true;
 	additionalExtensionPaths: string[];
 } {
-	const additionalExtensionPaths = [AUTO_COMPACT_EXTENSION_PATH];
+	const additionalExtensionPaths = [AUTO_COMPACT_EXTENSION_PATH, CODEX_FAST_EXTENSION_PATH];
 	if (standard) {
 		additionalExtensionPaths.push(LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH);
 		if (advisor) additionalExtensionPaths.push(ADVISOR_EXTENSION_PATH);
@@ -155,7 +156,7 @@ export interface RunOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Disable ledger, session-search, MCP, and optional Advisor; the overflow guard remains mandatory. */
+	/** Disable ledger, session-search, MCP, and optional Advisor; fast mode and the overflow guard remain mandatory. */
 	loadStandardChildExtensions?: boolean;
 	signal?: AbortSignal;
 	isolated?: boolean;
@@ -382,8 +383,8 @@ export async function runAgent(
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
 	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
-	// Ordinary children load the overflow guard, ledger, session search, MCP, and optional Advisor;
-	// narrowly owned internal sessions may opt out of everything except the guard. Suppress
+	// Ordinary children load fast mode, the overflow guard, ledger, session search, MCP, and optional Advisor;
+	// narrowly owned internal sessions may opt out of everything except fast mode and the guard. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to

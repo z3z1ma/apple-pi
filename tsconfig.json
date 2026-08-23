@@ -18,6 +18,8 @@
     "components/ask-user-question/src/**/*.ts",
     "components/backlog/src/**/*.ts",
     "components/backlog/tests/**/*.ts",
+    "components/codex-fast/src/**/*.ts",
+    "components/codex-fast/tests/**/*.ts",
     "components/shared/src/**/*.ts",
     "components/session-search/src/**/*.ts",
     "components/memory/src/**/*.ts",

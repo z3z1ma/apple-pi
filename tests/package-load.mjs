@@ -21,6 +21,7 @@ try {
 			"extensions/backlog.ts",
 			"extensions/context.ts",
 			"extensions/auto-compact.ts",
+			"extensions/codex-fast.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
@@ -38,7 +39,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 16);
+	assert.equal(result.extensions.length, 17);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -58,6 +59,14 @@ try {
 				extension.path.endsWith("auto-compact.ts") && (extension.handlers.get("turn_end")?.length ?? 0) > 0,
 		),
 		"missing proactive auto-compaction guard",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("codex-fast.ts") &&
+				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
+		),
+		"missing Codex fast-mode provider hook",
 	);
 	assert(
 		result.extensions.some(
@@ -110,6 +119,7 @@ try {
 		"agents",
 		"btw",
 		"backlog",
+		"fast",
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
@@ -161,7 +171,9 @@ try {
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert(manifest.pi.extensions.includes("./extensions/workflow.ts"), "package manifest omits root workflow extension");
+	assert(manifest.pi.extensions.includes("./extensions/codex-fast.ts"), "package manifest omits Codex fast mode");
 	assert(manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest omits todos extension");
+	assert(manifest.files.includes("components/codex-fast/src/"), "package manifest omits Codex fast-mode source");
 	assert(manifest.files.includes("components/todos/src/"), "package manifest omits todos source");
 	assert(manifest.files.includes("docs/"), "package manifest omits todo documentation");
 	const ledgerLifecycleSkills = [
