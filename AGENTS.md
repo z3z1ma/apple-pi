@@ -33,7 +33,7 @@ At a high level, the package adds five kinds of capability to Pi:
 2. **Context continuity** — xAI server-side or Pi default compaction, model-generated observational memory, and two complementary recall paths.
 3. **Execution tracking** — branch-aware active to-dos, distinct from parked backlog ideas and durable Ledger records.
 4. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
-5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops.
+5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
 6. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
 
 The design goal is an integrated Pi environment with one implementation of each responsibility. Features that are intentionally delegated to Pi or a dependency should not be copied locally.
@@ -68,6 +68,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
 | Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with Ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
+| `prompts/` | Explicitly invoked prompt templates | `/distill` proposes durable lessons for the right existing owner and waits for operator approval before writing. Keep prompt templates stateless; use an extension only when runtime behavior is actually required. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
 | `.ledger/` | Optional task-local workbench for non-trivial work | It is execution state and evidence, not product runtime state. Storage/commit policy belongs to the repository owner. |
@@ -78,7 +79,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 - The package ships source ESM; there is no generated build directory or separate compilation artifact.
 - TypeScript uses NodeNext semantics, and relative TypeScript imports use `.js` suffixes because that is the runtime ESM path.
-- The root manifest's extension list, skills path, published `files` allowlist, and dependency declarations are part of the product surface.
+- The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
 - The package-load test is the executable smoke test for loading an explicit checkout entrypoint list and checking the expected tool/command boundary. It does not discover entries from the manifest or load the packed tarball, so keep its list aligned with `package.json` and inspect packaging separately.
 
 ### Context and memory
@@ -134,6 +135,7 @@ Use the narrowest production owner:
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.
+- Explicit user-invoked model workflow that needs no runtime state: `prompts/<command>.md`.
 - Task-specific investigation, decisions, or evidence: the governing `.ledger` bundle, not production code.
 
 Do not add metadata, fixtures, schemas, loaders, or policy modules without identifying the production consumer and the incorrect behavior prevented by the addition. Avoid compatibility wrappers, duplicate implementations, dormant toggles, speculative abstractions, and “new/v2” paths unless a real migration contract requires coexistence.

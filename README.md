@@ -34,6 +34,7 @@ These are the pieces I interact with directly while a session is running.
 - [`Advisor`](docs/advisor.md) — persistent read-only peer review
 - [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
 - [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
+- [`Distill`](docs/distill.md) — proposal-first extraction of durable lessons via `/distill [focus]`
 - [Custom Footer](docs/status-footer.md) — responsive model, context, cost, Git, and live extension status
 
 ### Keeping context and work straight
@@ -63,7 +64,7 @@ These are the smaller integrations that make the whole setup feel like one harne
 - [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
 - [xAI context compaction](docs/context.md) — server-side `/responses/compact` plus opaque-item injection on later Grok Responses requests
 
-The Pi package manifest in [`package.json`](package.json) exports [`extensions`](extensions) and [`skills`](skills). MCP protocol and UI stay in the pinned `pi-mcp-adapter` dependency; everything else is owned here. Feature contracts live in [`docs`](docs), with adopted and rejected ideas recorded in [`docs/boundaries.md`](docs/boundaries.md).
+The Pi package manifest in [`package.json`](package.json) exports [`extensions`](extensions), [`skills`](skills), and [`prompt templates`](prompts). MCP protocol and UI stay in the pinned `pi-mcp-adapter` dependency; everything else is owned here. Feature contracts live in [`docs`](docs), with adopted and rejected ideas recorded in [`docs/boundaries.md`](docs/boundaries.md).
 
 ## Skills
 

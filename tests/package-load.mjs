@@ -8,6 +8,10 @@ import {
 	createExtensionRuntime,
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
+import {
+	expandPromptTemplate,
+	loadPromptTemplates,
+} from "../node_modules/@earendil-works/pi-coding-agent/dist/core/prompt-templates.js";
 import { loadSkills } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js";
 
 const temp = mkdtempSync(join(tmpdir(), "apple-pi-load-"));
@@ -170,12 +174,31 @@ try {
 	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
+	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
 	assert(manifest.pi.extensions.includes("./extensions/workflow.ts"), "package manifest omits root workflow extension");
 	assert(manifest.pi.extensions.includes("./extensions/codex-fast.ts"), "package manifest omits Codex fast mode");
 	assert(manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest omits todos extension");
 	assert(manifest.files.includes("components/codex-fast/src/"), "package manifest omits Codex fast-mode source");
 	assert(manifest.files.includes("components/todos/src/"), "package manifest omits todos source");
-	assert(manifest.files.includes("docs/"), "package manifest omits todo documentation");
+	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
+	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
+	const promptTemplates = loadPromptTemplates({
+		cwd: process.cwd(),
+		agentDir: temp,
+		promptPaths: manifest.pi.prompts,
+		includeDefaults: false,
+	});
+	assert.deepEqual(
+		promptTemplates.map((template) => template.name),
+		["distill"],
+	);
+	const distillTemplate = promptTemplates[0];
+	assert.equal(distillTemplate.argumentHint, "[focus]");
+	assert.match(distillTemplate.description, /durable knowledge and reusable harness artifacts/);
+	assert.match(expandPromptTemplate("/distill", promptTemplates), /the most recent meaningful body of work/);
+	assert.match(expandPromptTemplate("/distill debugging workflow", promptTemplates), /focused on: debugging workflow/);
+	assert.match(distillTemplate.content, /AGENTS\.md/);
+	assert.match(distillTemplate.content, /do not create or modify artifacts/i);
 	const ledgerLifecycleSkills = [
 		"task-shaping",
 		"implementation-planning",

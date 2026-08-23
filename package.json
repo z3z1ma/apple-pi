@@ -41,6 +41,7 @@
     "components/status-footer/src/",
     "extensions/",
     "skills/",
+    "prompts/",
     "docs/",
     "LICENSE",
     "README.md",
@@ -68,6 +69,9 @@
     ],
     "skills": [
       "./skills"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "scripts": {
