@@ -45,7 +45,7 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 export type ResultWaitMode = { kind: "immediate" } | { kind: "indefinite" } | { kind: "yield"; seconds: number };
 
 export type ActiveResultWaitMode = Exclude<ResultWaitMode, { kind: "immediate" }>;
-export type AgentSettlementOutcome = "settled" | "yielded";
+export type AgentSettlementOutcome = "settled" | "yielded" | "interrupted";
 
 /** Resolve omission separately from an explicit immediate check or finite yield interval. */
 export function resolveResultWaitMode(yieldSeconds: unknown, transcriptSnapshot = false): ResultWaitMode {
@@ -95,11 +95,12 @@ function createYieldExpiry(seconds: number): { promise: Promise<"yielded">; canc
 	};
 }
 
-/** Wait until settlement or an optional finite yield interval without cancelling the child. */
+/** Wait until settlement, an optional finite yield interval, or an external wake-up without cancelling the child. */
 export async function waitForAgentSettlement(
 	record: WaitableAgent,
 	mode: ActiveResultWaitMode,
 	signal?: AbortSignal,
+	interrupt?: Promise<unknown>,
 ): Promise<AgentSettlementOutcome> {
 	if (!isPending(record)) return "settled";
 
@@ -117,12 +118,13 @@ export async function waitForAgentSettlement(
 	})();
 
 	const expiry = mode.kind === "yield" ? createYieldExpiry(mode.seconds) : undefined;
+	const interrupted = interrupt?.then(() => "interrupted" as const);
 	try {
-		if (!expiry) {
-			await abortable(settled, signal);
-			return "settled";
-		}
-		const outcome = await abortable(Promise.race([settled, expiry.promise]), signal);
+		const candidates: Promise<"settled" | "closed" | "yielded" | "interrupted">[] = [settled];
+		if (expiry) candidates.push(expiry.promise);
+		if (interrupted) candidates.push(interrupted);
+		const outcome = await abortable(Promise.race(candidates), signal);
+		if (outcome === "interrupted" && isPending(record)) return "interrupted";
 		return outcome === "yielded" && isPending(record) ? "yielded" : "settled";
 	} finally {
 		closed = true;

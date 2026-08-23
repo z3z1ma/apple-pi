@@ -13,6 +13,7 @@ import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
+import { createParentEscalationTool, type ParentEscalationHandler } from "./escalation.js";
 import type { ManagedAgentToolPolicy } from "./service.js";
 import type {
 	AgentConfig,
@@ -112,6 +113,8 @@ export interface SpawnOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
+	/** Direct Agent children only: asynchronously alert the owning root session. */
+	onParentEscalation?: ParentEscalationHandler;
 	/** Disable standard child extensions for a narrowly owned internal session. */
 	loadStandardChildExtensions?: boolean;
 	/** Capability owner; internal records cannot be resumed or steered through public tools. */
@@ -289,7 +292,8 @@ export class AgentManager {
 
 		record.status = "running";
 		record.startedAt = Date.now();
-		if (occupiesPoolSlot(record)) this.runningBackground++;
+		const occupiesBackgroundSlot = occupiesPoolSlot(record);
+		if (occupiesBackgroundSlot) this.runningBackground++;
 		this.onStart?.(record);
 
 		// Wire parent abort signal to stop the subagent when the parent is interrupted
@@ -303,8 +307,13 @@ export class AgentManager {
 		const detach = () => {
 			detachParentSignal?.();
 			detachParentSignal = undefined;
+			record.detachCallerSignal = undefined;
 		};
+		record.detachCallerSignal = detach;
 
+		const parentEscalationTools = options.onParentEscalation
+			? [createParentEscalationTool(id, options.onParentEscalation)]
+			: [];
 		const promise = runAgent(ctx, type, prompt, {
 			pi,
 			agentId: id,
@@ -316,7 +325,7 @@ export class AgentManager {
 			agentConfig: options.agentConfig,
 			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
-			customTools: options.customTools,
+			customTools: [...parentEscalationTools, ...(options.customTools ?? [])],
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
@@ -386,7 +395,7 @@ export class AgentManager {
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
-				if (!options.isBackground) {
+				if (!options.isBackground && record.isBackground !== true) {
 					record.resultConsumed = true;
 					try {
 						this.onComplete?.(record);
@@ -394,7 +403,7 @@ export class AgentManager {
 						/* ignore completion side-effect errors */
 					}
 				} else {
-					if (occupiesPoolSlot(record)) this.runningBackground--;
+					if (occupiesBackgroundSlot) this.runningBackground--;
 					try {
 						this.onComplete?.(record);
 					} catch {
@@ -418,11 +427,11 @@ export class AgentManager {
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
-				if (!options.isBackground) {
+				if (!options.isBackground && record.isBackground !== true) {
 					record.resultConsumed = true;
 					this.onComplete?.(record);
 				} else {
-					if (occupiesPoolSlot(record)) this.runningBackground--;
+					if (occupiesBackgroundSlot) this.runningBackground--;
 					this.onComplete?.(record);
 					this.drainQueue();
 				}
@@ -556,46 +565,83 @@ export class AgentManager {
 			return record;
 		}
 
-		// Foreground resume: run inline and return the settled record.
+		// Foreground resume normally returns inline, but may be detached if the
+		// child escalates while the caller is waiting. Its settle path therefore
+		// consults the live record shape rather than assuming it stayed foreground.
+		record.isBackground = false;
+		record.resultConsumed = false;
 		record.status = "running";
 		record.startedAt = Date.now();
 		record.completedAt = undefined;
 		record.result = undefined;
 		record.error = undefined;
-
-		try {
-			const { text, failure } = await resumeAgent(record.session, prompt, {
-				onToolActivity: (activity) => {
-					if (activity.type === "end") record.toolUses++;
-					options?.onToolActivity?.(activity);
-				},
-				onAssistantUsage: (usage) => {
-					addUsage(record.lifetimeUsage, usage);
-					options?.onAssistantUsage?.(usage);
-				},
-				onCompaction: (info) => {
-					record.compactionCount++;
-					this.onCompact?.(record, info);
-					options?.onCompaction?.(info);
-				},
-				signal,
-			});
-			// Same contract as the spawn path (#144): a failed final turn is an
-			// error, not a completion — but the resumed text stays available.
-			record.status = failure ? "error" : "completed";
-			if (failure) record.error = failure;
-			record.result = text;
-			record.completedAt = Date.now();
-		} catch (err) {
-			record.status = "error";
-			record.error = err instanceof Error ? err.message : String(err);
-			record.completedAt = Date.now();
+		const abortController = new AbortController();
+		record.abortController = abortController;
+		let detachParentSignal: (() => void) | undefined;
+		if (signal) {
+			const onParentAbort = () => abortController.abort(signal.reason);
+			signal.addEventListener("abort", onParentAbort, { once: true });
+			detachParentSignal = () => signal.removeEventListener("abort", onParentAbort);
+			if (signal.aborted) onParentAbort();
 		}
+		const detach = () => {
+			detachParentSignal?.();
+			detachParentSignal = undefined;
+			record.detachCallerSignal = undefined;
+		};
+		record.detachCallerSignal = detach;
 
-		// Same contract as the spawn settle paths: children spawned during the
-		// resumed turn must not outlive it — nothing else can see or reach them.
-		this.abortOwnedChildren(id);
-
+		const settle = () => {
+			detach();
+			this.abortOwnedChildren(id);
+			if (record.isBackground !== true) {
+				record.resultConsumed = true;
+				return;
+			}
+			try {
+				this.onComplete?.(record);
+			} catch {
+				/* ignore completion side-effect errors */
+			}
+			this.drainQueue();
+		};
+		const promise = resumeAgent(record.session, prompt, {
+			onToolActivity: (activity) => {
+				if (activity.type === "end") record.toolUses++;
+				options?.onToolActivity?.(activity);
+			},
+			onAssistantUsage: (usage) => {
+				addUsage(record.lifetimeUsage, usage);
+				options?.onAssistantUsage?.(usage);
+			},
+			onCompaction: (info) => {
+				record.compactionCount++;
+				this.onCompact?.(record, info);
+				options?.onCompaction?.(info);
+			},
+			signal: abortController.signal,
+		})
+			.then(({ text, failure }) => {
+				if (record.status !== "stopped") {
+					record.status = failure ? "error" : "completed";
+					if (failure) record.error = failure;
+				}
+				record.result = text;
+				record.completedAt ??= Date.now();
+				settle();
+				return text;
+			})
+			.catch((err) => {
+				if (record.status !== "stopped") {
+					record.status = "error";
+					record.error = err instanceof Error ? err.message : String(err);
+				}
+				record.completedAt ??= Date.now();
+				settle();
+				return "";
+			});
+		record.promise = promise;
+		await promise;
 		return record;
 	}
 
@@ -720,6 +766,16 @@ export class AgentManager {
 		return true;
 	}
 
+	/** Detach an in-flight foreground Agent call after it escalates so its run can continue in the background. */
+	detachForeground(id: string): boolean {
+		const record = this.agents.get(id);
+		if (record?.status !== "running" || record.isBackground !== false) return false;
+		record.detachCallerSignal?.();
+		record.isBackground = true;
+		record.resultConsumed = false;
+		return true;
+	}
+
 	getRecord(id: string): AgentRecord | undefined {
 		return this.agents.get(id);
 	}
@@ -766,6 +822,7 @@ export class AgentManager {
 	/** Dispose a record's in-process session and remove it from the roster. */
 	private removeRecord(id: string, record: AgentRecord): void {
 		const session = record.session;
+		record.detachCallerSignal?.();
 		record.session = undefined;
 		this.agents.delete(id);
 		void disposeAgentSession(session);
@@ -830,6 +887,7 @@ export class AgentManager {
 		this.queue = [];
 		const sessions = [...this.agents.values()].map((record) => {
 			const session = record.session;
+			record.detachCallerSignal?.();
 			record.session = undefined;
 			return session;
 		});

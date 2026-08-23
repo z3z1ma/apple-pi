@@ -78,6 +78,8 @@ export interface AgentRecord {
 	retainUntilSessionEnd?: boolean;
 	/** Controller-owned termination attribution; absent for ordinary successful agents. */
 	terminationCause?: AgentTerminationCause;
+	/** Internal cleanup for a foreground caller signal when the run settles or becomes detached. */
+	detachCallerSignal?: () => void;
 }
 
 export interface AgentInvocation {

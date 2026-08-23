@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
+import { AgentManager } from "../src/agent-manager.js";
 import { selectAgentModel } from "../src/agent-runner.js";
 import { BUILTIN_TOOL_NAMES, buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
 import {
@@ -17,6 +18,7 @@ import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
+import { createParentEscalationTool, ParentEscalationHub } from "../src/escalation.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
@@ -38,6 +40,64 @@ afterEach(() => {
 });
 
 describe("owned subagent surface", () => {
+	it("steers the root when the escalating agent has no active result wait", async () => {
+		const deliver = vi.fn();
+		const hub = new ParentEscalationHub(deliver);
+		const outcome = hub.escalate("agent-1", "The API contract is contradictory.");
+		expect(outcome).toBe("steered");
+		expect(deliver).toHaveBeenCalledWith({
+			agentId: "agent-1",
+			message: "The API contract is contradictory.",
+		});
+	});
+
+	it("wakes every active result wait when the escalating agent is among them", async () => {
+		const deliver = vi.fn();
+		const hub = new ParentEscalationHub(deliver);
+		const matching = hub.registerWait("agent-1");
+		const other = hub.registerWait("agent-2");
+
+		expect(hub.escalate("agent-1", "A migration would destroy user data.")).toBe("woke-waits");
+		await expect(matching.promise).resolves.toEqual({
+			agentId: "agent-1",
+			message: "A migration would destroy user data.",
+		});
+		await expect(other.promise).resolves.toEqual({
+			agentId: "agent-1",
+			message: "A migration would destroy user data.",
+		});
+		expect(deliver).not.toHaveBeenCalled();
+		expect(hub.escalate("agent-1", "A second, distinct escalation.")).toBe("steered");
+		expect(deliver).toHaveBeenCalledWith({ agentId: "agent-1", message: "A second, distinct escalation." });
+		matching.close();
+		other.close();
+	});
+
+	it("detaches a foreground escalation from its caller signal", () => {
+		const manager = new AgentManager();
+		const detachCallerSignal = vi.fn();
+		(manager as any).agents.set("agent-1", {
+			id: "agent-1",
+			status: "running",
+			isBackground: false,
+			detachCallerSignal,
+		});
+		expect(manager.detachForeground("agent-1")).toBe(true);
+		expect(detachCallerSignal).toHaveBeenCalledOnce();
+		expect(manager.getRecord("agent-1")).toMatchObject({ isBackground: true, resultConsumed: false });
+		manager.dispose();
+	});
+
+	it("keeps escalate_to_parent reserved for urgent asynchronous communication", async () => {
+		const escalate = vi.fn(() => "steered" as const);
+		const tool = createParentEscalationTool("agent-1", escalate);
+		expect(tool.name).toBe("escalate_to_parent");
+		expect(tool.description).toContain("Continue working after calling it");
+		expect(tool.promptGuidelines?.join(" ")).toContain("Do not use it for routine progress updates");
+		const result = await (tool as any).execute("escalate", { message: "Need a root decision now." });
+		expect(escalate).toHaveBeenCalledWith("agent-1", "Need a root decision now.");
+		expect(result.content[0].text).toContain("Continue working");
+	});
 	it("keeps automatic completion notifications to a preview", () => {
 		const output = "x".repeat(750);
 		const notification = formatNotification(
@@ -576,6 +636,18 @@ describe("owned subagent surface", () => {
 		const waiting = waitForAgentSettlement(record, { kind: "indefinite" }, controller.signal);
 		controller.abort(new Error("stop waiting"));
 		await expect(waiting).rejects.toThrow("stop waiting");
+		expect(record.status).toBe("running");
+	});
+
+	it("interrupts a result wait without stopping its agent", async () => {
+		let interrupt!: () => void;
+		const interrupted = new Promise<void>((resolve) => {
+			interrupt = resolve;
+		});
+		const record = { status: "running" as const, promise: new Promise<void>(() => {}) };
+		const waiting = waitForAgentSettlement(record, { kind: "indefinite" }, undefined, interrupted);
+		interrupt();
+		expect(await waiting).toBe("interrupted");
 		expect(record.status).toBe("running");
 	});
 

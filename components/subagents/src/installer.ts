@@ -30,6 +30,12 @@ import {
 } from "./agent-types.js";
 import { inChildSessionContext } from "./child-context.js";
 import { loadCustomAgents } from "./custom-agents.js";
+import {
+	formatInterruptedResultWait,
+	formatParentEscalation,
+	ParentEscalationHub,
+	type ParentEscalationWait,
+} from "./escalation.js";
 import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
@@ -109,6 +115,17 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	let fleet!: FleetList;
 	const backgroundCompletions = new Map<string, (record: AgentRecord) => void>();
 	const lifecycleCancelledIds = new Set<string>();
+	const escalationHub = new ParentEscalationHub((escalation) => {
+		pi.sendMessage(
+			{
+				customType: "subagent-escalation",
+				content: formatParentEscalation(escalation),
+				display: true,
+				details: escalation,
+			},
+			{ deliverAs: "steer", triggerTurn: true },
+		);
+	});
 	const settleBackgroundCompletion = (record: AgentRecord) => {
 		const resolve = backgroundCompletions.get(record.id);
 		if (!resolve) return;
@@ -557,6 +574,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Public Agent spawn, resume, detachment, and escalation share one lifecycle boundary.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			bindSessionContext(ctx);
 
@@ -588,12 +606,29 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					() => widget.update(),
 				);
 				activityById.set(existing.id, activity.state);
-				const resumed = await manager.resume(existing.id, params.prompt, background ? undefined : signal, {
+				const escalationWait = background ? undefined : escalationHub.registerWait(existing.id);
+				const resumeRun = manager.resume(existing.id, params.prompt, background ? undefined : signal, {
 					isBackground: background,
 					onToolActivity: activity.callbacks.onToolActivity,
 					onAssistantUsage: activity.callbacks.onAssistantUsage,
 					onCompaction: () => widget.update(),
 				});
+				const resumeOutcome = escalationWait
+					? await Promise.race([
+							resumeRun.then((record) => ({ kind: "settled" as const, record })),
+							escalationWait.promise.then((escalation) => ({ kind: "escalated" as const, escalation })),
+						])
+					: { kind: "settled" as const, record: await resumeRun };
+				escalationWait?.close();
+				if (resumeOutcome.kind === "escalated" && manager.detachForeground(existing.id)) {
+					widget.markRunning(existing.id);
+					widget.update();
+					return textResult(
+						formatInterruptedResultWait(existing.id, resumeOutcome.escalation),
+						detailsFor(existing, activity.state, { status: "background" }),
+					);
+				}
+				const resumed = resumeOutcome.kind === "settled" ? resumeOutcome.record : await resumeRun;
 				if (!resumed)
 					return textResult(`Agent ${existing.id} is already running or cannot be resumed.`, undefined, true);
 				if (background)
@@ -677,6 +712,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				onAssistantUsage: tracker.callbacks.onAssistantUsage,
 				onSessionCreated: tracker.callbacks.onSessionCreated,
 				maxSubagentDepth: getMaxSubagentDepth(),
+				onParentEscalation: (agentId: string, message: string) => escalationHub.escalate(agentId, message),
 			};
 
 			try {
@@ -693,12 +729,33 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						detailsFor(record, tracker.state, { status: "background" }),
 					);
 				}
-				const result = await manager.spawnAndWait(pi, ctx, type, params.prompt, { ...options, signal }, (agentId) => {
+				let escalationWait: ParentEscalationWait | undefined;
+				const foregroundRun = manager.spawnAndWait(pi, ctx, type, params.prompt, { ...options, signal }, (agentId) => {
 					id = agentId;
+					escalationWait = escalationHub.registerWait(agentId);
 					activityById.set(agentId, tracker.state);
 					const record = manager.getRecord(agentId);
 					if (record) record.toolCallId = toolCallId;
 				});
+				const foregroundOutcome = escalationWait
+					? await Promise.race([
+							foregroundRun.then((result) => ({ kind: "settled" as const, result })),
+							escalationWait.promise.then((escalation) => ({ kind: "escalated" as const, escalation })),
+						])
+					: { kind: "settled" as const, result: await foregroundRun };
+				escalationWait?.close();
+				if (foregroundOutcome.kind === "escalated") {
+					const record = id ? manager.getRecord(id) : undefined;
+					if (record && manager.detachForeground(record.id)) {
+						widget.markRunning(record.id);
+						widget.update();
+						return textResult(
+							formatInterruptedResultWait(record.id, foregroundOutcome.escalation),
+							detailsFor(record, tracker.state, { status: "background" }),
+						);
+					}
+				}
+				const result = foregroundOutcome.kind === "settled" ? foregroundOutcome.result : await foregroundRun;
 				const record = result.record;
 				const output =
 					(record.status === "error"
@@ -802,9 +859,23 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				if (!record || record.parentAgentId || record.internalOwner)
 					return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
 				let yieldedSeconds: number | undefined;
+				let interrupted: ParentEscalationWait | undefined;
+				let escalation: Awaited<ParentEscalationWait["promise"]> | undefined;
 				if (waitMode.kind !== "immediate" && (record.status === "queued" || record.status === "running")) {
-					const outcome = await waitForAgentSettlement(record, waitMode, signal);
-					if (outcome === "yielded" && waitMode.kind === "yield") yieldedSeconds = waitMode.seconds;
+					interrupted = escalationHub.registerWait(record.id);
+					try {
+						const outcome = await waitForAgentSettlement(record, waitMode, signal, interrupted.promise);
+						if (outcome === "yielded" && waitMode.kind === "yield") yieldedSeconds = waitMode.seconds;
+						if (outcome === "interrupted") escalation = await interrupted.promise;
+					} finally {
+						interrupted.close();
+					}
+				}
+				if (escalation) {
+					return textResult(
+						formatInterruptedResultWait(record.id, escalation),
+						detailsFor(record, activityById.get(record.id), { status: "background" }),
+					);
 				}
 				const settled = record.status !== "queued" && record.status !== "running";
 				if (settled && params.transcript_tail === undefined) {
