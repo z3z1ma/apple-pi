@@ -153,12 +153,17 @@ export default function (pi) {
 		await session.bindExtensions({});
 		session.setActiveToolsByName(["read"]);
 		const events: unknown[] = [];
-		session.subscribe((event) => events.push(event));
+		session.subscribe((event) => events.push(JSON.parse(JSON.stringify(event))));
 
 		await session.prompt("Read the manifest and finish.");
 
 		expect(readFileSync(callsPath, "utf8").trim().split("\n")).toHaveLength(2);
-		expect(JSON.stringify(events)).toContain(">= 1 tokens");
+		expect(events).not.toContainEqual(
+			expect.objectContaining({
+				type: "message_end",
+				message: expect.objectContaining({ stopReason: "error" }),
+			}),
+		);
 		expect(events).toContainEqual(
 			expect.objectContaining({ type: "compaction_end", reason: "overflow", willRetry: true, aborted: false }),
 		);

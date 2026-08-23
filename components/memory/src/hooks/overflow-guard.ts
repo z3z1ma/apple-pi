@@ -1,12 +1,17 @@
-import { type ExtensionAPI, type ExtensionContext, SettingsManager } from "@earendil-works/pi-coding-agent";
 import {
-	createAssistantMessageEventStream,
-	getApiProvider,
 	type Api,
 	type AssistantMessage,
 	type Context,
+	createAssistantMessageEventStream,
+	getApiProvider,
 	type Model,
 } from "@earendil-works/pi-ai/compat";
+import {
+	AgentSession,
+	type ExtensionAPI,
+	type ExtensionContext,
+	SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import type { Runtime } from "../runtime.js";
 
 const ZERO_USAGE = {
@@ -24,14 +29,29 @@ const ZERO_USAGE = {
 	},
 };
 
+const PROACTIVE_OVERFLOW = Symbol.for("apple-pi.proactive-overflow");
+const OVERFLOW_RECOVERY_PATCH = Symbol.for("apple-pi.proactive-overflow-recovery-patch");
+
+const INTERNAL_OVERFLOW_ERROR = "proactive compaction token limit exceeded";
+
 type ProviderStream = NonNullable<Parameters<ExtensionAPI["registerProvider"]>[1]["streamSimple"]>;
+
+type ProactiveOverflowMessage = AssistantMessage & {
+	[PROACTIVE_OVERFLOW]?: true;
+};
+
+type AgentSessionInternals = {
+	_checkCompaction(message: AssistantMessage, skipAbortedCheck?: boolean): Promise<boolean>;
+};
+
+type AgentSessionPrototype = AgentSessionInternals & {
+	[OVERFLOW_RECOVERY_PATCH]?: true;
+};
 
 type ArmedRequest = {
 	api: Api;
 	provider: string;
 	model: string;
-	threshold: number;
-	tokens: number;
 	toolCallIds: string[];
 };
 
@@ -43,20 +63,68 @@ function includesArmedToolResults(model: Model<Api>, context: Context, request: 
 	return request.toolCallIds.every((toolCallId) => toolCallIds.has(toolCallId));
 }
 
-function syntheticOverflow(model: Model<Api>, request: ArmedRequest) {
-	const message: AssistantMessage = {
+/**
+ * Pi exposes manual compaction but not its compact-and-retry entrypoint. Keep
+ * the marked provider response benign at the event/UI boundary, then classify
+ * it as overflow only while Pi's native recovery check runs.
+ */
+function installOverflowRecoveryPatch(): string | undefined {
+	const prototype = AgentSession.prototype as unknown as AgentSessionPrototype;
+	if (prototype[OVERFLOW_RECOVERY_PATCH]) return undefined;
+
+	const descriptor = Object.getOwnPropertyDescriptor(prototype, "_checkCompaction");
+	if (!descriptor || typeof descriptor.value !== "function") {
+		return "Pi no longer exposes the expected compaction recovery method";
+	}
+	const original = descriptor.value;
+
+	const patched = async function (
+		this: AgentSessionInternals,
+		message: AssistantMessage,
+		skipAbortedCheck?: boolean,
+	): Promise<boolean> {
+		if (!(message as ProactiveOverflowMessage)[PROACTIVE_OVERFLOW]) {
+			return original.call(this, message, skipAbortedCheck);
+		}
+
+		const stopReason = message.stopReason;
+		const errorMessage = message.errorMessage;
+		// Pi persisted this same object before checking compaction. Classifying it
+		// only during recovery lets Pi remove it after rebuilding session state.
+		message.stopReason = "error";
+		message.errorMessage = INTERNAL_OVERFLOW_ERROR;
+		try {
+			return await original.call(this, message, skipAbortedCheck);
+		} finally {
+			message.stopReason = stopReason;
+			message.errorMessage = errorMessage;
+		}
+	};
+
+	try {
+		Object.defineProperty(prototype, "_checkCompaction", { ...descriptor, value: patched });
+		Object.defineProperty(prototype, OVERFLOW_RECOVERY_PATCH, { value: true });
+	} catch (error) {
+		Object.defineProperty(prototype, "_checkCompaction", descriptor);
+		return error instanceof Error ? error.message : String(error);
+	}
+	return undefined;
+}
+
+function syntheticOverflow(model: Model<Api>) {
+	const message: ProactiveOverflowMessage = {
 		role: "assistant",
 		content: [],
 		api: model.api,
 		provider: model.provider,
 		model: model.id,
 		usage: ZERO_USAGE,
-		stopReason: "error",
-		errorMessage: `proactive compaction token limit exceeded (${request.tokens.toLocaleString()} >= ${request.threshold.toLocaleString()} tokens)`,
+		stopReason: "stop",
 		timestamp: Date.now(),
+		[PROACTIVE_OVERFLOW]: true,
 	};
 	const stream = createAssistantMessageEventStream();
-	stream.push({ type: "error", reason: "error", error: message });
+	stream.push({ type: "done", reason: "stop", message });
 	stream.end(message);
 	return stream;
 }
@@ -69,10 +137,11 @@ function nativeCompactionSettings(ctx: ExtensionContext) {
 
 /**
  * Stop an oversized post-tool request before it reaches the provider. The
- * synthetic overflow deliberately enters Pi's native compact-and-retry path,
- * which preserves the current agent run and continues it after compaction.
+ * marked completion enters Pi's native compact-and-retry path without exposing
+ * the internal overflow signal as an assistant error.
  */
 export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void {
+	const recoveryPatchError = installOverflowRecoveryPatch();
 	let armed: ArmedRequest | undefined;
 	const installedProviders = new Map<string, Api>();
 
@@ -82,9 +151,8 @@ export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void 
 
 	function intercept(model: Model<Api>, context: Context) {
 		if (!armed || !includesArmedToolResults(model, context, armed)) return undefined;
-		const request = armed;
 		armed = undefined;
-		return syntheticOverflow(model, request);
+		return syntheticOverflow(model);
 	}
 
 	function installProviderWrapper(model: Model<Api>): string | undefined {
@@ -116,7 +184,7 @@ export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void 
 		const threshold = model.contextWindow - native.reserveTokens;
 		if (tokens < threshold) return;
 
-		const installError = installProviderWrapper(model);
+		const installError = recoveryPatchError ?? installProviderWrapper(model);
 		if (installError) {
 			ctx.ui?.notify?.(
 				`Proactive compaction stopped ${model.provider}/${model.id} before an unguarded oversized request: ${installError}`,
@@ -130,8 +198,6 @@ export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void 
 			api: model.api,
 			provider: model.provider,
 			model: model.id,
-			threshold,
-			tokens,
 			toolCallIds: event.toolResults.map((result) => result.toolCallId),
 		};
 	});

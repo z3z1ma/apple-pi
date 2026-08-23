@@ -1,5 +1,5 @@
-import type { ExtensionAPI, ExtensionContext, ProviderConfig } from "@earendil-works/pi-coding-agent";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai/compat";
+import type { ExtensionAPI, ExtensionContext, ProviderConfig } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
 import { registerOverflowGuard } from "../src/hooks/overflow-guard.js";
@@ -94,7 +94,9 @@ describe("proactive overflow guard", () => {
 				{},
 			);
 
-			expect((await result.result()).errorMessage).toContain("token limit exceeded (260,000 >= 255,616 tokens)");
+			const overflow = await result.result();
+			expect(overflow).toMatchObject({ stopReason: "stop", content: [] });
+			expect(overflow.errorMessage).toBeUndefined();
 			expect(faux.state.callCount).toBe(0);
 		} finally {
 			faux.unregister();
