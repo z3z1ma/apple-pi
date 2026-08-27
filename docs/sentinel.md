@@ -79,8 +79,7 @@ The packet includes:
 - compact trajectory, validation, and failure receipts;
 - Git status, changed paths, diff stat, and full current diff;
 - demand-paged evidence handles;
-- the Sentinel hypothesis, labeled as an untrusted claim;
-- an optional main-agent draft, labeled as unverified.
+- the Sentinel hypothesis, labeled as an untrusted claim.
 
 The extension imposes no character ceiling on consultation packets or Git diffs. Pi and the selected model own context-window behavior.
 
@@ -99,7 +98,9 @@ Refutations are recorded but are not delivered as warnings.
 
 Only one Advisor consultation runs at a time. Distinct escalations queue. Equivalent claims with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Starts are separated by a minimum number of primary turns. There is no lifetime or per-task consultation maximum.
 
-Before delivery, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Settled results are delivered only at a safe primary-session boundary.
+Before delivery, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Settled results are delivered only at a safe primary-session boundary. Findings ready at the same boundary share one steer instead of interrupting serially.
+
+A terminal advisory closes the current supervision episode. Sentinel does not review the main agent's resulting correction run; the next user message opens a new episode. This prevents advice from creating its own review loop.
 
 If Advisor fails or returns no typed disposition, the Sentinel claim may be delivered as **unadjudicated** with the failure reason. It is never presented as confirmed or refuted. Shutdown, session replacement, handoff, and Sentinel disablement cancel late delivery.
 
@@ -107,9 +108,9 @@ A delivered finding remains advice. The main agent inspects current code, decide
 
 ## Direct Advisor use
 
-The main agent can invoke the Advisor sub-agent directly through `Agent`.
+The main agent can invoke Advisor through `Agent` as an ordinary read-only sub-agent. That public path uses the normal Agent prompt and optional `inherit_context`; it does not expose Sentinel's harness context or typed adjudication protocol.
 
-Use `context_mode: "consultation"` when the harness should assemble current primary evidence. This path is fresh, foreground-only, read-only, non-recursive, and returns a typed disposition. Ordinary Advisor delegation remains available when the prompt itself is a complete architecture, root-cause, or simplification handoff.
+Sentinel escalation uses a separate, hidden host operation. It cannot be selected through Agent parameters.
 
 ## Status and accounting
 

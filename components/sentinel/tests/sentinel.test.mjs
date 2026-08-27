@@ -2758,6 +2758,28 @@ test("lifecycle: a direct late nit after terminal turn_end restates", async () =
 	assert.match(x.sent[0].content, /context="raised about an earlier step"/);
 });
 
+test("lifecycle: a terminal advisory closes review until the next user message", async () => {
+	assert.ok(!process.env.SENTINEL_NO_REVIEW, "needs the real turn_end handler");
+	const x = await lifecycleHarness();
+	await x.h("turn_end")(
+		{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
+		x.turnCtx,
+	);
+	await x.cmd("test nit first", x.uiCtx);
+	assert.equal(x.sent.length, 1);
+
+	await x.h("turn_end")(
+		{ message: { role: "assistant", content: [{ type: "text", text: "revised answer" }] } },
+		x.turnCtx,
+	);
+	await x.cmd("test nit suppressed", x.uiCtx);
+	assert.equal(x.sent.length, 1, "the advisory-triggered correction must not start another review loop");
+
+	x.h("message_end")({ message: { role: "user", content: [{ type: "text", text: "next request" }] } });
+	await x.cmd("test nit next", x.uiCtx);
+	assert.equal(x.sent.length, 2, "new user input opens a new supervision episode");
+});
+
 test("lifecycle: a direct late nit after non-terminal turn_end does not restate", async () => {
 	assert.ok(!process.env.SENTINEL_NO_REVIEW, "needs the real turn_end handler");
 	const x = await lifecycleHarness();

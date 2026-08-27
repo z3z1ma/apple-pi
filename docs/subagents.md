@@ -42,15 +42,11 @@ Review the requested change. Report concrete findings with file paths and eviden
 
 Trusted agent definitions and settings control tool scope, skills, model-profile selection, supervision defaults, turn limits with graceful wrap-up, session persistence, and explicit nested-agent allowlists. A new top-level or nested `Agent` call selects a team member with `subagent_type`, may select an inference profile with `profile`, and may append dynamic guidance with `system_prompt`. The guidance is appended after the selected definition and preloaded skills, so it specializes the run without replacing the definition or granting capabilities. `pi_exec` `agents.run` provides the equivalent `type`, `profile`, and `systemPrompt` combination. Interactive children do not discover package extensions. Ordinary `Agent` children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via `--no-extensions` plus `-e`; `sentinel: true` also loads the Sentinel sidecar for correctness-critical implementation. The internal BTW child loads only Codex fast mode and the mandatory overflow guard. Agent-definition `extensions:` is ignored. Implement enables supervision by default; use `sentinel: false` in the invocation or definition to explicitly opt out. Other types use their agent-definition Sentinel default. `max_turns` is a trusted definition-level run-length cutoff, not a model-facing output-size budget: omit it for an unlimited investigation. A turn-limited agent receives a comprehensive wrap-up instruction and retains the model's normal per-response output allowance; settled `get_subagent_result` calls return that final response in full. Nested children are ownership-scoped and depth-limited; they can be inspected, steered, or stopped only by the agent that launched them.
 
-### Context modes
+### Context inheritance
 
-Root `Agent` calls make context ownership explicit with `context_mode`:
+A root `Agent` call is a normal sub-agent handoff. Its prompt is the complete task by default. Set `inherit_context: true` only when the child also needs the full parent conversation.
 
-- `handoff` — the default. The caller's prompt is the complete task handoff.
-- `inherit` — prepend the full parent conversation; equivalent to `inherit_context: true`.
-- `consultation` — Advisor only. The harness assembles current primary request, trajectory receipts, Git evidence, validation/failure receipts, and demand-paged evidence handles. The optional `draft` is marked as an unverified Executor claim.
-
-`context_mode: "consultation"` is fresh, synchronous, read-only, non-recursive, and incompatible with background execution, resume, inherited context, custom `system_prompt`, and a Sentinel sidecar. Advisor returns a typed `confirm | refute | refine | uncertain` disposition through a private result tool. Use this mode when the Executor needs episodic deep judgment over current evidence; use ordinary Advisor delegation for open-ended architecture or root-cause analysis whose prompt is already a complete handoff.
+Advisor follows this same public contract. Sentinel's hidden typed adjudication is an internal host operation, not an `Agent` mode or parameter.
 
 ## Model profiles
 

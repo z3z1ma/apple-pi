@@ -9,6 +9,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
+import { buildConsultationContext } from "../src/consultation.js";
 import installSubagents from "../src/index.js";
 import { getManagedSubagentService } from "../src/service.js";
 import type { AgentConfig } from "../src/types.js";
@@ -800,7 +801,7 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
-	it("runs Advisor consultation mode from harness-assembled context with no recursive Sentinel", async () => {
+	it("runs internal Advisor adjudication from harness-assembled context with no recursive Sentinel", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({
@@ -889,26 +890,26 @@ RELOADED ROLE MUST NOT RUN.
 		process.chdir(cwd);
 		try {
 			installSubagents(pi);
-			const result = await tools.get("Agent").execute(
-				"consult-advisor",
-				{
-					prompt: "Check the retry ownership invariant.",
-					description: "Adjudicate retry durability",
-					subagent_type: "Advisor",
-					run_in_background: false,
-					isolated: false,
-					inherit_context: false,
-					context_mode: "consultation",
-					draft: "All retry callers are durable.",
-				},
-				undefined,
-				undefined,
+			const agentParameters = Object.keys(tools.get("Agent").parameters.properties);
+			expect(agentParameters).not.toContain("context_mode");
+			expect(agentParameters).not.toContain("draft");
+			const context = await buildConsultationContext({
+				pi,
 				ctx,
-			);
-			expect(result.isError).not.toBe(true);
-			expect(result.content[0].text).toContain("Disposition: refine");
+				source: "sentinel",
+				trajectorySequence: ctx.sessionManager.getBranch().length,
+				hypothesis: {
+					severity: "concern",
+					claim: "Retry ownership may not be durable.",
+					whyDeepReasoning: "The ordering spans queue and acknowledgement ownership.",
+					evidence: [{ kind: "file", ref: "src/retry.ts", path: "src/retry.ts" }],
+				},
+			});
+			const result = await getManagedSubagentService()?.runConsultation(ctx, { context });
+			expect(result?.status).toBe("completed");
+			expect(result?.finding?.disposition).toBe("refine");
 			expect(requestText).toContain("implement durable retry");
-			expect(requestText).toContain("Executor draft — CLAIM ONLY, NOT VERIFICATION EVIDENCE");
+			expect(requestText).toContain("Retry ownership may not be durable.");
 			expect(requestText).not.toContain("# Parent Conversation Context");
 			expect(systemText).toContain("independent adjudication");
 			expect(activeTools).toEqual(

@@ -74,7 +74,7 @@ describe("consultation context", () => {
 		const context = await buildConsultationContext({
 			pi: fakePi(),
 			ctx: ctx(entries),
-			source: "executor",
+			source: "sentinel",
 			trajectorySequence: 12,
 		});
 
@@ -123,13 +123,12 @@ describe("consultation context", () => {
 		expect(context.evidenceHandles).toContainEqual(expect.objectContaining({ ref: "src/retry.ts" }));
 	});
 
-	it("labels hypotheses and Executor drafts as unverified and represents unavailable evidence", async () => {
+	it("labels Sentinel hypotheses as untrusted and represents unavailable evidence", async () => {
 		const context = await buildConsultationContext({
 			pi: fakePi({ "rev-parse --is-inside-work-tree": "false\n" }),
 			ctx: ctx([{ type: "message", message: { role: "user", content: "choose the safe queue path" } }]),
 			source: "sentinel",
 			trajectorySequence: 1,
-			executorDraft: "All callers are updated and tests passed.",
 			hypothesis: {
 				severity: "blocker",
 				claim: "Acknowledge happens before persistence.",
@@ -140,26 +139,22 @@ describe("consultation context", () => {
 		const rendered = renderConsultationContext(context);
 
 		expect(rendered).toContain("UNTRUSTED CLAIM, NOT EVIDENCE");
-		expect(rendered).toContain("Executor draft — CLAIM ONLY, NOT VERIFICATION EVIDENCE");
 		expect(rendered).toContain("Working state unavailable");
 		expect(rendered).toContain("absence is not evidence");
 	});
 
-	it("does not impose an invented packet ceiling on required request, diff, or draft context", async () => {
+	it("does not impose an invented packet ceiling on required request or diff context", async () => {
 		const request = `required-start-${"x".repeat(55_000)}-required-end`;
 		const diff = `diff-start-${"z".repeat(30_000)}-diff-end`;
-		const draft = `draft-start-${"d".repeat(20_000)}-draft-end`;
 		const context = await buildConsultationContext({
 			pi: fakePi({ "diff HEAD --no-ext-diff --unified=3": diff }),
 			ctx: ctx([{ type: "message", message: { role: "user", content: request } }]),
-			source: "executor",
+			source: "gate",
 			trajectorySequence: 2,
-			executorDraft: draft,
 		});
 
 		expect(context.request.current).toBe(request);
 		expect(context.changedWork).toContain(diff);
-		expect(context.executorDraft).toBe(draft);
 	});
 
 	it("fingerprints implicated paths separately for staleness decisions", async () => {

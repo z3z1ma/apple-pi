@@ -1088,6 +1088,10 @@ export default function (pi: ExtensionAPI) {
 	// the user just stopped. Cleared when the user drives the next turn.
 	let autoResumeSuppressed = false;
 
+	// A terminal advisory closes the supervision episode. The resulting correction
+	// run belongs to the main agent and is not reviewed again until the user speaks.
+	let awaitingUserAfterAdvisory = false;
+
 	// One source of truth for which primary boundary a queue flush belongs to.
 	let turnState: PrimaryTurnState = "ended-nonterminal";
 
@@ -1142,29 +1146,34 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ---- advice delivery into the primary session ----
-	function sendNit(note: string, severity: SentinelSeverity | undefined, finalAnswer: boolean): void {
-		const notes: SentinelNote[] = [{ note, severity, source: "sentinel" }];
-		directFindings[severity ?? "nit"]++;
-		const content = formatAdvisoryContent(notes, { stale: true, finalAnswer });
+	function sendNotes(notes: readonly SentinelNote[], opts: { stale?: boolean; finalAnswer?: boolean }): void {
+		if (!notes.length) return;
+		const delivered = notes.map((note) => ({ ...note, source: note.source ?? "sentinel" }) satisfies SentinelNote);
+		for (const note of delivered) {
+			if (note.source === "sentinel") directFindings[note.severity ?? "nit"]++;
+		}
+		const triggerTurn = !autoResumeSuppressed;
+		if (opts.finalAnswer && triggerTurn) awaitingUserAfterAdvisory = true;
+		const content = formatAdvisoryContent(delivered, opts);
 		pi.sendMessage(
-			{ customType: ADVISORY_TYPE, content, display: true, details: { notes } },
-			{ deliverAs: "steer", triggerTurn: !autoResumeSuppressed },
+			{ customType: ADVISORY_TYPE, content, display: true, details: { notes: delivered } },
+			{ deliverAs: "steer", triggerTurn },
 		);
 	}
 
-	// The only immediate boundary flush: non-terminal turns drain queued nits.
-	// Concerns/blockers stay in the same queue for review reconfirmation.
+	// The only immediate boundary flush: non-terminal turns drain queued nits in one
+	// steer. Concerns/blockers stay in the shared queue for review reconfirmation.
 	function flushNits(rt: SentinelRuntime | undefined): void {
 		if (!rt || handoffInProgress()) return;
-		for (const n of rt.takeNits()) {
-			sendNit(n.note, n.severity, false);
-			adviseTool?.markDelivered(n.note, n.severity);
-		}
+		const notes = rt.takeNits();
+		sendNotes(notes, { stale: true });
+		for (const note of notes) adviseTool?.markDelivered(note.note, note.severity);
 	}
 
 	// Sentinel callbacks only enqueue. Delivery policy lives at primary boundaries,
 	// where terminality and reconfirmation state are actually known.
 	function deliverAdvice(note: string, severity?: SentinelSeverity, sourceRuntime?: SentinelRuntime): boolean {
+		if (awaitingUserAfterAdvisory) return false;
 		// Stand down entirely while a handoff is being performed (see comment on
 		// HANDOFF_IN_PROGRESS_KEY).
 		if (handoffInProgress()) {
@@ -1192,7 +1201,10 @@ export default function (pi: ExtensionAPI) {
 		// Hidden no-model test hook only: production sentinel callbacks always have the
 		// runtime that created their AdviseTool. Keep idle command testing convenient.
 		if (!isHighSeverity(severity) && turnState !== "running") {
-			sendNit(note, severity, turnState === "ended-terminal");
+			sendNotes([{ note, severity, source: "sentinel" }], {
+				stale: true,
+				finalAnswer: turnState === "ended-terminal",
+			});
 			return true;
 		}
 		return false;
@@ -1206,21 +1218,15 @@ export default function (pi: ExtensionAPI) {
 		const finalAnswer = turnState === "ended-terminal";
 		if (opts && opts.terminal !== undefined && opts.terminal !== finalAnswer)
 			dbg("deliverHeld: opts.terminal diverged from turnState", opts.terminal, turnState);
-		for (const n of notes) {
-			dbg("deliverHeld", n.severity, JSON.stringify(n.note).slice(0, 120));
-			const delivered = { ...n, source: n.source ?? "sentinel" } satisfies SentinelNote;
-			if (delivered.source === "sentinel") directFindings[delivered.severity ?? "nit"]++;
-			const content = formatAdvisoryContent([delivered], {
-				finalAnswer,
-				stale: !isHighSeverity(delivered.severity),
-			});
-			pi.sendMessage(
-				{ customType: ADVISORY_TYPE, content, display: true, details: { notes: [delivered] } },
-				{ deliverAs: "steer", triggerTurn: !autoResumeSuppressed },
-			);
+		for (const note of notes) dbg("deliverHeld", note.severity, JSON.stringify(note.note).slice(0, 120));
+		sendNotes(notes, {
+			finalAnswer,
+			stale: notes.every((note) => !isHighSeverity(note.severity)),
+		});
+		for (const note of notes) {
 			// Record at the real delivery point (onAdvice→false never recorded it), so a
 			// later same-or-lower-severity repeat is deduped.
-			adviseTool?.markDelivered(n.note, n.severity);
+			adviseTool?.markDelivered(note.note, note.severity);
 		}
 	}
 
@@ -1228,7 +1234,7 @@ export default function (pi: ExtensionAPI) {
 	// policy instead of creating a late-callback delivery path. This synchronous
 	// callback drains before a runTurnBlock waiter resumes; the latter then sees empty.
 	function flushSettledAdvice(outcome: "ok" | "failed"): void {
-		if (outcome !== "ok" || !runtime || handoffInProgress()) return;
+		if (outcome !== "ok" || !runtime || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		if (turnState === "ended-terminal") {
 			const notes = runtime.takeAllAdvice();
 			if (notes.length) deliverHeld(notes, { terminal: true });
@@ -1239,16 +1245,11 @@ export default function (pi: ExtensionAPI) {
 
 	function deliverConsultationFinding(note: SentinelNote): void {
 		if (handoffInProgress()) return;
-		const finalAnswer = turnState === "ended-terminal";
-		const content = formatAdvisoryContent([note], { finalAnswer });
-		pi.sendMessage(
-			{ customType: ADVISORY_TYPE, content, display: true, details: { notes: [note] } },
-			{ deliverAs: "steer", triggerTurn: !autoResumeSuppressed },
-		);
+		sendNotes([note], { finalAnswer: turnState === "ended-terminal" });
 	}
 
 	async function flushConsultationFinding(): Promise<void> {
-		if (turnState === "running" || handoffInProgress()) return;
+		if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		await escalationController?.flushDelivery(deliverConsultationFinding);
 		if (latestCtx) updateStatus(latestCtx);
 	}
@@ -1287,6 +1288,7 @@ export default function (pi: ExtensionAPI) {
 		pendingUserTexts = [];
 		consecutiveBlocks = 0;
 		autoResumeSuppressed = false;
+		awaitingUserAfterAdvisory = false;
 		turnState = "ended-nonterminal";
 		primaryTurnSequence = 0;
 		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
@@ -1434,6 +1436,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("message_end", (event) => {
 		if (!enabled) return;
 		if (event.message?.role !== "user") return;
+		awaitingUserAfterAdvisory = false;
 		const text = userMessageText(event.message);
 		if (!text || text.startsWith("/")) return;
 		pendingUserTexts.push(text);
@@ -1465,6 +1468,11 @@ export default function (pi: ExtensionAPI) {
 		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!enabled) return;
 		latestCtx = ctx;
+		if (awaitingUserAfterAdvisory) {
+			pendingUserTexts = [];
+			updateStatus(ctx);
+			return;
+		}
 		primaryTurnSequence++;
 		escalationController?.advanceTurn(primaryTurnSequence);
 
@@ -1641,9 +1649,7 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.notify("usage: /sentinel test <nit|concern|blocker> <note>", "warning");
 					return;
 				}
-				if (parsed.severity === "nit" && turnState !== "running")
-					sendNit(parsed.note, parsed.severity, turnState === "ended-terminal");
-				else deliverAdvice(parsed.note, parsed.severity);
+				deliverAdvice(parsed.note, parsed.severity);
 				return;
 			}
 

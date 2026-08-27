@@ -1,6 +1,5 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import type { AgentContextMode } from "./invocation-config.js";
 import type { LifetimeUsage } from "./usage.js";
 
 export type ThinkingLevel = ModelThinkingLevel;
@@ -91,7 +90,6 @@ export interface AgentInvocation {
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;
-	contextMode?: AgentContextMode;
 	/** Whether this invocation received the parent conversation. */
 	inheritContext: boolean;
 	/** Whether this invocation enabled the continuous sentinel. */

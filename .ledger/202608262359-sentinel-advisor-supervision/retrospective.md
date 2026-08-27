@@ -17,7 +17,7 @@ Delivered one hierarchy: main agent, optional persistent Sentinel, and episodic 
 
 ## What Could Improve
 
-The initial design kept the old Advisor name for the persistent feature and called the deep sub-agent Counsel. The operator's corrected topology should have been reflected in names immediately: Sentinel is the watcher; Advisor is the sub-agent.
+The initial design kept the old Advisor name for the persistent feature and called the deep sub-agent Counsel. It then exposed Sentinel's typed adjudication as an `Agent` context mode, mixing a private routing protocol into the ordinary Advisor sub-agent API. Sentinel delivery also allowed an advisory-triggered correction to start another review episode.
 
 ## Learnings
 
@@ -25,4 +25,4 @@ Role names are architecture. When two roles have different lifetimes, capabiliti
 
 ## Improvements
 
-Current docs, tests, package paths, tool parameters, status, and sidecar records now enforce that distinction. A separate backlog item tracks the unrelated parallel-suite WebSocket timeout observed during verification.
+Current docs, tests, package paths, tool parameters, status, and sidecar records now enforce that distinction. Ordinary Advisor calls are normal Agent handoffs; typed adjudication is private to Sentinel's host service. Findings ready at one boundary share one steer, and a terminal advisory closes review until the next user message. A separate backlog item tracks the unrelated parallel-suite WebSocket timeout observed during verification.

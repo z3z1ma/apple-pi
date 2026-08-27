@@ -19,7 +19,7 @@ import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversa
 import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { createParentEscalationTool, ParentEscalationHub } from "../src/escalation.js";
-import { resolveAgentContextMode, resolveAgentInvocationConfig } from "../src/invocation-config.js";
+import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { formatNotification } from "../src/notifications.js";
@@ -444,23 +444,6 @@ describe("owned subagent surface", () => {
 				sentinel: true,
 			}),
 		).toMatchObject({ inheritContext: true, sentinel: true });
-	});
-
-	it("resolves handoff, inheritance, and consultation as distinct context modes", () => {
-		expect(resolveAgentContextMode(undefined, false)).toEqual({ mode: "handoff" });
-		expect(resolveAgentContextMode(undefined, true)).toEqual({ mode: "inherit" });
-		expect(resolveAgentContextMode("consultation", false)).toEqual({ mode: "consultation" });
-		expect(resolveAgentContextMode("inherit", false)).toEqual({ mode: "inherit" });
-		expect(resolveAgentContextMode("consultation", true)).toMatchObject({
-			mode: "consultation",
-			error: expect.stringContaining("contradicts inherit_context"),
-		});
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Advisor"), { context_mode: "consultation" })).toMatchObject(
-			{
-				contextMode: "consultation",
-				inheritContext: false,
-			},
-		);
 	});
 
 	it("retains the full branch only for explicit inheritance", () => {
