@@ -77,7 +77,7 @@ ${availability}
 <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}>
 # Inference profiles
 
-These are the inference profiles that users map to provider models and reasoning effort in \`model-profiles.json\`. Each \`{ profile, description }\` entry describes the intended inference characteristics. Profiles select model and thinking policy only; they do not grant tools, skills, permissions, Advisor behavior, or other capabilities.
+These are the inference profiles that users map to provider models and reasoning effort in \`model-profiles.json\`. Each \`{ profile, description }\` entry describes the intended inference characteristics. Profiles select model and thinking policy only; they do not grant tools, skills, permissions, Sentinel behavior, or other capabilities.
 
 \`\`\`json
 ${encodedEntries(profiles)}

@@ -16,7 +16,7 @@ Good reasons:
 - a large integrated change has a subtle contract difficult to verify locally;
 - the root agent is genuinely stuck after gathering evidence.
 
-Small reversible changes with adequate checks rely on root inspection and the persistent Advisor. Independent review serves the concrete reasons above.
+Small reversible changes with adequate checks rely on root inspection and the persistent Sentinel. Independent review serves the concrete reasons above.
 
 ## One-shot contract
 

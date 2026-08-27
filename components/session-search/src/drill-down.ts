@@ -15,7 +15,7 @@ const DRILL_DOWN = /^#(\d+):(.+?)(?::(full|\d+(?::\d+)?))?$/;
 const CALL_QUERY = /^call:\s*(\S+)\s*$/i;
 const CALL_BODY_CAP = 50 * 1024;
 
-/** Parse `call:<toolCallId>` from an advisor receipt address. */
+/** Parse `call:<toolCallId>` from an sentinel receipt address. */
 export const parseCallQuery = (query: string): string | undefined => {
 	const match = CALL_QUERY.exec(query.trim());
 	return match?.[1];

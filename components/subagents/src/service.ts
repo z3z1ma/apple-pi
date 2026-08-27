@@ -1,8 +1,17 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { EventBus, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ConsultationContext, AdvisorConsultationResult } from "./consultation.js";
 import type { AgentConfig, AgentRecord, ThinkingLevel } from "./types.js";
 
 export type HarnessActivityPhase = "thinking" | "tool";
+
+export interface AssistantUsageDelta {
+	input: number;
+	cacheRead: number;
+	cacheWrite: number;
+	output: number;
+	cost: number;
+}
 
 /** Bounded, sanitized role activity. Never includes IDs, paths, prompts, args, or model text. */
 export interface HarnessBoundedActivity {
@@ -35,6 +44,8 @@ export interface ManagedAgentRequest {
 	prompt: string;
 	agentConfig: AgentConfig;
 	model?: Model<any>;
+	/** Invocation-specific system overlay appended after the agent definition. */
+	systemPrompt?: string;
 	maxTurns?: number;
 	/** Per-invocation live usage ceiling; the service aborts before another tool/turn after it is reached. */
 	maxTokens?: number;
@@ -47,9 +58,11 @@ export interface ManagedAgentRequest {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied typed result tools, available even when extensions are disabled. */
 	customTools?: ToolDefinition[];
+	/** Keep only mandatory child safety extensions when false. */
+	loadStandardChildExtensions?: boolean;
 	internalOwner?: string;
 	onStarted?: (agentId: string) => void;
-	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 	onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
 	/** Sanitized activity for owning harness controllers. Does not change public visibility. */
 	onActivity?: (activity: HarnessBoundedActivity) => void;
@@ -63,7 +76,15 @@ export interface ManagedBackgroundRequest {
 	profile?: string;
 	cwd?: string;
 	onActivity?: (activity: HarnessBoundedActivity) => void;
-	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
+}
+
+export interface ManagedConsultationRequest {
+	context: ConsultationContext;
+	/** Optional explicit inference override. Sentinel consultations use Advisor's configured deep profile. */
+	profile?: string;
+	signal?: AbortSignal;
+	onActivity?: (activity: HarnessBoundedActivity) => void;
 }
 
 export interface ManagedBackgroundRun {
@@ -76,6 +97,8 @@ export interface ManagedSubagentService {
 	runFresh(ctx: ExtensionContext, request: ManagedAgentRequest): Promise<AgentRecord>;
 	/** Start one ordinary public background AgentRecord through the owned manager. */
 	startBackground(ctx: ExtensionContext, request: ManagedBackgroundRequest): ManagedBackgroundRun;
+	/** Run one hidden, read-only Advisor adjudication with Sentinel and nesting disabled. */
+	runConsultation(ctx: ExtensionContext, request: ManagedConsultationRequest): Promise<AdvisorConsultationResult>;
 	abort(agentId: string): boolean;
 }
 
@@ -97,10 +120,13 @@ export function installManagedSubagentService(service: ManagedSubagentService, e
 	};
 }
 
-export function getManagedSubagentService(events?: EventBus): ManagedSubagentService | undefined {
+export function getManagedSubagentService(
+	events?: EventBus,
+	options?: { processFallback?: boolean },
+): ManagedSubagentService | undefined {
 	let discovered: ManagedSubagentService | undefined;
 	events?.emit(SERVICE_REQUEST_CHANNEL, (service: ManagedSubagentService) => {
 		discovered ??= service;
 	});
-	return discovered ?? installedService;
+	return discovered ?? (options?.processFallback === false ? undefined : installedService);
 }

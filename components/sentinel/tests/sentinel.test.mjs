@@ -1,5 +1,5 @@
 /**
- * Tests for the /advisor extension (a persistent second model that reviews each
+ * Tests for the /sentinel extension (a persistent second model that reviews each
  * turn and injects advice). Mirrors review.test.mjs structure.
  *
  * Layers:
@@ -7,19 +7,19 @@
  *                          parsing, advisory/​delta formatting, primary-agent
  *                          protocol, AdviseTool dedup (no model/network/TUI)
  *   1b. runtime mechanics — always-hold + catch-up block: runTurnBlock branches
- *                          (stub runtime) and the real AdvisorRuntime + stub
+ *                          (stub runtime) and the real SentinelRuntime + stub
  *                          Agent (hold → reconfirm → deliver/drop, settle waits)
  *   2. real loader       — the extension registers through pi's loader
  *   3. render path        — the advisory renderer shows notes by severity
  *   4. pi harness (E2E)  — drive a real `pi --mode rpc` and verify a nit is
  *                          delivered at its turn boundary and triggers a turn. Gated
- *                          behind ADVISOR_E2E=1 (needs anthropic auth + network;
- *                          spawns pi with ADVISOR_NO_REVIEW so the advisor model
- *                          never fires — only the deterministic `/advisor test`
+ *                          behind SENTINEL_E2E=1 (needs anthropic auth + network;
+ *                          spawns pi with SENTINEL_NO_REVIEW so the sentinel model
+ *                          never fires — only the deterministic `/sentinel test`
  *                          nit hook does; high-sev needs the runtime, covered in 1b).
  *
- * Run:  npm run test:advisor              (fast, offline)
- *       ADVISOR_E2E=1 npm run test:advisor (also the pi harness)
+ * Run:  npm run test:sentinel              (fast, offline)
+ *       SENTINEL_E2E=1 npm run test:sentinel (also the pi harness)
  */
 
 import assert from "node:assert/strict";
@@ -98,11 +98,13 @@ test("nextBackoffMs: base, doubling, capped, guarded", () => {
 	assert.equal(A.nextBackoffMs(0), 15000); // defaults
 });
 
-test("formatAdvisorFooterText: labels reviewing vs idle, always shows cost", () => {
-	assert.equal(A.formatAdvisorFooterText(false, 0), "Advisor: $0.00");
-	assert.equal(A.formatAdvisorFooterText(false, 0.02), "Advisor: $0.02");
-	assert.equal(A.formatAdvisorFooterText(true, 0.02), "Advisor (reviewing): $0.02");
-	assert.equal(A.formatAdvisorFooterText(true, 1.5), "Advisor (reviewing): $1.50");
+test("formatSentinelFooterText: Sentinel is default and Advisor work is visible", () => {
+	assert.equal(A.formatSentinelFooterText(false, 0), "Sentinel: $0.00");
+	assert.equal(A.formatSentinelFooterText(true, 0.02), "Sentinel (reviewing): $0.02");
+	assert.equal(A.formatSentinelFooterText(false, 1.5), "Sentinel: $1.50");
+	assert.equal(A.formatSentinelFooterText(false, 0.02, "advisor_running", 0.5), "Sentinel → Advisor: $0.52");
+	assert.equal(A.formatSentinelFooterText(false, 0.02, "escalation_pending", 0.5), "Sentinel (Advisor queued): $0.52");
+	assert.equal(A.formatSentinelFooterText(false, 0.02, "delivery_pending", 0.5), "Sentinel (Advisor ready): $0.52");
 });
 
 test("isTerminalTurn: terminal iff the assistant message made no tool calls", () => {
@@ -142,36 +144,36 @@ test("formatReconfirmPreamble: empty when nothing held, else lists held notes", 
 		{ note: "races on shared map", severity: "blocker" },
 		{ note: "missing await", severity: "concern" },
 	]);
-	assert.match(p, /Held advisories — reconfirm/);
+	assert.match(p, /Held sentinel notes — reconfirm/);
 	assert.match(p, /call `advise` again/);
 	assert.match(p, /- \[BLOCKER\] races on shared map/);
 	assert.match(p, /- \[CONCERN\] missing await/);
 	assert.match(p, /\n---\n/); // separates preamble from the session update below
 });
 
-test("parseAdvisorTestArgs: valid severities + multiword note", () => {
-	assert.deepEqual(A.parseAdvisorTestArgs("test nit be tidy"), { severity: "nit", note: "be tidy" });
-	assert.deepEqual(A.parseAdvisorTestArgs("test  concern   wrong path here"), {
+test("parseSentinelTestArgs: valid severities + multiword note", () => {
+	assert.deepEqual(A.parseSentinelTestArgs("test nit be tidy"), { severity: "nit", note: "be tidy" });
+	assert.deepEqual(A.parseSentinelTestArgs("test  concern   wrong path here"), {
 		severity: "concern",
 		note: "wrong path here",
 	});
-	assert.deepEqual(A.parseAdvisorTestArgs("test BLOCKER STOP NOW"), { severity: "blocker", note: "STOP NOW" });
+	assert.deepEqual(A.parseSentinelTestArgs("test BLOCKER STOP NOW"), { severity: "blocker", note: "STOP NOW" });
 });
 
-test("parseAdvisorTestArgs: rejects bad input", () => {
-	assert.equal(A.parseAdvisorTestArgs("test"), null);
-	assert.equal(A.parseAdvisorTestArgs("test nit"), null); // no note
-	assert.equal(A.parseAdvisorTestArgs("test bogus hi"), null); // bad severity
-	assert.equal(A.parseAdvisorTestArgs("status"), null);
+test("parseSentinelTestArgs: rejects bad input", () => {
+	assert.equal(A.parseSentinelTestArgs("test"), null);
+	assert.equal(A.parseSentinelTestArgs("test nit"), null); // no note
+	assert.equal(A.parseSentinelTestArgs("test bogus hi"), null); // bad severity
+	assert.equal(A.parseSentinelTestArgs("status"), null);
 });
 
-test("appendPrimaryAdvisorPrompt: appends the protocol once and is idempotent", () => {
-	const once = A.appendPrimaryAdvisorPrompt("You are the coding agent.");
+test("appendPrimarySentinelPrompt: appends the protocol once and is idempotent", () => {
+	const once = A.appendPrimarySentinelPrompt("You are the coding agent.");
 	assert.match(once, /^You are the coding agent\.\n\n/);
-	assert.match(once, /<advisor-protocol>/);
-	assert.match(once, /<\/advisor-protocol>/);
-	assert.equal(A.appendPrimaryAdvisorPrompt(once), once);
-	assert.equal(A.appendPrimaryAdvisorPrompt(""), A.PRIMARY_ADVISOR_PROTOCOL);
+	assert.match(once, /<sentinel-protocol>/);
+	assert.match(once, /<\/sentinel-protocol>/);
+	assert.equal(A.appendPrimarySentinelPrompt(once), once);
+	assert.equal(A.appendPrimarySentinelPrompt(""), A.PRIMARY_SENTINEL_PROTOCOL);
 });
 
 test("formatAdvisoryContent: wraps with severity + guidance, escapes XML", () => {
@@ -708,7 +710,7 @@ test("seed: recent users are current plus two completed requests, labeled as imp
 			{ texts: ["third", "steer"], prior: false },
 		],
 	);
-	const built = A.buildAdvisorSeed({
+	const built = A.buildSentinelSeed({
 		entries: [{ type: "message", message: { role: "user", content: "do it" } }],
 		rollingAdvice: [{ note: "watch the lock", severity: "concern", disposition: "delivered" }],
 	});
@@ -769,26 +771,26 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.match(trajectory, /#### User bash/);
 	assert.ok(!trajectory.includes("stale think 0"), "older turns outside the tail are dropped");
 	assert.ok(!trajectory.includes("old request"), "user text stays in the user-request section");
-	const seeded = A.buildAdvisorSeed({ entries });
+	const seeded = A.buildSentinelSeed({ entries });
 	assert.match(seeded, /## Recent trajectory/);
 	assert.match(seeded, /User → implementing agent/);
 });
 
-test("compact hook reseeds and keeps no prior advisor deltas", async () => {
-	const result = await A.advisorCompactResult(
+test("compact hook reseeds and keeps no prior sentinel deltas", async () => {
+	const result = await A.sentinelCompactResult(
 		{ preparation: { tokensBefore: 12000 } },
 		{
 			entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
 			rollingAdvice: () => [],
 		},
 	);
-	assert.equal(result.compaction.firstKeptEntryId, A.ADVISOR_RESEED_ENTRY_ID);
+	assert.equal(result.compaction.firstKeptEntryId, A.SENTINEL_RESEED_ENTRY_ID);
 	assert.equal(result.compaction.tokensBefore, 12000);
 	assert.match(result.compaction.summary, /ship it/);
 });
 
 test("compact hook includes recent trajectory in the reseed", async () => {
-	const result = await A.advisorCompactResult(
+	const result = await A.sentinelCompactResult(
 		{ preparation: { tokensBefore: 8000 } },
 		{
 			entries: () => [
@@ -816,7 +818,7 @@ test("compact hook keeps the reseed and stores an xAI item when compact succeeds
 		text: async () => "",
 	});
 	try {
-		const result = await A.advisorCompactResult(
+		const result = await A.sentinelCompactResult(
 			{
 				preparation: {
 					tokensBefore: 9000,
@@ -834,7 +836,7 @@ test("compact hook keeps the reseed and stores an xAI item when compact succeeds
 				modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k" }) },
 			},
 		);
-		assert.equal(result.compaction.firstKeptEntryId, A.ADVISOR_RESEED_ENTRY_ID);
+		assert.equal(result.compaction.firstKeptEntryId, A.SENTINEL_RESEED_ENTRY_ID);
 		assert.match(result.compaction.summary, /ship it/);
 		assert.ok(!result.compaction.summary.includes("[xAI Server-Side Compaction"));
 		assert.deepEqual(result.compaction.details.xaiCompaction, {
@@ -848,7 +850,7 @@ test("compact hook keeps the reseed and stores an xAI item when compact succeeds
 });
 
 test("compact hook omits the parent fold from the reseed summary", async () => {
-	const result = await A.advisorCompactResult(
+	const result = await A.sentinelCompactResult(
 		{ preparation: { tokensBefore: 1000 } },
 		{
 			entries: () => [
@@ -901,7 +903,7 @@ test("parent memory packet sits after the compaction summary and is idempotent",
 	assert.ok(packet);
 	assert.match(packet.content[0].text, /Do not reimplement auth/);
 	assert.match(packet.content[0].text, /memory_source/);
-	assert.match(packet.content[0].text, /not this advisor conversation/);
+	assert.match(packet.content[0].text, /not this sentinel conversation/);
 	assert.ok(!packet.content[0].text.includes("this session's current working memory"));
 
 	const first = A.insertParentMemoryAfterCompaction(
@@ -919,14 +921,14 @@ test("parent memory packet sits after the compaction summary and is idempotent",
 	assert.equal(A.insertParentMemoryAfterCompaction([{ role: "user", content: "no compact yet" }], packet), undefined);
 });
 
-test("advisor parent-memory hook does not register the OM pipeline", () => {
+test("sentinel parent-memory hook does not register the OM pipeline", () => {
 	const events = [];
 	const pi = {
 		on(event) {
 			events.push(event);
 		},
 	};
-	A.registerAdvisorParentMemoryPacket(pi, { getBranch: () => [] });
+	A.registerSentinelParentMemoryPacket(pi, { getBranch: () => [] });
 	assert.deepEqual(events, ["context"]);
 });
 
@@ -946,7 +948,7 @@ test("runtime: a thrown first prompt keeps the seed for the retry", async () => 
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(
+	const rt = new A.SentinelRuntime(
 		agent,
 		new A.AdviseTool(() => false),
 		0,
@@ -963,8 +965,12 @@ test("runtime: a thrown first prompt keeps the seed for the retry", async () => 
 	rt.dispose();
 });
 
-test("default advisor prompt names primary-bound recall tools", () => {
-	const agentDir = mkdtempSync(join(tmpdir(), "advisor-prompt-"));
+test("Sentinel uses one fixed inference profile", () => {
+	assert.equal(A.SENTINEL_MODEL_PROFILE, "sentinel");
+});
+
+test("default sentinel prompt names primary-bound recall tools", () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "sentinel-prompt-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
@@ -973,6 +979,9 @@ test("default advisor prompt names primary-bound recall tools", () => {
 		assert.match(prompt, /session_search/);
 		assert.match(prompt, /primary implementing-agent transcript/);
 		assert.match(prompt, /call:<id>/);
+		assert.match(prompt, /You are Sentinel/);
+		assert.match(prompt, /Call `escalate` instead/);
+		assert.match(prompt, /Generic uncertainty.*do not escalate/);
 	} finally {
 		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previous;
@@ -1016,7 +1025,7 @@ test("primary-bound memory_source resolves the primary branch, not the caller ct
 	assert.ok(memory);
 	assert.match(memory.description, /primary implementing-agent session/);
 	for (const name of tools.map((t) => t.name)) {
-		assert.ok(A.ADVISOR_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
+		assert.ok(A.SENTINEL_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
 	}
 	const hit = await memory.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
@@ -1029,7 +1038,7 @@ test("primary-bound memory_source resolves the primary branch, not the caller ct
 });
 
 test("primary-bound session_search reads the primary session file, not the caller ctx", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "advisor-recall-"));
+	const dir = mkdtempSync(join(tmpdir(), "sentinel-recall-"));
 	const file = join(dir, "session.jsonl");
 	writeFileSync(
 		file,
@@ -1099,7 +1108,7 @@ test("buildReviewMessages: header turn + one single-block user turn per delta, c
 	assert.ok(msgs[1].content[0].text.includes("echo hi\nls"), "command rides verbatim");
 });
 
-test("formatActiveSessionContext: renders Pi's active context verbatim and excludes prior advisories", () => {
+test("formatActiveSessionContext: renders Pi's active context verbatim and excludes prior sentinel notes", () => {
 	const bigResult = "RESULT-LINE\n".repeat(3000);
 	const entries = [
 		{
@@ -1186,7 +1195,7 @@ test("formatActiveSessionContext: renders Pi's active context verbatim and exclu
 	assert.match(context, /3000 lines/);
 	assert.ok(!context.includes(bigResult), "active bash output is a receipt, not a body");
 	assert.match(context, /#### Branch summary\n\nThe alternate branch rejected a global lock\./);
-	assert.doesNotMatch(context, /EXCLUDED-BASH-OUTPUT/, "!! bash output stays outside advisor context");
+	assert.doesNotMatch(context, /EXCLUDED-BASH-OUTPUT/, "!! bash output stays outside sentinel context");
 	assert.doesNotMatch(context, /OLD-ADVISORY-MUST-NOT-REPLAY/);
 });
 
@@ -1200,39 +1209,39 @@ test("buildReviewMessages: re-prime context precedes but is distinct from the ne
 	assert.equal(messages[2].content[0].text, "LATEST-ACTIVITY");
 });
 
-test("the global deep profile and trusted project WATCHDOG have separate authority", async () => {
-	const root = mkdtempSync(join(tmpdir(), "advisor-trust-"));
+test("the global Sentinel profile and trusted project WATCHDOG have separate authority", async () => {
+	const root = mkdtempSync(join(tmpdir(), "sentinel-trust-"));
 	const agentDir = join(root, "agent");
 	const cwd = join(root, "project");
 	mkdirSync(join(agentDir, "system-prompts"), { recursive: true });
 	mkdirSync(join(cwd, ".pi"), { recursive: true });
 	writeFileSync(
 		join(agentDir, "model-profiles.json"),
-		JSON.stringify({ profiles: { deep: { model: "global-provider/global-model", thinking: "low" } } }),
+		JSON.stringify({ profiles: { sentinel: { model: "global-provider/global-model", thinking: "low" } } }),
 	);
 	writeFileSync(
 		join(cwd, ".pi", "model-profiles.json"),
-		JSON.stringify({ profiles: { deep: { model: "project-provider/project-model", thinking: "high" } } }),
+		JSON.stringify({ profiles: { sentinel: { model: "project-provider/project-model", thinking: "high" } } }),
 	);
-	writeFileSync(join(agentDir, "system-prompts", "advisor.md"), "GLOBAL-ADVISOR-PROMPT");
+	writeFileSync(join(agentDir, "system-prompts", "sentinel.md"), "GLOBAL-SENTINEL-PROMPT");
 	writeFileSync(join(cwd, "WATCHDOG.md"), "PROJECT-WATCHDOG-GUIDANCE");
 
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const primaryModel = { provider: "global-provider", id: "global-model" };
-		const resolved = P.resolveModelProfile("deep", {
+		const resolved = P.resolveModelProfile("sentinel", {
 			find: (provider, modelId) =>
 				provider === primaryModel.provider && modelId === primaryModel.id ? primaryModel : undefined,
 		});
 		assert.equal(resolved.model, primaryModel, "a profile may intentionally select the primary model");
 		assert.equal(resolved.thinking, "low");
 		const untrustedPrompt = A.loadSystemPrompt(cwd, false);
-		assert.match(untrustedPrompt, /^GLOBAL-ADVISOR-PROMPT/);
+		assert.match(untrustedPrompt, /^GLOBAL-SENTINEL-PROMPT/);
 		assert.doesNotMatch(untrustedPrompt, /<ledger-workbench>/);
 		assert.doesNotMatch(untrustedPrompt, /PROJECT-WATCHDOG-GUIDANCE/);
 		const trustedPrompt = A.loadSystemPrompt(cwd, true);
-		assert.match(trustedPrompt, /^GLOBAL-ADVISOR-PROMPT/);
+		assert.match(trustedPrompt, /^GLOBAL-SENTINEL-PROMPT/);
 		assert.match(trustedPrompt, /PROJECT-WATCHDOG-GUIDANCE/);
 		assert.doesNotMatch(trustedPrompt, /<ledger-workbench>/);
 	} finally {
@@ -1328,9 +1337,9 @@ test("AdviseTool: markDelivered records dedup at the real delivery point", async
 // 1b. runtime mechanics (offline, stub agent) — always-hold + catch-up block
 //
 // The hold/reconfirm/deliver flow needs the real runtime + a controllable
-// advisor, which a live E2E can't make deterministic (the /advisor test hook
+// sentinel, which a live E2E can't make deterministic (the /sentinel test hook
 // bypasses the runtime entirely). So we drive runTurnBlock with a stub runtime,
-// and the real AdvisorRuntime with a stub Agent.
+// and the real SentinelRuntime with a stub Agent.
 // ===========================================================================
 
 // --- runTurnBlock orchestration, against a stub runtime ---
@@ -1402,7 +1411,7 @@ test("runTurnBlock: terminal blocks unconditionally (even with nothing held)", a
 	const rt = stubRuntime({ held: [], settleResult: "settled" });
 	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt }));
 	assert.equal(rt.started, true, "terminal catch-up must start drain before waiting");
-	assert.equal(rt.waited, true, "terminal must block until the advisor settles");
+	assert.equal(rt.waited, true, "terminal must block until the sentinel settles");
 	assert.equal(n, 0);
 });
 
@@ -1494,7 +1503,7 @@ test("runTurnBlock: aborted (user Escape) → keeps held + streak, no delivery",
 });
 
 test("runTurnBlock: non-terminal + failed reconfirm → keeps held unconfirmed, backs off", async () => {
-	// A failed reconfirm (advisor errored out) must NOT deliver held notes as if
+	// A failed reconfirm (sentinel errored out) must NOT deliver held notes as if
 	// confirmed — same handling as a timeout.
 	const delivered = [];
 	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "failed" });
@@ -1537,8 +1546,8 @@ test("runTurnBlock: terminal + timeout → only concerns/blockers ship best-effo
 	);
 });
 
-// --- real AdvisorRuntime + stub Agent: hold → reconfirm → deliver/drop ---
-// onReview(text, {tool, rt, reviewCount}) simulates the advisor's reaction per review.
+// --- real SentinelRuntime + stub Agent: hold → reconfirm → deliver/drop ---
+// onReview(text, {tool, rt, reviewCount}) simulates the sentinel's reaction per review.
 function buildIntegration({ onReview } = {}) {
 	const delivered = [];
 	let rt;
@@ -1553,7 +1562,7 @@ function buildIntegration({ onReview } = {}) {
 	const agent = {
 		state: { messages: [], model: {} },
 		async prompt(input) {
-			// Defer like a real (multi-second, network) advisor review: the hold must
+			// Defer like a real (multi-second, network) sentinel review: the hold must
 			// land AFTER push()/turn_end returns, not synchronously inside it.
 			await new Promise((r) => setTimeout(r, 0));
 			reviewCount++;
@@ -1592,7 +1601,7 @@ function buildIntegration({ onReview } = {}) {
 		if (state.turn === "ended-terminal") deliverHeld(rt.takeAllAdvice());
 		else if (state.turn === "ended-nonterminal") flushNits();
 	};
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, onSettled);
+	rt = new A.SentinelRuntime(agent, tool, 0, undefined, onSettled);
 	const block = (terminal, opts = {}) => {
 		state.turn = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!terminal) flushNits();
@@ -1631,7 +1640,7 @@ test("integration: a queued nit enters terminal reconfirmation and surviving adv
 		state: { messages: [], model: {} },
 		async prompt(input) {
 			const text = input.map((m) => m.content.map((b) => b.text ?? "").join("\n")).join("\n\n");
-			assert.match(text, /Held advisories/);
+			assert.match(text, /Held sentinel notes/);
 			assert.match(text, /queued race/);
 			await tool.execute("reconfirm", { note: "queued race", severity: "nit" });
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
@@ -1639,7 +1648,7 @@ test("integration: a queued nit enters terminal reconfirmation and surviving adv
 		abort() {},
 		reset() {},
 	};
-	rt = new A.AdvisorRuntime(agent, tool, 0);
+	rt = new A.SentinelRuntime(agent, tool, 0);
 	// Exact production boundary: the callback has queued a nit; terminal turn_end
 	// leaves it in the shared queue before pushing/reviewing the final delta.
 	rt.enqueueAdvice("queued race", "nit");
@@ -1672,7 +1681,7 @@ test("integration: terminal timeout requeue does not fake reconfirmation when la
 		rt.enqueueAdvice(note, severity);
 		return false;
 	});
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, (outcome) => {
+	rt = new A.SentinelRuntime(agent, tool, 0, undefined, (outcome) => {
 		if (outcome === "ok") delivered.push(...rt.takeAllAdvice());
 	});
 	rt.enqueueAdvice("stale nit", "nit");
@@ -1710,7 +1719,7 @@ test("integration: terminal timeout delivers a nit that the late review genuinel
 		rt.enqueueAdvice(note, severity);
 		return false;
 	});
-	rt = new A.AdvisorRuntime(agent, tool, 0, undefined, (outcome) => {
+	rt = new A.SentinelRuntime(agent, tool, 0, undefined, (outcome) => {
 		if (outcome === "ok") delivered.push(...rt.takeAllAdvice());
 	});
 	rt.enqueueAdvice("still valid", "nit");
@@ -1736,7 +1745,7 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 				// review of turn 1, emitted while the terminal turn 2 is already queued
 				await tool.execute("n1", { note: "rename var", severity: "nit" });
 			} else if (reviewCount === 2) {
-				assert.match(text, /Held advisories/, "the held nit rides the final turn's reconfirm preamble");
+				assert.match(text, /Held sentinel notes/, "the held nit rides the final turn's reconfirm preamble");
 				assert.match(text, /\[NIT\] rename var/);
 				await tool.execute("n2", { note: "rename var", severity: "nit" }); // still applies
 			}
@@ -1776,7 +1785,7 @@ test("integration: terminal turn — a nit from the final turn's OWN review land
 			if (reviewCount === 1) await tool.execute("n1", { note: "rename var", severity: "nit" });
 		},
 	});
-	h.rt.push("final turn"); // advisor idle → the review includes the final turn (current, no reconfirm needed)
+	h.rt.push("final turn"); // sentinel idle → the review includes the final turn (current, no reconfirm needed)
 	assert.equal(await h.block(true), 0);
 	assert.equal(h.getReviewCount(), 1, "no extra reconfirm review — the nit skips the prune and waits for settle");
 	assert.deepEqual(h.delivered, [{ note: "rename var", severity: "nit", kind: "held" }]);
@@ -1818,7 +1827,7 @@ test("integration: blocker held on turn 1, survives reconfirm, delivered after t
 			if (reviewCount === 1) {
 				await tool.execute("a1", { note: "off-by-one", severity: "blocker" });
 			} else if (reviewCount === 2) {
-				assert.match(text, /Held advisories/, "reconfirm preamble rides review 2");
+				assert.match(text, /Held sentinel notes/, "reconfirm preamble rides review 2");
 				await tool.execute("a2", { note: "off-by-one", severity: "blocker" }); // still applies
 			}
 		},
@@ -1839,7 +1848,7 @@ test("integration: blocker held on turn 1, survives reconfirm, delivered after t
 });
 
 test("integration: a blocker first raised ON the terminal turn is caught + delivered (Q1)", async () => {
-	// The advisor flags for the first time while the terminal turn is blocked; the
+	// The sentinel flags for the first time while the terminal turn is blocked; the
 	// agent did no follow-up (it's stopping), so it's delivered without a reconfirm.
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
@@ -1903,7 +1912,7 @@ test("integration: held blocker is dropped when the reconfirm review recants", a
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "off-by-one", severity: "blocker" });
-			// review 2: agent fixed it → advisor stays silent → held note evaporates
+			// review 2: agent fixed it → sentinel stays silent → held note evaporates
 		},
 	});
 	h.rt.push("turn 1");
@@ -1924,7 +1933,7 @@ test("integration (regression): a held note survives push() and blocks + deliver
 		onReview: async (text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "races on cache", severity: "blocker" });
 			else if (reviewCount === 2) {
-				assert.match(text, /Held advisories/);
+				assert.match(text, /Held sentinel notes/);
 				await tool.execute("a2", { note: "races on cache", severity: "blocker" }); // still applies
 			}
 		},
@@ -1976,7 +1985,7 @@ test("runtime.waitUntilSettled: settles on drain, times out, and aborts", async 
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => true), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => true), 0);
 	rt.push("hang"); // drain starts, prompt hangs → not idle
 	assert.equal(await rt.waitUntilSettled(20), "timeout");
 	const ac = new AbortController();
@@ -1998,7 +2007,7 @@ test("runtime: low-signal pushes stay pending and do not start a review", async 
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("read 1", { lowSignal: true });
 	rt.push("read 2", { lowSignal: true });
 	rt.push("read 3", { lowSignal: true });
@@ -2020,7 +2029,7 @@ test("runtime: a high-signal delta drains the deferred queue", async () => {
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("read 1", { lowSignal: true });
 	rt.push("read 2", { lowSignal: true });
 	rt.push("edit landed");
@@ -2043,13 +2052,13 @@ test("runtime: held high-priority or terminal forces drain of low-signal pending
 		abort() {},
 		reset() {},
 	};
-	const held = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const held = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	held.enqueueAdvice("data race", "concern");
 	held.push("read", { lowSignal: true });
 	assert.equal(await held.waitUntilSettled(2000), "settled");
 	assert.equal(reviews.length, 1, "held concern starts drain");
 
-	const terminal = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const terminal = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	terminal.push("read", { lowSignal: true, terminal: true });
 	assert.equal(await terminal.waitUntilSettled(2000), "settled");
 	assert.equal(reviews.length, 2, "terminal starts drain");
@@ -2066,14 +2075,14 @@ test("runtime: backlog and deferral timer drain low-signal pending", async () =>
 		abort() {},
 		reset() {},
 	};
-	const backlog = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
-	for (let i = 0; i < A.ADVISOR_DRAIN_BACKLOG; i++) backlog.push(`read ${i}`, { lowSignal: true });
+	const backlog = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
+	for (let i = 0; i < A.SENTINEL_DRAIN_BACKLOG; i++) backlog.push(`read ${i}`, { lowSignal: true });
 	assert.equal(reviews.length, 0);
 	backlog.push("read last", { lowSignal: true });
 	assert.equal(await backlog.waitUntilSettled(2000), "settled");
 	assert.equal(reviews.length, 1);
 
-	const timed = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const timed = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	timed.deferMs = 20;
 	timed.push("read later", { lowSignal: true });
 	assert.equal(reviews.length, 1);
@@ -2099,7 +2108,7 @@ test("runtime: onSettled fires after a review even if more low-signal work is st
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0, undefined, (outcome) =>
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0, undefined, (outcome) =>
 		settled.push(outcome),
 	);
 	rt.push("edit landed");
@@ -2124,7 +2133,7 @@ test("runtime.waitUntilSettled: a dropped (3x-failed) review resolves 'failed', 
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("data race", "blocker"); // pre-existing held note
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
@@ -2145,7 +2154,7 @@ test("runtime.waitUntilSettled: a provider error (stopReason, no throw) resolves
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
@@ -2168,9 +2177,9 @@ test("runtime.reprime: stays passive and supplies active context to exactly the 
 			this.state.messages = [];
 		},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.reprime("PRIOR-ACTIVE-CONTEXT");
-	assert.equal(resets, 1, "re-prime resets stale private advisor history");
+	assert.equal(resets, 1, "re-prime resets stale private sentinel history");
 	assert.equal(reviews.length, 0, "re-prime does not review history by itself");
 	assert.equal(rt.idle, true);
 	assert.equal(rt.backlog, 0);
@@ -2186,7 +2195,7 @@ test("runtime.reprime: stays passive and supplies active context to exactly the 
 	assert.doesNotMatch(reviews[1], /PRIOR-ACTIVE-CONTEXT/, "successful first review consumes the staged context");
 });
 
-test("runtime.reprime: an in-flight history rewrite clears the old advisor transcript after abort unwinds", async () => {
+test("runtime.reprime: an in-flight history rewrite clears the old sentinel transcript after abort unwinds", async () => {
 	let releaseFirst;
 	let processing = false;
 	let promptCount = 0;
@@ -2211,7 +2220,7 @@ test("runtime.reprime: an in-flight history rewrite clears the old advisor trans
 			assert.deepEqual(
 				this.state.messages,
 				[],
-				"stale and aborted advisor messages were cleared before the new review",
+				"stale and aborted sentinel messages were cleared before the new review",
 			);
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
 		},
@@ -2223,7 +2232,7 @@ test("runtime.reprime: an in-flight history rewrite clears the old advisor trans
 			this.state.messages = [];
 		},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("OLD-REVIEW");
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	rt.reprime("NEW-ACTIVE-CONTEXT");
@@ -2244,7 +2253,7 @@ test("runtime.waitUntilSettled: reset() cancels a pending waiter as 'aborted' im
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => true), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => true), 0);
 	rt.push("hang");
 	const p = rt.waitUntilSettled(5000); // would hang on the in-flight prompt
 	rt.reset(); // must resolve the waiter now, not wait for the prompt/timeout
@@ -2267,7 +2276,7 @@ test("runtime.waitUntilSettled: a truncated review retries 3 times then fails, w
 			this.state.messages = [];
 		},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
@@ -2292,7 +2301,7 @@ test("runtime.waitUntilSettled: a later successful review still prunes recanted 
 		abort() {},
 		reset() {},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
@@ -2324,7 +2333,7 @@ test("runtime: a concern/blocker held by a DISCARDED overflowed attempt is rolle
 			this.state.messages = [];
 		},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(attempts, 2, "overflow then a successful fresh replay");
@@ -2351,7 +2360,7 @@ test("runtime: overflow rollback restores pre-existing held severity by value", 
 			this.state.messages = [];
 		},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("shared mutation", "concern");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
@@ -2381,7 +2390,7 @@ test("runtime: attempt-only queued advice is rolled back after reactive overflow
 			this.state.messages = [];
 		},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.deepEqual(rt.takeAllAdvice(), []);
@@ -2406,7 +2415,7 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 			this.state.messages = [];
 		},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("already delivered", "nit");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
@@ -2415,7 +2424,7 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 
 test("runtime: one queue dedupes, escalates, splits nits, and resets", () => {
 	const agent = { state: { messages: [], model: {} }, abort() {}, reset() {} };
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("shared mutation", "nit");
 	rt.enqueueAdvice("shared   mutation", "blocker");
 	rt.enqueueAdvice("small cleanup", "nit");
@@ -2441,7 +2450,7 @@ test("runtime: the reactive rollback keeps PRE-EXISTING held notes, dropping onl
 			this.state.messages = [];
 		},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("real prior blocker", "blocker"); // pre-existing, captured in the pre-batch snapshot
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
@@ -2471,7 +2480,7 @@ test("runtime: does not privately reset when context is a large fraction of the 
 			this.state.messages = [];
 		},
 	};
-	const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(resets, 0);
@@ -2479,7 +2488,7 @@ test("runtime: does not privately reset when context is a large fraction of the 
 });
 
 test("runtime: bound session records each prompt including a self-compaction replay", async () => {
-	const agentDir = mkdtempSync(join(tmpdir(), "advisor-usage-"));
+	const agentDir = mkdtempSync(join(tmpdir(), "sentinel-usage-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
@@ -2505,7 +2514,7 @@ test("runtime: bound session records each prompt including a self-compaction rep
 				this.state.messages = [];
 			},
 		};
-		const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+		const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 		rt.setUsageSession("session-usage");
 		rt.push("secret primary delta");
 		assert.equal(await rt.waitUntilSettled(2000), "settled");
@@ -2529,7 +2538,7 @@ test("runtime: bound session records each prompt including a self-compaction rep
 });
 
 test("runtime: unbound session writes no usage records", async () => {
-	const agentDir = mkdtempSync(join(tmpdir(), "advisor-usage-unbound-"));
+	const agentDir = mkdtempSync(join(tmpdir(), "sentinel-usage-unbound-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
@@ -2545,7 +2554,7 @@ test("runtime: unbound session writes no usage records", async () => {
 			abort() {},
 			reset() {},
 		};
-		const rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+		const rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 		rt.push("turn");
 		assert.equal(await rt.waitUntilSettled(2000), "settled");
 		assert.equal(existsSync(join(agentDir, "sidecar-usage")), false);
@@ -2570,7 +2579,7 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 		abort() {},
 		reset() {},
 	};
-	rt = new A.AdvisorRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt = new A.SentinelRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
 	await rt.waitUntilSettled(2000);
 	assert.equal(during, true, "advice accepted during a live review");
@@ -2578,7 +2587,7 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 });
 
 test("runtime queue: re-raising advice at higher severity escalates it", () => {
-	const rt = new A.AdvisorRuntime(
+	const rt = new A.SentinelRuntime(
 		{ state: { messages: [], model: {} }, async prompt() {}, abort() {}, reset() {} },
 		new A.AdviseTool(() => false),
 		0,
@@ -2598,16 +2607,16 @@ test("runtime queue: re-raising advice at higher severity escalates it", () => {
 // 2. real loader
 // ===========================================================================
 
-async function loadAdvisorExtension() {
+async function loadSentinelExtension() {
 	const runtime = createExtensionRuntime();
 	const res = await loadExtensions(["index.ts"], SOURCE_DIR, createEventBus(), runtime);
 	assert.deepEqual(res.errors, [], "extension should load without errors");
 	return res.extensions[0];
 }
 
-test("extension loads + registers /advisor command, advisory renderer, and branch lifecycle hook", async () => {
-	const ext = await loadAdvisorExtension();
-	assert.ok(ext.commands.has("advisor"), "registers /advisor");
+test("extension loads + registers /sentinel command, advisory renderer, and branch lifecycle hook", async () => {
+	const ext = await loadSentinelExtension();
+	assert.ok(ext.commands.has("sentinel"), "registers /sentinel");
 	assert.ok(ext.messageRenderers.has("advisory"), "registers advisory renderer");
 	assert.ok(ext.handlers.has("session_tree"), "re-primes when the active branch changes");
 	assert.ok(ext.handlers.has("before_agent_start"), "injects the primary-agent protocol");
@@ -2675,7 +2684,7 @@ test("agent-core ordering: a steer queued during streaming is inserted after tha
 });
 
 // Drive real extension handlers for the hidden no-model command seam. Production
-// callbacks use AdvisorRuntime's shared queue (covered by integration tests).
+// callbacks use SentinelRuntime's shared queue (covered by integration tests).
 async function lifecycleHarness() {
 	const sent = [];
 	const runtime = createExtensionRuntime();
@@ -2690,21 +2699,21 @@ async function lifecycleHarness() {
 	return {
 		sent,
 		h,
-		cmd: ext.commands.get("advisor").handler,
+		cmd: ext.commands.get("sentinel").handler,
 		uiCtx: { ui: { notify: () => {} } },
 		turnCtx: { model: undefined, cwd: HERE },
 	};
 }
 
 test("lifecycle: before_agent_start appends the primary protocol only while enabled", async () => {
-	const agentDir = mkdtempSync(join(tmpdir(), "advisor-prompt-"));
+	const agentDir = mkdtempSync(join(tmpdir(), "sentinel-prompt-"));
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const x = await lifecycleHarness();
 		const base = "You are the coding agent.";
 		const onResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
-		assert.deepEqual(onResult, { systemPrompt: A.appendPrimaryAdvisorPrompt(base) });
+		assert.deepEqual(onResult, { systemPrompt: A.appendPrimarySentinelPrompt(base) });
 
 		await x.cmd("off", x.uiCtx);
 		const offResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
@@ -2715,7 +2724,7 @@ test("lifecycle: before_agent_start appends the primary protocol only while enab
 	}
 });
 
-test("lifecycle: primary compact leaves the advisor alone; identity change does not dump primary context", async () => {
+test("lifecycle: primary compact leaves the sentinel alone; identity change does not dump primary context", async () => {
 	const x = await lifecycleHarness();
 	let builds = 0;
 	const ctx = {
@@ -2732,12 +2741,12 @@ test("lifecycle: primary compact leaves the advisor alone; identity change does 
 	}
 	x.h("session_compact")({}, ctx);
 	x.h("session_tree")({}, ctx);
-	assert.equal(builds, 0, "advisor no longer reprimes from Pi's active context");
+	assert.equal(builds, 0, "sentinel no longer reprimes from Pi's active context");
 	assert.deepEqual(x.sent, [], "identity change never emits advice by itself");
 });
 
 test("lifecycle: a direct late nit after terminal turn_end restates", async () => {
-	assert.ok(!process.env.ADVISOR_NO_REVIEW, "needs the real turn_end handler");
+	assert.ok(!process.env.SENTINEL_NO_REVIEW, "needs the real turn_end handler");
 	const x = await lifecycleHarness();
 	await x.h("turn_end")(
 		{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
@@ -2750,7 +2759,7 @@ test("lifecycle: a direct late nit after terminal turn_end restates", async () =
 });
 
 test("lifecycle: a direct late nit after non-terminal turn_end does not restate", async () => {
-	assert.ok(!process.env.ADVISOR_NO_REVIEW, "needs the real turn_end handler");
+	assert.ok(!process.env.SENTINEL_NO_REVIEW, "needs the real turn_end handler");
 	const x = await lifecycleHarness();
 	await x.h("turn_end")(
 		{ message: { role: "assistant", content: [{ type: "text", text: "working" }, { type: "toolCall" }] } },
@@ -2767,7 +2776,7 @@ test("lifecycle: a direct late nit after non-terminal turn_end does not restate"
 // ===========================================================================
 
 async function renderAdvisory(notes) {
-	const ext = await loadAdvisorExtension();
+	const ext = await loadSentinelExtension();
 	const renderer = ext.messageRenderers.get("advisory");
 	const message = {
 		role: "custom",
@@ -2784,7 +2793,7 @@ async function renderAdvisory(notes) {
 
 test("render: advisory card shows severity tag + note text", async () => {
 	const text = await renderAdvisory([{ note: "this divides by zero on empty input", severity: "blocker" }]);
-	assert.match(text, /advisor/i);
+	assert.match(text, /sentinel/i);
 	assert.match(text, /BLOCKER/);
 	assert.match(text, /divides by zero/);
 });
@@ -2801,8 +2810,8 @@ test("render: advisory card has a left border on both the heading and body lines
 	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
 	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
 	assert.ok(
-		lines.some((line) => /Advisor/.test(line) && /CONCERN/.test(line)),
-		"heading line carries both the Advisor label and severity tag",
+		lines.some((line) => /Sentinel/.test(line) && /CONCERN/.test(line)),
+		"heading line carries both the Sentinel label and severity tag",
 	);
 });
 
@@ -2826,8 +2835,8 @@ test("render: multiple advisory notes in one message render as separate bordered
 // ===========================================================================
 // 4. pi harness (E2E) — nit delivers immediately + triggers a turn
 //
-// Only the nit path is live-testable: the /advisor test hook runs under
-// ADVISOR_NO_REVIEW (no advisor model), so high-severity notes have no runtime
+// Only the nit path is live-testable: the /sentinel test hook runs under
+// SENTINEL_NO_REVIEW (no sentinel model), so high-severity notes have no runtime
 // to hold them and no turn_end block to deliver them. The hold → reconfirm →
 // catch-up-block → deliver flow is covered deterministically by the offline
 // runtime tests above.
@@ -2835,7 +2844,7 @@ test("render: multiple advisory notes in one message render as separate bordered
 
 class RpcPi {
 	constructor() {
-		const cwd = mkdtempSync(join(tmpdir(), "advisor-e2e-"));
+		const cwd = mkdtempSync(join(tmpdir(), "sentinel-e2e-"));
 		execSync("git init -q", { cwd });
 		writeFileSync(join(cwd, "README.md"), "# test\n");
 		this.cwd = cwd;
@@ -2845,7 +2854,7 @@ class RpcPi {
 		this.proc = spawn(
 			PI_BIN,
 			["--mode", "rpc", "--model", "anthropic/claude-haiku-4-5", "--session-dir", join(cwd, ".sessions")],
-			{ cwd, env: { ...process.env, ADVISOR_NO_REVIEW: "1" } },
+			{ cwd, env: { ...process.env, SENTINEL_NO_REVIEW: "1" } },
 		);
 		this.proc.stderr.on("data", () => {});
 		let buffer = "";
@@ -2907,13 +2916,13 @@ class RpcPi {
 	}
 }
 
-if (process.env.ADVISOR_E2E) {
+if (process.env.SENTINEL_E2E) {
 	test("E2E: a nit is delivered at its turn boundary, triggers a turn, and lands in transcript", async () => {
 		const pi = new RpcPi();
 		try {
 			await pi.sleep(2500);
 			const before = pi.agentStarts;
-			pi.prompt("/advisor test nit NITSENTINEL tidy this later");
+			pi.prompt("/sentinel test nit NITSENTINEL tidy this later");
 			// nits now steer + triggerTurn: an idle agent wakes to act on them.
 			await pi.waitFor(() => pi.agentStarts > before, 30000, "nit-triggered agent_start");
 			await pi.waitFor(() => pi.agentEnds >= 1, 60000, "triggered turn agent_end");
@@ -2926,7 +2935,7 @@ if (process.env.ADVISOR_E2E) {
 		}
 	});
 } else {
-	test("E2E (skipped: set ADVISOR_E2E=1 to run the pi harness)", () => {});
+	test("E2E (skipped: set SENTINEL_E2E=1 to run the pi harness)", () => {});
 }
 
 // ===========================================================================

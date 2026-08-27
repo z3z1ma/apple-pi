@@ -16,14 +16,14 @@ import {
 	resolveEnabledTypeIn,
 } from "../components/subagents/src/agent-types.js";
 import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
-import { resolveAgentAdvisor } from "../components/subagents/src/invocation-config.js";
+import { resolveAgentSentinel } from "../components/subagents/src/invocation-config.js";
 import { resolveAgentProfile } from "../components/subagents/src/model-routing.js";
 import type { AgentConfig, SubagentConfigScope } from "../components/subagents/src/types.js";
 
 import { AUTO_COMPACT_EXTENSION_PATH } from "./auto-compact.js";
 import { CODEX_FAST_EXTENSION_PATH } from "./codex-fast.js";
 import { LEDGER_EXTENSION_PATH } from "./ledger.js";
-import { ADVISOR_EXTENSION_PATH } from "./pi-advisor.js";
+import { SENTINEL_EXTENSION_PATH } from "./pi-sentinel.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "./session-search.js";
 
@@ -47,7 +47,7 @@ export interface AgentRequest {
 	name?: string;
 	profile?: InferenceProfileName;
 	tools?: string[];
-	advisor?: boolean;
+	sentinel?: boolean;
 	systemPrompt?: string;
 	context?: unknown;
 	outputSchema?: Record<string, unknown>;
@@ -57,7 +57,7 @@ export interface ExecWorkerResolution {
 	tools: string[];
 	model?: string;
 	thinking?: string;
-	advisor: boolean;
+	sentinel: boolean;
 	systemPrompt?: string;
 	type?: string;
 }
@@ -87,8 +87,8 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	if (rawArgs.model !== undefined || rawArgs.thinking !== undefined) {
 		throw new Error("agents.run selects inference with profile; raw model/thinking options are not supported");
 	}
-	if (rawArgs.advisor !== undefined && typeof rawArgs.advisor !== "boolean") {
-		throw new Error("agents.run advisor must be a boolean");
+	if (rawArgs.sentinel !== undefined && typeof rawArgs.sentinel !== "boolean") {
+		throw new Error("agents.run sentinel must be a boolean");
 	}
 	const name = typeof rawArgs.name === "string" ? rawArgs.name.trim() : "";
 	const type = typeof rawArgs.type === "string" ? rawArgs.type.trim() : "";
@@ -107,7 +107,7 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 		...(name ? { name } : {}),
 		...(validatedProfile ? { profile: validatedProfile } : {}),
 		...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools as string[] } : {}),
-		...(typeof rawArgs.advisor === "boolean" ? { advisor: rawArgs.advisor } : {}),
+		...(typeof rawArgs.sentinel === "boolean" ? { sentinel: rawArgs.sentinel } : {}),
 		...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
 	};
 	if ("context" in rawArgs) request.context = rawArgs.context;
@@ -151,7 +151,7 @@ export async function resolveExecWorker(
 		if (!request.profile) {
 			return {
 				tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
-				advisor: resolveAgentAdvisor(undefined, request.advisor),
+				sentinel: resolveAgentSentinel(undefined, request.sentinel),
 				...(options.parentModel ? { model: options.parentModel } : {}),
 				...(options.parentThinking ? { thinking: options.parentThinking } : {}),
 				...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
@@ -167,7 +167,7 @@ export async function resolveExecWorker(
 		if (resolved.error) throw new Error(resolved.error);
 		return {
 			tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
-			advisor: resolveAgentAdvisor(undefined, request.advisor),
+			sentinel: resolveAgentSentinel(undefined, request.sentinel),
 			...(resolved.model ? { model: `${resolved.model.provider}/${resolved.model.id}` } : {}),
 			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
 			...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
@@ -198,7 +198,7 @@ export async function resolveExecWorker(
 	return {
 		type: config.name,
 		tools,
-		advisor: resolveAgentAdvisor(config, request.advisor),
+		sentinel: resolveAgentSentinel(config, request.sentinel),
 		...(model ? { model } : {}),
 		...(thinking ? { thinking } : {}),
 		systemPrompt: typedSystemPrompt(config, request.systemPrompt),
@@ -284,7 +284,7 @@ export function agentOperationArgs(rawArgs: Record<string, unknown>): Record<str
 		...(name ? { name } : {}),
 		...(typeof rawArgs.profile === "string" ? { profile: rawArgs.profile } : {}),
 		...(Array.isArray(rawArgs.tools) ? { tools: rawArgs.tools } : {}),
-		...(typeof rawArgs.advisor === "boolean" ? { advisor: rawArgs.advisor } : {}),
+		...(typeof rawArgs.sentinel === "boolean" ? { sentinel: rawArgs.sentinel } : {}),
 		...(typeof rawArgs.systemPrompt === "string" ? { systemPrompt: rawArgs.systemPrompt } : {}),
 		...("context" in rawArgs ? { context: summarizeBound(rawArgs.context) } : {}),
 		...("outputSchema" in rawArgs ? { outputSchema: summarizeBound(rawArgs.outputSchema) } : {}),
@@ -325,7 +325,7 @@ export function buildAgentCliArgs(
 		thinking?: string;
 		contextPath?: string;
 		extensionPath?: string;
-		advisor?: boolean;
+		sentinel?: boolean;
 	},
 ): string[] {
 	const guidance = [
@@ -357,7 +357,7 @@ export function buildAgentCliArgs(
 		"--extension",
 		SESSION_SEARCH_EXTENSION_PATH,
 	];
-	if (options.advisor) args.push("--extension", ADVISOR_EXTENSION_PATH);
+	if (options.sentinel) args.push("--extension", SENTINEL_EXTENSION_PATH);
 	if (options.extensionPath) args.push("--extension", options.extensionPath);
 	if (request.name) args.push("--name", request.name);
 	if (options.model) args.push("--model", options.model);
@@ -369,7 +369,7 @@ export function buildAgentCliArgs(
 
 export function prepareAgentSpawn(
 	request: AgentRequest,
-	options: { tools: readonly string[]; projectTrusted: boolean; model?: string; thinking?: string; advisor?: boolean },
+	options: { tools: readonly string[]; projectTrusted: boolean; model?: string; thinking?: string; sentinel?: boolean },
 ): { args: string[]; cleanup: () => void; env?: Record<string, string> } {
 	const cleanups: Array<() => void> = [];
 	try {
@@ -387,7 +387,7 @@ export function prepareAgentSpawn(
 				projectTrusted: options.projectTrusted,
 				...(options.model ? { model: options.model } : {}),
 				...(options.thinking ? { thinking: options.thinking } : {}),
-				...(options.advisor ? { advisor: true } : {}),
+				...(options.sentinel ? { sentinel: true } : {}),
 				...(context ? { contextPath: context.path } : {}),
 				...(schema ? { extensionPath: WORKER_RETURN_EXTENSION_PATH } : {}),
 			}),

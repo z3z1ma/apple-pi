@@ -14,7 +14,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createParentEscalationTool, type ParentEscalationHandler } from "./escalation.js";
-import type { ManagedAgentToolPolicy } from "./service.js";
+import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import type {
 	AgentConfig,
 	AgentInvocation,
@@ -123,7 +123,7 @@ export interface SpawnOptions {
 	retainUntilSessionEnd?: boolean;
 	isolated?: boolean;
 	inheritContext?: boolean;
-	advisor?: boolean;
+	sentinel?: boolean;
 	thinkingLevel?: ThinkingLevel;
 	isBackground?: boolean;
 	/**
@@ -146,7 +146,7 @@ export interface SpawnOptions {
 	/** Called at the end of each agentic turn with the cumulative count. */
 	onTurnEnd?: (turnCount: number) => void;
 	/** Called once per assistant message_end with that message's usage delta. */
-	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 	/** Called when the session successfully compacts. */
 	onCompaction?: (info: CompactionInfo) => void;
 	/** Nesting depth: top-level subagent = 1. */
@@ -173,7 +173,7 @@ interface ResumeOptions {
 	/** Called on tool start/end with activity info (for streaming progress to UI). */
 	onToolActivity?: (activity: ToolActivity) => void;
 	/** Called once per assistant message_end with that message's usage delta. */
-	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 	/** Called when the session successfully compacts. */
 	onCompaction?: (info: CompactionInfo) => void;
 	/**
@@ -329,7 +329,7 @@ export class AgentManager {
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
-			advisor: options.advisor,
+			sentinel: options.sentinel,
 			thinkingLevel: options.thinkingLevel,
 			nested: options.parentAgentId !== undefined,
 			cwd: customCwd,

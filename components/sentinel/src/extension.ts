@@ -1,13 +1,10 @@
 /**
- * /advisor — a persistent second model that reviews the main agent's work each
- * turn and injects concise advice inline. Port of oh-my-pi's advisor onto
- * upstream pi's extension API.
- *
- * Enable with `/advisor on` (persisted). The advisor uses the user-global
- * `deep` model profile.
+ * /sentinel — persistent read-only supervision of the main agent's work.
+ * Sentinel is the sole persistent watcher and can submit typed hypotheses to a
+ * host-controlled, non-recursive Advisor consultation.
  *
  * Delivery model. Every advise() call enters one shared queue; only primary turn
- * boundaries or advisor-review completion flush it. Nothing is a hard interrupt:
+ * boundaries or sentinel-review completion flush it. Nothing is a hard interrupt:
  * upstream pi's extension surface delivers via `steer` (the message folds in at
  * the agent's next-step boundary; `triggerTurn` additionally wakes an idle agent). We never call
  * `abort()`. So:
@@ -27,64 +24,66 @@
  *   concern  → ALWAYS held, never steered on first emission.
  *   blocker  → ALWAYS held, never steered on first emission.
  *
- * Why always-hold for high severity: the advisor reviews turn N asynchronously
+ * Why always-hold for high severity: the sentinel reviews turn N asynchronously
  * (seconds), so by the time any advice could land the primary has almost always
  * done follow-up work — the advice is stale. Instead we hold it and let the next
- * review reconfirm it (held notes ride a reconfirm preamble; the advisor re-
+ * review reconfirm it (held notes ride a reconfirm preamble; the sentinel re-
  * raises survivors, stays silent on the resolved ones).
  *
  * Catch-up block: while a high-severity note is held — or whenever a turn is
  * about to idle — we stall the primary's next step (by awaiting in the `turn_end`
- * hook, which the agent loop awaits) so the advisor can catch up. The wait backs
+ * hook, which the agent loop awaits) so the sentinel can catch up. The wait backs
  * off 15s→30s→60s… capped at 120s, is Escape-abortable, and is reflected in the
- * persistent footer state (formatAdvisorFooterText: "Advisor (reviewing)" vs
- * "Advisor") rather than a one-shot notify — a toast for a wait that hasn't
+ * persistent footer state (formatSentinelFooterText: "Sentinel (reviewing)" vs
+ * "Sentinel") rather than a one-shot notify — a toast for a wait that hasn't
  * resolved yet is the ambiguity this footer state exists to remove. Once the
- * advisor settles, surviving held notes are steered in against the now-unraced
+ * sentinel settles, surviving held notes are steered in against the now-unraced
  * state. This is a deliberate throttle (omp's syncBacklog idea).
  *
- * An optional WATCHDOG.md in a trusted cwd is appended to the advisor's system
- * prompt (advisor-only guidance: review priorities, project traps).
+ * An optional WATCHDOG.md in a trusted cwd is appended to the sentinel's system
+ * prompt (sentinel-only guidance: review priorities, project traps).
  *
  * While enabled, `before_agent_start` appends a short protocol to the primary
  * agent's system prompt so it knows how to treat nit/concern/blocker notes,
- * including repeats. That text is for the agent being reviewed, not the advisor.
+ * including repeats. That text is for the agent being reviewed, not the sentinel.
  */
 
 import { Agent, type AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
+import { getManagedSubagentService } from "../../subagents/src/service.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { EscalateTool, RepeatedFailureDetector, SentinelEscalationController } from "./escalation.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
-import { buildAdvisorSeed, type SettledAdvice } from "./seed.js";
-import { createAdvisorSession } from "./session.js";
+import { buildSentinelSeed, type SettledAdvice } from "./seed.js";
+import { createSentinelSession } from "./session.js";
 
 // ===========================================================================
-// Advisor core — persistent second model that watches the main agent.
+// Sentinel core — persistent second model that watches the main agent.
 //
-// Port of oh-my-pi's advisor onto upstream pi's public extension surface. The
-// advisor is a long-lived `Agent` with its own model + read-only tools
+// Port of oh-my-pi's sentinel onto upstream pi's public extension surface. The
+// sentinel is a long-lived `Agent` with its own model + read-only tools
 // (read/grep/find, primary-bound memory_source/session_search) and one `advise`
 // tool. It is fed the primary transcript one
 // turn-delta at a time and may inject concise advice back. It is NOT an
 // executor: it cannot edit, run commands, or change session state.
 // ===========================================================================
 
-export type { AdvisorNote, AdvisorSeverity } from "./types.js";
+export type { SentinelNote, SentinelSeverity } from "./types.js";
 
 import type { PrimaryTurnState } from "../../shared/src/types.js";
-import type { AdvisorNote, AdvisorSeverity } from "./types.js";
+import type { SentinelNote, SentinelSeverity, SentinelEscalationState } from "./types.js";
 
 export type { PrimaryTurnState } from "../../shared/src/types.js";
 
 const ADVISORY_TYPE = "advisory";
 
-// ---- advise tool (agent-core tool; lives only on the advisor agent) ----
+// ---- advise tool (agent-core tool; lives only on the sentinel agent) ----
 
 const adviseSchema = Type.Object({
 	note: Type.String({
@@ -97,11 +96,11 @@ const adviseSchema = Type.Object({
 	),
 });
 
-const SEVERITY_RANK: Record<AdvisorSeverity, number> = { nit: 1, concern: 2, blocker: 3 };
-const rankOf = (s: AdvisorSeverity | undefined): number => SEVERITY_RANK[s ?? "nit"];
+const SEVERITY_RANK: Record<SentinelSeverity, number> = { nit: 1, concern: 2, blocker: 3 };
+const rankOf = (s: SentinelSeverity | undefined): number => SEVERITY_RANK[s ?? "nit"];
 const dedupeKey = (note: string): string => note.trim().replace(/\s+/g, " ");
 /** High severity (concern/blocker) is always held + reconfirmed; nits deliver now. */
-export const isHighSeverity = (s: AdvisorSeverity | undefined): boolean => s === "concern" || s === "blocker";
+export const isHighSeverity = (s: SentinelSeverity | undefined): boolean => s === "concern" || s === "blocker";
 
 /** Catch-up block backoff: base, 2×, 4×… capped. consecutive=0 → base (15s default). */
 export function nextBackoffMs(consecutive: number, baseMs = 15_000, capMs = 120_000): number {
@@ -111,7 +110,7 @@ export function nextBackoffMs(consecutive: number, baseMs = 15_000, capMs = 120_
 /**
  * A turn is terminal (the agent is about to go idle) when its assistant message
  * issued no tool calls — the agent-loop's inner loop exits unless something is
- * steered in. We block-until-settled on terminal turns so a blocker the advisor
+ * steered in. We block-until-settled on terminal turns so a blocker the sentinel
  * raises about the final turn is caught before control returns to the user.
  *
  * Approximation: a turn WITH tool calls can still end the run if a tool returns
@@ -125,11 +124,11 @@ export function isTerminalTurn(message: { content?: ReadonlyArray<{ type: string
 }
 
 /** Drain after this many still-pending deltas, even if every one is low-signal. */
-export const ADVISOR_DRAIN_BACKLOG = 8;
+export const SENTINEL_DRAIN_BACKLOG = 8;
 /** Deferral timer from the first still-pending low-signal delta. */
-export const ADVISOR_DEFER_MS = 15_000;
+export const SENTINEL_DEFER_MS = 15_000;
 
-const BASH_APPEND_WATCHED = Symbol("advisor.bashAppendWatched");
+const BASH_APPEND_WATCHED = Symbol("sentinel.bashAppendWatched");
 
 /** Observe persisted `!bash` pages. Pi records them via appendMessage, not message_end. */
 export function bindBashAppendObserver(
@@ -194,12 +193,12 @@ export function isLowSignalTurn(opts: {
 	return true;
 }
 
-/** Structural slice of AdvisorRuntime the catch-up block needs (so it's testable). */
+/** Structural slice of SentinelRuntime the catch-up block needs (so it's testable). */
 export interface TurnBlockRuntime {
 	readonly hasHighPriority: boolean;
 	startDrain(): void;
-	takeAllAdvice(): AdvisorNote[];
-	requeueAdvice(note: string, severity?: AdvisorSeverity): void;
+	takeAllAdvice(): SentinelNote[];
+	requeueAdvice(note: string, severity?: SentinelSeverity): void;
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed">;
 }
 
@@ -208,12 +207,12 @@ export interface TurnBlockRuntime {
  * Returns the next `consecutiveBlocks` count for the caller to carry.
  *
  * - Non-terminal turn with nothing held → no block (streak resets to 0).
- * - Otherwise block, racing advisor-settled vs a timeout vs the abort signal:
- *     - terminal → timeout = cap (block until the advisor finishes the last turn).
+ * - Otherwise block, racing sentinel-settled vs a timeout vs the abort signal:
+ *     - terminal → timeout = cap (block until the sentinel finishes the last turn).
  *     - mid-run  → timeout = backoff(consecutiveBlocks); on timeout, keep the held
  *                  notes and lengthen the next wait (return consecutiveBlocks+1).
  * - On settle: steer in whatever survived reconfirmation (may be empty), reset streak.
- * - On timeout / failed reconfirm (advisor errored out): non-terminal keeps the
+ * - On timeout / failed reconfirm (sentinel errored out): non-terminal keeps the
  *   queued advice and lengthens the next wait; terminal delivers concerns/blockers
  *   best-effort (it's the last chance before control returns to the user, and
  *   the stakes justify an unconfirmed delivery) but requeues NITS without marking
@@ -229,7 +228,7 @@ export async function runTurnBlock(opts: {
 	capMs?: number;
 	signal?: AbortSignal;
 	notify: (msg: string) => void;
-	deliverHeld: (notes: AdvisorNote[], opts?: { terminal?: boolean }) => void;
+	deliverHeld: (notes: SentinelNote[], opts?: { terminal?: boolean }) => void;
 }): Promise<number> {
 	const { terminal, runtime } = opts;
 	const baseMs = opts.baseMs ?? 15_000;
@@ -240,19 +239,19 @@ export async function runTurnBlock(opts: {
 	const timeoutMs = terminal ? capMs : nextBackoffMs(opts.consecutiveBlocks, baseMs, capMs);
 	// No "catching up"/"waiting up to Ns" notify here: a toast for an in-progress,
 	// not-yet-resolved wait is exactly the symptom this task fixed. The footer's
-	// reviewing/idle state (see formatAdvisorFooterText) is the persistent, self-
+	// reviewing/idle state (see formatSentinelFooterText) is the persistent, self-
 	// resolving signal for "is it still working" now. `notify` below stays for the
 	// timeout/failure branch, which reports a concrete, already-decided outcome.
 	const result = await runtime.waitUntilSettled(timeoutMs, opts.signal);
 	if (result === "aborted") return opts.consecutiveBlocks; // user bailed; keep held + streak
 	if (result === "settled") {
-		// Only a successful reconfirmation settles; the advisor has pruned recanted
+		// Only a successful reconfirmation settles; the sentinel has pruned recanted
 		// entries, so the shared queue is the confirmed survivor set.
 		const held = runtime.takeAllAdvice();
 		if (held.length) opts.deliverHeld(held, { terminal });
 		return 0;
 	}
-	// timeout OR failed (advisor errored 3x and dropped the reconfirm). Either way
+	// timeout OR failed (sentinel errored 3x and dropped the reconfirm). Either way
 	// the held notes are NOT confirmed.
 	if (terminal) {
 		// Best-effort only for concerns/blockers. Requeue nits WITHOUT marking a
@@ -262,18 +261,18 @@ export async function runTurnBlock(opts: {
 		for (const n of held) if (!isHighSeverity(n.severity)) runtime.requeueAdvice(n.note, n.severity);
 		if (high.length) {
 			opts.deliverHeld(high, { terminal: true });
-			opts.notify("advisor didn't reconfirm in time; delivering held advice anyway");
+			opts.notify("sentinel didn't reconfirm in time; delivering held advice anyway");
 		}
 		return 0;
 	}
 	return opts.consecutiveBlocks + 1; // mid-run: keep held unconfirmed, lengthen next wait
 }
 
-/** Parse the hidden `/advisor test <nit|concern|blocker> <note>` test hook args. */
-export function parseAdvisorTestArgs(args: string): { severity: AdvisorSeverity; note: string } | null {
+/** Parse the hidden `/sentinel test <nit|concern|blocker> <note>` test hook args. */
+export function parseSentinelTestArgs(args: string): { severity: SentinelSeverity; note: string } | null {
 	const m = args.trim().match(/^test\s+(nit|concern|blocker)\s+([\s\S]+)$/i);
 	if (!m) return null;
-	return { severity: m[1].toLowerCase() as AdvisorSeverity, note: m[2].trim() };
+	return { severity: m[1].toLowerCase() as SentinelSeverity, note: m[2].trim() };
 }
 
 /**
@@ -292,7 +291,7 @@ export class AdviseTool {
 	#delivered = new Map<string, number>();
 
 	// onAdvice returns true if delivered, false if queued or dropped.
-	constructor(private readonly onAdvice: (note: string, severity?: AdvisorSeverity) => boolean) {}
+	constructor(private readonly onAdvice: (note: string, severity?: SentinelSeverity) => boolean) {}
 
 	resetDelivered(): void {
 		this.#delivered.clear();
@@ -304,11 +303,11 @@ export class AdviseTool {
 	 * notes go through `onAdvice`→false, which intentionally does NOT record, so
 	 * the actual delivery point must).
 	 */
-	markDelivered(note: string, severity?: AdvisorSeverity): void {
+	markDelivered(note: string, severity?: SentinelSeverity): void {
 		this.#delivered.set(dedupeKey(note), rankOf(severity));
 	}
 
-	async execute(_id: string, args: { note: string; severity?: AdvisorSeverity }): Promise<AgentToolResult<unknown>> {
+	async execute(_id: string, args: { note: string; severity?: SentinelSeverity }): Promise<AgentToolResult<unknown>> {
 		const key = dedupeKey(args.note);
 		const rank = rankOf(args.severity);
 		const prev = this.#delivered.get(key) ?? 0;
@@ -349,28 +348,35 @@ export {
 export {
 	buildParentMemoryPacket,
 	insertParentMemoryAfterCompaction,
-	registerAdvisorParentMemoryPacket,
+	registerSentinelParentMemoryPacket,
 } from "./parent-memory.js";
+export {
+	EscalateTool,
+	MIN_TURNS_BETWEEN_ADVISOR,
+	RepeatedFailureDetector,
+	SentinelEscalationController,
+} from "./escalation.js";
 export { bindPrimaryRecallTools } from "./recall.js";
 export {
-	ADVISOR_RESEED_ENTRY_ID,
-	buildAdvisorSeed,
+	SENTINEL_RESEED_ENTRY_ID,
+	buildSentinelSeed,
 	collectRecentUserRequests,
-	formatAdvisorSeed,
+	formatSentinelSeed,
 	formatRecentTrajectory,
 	RECENT_TRAJECTORY_TURNS,
 } from "./seed.js";
-export { ADVISOR_SESSION_TOOLS, advisorCompactResult } from "./session.js";
+export { SENTINEL_SESSION_TOOLS, sentinelCompactResult } from "./session.js";
 
-// ---- build the persistent advisor Agent ----
+// ---- build the persistent sentinel Agent ----
 
-function buildAdvisorAgent(opts: {
+function buildSentinelAgent(opts: {
 	cwd: string;
 	model: Model<any>;
 	thinkingLevel: string;
 	systemPrompt: string;
 	modelRegistry: any;
 	adviseTool: AdviseTool;
+	escalateTool: EscalateTool;
 	primarySessionManager: PrimarySessionManager;
 }): Agent {
 	const readOnly = createReadOnlyTools(opts.cwd);
@@ -380,7 +386,12 @@ function buildAdvisorAgent(opts: {
 			systemPrompt: opts.systemPrompt,
 			model: opts.model,
 			thinkingLevel,
-			tools: [opts.adviseTool, ...readOnly, ...bindPrimaryRecallTools(opts.primarySessionManager)] as any,
+			tools: [
+				opts.adviseTool,
+				opts.escalateTool,
+				...readOnly,
+				...bindPrimaryRecallTools(opts.primarySessionManager),
+			] as any,
 		},
 		convertToLlm,
 		// Pi installs its provider-aware default stream function before loading
@@ -391,25 +402,25 @@ function buildAdvisorAgent(opts: {
 	});
 }
 
-// ---- AdvisorRuntime — drives the advisor agent off primary turn deltas ----
+// ---- SentinelRuntime — drives the sentinel agent off primary turn deltas ----
 
 /**
- * Feeds the persistent advisor conversation one delta per primary turn.
- * Identity change uses `reset()`. Overflow uses the advisor session compact hook.
+ * Feeds the persistent sentinel conversation one delta per primary turn.
+ * Identity change uses `reset()`. Overflow uses the sentinel session compact hook.
  */
 type PendingDelta = { text: string; lowSignal: boolean };
 
-export class AdvisorRuntime {
+export class SentinelRuntime {
 	#pending: PendingDelta[] = [];
 	#primedContext: string | undefined;
 	#deferTimer: ReturnType<typeof setTimeout> | undefined;
 	#forceDrain = false;
-	deferMs = ADVISOR_DEFER_MS;
+	deferMs = SENTINEL_DEFER_MS;
 	#rolling: SettledAdvice[] = [];
 	#needsSeed = true;
 	// The ONE pending-advice queue. Nits, concerns, and blockers all enter here;
 	// boundary policy decides which severities can leave and when.
-	#advice: AdvisorNote[] = [];
+	#advice: SentinelNote[] = [];
 	// Keys re-raised during the in-flight review; drives the post-review prune.
 	#reraised: Set<string> | undefined;
 	// Outcome of the most recently completed drain batch: "ok" (successful review)
@@ -426,15 +437,16 @@ export class AdvisorRuntime {
 	#failures = 0;
 	#epoch = 0;
 	#agentResetPending = false;
-	// Lifetime input/output/cost from advisor turns already discarded by compact.
+	// Lifetime input/output/cost from sentinel turns already discarded by compact.
 	// The agent's message list only holds the CURRENT context, so without folding
-	// these in, /advisor status would undercount after compact. A full reset()
+	// these in, /sentinel status would undercount after compact. A full reset()
 	// (identity change) zeroes them — that is a fresh accounting.
 	#cumInput = 0;
 	#cumOutput = 0;
 	#cumCost = 0;
+	#reviewCount = 0;
 	// Production turn_end binds this so #drain can emit after the hook returns.
-	// Tests that construct AdvisorRuntime directly leave it unset and write nothing.
+	// Tests that construct SentinelRuntime directly leave it unset and write nothing.
 	#usageSession?: { sessionId?: string };
 	disposed = false;
 
@@ -473,6 +485,7 @@ export class AdvisorRuntime {
 	}
 
 	async #promptAndRecord(messages: UserMessage[], trigger: string): Promise<void> {
+		this.#reviewCount++;
 		const prior = this.agent.state.messages.slice();
 		const before = prior.length;
 		const started = Date.now();
@@ -516,7 +529,7 @@ export class AdvisorRuntime {
 				if (message.role !== "assistant") continue;
 				const assistant = message as AssistantMessage;
 				recordSidecarUsage({
-					agent: "advisor",
+					agent: "sentinel",
 					trigger,
 					status: String(assistant.stopReason ?? "ok"),
 					provider: model?.provider,
@@ -528,7 +541,7 @@ export class AdvisorRuntime {
 			}
 			if (recorded === 0) {
 				recordSidecarUsage({
-					agent: "advisor",
+					agent: "sentinel",
 					trigger,
 					status: "error",
 					provider: model?.provider,
@@ -541,6 +554,10 @@ export class AdvisorRuntime {
 
 	get backlog(): number {
 		return this.#backlog;
+	}
+
+	get reviewCount(): number {
+		return this.#reviewCount;
 	}
 
 	/** True when no batch is in flight and nothing is queued. */
@@ -563,7 +580,7 @@ export class AdvisorRuntime {
 		return this.#advice.some((n) => isHighSeverity(n.severity));
 	}
 
-	#upsertAdvice(note: string, severity?: AdvisorSeverity): void {
+	#upsertAdvice(note: string, severity?: SentinelSeverity): void {
 		if (this.disposed) return;
 		const key = dedupeKey(note);
 		const existing = this.#advice.find((n) => dedupeKey(n.note) === key);
@@ -571,20 +588,20 @@ export class AdvisorRuntime {
 		else if (rankOf(severity) > rankOf(existing.severity)) existing.severity = severity;
 	}
 
-	/** Advisor observation: upsert and count as a genuine reconfirmation. */
-	enqueueAdvice(note: string, severity?: AdvisorSeverity): void {
+	/** Sentinel observation: upsert and count as a genuine reconfirmation. */
+	enqueueAdvice(note: string, severity?: SentinelSeverity): void {
 		if (this.disposed) return;
 		this.#reraised?.add(dedupeKey(note));
 		this.#upsertAdvice(note, severity);
 	}
 
 	/** Boundary bookkeeping: put advice back without faking a reconfirmation. */
-	requeueAdvice(note: string, severity?: AdvisorSeverity): void {
+	requeueAdvice(note: string, severity?: SentinelSeverity): void {
 		this.#upsertAdvice(note, severity);
 	}
 
 	/** Drain nits only; concerns/blockers remain queued for reconfirmation. */
-	takeNits(): AdvisorNote[] {
+	takeNits(): SentinelNote[] {
 		const nits = this.#advice.filter((n) => !isHighSeverity(n.severity));
 		this.#advice = this.#advice.filter((n) => isHighSeverity(n.severity));
 		this.#rememberSettled(nits, "delivered");
@@ -592,7 +609,7 @@ export class AdvisorRuntime {
 	}
 
 	/** Drain every queued survivor after successful boundary reconciliation. */
-	takeAllAdvice(): AdvisorNote[] {
+	takeAllAdvice(): SentinelNote[] {
 		const notes = this.#advice.splice(0);
 		this.#rememberSettled(notes, "delivered");
 		return notes;
@@ -602,7 +619,7 @@ export class AdvisorRuntime {
 		return this.#rolling;
 	}
 
-	#rememberSettled(notes: readonly AdvisorNote[], disposition: SettledAdvice["disposition"]): void {
+	#rememberSettled(notes: readonly SentinelNote[], disposition: SettledAdvice["disposition"]): void {
 		for (const note of notes) this.#rolling.push({ ...note, disposition });
 		if (this.#rolling.length > 8) this.#rolling.splice(0, this.#rolling.length - 8);
 	}
@@ -614,7 +631,7 @@ export class AdvisorRuntime {
 	}
 
 	/**
-	 * Resolve once the advisor has caught up (`idle`), or `timeoutMs` elapses, or
+	 * Resolve once the sentinel has caught up (`idle`), or `timeoutMs` elapses, or
 	 * `signal` aborts. Drives the per-turn catch-up block. Resolves "settled"
 	 * immediately if already idle/disposed.
 	 */
@@ -674,7 +691,7 @@ export class AdvisorRuntime {
 				input += u.input ?? 0;
 				output += u.output ?? 0;
 				cost += u.cost?.total ?? 0;
-				// Latest request's input + cache reads ≈ current advisor context size.
+				// Latest request's input + cache reads ≈ current sentinel context size.
 				contextTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
 			}
 		}
@@ -704,7 +721,7 @@ export class AdvisorRuntime {
 		if (this.#forceDrain) return true;
 		if (this.hasHighPriority) return true;
 		if (this.#pending.some((item) => !item.lowSignal)) return true;
-		return this.#pending.length > ADVISOR_DRAIN_BACKLOG;
+		return this.#pending.length > SENTINEL_DRAIN_BACKLOG;
 	}
 
 	#scheduleDrain(): void {
@@ -764,6 +781,7 @@ export class AdvisorRuntime {
 		this.#backlog = 0;
 		this.#failures = 0;
 		this.#cumInput = this.#cumOutput = this.#cumCost = 0;
+		this.#reviewCount = 0;
 		this.adviseTool.resetDelivered();
 		try {
 			this.agent.abort();
@@ -819,7 +837,7 @@ export class AdvisorRuntime {
 			0,
 		);
 		try {
-			this.onDebug?.("prompting advisor agent, delta chars=", promptChars, "held=", offered.length);
+			this.onDebug?.("prompting sentinel agent, delta chars=", promptChars, "held=", offered.length);
 			const trigger = this.#failures > 0 ? "turn_end_retry" : "turn_end";
 			await this.#promptAndRecord(messages, trigger);
 			if (this.#epoch !== epoch) {
@@ -837,11 +855,11 @@ export class AdvisorRuntime {
 					});
 					this.#reraised = new Set();
 				}
-				this.onDebug?.("advisor review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
+				this.onDebug?.("sentinel review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
 				this.#reraised = undefined;
 				return "failed";
 			}
-			const dropped: AdvisorNote[] = [];
+			const dropped: SentinelNote[] = [];
 			for (const key of offeredKeys) {
 				if (this.#reraised?.has(key)) continue;
 				const i = this.#advice.findIndex((n) => dedupeKey(n.note) === key);
@@ -854,11 +872,11 @@ export class AdvisorRuntime {
 			this.#lastOutcome = "ok";
 			this.#failures = 0;
 			this.#reraised = undefined;
-			this.onDebug?.("advisor turn done, stop=", last?.stopReason);
+			this.onDebug?.("sentinel turn done, stop=", last?.stopReason);
 			return "ok";
 		} catch (e) {
 			this.#reraised = undefined;
-			this.onDebug?.("advisor prompt threw", String(e));
+			this.onDebug?.("sentinel prompt threw", String(e));
 			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
 			// Held notes were never removed, so nothing to restore there.
 			return this.#epoch !== epoch ? "stale" : "failed";
@@ -876,7 +894,7 @@ export class AdvisorRuntime {
 				this.#forceDrain = false;
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
 				if (this.#agentResetPending) {
-					this.onDebug?.("advisor private context still busy after history rewrite; dropping queued review");
+					this.onDebug?.("sentinel private context still busy after history rewrite; dropping queued review");
 					this.#pending = [];
 					this.#backlog = 0;
 					this.#lastOutcome = "failed";
@@ -911,7 +929,7 @@ export class AdvisorRuntime {
 				try {
 					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok");
 				} catch (e) {
-					this.onDebug?.("advisor onSettled callback threw", String(e));
+					this.onDebug?.("sentinel onSettled callback threw", String(e));
 				}
 			}
 			if (restart) void this.#drain();
@@ -923,11 +941,11 @@ export class AdvisorRuntime {
 // Extension wiring
 // ===========================================================================
 
-// Footer status key. Statuses are ordered alphabetically by key; "q-advisor"
+// Footer status key. Statuses are ordered alphabetically by key; "q-sentinel"
 // sorts after "permissions"/"provider-system-prompt" but before "sub-bar", so
-// Advisor shows as a middle segment. Change this to reposition it (e.g.
-// "a-advisor" for leftmost).
-const STATUS_KEY = "q-advisor";
+// Sentinel shows as a middle segment. Change this to reposition it (e.g.
+// "a-sentinel" for leftmost).
+const STATUS_KEY = "q-sentinel";
 
 /**
  * Footer label + cost for the given reviewing state. `reviewing` distinguishes
@@ -935,12 +953,28 @@ const STATUS_KEY = "q-advisor";
  * "is it still working" — the persistent, self-resolving signal that replaces
  * the old one-shot "catching up" toast (which never resolved on a silent settle).
  */
-export function formatAdvisorFooterText(reviewing: boolean, costUsd: number): string {
-	return `${reviewing ? "Advisor (reviewing)" : "Advisor"}: $${costUsd.toFixed(2)}`;
+export function formatSentinelFooterText(
+	reviewing: boolean,
+	costUsd: number,
+	advisorState: SentinelEscalationState = "idle",
+	advisorCostUsd = 0,
+): string {
+	const state =
+		advisorState === "advisor_running"
+			? "Sentinel → Advisor"
+			: advisorState === "escalation_pending"
+				? "Sentinel (Advisor queued)"
+				: advisorState === "delivery_pending"
+					? "Sentinel (Advisor ready)"
+					: reviewing
+						? "Sentinel (reviewing)"
+						: "Sentinel";
+	const total = costUsd + advisorCostUsd;
+	return `${state}: $${total.toFixed(2)}`;
 }
-const DEBUG = !!process.env.ADVISOR_DEBUG;
+const DEBUG = !!process.env.SENTINEL_DEBUG;
 const dbg = (...a: unknown[]) => {
-	if (DEBUG) console.error("[advisor]", ...a);
+	if (DEBUG) console.error("[sentinel]", ...a);
 };
 const BLOCK_BASE_MS = 15_000;
 const BLOCK_CAP_MS = 120_000;
@@ -949,7 +983,7 @@ const BLOCK_CAP_MS = 120_000;
 // handoff is in flight — from the moment it becomes pending until the new
 // session's prompt has been dispatched. During that window the primary session
 // is being torn down / replaced and its deferred handoff prompt is racing to be
-// sent, so the advisor must not inject messages or (worse) trigger an
+// sent, so the sentinel must not inject messages or (worse) trigger an
 // autonomous turn: doing so either crashes the handoff ("Agent is already
 // processing") or leaks a stray advisory into the brand-new session.
 const HANDOFF_IN_PROGRESS_KEY = Symbol.for("pi-amplike-handoff-in-progress");
@@ -992,18 +1026,23 @@ function sessionIdFromCtx(ctx: unknown): string | undefined {
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
 
 import {
-	ADVISOR_MODEL_PROFILE,
-	appendPrimaryAdvisorPrompt,
+	appendPrimarySentinelPrompt,
 	loadEnabled,
 	loadSystemPrompt,
 	saveEnabled,
+	SENTINEL_MODEL_PROFILE,
 } from "./config.js";
 
-export { appendPrimaryAdvisorPrompt, loadSystemPrompt, PRIMARY_ADVISOR_PROTOCOL } from "./config.js";
+export {
+	appendPrimarySentinelPrompt,
+	loadSystemPrompt,
+	PRIMARY_SENTINEL_PROTOCOL,
+	SENTINEL_MODEL_PROFILE,
+} from "./config.js";
 
 // Wraps an advisory card's body in a severity-colored left rule (one line prefix
 // per rendered row), matching the bordered-card convention read from richer
-// third-party advisor UIs during UX research. Pure layout: no state of its own.
+// third-party sentinel UIs during UX research. Pure layout: no state of its own.
 class AdvisoryBorder implements Component {
 	constructor(
 		private readonly child: Component,
@@ -1023,25 +1062,29 @@ class AdvisoryBorder implements Component {
 export default function (pi: ExtensionAPI) {
 	let enabled = loadEnabled();
 
-	// Lazily-built advisor state, rebuilt when cwd/model changes or session resets.
-	let runtime: AdvisorRuntime | undefined;
+	// Lazily-built sentinel state, rebuilt when cwd/model changes or session resets.
+	let runtime: SentinelRuntime | undefined;
 	let activeModelLabel: string | undefined;
 	let modelProfileError: string | undefined;
 	let lastNotifiedProfileError: string | undefined;
 	let builtForCwd: string | undefined;
 	let pendingUserTexts: string[] = [];
 	let unwatchBash: (() => void) | undefined;
+	let escalationController: SentinelEscalationController | undefined;
+	let primaryTurnSequence = 0;
+	const directFindings = { nit: 0, concern: 0, blocker: 0 };
+	const repeatedFailures = new RepeatedFailureDetector();
 
 	// The advise tool bound to the live runtime (held so the catch-up block can
 	// mark held notes delivered at the actual delivery point).
 	let adviseTool: AdviseTool | undefined;
 
-	// Consecutive mid-run catch-up blocks, for the backoff (reset when the advisor
+	// Consecutive mid-run catch-up blocks, for the backoff (reset when the sentinel
 	// settles or a turn doesn't need to block).
 	let consecutiveBlocks = 0;
 
 	// Set when the user aborts (Escape) around a catch-up block: while true, late
-	// advisor advice is delivered WITHOUT triggerTurn so it can't auto-resume the run
+	// sentinel advice is delivered WITHOUT triggerTurn so it can't auto-resume the run
 	// the user just stopped. Cleared when the user drives the next turn.
 	let autoResumeSuppressed = false;
 
@@ -1053,26 +1096,26 @@ export default function (pi: ExtensionAPI) {
 	// completes, not just at turn_end — can refresh the footer without waiting for
 	// the next primary-turn event. That is the actual fix for the reported UX gap:
 	// the old transient "catching up" notify had no matching "done" signal, so a
-	// silent settle was indistinguishable from a stuck advisor. A persistent,
+	// silent settle was indistinguishable from a stuck sentinel. A persistent,
 	// self-resolving footer state removes the need for a terminal message at all.
-	let latestCtx: unknown;
+	let latestCtx: ExtensionContext | undefined;
 
-	// ---- statusbar: per-session advisor cost + live reviewing/idle state ----
-	// Reflects the live advisor lifetime cost (rt.usage.cost) and whether a review
-	// is currently in flight (`Advisor (reviewing): $N` vs `Advisor: $N`) in the
-	// footer status bar. Cleared when the advisor is off or torn down.
+	// ---- statusbar: per-session sentinel cost + live reviewing/idle state ----
+	// Reflects the live sentinel lifetime cost (rt.usage.cost) and whether a review
+	// is currently in flight (`Sentinel (reviewing): $N` vs `Sentinel: $N`) in the
+	// footer status bar. Cleared when the sentinel is off or torn down.
 	//
 	// Footer ordering: pi sorts extension statuses alphabetically BY KEY and joins
 	// them with a single space (no separators of its own). So the key controls
 	// position and we draw our own `│` divider in the text. STATUS_KEY sorts after
-	// "permissions"/"provider-system-prompt" but before "sub-bar", placing Advisor as
+	// "permissions"/"provider-system-prompt" but before "sub-bar", placing Sentinel as
 	// a middle segment rather than the leftmost.
 	//
 	// LEADING bar only (no trailing): whatever follows draws its own separator
 	// (e.g. pi-sub-bar with statusLeadingDivider:true starts with `│`), so a trailing
-	// bar here would double up (`│ Advisor │ │ …`).
+	// bar here would double up (`│ Sentinel │ │ …`).
 	function updateStatus(ctx: unknown): void {
-		latestCtx = ctx;
+		latestCtx = ctx as ExtensionContext;
 		const ui = (
 			ctx as {
 				ui?: {
@@ -1087,12 +1130,21 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 		const bar = ui.theme ? ui.theme.fg("dim", "│") : "│";
-		ui.setStatus(STATUS_KEY, `${bar} ${formatAdvisorFooterText(runtime.reviewing, runtime.usage.cost)}`);
+		ui.setStatus(
+			STATUS_KEY,
+			`${bar} ${formatSentinelFooterText(
+				runtime.reviewing,
+				runtime.usage.cost,
+				escalationController?.state ?? "idle",
+				escalationController?.stats.cost ?? 0,
+			)}`,
+		);
 	}
 
 	// ---- advice delivery into the primary session ----
-	function sendNit(note: string, severity: AdvisorSeverity | undefined, finalAnswer: boolean): void {
-		const notes: AdvisorNote[] = [{ note, severity }];
+	function sendNit(note: string, severity: SentinelSeverity | undefined, finalAnswer: boolean): void {
+		const notes: SentinelNote[] = [{ note, severity, source: "sentinel" }];
+		directFindings[severity ?? "nit"]++;
 		const content = formatAdvisoryContent(notes, { stale: true, finalAnswer });
 		pi.sendMessage(
 			{ customType: ADVISORY_TYPE, content, display: true, details: { notes } },
@@ -1102,7 +1154,7 @@ export default function (pi: ExtensionAPI) {
 
 	// The only immediate boundary flush: non-terminal turns drain queued nits.
 	// Concerns/blockers stay in the same queue for review reconfirmation.
-	function flushNits(rt: AdvisorRuntime | undefined): void {
+	function flushNits(rt: SentinelRuntime | undefined): void {
 		if (!rt || handoffInProgress()) return;
 		for (const n of rt.takeNits()) {
 			sendNit(n.note, n.severity, false);
@@ -1110,9 +1162,9 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	// Advisor callbacks only enqueue. Delivery policy lives at primary boundaries,
+	// Sentinel callbacks only enqueue. Delivery policy lives at primary boundaries,
 	// where terminality and reconfirmation state are actually known.
-	function deliverAdvice(note: string, severity?: AdvisorSeverity, sourceRuntime?: AdvisorRuntime): boolean {
+	function deliverAdvice(note: string, severity?: SentinelSeverity, sourceRuntime?: SentinelRuntime): boolean {
 		// Stand down entirely while a handoff is being performed (see comment on
 		// HANDOFF_IN_PROGRESS_KEY).
 		if (handoffInProgress()) {
@@ -1121,7 +1173,7 @@ export default function (pi: ExtensionAPI) {
 			// session's dedup map with a dropped callback.
 			return false;
 		}
-		// Drop late callbacks the session has moved past: advisor turned off, or a
+		// Drop late callbacks the session has moved past: sentinel turned off, or a
 		// reset/dispose orphaned the in-flight review (its epoch no longer matches).
 		const targetRuntime = sourceRuntime ?? runtime;
 		if (!enabled || (sourceRuntime && sourceRuntime !== runtime) || (targetRuntime && !targetRuntime.acceptingAdvice)) {
@@ -1137,7 +1189,7 @@ export default function (pi: ExtensionAPI) {
 			return false; // AdviseTool records only at the real boundary delivery.
 		}
 
-		// Hidden no-model test hook only: production advisor callbacks always have the
+		// Hidden no-model test hook only: production sentinel callbacks always have the
 		// runtime that created their AdviseTool. Keep idle command testing convenient.
 		if (!isHighSeverity(severity) && turnState !== "running") {
 			sendNit(note, severity, turnState === "ended-terminal");
@@ -1147,7 +1199,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ---- steer held survivors into the primary (called by the catch-up block) ----
-	function deliverHeld(notes: AdvisorNote[], opts?: { terminal?: boolean }): void {
+	function deliverHeld(notes: SentinelNote[], opts?: { terminal?: boolean }): void {
 		if (handoffInProgress() || !notes.length) return;
 		// A held note restates iff it is delivered from a terminal turn's catch-up.
 		// turnState was set synchronously at turn_end before the block began.
@@ -1156,9 +1208,14 @@ export default function (pi: ExtensionAPI) {
 			dbg("deliverHeld: opts.terminal diverged from turnState", opts.terminal, turnState);
 		for (const n of notes) {
 			dbg("deliverHeld", n.severity, JSON.stringify(n.note).slice(0, 120));
-			const content = formatAdvisoryContent([n], { finalAnswer, stale: !isHighSeverity(n.severity) });
+			const delivered = { ...n, source: n.source ?? "sentinel" } satisfies SentinelNote;
+			if (delivered.source === "sentinel") directFindings[delivered.severity ?? "nit"]++;
+			const content = formatAdvisoryContent([delivered], {
+				finalAnswer,
+				stale: !isHighSeverity(delivered.severity),
+			});
 			pi.sendMessage(
-				{ customType: ADVISORY_TYPE, content, display: true, details: { notes: [n] } },
+				{ customType: ADVISORY_TYPE, content, display: true, details: { notes: [delivered] } },
 				{ deliverAs: "steer", triggerTurn: !autoResumeSuppressed },
 			);
 			// Record at the real delivery point (onAdvice→false never recorded it), so a
@@ -1180,7 +1237,46 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function deliverConsultationFinding(note: SentinelNote): void {
+		if (handoffInProgress()) return;
+		const finalAnswer = turnState === "ended-terminal";
+		const content = formatAdvisoryContent([note], { finalAnswer });
+		pi.sendMessage(
+			{ customType: ADVISORY_TYPE, content, display: true, details: { notes: [note] } },
+			{ deliverAs: "steer", triggerTurn: !autoResumeSuppressed },
+		);
+	}
+
+	async function flushConsultationFinding(): Promise<void> {
+		if (turnState === "running" || handoffInProgress()) return;
+		await escalationController?.flushDelivery(deliverConsultationFinding);
+		if (latestCtx) updateStatus(latestCtx);
+	}
+
+	function ensureEscalationController(): SentinelEscalationController {
+		if (escalationController) return escalationController;
+		escalationController = new SentinelEscalationController({
+			pi,
+			getContext: () => latestCtx,
+			getService: () => getManagedSubagentService(pi.events, { processFallback: false }),
+			onDeliveryReady: () => {
+				if (turnState !== "running") void flushConsultationFinding();
+			},
+			onOutcome: (outcome) => {
+				try {
+					pi.appendEntry("sentinel.escalation.outcome", outcome);
+				} catch {}
+			},
+			onStateChange: () => {
+				if (latestCtx) updateStatus(latestCtx);
+			},
+		});
+		return escalationController;
+	}
+
 	function teardown(): void {
+		escalationController?.cancel();
+		escalationController = undefined;
 		unwatchBash?.();
 		unwatchBash = undefined;
 		runtime?.dispose();
@@ -1192,6 +1288,9 @@ export default function (pi: ExtensionAPI) {
 		consecutiveBlocks = 0;
 		autoResumeSuppressed = false;
 		turnState = "ended-nonterminal";
+		primaryTurnSequence = 0;
+		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
+		repeatedFailures.reset();
 	}
 
 	function primaryEntries(): readonly unknown[] {
@@ -1211,7 +1310,7 @@ export default function (pi: ExtensionAPI) {
 		unwatchBash = bindBashAppendObserver(
 			ctx.sessionManager as { appendMessage?: (message: unknown) => unknown },
 			(message) => {
-				if (!enabled || process.env.ADVISOR_NO_REVIEW) return;
+				if (!enabled || process.env.SENTINEL_NO_REVIEW) return;
 				const delta = formatUserBash(message);
 				if (!delta) return;
 				void ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0]).then((rt) => {
@@ -1223,7 +1322,7 @@ export default function (pi: ExtensionAPI) {
 		);
 	}
 
-	// ---- build the advisor agent lazily (needs ctx for model/registry/cwd) ----
+	// ---- build the sentinel agent lazily (needs ctx for model/registry/cwd) ----
 	async function ensureRuntime(
 		ctx: {
 			cwd: string;
@@ -1234,19 +1333,20 @@ export default function (pi: ExtensionAPI) {
 			sessionManager: PrimarySessionManager;
 		},
 		notifyProfileError = true,
-	): Promise<AdvisorRuntime | undefined> {
+	): Promise<SentinelRuntime | undefined> {
 		if (runtime && builtForCwd === ctx.cwd) return runtime;
 		if (runtime && builtForCwd !== ctx.cwd) teardown();
 
 		const projectTrusted = ctx.isProjectTrusted?.() ?? false;
 		let model: any;
 		let thinkingLevel: any;
+		const profile = SENTINEL_MODEL_PROFILE;
 		try {
-			const resolved = resolveModelProfile(ADVISOR_MODEL_PROFILE, ctx.modelRegistry);
+			const resolved = resolveModelProfile(profile, ctx.modelRegistry);
 			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(resolved.model);
 			if (!auth.ok) {
 				throw new Error(
-					`model profile ${JSON.stringify(ADVISOR_MODEL_PROFILE)} cannot authenticate ${resolved.model.provider}/${resolved.model.id}: ${auth.error ?? "authentication unavailable"}`,
+					`model profile ${JSON.stringify(profile)} cannot authenticate ${resolved.model.provider}/${resolved.model.id}: ${auth.error ?? "authentication unavailable"}`,
 				);
 			}
 			model = resolved.model;
@@ -1257,43 +1357,49 @@ export default function (pi: ExtensionAPI) {
 			modelProfileError = error instanceof Error ? error.message : String(error);
 			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
 				lastNotifiedProfileError = modelProfileError;
-				ctx.ui.notify(`Advisor unavailable: ${modelProfileError}`, "warning");
+				ctx.ui.notify(`Sentinel unavailable: ${modelProfileError}`, "warning");
 			}
 			return undefined;
 		}
 
-		let builtRuntime!: AdvisorRuntime;
+		let builtRuntime!: SentinelRuntime;
 		const builtAdviseTool = new AdviseTool((note, severity) => deliverAdvice(note, severity, builtRuntime));
+		const builtEscalateTool = new EscalateTool((request) => {
+			if (runtime !== builtRuntime || !builtRuntime.acceptingAdvice) return "unavailable";
+			return ensureEscalationController().submit("sentinel", request, primaryTurnSequence);
+		});
 		adviseTool = builtAdviseTool;
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const seedSource = {
 			entries: primaryEntries,
 			rollingAdvice: () => builtRuntime?.rollingAdvice ?? [],
 		};
-		let session: Awaited<ReturnType<typeof createAdvisorSession>> | undefined;
+		let session: Awaited<ReturnType<typeof createSentinelSession>> | undefined;
 		try {
-			session = await createAdvisorSession({
+			session = await createSentinelSession({
 				cwd: ctx.cwd,
 				model,
 				thinkingLevel,
 				systemPrompt,
 				adviseTool: builtAdviseTool as never,
+				escalateTool: builtEscalateTool as never,
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
 			});
 		} catch (error) {
-			dbg("advisor session unavailable", String(error));
+			dbg("sentinel session unavailable", String(error));
 		}
 		const agent =
 			session?.agent ??
-			buildAdvisorAgent({
+			buildSentinelAgent({
 				cwd: ctx.cwd,
 				model,
 				thinkingLevel,
 				systemPrompt,
 				modelRegistry: ctx.modelRegistry,
 				adviseTool: builtAdviseTool,
+				escalateTool: builtEscalateTool,
 				primarySessionManager: ctx.sessionManager,
 			});
 		const onSettled = (outcome: "ok" | "failed") => {
@@ -1301,14 +1407,14 @@ export default function (pi: ExtensionAPI) {
 			flushSettledAdvice(outcome);
 			if (latestCtx) updateStatus(latestCtx);
 		};
-		builtRuntime = new AdvisorRuntime(agent, builtAdviseTool, 1000, dbg, onSettled, session, () =>
-			buildAdvisorSeed({ entries: primaryEntries(), rollingAdvice: builtRuntime.rollingAdvice }),
+		builtRuntime = new SentinelRuntime(agent, builtAdviseTool, 1000, dbg, onSettled, session, () =>
+			buildSentinelSeed({ entries: primaryEntries(), rollingAdvice: builtRuntime.rollingAdvice }),
 		);
 		runtime = builtRuntime;
 		activeModelLabel = `${model.provider}/${model.id}`;
 		builtForCwd = ctx.cwd;
 		watchPrimaryBash(ctx);
-		dbg("built advisor runtime, model=", activeModelLabel);
+		dbg("built sentinel runtime, model=", activeModelLabel);
 		return runtime;
 	}
 
@@ -1317,12 +1423,12 @@ export default function (pi: ExtensionAPI) {
 	// User preflight happens before Pi starts streaming, so mark the turn running
 	// here as well as at turn_start. This closes the only real pre-turn window without
 	// consulting isIdle() or maintaining a second terminal flag. Also append the
-	// primary-agent protocol so weaker models actually handle steered advisories.
+	// primary-agent protocol so weaker models actually handle steered sentinel notes.
 	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
 		turnState = "running";
-		return { systemPrompt: appendPrimaryAdvisorPrompt(event.systemPrompt ?? "") };
+		return { systemPrompt: appendPrimarySentinelPrompt(event.systemPrompt ?? "") };
 	});
 
 	pi.on("message_end", (event) => {
@@ -1334,11 +1440,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// `!bash` is recorded by SessionManager.appendMessage, not message_end.
-	// Install the observer synchronously so executeBash is not stalled on advisor setup.
+	// Install the observer synchronously so executeBash is not stalled on sentinel setup.
 	pi.on("user_bash", (event, ctx) => {
 		if (!enabled) return;
 		if (event.excludeFromContext) return;
-		if (process.env.ADVISOR_NO_REVIEW) return;
+		if (process.env.SENTINEL_NO_REVIEW) return;
 		watchPrimaryBash(ctx);
 	});
 
@@ -1351,19 +1457,24 @@ export default function (pi: ExtensionAPI) {
 
 	// One delta per primary turn (assistant message + its tool results). After
 	// pushing, run the catch-up block: this hook is awaited by the agent loop, so
-	// awaiting here stalls the primary's next step until the advisor catches up.
+	// awaiting here stalls the primary's next step until the sentinel catches up.
 	pi.on("turn_end", async (event, ctx) => {
+		// Terminality is real session state even while supervision is disabled; the
+		// hidden deterministic test hook relies on the same safe-boundary semantics.
+		const terminal = isTerminalTurn(event.message as any);
+		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!enabled) return;
+		latestCtx = ctx;
+		primaryTurnSequence++;
+		escalationController?.advanceTurn(primaryTurnSequence);
 
 		// This is the authoritative boundary: Pi has finalized the assistant message,
 		// and any steer observed during `running` will be inserted immediately after it.
-		// Set state before any await so concurrent advisor callbacks see the result.
-		const terminal = isTerminalTurn(event.message as any);
-		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
+		// Set state before any await so concurrent sentinel callbacks see the result.
 
 		// Test seam: skip live model review. The hidden command delivers directly when
 		// no runtime exists, so no queue work is needed here.
-		if (process.env.ADVISOR_NO_REVIEW) return;
+		if (process.env.SENTINEL_NO_REVIEW) return;
 
 		const rt = await ensureRuntime(ctx as any);
 		dbg("turn_end", "state=", turnState, "enabled=", enabled, "runtime=", !!rt, "model=", activeModelLabel);
@@ -1378,6 +1489,13 @@ export default function (pi: ExtensionAPI) {
 		const userPrompt = pendingUserTexts.join("\n\n");
 		pendingUserTexts = [];
 		const toolResults = event.toolResults as ToolResultMessage[];
+		const repeatedFailure = repeatedFailures.observe(event.message as never, toolResults, primaryTurnSequence);
+		if (repeatedFailure) {
+			ensureEscalationController().submit("gate", repeatedFailure, primaryTurnSequence, {
+				repeatedFailure: true,
+				testFailure: /\b(test|check|lint|typecheck)\b/i.test(repeatedFailure.claim),
+			});
+		}
 		const delta = formatTurnDelta({
 			userPrompt: userPrompt || undefined,
 			assistant: event.message as AssistantMessage,
@@ -1406,9 +1524,10 @@ export default function (pi: ExtensionAPI) {
 			deliverHeld,
 		});
 		// If the user aborted (Escape) around the block, suppress auto-resume so a late
-		// advisor callback from the still-running review can't restart the stopped run.
+		// sentinel callback from the still-running review can't restart the stopped run.
 		if ((ctx as any).signal?.aborted) autoResumeSuppressed = true;
-		// Refresh the footer cost after the advisor caught up (review cost is now in).
+		await flushConsultationFinding();
+		// Refresh the footer cost after the Sentinel and any settled consultation caught up.
 		updateStatus(ctx);
 	});
 
@@ -1434,13 +1553,13 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory card rendering ----
-	// Bordered card (severity-colored left rule, bold "Advisor <SEVERITY>" heading,
+	// Bordered card (severity-colored left rule, bold "Sentinel <SEVERITY>" heading,
 	// body in the default readable `text` color) replacing the single dim inline
-	// line, matching the visual clarity of richer third-party advisor UIs surveyed
+	// line, matching the visual clarity of richer third-party sentinel UIs surveyed
 	// during UX research. `text` (not `muted`/`dim`) for the body follows the same
 	// contrast rationale as the conversation-viewer fix: dim is nearly invisible in
 	// the dark theme and this is content the user is meant to read.
-	pi.registerMessageRenderer<{ notes: AdvisorNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
+	pi.registerMessageRenderer<{ notes: SentinelNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
 		const container = new Container();
@@ -1448,8 +1567,10 @@ export default function (pi: ExtensionAPI) {
 			if (index > 0) container.addChild(new Spacer(1));
 			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
+			const role = n.source === "advisor" ? "Advisor" : "Sentinel";
+			const qualifier = n.adjudication === "unadjudicated" ? " (unadjudicated)" : "";
 			const card = new Container();
-			card.addChild(new Text(`${theme.fg(color, theme.bold("Advisor"))} ${theme.fg(color, tag)}`, 0, 0));
+			card.addChild(new Text(`${theme.fg(color, theme.bold(role))}${qualifier} ${theme.fg(color, tag)}`, 0, 0));
 			card.addChild(new Spacer(1));
 			card.addChild(new Text(theme.fg("text", n.note), 0, 0));
 			container.addChild(new AdvisoryBorder(card, theme.fg(color, "│")));
@@ -1457,31 +1578,34 @@ export default function (pi: ExtensionAPI) {
 		return container;
 	});
 
-	// ---- /advisor command ----
-	pi.registerCommand("advisor", {
-		description: "Toggle/inspect the advisor (a second model that reviews each turn). Usage: /advisor [on|off|status]",
+	// ---- /sentinel command ----
+	pi.registerCommand("sentinel", {
+		description: "Toggle or inspect hierarchical supervision. Usage: /sentinel [on|off|status]",
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 
 			if (arg === "status" || arg === "") {
-				const state = enabled ? "enabled" : "disabled";
 				if (!enabled) {
-					ctx.ui.notify(`advisor ${state}`, "info");
+					ctx.ui.notify(`Sentinel disabled — profile ${SENTINEL_MODEL_PROFILE}`, "info");
 					updateStatus(ctx);
 					return;
 				}
 				const rt = await ensureRuntime(ctx as any, false);
 				if (!rt) {
-					ctx.ui.notify(`advisor enabled but unavailable: ${modelProfileError ?? "unknown profile error"}`, "warning");
+					ctx.ui.notify(
+						`Sentinel enabled but unavailable — profile ${SENTINEL_MODEL_PROFILE}: ${modelProfileError ?? "unknown profile error"}`,
+						"warning",
+					);
 					return;
 				}
 				updateStatus(ctx);
 				const u = rt.usage;
 				const ctxStr =
 					u.contextPercent !== null ? `${u.contextPercent}% (${u.contextTokens} tok)` : `${u.contextTokens} tok`;
+				const advisor = escalationController;
 				ctx.ui.notify(
-					`advisor ${state} — model ${activeModelLabel}, backlog ${rt.backlog}, ` +
-						`tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}`,
+					`Sentinel enabled — profile ${SENTINEL_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
+						`Advisor — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
 				);
 				return;
@@ -1494,8 +1618,8 @@ export default function (pi: ExtensionAPI) {
 				updateStatus(ctx);
 				ctx.ui.notify(
 					rt
-						? `advisor on — ${activeModelLabel}`
-						: `advisor on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
+						? `Sentinel on — ${activeModelLabel}`
+						: `Sentinel on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
 					rt ? "info" : "warning",
 				);
 				return;
@@ -1505,16 +1629,16 @@ export default function (pi: ExtensionAPI) {
 				saveEnabled(false);
 				teardown();
 				updateStatus(ctx);
-				ctx.ui.notify("advisor off", "info");
+				ctx.ui.notify("sentinel off", "info");
 				return;
 			}
 
 			// Hidden test hook. An idle nit delivers directly so it remains useful even
 			// before the runtime's first review; running/high-severity cases use the queue.
 			if (arg.startsWith("test")) {
-				const parsed = parseAdvisorTestArgs(args);
+				const parsed = parseSentinelTestArgs(args);
 				if (!parsed) {
-					ctx.ui.notify("usage: /advisor test <nit|concern|blocker> <note>", "warning");
+					ctx.ui.notify("usage: /sentinel test <nit|concern|blocker> <note>", "warning");
 					return;
 				}
 				if (parsed.severity === "nit" && turnState !== "running")
@@ -1523,7 +1647,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			ctx.ui.notify("usage: /advisor [on|off|status]", "warning");
+			ctx.ui.notify("usage: /sentinel [on|off|status]", "warning");
 		},
 	});
 }

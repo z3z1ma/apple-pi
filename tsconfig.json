@@ -14,7 +14,8 @@
   },
   "include": [
     "extensions/**/*.ts",
-    "components/advisor/src/**/*.ts",
+    "components/sentinel/src/**/*.ts",
+    "components/sentinel/tests/**/*.ts",
     "components/ask-user-question/src/**/*.ts",
     "components/backlog/src/**/*.ts",
     "components/backlog/tests/**/*.ts",

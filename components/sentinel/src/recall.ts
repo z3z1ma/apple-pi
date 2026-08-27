@@ -31,16 +31,16 @@ export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): T
 			...memory,
 			description:
 				`${recallObservationTool.description} ` +
-				"Resolves against the primary implementing-agent session, never this advisor conversation.",
+				"Resolves against the primary implementing-agent session, never this sentinel conversation.",
 		},
 		{
 			...search,
 			description:
 				`${sessionSearchTool.description} ` +
-				"Searches the primary implementing-agent session, never this advisor conversation.",
+				"Searches the primary implementing-agent session, never this sentinel conversation.",
 			promptGuidelines: [
 				...(sessionSearchTool.promptGuidelines ?? []),
-				"This searches the primary session transcript, not the advisor conversation.",
+				"This searches the primary session transcript, not the sentinel conversation.",
 			],
 		},
 	];

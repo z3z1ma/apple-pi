@@ -2,12 +2,12 @@
 
 apple-pi contains modified source imports and one pinned runtime dependency. apple-pi takes maintenance responsibility for copied sources; the MCP dependency retains upstream protocol/auth maintenance ownership.
 
-## pi-omplike-advisor → Pi Advisor
+## pi-omplike-advisor → Sentinel
 
 - Source: <https://github.com/pasky/pi-omplike-advisor>
 - Imported commit: `43eb9a976d751c06016a62b5423e2c6ddaff43a1`
 - Author named by the source package: Petr Baudis
-- Local paths: `components/advisor/`, `extensions/pi-advisor.ts`
+- Local paths: `components/sentinel/`, `extensions/pi-sentinel.ts`
 - License: MIT, as declared by the source package metadata. The imported commit did not contain a standalone license file or separate copyright notice.
 
 ## rpiv-ask-user-question → Ask User Question

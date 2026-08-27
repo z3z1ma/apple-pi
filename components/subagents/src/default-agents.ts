@@ -38,7 +38,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 			name: "Explore",
 			displayName: "Explore",
 			description:
-				'Fast read-only search agent for broad local code discovery across multiple areas, naming conventions, or hypotheses when a compact result map would be valuable. Prefer direct grep, find, and read calls for known paths, targeted symbols, and ordinary search refinement. Do NOT use it for external docs (Research), architecture or costly judgment (Counsel), implementation planning (Plan), code review, design-doc auditing, or open-ended analysis — it reads excerpts rather than whole files and may miss content past its read window. When calling, specify search breadth: "quick" for bounded but non-trivial discovery, "medium" for moderate exploration, or "very thorough" for multiple locations and naming conventions.',
+				'Fast read-only search agent for broad local code discovery across multiple areas, naming conventions, or hypotheses when a compact result map would be valuable. Prefer direct grep, find, and read calls for known paths, targeted symbols, and ordinary search refinement. Do NOT use it for external docs (Research), architecture or costly judgment (Advisor), implementation planning (Plan), code review, design-doc auditing, or open-ended analysis — it reads excerpts rather than whole files and may miss content past its read window. When calling, specify search breadth: "quick" for bounded but non-trivial discovery, "medium" for moderate exploration, or "very thorough" for multiple locations and naming conventions.',
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -68,7 +68,7 @@ Your role is EXCLUSIVELY to search and analyze existing local code.
 			name: "Plan",
 			displayName: "Plan",
 			description:
-				"Software architect agent for non-trivial implementation planning involving cross-module dependencies, consequential trade-offs, migrations, or unclear ownership boundaries. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs. Do not use it for routine implementation when the main agent can form the plan after local inspection, for high-stakes should/root-cause/YAGNI judgment (Counsel), or to implement the plan.",
+				"Software architect agent for non-trivial implementation planning involving cross-module dependencies, consequential trade-offs, migrations, or unclear ownership boundaries. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs. Do not use it for routine implementation when the main agent can form the plan after local inspection, for high-stakes should/root-cause/YAGNI judgment (Advisor), or to implement the plan.",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -90,7 +90,7 @@ Your role is EXCLUSIVELY to explore the codebase and design implementation plans
 - Identify dependencies and sequencing
 - Anticipate potential challenges
 - Follow existing patterns where appropriate
-- Do not implement. Do not treat this as Counsel: the primary artifact is a how-to-implement plan, not a should-we verdict.
+- Do not implement. Do not treat this as Advisor: the primary artifact is a how-to-implement plan, not a should-we verdict.
 
 # Output Format
 End your response with:
@@ -108,7 +108,7 @@ List 3-5 files most critical for implementing this plan:
 			name: "Research",
 			displayName: "Research",
 			description:
-				"External documentation and library research via session extensions (MCP) and cited sources. Use for current official docs, version-specific APIs, GitHub examples, and unfamiliar libraries. Do not use for local codebase maps (Explore), architecture or costly trade-offs (Counsel), or implementation. If the session has no docs tools, the parent or a pi_exec program must gather sources and bind them; this lane does not invent version-specific APIs.",
+				"External documentation and library research via session extensions (MCP) and cited sources. Use for current official docs, version-specific APIs, GitHub examples, and unfamiliar libraries. Do not use for local codebase maps (Explore), architecture or costly trade-offs (Advisor), or implementation. If the session has no docs tools, the parent or a pi_exec program must gather sources and bind them; this lane does not invent version-specific APIs.",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -135,12 +135,12 @@ Official docs, current API behavior, implementation examples, and version-specif
 		},
 	],
 	[
-		"Counsel",
+		"Advisor",
 		{
-			name: "Counsel",
-			displayName: "Counsel",
+			name: "Advisor",
+			displayName: "Advisor",
 			description:
-				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Advisor (live parent-turn peer) and review (structured change review).",
+				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Sentinel (persistent trajectory supervision) and Review (structured change review).",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -148,7 +148,7 @@ Official docs, current API behavior, implementation examples, and version-specif
 			systemPrompt: `${READ_ONLY_CONTRACT}
 
 # Role
-You are Counsel — a strategic technical advisor.
+You are Advisor — a strategic technical consultant.
 Architecture, costly trade-offs, persistent debugging, review, and simplification. You advise; you do not implement.
 
 # Behavior
@@ -171,7 +171,7 @@ Architecture, costly trade-offs, persistent debugging, review, and simplificatio
 			extensions: false,
 			skills: false,
 			profile: "coding",
-			advisor: true,
+			sentinel: true,
 			systemPrompt: `# Role
 You are Implement — a bounded execution specialist.
 Apply a complete task specification. Do not plan, research, or redesign.

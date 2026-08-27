@@ -45,7 +45,7 @@ Subagents are expensive context-isolation tools, not default participants. Keep 
 
 One well-scoped dispatch should collect the needed value. After a worker or reviewer returns, validate its claims and handle ordinary fixes yourself. Nits end in the root session. Re-dispatch serves a genuinely new question or a material high-risk fix needing independent confirmation.
 
-The persistent Advisor is the normal second set of eyes during implementation. Additional review is risk-based, not ceremonial.
+The persistent Sentinel is the normal second set of eyes during implementation. Additional review is risk-based, not ceremonial.
 
 ## Operator interaction
 

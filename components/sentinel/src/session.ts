@@ -15,46 +15,55 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
-import { registerAdvisorParentMemoryPacket } from "./parent-memory.js";
+import { registerSentinelParentMemoryPacket } from "./parent-memory.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
-import { ADVISOR_RESEED_ENTRY_ID, buildAdvisorSeed, type SettledAdvice } from "./seed.js";
+import { SENTINEL_RESEED_ENTRY_ID, buildSentinelSeed, type SettledAdvice } from "./seed.js";
 
-export type AdvisorSeedSource = {
+export type SentinelSeedSource = {
 	entries(): readonly unknown[];
 	rollingAdvice(): readonly SettledAdvice[];
 };
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
-export const ADVISOR_SESSION_TOOLS = ["advise", "read", "grep", "find", "memory_source", "session_search"] as const;
+export const SENTINEL_SESSION_TOOLS = [
+	"advise",
+	"escalate",
+	"read",
+	"grep",
+	"find",
+	"memory_source",
+	"session_search",
+] as const;
 
-export async function advisorCompactResult(
+export async function sentinelCompactResult(
 	event: SessionBeforeCompactEvent,
-	source: AdvisorSeedSource,
+	source: SentinelSeedSource,
 	ctx?: ExtensionContext,
 ) {
 	const xai = ctx ? await compactWithXai(event, ctx) : undefined;
 	const xaiItem = xai?.compaction?.details?.xaiCompaction;
 	return {
 		compaction: {
-			summary: buildAdvisorSeed({
+			summary: buildSentinelSeed({
 				entries: source.entries(),
 				rollingAdvice: source.rollingAdvice(),
 				includeFold: false,
 			}),
-			firstKeptEntryId: ADVISOR_RESEED_ENTRY_ID,
+			firstKeptEntryId: SENTINEL_RESEED_ENTRY_ID,
 			tokensBefore: event.preparation.tokensBefore,
 			...(xaiItem ? { details: { xaiCompaction: xaiItem } } : {}),
 		},
 	};
 }
 
-export async function createAdvisorSession(opts: {
+export async function createSentinelSession(opts: {
 	cwd: string;
 	model: Model<any>;
 	thinkingLevel?: string;
 	systemPrompt: string;
 	adviseTool: ToolDefinition;
-	seedSource: AdvisorSeedSource;
+	escalateTool: ToolDefinition;
+	seedSource: SentinelSeedSource;
 	primarySessionManager: PrimarySessionManager;
 	modelRuntime?: unknown;
 }): Promise<AgentSession> {
@@ -75,7 +84,7 @@ export async function createAdvisorSession(opts: {
 		appendSystemPrompt: [],
 		extensionFactories: [
 			{
-				name: "advisor-reseed",
+				name: "sentinel-reseed",
 				hidden: true,
 				factory: (pi: ExtensionAPI) => {
 					// Replay + reseed only. Never register the observational-memory
@@ -83,8 +92,8 @@ export async function createAdvisorSession(opts: {
 					// on the primary session. The parent packet is a read of that
 					// ledger, not a second OM pipeline.
 					registerXaiCompactionReplayHooks(pi);
-					pi.on("session_before_compact", (event, ctx) => advisorCompactResult(event, opts.seedSource, ctx));
-					registerAdvisorParentMemoryPacket(pi, opts.primarySessionManager);
+					pi.on("session_before_compact", (event, ctx) => sentinelCompactResult(event, opts.seedSource, ctx));
+					registerSentinelParentMemoryPacket(pi, opts.primarySessionManager);
 				},
 			},
 		],
@@ -96,14 +105,14 @@ export async function createAdvisorSession(opts: {
 		agentDir,
 		model: opts.model,
 		thinkingLevel: opts.thinkingLevel as never,
-		tools: [...ADVISOR_SESSION_TOOLS],
-		customTools: [opts.adviseTool, ...bindPrimaryRecallTools(opts.primarySessionManager)],
+		tools: [...SENTINEL_SESSION_TOOLS],
+		customTools: [opts.adviseTool, opts.escalateTool, ...bindPrimaryRecallTools(opts.primarySessionManager)],
 		resourceLoader: loader,
 		sessionManager: SessionManager.inMemory(opts.cwd),
 		settingsManager,
 		...(opts.modelRuntime !== undefined && { modelRuntime: opts.modelRuntime as never }),
 	});
 	await session.bindExtensions({});
-	session.setActiveToolsByName([...ADVISOR_SESSION_TOOLS]);
+	session.setActiveToolsByName([...SENTINEL_SESSION_TOOLS]);
 	return session;
 }

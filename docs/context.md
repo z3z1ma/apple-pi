@@ -6,7 +6,7 @@ Compaction has one hook owner. On an xAI model using `openai-responses`, [`exten
 
 After any compaction entry exists, observational memory appends its current fold to the **tail** of the live conversation via the `context` event. That packet is the same for xAI compaction, Pi default summarization, and any compact-hook fallback that still writes a compaction entry.
 
-The curator pipeline, `/om:*` commands, and `memory_source` register only on the **root** session. Ordinary subagents and `pi_exec` workers load `session_search` without starting observer/reflector/curator work; the internal BTW child loads only Codex fast mode and the overflow guard. The advisor session also does not run observational memory: after its own compaction summary it inserts a **read-only** copy of the parent fold, and its `memory_source` / `session_search` tools stay bound to the primary session.
+The curator pipeline, `/om:*` commands, and `memory_source` register only on the **root** session. Ordinary subagents and `pi_exec` workers load `session_search` without starting observer/reflector/curator work; the internal BTW child loads only Codex fast mode and the overflow guard. The Sentinel session also does not run observational memory: after its own compaction summary it inserts a **read-only** copy of the parent fold, and its `memory_source` / `session_search` tools stay bound to the primary session. Episodic Advisor consultations use the same primary-bound recall tools without starting another curator.
 
 ## xAI server-side compaction
 
@@ -54,7 +54,7 @@ apple-pi intentionally does not create a `.pi/memory` mirror. A mirror would int
 
 ## Sidecar usage records
 
-Advisor reviews and observational-memory curator (and any remaining isolated stage) runs write one NDJSON line per model call to:
+Sentinel reviews, Advisor consultations, and observational-memory curator (and any remaining isolated stage) runs write one NDJSON line per model call to:
 
 ```text
 ~/.pi/agent/sidecar-usage/<session-id>.ndjson

@@ -1,11 +1,12 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { AgentContextMode } from "./invocation-config.js";
 import type { LifetimeUsage } from "./usage.js";
 
 export type ThinkingLevel = ModelThinkingLevel;
 export type SubagentType = string;
 export type SubagentConfigScope = Readonly<{ cwd: string; projectTrusted: boolean }>;
-export const DEFAULT_AGENT_NAMES = ["Explore", "Plan", "Research", "Counsel", "Implement", "Design"] as const;
+export const DEFAULT_AGENT_NAMES = ["Explore", "Plan", "Research", "Advisor", "Implement", "Design"] as const;
 
 export interface AgentConfig {
 	name: string;
@@ -23,8 +24,8 @@ export interface AgentConfig {
 	maxTurns?: number;
 	persistSession?: boolean;
 	sessionDir?: string;
-	/** Default Advisor sidecar choice; an explicit invocation boolean overrides it. */
-	advisor?: boolean;
+	/** Default Sentinel sidecar choice; an explicit invocation boolean overrides it. */
+	sentinel?: boolean;
 	allowedSubagents?: "all" | string[];
 	systemPrompt: string;
 	promptMode: "replace" | "append";
@@ -90,10 +91,11 @@ export interface AgentInvocation {
 	thinking?: ThinkingLevel;
 	maxTurns?: number;
 	isolated?: boolean;
+	contextMode?: AgentContextMode;
 	/** Whether this invocation received the parent conversation. */
 	inheritContext: boolean;
-	/** Whether this invocation enabled the continuous advisor. */
-	advisor: boolean;
+	/** Whether this invocation enabled the continuous sentinel. */
+	sentinel: boolean;
 	runInBackground?: boolean;
 }
 

@@ -9,7 +9,7 @@
     "pi",
     "pi-coding-agent",
     "questionnaire",
-    "advisor",
+    "sentinel",
     "compaction",
     "memory",
     "mcp",
@@ -19,7 +19,7 @@
     "work-graph"
   ],
   "files": [
-    "components/advisor/src/",
+    "components/sentinel/src/",
     "components/ask-user-question/src/",
     "components/backlog/src/",
     "components/codex-fast/src/",
@@ -49,7 +49,7 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions/pi-advisor.ts",
+      "./extensions/pi-sentinel.ts",
       "./extensions/ask-user-question.ts",
       "./extensions/backlog.ts",
       "./extensions/context.ts",
@@ -80,9 +80,9 @@
     "lint": "biome lint components extensions tests",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:unit && npm run test:advisor && npm run test:loader",
+    "test": "npm run test:unit && npm run test:sentinel && npm run test:loader",
     "test:unit": "vitest run",
-    "test:advisor": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/advisor/tests/advisor.test.mjs",
+    "test:sentinel": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/sentinel/tests/sentinel.test.mjs",
     "test:loader": "node tests/package-load.mjs",
     "pack:check": "npm pack --dry-run"
   },

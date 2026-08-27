@@ -122,18 +122,18 @@ describe("BTW command", () => {
 			agentConfig: {
 				extensions: false,
 				skills: false,
-				advisor: false,
+				sentinel: false,
 				persistSession: false,
 			},
 			loadStandardChildExtensions: false,
-			advisor: false,
+			sentinel: false,
 			isolated: true,
 			inheritContext: false,
 			invocation: {
 				modelName: "test/model",
 				thinking: "medium",
 				isolated: true,
-				advisor: false,
+				sentinel: false,
 			},
 		});
 

@@ -29,7 +29,7 @@ Authority is split deliberately:
 
 At a high level, the package adds five kinds of capability to Pi:
 
-1. **Turn assistance and interaction** — a persistent read-only advisor and a structured user-question tool.
+1. **Turn assistance and interaction** — persistent read-only Sentinel supervision with episodic Advisor adjudication, plus a structured user-question tool.
 2. **Context continuity** — xAI server-side or Pi default compaction, model-generated observational memory, and two complementary recall paths.
 3. **Execution tracking** — branch-aware active to-dos, distinct from parked backlog ideas and durable Ledger records.
 4. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
@@ -45,7 +45,7 @@ Pi discovers the package through the `pi` section of `package.json`. Each config
 There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
-- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Advisor sidecar when `advisor: true`; the internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
+- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Sentinel sidecar when `sentinel: true`; the internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
 - **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context. They load Codex fast mode, the proactive overflow guard, ledger, and `session_search` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
@@ -55,7 +55,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | Area | Responsibility | Important relationships |
 | --- | --- | --- |
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
-| `components/advisor/` | Persistent read-only peer review of main-agent turns | Uses the user-global `deep` model profile; appends the advisor protocol only when enabled; must remain advisory rather than becoming an implementation agent. |
+| `components/sentinel/` | Optional persistent read-only supervision of main-agent turns | Uses the user-global `sentinel` model profile and can route typed escalations through the host-controlled deep Advisor sub-agent; neither role may implement. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
 | `components/todos/` | Branch-aware active-execution checklist, `/todos`, reminder/cleanup lifecycle, and managed subagent execution | To-dos are ephemeral execution state, not Ledger acceptance evidence. Default snapshots follow session branches; trusted shared-project state is explicitly opted in and safely locked. |
@@ -66,7 +66,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
-| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Advisor does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `session_search` and MCP; workers load `session_search`. The Sentinel does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
 | `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with Ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
 | `prompts/` | Explicitly invoked prompt templates | `/distill` proposes durable lessons for the right existing owner and waits for operator approval before writing. Keep prompt templates stateless; use an extension only when runtime behavior is actually required. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
@@ -96,7 +96,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
 - `Agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
-- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths under `--no-extensions`; `advisor: true` adds the Advisor sidecar, and direct public `Agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. Workers load Codex fast mode, the overflow guard, ledger, and `session_search` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Observational memory stays on the root context extension.
+- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths under `--no-extensions`; `sentinel: true` adds the Sentinel sidecar, and direct public `Agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. Workers load Codex fast mode, the overflow guard, ledger, and `session_search` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Observational memory stays on the root context extension.
 - Child sessions must not bypass manager ownership, nesting depth, tool policy, or root-only capabilities. Avoid global registries unless they are explicitly process-scoped integration points with lifecycle cleanup.
 - Nested `pi_exec` operations are not separate top-level Pi tool calls. Policy extensions that gate only top-level `tool_call` events see the outer `pi_exec`, not every bridged operation; deployments needing an outer per-call gate must treat `pi_exec` itself as the capability boundary.
 - Persisted child sessions are Pi sessions. Do not add a second transcript or memory store merely for the subagent feature.
@@ -167,7 +167,7 @@ npm run pack:check
 Useful narrower commands are defined in `package.json`:
 
 - `test:unit` runs Vitest suites for components and root integration.
-- `test:advisor` runs the advisor's offline Node harness and expects the `pi` executable on `PATH`; its networked E2E mode is opt-in.
+- `test:sentinel` runs the sentinel's offline Node harness and expects the `pi` executable on `PATH`; its networked E2E mode is opt-in.
 - `test:loader` loads an explicit list of checkout extension entrypoints and checks the exposed surface.
 - `pack:check` prints npm's dry-run package contents. Inspect that list for expected source; the command does not assert completeness or test the tarball in an installed environment.
 
@@ -206,7 +206,7 @@ Several features read global Pi configuration and optionally trusted project-loc
 Preserve these categories:
 
 - **Package configuration** — tracked manifest and docs in this repository.
-- **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional advisor guidance resolved at runtime with their documented trust boundaries.
+- **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional sentinel guidance resolved at runtime with their documented trust boundaries.
 - **Session state** — Pi session JSONL, including context and observational-memory entries.
 - **Task workbench state** — `.ledger`, governed by repository-owner storage policy.
 - **Temporary worker state** — bounded files/processes that must be cleaned up on success, failure, cancellation, and shutdown.

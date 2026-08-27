@@ -1,19 +1,33 @@
 import type { AgentConfig, JoinMode } from "./types.js";
 
+export type AgentContextMode = "handoff" | "inherit" | "consultation";
+
 interface AgentInvocationParams {
 	run_in_background?: boolean;
 	isolated?: boolean;
 	inherit_context?: boolean;
-	advisor?: boolean;
+	context_mode?: AgentContextMode;
+	sentinel?: boolean;
 	system_prompt?: string;
 }
 
+export function resolveAgentContextMode(
+	mode: AgentContextMode | undefined,
+	inheritContext: boolean | undefined,
+): { mode: AgentContextMode; error?: string } {
+	if (!mode) return { mode: inheritContext === true ? "inherit" : "handoff" };
+	if (inheritContext === true && mode !== "inherit") {
+		return { mode, error: `context_mode ${JSON.stringify(mode)} contradicts inherit_context: true` };
+	}
+	return { mode };
+}
+
 /** An explicit invocation value overrides the agent definition default. */
-export function resolveAgentAdvisor(
+export function resolveAgentSentinel(
 	agentConfig: AgentConfig | undefined,
-	requestedAdvisor: boolean | undefined,
+	requestedSentinel: boolean | undefined,
 ): boolean {
-	return requestedAdvisor ?? agentConfig?.advisor ?? agentConfig?.name.toLowerCase() === "implement";
+	return requestedSentinel ?? agentConfig?.sentinel ?? agentConfig?.name.toLowerCase() === "implement";
 }
 
 export function resolveAgentInvocationConfig(
@@ -23,20 +37,21 @@ export function resolveAgentInvocationConfig(
 	maxTurns?: number;
 	/** Invocation-level guidance appended after the selected definition. */
 	systemPrompt?: string;
-	/** undefined = compact handoff, true = full parent branch, false = none. */
+	contextMode: AgentContextMode;
+	/** true only for full parent text inheritance. */
 	inheritContext: boolean;
-	advisor: boolean;
+	sentinel: boolean;
 	runInBackground: boolean;
 	isolated: boolean;
 } {
+	const context = resolveAgentContextMode(params.context_mode, params.inherit_context);
 	return {
 		// Turn ceilings are agent-definition or trusted-settings policy, never model arithmetic.
 		maxTurns: agentConfig?.maxTurns,
 		systemPrompt: params.system_prompt?.trim() || undefined,
-		// Context inheritance belongs to each invocation. Advisor may have a trusted
-		// definition default; an explicit invocation boolean wins, including false.
-		inheritContext: params.inherit_context === true,
-		advisor: resolveAgentAdvisor(agentConfig, params.advisor),
+		contextMode: context.mode,
+		inheritContext: context.mode === "inherit",
+		sentinel: resolveAgentSentinel(agentConfig, params.sentinel),
 		runInBackground: params.run_in_background === true,
 		isolated: params.isolated === true,
 	};

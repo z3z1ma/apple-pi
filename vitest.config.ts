@@ -4,6 +4,7 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		include: [
+			"components/sentinel/tests/**/*.test.ts",
 			"components/backlog/tests/**/*.test.ts",
 			"components/codex-fast/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",

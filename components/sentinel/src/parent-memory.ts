@@ -12,14 +12,14 @@ import type { Entry } from "../../memory/src/session-ledger/types.js";
 
 import type { PrimarySessionManager } from "./recall.js";
 
-const PARENT_MEMORY_FRAMING = `These records are the implementing-agent session's current working memory, not this advisor conversation.
+const PARENT_MEMORY_FRAMING = `These records are the implementing-agent session's current working memory, not this sentinel conversation.
 
 - Reflections: current law on that session. Binding facts about the user, project, decisions, constraints, completed outcomes, and still-constraining pivots. Reflection lines include ids in brackets.
 - Observations: working evidence still needed as detail. Timestamped, in chronological order, with ids in brackets.
 
 Honor current law. Do not replay this list as a historical stack. When current law and a newer observation conflict, the newer observation is the latest known state until law is updated.
 
-When exact source context is needed, use memory_source with the relevant observation or reflection id. To search the implementing-agent transcript or recover a file written earlier, use session_search. Both tools resolve against the primary session, never this advisor conversation.`;
+When exact source context is needed, use memory_source with the relevant observation or reflection id. To search the implementing-agent transcript or recover a file written earlier, use session_search. Both tools resolve against the primary session, never this sentinel conversation.`;
 
 export function buildParentMemoryPacket(
 	primaryEntries: readonly unknown[],
@@ -65,11 +65,11 @@ export function insertParentMemoryAfterCompaction(
 }
 
 /**
- * After the advisor session compacts, append the implementing agent's live fold
+ * After the sentinel session compacts, append the implementing agent's live fold
  * immediately after the compaction summary. Recall tools stay on the session
  * allowlist and resolve against the primary manager.
  */
-export function registerAdvisorParentMemoryPacket(
+export function registerSentinelParentMemoryPacket(
 	pi: ExtensionAPI,
 	primarySessionManager: PrimarySessionManager,
 ): void {

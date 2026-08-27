@@ -46,7 +46,7 @@ describe("sidecar usage records", () => {
 
 	it("does not write when no session is bound", () => {
 		recordSidecarUsage({
-			agent: "advisor",
+			agent: "sentinel",
 			trigger: "turn_end",
 			status: "stop",
 			provider: "anthropic",
@@ -58,7 +58,7 @@ describe("sidecar usage records", () => {
 	it("writes a session-scoped allowlisted record", () => {
 		withSidecarUsageContext({ sessionId: "session-123" }, () => {
 			recordSidecarUsage({
-				agent: "advisor",
+				agent: "sentinel",
 				trigger: "turn_end",
 				status: "stop",
 				provider: "anthropic",
@@ -82,7 +82,7 @@ describe("sidecar usage records", () => {
 		expect(Object.keys(row).sort()).toEqual([...SIDECAR_USAGE_RECORD_KEYS].sort());
 		expect(row).toMatchObject({
 			sessionId: "session-123",
-			agent: "advisor",
+			agent: "sentinel",
 			trigger: "turn_end",
 			status: "stop",
 			provider: "anthropic",
@@ -144,7 +144,7 @@ describe("sidecar usage records", () => {
 	it("records each assistant message and skips finish after a real call", () => {
 		withSidecarUsageContext({ sessionId: "session-calls" }, () => {
 			const tracker = startSidecarUsageTracker({
-				agent: "advisor",
+				agent: "sentinel",
 				trigger: "turn_end",
 				provider: "xai",
 				model: "grok-4.6",
@@ -181,7 +181,7 @@ describe("sidecar usage records", () => {
 	it("aggregates into the baseline table columns", () => {
 		const records = [
 			buildSidecarUsageRecord({
-				agent: "advisor",
+				agent: "sentinel",
 				trigger: "turn_end",
 				status: "stop",
 				provider: "anthropic",
@@ -203,7 +203,7 @@ describe("sidecar usage records", () => {
 				cost: 0.01,
 			}),
 			buildSidecarUsageRecord({
-				agent: "advisor",
+				agent: "sentinel",
 				trigger: "turn_end_replay",
 				status: "length",
 				provider: "anthropic",

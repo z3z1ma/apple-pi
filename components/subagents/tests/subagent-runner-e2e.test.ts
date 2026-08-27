@@ -400,7 +400,7 @@ Answer the task.
 					description: "Incompatible continuation",
 					subagent_type: "tool-test",
 					resume: agentId,
-					advisor: true,
+					sentinel: true,
 					inherit_context: false,
 					isolated: false,
 					run_in_background: false,
@@ -800,6 +800,138 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
+	it("runs Advisor consultation mode from harness-assembled context with no recursive Sentinel", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({
+			provider: "faux",
+			models: [{ id: "faux-advisor", contextWindow: 200_000 }],
+		});
+		fauxProviders.push(faux);
+		writeFileSync(
+			join(isolatedAgentDir, "model-profiles.json"),
+			JSON.stringify({ profiles: { deep: { model: "faux/faux-advisor", thinking: "high" } } }),
+		);
+		let requestText = "";
+		let systemText = "";
+		let activeTools: string[] = [];
+		faux.setResponses([
+			(context) => {
+				requestText = JSON.stringify(context.messages);
+				systemText = context.systemPrompt ?? "";
+				activeTools = context.tools?.map((candidate) => candidate.name) ?? [];
+				return fauxAssistantMessage(
+					[
+						fauxToolCall("report_consultation", {
+							disposition: "refine",
+							severity: "concern",
+							finding: "The risk is flush ordering, not restart durability.",
+							evidence: ["src/retry.ts:42"],
+							recommended_action: "Move acknowledgement after enqueue.",
+						}),
+					],
+					{ stopReason: "toolUse" },
+				);
+			},
+		]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		const tools = new Map<string, any>();
+		const lifecycle = new Map<string, (...args: any[]) => any>();
+		const events = new Map<string, (reply: unknown) => void>();
+		const pi = {
+			registerMessageRenderer: () => {},
+			registerTool: (tool: any) => tools.set(tool.name, tool),
+			registerCommand: () => {},
+			registerShortcut: () => {},
+			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
+			events: {
+				on: (event: string, handler: (reply: unknown) => void) => {
+					events.set(event, handler);
+					return () => events.delete(event);
+				},
+				emit: (event: string, value: unknown) => events.get(event)?.(value),
+			},
+			sendMessage: () => {},
+			exec: async (_command: string, args: string[]) => ({
+				code: 0,
+				stdout:
+					args.join(" ") === "rev-parse --is-inside-work-tree"
+						? "true\n"
+						: args.join(" ") === "status --short"
+							? " M src/retry.ts\n"
+							: args.join(" ") === "diff HEAD --name-only"
+								? "src/retry.ts\n"
+								: args.join(" ") === "diff HEAD --stat"
+									? "src/retry.ts | 1 +\n"
+									: args.join(" ") === "diff HEAD --no-ext-diff --unified=3"
+										? "+ retry\n"
+										: "",
+				stderr: "",
+			}),
+		} as any;
+		const ctx = {
+			cwd,
+			model,
+			modelRegistry: runtime.modelRegistry,
+			getSystemPrompt: () => "root",
+			isProjectTrusted: () => true,
+			sessionManager: {
+				getSessionFile: () => undefined,
+				getSessionId: () => "consultation-test",
+				getBranch: () => [
+					{ type: "message", message: { role: "user", content: "implement durable retry" } },
+					{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "working" }] } },
+				],
+			},
+		} as any;
+		const previousCwd = process.cwd();
+		process.chdir(cwd);
+		try {
+			installSubagents(pi);
+			const result = await tools.get("Agent").execute(
+				"consult-advisor",
+				{
+					prompt: "Check the retry ownership invariant.",
+					description: "Adjudicate retry durability",
+					subagent_type: "Advisor",
+					run_in_background: false,
+					isolated: false,
+					inherit_context: false,
+					context_mode: "consultation",
+					draft: "All retry callers are durable.",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(result.isError).not.toBe(true);
+			expect(result.content[0].text).toContain("Disposition: refine");
+			expect(requestText).toContain("implement durable retry");
+			expect(requestText).toContain("Executor draft — CLAIM ONLY, NOT VERIFICATION EVIDENCE");
+			expect(requestText).not.toContain("# Parent Conversation Context");
+			expect(systemText).toContain("independent adjudication");
+			expect(activeTools).toEqual(
+				expect.arrayContaining([
+					"read",
+					"bash",
+					"grep",
+					"find",
+					"ls",
+					"memory_source",
+					"session_search",
+					"report_consultation",
+				]),
+			);
+			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "advise", "escalate"]) {
+				expect(activeTools).not.toContain(forbidden);
+			}
+		} finally {
+			await lifecycle.get("session_shutdown")?.();
+			process.chdir(previousCwd);
+		}
+	}, 30_000);
+
 	it("uses full parent context only when the invocation requests it", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-trust-"));
 		temporaryDirectories.push(cwd);
@@ -874,17 +1006,17 @@ RELOADED ROLE MUST NOT RUN.
 		expect(requests[1]).toContain("latest-handoff");
 	}, 30_000);
 
-	it("loads the advisor sidecar only when requested", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-advisor-scope-"));
+	it("loads the sentinel sidecar only when requested", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-sentinel-scope-"));
 		temporaryDirectories.push(cwd);
-		const extensionPath = join(cwd, "pi-advisor.ts");
+		const extensionPath = join(cwd, "pi-sentinel.ts");
 		writeFileSync(
 			extensionPath,
 			`
-export default function advisorMarker(pi) {
+export default function sentinelMarker(pi) {
 	pi.registerTool({
-		name: "child_advisor_marker",
-		label: "child_advisor_marker",
+		name: "child_sentinel_marker",
+		label: "child_sentinel_marker",
 		description: "marker",
 		parameters: { type: "object", properties: {}, additionalProperties: false },
 		execute: async () => ({ content: [{ type: "text", text: "marker" }] }),
@@ -894,25 +1026,25 @@ export default function advisorMarker(pi) {
 		);
 		const faux = registerFauxProvider({
 			provider: "faux",
-			models: [{ id: "faux-advisor-scope", contextWindow: 200_000 }],
+			models: [{ id: "faux-sentinel-scope", contextWindow: 200_000 }],
 		});
 		fauxProviders.push(faux);
 		faux.setResponses([
-			() => fauxAssistantMessage([fauxText("ADVISOR-OFF")]),
-			() => fauxAssistantMessage([fauxText("ADVISOR-ON")]),
-			() => fauxAssistantMessage([fauxText("ADVISOR-UNTRUSTED")]),
+			() => fauxAssistantMessage([fauxText("SENTINEL-OFF")]),
+			() => fauxAssistantMessage([fauxText("SENTINEL-ON")]),
+			() => fauxAssistantMessage([fauxText("SENTINEL-UNTRUSTED")]),
 		]);
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
 
-		const run = async (advisor: boolean, projectTrusted = true) => {
+		const run = async (sentinel: boolean, projectTrusted = true) => {
 			registerAgents(
 				new Map<string, AgentConfig>([
 					[
-						"advisor-scope",
+						"sentinel-scope",
 						{
-							name: "advisor-scope",
-							description: "advisor scope test",
+							name: "sentinel-scope",
+							description: "sentinel scope test",
 							builtinToolNames: ["read"],
 							extensions: [extensionPath],
 							skills: false,
@@ -934,12 +1066,12 @@ export default function advisorMarker(pi) {
 					sessionManager: { getSessionFile: () => undefined },
 					isProjectTrusted: () => projectTrusted,
 				} as any,
-				"advisor-scope",
+				"sentinel-scope",
 				"answer",
 				{
 					pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
 					model,
-					advisor,
+					sentinel,
 					onSessionCreated: (session) => {
 						tools = session.getAllTools().map((tool) => tool.name);
 					},
@@ -951,14 +1083,14 @@ export default function advisorMarker(pi) {
 		};
 
 		const off = await run(false);
-		expect(off.tools).not.toContain("child_advisor_marker");
-		expect(off.systemPrompt).not.toContain("<advisor-protocol>");
+		expect(off.tools).not.toContain("child_sentinel_marker");
+		expect(off.systemPrompt).not.toContain("<sentinel-protocol>");
 		const on = await run(true);
-		expect(on.tools).not.toContain("child_advisor_marker");
-		expect(on.systemPrompt).toContain("<advisor-protocol>");
+		expect(on.tools).not.toContain("child_sentinel_marker");
+		expect(on.systemPrompt).toContain("<sentinel-protocol>");
 		const untrusted = await run(true, false);
-		expect(untrusted.tools).not.toContain("child_advisor_marker");
-		expect(untrusted.systemPrompt).toContain("<advisor-protocol>");
+		expect(untrusted.tools).not.toContain("child_sentinel_marker");
+		expect(untrusted.systemPrompt).toContain("<sentinel-protocol>");
 	}, 30_000);
 
 	it("does not load a custom extensions path and keeps pi_exec out of child sessions", async () => {

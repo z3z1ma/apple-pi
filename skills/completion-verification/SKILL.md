@@ -33,7 +33,7 @@ When a check cannot run, say `Not verified` and why. This limits the claim; it d
 
 ## Review and delegation
 
-Advisor, agent, and reviewer reports are useful claims, not proof. Validate material points once. Completion does not require an independent review unless the operator requested it or a concrete named risk justifies it.
+Sentinel, agent, and reviewer reports are useful claims, not proof. Validate material points once. Completion does not require an independent review unless the operator requested it or a concrete named risk justifies it.
 
 Nits and optional cleanup remain optional; confirmed material defects block completion.
 

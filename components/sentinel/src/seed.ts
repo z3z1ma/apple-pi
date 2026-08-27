@@ -5,7 +5,7 @@ import { observationToSummaryLine, reflectionToSummaryLine } from "../../memory/
 import type { Entry } from "../../memory/src/session-ledger/types.js";
 
 import { formatTurnDelta, formatUserBash } from "./formatting.js";
-import type { AdvisorNote } from "./types.js";
+import type { SentinelNote } from "./types.js";
 
 function isTerminalAssistant(message: { content?: unknown } | undefined): boolean {
 	if (!message || !Array.isArray(message.content)) return true;
@@ -14,7 +14,7 @@ function isTerminalAssistant(message: { content?: unknown } | undefined): boolea
 	);
 }
 
-export const ADVISOR_RESEED_ENTRY_ID = "advisor-reseed";
+export const SENTINEL_RESEED_ENTRY_ID = "sentinel-reseed";
 /** Last implementing-agent turns kept in the compact seed. */
 export const RECENT_TRAJECTORY_TURNS = 8;
 
@@ -23,7 +23,7 @@ export type SeedUserRequest = {
 	prior: boolean;
 };
 
-export type SettledAdvice = AdvisorNote & {
+export type SettledAdvice = SentinelNote & {
 	disposition: "delivered" | "dropped";
 };
 
@@ -192,7 +192,7 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 	return parts.length ? `## Recent trajectory\n${parts.join("\n\n")}` : "";
 }
 
-export function formatAdvisorSeed(opts: {
+export function formatSentinelSeed(opts: {
 	fold?: string;
 	userMessages?: string;
 	trajectory?: string;
@@ -208,14 +208,14 @@ export function formatAdvisorSeed(opts: {
 	return parts.join("\n\n");
 }
 
-export function buildAdvisorSeed(opts: {
+export function buildSentinelSeed(opts: {
 	entries?: readonly unknown[];
 	rollingAdvice?: readonly SettledAdvice[];
 	/** Default true. Compact reseeds omit the fold; the parent packet carries it. */
 	includeFold?: boolean;
 }): string {
 	const includeFold = opts.includeFold !== false;
-	return formatAdvisorSeed({
+	return formatSentinelSeed({
 		fold: includeFold && opts.entries ? formatCuratorFold(opts.entries) : "",
 		userMessages: opts.entries ? formatRecentUserMessages(collectRecentUserRequests(opts.entries)) : "",
 		trajectory: opts.entries ? formatRecentTrajectory(opts.entries) : "",

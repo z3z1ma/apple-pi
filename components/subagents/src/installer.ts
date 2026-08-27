@@ -7,8 +7,16 @@ import {
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
+import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { bindPrimaryRecallTools } from "../../sentinel/src/recall.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
+import {
+	buildConsultationContext,
+	ADVISOR_CONSULTATION_OVERLAY,
+	renderConsultationContext,
+	type AdvisorFinding,
+} from "./consultation.js";
 import { renderAgentName } from "./agent-color.js";
 import { registerBtwCommand } from "./btw.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
@@ -37,7 +45,7 @@ import {
 	type ParentEscalationWait,
 } from "./escalation.js";
 import { GroupJoinManager } from "./group-join.js";
-import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
+import { resolveAgentContextMode, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
@@ -285,7 +293,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				systemPrompt: invocation.systemPrompt,
 				isolated: invocation.isolated,
 				inheritContext: false,
-				advisor: invocation.advisor,
+				sentinel: invocation.sentinel,
 				thinkingLevel: resolved.thinkingLevel,
 				cwd: request.cwd,
 				isBackground: true,
@@ -304,8 +312,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					thinking: resolved.thinkingLevel,
 					maxTurns,
 					isolated: invocation.isolated,
+					contextMode: "handoff",
 					inheritContext: false,
-					advisor: invocation.advisor,
+					sentinel: invocation.sentinel,
 					runInBackground: true,
 				},
 			});
@@ -317,6 +326,121 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				id,
 				completion,
 				abort: () => manager.abort(id),
+			};
+		},
+		async runConsultation(ctx, request) {
+			bindSessionContext(ctx);
+			const dispatch = resolveSpawnType("Advisor");
+			if (!dispatch.ok) throw new Error(dispatch.message);
+			const configured = getAgentConfig(dispatch.type);
+			if (!configured) throw new Error('Unknown or disabled agent type: "Advisor"');
+			const agentConfig = {
+				...configured,
+				sentinel: false,
+				allowedSubagents: undefined,
+				persistSession: false,
+			};
+			const resolved = resolveAgentProfile({
+				registry: ctx.modelRegistry,
+				parentModel: ctx.model,
+				parentThinking: ctx.thinkingLevel,
+				config: agentConfig,
+				explicitProfile: request.profile,
+			});
+			if (resolved.error) throw new Error(resolved.error);
+			let finding: AdvisorFinding | undefined;
+			const reportTool = defineTool({
+				name: "report_consultation",
+				label: "Report Consultation",
+				description: "Return the independent Advisor disposition. Call exactly once after investigating.",
+				parameters: Type.Object({
+					disposition: Type.Union([
+						Type.Literal("confirm"),
+						Type.Literal("refute"),
+						Type.Literal("refine"),
+						Type.Literal("uncertain"),
+					]),
+					severity: Type.Optional(Type.Union([Type.Literal("concern"), Type.Literal("blocker")])),
+					finding: Type.String({ minLength: 1 }),
+					evidence: Type.Array(Type.String()),
+					recommended_action: Type.Optional(Type.String()),
+					uncertainty: Type.Optional(Type.String()),
+				}),
+				async execute(_toolCallId, params) {
+					if (finding) return textResult("A consultation disposition was already recorded.", undefined, true);
+					finding = {
+						disposition: params.disposition,
+						...(params.severity ? { severity: params.severity } : {}),
+						finding: params.finding,
+						evidence: params.evidence,
+						...(params.recommended_action ? { recommendedAction: params.recommended_action } : {}),
+						...(params.uncertainty ? { uncertainty: params.uncertainty } : {}),
+					};
+					return { ...textResult("Consultation disposition recorded."), terminate: true };
+				},
+			});
+			const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, cost: 0 };
+			const startedAt = Date.now();
+			let record: AgentRecord | undefined;
+			let thrown: unknown;
+			try {
+				record = await managedService.runFresh(ctx, {
+					type: dispatch.type,
+					description: "Advisor consultation",
+					prompt: renderConsultationContext(request.context),
+					agentConfig,
+					model: resolved.model,
+					thinkingLevel: resolved.thinkingLevel,
+					systemPrompt: ADVISOR_CONSULTATION_OVERLAY,
+					customTools: [reportTool, ...bindPrimaryRecallTools(ctx.sessionManager)],
+					loadStandardChildExtensions: false,
+					internalOwner: `consultation:${request.context.metadata.createdAt}`,
+					cwd: request.context.metadata.cwd,
+					signal: request.signal,
+					onActivity: request.onActivity,
+					onAssistantUsage(delta) {
+						usage.input += delta.input;
+						usage.cacheRead += delta.cacheRead;
+						usage.cacheWrite += delta.cacheWrite;
+						usage.output += delta.output;
+						usage.cost += delta.cost;
+					},
+				});
+			} catch (error) {
+				thrown = error;
+			}
+			const durationMs = Date.now() - startedAt;
+			const resultStatus = request.signal?.aborted
+				? "cancelled"
+				: thrown || !record || ["error", "stopped", "aborted"].includes(record.status)
+					? "failed"
+					: finding
+						? "completed"
+						: "malformed";
+			const error =
+				thrown instanceof Error
+					? thrown.message
+					: thrown
+						? String(thrown)
+						: (record?.error ??
+							(resultStatus === "malformed" ? "Advisor returned without a typed disposition." : undefined));
+			const sessionId = ctx.sessionManager.getSessionId?.() ?? ctx.sessionManager.getSessionFile?.() ?? undefined;
+			withSidecarUsageContext({ sessionId }, () => {
+				recordSidecarUsage({
+					agent: "advisor",
+					trigger: `consultation:${request.context.metadata.source}`,
+					status: finding?.disposition ?? resultStatus,
+					provider: resolved.model?.provider,
+					model: resolved.model?.id,
+					durationMs,
+					...usage,
+				});
+			});
+			return {
+				status: resultStatus,
+				...(resultStatus === "completed" && finding ? { finding } : {}),
+				...(error ? { error } : {}),
+				usage: { ...usage, durationMs, toolCalls: record?.toolUses ?? 0 },
 			};
 		},
 		async runFresh(ctx, request) {
@@ -345,8 +469,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					hardTurnLimit: request.hardTurnLimit ?? true,
 					toolExecution: request.toolExecution,
 					agentConfig: request.agentConfig,
+					systemPrompt: request.systemPrompt,
 					toolPolicy: request.toolPolicy,
 					customTools: request.customTools,
+					loadStandardChildExtensions: request.loadStandardChildExtensions,
 					internalOwner,
 					inheritContext: false,
 					thinkingLevel: request.thinkingLevel,
@@ -357,8 +483,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						thinking: request.thinkingLevel,
 						maxTurns: request.maxTurns,
 						isolated: false,
+						contextMode: "handoff",
 						inheritContext: false,
-						advisor: false,
+						sentinel: false,
 						runInBackground: false,
 					},
 					onToolActivity: tracker.callbacks.onToolActivity,
@@ -535,13 +662,15 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"Use background mode for parallel work, then get_subagent_result; use resume to continue an in-memory agent.",
 			"Custom agents are Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
 			"Subagents may delegate only when their definition explicitly sets allowed_subagents.",
+			"Advisor supports context_mode consultation: the harness assembles current request, trajectory receipts, diff, validation, failures, and evidence handles; prompt is only an optional focus.",
 			`The live <${TEAM_SYSTEM_PROMPT_TAG}> system-prompt block lists every callable teammate with its name, configured inference profile, and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block lists the inference profiles and their descriptions. Select the teammate with subagent_type, optionally select an inference profile with profile, and append dynamic guidance with system_prompt without changing capabilities.`,
 		].join(" "),
 		promptGuidelines: [
 			`The parent session is a senior engineer who may implement. In the live <${TEAM_SYSTEM_PROMPT_TAG}> block, choose a teammate by its own description and use its configured inference profile unless the invocation needs an explicit profile override. If no teammate fits, keep the work in the parent session.`,
 			"Do not launch overlapping writers. Do not retry an unchanged rejected task.",
 			`Use the Agent tool for collaboration and pi_exec agents.run for program graphs. Agent subagent_type and agents.run type select a teammate; profile selects an available inference profile. Pair profile with Agent's system_prompt or agents.run's systemPrompt for dynamic specialization. Additional guidance cannot grant capabilities.`,
-			"The persistent Advisor reviews the root session. Implement runs its Advisor sidecar by default; set advisor false to explicitly opt out for one new session. Other types follow their agent-definition Advisor default.",
+			"When deeper judgment is needed, invoke Advisor with context_mode consultation and use prompt only as an optional focus. The harness supplies current primary context; draft is optional and explicitly unverified.",
+			"The persistent Sentinel reviews the root session. Implement runs its supervision sidecar by default; set sentinel false to explicitly opt out for one new session. Other types follow their agent-definition Sentinel default.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
@@ -564,12 +693,23 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			}),
 			inherit_context: Type.Boolean({
 				default: false,
-				description: "Include the full parent conversation before the initial task prompt.",
+				description: "Legacy context switch: false is handoff and true is inherit. Must not contradict context_mode.",
 			}),
-			advisor: Type.Optional(
+			context_mode: Type.Optional(
+				Type.Union([Type.Literal("handoff"), Type.Literal("inherit"), Type.Literal("consultation")], {
+					description:
+						"Context source for a new session. consultation is Advisor-only and uses harness-assembled current context.",
+				}),
+			),
+			draft: Type.Optional(
+				Type.String({
+					description: "Consultation-only Executor proposal, labeled as an unverified claim rather than evidence.",
+				}),
+			),
+			sentinel: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's Advisor default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's Sentinel default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
@@ -577,25 +717,97 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Public Agent spawn, resume, detachment, and escalation share one lifecycle boundary.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			bindSessionContext(ctx);
+			const contextResolution = resolveAgentContextMode(params.context_mode, params.inherit_context);
+			if (contextResolution.error) return textResult(contextResolution.error, undefined, true);
+			if (params.draft !== undefined && contextResolution.mode !== "consultation") {
+				return textResult("draft is valid only with context_mode: consultation.", undefined, true);
+			}
+			if (contextResolution.mode === "consultation") {
+				if (params.resume)
+					return textResult(
+						"Consultations are fresh episodic Advisor runs and cannot resume a session.",
+						undefined,
+						true,
+					);
+				if (params.subagent_type !== "Advisor")
+					return textResult("context_mode: consultation is available only for Advisor.", undefined, true);
+				if (params.run_in_background)
+					return textResult(
+						"Agent consultation returns one adjudicated result and cannot run in public background mode.",
+						undefined,
+						true,
+					);
+				if (params.sentinel === true)
+					return textResult(
+						"Advisor consultation always disables Sentinel to prevent recursive supervision.",
+						undefined,
+						true,
+					);
+				if (params.system_prompt?.trim())
+					return textResult(
+						"Advisor consultation uses its fixed adjudication overlay; system_prompt is not accepted.",
+						undefined,
+						true,
+					);
+				const entries = ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries?.() ?? [];
+				try {
+					const context = await buildConsultationContext({
+						pi,
+						ctx,
+						source: "executor",
+						trajectorySequence: entries.length,
+						focus: params.prompt,
+						executorDraft: params.draft,
+					});
+					const result = await managedService.runConsultation(ctx, {
+						context,
+						profile: params.profile,
+						signal,
+					});
+					if (result.status !== "completed" || !result.finding) {
+						return textResult(
+							`Advisor consultation ${result.status}: ${result.error ?? "no typed disposition"}`,
+							undefined,
+							true,
+						);
+					}
+					const finding = result.finding;
+					const output = [
+						`Disposition: ${finding.disposition}`,
+						finding.severity ? `Severity: ${finding.severity}` : "",
+						`Finding: ${finding.finding}`,
+						finding.evidence.length ? `Evidence:\n${finding.evidence.map((item) => `- ${item}`).join("\n")}` : "",
+						finding.recommendedAction ? `Recommended action: ${finding.recommendedAction}` : "",
+						finding.uncertainty ? `Uncertainty: ${finding.uncertainty}` : "",
+					].filter(Boolean);
+					return textResult(output.join("\n\n"));
+				} catch (error) {
+					return textResult(error instanceof Error ? error.message : String(error), undefined, true);
+				}
+			}
 
 			if (params.resume) {
 				const existing = manager.getRecord(params.resume);
 				if (!existing || existing.parentAgentId || existing.internalOwner)
 					return textResult(`Agent not found: ${params.resume}`, undefined, true);
-				const requestedInheritance = params.inherit_context === true;
-				const requestedAdvisor = params.advisor ?? existing.invocation?.advisor === true;
+				const requestedContextMode = contextResolution.mode;
+				const existingContextMode =
+					existing.invocation?.contextMode ?? (existing.invocation?.inheritContext ? "inherit" : "handoff");
+				const requestedInheritance = requestedContextMode === "inherit";
+				const requestedSentinel = params.sentinel ?? existing.invocation?.sentinel === true;
 				const requestedIsolation = params.isolated === true;
 				const requestedProfile = params.profile ?? existing.invocation?.profile;
 				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
 				if (
+					requestedContextMode !== existingContextMode ||
 					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
-					requestedAdvisor !== (existing.invocation?.advisor === true) ||
+					requestedSentinel !== (existing.invocation?.sentinel === true) ||
 					requestedIsolation !== (existing.invocation?.isolated === true) ||
 					requestedProfile !== existing.invocation?.profile ||
 					requestedSystemPrompt !== existing.invocation?.systemPrompt
 				) {
 					return textResult(
-						"profile, system_prompt, inherit_context, advisor, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						"profile, system_prompt, context_mode, inherit_context, sentinel, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
 						undefined,
 						true,
 					);
@@ -689,8 +901,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				thinking: resolvedAgentProfile.thinkingLevel,
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
+				contextMode: invocation.contextMode,
 				inheritContext: invocation.inheritContext,
-				advisor: invocation.advisor,
+				sentinel: invocation.sentinel,
 				runInBackground: invocation.runInBackground,
 			};
 			const options = {
@@ -702,7 +915,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
-				advisor: invocation.advisor,
+				sentinel: invocation.sentinel,
 				thinkingLevel: resolvedAgentProfile.thinkingLevel,
 				cwd: params.cwd,
 				invocation: invocationDetails,

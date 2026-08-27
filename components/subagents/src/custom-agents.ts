@@ -111,7 +111,7 @@ function loadFromDir(
 			maxTurns: nonNegativeInt(fm.max_turns),
 			persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
 			sessionDir: str(fm.session_dir),
-			advisor: typeof fm.advisor === "boolean" ? fm.advisor : undefined,
+			sentinel: typeof fm.sentinel === "boolean" ? fm.sentinel : undefined,
 			allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
 			systemPrompt: body.trim(),
 			promptMode: fm.prompt_mode === "append" ? "append" : "replace",

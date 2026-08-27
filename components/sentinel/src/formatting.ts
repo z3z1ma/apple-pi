@@ -10,16 +10,16 @@ import {
 	truncateResultBody,
 	utf8Bytes,
 } from "./receipts.js";
-import type { AdvisorNote } from "./types.js";
+import type { SentinelNote } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
 
-/** Render held advisories as the reconfirmation preamble for the next review. */
-export function formatReconfirmPreamble(held: readonly AdvisorNote[]): string {
+/** Render held sentinel notes as the reconfirmation preamble for the next review. */
+export function formatReconfirmPreamble(held: readonly SentinelNote[]): string {
 	if (!held.length) return "";
 	const items = held.map((note) => `- [${(note.severity ?? "nit").toUpperCase()}] ${note.note}`).join("\n");
 	return [
-		"### Held advisories — reconfirm",
+		"### Held sentinel notes — reconfirm",
 		"",
 		"You raised these on an earlier step; they were held pending reconfirmation, because by now the agent may have already addressed them. Re-check each against the latest activity below.",
 		"For every item that STILL applies, call `advise` again — same severity, or higher if it's gotten worse; never lower it. Say nothing for the rest — silence drops them. Do NOT call `advise` to announce that an item is resolved or that all are cleared; just stay silent.",
@@ -31,13 +31,13 @@ export function formatReconfirmPreamble(held: readonly AdvisorNote[]): string {
 	].join("\n");
 }
 
-const ADVISOR_GUIDANCE = "weigh, don't blindly obey";
+const SENTINEL_GUIDANCE = "weigh, don't blindly obey";
 const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
  * Render notes as the agent-facing message body: one `<advisory>` per note.
  * `stale` adds a `context` attribute noting the advice is about an earlier step
- * (used for nits, which the advisor always raises a little behind the agent).
+ * (used for nits, which the sentinel always raises a little behind the agent).
  * `finalAnswer` appends guidance for advice delivered as a followup to a terminal
  * message: at the moment it is steered in, the primary is stopped having returned
  * a final answer this turn — regardless of which turn generated the note. If the
@@ -46,21 +46,23 @@ const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, 
  * back-and-forth thread it has to stitch together.
  */
 export function formatAdvisoryContent(
-	notes: readonly AdvisorNote[],
+	notes: readonly SentinelNote[],
 	opts?: { stale?: boolean; finalAnswer?: boolean },
 ): string {
 	const context = opts?.stale ? ` context="raised about an earlier step"` : "";
 	const body = notes
 		.map((n) => {
 			const sev = n.severity ? ` severity="${n.severity}"` : "";
-			return `<advisory${sev}${context} guidance="${ADVISOR_GUIDANCE}">\n${escapeXml(n.note)}\n</advisory>`;
+			const source = n.source ? ` source="${n.source}"` : "";
+			const disposition = n.adjudication ? ` disposition="${n.adjudication}"` : "";
+			return `<advisory${sev}${source}${disposition}${context} guidance="${SENTINEL_GUIDANCE}">\n${escapeXml(n.note)}\n</advisory>`;
 		})
 		.join("\n");
 	if (!opts?.finalAnswer) return body;
 	return `${body}\n\nYou had already returned a final answer to the user this turn. If you act on the advice above, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
 }
 
-// ---- transcript delta formatting (primary turn → markdown for the advisor) ----
+// ---- transcript delta formatting (primary turn → markdown for the sentinel) ----
 
 function textOf(content: Array<{ type: string; text?: string }>): string {
 	return content
@@ -71,7 +73,7 @@ function textOf(content: Array<{ type: string; text?: string }>): string {
 
 // Render any tool-call argument value as readable text with REAL newlines preserved
 // at EVERY depth. We never JSON.stringify content: that escapes every real newline
-// into a literal backslash-n (so a heredoc body reaches the advisor as `<<'EOF'\n...`
+// into a literal backslash-n (so a heredoc body reaches the sentinel as `<<'EOF'\n...`
 // — the exact bug that produced a bogus "garbled markdown" advisory), and escaping
 // only at the top level merely pushes the bug into nested strings (e.g. edits[].oldText).
 // String leaves ride verbatim; containers are walked. Tool args are plain JSON data
@@ -79,7 +81,7 @@ function textOf(content: Array<{ type: string; text?: string }>): string {
 // a depth cap is the only (never-hit-in-practice) backstop.
 function renderArgValue(v: unknown, indent: string, depth: number): string {
 	// Multiline strings ride raw on following lines — NOT re-indented, which would
-	// alter the very content (e.g. a heredoc body) the advisor must see verbatim.
+	// alter the very content (e.g. a heredoc body) the sentinel must see verbatim.
 	if (typeof v === "string") return v.includes("\n") ? `\n${v}` : ` ${v}`;
 	if (v === null || typeof v !== "object") return ` ${String(v)}`;
 	if (depth >= 8) return " […]";
@@ -156,7 +158,7 @@ function formatImplementingAgent(
 			}
 			// When this call produced a diff (a successful edit), suppress the raw
 			// {oldText,newText} args and let the result's -/+ diff carry the change: the
-			// args are two unannotated peer blobs and the advisor — reviewing AFTER the
+			// args are two unannotated peer blobs and the sentinel — reviewing AFTER the
 			// edit landed (a fresh read shows the NEW side) — can't tell which is on disk
 			// ("didn't persist"). With NO diff (failed edit, non-edit tool) show the args
 			// verbatim; for a failed edit they're the only evidence of what was attempted.
@@ -186,7 +188,7 @@ function formatProjectedResults(
 		// main model gets, computed by pi's edit-diff) for a SUCCESSFUL result: its -/+
 		// markers unambiguously frame removed-vs-current lines, which the flat
 		// {oldText,newText} echo lacks. It is also a pinned point-in-time snapshot of
-		// THIS turn's change — the advisor's own read returns current (possibly later-
+		// THIS turn's change — the sentinel's own read returns current (possibly later-
 		// edited) disk, so the inline diff is not re-derivable and must ride verbatim.
 		// On an ERROR, show the text body instead: the error is the diagnostic, and a
 		// diff from a failed edit is untrustworthy (did it apply? partially?).
@@ -251,7 +253,7 @@ function contextText(content: string | Array<{ type: string; text?: string }>): 
 /**
  * Render exactly the primary messages Pi currently considers active after applying
  * compaction or branch navigation. This is prior context for the next review, not
- * a historical review request, so advisor messages themselves are excluded.
+ * a historical review request, so sentinel messages themselves are excluded.
  */
 export function formatActiveSessionContext(entries: readonly SessionEntry[]): string {
 	const messages: AgentMessage[] = entries

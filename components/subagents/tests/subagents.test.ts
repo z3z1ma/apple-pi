@@ -19,7 +19,7 @@ import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversa
 import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import { createParentEscalationTool, ParentEscalationHub } from "../src/escalation.js";
-import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
+import { resolveAgentContextMode, resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { formatNotification } from "../src/notifications.js";
@@ -127,7 +127,7 @@ describe("owned subagent surface", () => {
 			builtinToolNames: ["read", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
-			advisor: false,
+			sentinel: false,
 			persistSession: false,
 			promptMode: "replace",
 		});
@@ -227,14 +227,14 @@ describe("owned subagent surface", () => {
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Counsel")).toMatchObject({
+		expect(DEFAULT_AGENTS.get("Advisor")).toMatchObject({
 			profile: "deep",
 			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
 			profile: "coding",
-			advisor: true,
+			sentinel: true,
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
@@ -249,7 +249,7 @@ describe("owned subagent surface", () => {
 		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/Not local reconnaissance/);
 		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/no docs tools/);
 		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/session extensions \(MCP\)/);
-		expect(DEFAULT_AGENTS.get("Counsel")?.systemPrompt).toMatch(/You advise; you do not implement/);
+		expect(DEFAULT_AGENTS.get("Advisor")?.systemPrompt).toMatch(/You advise; you do not implement/);
 		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
 		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
 	});
@@ -284,7 +284,7 @@ describe("owned subagent surface", () => {
 			"---\nname: unknown-profile\ndescription: Invalid profile\nprofile: custom-fast\n---\n\nInvalid instructions.\n",
 		);
 		expect(() => loadCustomAgents({ cwd: root, projectTrusted: true }, true)).toThrow(
-			/profile must be one of: quick, balanced, deep, coding, visual-engineering, background/,
+			/profile must be one of: quick, balanced, sentinel, deep, coding, visual-engineering, background/,
 		);
 	});
 
@@ -384,23 +384,23 @@ describe("owned subagent surface", () => {
 			run_in_background: false,
 			isolated: false,
 			inherit_context: false,
-			advisor: false,
+			sentinel: false,
 			system_prompt: "  Focus on the requested boundary.  ",
 		});
 		expect(resolved).toMatchObject({
 			maxTurns: 11,
 			systemPrompt: "Focus on the requested boundary.",
 			inheritContext: false,
-			advisor: false,
+			sentinel: false,
 			runInBackground: false,
 			isolated: false,
 		});
 	});
 
-	it("enables Advisor only for write-capable default agents", () => {
-		const advisorDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.advisor === true);
-		expect(advisorDefaults).not.toHaveLength(0);
-		for (const config of advisorDefaults) {
+	it("enables Sentinel only for write-capable default agents", () => {
+		const sentinelDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.sentinel === true);
+		expect(sentinelDefaults).not.toHaveLength(0);
+		for (const config of sentinelDefaults) {
 			const tools = config.builtinToolNames ?? BUILTIN_TOOL_NAMES;
 			expect(
 				tools.some((tool) => (tool === "edit" || tool === "write") && !config.disallowedTools?.includes(tool)),
@@ -408,8 +408,8 @@ describe("owned subagent surface", () => {
 		}
 	});
 
-	it("uses agent Advisor defaults while preserving explicit invocation overrides", () => {
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ advisor: true });
+	it("uses agent Sentinel defaults while preserving explicit invocation overrides", () => {
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ sentinel: true });
 		expect(
 			resolveAgentInvocationConfig(
 				{
@@ -423,27 +423,44 @@ describe("owned subagent surface", () => {
 				},
 				{},
 			),
-		).toMatchObject({ advisor: true });
-		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, advisor: false }, {})).toMatchObject({
-			advisor: false,
+		).toMatchObject({ sentinel: true });
+		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, sentinel: false }, {})).toMatchObject({
+			sentinel: false,
 		});
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ advisor: false });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ sentinel: false });
 		expect(
 			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: false,
-				advisor: false,
+				sentinel: false,
 			}),
-		).toMatchObject({ inheritContext: false, advisor: false });
+		).toMatchObject({ inheritContext: false, sentinel: false });
 		expect(
 			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: true,
-				advisor: true,
+				sentinel: true,
 			}),
-		).toMatchObject({ inheritContext: true, advisor: true });
+		).toMatchObject({ inheritContext: true, sentinel: true });
+	});
+
+	it("resolves handoff, inheritance, and consultation as distinct context modes", () => {
+		expect(resolveAgentContextMode(undefined, false)).toEqual({ mode: "handoff" });
+		expect(resolveAgentContextMode(undefined, true)).toEqual({ mode: "inherit" });
+		expect(resolveAgentContextMode("consultation", false)).toEqual({ mode: "consultation" });
+		expect(resolveAgentContextMode("inherit", false)).toEqual({ mode: "inherit" });
+		expect(resolveAgentContextMode("consultation", true)).toMatchObject({
+			mode: "consultation",
+			error: expect.stringContaining("contradicts inherit_context"),
+		});
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Advisor"), { context_mode: "consultation" })).toMatchObject(
+			{
+				contextMode: "consultation",
+				inheritContext: false,
+			},
+		);
 	});
 
 	it("retains the full branch only for explicit inheritance", () => {
@@ -665,10 +682,11 @@ describe("owned subagent surface", () => {
 		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
 		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context"]));
-		expect(agentSchema.required).not.toContain("advisor");
+		expect(agentSchema.required).not.toContain("sentinel");
 		expect(agentSchema.properties.profile.anyOf.map((entry: any) => entry.const)).toEqual([
 			"quick",
 			"balanced",
+			"sentinel",
 			"deep",
 			"coding",
 			"visual-engineering",
@@ -676,7 +694,7 @@ describe("owned subagent surface", () => {
 		]);
 		expect(agentSchema.properties.profile.description).toContain("model/thinking only");
 		expect(agentSchema.properties.system_prompt.description).toContain("appended after the selected definition");
-		expect(agentSchema.properties.advisor.description).toContain("definition's Advisor default");
+		expect(agentSchema.properties.sentinel.description).toContain("definition's Sentinel default");
 		expect(resultSchema.required).not.toContain("yield_seconds");
 		expect(resultSchema.properties.yield_seconds.minimum).toBe(0);
 		expect(resultSchema.properties.yield_seconds.description).toContain("very large positive value");

@@ -1,4 +1,4 @@
-import type { HarnessBoundedActivity } from "./service.js";
+import type { AssistantUsageDelta, HarnessBoundedActivity } from "./service.js";
 import type { AgentActivity } from "./ui/agent-widget.js";
 import { addUsage } from "./usage.js";
 
@@ -104,7 +104,7 @@ export function createActivityTracker(
 				state.session = session;
 				onChange?.();
 			},
-			onAssistantUsage: (usage: { input: number; output: number; cacheWrite: number }) => {
+			onAssistantUsage: (usage: AssistantUsageDelta) => {
 				addUsage(state.lifetimeUsage, usage);
 				onChange?.();
 			},

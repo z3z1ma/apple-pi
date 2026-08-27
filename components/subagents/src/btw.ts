@@ -38,7 +38,7 @@ export const BTW_AGENT_CONFIG: AgentConfig = {
 	builtinToolNames: ["read", "grep", "find", "ls"],
 	extensions: false,
 	skills: false,
-	advisor: false,
+	sentinel: false,
 	persistSession: false,
 	systemPrompt: `You are a concise side-channel assistant for a coding session.
 Answer the user's questions directly. Use the read-only repository tools when local facts are needed.
@@ -278,7 +278,7 @@ export function registerBtwCommand(pi: ExtensionAPI, manager: AgentManager): voi
 						modelResolved: true,
 						thinkingLevel: ctx.thinkingLevel,
 						loadStandardChildExtensions: false,
-						advisor: false,
+						sentinel: false,
 						isolated: true,
 						inheritContext: false,
 						isBackground: false,
@@ -290,7 +290,7 @@ export function registerBtwCommand(pi: ExtensionAPI, manager: AgentManager): voi
 							thinking: ctx.thinkingLevel,
 							isolated: true,
 							inheritContext: false,
-							advisor: false,
+							sentinel: false,
 							runInBackground: false,
 						},
 						onSessionCreated: () => sessionReady?.(),

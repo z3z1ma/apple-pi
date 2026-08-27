@@ -11,7 +11,7 @@
 
 ## Retained cohesive modules
 
-`AdvisorRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, and `agent-manager.ts` remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
+`SentinelRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, and `agent-manager.ts` remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
 
 ## Quality commands
 

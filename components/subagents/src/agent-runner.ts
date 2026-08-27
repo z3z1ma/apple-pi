@@ -20,7 +20,7 @@ import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js
 import { CODEX_FAST_EXTENSION_PATH } from "../../../extensions/codex-fast.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
-import { ADVISOR_EXTENSION_PATH } from "../../../extensions/pi-advisor.js";
+import { SENTINEL_EXTENSION_PATH } from "../../../extensions/pi-sentinel.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
@@ -34,7 +34,7 @@ import {
 	SUBAGENT_TOOL_NAMES,
 } from "./nested-tools.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
-import type { ManagedAgentToolPolicy } from "./service.js";
+import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
 
@@ -58,9 +58,9 @@ export { SUBAGENT_TOOL_NAMES };
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
 
-/** Child sessions: no discovery; explicit fast-mode/safety/context extensions, MCP, and optional advisor. */
+/** Child sessions: no discovery; explicit fast-mode/safety/context extensions, MCP, and optional sentinel. */
 export function childSessionExtensions(
-	advisor = false,
+	sentinel = false,
 	standard = true,
 ): {
 	noExtensions: true;
@@ -69,7 +69,7 @@ export function childSessionExtensions(
 	const additionalExtensionPaths = [AUTO_COMPACT_EXTENSION_PATH, CODEX_FAST_EXTENSION_PATH];
 	if (standard) {
 		additionalExtensionPaths.push(LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH);
-		if (advisor) additionalExtensionPaths.push(ADVISOR_EXTENSION_PATH);
+		if (sentinel) additionalExtensionPaths.push(SENTINEL_EXTENSION_PATH);
 	}
 	return { noExtensions: true, additionalExtensionPaths };
 }
@@ -156,12 +156,12 @@ export interface RunOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Disable ledger, session-search, MCP, and optional Advisor; fast mode and the overflow guard remain mandatory. */
+	/** Disable ledger, session-search, MCP, and optional Sentinel; fast mode and the overflow guard remain mandatory. */
 	loadStandardChildExtensions?: boolean;
 	signal?: AbortSignal;
 	isolated?: boolean;
 	inheritContext?: boolean;
-	advisor?: boolean;
+	sentinel?: boolean;
 	thinkingLevel?: ThinkingLevel;
 	/**
 	 * True when another agent spawned this one. Nested runs stay in memory by
@@ -194,7 +194,7 @@ export interface RunOptions {
 	 * Lets callers maintain a lifetime accumulator that survives compaction
 	 * (which replaces session.state.messages and resets stats-derived sums).
 	 */
-	onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 	/**
 	 * Called when the session successfully compacts. `tokensBefore` is upstream's
 	 * pre-compaction context size estimate. Aborted compactions don't fire.
@@ -383,14 +383,14 @@ export async function runAgent(
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
 	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
-	// Ordinary children load fast mode, the overflow guard, ledger, session search, MCP, and optional Advisor;
+	// Ordinary children load fast mode, the overflow guard, ledger, session search, MCP, and optional Sentinel;
 	// narrowly owned internal sessions may opt out of everything except fast mode and the guard. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to
 	// the task prompt below. Agent-definition `extensions:` is ignored.
 	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(
-		options.advisor === true,
+		options.sentinel === true,
 		options.loadStandardChildExtensions !== false,
 	);
 
@@ -471,7 +471,7 @@ export async function runAgent(
 	if (customToolNames.size !== customTools.length)
 		throw new Error(`Agent "${type}" received duplicate custom tool names`);
 
-	// Ledger (and optional advisor) load via explicit `-e`, so their tools must
+	// Ledger (and optional sentinel) load via explicit `-e`, so their tools must
 	// be able to register. Leave `allowedToolNames` unset and deny the stable
 	// names that must never appear: orchestration tools the agent did not opt
 	// into, built-ins it did not ask for, and `disallowedTools`.
@@ -617,8 +617,10 @@ export async function runAgent(
 			if (u)
 				options.onAssistantUsage?.({
 					input: u.input ?? 0,
-					output: u.output ?? 0,
+					cacheRead: u.cacheRead ?? 0,
 					cacheWrite: u.cacheWrite ?? 0,
+					output: u.output ?? 0,
+					cost: typeof u.cost === "number" ? u.cost : (u.cost?.total ?? 0),
 				});
 		}
 		if (event.type === "compaction_end" && !event.aborted && event.result) {
@@ -660,7 +662,7 @@ export async function resumeAgent(
 	prompt: string,
 	options: {
 		onToolActivity?: (activity: ToolActivity) => void;
-		onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
+		onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 		onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
 		signal?: AbortSignal;
 	} = {},
@@ -683,8 +685,10 @@ export async function resumeAgent(
 						if (u)
 							options.onAssistantUsage?.({
 								input: u.input ?? 0,
-								output: u.output ?? 0,
+								cacheRead: u.cacheRead ?? 0,
 								cacheWrite: u.cacheWrite ?? 0,
+								output: u.output ?? 0,
+								cost: typeof u.cost === "number" ? u.cost : (u.cost?.total ?? 0),
 							});
 					}
 					if (event.type === "compaction_end" && !event.aborted && event.result) {
