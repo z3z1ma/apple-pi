@@ -1358,12 +1358,14 @@ describe("pi_exec tool", () => {
 			},
 		};
 		const echo = { ...definition, name: "echo_value" };
+		const exec = { ...definition, name: "pi_exec" };
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		runner.extensions = [
 			{
 				tools: new Map([
 					[definition.name, { definition }],
 					[echo.name, { definition: echo }],
+					[exec.name, { definition: exec }],
 				]),
 			},
 		];
@@ -1613,8 +1615,16 @@ return pi.read({ path: "result.txt" });
 				return { content: [{ type: "text", text: `echo:${params.value}` }], details: { echoed: true } };
 			},
 		};
+		const exec = { ...echo, name: "pi_exec" };
 		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [{ tools: new Map([["echo_value", { definition: echo }]]) }];
+		runner.extensions = [
+			{
+				tools: new Map([
+					["echo_value", { definition: echo }],
+					["pi_exec", { definition: exec }],
+				]),
+			},
+		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 		const childRunner = Object.create(ExtensionRunner.prototype) as any;
 		childRunner.extensions = [{ tools: new Map([["child_only", { definition: { ...echo, name: "child_only" } }]]) }];
@@ -1627,10 +1637,19 @@ return pi.read({ path: "result.txt" });
 				tools: new Map([
 					["echo_value", { definition: echo }],
 					["reload_value", { definition: reloaded }],
+					["pi_exec", { definition: exec }],
 				]),
 			},
 		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(reloadedRoot);
+
+		// Auxiliary sessions such as Advisor assemble their own tool catalogs
+		// outside the subagent child-context marker. They must not displace the
+		// root catalog that owns pi_exec.
+		const auxiliaryRunner = Object.create(ExtensionRunner.prototype) as any;
+		auxiliaryRunner.extensions = [];
+		ExtensionRunner.prototype.getAllRegisteredTools.call(auxiliaryRunner);
+
 		childRunner.extensions = [
 			{ tools: new Map([["late_child_only", { definition: { ...echo, name: "late_child_only" } }]]) },
 		];

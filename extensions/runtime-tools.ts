@@ -36,10 +36,11 @@ export const installRegisteredToolCapture = (): void => {
 		// AsyncLocalStorage scope that constructed the AgentSession has returned.
 		if (hub.children.has(this)) return tools;
 
-		// A root /reload may replace the ExtensionRunner. Every non-child assembly
-		// therefore reclaims ownership and refreshes definitions, while runners
-		// positively identified as apple-pi subagents can never displace it.
-		hub.latest = tools;
+		// Advisor and other auxiliary sessions may assemble their own catalogs
+		// outside apple-pi's child-session marker. Only the root runner that owns
+		// pi_exec may publish the catalog. A root /reload still refreshes it because
+		// the replacement runner registers pi_exec too.
+		if (tools.some((tool) => tool.definition.name === "pi_exec")) hub.latest = tools;
 		return tools;
 	};
 };
