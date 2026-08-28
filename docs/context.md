@@ -1,10 +1,10 @@
-# Context and memory
+# Context and notebook
 
 Compaction has one hook owner. On an xAI model using `openai-responses`, [`extensions/xai-context-compaction.ts`](../extensions/xai-context-compaction.ts) handles `/compact`, automatic compaction, and overflow recovery by calling xAI's `POST /responses/compact`. Other models leave `session_before_compact` unset so Pi's default summarizer runs.
 
-[`extensions/auto-compact.ts`](../extensions/auto-compact.ts) prevents an oversized post-tool continuation from reaching the provider. When context usage reaches Pi's model-specific native `context window - reserve` boundary, it arms the active provider stream. The next request containing that tool batch receives a local synthetic context-overflow response instead of an upstream call. Pi then uses its native overflow path to compact and retry the same agent run. The guard is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers. It follows Pi's effective `compaction.enabled` setting and the Pair memory `passive` setting.
+[`extensions/auto-compact.ts`](../extensions/auto-compact.ts) prevents an oversized post-tool continuation from reaching the provider. When context usage reaches Pi's model-specific native `context window - reserve` boundary, it arms the active provider stream. The next request containing that tool batch receives a local synthetic context-overflow response instead of an upstream call. Pi then uses its native overflow path to compact and retry the same agent run. The guard is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers. It follows Pi's effective `compaction.enabled` setting and the Pair notebook `passive` setting.
 
-After any compaction entry exists, the deterministic memory ledger appends its current fold to the tail of the live conversation through the `context` event. That packet is the same for xAI compaction, Pi default summarization, and any compact-hook fallback that still writes a compaction entry.
+After any compaction entry exists, the deterministic notebook ledger appends its current fold to the tail of the live conversation through the `context` event. That packet is the same for xAI compaction, Pi default summarization, and any compact-hook fallback that still writes a compaction entry.
 
 ## xAI server-side compaction
 
@@ -20,34 +20,34 @@ When the active model is `provider === "xai"` and `api === "openai-responses"`:
 
 Completions-routed Grok is left to Pi default compaction.
 
-## Pair memory
+## Pair notebook
 
-The Pair Programmer is the only persistent model actor. It receives the root trajectory once, reviews it as navigator, and periodically maintains sourced observations and current-law reflections through its private `update_memory` tool. The tool stages a typed transaction; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending records.
+The Pair Programmer is the only persistent model actor. It receives the root trajectory once, reviews it as navigator, and periodically maintains sourced observations and current-law reflections through its private `update_notebook` tool. The tool stages a typed transaction; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending records.
 
-Full maintenance becomes due when uncovered source tokens reach `memoryAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal Pair review. Empty full-maintenance results use a bounded retry backoff. If Pair is disabled or unavailable, maintenance pauses; existing records, compaction packets, `session_search`, and `memory_source` remain readable. No hidden memory actor starts.
+Full maintenance becomes due when uncovered source tokens reach `notebookAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal Pair review. Empty full-maintenance results use a bounded retry backoff. If Pair is disabled or unavailable, note-taking pauses; existing observations, reflections, compaction packets, `session_search`, and `notebook_source` remain readable. No hidden notebook actor starts.
 
-The ledger keeps source-addressed observations, reflections, retirement records, drop records, and coverage markers in Pi's append-only session JSONL. `registerMemoryContextPacket` projects the ledger to the latest compaction boundary and appends one idempotent `om.memory.packet` custom message during each context rebuild. The `om.*` names are persistent session-record formats, not commands or model actors.
+The ledger keeps source-addressed observations, reflections, retirement records, drop records, and coverage markers in Pi's append-only session JSONL. `registerNotebookContextPacket` projects the ledger to the latest compaction boundary and appends one idempotent `notebook.packet` custom message during each context rebuild. The `notebook.*` names are persistent session-record formats, not commands or model actors.
 
 Commands and tools:
 
-- `/pair status` — Pair state, memory coverage, and Pair/Advisor usage
-- `/pair memory [full]` — visible or complete memory projection
+- `/pair status` — Pair state, notebook coverage, and Pair/Advisor usage
+- `/pair notebook [full]` — visible or complete notebook projection
 - `session_search` — progressive search of this session's transcript and file-operation history
-- `memory_source` — exact source lookup by a known observation or reflection ID
+- `notebook_source` — exact source lookup by a known observation or reflection ID
 
-Pair operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. Pair model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_MEMORY_PASSIVE` can disable proactive compaction and Pair memory maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/memory/src/config.ts`](../components/memory/src/config.ts).
+Pair operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. Pair model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable proactive compaction and Pair notebook maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-Pair and episodic Advisor sessions bind `session_search` and `memory_source` to the primary session. Ordinary subagents and `pi_exec` workers load `session_search` but do not maintain memory. The internal BTW child loads only Codex fast mode and the overflow guard.
+Pair and episodic Advisor sessions bind `session_search` and `notebook_source` to the primary session. Ordinary subagents and `pi_exec` workers load `session_search` but do not keep a Pair notebook. The internal BTW child loads only Codex fast mode and the overflow guard.
 
-## Where memory persists
+## Where the notebook persists
 
-Memory records remain in Pi's append-only session JSONL, normally under:
+Notebook records remain in Pi's append-only session JSONL, normally under:
 
 ```text
 ~/.pi/agent/sessions/--<cwd>--/*.jsonl
 ```
 
-They are project-associated through Pi's session location, but they are not repository state and are not shared through Git. apple-pi intentionally does not create a `.pi/memory` mirror because that would create a second source of truth and an implicit privacy policy.
+They are project-associated through Pi's session location, but they are not repository state and are not shared through Git. apple-pi intentionally does not create a `.pi/notebook` mirror because that would create a second source of truth and an implicit privacy policy.
 
 ## Pair and Advisor usage records
 
@@ -57,4 +57,4 @@ Pair reviews and Advisor consultations write one NDJSON line per model call to:
 ~/.pi/agent/sidecar-usage/<session-id>.ndjson
 ```
 
-Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or memory projection. A write failure is ignored so instrumentation cannot change Pair or Advisor behavior.
+Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change Pair or Advisor behavior.

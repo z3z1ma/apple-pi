@@ -36,7 +36,7 @@ export const sessionSearchTool = defineTool({
 		"Use session_search query 'call:<toolCallId>' to recover a persisted tool-result body by the call: address on pair receipts.",
 		"Use session_search with a text or regex query to find earlier conversation or tool results; multi-word queries are OR-ranked.",
 		"Do not use session_search to search the repository — use grep, find, or read for current files.",
-		"Do not use session_search as a memory-id lookup. It searches the session transcript, not compacted observation or reflection ids.",
+		"Do not use session_search as a notebook-id lookup. It searches the session transcript, not compacted observation or reflection ids.",
 	],
 	parameters: Type.Object({
 		query: Type.Optional(

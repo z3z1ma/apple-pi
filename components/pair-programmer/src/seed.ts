@@ -1,8 +1,8 @@
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 
-import { foldLedger } from "../../memory/src/session-ledger/fold.js";
-import { observationToSummaryLine, reflectionToSummaryLine } from "../../memory/src/session-ledger/render-summary.js";
-import type { Entry } from "../../memory/src/session-ledger/types.js";
+import { foldLedger } from "../../notebook/src/session-ledger/fold.js";
+import { observationToSummaryLine, reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
+import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
 import { formatTurnDelta, formatUserBash } from "./formatting.js";
 import type { PairNote } from "./types.js";
@@ -90,7 +90,7 @@ export function collectRecentUserRequests(entries: readonly unknown[]): SeedUser
 	return kept.map((texts, i) => ({ texts, prior: i < kept.length - 1 }));
 }
 
-export function formatMemoryFold(entries: readonly unknown[]): string {
+export function formatNotebookFold(entries: readonly unknown[]): string {
 	try {
 		const folded = foldLedger(entries as Entry[]);
 		const parts: string[] = [];
@@ -195,7 +195,7 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 /**
  * Render the still-uncovered primary trajectory once for Pair session seeding.
  * Source ids remain attached while successful tool bodies use the same compact
- * receipts as live Pair review rather than the standalone memory actor's raw transcript.
+ * receipts as live Pair review rather than submitting a second notebook transcript.
  */
 export function formatSourceAddressedTrajectory(
 	entries: readonly unknown[],
@@ -258,14 +258,14 @@ export function formatSourceAddressedTrajectory(
 		}
 	}
 	flush();
-	return parts.length > 0 ? `## Unresolved Pair memory source\n${parts.join("\n\n")}` : "";
+	return parts.length > 0 ? `## Unresolved Pair notebook source\n${parts.join("\n\n")}` : "";
 }
 
 export function formatPairSeed(opts: {
 	fold?: string;
 	userMessages?: string;
 	trajectory?: string;
-	unresolvedMemory?: string;
+	unresolvedNotebook?: string;
 	rollingAdvice?: string;
 }): string {
 	const parts = [
@@ -273,7 +273,7 @@ export function formatPairSeed(opts: {
 		opts.fold?.trim(),
 		opts.userMessages?.trim(),
 		opts.trajectory?.trim(),
-		opts.unresolvedMemory?.trim(),
+		opts.unresolvedNotebook?.trim(),
 		opts.rollingAdvice?.trim(),
 	].filter(Boolean);
 	return parts.join("\n\n");
@@ -282,16 +282,16 @@ export function formatPairSeed(opts: {
 export function buildPairSeed(opts: {
 	entries?: readonly unknown[];
 	rollingAdvice?: readonly SettledAdvice[];
-	unresolvedMemory?: string;
+	unresolvedNotebook?: string;
 	/** Default true. Compact reseeds omit the fold; the parent packet carries it. */
 	includeFold?: boolean;
 }): string {
 	const includeFold = opts.includeFold !== false;
 	return formatPairSeed({
-		fold: includeFold && opts.entries ? formatMemoryFold(opts.entries) : "",
+		fold: includeFold && opts.entries ? formatNotebookFold(opts.entries) : "",
 		userMessages: opts.entries ? formatRecentUserMessages(collectRecentUserRequests(opts.entries)) : "",
 		trajectory: opts.entries ? formatRecentTrajectory(opts.entries) : "",
-		unresolvedMemory: opts.unresolvedMemory,
+		unresolvedNotebook: opts.unresolvedNotebook,
 		rollingAdvice: formatRollingAdvice(opts.rollingAdvice ?? []),
 	});
 }

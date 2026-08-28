@@ -13,7 +13,7 @@ export type ConsultationSeverity = "concern" | "blocker";
 export type AdvisorDisposition = "confirm" | "refute" | "refine" | "uncertain";
 
 export interface EvidencePointer {
-	kind: "call" | "file" | "symbol" | "diff" | "command" | "memory" | "session";
+	kind: "call" | "file" | "symbol" | "diff" | "command" | "notebook" | "session";
 	ref: string;
 	path?: string;
 	description?: string;

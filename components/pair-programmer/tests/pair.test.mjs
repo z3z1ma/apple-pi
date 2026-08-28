@@ -858,7 +858,7 @@ test("compact hook omits the parent fold from the reseed summary", async () => {
 				{
 					id: "r1",
 					type: "custom",
-					customType: "om.reflections.recorded",
+					customType: "notebook.reflections.recorded",
 					data: {
 						reflections: [
 							{
@@ -880,13 +880,13 @@ test("compact hook omits the parent fold from the reseed summary", async () => {
 	assert.ok(!result.compaction.summary.includes("## Current law"));
 });
 
-test("parent memory packet sits after the compaction summary and is idempotent", () => {
-	const packet = A.buildParentMemoryPacket([
+test("parent notebook packet sits after the compaction summary and is idempotent", () => {
+	const packet = A.buildParentNotebookPacket([
 		{ id: "m1", type: "message", message: { role: "user", content: "Build it" } },
 		{
 			id: "r1",
 			type: "custom",
-			customType: "om.reflections.recorded",
+			customType: "notebook.reflections.recorded",
 			data: {
 				reflections: [
 					{
@@ -902,11 +902,11 @@ test("parent memory packet sits after the compaction summary and is idempotent",
 	]);
 	assert.ok(packet);
 	assert.match(packet.content[0].text, /Do not reimplement auth/);
-	assert.match(packet.content[0].text, /memory_source/);
-	assert.match(packet.content[0].text, /not this pair conversation/);
-	assert.ok(!packet.content[0].text.includes("this session's current working memory"));
+	assert.match(packet.content[0].text, /notebook_source/);
+	assert.match(packet.content[0].text, /not a notebook for this pair conversation/);
+	assert.match(packet.content[0].text, /Pair Programmer's notebook/);
 
-	const first = A.insertParentMemoryAfterCompaction(
+	const first = A.insertParentNotebookAfterCompaction(
 		[
 			{ role: "compactionSummary", summary: "reseed" },
 			{ role: "user", content: "next review" },
@@ -914,21 +914,21 @@ test("parent memory packet sits after the compaction summary and is idempotent",
 		packet,
 	);
 	assert.equal(first.messages[0].role, "compactionSummary");
-	assert.equal(first.messages[1].customType, "om.memory.packet");
+	assert.equal(first.messages[1].customType, "notebook.packet");
 	assert.equal(first.messages[2].role, "user");
 
-	assert.equal(A.insertParentMemoryAfterCompaction(first.messages, packet), undefined);
-	assert.equal(A.insertParentMemoryAfterCompaction([{ role: "user", content: "no compact yet" }], packet), undefined);
+	assert.equal(A.insertParentNotebookAfterCompaction(first.messages, packet), undefined);
+	assert.equal(A.insertParentNotebookAfterCompaction([{ role: "user", content: "no compact yet" }], packet), undefined);
 });
 
-test("pair parent-memory hook does not register the OM pipeline", () => {
+test("pair parent-notebook hook does not register the notebook pipeline", () => {
 	const events = [];
 	const pi = {
 		on(event) {
 			events.push(event);
 		},
 	};
-	A.registerPairParentMemoryPacket(pi, { getBranch: () => [] });
+	A.registerPairParentNotebookPacket(pi, { getBranch: () => [] });
 	assert.deepEqual(events, ["context"]);
 });
 
@@ -975,7 +975,7 @@ test("default pair prompt names primary-bound recall tools", () => {
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const prompt = A.loadSystemPrompt(agentDir, false);
-		assert.match(prompt, /memory_source/);
+		assert.match(prompt, /notebook_source/);
 		assert.match(prompt, /session_search/);
 		assert.match(prompt, /primary implementing-agent transcript/);
 		assert.match(prompt, /call:<id>/);
@@ -989,7 +989,7 @@ test("default pair prompt names primary-bound recall tools", () => {
 	}
 });
 
-test("primary-bound memory_source resolves the primary branch, not the caller ctx", async () => {
+test("primary-bound notebook_source resolves the primary branch, not the caller ctx", async () => {
 	const tools = A.bindPrimaryRecallTools({
 		getSessionFile: () => undefined,
 		getBranch: () => [
@@ -1001,9 +1001,9 @@ test("primary-bound memory_source resolves the primary branch, not the caller ct
 			},
 			{
 				type: "custom",
-				id: "om-1",
+				id: "notebook-1",
 				timestamp: "2026-08-18T00:00:01.000Z",
-				customType: "om.observations.recorded",
+				customType: "notebook.observations.recorded",
 				data: {
 					observations: [
 						{
@@ -1021,17 +1021,17 @@ test("primary-bound memory_source resolves the primary branch, not the caller ct
 		],
 		getEntries: () => [],
 	});
-	const memory = tools.find((t) => t.name === "memory_source");
-	assert.ok(memory);
-	assert.match(memory.description, /primary implementing-agent session/);
+	const notebook = tools.find((t) => t.name === "notebook_source");
+	assert.ok(notebook);
+	assert.match(notebook.description, /primary implementing-agent session/);
 	for (const name of tools.map((t) => t.name)) {
 		assert.ok(A.PAIR_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
 	}
-	const hit = await memory.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
+	const hit = await notebook.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
 	});
 	assert.match(hit.content[0].text, /exact primary lock wording/);
-	const miss = await memory.execute("c2", { id: "ffffffffffff" }, undefined, undefined, {
+	const miss = await notebook.execute("c2", { id: "ffffffffffff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
 	});
 	assert.match(miss.content[0].text, /No observation or reflection/);
@@ -1276,7 +1276,7 @@ test("AdviseTool: records, dedups, and escalates by severity rank", async () => 
 	await tool.execute("c5", { note: "guard empty array", severity: "nit" });
 	assert.equal(calls.length, 2);
 
-	// reset clears memory ⇒ same note can be raised again
+	// reset clears dedupe state ⇒ same note can be raised again
 	tool.resetDelivered();
 	await tool.execute("c6", { note: "guard empty array", severity: "nit" });
 	assert.equal(calls.length, 3);
@@ -2643,6 +2643,47 @@ test("extension loads + registers /pair command, advisory renderer, and branch l
 	assert.ok(ext.messageRenderers.has("advisory"), "registers advisory renderer");
 	assert.ok(ext.handlers.has("session_tree"), "re-primes when the active branch changes");
 	assert.ok(ext.handlers.has("before_agent_start"), "injects the primary-agent protocol");
+});
+
+test("/pair notebook renders the notebook and keeps no memory alias", async () => {
+	const ext = await loadPairExtension();
+	const notices = [];
+	const ctx = {
+		ui: { notify: (text) => notices.push(text) },
+		sessionManager: {
+			getBranch: () => [
+				{
+					type: "message",
+					id: "source-1",
+					message: { role: "user", content: [{ type: "text", text: "Use Notebook terminology." }] },
+				},
+				{
+					type: "custom",
+					id: "notebook-entry",
+					customType: "notebook.observations.recorded",
+					data: {
+						observations: [
+							{
+								id: "aaaaaaaaaaaa",
+								content: "User selected Notebook terminology.",
+								timestamp: "2026-08-27 19:00",
+								relevance: "high",
+								sourceEntryIds: ["source-1"],
+								tokenCount: 6,
+							},
+						],
+						coversUpToId: "source-1",
+					},
+				},
+			],
+		},
+	};
+
+	await ext.commands.get("pair").handler("notebook full", ctx);
+	assert.match(notices.at(-1), /User selected Notebook terminology/);
+
+	await ext.commands.get("pair").handler("memory", ctx);
+	assert.match(notices.at(-1), /usage: \/pair \[on\|off\|status\|notebook \[full\]\]/);
 });
 
 test("agent-core ordering: a steer queued during streaming is inserted after that assistant turn_end", async () => {

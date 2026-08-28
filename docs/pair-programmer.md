@@ -43,6 +43,7 @@ Commands:
 - `/pair` or `/pair status`
 - `/pair on`
 - `/pair off`
+- `/pair notebook [full]`
 
 Disabling Pair cancels queued and active Advisor consultations.
 
@@ -53,15 +54,16 @@ Pair receives a stable supervision policy followed by:
 - recent primary-session user requests;
 - compact trajectory receipts rather than successful tool bodies;
 - active task and assumption context;
-- a read-only Pair memory projection after compaction;
+- a read-only Pair notebook projection after compaction;
 - optional global or trusted-project `PAIR.md` guidance.
 
 `PAIR.md` is untrusted review input. It cannot grant tools or force an escalation.
 
-Pair has two private typed tools:
+Pair has three private typed tools:
 
 - `advise` emits a current, actionable `nit`, `concern`, or `blocker`;
-- `escalate` submits a `concern` or `blocker` hypothesis for host-controlled Advisor adjudication.
+- `escalate` submits a `concern` or `blocker` hypothesis for host-controlled Advisor adjudication;
+- `update_notebook` stages sourced observations, current reflections, retirements, and safe drops for deterministic host validation.
 
 Pair cannot invoke agents, shell commands, MCP, `pi_exec`, mutation tools, or arbitrary extension tools. It does not invoke Advisor directly. The host owns routing, context assembly, throttling, cancellation, staleness checks, and delivery.
 
@@ -83,7 +85,7 @@ The packet includes:
 
 The extension imposes no character ceiling on consultation packets or Git diffs. Pi and the selected model own context-window behavior.
 
-Advisor runs as a fresh, foreground, hidden managed sub-agent. It receives only read-only repository tools, primary-bound `memory_source` and `session_search`, and the private typed `report_consultation` result tool. It does not receive Pair, nested agents, `pi_exec`, mutation tools, Ledger mutation tools, MCP, or project extension discovery.
+Advisor runs as a fresh, foreground, hidden managed sub-agent. It receives only read-only repository tools, primary-bound `notebook_source` and `session_search`, and the private typed `report_consultation` result tool. It does not receive Pair, nested agents, `pi_exec`, mutation tools, Ledger mutation tools, MCP, or project extension discovery.
 
 Advisor returns exactly one disposition:
 
@@ -118,4 +120,4 @@ The footer uses `q-pair` and shows Pair review plus Advisor queued, running, or 
 
 Sidecar telemetry records `pair` and `advisor` calls separately. Consultation outcomes are structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes. Private hypothesis and finding text are not persisted there.
 
-Pair and Advisor use primary-bound recall. Neither starts another memory-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.
+Pair and Advisor use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.

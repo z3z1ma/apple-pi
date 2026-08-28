@@ -15,14 +15,14 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
-import { registerPairParentMemoryPacket } from "./parent-memory.js";
+import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { PAIR_RESEED_ENTRY_ID, buildPairSeed, type SettledAdvice } from "./seed.js";
 
 export type PairSeedSource = {
 	entries(): readonly unknown[];
 	rollingAdvice(): readonly SettledAdvice[];
-	unresolvedMemory?(): string;
+	unresolvedNotebook?(): string;
 };
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
@@ -32,7 +32,7 @@ export const PAIR_SESSION_TOOLS = [
 	"read",
 	"grep",
 	"find",
-	"memory_source",
+	"notebook_source",
 	"session_search",
 ] as const;
 
@@ -48,7 +48,7 @@ export async function pairCompactResult(
 			summary: buildPairSeed({
 				entries: source.entries(),
 				rollingAdvice: source.rollingAdvice(),
-				unresolvedMemory: source.unresolvedMemory?.(),
+				unresolvedNotebook: source.unresolvedNotebook?.(),
 				includeFold: false,
 			}),
 			firstKeptEntryId: PAIR_RESEED_ENTRY_ID,
@@ -65,7 +65,7 @@ export async function createPairSession(opts: {
 	systemPrompt: string;
 	adviseTool: ToolDefinition;
 	escalateTool: ToolDefinition;
-	memoryTool?: ToolDefinition;
+	notebookTool?: ToolDefinition;
 	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
 	modelRuntime?: unknown;
@@ -90,24 +90,24 @@ export async function createPairSession(opts: {
 				name: "pair-reseed",
 				hidden: true,
 				factory: (pi: ExtensionAPI) => {
-					// Replay + reseed only. Never register the Pair memory
-					// Runtime, triggers, commands, or memory_source here — those stay
+					// Replay + reseed only. Never register the Pair notebook
+					// Runtime, triggers, commands, or notebook_source here — those stay
 					// on the primary session. The parent packet is a read of that
-					// ledger, not a second OM pipeline.
+					// ledger, not a second notebook pipeline.
 					registerXaiCompactionReplayHooks(pi);
 					pi.on("session_before_compact", (event, ctx) => pairCompactResult(event, opts.seedSource, ctx));
-					registerPairParentMemoryPacket(pi, opts.primarySessionManager);
+					registerPairParentNotebookPacket(pi, opts.primarySessionManager);
 				},
 			},
 		],
 	});
 	await loader.reload();
 
-	const toolNames = [...PAIR_SESSION_TOOLS, ...(opts.memoryTool ? ["update_memory" as const] : [])];
+	const toolNames = [...PAIR_SESSION_TOOLS, ...(opts.notebookTool ? ["update_notebook" as const] : [])];
 	const customTools = [
 		opts.adviseTool,
 		opts.escalateTool,
-		...(opts.memoryTool ? [opts.memoryTool] : []),
+		...(opts.notebookTool ? [opts.notebookTool] : []),
 		...bindPrimaryRecallTools(opts.primarySessionManager),
 	];
 	const { session } = await createAgentSession({

@@ -532,7 +532,7 @@ export async function runAgent(
 
 	// Bind the explicit `-e` extensions so session_start fires. Registry scope
 	// is `excludeTools` from session construction. Stay in child-session ALS so
-	// a leaked context.ts factory cannot register Pair memory.
+	// a leaked context.ts factory cannot register the Pair notebook.
 	await runInChildSessionContext(() =>
 		session.bindExtensions({
 			onError: (err) => {

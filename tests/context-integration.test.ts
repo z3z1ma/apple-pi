@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	buildMemoryContextPacket,
-	MEMORY_PACKET_CUSTOM_TYPE,
-	MEMORY_PACKET_HEADER,
-} from "../components/memory/src/hooks/context-packet.js";
-import type { Entry, Observation } from "../components/memory/src/session-ledger/types.js";
+	buildNotebookContextPacket,
+	NOTEBOOK_PACKET_CUSTOM_TYPE,
+	NOTEBOOK_PACKET_HEADER,
+} from "../components/notebook/src/hooks/context-packet.js";
+import type { Entry, Observation } from "../components/notebook/src/session-ledger/types.js";
 
 function message(id: string, role: string, content: unknown): Entry {
 	return { id, type: "message", message: { role, content } };
 }
 
-describe("Pair memory after normal compaction", () => {
+describe("Pair notebook after normal compaction", () => {
 	it("places the folded packet after a compaction entry for conversation continuity", () => {
 		const observation: Observation = {
 			id: "abc123abc123",
@@ -25,9 +25,9 @@ describe("Pair memory after normal compaction", () => {
 			message("m1", "user", "Build deterministic context compaction"),
 			message("m2", "assistant", [{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "README.md" } }]),
 			{
-				id: "memory-1",
+				id: "notebook-1",
 				type: "custom",
-				customType: "om.observations.recorded",
+				customType: "notebook.observations.recorded",
 				data: { observations: [observation], coversUpToId: "m2" },
 			},
 			{
@@ -39,9 +39,9 @@ describe("Pair memory after normal compaction", () => {
 			message("m3", "user", "Continue"),
 		];
 
-		const packet = buildMemoryContextPacket(entries, 100);
-		expect(packet?.customType).toBe(MEMORY_PACKET_CUSTOM_TYPE);
-		expect(packet?.content[0]?.text).toContain(MEMORY_PACKET_HEADER);
+		const packet = buildNotebookContextPacket(entries, 100);
+		expect(packet?.customType).toBe(NOTEBOOK_PACKET_CUSTOM_TYPE);
+		expect(packet?.content[0]?.text).toContain(NOTEBOOK_PACKET_HEADER);
 		expect(packet?.content[0]?.text).toContain("## Observations");
 		expect(packet?.content[0]?.text).toContain("[abc123abc123]");
 	});

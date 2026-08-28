@@ -2,7 +2,7 @@
 
 `/distill [focus]` is an explicitly invoked prompt template for turning recent work into proposed durable knowledge and reusable harness artifacts. It runs as a normal model turn with the current conversation and available tools; there is no distillation extension, background service, or separate state store.
 
-Distillation is broader than summarization. The model reviews the most recent meaningful work, uses Pair memory and transcript recall when needed, and looks for lessons worth carrying into future sessions. Ledger records, repository state, diffs, documentation, and existing artifacts are optional evidence rather than required inputs.
+Distillation is broader than summarization. The model reviews the most recent meaningful work, uses Pair notebook and transcript recall when needed, and looks for lessons worth carrying into future sessions. Ledger records, repository state, diffs, documentation, and existing artifacts are optional evidence rather than required inputs.
 
 A pass can propose multiple destinations:
 

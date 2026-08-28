@@ -1,6 +1,6 @@
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 
-import { recallObservationTool } from "../../memory/src/tools/recall-observation.js";
+import { recallObservationTool } from "../../notebook/src/tools/notebook-source.js";
 import { sessionSearchTool } from "../../session-search/src/index.js";
 
 export type PrimarySessionManager = Pick<
@@ -24,11 +24,11 @@ function bindPrimarySession(
 }
 
 export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
-	const memory = bindPrimarySession(recallObservationTool, sessionManager);
+	const notebook = bindPrimarySession(recallObservationTool, sessionManager);
 	const search = bindPrimarySession(sessionSearchTool, sessionManager);
 	return [
 		{
-			...memory,
+			...notebook,
 			description:
 				`${recallObservationTool.description} ` +
 				"Resolves against the primary implementing-agent session, never this pair conversation.",

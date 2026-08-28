@@ -102,7 +102,7 @@ describe("sidecar usage records", () => {
 
 	it("falls back to the unscoped file without a usable session id", () => {
 		withSidecarUsageContext({}, () => {
-			recordSidecarUsage({ agent: "pair", trigger: "memory_maintenance", status: "ok" });
+			recordSidecarUsage({ agent: "pair", trigger: "notebook_maintenance", status: "ok" });
 		});
 		expect(existsSync(join(agentDir, sidecarUsageRelativePath(undefined)))).toBe(true);
 	});
@@ -121,7 +121,7 @@ describe("sidecar usage records", () => {
 		withSidecarUsageContext({ sessionId: "session-empty", threshold: 10_000 }, () => {
 			const tracker = startSidecarUsageTracker({
 				agent: "pair",
-				trigger: "memory_maintenance",
+				trigger: "notebook_maintenance",
 				provider: "openai-codex",
 				model: "gpt-5.6-luna",
 			});
@@ -130,7 +130,7 @@ describe("sidecar usage records", () => {
 		const [row] = readJsonLines(join(agentDir, sidecarUsageRelativePath("session-empty")));
 		expect(row).toMatchObject({
 			agent: "pair",
-			trigger: "memory_maintenance",
+			trigger: "notebook_maintenance",
 			status: "aborted",
 			input: 0,
 			cacheRead: 0,

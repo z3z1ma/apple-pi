@@ -16,7 +16,7 @@ describe("standalone session_search extension", () => {
 		delete process.env.PI_CODING_AGENT_DIR;
 	});
 
-	it("registers session_search without Pair memory or a compact hook", async () => {
+	it("registers session_search without Pair notebook or a compact hook", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-session-search-standalone-"));
 		directories.push(root);
 		process.env.PI_CODING_AGENT_DIR = root;
@@ -36,6 +36,6 @@ describe("standalone session_search extension", () => {
 		expect(result.extensions[0]?.handlers.has("session_before_compact")).toBe(false);
 		expect(commands.has("om:status")).toBe(false);
 		expect(commands.has("om:view")).toBe(false);
-		expect(tools.has("memory_source")).toBe(false);
+		expect(tools.has("notebook_source")).toBe(false);
 	});
 });

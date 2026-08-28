@@ -20,7 +20,7 @@ const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
 const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "session_search", "mcp"];
-const FORBIDDEN_CHILD_TOOLS = ["memory_source", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
+const FORBIDDEN_CHILD_TOOLS = ["notebook_source", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {
 	for (const name of [...expected, ...CHILD_EXTENSION_TOOLS]) {
@@ -919,7 +919,7 @@ RELOADED ROLE MUST NOT RUN.
 					"grep",
 					"find",
 					"ls",
-					"memory_source",
+					"notebook_source",
 					"session_search",
 					"report_consultation",
 				]),
@@ -1188,7 +1188,7 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("persists a child session with session_search and without Pair memory", async () => {
+	it("persists a child session with session_search and without the Pair notebook", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
 
@@ -1240,7 +1240,7 @@ export default function childTools(pi) {
 		expect(result.responseText).toBe("MEMORY-READY");
 		expectActiveTools(activeTools, ["read"]);
 		expect(activeTools).toContain("session_search");
-		expect(activeTools).not.toContain("memory_source");
+		expect(activeTools).not.toContain("notebook_source");
 		expect(result.session.sessionManager.getSessionFile()).toBeTruthy();
 		expect(existsSync(result.session.sessionManager.getSessionFile()!)).toBe(true);
 		result.session.dispose();

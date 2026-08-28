@@ -135,7 +135,7 @@ try {
 		"backlog_list",
 		"backlog_take",
 		"session_search",
-		"memory_source",
+		"notebook_source",
 		"pi_exec",
 		"pi_discover_programs",
 		"pi_exec_program",

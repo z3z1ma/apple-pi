@@ -30,7 +30,7 @@ Authority is split deliberately:
 At a high level, the package adds five kinds of capability to Pi:
 
 1. **Turn assistance and interaction** — persistent read-only Pair supervision with episodic Advisor adjudication, plus a structured user-question tool.
-2. **Context continuity** — xAI server-side or Pi default compaction, Pair-maintained sourced memory, and two complementary recall paths.
+2. **Context continuity** — xAI server-side or Pi default compaction, the Pair Programmer's sourced notebook, and two complementary recall paths.
 3. **Execution tracking** — branch-aware active to-dos, distinct from parked backlog ideas and durable Ledger records.
 4. **Execution and delegation** — a bounded JavaScript composition runtime plus interactive specialist subagents.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
@@ -59,8 +59,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
 | `components/todos/` | Branch-aware active-execution checklist, `/todos`, reminder/cleanup lifecycle, and managed subagent execution | To-dos are ephemeral execution state, not Ledger acceptance evidence. Default snapshots follow session branches; trusted shared-project state is explicitly opted in and safely locked. |
-| `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the Pair memory packet. |
-| `components/memory/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
+| `components/session-search/` | Transcript history search (`session_search`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the Pair notebook packet. |
+| `components/notebook/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
 | `components/xai-context-compaction/` | xAI server-side Responses compaction | Owns `session_before_compact` for xAI Responses models; injects the newest opaque item on later requests. |
 | `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, TUI views, and the private `/btw` side conversation | Serves the interactive `Agent` surface, managed workers used by `pi_exec`, and one internal read-only BTW session while keeping ownership and depth boundaries explicit. |
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
@@ -82,12 +82,12 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
 - The package-load test is the executable smoke test for loading an explicit checkout entrypoint list and checking the expected tool/command boundary. It does not discover entries from the manifest or load the packed tarball, so keep its list aligned with `package.json` and inspect packaging separately.
 
-### Context and memory
+### Context and notebook
 
-- There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. Pair memory does not register a compact hook; it appends its packet to the conversation tail after a compaction entry exists.
-- Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; Pair memory only appends its packet afterwards.
-- Session-history search and memory-source lookup are intentionally separate: one progressively searches transcript/file-operation history; the other resolves a known memory ID to source evidence.
-- Pair memory is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
+- There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. Pair notebook does not register a compact hook; it appends its packet to the conversation tail after a compaction entry exists.
+- Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; Pair notebook only appends its packet afterwards.
+- Session-history search and notebook-source lookup are intentionally separate: one progressively searches transcript/file-operation history; the other resolves a known notebook ID to source evidence.
+- Pair notebook is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
 - Reload, switch, fork, and shutdown paths matter. Any asynchronous work holding a Pi extension context must stop or re-prime when that context becomes stale.
 
 ### Exec and subagents
@@ -96,7 +96,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
 - `Agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
-- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths under `--no-extensions`; `pair: true` adds the Pair sidecar, and direct public `Agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. Workers load Codex fast mode, the overflow guard, ledger, and `session_search` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Pair memory maintenance stays with the root Pair integration.
+- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, ledger, `session_search`, and MCP via explicit paths under `--no-extensions`; `pair: true` adds the Pair sidecar, and direct public `Agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory overflow guard. Workers load Codex fast mode, the overflow guard, ledger, and `session_search` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Pair notebook maintenance stays with the root Pair integration.
 - Child sessions must not bypass manager ownership, nesting depth, tool policy, or root-only capabilities. Avoid global registries unless they are explicitly process-scoped integration points with lifecycle cleanup.
 - Nested `pi_exec` operations are not separate top-level Pi tool calls. Policy extensions that gate only top-level `tool_call` events see the outer `pi_exec`, not every bridged operation; deployments needing an outer per-call gate must treat `pi_exec` itself as the capability boundary.
 - Persisted child sessions are Pi sessions. Do not add a second transcript or memory store merely for the subagent feature.
@@ -207,11 +207,11 @@ Preserve these categories:
 
 - **Package configuration** — tracked manifest and docs in this repository.
 - **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional pair guidance resolved at runtime with their documented trust boundaries.
-- **Session state** — Pi session JSONL, including context and Pair memory entries.
+- **Session state** — Pi session JSONL, including context and Pair notebook entries.
 - **Task workbench state** — `.ledger`, governed by repository-owner storage policy.
 - **Temporary worker state** — bounded files/processes that must be cleaned up on success, failure, cancellation, and shutdown.
 
-Never move credentials, private transcript content, or memory records into repository fixtures, logs, package contents, or third-party calls. Tests should redirect runtime state to temporary directories rather than touching a developer's real Pi configuration.
+Never move credentials, private transcript content, or notebook records into repository fixtures, logs, package contents, or third-party calls. Tests should redirect runtime state to temporary directories rather than touching a developer's real Pi configuration.
 
 ## Change playbooks
 
@@ -226,7 +226,7 @@ Never move credentials, private transcript content, or memory records into repos
 
 ### Changing compaction or recall
 
-1. Trace both `session_search` and Pair memory consumers before editing.
+1. Trace both `session_search` and Pair notebook consumers before editing.
 2. Preserve the single-cut/single-hook model and shared metadata recognition.
 3. Test cut selection, projection/folding, continuation behavior, and both recall paths as applicable.
 4. Include reload/compaction lifecycle cases when asynchronous state changes.

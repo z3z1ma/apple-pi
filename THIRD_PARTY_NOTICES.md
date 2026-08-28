@@ -35,7 +35,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
 - Upstream version at import: `0.1.9`
 - Author named by the source package: Thomas Mustier
-- Local paths: `components/memory/src/hooks/overflow-guard.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
+- Local paths: `components/notebook/src/hooks/overflow-guard.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Thomas Mustier`
 - apple-pi adapts the one-shot provider stream interception that turns an oversized post-tool continuation into a local synthetic context overflow, allowing Pi to compact and retry the same run without sending the intercepted request upstream. It uses Pi's model-specific native compaction boundary and omits upstream's separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
@@ -44,7 +44,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 
 - Source: <https://github.com/elpapi42/pi-observational-memory>
 - Imported commit: `37986b6faa1e39eb5aa1d03a4ca6379ecaf3148d`
-- Local path: `components/memory/`; integration in `extensions/context.ts`
+- Local path: `components/notebook/`; integration in `extensions/context.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 pi-observational-memory contributors`
 

@@ -21,7 +21,7 @@ const evidencePointerSchema = Type.Object({
 		Type.Literal("symbol"),
 		Type.Literal("diff"),
 		Type.Literal("command"),
-		Type.Literal("memory"),
+		Type.Literal("notebook"),
 		Type.Literal("session"),
 	]),
 	ref: Type.String({ minLength: 1 }),

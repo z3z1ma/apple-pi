@@ -55,27 +55,27 @@ import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-age
 import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
-import { renderMemoryView } from "../../memory/src/commands/view.js";
-import { registerCompactionTrigger } from "../../memory/src/hooks/compaction-trigger.js";
-import { registerMemoryContextPacket } from "../../memory/src/hooks/context-packet.js";
+import { renderNotebookView } from "../../notebook/src/commands/view.js";
+import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
+import { registerNotebookContextPacket } from "../../notebook/src/hooks/context-packet.js";
 import {
-	commitPairMemoryUpdate,
-	preparePairMemoryBatch,
-	type PairMemoryBatch,
-	type PairMemoryUpdate,
-	UpdateMemoryTool,
-} from "../../memory/src/pair-maintenance.js";
-import { Runtime as MemoryRuntime } from "../../memory/src/runtime.js";
+	commitPairNotebookUpdate,
+	preparePairNotebookBatch,
+	type PairNotebookBatch,
+	type PairNotebookUpdate,
+	UpdateNotebookTool,
+} from "../../notebook/src/notebook-maintenance.js";
+import { Runtime as NotebookRuntime } from "../../notebook/src/runtime.js";
 import {
 	entryIndexForId,
 	foldLedger,
 	isSourceEntry,
 	latestCoverageMarkerId,
-	OM_OBSERVATIONS_RECORDED,
+	NOTEBOOK_OBSERVATIONS_RECORDED,
 	rawTokensSinceObservationCoverage,
 	type Entry,
-} from "../../memory/src/session-ledger/index.js";
-import { registerRecallTool as registerMemoryRecallTool } from "../../memory/src/tools/recall-observation.js";
+} from "../../notebook/src/session-ledger/index.js";
+import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
@@ -89,9 +89,9 @@ import { createPairSession } from "./session.js";
 // Pair core — persistent second model that watches the main agent.
 //
 // Port of oh-my-pi's pair onto upstream pi's public extension surface. The
-// pair is a long-lived `Agent` with its own model + read-only tools
-// (read/grep/find, primary-bound memory_source/session_search) and one `advise`
-// tool. It is fed the primary transcript one
+// pair is a long-lived `Agent` with its own model, read-only tools
+// (read/grep/find, primary-bound notebook_source/session_search), and private
+// advise/escalate/update_notebook capabilities. It is fed the primary transcript one
 // turn-delta at a time and may inject concise advice back. It is NOT an
 // executor: it cannot edit, run commands, or change session state.
 // ===========================================================================
@@ -395,10 +395,10 @@ export {
 	formatUserBash,
 } from "./formatting.js";
 export {
-	buildParentMemoryPacket,
-	insertParentMemoryAfterCompaction,
-	registerPairParentMemoryPacket,
-} from "./parent-memory.js";
+	buildParentNotebookPacket,
+	insertParentNotebookAfterCompaction,
+	registerPairParentNotebookPacket,
+} from "./parent-notebook.js";
 export {
 	EscalateTool,
 	MIN_TURNS_BETWEEN_ADVISOR,
@@ -426,7 +426,7 @@ function buildPairAgent(opts: {
 	modelRegistry: any;
 	adviseTool: AdviseTool;
 	escalateTool: EscalateTool;
-	memoryTool?: UpdateMemoryTool;
+	notebookTool?: UpdateNotebookTool;
 	primarySessionManager: PrimarySessionManager;
 }): Agent {
 	const readOnly = createReadOnlyTools(opts.cwd);
@@ -439,7 +439,7 @@ function buildPairAgent(opts: {
 			tools: [
 				opts.adviseTool,
 				opts.escalateTool,
-				...(opts.memoryTool ? [opts.memoryTool] : []),
+				...(opts.notebookTool ? [opts.notebookTool] : []),
 				...readOnly,
 				...bindPrimaryRecallTools(opts.primarySessionManager),
 			] as any,
@@ -459,7 +459,7 @@ function buildPairAgent(opts: {
  * Feeds the persistent pair conversation one delta per primary turn.
  * Identity change uses `reset()`. Overflow uses the pair session compact hook.
  */
-type PendingDelta = { text: string; lowSignal: boolean; memoryBatch?: PairMemoryBatch };
+type PendingDelta = { text: string; lowSignal: boolean; notebookBatch?: PairNotebookBatch };
 
 export class PairRuntime {
 	#pending: PendingDelta[] = [];
@@ -509,8 +509,8 @@ export class PairRuntime {
 		private readonly onSettled?: (outcome: "ok" | "failed") => void,
 		private readonly session?: { prompt(text: string): Promise<void>; dispose?: () => void },
 		private readonly seed?: () => string,
-		private readonly memoryTool?: UpdateMemoryTool,
-		private readonly onMemoryUpdate?: (update: PairMemoryUpdate) => void,
+		private readonly notebookTool?: UpdateNotebookTool,
+		private readonly onNotebookUpdate?: (update: PairNotebookUpdate) => void,
 	) {}
 
 	/** Enable durable per-prompt usage records for this runtime. */
@@ -754,12 +754,12 @@ export class PairRuntime {
 	}
 
 	/** Queue a rendered primary-turn delta. Drain starts only when required. */
-	push(deltaText: string, opts?: { lowSignal?: boolean; terminal?: boolean; memoryBatch?: PairMemoryBatch }): void {
+	push(deltaText: string, opts?: { lowSignal?: boolean; terminal?: boolean; notebookBatch?: PairNotebookBatch }): void {
 		if (this.disposed || !deltaText.trim()) return;
 		this.#pending.push({
 			text: deltaText,
 			lowSignal: opts?.lowSignal === true,
-			...(opts?.memoryBatch ? { memoryBatch: opts.memoryBatch } : {}),
+			...(opts?.notebookBatch ? { notebookBatch: opts.notebookBatch } : {}),
 		});
 		this.#backlog++;
 		if (opts?.terminal) this.#forceDrain = true;
@@ -869,10 +869,10 @@ export class PairRuntime {
 	}
 
 	async #reviewBatch(batch: PendingDelta[]): Promise<"ok" | "failed" | "stale"> {
-		const memoryBatch = [...batch].reverse().find((item) => item.memoryBatch)?.memoryBatch;
+		const notebookBatch = [...batch].reverse().find((item) => item.notebookBatch)?.notebookBatch;
 		const texts = batch.map((item) => item.text);
-		if (memoryBatch?.prompt) texts.push(memoryBatch.prompt);
-		this.memoryTool?.begin(memoryBatch);
+		if (notebookBatch?.prompt) texts.push(notebookBatch.prompt);
+		this.notebookTool?.begin(notebookBatch);
 		const epoch = this.#epoch;
 		// Re-offer the shared advice queue without removing it. On success, entries
 		// not re-raised are resolved and pruned. Snapshot by value so a discarded
@@ -901,7 +901,7 @@ export class PairRuntime {
 			const trigger = this.#failures > 0 ? "turn_end_retry" : "turn_end";
 			await this.#promptAndRecord(messages, trigger);
 			if (this.#epoch !== epoch) {
-				this.memoryTool?.clear();
+				this.notebookTool?.clear();
 				this.#reraised = undefined;
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
 				return "stale";
@@ -916,7 +916,7 @@ export class PairRuntime {
 					});
 					this.#reraised = new Set();
 				}
-				this.memoryTool?.clear();
+				this.notebookTool?.clear();
 				this.onDebug?.("pair review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
 				this.#reraised = undefined;
 				return "failed";
@@ -930,12 +930,12 @@ export class PairRuntime {
 				this.#advice.splice(i, 1);
 			}
 			this.#rememberSettled(dropped, "dropped");
-			const memoryUpdate = this.memoryTool?.takeStaged();
-			if (memoryUpdate) {
+			const notebookUpdate = this.notebookTool?.takeStaged();
+			if (notebookUpdate) {
 				try {
-					this.onMemoryUpdate?.(memoryUpdate);
+					this.onNotebookUpdate?.(notebookUpdate);
 				} catch (error) {
-					this.onDebug?.("pair memory commit callback threw", String(error));
+					this.onDebug?.("pair notebook commit callback threw", String(error));
 				}
 			}
 			if (this.#primedContext === primedContext) this.#primedContext = undefined;
@@ -945,7 +945,7 @@ export class PairRuntime {
 			this.onDebug?.("pair turn done, stop=", last?.stopReason);
 			return "ok";
 		} catch (e) {
-			this.memoryTool?.clear();
+			this.notebookTool?.clear();
 			this.#reraised = undefined;
 			this.onDebug?.("pair prompt threw", String(e));
 			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
@@ -1125,12 +1125,12 @@ class AdvisoryBorder implements Component {
 }
 
 export default function (pi: ExtensionAPI) {
-	const rootMemory = inChildSessionContext() ? undefined : new MemoryRuntime();
-	const memoryTool = rootMemory ? new UpdateMemoryTool() : undefined;
-	if (rootMemory) {
-		registerCompactionTrigger(pi, rootMemory);
-		registerMemoryContextPacket(pi, rootMemory);
-		registerMemoryRecallTool(pi);
+	const rootNotebook = inChildSessionContext() ? undefined : new NotebookRuntime();
+	const notebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
+	if (rootNotebook) {
+		registerCompactionTrigger(pi, rootNotebook);
+		registerNotebookContextPacket(pi, rootNotebook);
+		registerNotebookSourceTool(pi);
 	}
 
 	let enabled = loadEnabled();
@@ -1411,27 +1411,27 @@ export default function (pi: ExtensionAPI) {
 		return `${labels}\n${delta}`;
 	}
 
-	function prepareMemoryBatch(ctx: ExtensionContext): PairMemoryBatch | undefined {
-		if (!rootMemory || !memoryTool || !enabled) return undefined;
-		const config = rootMemory.ensureConfig(ctx.cwd);
+	function prepareNotebookBatch(ctx: ExtensionContext): PairNotebookBatch | undefined {
+		if (!rootNotebook || !notebookTool || !enabled) return undefined;
+		const config = rootNotebook.ensureConfig(ctx.cwd);
 		if (config.passive) return undefined;
 		const getBranch = (ctx.sessionManager as { getBranch?: () => unknown }).getBranch;
 		if (typeof getBranch !== "function") return undefined;
 		const entries = getBranch.call(ctx.sessionManager) as Entry[];
 		const sourceTokens = rawTokensSinceObservationCoverage(entries);
 		const sessionIdentity = sessionIdFromCtx(ctx);
-		const coverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
-		const backoff = rootMemory.memoryEmptyBackoff;
-		let fullMaintenanceDue = sourceTokens >= config.memoryAfterTokens;
+		const coverageId = latestCoverageMarkerId(entries, NOTEBOOK_OBSERVATIONS_RECORDED);
+		const backoff = rootNotebook.notebookEmptyBackoff;
+		let fullMaintenanceDue = sourceTokens >= config.notebookAfterTokens;
 		if (backoff) {
 			const sameSpan = backoff.sessionIdentity === sessionIdentity && backoff.coverageId === coverageId;
-			if (sameSpan && sourceTokens < backoff.tokensAtEmpty + config.memoryAfterTokens) {
+			if (sameSpan && sourceTokens < backoff.tokensAtEmpty + config.notebookAfterTokens) {
 				fullMaintenanceDue = false;
 			} else {
-				rootMemory.memoryEmptyBackoff = undefined;
+				rootNotebook.notebookEmptyBackoff = undefined;
 			}
 		}
-		return preparePairMemoryBatch({
+		return preparePairNotebookBatch({
 			entries,
 			config,
 			contextWindow: activePairContextWindow,
@@ -1441,15 +1441,15 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	function commitMemoryUpdate(update: PairMemoryUpdate): void {
-		if (!rootMemory || !latestCtx) return;
+	function commitNotebookUpdate(update: PairNotebookUpdate): void {
+		if (!rootNotebook || !latestCtx) return;
 		if (update.sessionIdentity && update.sessionIdentity !== sessionIdFromCtx(latestCtx)) return;
 		const entries = latestCtx.sessionManager.getBranch() as Entry[];
-		if (!commitPairMemoryUpdate(pi, rootMemory, entries, update)) return;
+		if (!commitPairNotebookUpdate(pi, rootNotebook, entries, update)) return;
 		if (update.observations.length > 0) {
-			rootMemory.memoryEmptyBackoff = undefined;
+			rootNotebook.notebookEmptyBackoff = undefined;
 		} else if (update.fullMaintenanceDue) {
-			rootMemory.memoryEmptyBackoff = {
+			rootNotebook.notebookEmptyBackoff = {
 				sessionIdentity: update.sessionIdentity,
 				coverageId: update.priorCoverageId,
 				tokensAtEmpty: update.sourceTokens,
@@ -1523,16 +1523,16 @@ export default function (pi: ExtensionAPI) {
 		});
 		adviseTool = builtAdviseTool;
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
-		const unresolvedMemory = () => {
+		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
-			const batch = prepareMemoryBatch(latestCtx);
+			const batch = prepareNotebookBatch(latestCtx);
 			if (!batch) return "";
 			return formatSourceAddressedTrajectory(primaryEntries(), batch.allowedSourceEntryIds);
 		};
 		const seedSource = {
 			entries: primaryEntries,
 			rollingAdvice: () => builtRuntime?.rollingAdvice ?? [],
-			unresolvedMemory,
+			unresolvedNotebook,
 		};
 		let session: Awaited<ReturnType<typeof createPairSession>> | undefined;
 		try {
@@ -1543,7 +1543,7 @@ export default function (pi: ExtensionAPI) {
 				systemPrompt,
 				adviseTool: builtAdviseTool as never,
 				escalateTool: builtEscalateTool as never,
-				...(memoryTool ? { memoryTool: memoryTool as never } : {}),
+				...(notebookTool ? { notebookTool: notebookTool as never } : {}),
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
@@ -1561,7 +1561,7 @@ export default function (pi: ExtensionAPI) {
 				modelRegistry: ctx.modelRegistry,
 				adviseTool: builtAdviseTool,
 				escalateTool: builtEscalateTool,
-				...(memoryTool ? { memoryTool } : {}),
+				...(notebookTool ? { notebookTool } : {}),
 				primarySessionManager: ctx.sessionManager,
 			});
 		const onSettled = (outcome: "ok" | "failed") => {
@@ -1580,10 +1580,10 @@ export default function (pi: ExtensionAPI) {
 				buildPairSeed({
 					entries: primaryEntries(),
 					rollingAdvice: builtRuntime.rollingAdvice,
-					unresolvedMemory: unresolvedMemory(),
+					unresolvedNotebook: unresolvedNotebook(),
 				}),
-			memoryTool,
-			commitMemoryUpdate,
+			notebookTool,
+			commitNotebookUpdate,
 		);
 		runtime = builtRuntime;
 		activeModelLabel = `${model.provider}/${model.id}`;
@@ -1687,11 +1687,11 @@ export default function (pi: ExtensionAPI) {
 			}),
 			sourceEntryIds,
 		);
-		const memoryBatch = prepareMemoryBatch(ctx);
+		const notebookBatch = prepareNotebookBatch(ctx);
 		rt.push(delta, {
 			lowSignal: isLowSignalTurn({ hasUserText: Boolean(userPrompt), toolResults }),
 			terminal,
-			...(memoryBatch ? { memoryBatch } : {}),
+			...(notebookBatch ? { notebookBatch } : {}),
 		});
 
 		// Don't block during a handoff teardown (we'd stall the replacement).
@@ -1741,7 +1741,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		teardown();
-		rootMemory?.dispose();
+		rootNotebook?.dispose();
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
 	});
 
@@ -1773,24 +1773,27 @@ export default function (pi: ExtensionAPI) {
 
 	// ---- /pair command ----
 	pi.registerCommand("pair", {
-		description: "Control the Pair Programmer. Usage: /pair [on|off|status|memory [full]]",
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one command dispatcher owns Pair activation, status, memory view, and the private test hook.
+		description: "Control the Pair Programmer. Usage: /pair [on|off|status|notebook [full]]",
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one command dispatcher owns Pair activation, status, notebook view, and the private test hook.
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 
-			if (arg === "memory" || arg === "memory full") {
-				if (!rootMemory) {
-					ctx.ui.notify("Pair memory is available only in the root session.", "warning");
+			if (arg === "notebook" || arg === "notebook full") {
+				if (!rootNotebook) {
+					ctx.ui.notify("Pair notebook is available only in the root session.", "warning");
 					return;
 				}
 				const entries = ctx.sessionManager.getBranch() as Entry[];
-				ctx.ui.notify(renderMemoryView(entries, arg === "memory full" ? "full" : "visible"), "info");
+				ctx.ui.notify(renderNotebookView(entries, arg === "notebook full" ? "full" : "visible"), "info");
 				return;
 			}
 
 			if (arg === "status" || arg === "") {
 				if (!enabled) {
-					ctx.ui.notify(`Pair Programmer disabled — memory maintenance paused; profile ${PAIR_MODEL_PROFILE}`, "info");
+					ctx.ui.notify(
+						`Pair Programmer disabled — notebook maintenance paused; profile ${PAIR_MODEL_PROFILE}`,
+						"info",
+					);
 					updateStatus(ctx);
 					return;
 				}
@@ -1808,11 +1811,11 @@ export default function (pi: ExtensionAPI) {
 					u.contextPercent !== null ? `${u.contextPercent}% (${u.contextTokens} tok)` : `${u.contextTokens} tok`;
 				const advisor = escalationController;
 				const entries = ctx.sessionManager.getBranch() as Entry[];
-				const memory = foldLedger(entries);
-				const memoryProgress = rootMemory ? rawTokensSinceObservationCoverage(entries) : 0;
+				const notebook = foldLedger(entries);
+				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
 					`Pair Programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
-						`Memory — ${memory.activeObservations.length} active observations, ${memory.currentReflections.length} current reflections, ~${memoryProgress.toLocaleString()} uncovered source tokens\n` +
+						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Advisor — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
 				);
@@ -1837,7 +1840,7 @@ export default function (pi: ExtensionAPI) {
 				saveEnabled(false);
 				teardown();
 				updateStatus(ctx);
-				ctx.ui.notify("Pair Programmer off — memory maintenance paused", "info");
+				ctx.ui.notify("Pair Programmer off — notebook maintenance paused", "info");
 				return;
 			}
 
@@ -1853,7 +1856,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			ctx.ui.notify("usage: /pair [on|off|status|memory [full]]", "warning");
+			ctx.ui.notify("usage: /pair [on|off|status|notebook [full]]", "warning");
 		},
 	});
 }

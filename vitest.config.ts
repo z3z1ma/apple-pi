@@ -9,7 +9,7 @@ export default defineConfig({
 			"components/codex-fast/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/shared/tests/**/*.test.ts",
-			"components/memory/tests/**/*.test.ts",
+			"components/notebook/tests/**/*.test.ts",
 			"components/session-search/tests/**/*.test.ts",
 			"components/xai-hosted-tools/tests/**/*.test.ts",
 			"components/xai-context-compaction/tests/**/*.test.ts",

@@ -43,7 +43,7 @@ describe("standalone context extension", () => {
 		const loaded = surfaces(await loadContextExtension());
 		expect(loaded.errors).toEqual([]);
 		expect(loaded.tools.has("session_search")).toBe(true);
-		expect(loaded.tools.has("memory_source")).toBe(false);
+		expect(loaded.tools.has("notebook_source")).toBe(false);
 		expect(loaded.commands.size).toBe(0);
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);
@@ -54,7 +54,7 @@ describe("standalone context extension", () => {
 		const loaded = surfaces(await runInChildSessionContext(() => loadContextExtension()));
 		expect(loaded.errors).toEqual([]);
 		expect(loaded.tools.has("session_search")).toBe(true);
-		expect(loaded.tools.has("memory_source")).toBe(false);
+		expect(loaded.tools.has("notebook_source")).toBe(false);
 		expect(loaded.commands.size).toBe(0);
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);
