@@ -38,6 +38,15 @@ export type ManagedAgentToolPolicy = (
 	signal?: AbortSignal,
 ) => ManagedAgentToolPolicyResult | undefined | Promise<ManagedAgentToolPolicyResult | undefined>;
 
+export interface ManagedRequiredResult {
+	/** True only after the controller-owned result tool accepts a valid result. */
+	isSatisfied(): boolean;
+	/** One same-session finalization prompt after an otherwise clean prose return. */
+	repairPrompt: string;
+	/** The only tools active during finalization. */
+	toolNames: string[];
+}
+
 export interface ManagedAgentRequest {
 	type: string;
 	description: string;
@@ -58,6 +67,8 @@ export interface ManagedAgentRequest {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied typed result tools, available even when extensions are disabled. */
 	customTools?: ToolDefinition[];
+	/** Controller-owned structured outcome that receives one bounded same-session repair. */
+	requiredResult?: ManagedRequiredResult;
 	/** Keep only mandatory child safety extensions when false. */
 	loadStandardChildExtensions?: boolean;
 	internalOwner?: string;

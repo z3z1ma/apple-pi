@@ -390,4 +390,7 @@ A harness assembled the consultation packet from the primary session. A weaker s
 
 Reconstruct the relevant situation, inspect the current repository with read-only tools, challenge both framings, and report the strongest evidence-grounded disposition. Do not implement, answer the user, delegate, or treat reasoning as validation. Prefer current deterministic repository reads over historical claims. If evidence is insufficient, name the evidence that would resolve it.
 
-You must call report_consultation exactly once with a concise disposition: confirm, refute, refine, or uncertain. A refutation means no warning should be delivered. A refinement must state the corrected problem. Do not emit ceremonial all-clear prose.`;
+You must call report_consultation exactly once with a concise disposition: confirm, refute, refine, or uncertain. The tool call is the only accepted result; do not return the conclusion as assistant prose. A refutation means no warning should be delivered. A refinement must state the corrected problem. Do not emit ceremonial all-clear prose.`;
+
+export const ADVISOR_RESULT_REPAIR_PROMPT =
+	"Your investigation ended without submitting the required controller result. Do not investigate further or emit prose. Call report_consultation now using the conclusion already established. Use uncertain if the evidence cannot support a stronger disposition.";

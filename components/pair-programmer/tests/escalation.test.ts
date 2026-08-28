@@ -187,20 +187,34 @@ describe("Pair escalation machinery", () => {
 		expect(h.outcomes[0]).toMatchObject({ disposition: "refine", delivered: false, stale: true });
 	});
 
-	it("labels provider failure as unadjudicated instead of confirmation or refutation", async () => {
-		const h = harness({ status: "failed", error: "deep provider unavailable", usage: { ...usage, cost: 0 } });
+	it.each([
+		{ status: "failed" as const, error: "deep provider unavailable" },
+		{ status: "malformed" as const, error: "Advisor returned without a typed disposition." },
+	])("records $status without promoting the escalation hypothesis to advice", async ({ status, error }) => {
+		const h = harness({ status, error, usage: { ...usage, cost: 0 } });
 		h.controller.submit("pair", request, 1);
-		await vi.waitFor(() => expect(h.ready).toBe(1));
-		const delivered: any[] = [];
-		const prepared = await h.controller.prepareDelivery();
-		expect(prepared).toBeDefined();
-		if (prepared) {
-			delivered.push(prepared.note);
-			prepared.commit(true);
-		}
-		expect(delivered[0]).toMatchObject({ source: "pair", adjudication: "unadjudicated" });
-		expect(delivered[0].note).toContain("deep provider unavailable");
-		expect(h.outcomes[0]).toMatchObject({ status: "failed", delivered: true });
+		await vi.waitFor(() => expect(h.outcomes).toHaveLength(1));
+		expect(h.ready).toBe(0);
+		expect(await h.controller.prepareDelivery()).toBeUndefined();
+		expect(h.outcomes[0]).toMatchObject({ status, delivered: false });
+	});
+
+	it("records a typed uncertain disposition without delivering advice", async () => {
+		const h = harness({
+			status: "completed",
+			finding: {
+				disposition: "uncertain",
+				finding: "The available evidence does not resolve queue ownership.",
+				evidence: [],
+				uncertainty: "The wrapper implementation is unavailable.",
+			},
+			usage,
+		});
+		h.controller.submit("pair", request, 1);
+		await vi.waitFor(() => expect(h.outcomes).toHaveLength(1));
+		expect(h.ready).toBe(0);
+		expect(await h.controller.prepareDelivery()).toBeUndefined();
+		expect(h.outcomes[0]).toMatchObject({ disposition: "uncertain", delivered: false });
 	});
 
 	it("throttles starts by turns without imposing an absolute consultation maximum", async () => {

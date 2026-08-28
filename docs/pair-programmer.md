@@ -87,6 +87,8 @@ The extension imposes no character ceiling on consultation packets or Git diffs.
 
 Advisor runs as a fresh, foreground, hidden managed sub-agent. It receives only read-only repository tools, primary-bound `notebook_source` and `session_search`, and the private typed `report_consultation` result tool. It does not receive Pair, nested agents, `pi_exec`, mutation tools, Ledger mutation tools, MCP, or project extension discovery.
 
+The host accepts only a validated `report_consultation` call as the consultation result. If Advisor ends with prose instead, the managed runner keeps the same session alive, disables every tool except `report_consultation`, and allows one finalization turn. Prose is never parsed into a disposition.
+
 Advisor returns exactly one disposition:
 
 - `confirm`
@@ -94,7 +96,7 @@ Advisor returns exactly one disposition:
 - `refine`
 - `uncertain`
 
-Refutations are recorded but are not delivered as warnings.
+Only typed `confirm` and `refine` findings are eligible for delivery. Refutations and uncertain dispositions are recorded but are not delivered as warnings.
 
 ## Routing and delivery
 
@@ -104,7 +106,7 @@ Before delivery, the host recaptures working-state fingerprints for the whole ch
 
 A terminal advisory closes the current supervision episode. Pair does not review the main agent's resulting correction run; the next user message opens a new episode. This prevents advice from creating its own review loop.
 
-If Advisor fails or returns no typed disposition, the Pair claim may be delivered as **unadjudicated** with the failure reason. It is never presented as confirmed or refuted. Shutdown, session replacement, handoff, and Pair disablement cancel late delivery.
+An escalation is a request to investigate, not a finding. If Advisor fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the Pair escalation hypothesis or harness failure text into advice. Shutdown, session replacement, handoff, and Pair disablement cancel late delivery.
 
 A delivered finding remains advice. The main agent inspects current code, decides whether to act, implements, and validates.
 

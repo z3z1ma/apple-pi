@@ -12,7 +12,7 @@ export interface PairNote {
 	note: string;
 	severity?: PairSeverity;
 	source?: "pair" | "advisor";
-	adjudication?: AdvisorDisposition | "unadjudicated";
+	adjudication?: AdvisorDisposition;
 }
 
 export type PairEscalation = ConsultationHypothesis;

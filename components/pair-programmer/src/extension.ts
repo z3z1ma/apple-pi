@@ -1761,9 +1761,8 @@ export default function (pi: ExtensionAPI) {
 			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
 			const role = n.source === "advisor" ? "Advisor" : "Pair";
-			const qualifier = n.adjudication === "unadjudicated" ? " (unadjudicated)" : "";
 			const card = new Container();
-			card.addChild(new Text(`${theme.fg(color, theme.bold(role))}${qualifier} ${theme.fg(color, tag)}`, 0, 0));
+			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));
 			card.addChild(new Spacer(1));
 			card.addChild(new Text(theme.fg("text", n.note), 0, 0));
 			container.addChild(new AdvisoryBorder(card, theme.fg(color, "│")));

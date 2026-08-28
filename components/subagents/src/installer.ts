@@ -11,7 +11,12 @@ import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/si
 import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
-import { ADVISOR_CONSULTATION_OVERLAY, renderConsultationContext, type AdvisorFinding } from "./consultation.js";
+import {
+	ADVISOR_CONSULTATION_OVERLAY,
+	ADVISOR_RESULT_REPAIR_PROMPT,
+	renderConsultationContext,
+	type AdvisorFinding,
+} from "./consultation.js";
 import { renderAgentName } from "./agent-color.js";
 import { registerBtwCommand } from "./btw.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
@@ -19,6 +24,7 @@ import {
 	getAgentConversation,
 	getDefaultMaxTurns,
 	normalizeMaxTurns,
+	resumeAgent,
 	SUBAGENT_TOOL_NAMES,
 	setDefaultMaxTurns,
 	setGraceTurns,
@@ -62,6 +68,7 @@ import type {
 	SubagentConfigScope,
 	WidgetMode,
 } from "./types.js";
+import { addUsage } from "./usage.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -346,7 +353,13 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			const reportTool = defineTool({
 				name: "report_consultation",
 				label: "Report Consultation",
-				description: "Return the independent Advisor disposition. Call exactly once after investigating.",
+				description:
+					"Submit the independent Advisor disposition. You MUST use this as your last action; assistant prose is not a result.",
+				promptSnippet: "Submit the typed Advisor disposition and end the consultation",
+				promptGuidelines: [
+					"You must finish by calling report_consultation exactly once with arguments matching its schema.",
+					"The call is the consultation result. Do not put the disposition in assistant prose.",
+				],
 				parameters: Type.Object({
 					disposition: Type.Union([
 						Type.Literal("confirm"),
@@ -360,6 +373,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					recommended_action: Type.Optional(Type.String()),
 					uncertainty: Type.Optional(Type.String()),
 				}),
+				constrainedSampling: { type: "json_schema", strict: "prefer" },
 				async execute(_toolCallId, params) {
 					if (finding) return textResult("A consultation disposition was already recorded.", undefined, true);
 					finding = {
@@ -387,6 +401,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					thinkingLevel: resolved.thinkingLevel,
 					systemPrompt: ADVISOR_CONSULTATION_OVERLAY,
 					customTools: [reportTool, ...bindPrimaryRecallTools(ctx.sessionManager)],
+					requiredResult: {
+						isSatisfied: () => finding !== undefined,
+						repairPrompt: ADVISOR_RESULT_REPAIR_PROMPT,
+						toolNames: [reportTool.name],
+					},
+					toolExecution: "sequential",
 					loadStandardChildExtensions: false,
 					internalOwner: `consultation:${request.context.metadata.createdAt}`,
 					cwd: request.context.metadata.cwd,
@@ -404,12 +424,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				thrown = error;
 			}
 			const durationMs = Date.now() - startedAt;
-			const resultStatus = request.signal?.aborted
-				? "cancelled"
-				: thrown || !record || ["error", "stopped", "aborted"].includes(record.status)
-					? "failed"
-					: finding
-						? "completed"
+			const resultStatus = finding
+				? "completed"
+				: request.signal?.aborted
+					? "cancelled"
+					: thrown || !record || ["error", "stopped", "aborted"].includes(record.status)
+						? "failed"
 						: "malformed";
 			const error =
 				thrown instanceof Error
@@ -451,6 +471,11 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				},
 				request.onActivity,
 			);
+			const recordUsage = (usage: Parameters<typeof tracker.callbacks.onAssistantUsage>[0]) => {
+				tracker.callbacks.onAssistantUsage(usage);
+				request.onAssistantUsage?.(usage);
+				liveTokens += usage.input + usage.output + usage.cacheWrite;
+			};
 			const { record } = await manager.spawnAndWait(
 				pi,
 				ctx,
@@ -485,9 +510,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					onTextDelta: tracker.callbacks.onTextDelta,
 					onTurnEnd: tracker.callbacks.onTurnEnd,
 					onAssistantUsage: (usage) => {
-						tracker.callbacks.onAssistantUsage(usage);
-						request.onAssistantUsage?.(usage);
-						liveTokens += usage.input + usage.output + usage.cacheWrite;
+						recordUsage(usage);
 						if (request.maxTokens !== undefined && liveTokens >= request.maxTokens && id) {
 							tokenCeilingReached = true;
 							manager.abort(id, "token_ceiling");
@@ -508,15 +531,69 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				},
 			);
 			if (id) activityById.set(id, tracker.state);
-			if (tokenCeilingReached) record.terminationCause = "token_ceiling";
-			else if (compacted || record.compactionCount > 0) record.terminationCause = "compaction";
-			else if (request.signal?.aborted) record.terminationCause = "external_cancellation";
-			else if (record.status === "steered" || record.status === "aborted") record.terminationCause = "turn_ceiling";
-			else if (record.status === "error") record.terminationCause = "provider_error";
 			const session = record.session;
-			record.session = undefined;
-			await disposeAgentSession(session);
-			return record;
+			try {
+				const required = request.requiredResult;
+				const canRepair =
+					required &&
+					!required.isSatisfied() &&
+					session &&
+					["completed", "steered"].includes(record.status) &&
+					!request.signal?.aborted &&
+					!tokenCeilingReached &&
+					!compacted;
+				if (canRepair) {
+					const available = new Set(session.getAllTools().map((tool) => tool.name));
+					const missing = required.toolNames.filter((name) => !available.has(name));
+					if (missing.length > 0) throw new Error(`Required result tools are unavailable: ${missing.join(", ")}`);
+					session.setActiveToolsByName(required.toolNames);
+					const repair = await resumeAgent(session, required.repairPrompt, {
+						signal: request.signal,
+						onToolActivity: (activity) => {
+							tracker.callbacks.onToolActivity(activity);
+							if (activity.type === "end") record.toolUses++;
+						},
+						onAssistantUsage: (usage) => {
+							addUsage(record.lifetimeUsage, usage);
+							recordUsage(usage);
+							if (request.maxTokens !== undefined && liveTokens >= request.maxTokens) {
+								tokenCeilingReached = true;
+								session.abort();
+							}
+						},
+						onCompaction: (info) => {
+							compacted = true;
+							record.compactionCount++;
+							request.onCompaction?.(info);
+							session.abort();
+						},
+					});
+					record.result = repair.text;
+					record.completedAt = Date.now();
+					if (required.isSatisfied()) {
+						record.status = "completed";
+						record.error = undefined;
+						record.terminationCause = undefined;
+					} else if (repair.failure) {
+						record.status = "error";
+						record.error = repair.failure;
+						record.terminationCause = "provider_error";
+					}
+				}
+				if (request.requiredResult?.isSatisfied()) {
+					record.status = "completed";
+					record.error = undefined;
+					record.terminationCause = undefined;
+				} else if (tokenCeilingReached) record.terminationCause = "token_ceiling";
+				else if (compacted || record.compactionCount > 0) record.terminationCause = "compaction";
+				else if (request.signal?.aborted) record.terminationCause = "external_cancellation";
+				else if (record.status === "steered" || record.status === "aborted") record.terminationCause = "turn_ceiling";
+				else if (record.status === "error") record.terminationCause = "provider_error";
+				return record;
+			} finally {
+				record.session = undefined;
+				await disposeAgentSession(session);
+			}
 		},
 		abort(agentId) {
 			return manager.abort(agentId);

@@ -813,14 +813,19 @@ RELOADED ROLE MUST NOT RUN.
 			join(isolatedAgentDir, "model-profiles.json"),
 			JSON.stringify({ profiles: { deep: { model: "faux/faux-advisor", thinking: "high" } } }),
 		);
-		let requestText = "";
+		const requestTexts: string[] = [];
 		let systemText = "";
-		let activeTools: string[] = [];
+		const activeToolSets: string[][] = [];
 		faux.setResponses([
 			(context) => {
-				requestText = JSON.stringify(context.messages);
+				requestTexts.push(JSON.stringify(context.messages));
 				systemText = context.systemPrompt ?? "";
-				activeTools = context.tools?.map((candidate) => candidate.name) ?? [];
+				activeToolSets.push(context.tools?.map((candidate) => candidate.name) ?? []);
+				return fauxAssistantMessage([fauxText("The risk appears to be flush ordering.")]);
+			},
+			(context) => {
+				requestTexts.push(JSON.stringify(context.messages));
+				activeToolSets.push(context.tools?.map((candidate) => candidate.name) ?? []);
 				return fauxAssistantMessage(
 					[
 						fauxToolCall("report_consultation", {
@@ -908,11 +913,14 @@ RELOADED ROLE MUST NOT RUN.
 			const result = await getManagedSubagentService()?.runConsultation(ctx, { context });
 			expect(result?.status).toBe("completed");
 			expect(result?.finding?.disposition).toBe("refine");
-			expect(requestText).toContain("implement durable retry");
-			expect(requestText).toContain("Retry ownership may not be durable.");
-			expect(requestText).not.toContain("# Parent Conversation Context");
+			expect(requestTexts).toHaveLength(2);
+			expect(requestTexts[0]).toContain("implement durable retry");
+			expect(requestTexts[0]).toContain("Retry ownership may not be durable.");
+			expect(requestTexts[0]).not.toContain("# Parent Conversation Context");
+			expect(requestTexts[1]).toContain("investigation ended without submitting the required controller result");
+			expect(requestTexts[1]).toContain("The risk appears to be flush ordering.");
 			expect(systemText).toContain("independent adjudication");
-			expect(activeTools).toEqual(
+			expect(activeToolSets[0]).toEqual(
 				expect.arrayContaining([
 					"read",
 					"bash",
@@ -925,8 +933,17 @@ RELOADED ROLE MUST NOT RUN.
 				]),
 			);
 			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "advise", "escalate"]) {
-				expect(activeTools).not.toContain(forbidden);
+				expect(activeToolSets[0]).not.toContain(forbidden);
 			}
+			expect(activeToolSets[1]).toEqual(["report_consultation"]);
+
+			faux.setResponses([
+				() => fauxAssistantMessage([fauxText("I remain unsure.")]),
+				() => fauxAssistantMessage([fauxText("There is not enough evidence.")]),
+			]);
+			const malformed = await getManagedSubagentService()?.runConsultation(ctx, { context });
+			expect(malformed?.status).toBe("malformed");
+			expect(malformed?.finding).toBeUndefined();
 		} finally {
 			await lifecycle.get("session_shutdown")?.();
 			process.chdir(previousCwd);

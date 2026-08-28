@@ -74,7 +74,7 @@ export class EscalateTool {
 				? "Escalation accepted for host-controlled Advisor adjudication."
 				: acceptance === "suppressed"
 					? "Equivalent escalation suppressed by host deduplication or throttling."
-					: "Advisor orchestration is unavailable; the host retained the unadjudicated suspicion.";
+					: "Advisor orchestration is unavailable; no adjudication was started and no advice was produced.";
 		return { content: [{ type: "text", text }], details: { acceptance } };
 	}
 }
@@ -429,41 +429,28 @@ export class PairEscalationController {
 			status: result.status,
 			usage: result.usage,
 		};
-		const disposition = result.finding?.disposition;
-		if (disposition) this.stats[disposition]++;
-		if (result.status !== "completed" || !result.finding) this.stats.failed++;
-		if (disposition === "refute") {
-			this.state = "advisor_settled";
-			this.deps.onOutcome(outcome);
-			this.deps.onStateChange();
-			return;
-		}
-		if (result.status === "cancelled") {
-			this.state = "cancelled";
-			this.deps.onOutcome(outcome);
-			this.deps.onStateChange();
-			return;
-		}
-		const adjudicated = disposition === "confirm" || disposition === "refine";
 		const finding = result.finding;
-		const note =
-			adjudicated && finding
-				? [finding.finding, finding.recommendedAction].filter(Boolean).join("\n\n")
-				: [
-						queued.request.claim,
-						finding?.uncertainty || result.error
-							? `Advisor did not adjudicate this claim: ${finding?.uncertainty ?? result.error}`
-							: "Advisor did not return a usable adjudication; verify this Pair claim independently.",
-					].join("\n\n");
+		const disposition = finding?.disposition;
+		if (disposition) this.stats[disposition]++;
+		if (result.status === "failed" || result.status === "malformed") this.stats.failed++;
+		const deliverable =
+			result.status === "completed" && finding !== undefined && (disposition === "confirm" || disposition === "refine");
+		if (!deliverable) {
+			this.state =
+				result.status === "cancelled" ? "cancelled" : result.status === "completed" ? "advisor_settled" : "failed";
+			this.deps.onOutcome(outcome);
+			this.deps.onStateChange();
+			return;
+		}
 		this.#delivery = {
 			queued,
 			context,
 			result,
 			note: {
-				note,
-				severity: finding?.severity ?? queued.request.severity,
-				source: adjudicated ? "advisor" : "pair",
-				adjudication: adjudicated ? disposition : "unadjudicated",
+				note: [finding.finding, finding.recommendedAction].filter(Boolean).join("\n\n"),
+				severity: finding.severity ?? queued.request.severity,
+				source: "advisor",
+				adjudication: disposition,
 			},
 			outcome,
 		};
