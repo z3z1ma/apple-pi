@@ -36,7 +36,7 @@ const invoke = async (tool: any, file: string, params: Record<string, unknown>) 
 	return result.content[0].text as string;
 };
 
-describe("session_search scope", () => {
+describe("search_session scope", () => {
 	it("defaults to active lineage and opts into all-session search explicitly", async () => {
 		const { dir, file } = makeSession();
 		try {

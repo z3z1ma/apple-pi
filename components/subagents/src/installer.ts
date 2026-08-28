@@ -89,7 +89,7 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
-	// Child sessions load fast mode, the overflow guard, ledger, session_search, and MCP via explicit `-e` and never create
+	// Child sessions load fast mode, the overflow guard, ledger, search_session, and MCP via explicit `-e` and never create
 	// a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 
@@ -351,14 +351,14 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (resolved.error) throw new Error(resolved.error);
 			let finding: AdvisorFinding | undefined;
 			const reportTool = defineTool({
-				name: "report_consultation",
+				name: "give_second_opinion",
 				label: "Report Consultation",
 				description:
-					"Submit the independent Advisor disposition. You MUST use this as your last action; assistant prose is not a result.",
-				promptSnippet: "Submit the typed Advisor disposition and end the consultation",
+					"Share your independent architectural assessment with the programmers. You MUST use this as your last action; assistant prose is not a result.",
+				promptSnippet: "Give the programmers your typed second opinion and end the consultation",
 				promptGuidelines: [
-					"You must finish by calling report_consultation exactly once with arguments matching its schema.",
-					"The call is the consultation result. Do not put the disposition in assistant prose.",
+					"Finish by calling give_second_opinion exactly once with arguments matching its schema.",
+					"This call is the second opinion that returns to the programmers. Do not put the disposition in assistant prose.",
 				],
 				parameters: Type.Object({
 					disposition: Type.Union([
@@ -728,23 +728,25 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		name: SUBAGENT_TOOL_NAMES.AGENT,
 		label: "Agent",
 		description: [
-			"Launch an autonomous subagent in an isolated Pi context.",
-			"Use background mode for parallel work, then get_subagent_result; use resume to continue an in-memory agent.",
-			"Custom agents are Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
-			"Subagents may delegate only when their definition explicitly sets allowed_subagents.",
-			`The live <${TEAM_SYSTEM_PROMPT_TAG}> system-prompt block lists every callable teammate with its name, configured inference profile, and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block lists the inference profiles and their descriptions. Select the teammate with subagent_type, optionally select an inference profile with profile, and append dynamic guidance with system_prompt without changing capabilities.`,
+			"Bring a teammate into an isolated Pi session to own a well-defined piece of work.",
+			"Use background mode when their work can proceed alongside yours, then get_subagent_result; use resume to continue with the same teammate and context.",
+			"Custom teammates are defined by Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
+			"A teammate may bring in another teammate only when their definition explicitly allows it.",
+			`The live <${TEAM_SYSTEM_PROMPT_TAG}> block lists everyone available, including each teammate's configured inference profile and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block describes the inference profiles. Choose the teammate with subagent_type, optionally choose a profile, and use system_prompt only for invocation-specific guidance that does not change their capabilities.`,
 		].join(" "),
 		promptGuidelines: [
-			`The parent session is a senior engineer who may implement. In the live <${TEAM_SYSTEM_PROMPT_TAG}> block, choose a teammate by its own description and use its configured inference profile unless the invocation needs an explicit profile override. If no teammate fits, keep the work in the parent session.`,
-			"Do not launch overlapping writers. Do not retry an unchanged rejected task.",
-			`Use the Agent tool for collaboration and pi_exec agents.run for program graphs. Agent subagent_type and agents.run type select a teammate; profile selects an available inference profile. Pair profile with Agent's system_prompt or agents.run's systemPrompt for dynamic specialization. Additional guidance cannot grant capabilities.`,
-			"The persistent Pair reviews the root session. Implement runs its supervision sidecar by default; set pair false to explicitly opt out for one new session. Other types follow their agent-definition Pair default.",
-			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
+			`You are the senior engineer integrating the work. Use the live <${TEAM_SYSTEM_PROMPT_TAG}> block to choose a teammate whose role genuinely fits, and normally keep their configured inference profile. If nobody fits or coordination would cost more than it saves, keep the work in this session.`,
+			"Do not ask multiple teammates to write the same files. Do not retry an unchanged rejected task.",
+			`Use the Agent tool to collaborate with a teammate and pi_exec agents.run to compose model workers in a program graph. Agent subagent_type and agents.run type choose a teammate; profile chooses an inference profile. Agent's system_prompt and agents.run's systemPrompt add focused guidance without changing capabilities.`,
+			"Your pair programming partner follows the root session. Implement pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own Pair default.",
+			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
 		],
 		parameters: Type.Object({
-			prompt: Type.String({ description: "Self-contained task for the agent." }),
-			description: Type.String({ description: "Short task description shown in the UI." }),
-			subagent_type: Type.String({ description: "Agent type from the available Markdown/default definitions." }),
+			prompt: Type.String({ description: "A self-contained task for your teammate." }),
+			description: Type.String({ description: "A short description of their task, shown in the UI." }),
+			subagent_type: Type.String({
+				description: "The teammate to bring in, selected from the available Markdown/default definitions.",
+			}),
 			profile: Type.Optional(INFERENCE_PROFILE_PARAMETER_SCHEMA),
 			system_prompt: Type.Optional(
 				Type.String({
@@ -1015,7 +1017,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 			label: "Get Subagent Result",
 			description:
-				"Wait for a subagent result; omit yield_seconds to wait until it settles and receive its full final output. If an explicit yield is necessary, use a very large yield_seconds value (normally 3,600 seconds or more): this returns as soon as the agent finishes. yield_seconds is not an agent timeout; reaching it only yields control while the still-running agent continues untouched. Set it to 0 only for an immediate status check. Use transcript_tail for a bounded recent conversation slice or verbose for the full conversation; transcript_tail is mutually exclusive with verbose and a positive yield.",
+				"Wait for a teammate to finish and receive their final report. Omit yield_seconds to wait until they settle. If you need a bounded wait, use a very large value (normally 3,600 seconds or more); the call returns as soon as they finish, and reaching the interval leaves them working in the background. Use 0 only for an immediate check. transcript_tail shows a bounded recent conversation slice; verbose shows the full conversation, and neither can be combined with a positive yield.",
 			parameters: Type.Object({
 				agent_id: Type.String(),
 				yield_seconds: Type.Optional(
@@ -1104,7 +1106,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		defineTool({
 			name: SUBAGENT_TOOL_NAMES.STEER,
 			label: "Steer Subagent",
-			description: "Send guidance to a running or queued subagent by ID.",
+			description: "Send additional guidance to a running or queued teammate by ID.",
 			parameters: Type.Object({ agent_id: Type.String(), message: Type.String() }),
 			async execute(_toolCallId, params) {
 				if (!manager.steer(params.agent_id, params.message))
@@ -1119,7 +1121,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		defineTool({
 			name: SUBAGENT_TOOL_NAMES.STOP,
 			label: "Stop Subagent",
-			description: "Stop a running or queued subagent by ID.",
+			description: "Stop a running or queued teammate by ID.",
 			parameters: Type.Object({ agent_id: Type.String() }),
 			async execute(_toolCallId, params) {
 				const record = manager.getRecord(params.agent_id);

@@ -35,13 +35,13 @@ async function execute(id: string, entries: TestEntry[]) {
 	return { result, text, getBranch, getEntries };
 }
 
-describe("notebook source tool", () => {
-	it("keeps the public tool name and TUI call rendering", () => {
+describe("revisit note tool", () => {
+	it("uses the model-facing name without changing TUI call rendering", () => {
 		const pi = { registerTool: vi.fn() };
 		registerRecallTool(pi as any);
 
-		expect(NOTEBOOK_SOURCE_TOOL_NAME).toBe("notebook_source");
-		expect(recallObservationTool.name).toBe("notebook_source");
+		expect(NOTEBOOK_SOURCE_TOOL_NAME).toBe("revisit_note");
+		expect(recallObservationTool.name).toBe("revisit_note");
 		expect(recallObservationTool.label).toBe("Notebook source");
 		expect(formatRecallCallForTui("aaaaaaaaaaaa")).toBe("notebook_source aaaaaaaaaaaa");
 		expect(pi.registerTool).toHaveBeenCalledWith(recallObservationTool);

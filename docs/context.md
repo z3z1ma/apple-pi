@@ -22,9 +22,9 @@ Completions-routed Grok is left to Pi default compaction.
 
 ## Pair notebook
 
-The Pair Programmer is the only persistent model actor. It receives the root trajectory once, reviews it as navigator, and periodically maintains sourced observations and current-law reflections through its private `update_notebook` tool. The tool stages a typed transaction; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending records.
+The pair programming partner is the only persistent model actor. It follows the main session as it unfolds, keeps a second line of thought while the main agent works, and periodically maintains sourced observations and reflections about the pair's current shared understanding through its private `update_notebook` tool. The tool proposes a typed update; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending records.
 
-Full maintenance becomes due when uncovered source tokens reach `notebookAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal Pair review. Empty full-maintenance results use a bounded retry backoff. If Pair is disabled or unavailable, note-taking pauses; existing observations, reflections, compaction packets, `session_search`, and `notebook_source` remain readable. No hidden notebook actor starts.
+Full maintenance becomes due when uncovered source tokens reach `notebookAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal Pair review. Empty full-maintenance results use a bounded retry backoff. If Pair is disabled or unavailable, note-taking pauses; existing observations, reflections, compaction packets, `search_session`, and `revisit_note` remain readable. No hidden notebook actor starts.
 
 The ledger keeps source-addressed observations, reflections, retirement records, drop records, and coverage markers in Pi's append-only session JSONL. `registerNotebookContextPacket` projects the ledger to the latest compaction boundary and appends one idempotent `notebook.packet` custom message during each context rebuild. The `notebook.*` names are persistent session-record formats, not commands or model actors.
 
@@ -32,12 +32,12 @@ Commands and tools:
 
 - `/pair status` — Pair state, notebook coverage, and Pair/Advisor usage
 - `/pair notebook [full]` — visible or complete notebook projection
-- `session_search` — progressive search of this session's transcript and file-operation history
-- `notebook_source` — exact source lookup by a known observation or reflection ID
+- `search_session` — progressive search of this session's transcript and file-operation history
+- `revisit_note` — exact source lookup by a known observation or reflection ID
 
 Pair operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. Pair model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable proactive compaction and Pair notebook maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-Pair and episodic Advisor sessions bind `session_search` and `notebook_source` to the primary session. Ordinary subagents and `pi_exec` workers load `session_search` but do not keep a Pair notebook. The internal BTW child loads only Codex fast mode and the overflow guard.
+Pair and episodic Advisor sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a Pair notebook. The internal BTW child loads only Codex fast mode and the overflow guard.
 
 ## Where the notebook persists
 

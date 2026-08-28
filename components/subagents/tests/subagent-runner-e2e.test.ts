@@ -19,8 +19,8 @@ const fauxProviders: Array<{ unregister(): void }> = [];
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
-const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "session_search", "mcp"];
-const FORBIDDEN_CHILD_TOOLS = ["notebook_source", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
+const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "search_session", "mcp"];
+const FORBIDDEN_CHILD_TOOLS = ["revisit_note", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {
 	for (const name of [...expected, ...CHILD_EXTENSION_TOOLS]) {
@@ -828,7 +828,7 @@ RELOADED ROLE MUST NOT RUN.
 				activeToolSets.push(context.tools?.map((candidate) => candidate.name) ?? []);
 				return fauxAssistantMessage(
 					[
-						fauxToolCall("report_consultation", {
+						fauxToolCall("give_second_opinion", {
 							disposition: "refine",
 							severity: "concern",
 							finding: "The risk is flush ordering, not restart durability.",
@@ -917,9 +917,9 @@ RELOADED ROLE MUST NOT RUN.
 			expect(requestTexts[0]).toContain("implement durable retry");
 			expect(requestTexts[0]).toContain("Retry ownership may not be durable.");
 			expect(requestTexts[0]).not.toContain("# Parent Conversation Context");
-			expect(requestTexts[1]).toContain("investigation ended without submitting the required controller result");
+			expect(requestTexts[1]).toContain("finished investigating without sharing the required second opinion");
 			expect(requestTexts[1]).toContain("The risk appears to be flush ordering.");
-			expect(systemText).toContain("independent adjudication");
+			expect(systemText).toContain("senior software architect");
 			expect(activeToolSets[0]).toEqual(
 				expect.arrayContaining([
 					"read",
@@ -927,15 +927,15 @@ RELOADED ROLE MUST NOT RUN.
 					"grep",
 					"find",
 					"ls",
-					"notebook_source",
-					"session_search",
-					"report_consultation",
+					"revisit_note",
+					"search_session",
+					"give_second_opinion",
 				]),
 			);
-			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "advise", "escalate"]) {
+			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "share_note", "ask_advisor"]) {
 				expect(activeToolSets[0]).not.toContain(forbidden);
 			}
-			expect(activeToolSets[1]).toEqual(["report_consultation"]);
+			expect(activeToolSets[1]).toEqual(["give_second_opinion"]);
 
 			faux.setResponses([
 				() => fauxAssistantMessage([fauxText("I remain unsure.")]),
@@ -1205,7 +1205,7 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("persists a child session with session_search and without the Pair notebook", async () => {
+	it("persists a child session with search_session and without the Pair notebook", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
 
@@ -1256,8 +1256,8 @@ export default function childTools(pi) {
 
 		expect(result.responseText).toBe("MEMORY-READY");
 		expectActiveTools(activeTools, ["read"]);
-		expect(activeTools).toContain("session_search");
-		expect(activeTools).not.toContain("notebook_source");
+		expect(activeTools).toContain("search_session");
+		expect(activeTools).not.toContain("revisit_note");
 		expect(result.session.sessionManager.getSessionFile()).toBeTruthy();
 		expect(existsSync(result.session.sessionManager.getSessionFile()!)).toBe(true);
 		result.session.dispose();

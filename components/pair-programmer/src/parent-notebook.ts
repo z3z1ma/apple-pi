@@ -12,14 +12,14 @@ import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
 import type { PrimarySessionManager } from "./recall.js";
 
-const PARENT_NOTEBOOK_FRAMING = `This is the Pair Programmer's notebook for the implementing-agent session, not a notebook for this pair conversation.
+const PARENT_NOTEBOOK_FRAMING = `This is the sourced notebook you keep for your partner's session, not a notebook for this side conversation.
 
-- Reflections: current law on that session. Binding facts about the user, project, decisions, constraints, completed outcomes, and still-constraining pivots. Reflection lines include ids in brackets.
-- Observations: working evidence still needed as detail. Timestamped, in chronological order, with ids in brackets.
+- Reflections capture the pair's current shared understanding of the user, project, decisions, constraints, completed outcomes, and pivots that still shape the work. Their ids appear in brackets.
+- Observations preserve working evidence that still matters in detail. They are timestamped, chronological, and include ids in brackets.
 
-Honor current law. Do not replay this list as a historical stack. When current law and a newer observation conflict, the newer observation is the latest known state until law is updated.
+Use the current understanding rather than replaying the notebook as a historical stack. When a newer observation conflicts with a reflection, the observation is the latest known state until you revise the reflection.
 
-When exact source context is needed, use notebook_source with the relevant observation or reflection id. To search the implementing-agent transcript or recover a file written earlier, use session_search. Both tools resolve against the primary session, never this pair conversation.`;
+Use revisit_note with a relevant observation or reflection id when you need its exact source context. Use search_session when you need to search your partner's earlier conversation or recover a file written during the session. Both tools look at your partner's session, never this side conversation.`;
 
 export function buildParentNotebookPacket(
 	primaryEntries: readonly unknown[],

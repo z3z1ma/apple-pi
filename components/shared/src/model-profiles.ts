@@ -44,7 +44,7 @@ export const INFERENCE_PROFILE_CATALOG: readonly InferenceProfileCatalogEntry[] 
 	{
 		profile: "pair",
 		description:
-			"Economical persistent supervision intended to track trajectories, detect concrete risk, and route rare deep consultations.",
+			"An economical, attentive pair programming partner that follows the work, keeps context, notices concrete risk, and occasionally asks for deeper architectural judgment.",
 	},
 	{
 		profile: "deep",

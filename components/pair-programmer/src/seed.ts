@@ -95,10 +95,12 @@ export function formatNotebookFold(entries: readonly unknown[]): string {
 		const folded = foldLedger(entries as Entry[]);
 		const parts: string[] = [];
 		if (folded.currentReflections.length) {
-			parts.push(`## Current law\n${folded.currentReflections.map(reflectionToSummaryLine).join("\n")}`);
+			parts.push(
+				`## Current shared understanding\n${folded.currentReflections.map(reflectionToSummaryLine).join("\n")}`,
+			);
 		}
 		if (folded.activeObservations.length) {
-			parts.push(`## Visible observations\n${folded.activeObservations.map(observationToSummaryLine).join("\n")}`);
+			parts.push(`## Working observations\n${folded.activeObservations.map(observationToSummaryLine).join("\n")}`);
 		}
 		return parts.join("\n\n");
 	} catch {
@@ -109,7 +111,7 @@ export function formatNotebookFold(entries: readonly unknown[]): string {
 export function formatRecentUserMessages(requests: readonly SeedUserRequest[]): string {
 	if (!requests.length) return "";
 	const blocks = requests.map((request) => {
-		const label = request.prior ? "Prior user → implementing agent" : "User → implementing agent";
+		const label = request.prior ? "What the user previously told your partner" : "What the user told your partner";
 		return request.texts.map((text) => `#### ${label}\n\n${text}`).join("\n\n");
 	});
 	return blocks.join("\n\n");
@@ -119,9 +121,10 @@ export function formatRollingAdvice(notes: readonly SettledAdvice[]): string {
 	if (!notes.length) return "";
 	const items = notes.map((note) => {
 		const severity = (note.severity ?? "nit").toUpperCase();
-		return `- [${severity}] [${note.disposition}] ${note.note}`;
+		const outcome = note.disposition === "delivered" ? "shared" : "withdrawn";
+		return `- [${severity}] [${outcome}] ${note.note}`;
 	});
-	return `## Settled advice\n${items.join("\n")}`;
+	return `## Earlier notes\n${items.join("\n")}`;
 }
 
 type TrajectoryItem =
@@ -189,7 +192,7 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 		const text = formatTurnDelta({ assistant: item.assistant, toolResults: item.toolResults });
 		return text ? [text] : [];
 	});
-	return parts.length ? `## Recent trajectory\n${parts.join("\n\n")}` : "";
+	return parts.length ? `## What your partner has been doing\n${parts.join("\n\n")}` : "";
 }
 
 /**
@@ -230,7 +233,7 @@ export function formatSourceAddressedTrajectory(
 		if (role === "user") {
 			flush();
 			const text = contextText(message?.content);
-			if (text) parts.push(`${labels([entry.id])}\n#### User → implementing agent\n\n${text}`);
+			if (text) parts.push(`${labels([entry.id])}\n#### What the user told your partner\n\n${text}`);
 			continue;
 		}
 		if (role === "assistant") {
@@ -258,7 +261,7 @@ export function formatSourceAddressedTrajectory(
 		}
 	}
 	flush();
-	return parts.length > 0 ? `## Unresolved Pair notebook source\n${parts.join("\n\n")}` : "";
+	return parts.length > 0 ? `## Notebook material you have not reviewed yet\n${parts.join("\n\n")}` : "";
 }
 
 export function formatPairSeed(opts: {
@@ -269,7 +272,7 @@ export function formatPairSeed(opts: {
 	rollingAdvice?: string;
 }): string {
 	const parts = [
-		"Orientation only. Live user text and newer work outrank this snapshot. Quoted user text is what the user told the implementing agent, not a message to you.",
+		"Here is where you and your partner left off. Live user direction and newer work take precedence over this snapshot. Quoted user text was addressed to your partner, not to you.",
 		opts.fold?.trim(),
 		opts.userMessages?.trim(),
 		opts.trajectory?.trim(),

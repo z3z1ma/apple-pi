@@ -144,8 +144,8 @@ test("formatReconfirmPreamble: empty when nothing held, else lists held notes", 
 		{ note: "races on shared map", severity: "blocker" },
 		{ note: "missing await", severity: "concern" },
 	]);
-	assert.match(p, /Held pair notes — reconfirm/);
-	assert.match(p, /call `advise` again/);
+	assert.match(p, /Things you flagged earlier/);
+	assert.match(p, /call `share_note` again/);
 	assert.match(p, /- \[BLOCKER\] races on shared map/);
 	assert.match(p, /- \[CONCERN\] missing await/);
 	assert.match(p, /\n---\n/); // separates preamble from the session update below
@@ -178,15 +178,15 @@ test("appendPrimaryPairPrompt: appends the protocol once and is idempotent", () 
 
 test("formatAdvisoryContent: wraps with severity + guidance, escapes XML", () => {
 	const c = A.formatAdvisoryContent([{ note: "use <T> & stuff", severity: "concern" }]);
-	assert.match(c, /<advisory severity="concern" guidance="weigh, don't blindly obey">/);
+	assert.match(c, /<pair-note severity="concern" guidance="pause, consider, then use your judgment">/);
 	assert.match(c, /use &lt;T&gt; &amp; stuff/);
-	assert.match(c, /<\/advisory>/);
+	assert.match(c, /<\/pair-note>/);
 });
 
 test("formatAdvisoryContent: omits severity attr when absent (plain nit)", () => {
 	const c = A.formatAdvisoryContent([{ note: "tidy up" }]);
 	assert.doesNotMatch(c, /severity=/);
-	assert.match(c, /<advisory guidance=/);
+	assert.match(c, /<pair-note guidance=/);
 });
 
 test("formatAdvisoryContent: stale option tags advice as about an earlier step", () => {
@@ -197,7 +197,7 @@ test("formatAdvisoryContent: stale option tags advice as about an earlier step",
 
 test("formatAdvisoryContent: finalAnswer appends self-contained-final-answer guidance", () => {
 	const c = A.formatAdvisoryContent([{ note: "fix bug", severity: "blocker" }], { finalAnswer: true });
-	assert.match(c, /<\/advisory>/);
+	assert.match(c, /<\/pair-note>/);
 	assert.match(c, /self-contained final answer/);
 	assert.match(c, /do NOT write a terse follow-up/);
 	// absent without the option
@@ -232,9 +232,9 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 			},
 		],
 	});
-	assert.match(md, /#### User → implementing agent\n\ndo the thing/);
+	assert.match(md, /#### What the user told your partner\n\ndo the thing/);
 	assert.match(md, /<thinking>\nlet me think\n<\/thinking>/);
-	assert.match(md, /#### Implementing agent/);
+	assert.match(md, /#### Your partner/);
 	assert.match(md, /here is my plan/);
 	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
 	assert.match(md, /#### Tool result: `write`\n\ncall: 1\nwrote a\.js/);
@@ -714,10 +714,10 @@ test("seed: recent users are current plus two completed requests, labeled as imp
 		entries: [{ type: "message", message: { role: "user", content: "do it" } }],
 		rollingAdvice: [{ note: "watch the lock", severity: "concern", disposition: "delivered" }],
 	});
-	assert.match(built, /User → implementing agent/);
+	assert.match(built, /What the user told your partner/);
 	assert.match(built, /do it/);
-	assert.match(built, /\[CONCERN\] \[delivered\] watch the lock/);
-	assert.match(built, /not a message to you/);
+	assert.match(built, /\[CONCERN\] \[shared\] watch the lock/);
+	assert.match(built, /addressed to your partner, not to you/);
 });
 
 test("seed: recent trajectory keeps last implementing-agent turns and user bash", () => {
@@ -764,7 +764,7 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 		},
 	];
 	const trajectory = A.formatRecentTrajectory(entries);
-	assert.match(trajectory, /## Recent trajectory/);
+	assert.match(trajectory, /## What your partner has been doing/);
 	assert.match(trajectory, /check refresh/);
 	assert.match(trajectory, /→ tool `edit`\(src\/auth\.ts\)/);
 	assert.match(trajectory, /call: e1/);
@@ -772,8 +772,8 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.ok(!trajectory.includes("stale think 0"), "older turns outside the tail are dropped");
 	assert.ok(!trajectory.includes("old request"), "user text stays in the user-request section");
 	const seeded = A.buildPairSeed({ entries });
-	assert.match(seeded, /## Recent trajectory/);
-	assert.match(seeded, /User → implementing agent/);
+	assert.match(seeded, /## What your partner has been doing/);
+	assert.match(seeded, /What the user told your partner/);
 });
 
 test("compact hook reseeds and keeps no prior pair deltas", async () => {
@@ -806,7 +806,7 @@ test("compact hook includes recent trajectory in the reseed", async () => {
 			rollingAdvice: () => [],
 		},
 	);
-	assert.match(result.compaction.summary, /## Recent trajectory/);
+	assert.match(result.compaction.summary, /## What your partner has been doing/);
 	assert.match(result.compaction.summary, /keep this skeleton/);
 });
 
@@ -902,9 +902,9 @@ test("parent notebook packet sits after the compaction summary and is idempotent
 	]);
 	assert.ok(packet);
 	assert.match(packet.content[0].text, /Do not reimplement auth/);
-	assert.match(packet.content[0].text, /notebook_source/);
-	assert.match(packet.content[0].text, /not a notebook for this pair conversation/);
-	assert.match(packet.content[0].text, /Pair Programmer's notebook/);
+	assert.match(packet.content[0].text, /revisit_note/);
+	assert.match(packet.content[0].text, /not a notebook for this side conversation/);
+	assert.match(packet.content[0].text, /notebook you keep for your partner's session/);
 
 	const first = A.insertParentNotebookAfterCompaction(
 		[
@@ -975,13 +975,13 @@ test("default pair prompt names primary-bound recall tools", () => {
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const prompt = A.loadSystemPrompt(agentDir, false);
-		assert.match(prompt, /notebook_source/);
-		assert.match(prompt, /session_search/);
-		assert.match(prompt, /primary implementing-agent transcript/);
+		assert.match(prompt, /revisit_note/);
+		assert.match(prompt, /search_session/);
+		assert.match(prompt, /your partner's transcript/);
 		assert.match(prompt, /call:<id>/);
-		assert.match(prompt, /You are the Pair Programmer/);
-		assert.match(prompt, /Call `escalate` instead/);
-		assert.match(prompt, /Generic uncertainty.*do not escalate/);
+		assert.match(prompt, /You are pair programming with another capable coding agent/);
+		assert.match(prompt, /Call `ask_advisor` instead/);
+		assert.match(prompt, /Generic uncertainty.*keep them to yourself/);
 	} finally {
 		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previous;
@@ -989,7 +989,7 @@ test("default pair prompt names primary-bound recall tools", () => {
 	}
 });
 
-test("primary-bound notebook_source resolves the primary branch, not the caller ctx", async () => {
+test("primary-bound revisit_note resolves the primary branch, not the caller ctx", async () => {
 	const tools = A.bindPrimaryRecallTools({
 		getSessionFile: () => undefined,
 		getBranch: () => [
@@ -1021,9 +1021,9 @@ test("primary-bound notebook_source resolves the primary branch, not the caller 
 		],
 		getEntries: () => [],
 	});
-	const notebook = tools.find((t) => t.name === "notebook_source");
+	const notebook = tools.find((t) => t.name === "revisit_note");
 	assert.ok(notebook);
-	assert.match(notebook.description, /primary implementing-agent session/);
+	assert.match(notebook.description, /your partner's session/);
 	for (const name of tools.map((t) => t.name)) {
 		assert.ok(A.PAIR_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
 	}
@@ -1037,7 +1037,7 @@ test("primary-bound notebook_source resolves the primary branch, not the caller 
 	assert.match(miss.content[0].text, /No observation or reflection/);
 });
 
-test("primary-bound session_search reads the primary session file, not the caller ctx", async () => {
+test("primary-bound search_session reads the primary session file, not the caller ctx", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "pair-recall-"));
 	const file = join(dir, "session.jsonl");
 	writeFileSync(
@@ -1054,9 +1054,9 @@ test("primary-bound session_search reads the primary session file, not the calle
 			getBranch: () => [{ id: "m1" }],
 			getEntries: () => [{ id: "m1" }],
 		});
-		const search = tools.find((t) => t.name === "session_search");
+		const search = tools.find((t) => t.name === "search_session");
 		assert.ok(search);
-		assert.match(search.description, /primary implementing-agent session/);
+		assert.match(search.description, /your partner's session/);
 		const hit = await search.execute("c1", { query: "primary-only-token" }, undefined, undefined, {
 			sessionManager: {
 				getSessionFile: () => undefined,
@@ -1104,7 +1104,7 @@ test("buildReviewMessages: header turn + one single-block user turn per delta, c
 	assert.match(msgs[0].content[0].text, /### Session update/);
 	// The explicit \n\n boundary between the #### User and #### Assistant sections must
 	// be present in the block itself (the regression the reviewer flagged).
-	assert.match(msgs[1].content[0].text, /#### User → implementing agent\n\nu\n\n#### Implementing agent/);
+	assert.match(msgs[1].content[0].text, /#### What the user told your partner\n\nu\n\n#### Your partner/);
 	assert.ok(msgs[1].content[0].text.includes("echo hi\nls"), "command rides verbatim");
 });
 
@@ -1190,7 +1190,7 @@ test("formatActiveSessionContext: renders Pi's active context verbatim and exclu
 	];
 	const context = A.formatActiveSessionContext(entries);
 	assert.match(context, /#### Compaction summary\n\nKeep the migration atomic\./);
-	assert.match(context, /#### User → implementing agent\n\nContinue the migration\./);
+	assert.match(context, /#### What the user told your partner\n\nContinue the migration\./);
 	assert.ok(context.includes("printf 'a\\nb'"), "tool arguments remain verbatim");
 	assert.match(context, /3000 lines/);
 	assert.ok(!context.includes(bigResult), "active bash output is a receipt, not a body");
@@ -1256,12 +1256,12 @@ test("AdviseTool: records, dedups, and escalates by severity rank", async () => 
 
 	const r1 = await tool.execute("c1", { note: "guard empty array", severity: "nit" });
 	assert.equal(calls.length, 1);
-	assert.match(r1.content[0].text, /Recorded/);
+	assert.match(r1.content[0].text, /note was shared/);
 
 	// exact duplicate (same text, same severity) is dropped
 	const r2 = await tool.execute("c2", { note: "guard empty array", severity: "nit" });
 	assert.equal(calls.length, 1);
-	assert.match(r2.content[0].text, /Duplicate/);
+	assert.match(r2.content[0].text, /equivalent note/);
 
 	// whitespace-normalized duplicate also dropped
 	await tool.execute("c3", { note: "guard   empty\narray", severity: "nit" });
@@ -1292,7 +1292,7 @@ test("AdviseTool: held notes (onAdvice→false) stay unrecorded so they can re-f
 
 	// first attempt held → tool reports held, dedup NOT recorded
 	const r1 = await tool.execute("h1", { note: "data race", severity: "blocker" });
-	assert.match(r1.content[0].text, /Queued for boundary/);
+	assert.match(r1.content[0].text, /next safe moment/);
 	assert.equal(r1.details.held, true);
 	assert.equal(calls.length, 1);
 
@@ -1303,7 +1303,7 @@ test("AdviseTool: held notes (onAdvice→false) stay unrecorded so they can re-f
 	// now it gets delivered → recorded
 	deliver = true;
 	const r3 = await tool.execute("h3", { note: "data race", severity: "blocker" });
-	assert.match(r3.content[0].text, /Recorded/);
+	assert.match(r3.content[0].text, /note was shared/);
 	assert.equal(calls.length, 3);
 
 	// once delivered, a same-severity repeat is deduped away
@@ -1321,7 +1321,7 @@ test("AdviseTool: markDelivered records dedup at the real delivery point", async
 	tool.markDelivered("data race", "blocker");
 	// a later same-severity re-raise is now deduped before onAdvice fires
 	const r = await tool.execute("x", { note: "data race", severity: "blocker" });
-	assert.match(r.content[0].text, /Duplicate/);
+	assert.match(r.content[0].text, /equivalent note/);
 	assert.equal(calls.length, 0);
 	// but a genuine escalation past the recorded rank still passes
 	const tool2 = new A.AdviseTool((note, severity) => {
@@ -1640,7 +1640,7 @@ test("integration: a queued nit enters terminal reconfirmation and surviving adv
 		state: { messages: [], model: {} },
 		async prompt(input) {
 			const text = input.map((m) => m.content.map((b) => b.text ?? "").join("\n")).join("\n\n");
-			assert.match(text, /Held pair notes/);
+			assert.match(text, /Things you flagged earlier/);
 			assert.match(text, /queued race/);
 			await tool.execute("reconfirm", { note: "queued race", severity: "nit" });
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
@@ -1745,7 +1745,7 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 				// review of turn 1, emitted while the terminal turn 2 is already queued
 				await tool.execute("n1", { note: "rename var", severity: "nit" });
 			} else if (reviewCount === 2) {
-				assert.match(text, /Held pair notes/, "the held nit rides the final turn's reconfirm preamble");
+				assert.match(text, /Things you flagged earlier/, "the held nit rides the final turn's reconfirm preamble");
 				assert.match(text, /\[NIT\] rename var/);
 				await tool.execute("n2", { note: "rename var", severity: "nit" }); // still applies
 			}
@@ -1827,7 +1827,7 @@ test("integration: blocker held on turn 1, survives reconfirm, delivered after t
 			if (reviewCount === 1) {
 				await tool.execute("a1", { note: "off-by-one", severity: "blocker" });
 			} else if (reviewCount === 2) {
-				assert.match(text, /Held pair notes/, "reconfirm preamble rides review 2");
+				assert.match(text, /Things you flagged earlier/, "reconfirm preamble rides review 2");
 				await tool.execute("a2", { note: "off-by-one", severity: "blocker" }); // still applies
 			}
 		},
@@ -1874,7 +1874,7 @@ test("integration (F1): advice from an orphaned review is dropped without poison
 				// Same note in the fresh epoch must reach onAdvice; the stale callback must
 				// not have been recorded as delivered by AdviseTool.
 				const result = await tool.execute("a2", { note: "same blocker", severity: "blocker" });
-				assert.doesNotMatch(result.content[0].text, /Duplicate/);
+				assert.doesNotMatch(result.content[0].text, /equivalent note/);
 			}
 		},
 	});
@@ -1933,7 +1933,7 @@ test("integration (regression): a held note survives push() and blocks + deliver
 		onReview: async (text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "races on cache", severity: "blocker" });
 			else if (reviewCount === 2) {
-				assert.match(text, /Held pair notes/);
+				assert.match(text, /Things you flagged earlier/);
 				await tool.execute("a2", { note: "races on cache", severity: "blocker" }); // still applies
 			}
 		},

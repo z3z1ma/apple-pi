@@ -31,16 +31,14 @@ export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): T
 			...notebook,
 			description:
 				`${recallObservationTool.description} ` +
-				"Resolves against the primary implementing-agent session, never this pair conversation.",
+				"This revisits a note from your partner's session, never this side conversation.",
 		},
 		{
 			...search,
-			description:
-				`${sessionSearchTool.description} ` +
-				"Searches the primary implementing-agent session, never this pair conversation.",
+			description: `${sessionSearchTool.description} This searches your partner's session, never this side conversation.`,
 			promptGuidelines: [
 				...(sessionSearchTool.promptGuidelines ?? []),
-				"This searches the primary session transcript, not the pair conversation.",
+				"This searches your partner's session history, not this side conversation.",
 			],
 		},
 	];

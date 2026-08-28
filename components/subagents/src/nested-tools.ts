@@ -125,12 +125,12 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		name: SUBAGENT_TOOL_NAMES.AGENT,
 		label: "Agent",
 		description:
-			"Launch an ownership-scoped nested subagent. Agent definitions must opt in with allowed_subagents. system_prompt appends invocation-specific guidance to the selected definition without changing capabilities.",
+			"Bring in one ownership-scoped teammate when their focused contribution will help your assigned work. Their definition must explicitly allow nested collaboration. system_prompt adds invocation-specific guidance without changing capabilities.",
 		parameters: Type.Object({
-			prompt: Type.String({ description: "Self-contained task for the nested agent." }),
-			description: Type.String({ description: "Short task description." }),
+			prompt: Type.String({ description: "A self-contained task for your teammate." }),
+			description: Type.String({ description: "A short description of their task." }),
 			subagent_type: Type.String({
-				description: `Allowed type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.`,
+				description: `An allowed teammate. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.`,
 			}),
 			profile: Type.Optional(INFERENCE_PROFILE_PARAMETER_SCHEMA),
 			system_prompt: Type.Optional(
@@ -161,7 +161,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			if (params.resume) {
 				const existing = context.manager.getRecord(params.resume);
 				if (!ownsRecord(existing, context.parentAgentId)) {
-					return textResult(`Nested agent not found or not owned by this parent: "${params.resume}".`, true);
+					return textResult(`Teammate not found or not owned by this session: "${params.resume}".`, true);
 				}
 				const requestedInheritance = params.inherit_context === true;
 				const requestedPair = params.pair ?? existing.invocation?.pair === true;
@@ -183,12 +183,12 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				const resumed = await context.manager.resume(params.resume, params.prompt, signal);
 				return resumed
 					? textResult(formatRecord(resumed, true), resumed.status === "error")
-					: textResult(`Failed to resume nested agent "${params.resume}".`, true);
+					: textResult(`Could not resume teammate "${params.resume}".`, true);
 			}
 
 			if (context.depth >= context.maxSubagentDepth) {
 				return textResult(
-					`Nested subagent call blocked at depth ${context.depth} (max ${context.maxSubagentDepth}).`,
+					`This teammate cannot bring in another teammate at depth ${context.depth} (max ${context.maxSubagentDepth}).`,
 					true,
 				);
 			}
@@ -198,13 +198,13 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			const allowed = allowedTypesIn(registry);
 			if (!resolvedType || (allowed && !allowed.has(resolvedType))) {
 				return textResult(
-					`Unknown or disallowed nested agent type: "${params.subagent_type}". Allowed: ${availableIn(registry).join(", ") || "none"}.`,
+					`Unknown or unavailable teammate: "${params.subagent_type}". Available: ${availableIn(registry).join(", ") || "none"}.`,
 					true,
 				);
 			}
 
 			const config = getAgentConfigIn(registry, resolvedType);
-			if (!config) return textResult(`Unknown or disabled nested agent type: "${resolvedType}".`, true);
+			if (!config) return textResult(`Unknown or unavailable teammate: "${resolvedType}".`, true);
 			const resolvedAgentProfile = resolveAgentProfile({
 				registry: ctx.modelRegistry,
 				parentModel: ctx.model,
@@ -258,7 +258,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 						isBackground: true,
 					});
 					return textResult(
-						`Nested agent started in background. Agent ID: ${id}\n\nCall get_subagent_result with this agent_id to wait for its final result.`,
+						`Your teammate is working in the background. Agent ID: ${id}\n\nCall get_subagent_result with this agent_id when you are ready for their final report.`,
 					);
 				}
 				const { record } = await context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, {
@@ -276,7 +276,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 		name: SUBAGENT_TOOL_NAMES.GET_RESULT,
 		label: "Get Nested Agent Result",
 		description:
-			"Wait for an owned child result; omit yield_seconds to wait until it settles. If an explicit yield is necessary, use a very large yield_seconds value (normally 3,600 seconds or more): this returns as soon as the child finishes. yield_seconds is not a child timeout; reaching it only yields control while the still-running child continues untouched. Set it to 0 only for an immediate status check. Use transcript_tail for a bounded recent conversation slice; it cannot be combined with a positive yield.",
+			"Wait for an owned teammate to finish and receive their report. Omit yield_seconds to wait until they settle. If you need a bounded wait, use a very large value (normally 3,600 seconds or more); reaching it leaves them working in the background. Use 0 only for an immediate check. transcript_tail shows a bounded recent conversation slice and cannot be combined with a positive yield.",
 		parameters: Type.Object({
 			agent_id: Type.String(),
 			yield_seconds: Type.Optional(
@@ -307,7 +307,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			}
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId))
-				return textResult("Nested agent not found or not owned by this parent.", true);
+				return textResult("Teammate not found or not owned by this session.", true);
 			let yieldedSeconds: number | undefined;
 			if (waitMode.kind !== "immediate" && (record.status === "queued" || record.status === "running")) {
 				const outcome = await waitForAgentSettlement(record, waitMode, signal);
@@ -330,28 +330,28 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 	const steerTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.STEER,
 		label: "Steer Nested Agent",
-		description: "Send guidance to a running child owned by this agent.",
+		description: "Send additional guidance to a running teammate you brought in.",
 		parameters: Type.Object({ agent_id: Type.String(), message: Type.String() }),
 		execute: async (_toolCallId, params) => {
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId) || !context.manager.steer(params.agent_id, params.message)) {
-				return textResult("Running nested agent not found or not owned by this parent.", true);
+				return textResult("Running teammate not found or not owned by this session.", true);
 			}
-			return textResult(`Steering message sent to nested agent ${params.agent_id}.`);
+			return textResult(`Your guidance was sent to teammate ${params.agent_id}.`);
 		},
 	});
 
 	const stopTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.STOP,
 		label: "Stop Nested Agent",
-		description: "Stop a running or queued child owned by this agent.",
+		description: "Stop a running or queued teammate you brought in.",
 		parameters: Type.Object({ agent_id: Type.String() }),
 		execute: async (_toolCallId, params) => {
 			const record = context.manager.getRecord(params.agent_id);
 			if (!ownsRecord(record, context.parentAgentId) || !context.manager.abort(params.agent_id)) {
-				return textResult("Running or queued nested agent not found or not owned by this parent.", true);
+				return textResult("Running or queued teammate not found or not owned by this session.", true);
 			}
-			return textResult(`Stopped nested agent ${params.agent_id}.`);
+			return textResult(`Stopped teammate ${params.agent_id}.`);
 		},
 	});
 

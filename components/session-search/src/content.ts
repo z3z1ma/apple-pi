@@ -72,7 +72,7 @@ const toolCallParts = (content: Message["content"]): string[] => {
 };
 
 /** Extract all string-valued arguments from toolCall content parts.
- *  Lets session_search match against tool invocations — e.g. a bash
+ *  Lets search_session match against tool invocations — e.g. a bash
  *  toolCall's `arguments.command`, a grep's `pattern`, an edit's
  *  `oldText`/`newText`. Non-string args are skipped. */
 export const toolCallsOf = (content: Message["content"]): string => toolCallParts(content).filter(Boolean).join("\n");

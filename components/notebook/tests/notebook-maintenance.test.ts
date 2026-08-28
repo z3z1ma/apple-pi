@@ -41,7 +41,7 @@ describe("Pair notebook maintenance", () => {
 			sourceTokens: 42,
 			sessionIdentity: "session-1",
 		});
-		expect(batch?.prompt).toContain("Pair notebook maintenance due");
+		expect(batch?.prompt).toContain("Time to update the shared notebook");
 		expect(batch?.prompt).toContain("source-user, source-assistant");
 	});
 

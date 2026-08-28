@@ -65,14 +65,14 @@ const request = {
 const usage = { input: 100, cacheRead: 50, cacheWrite: 0, output: 20, cost: 0.2, durationMs: 10, toolCalls: 3 };
 
 describe("Pair escalation machinery", () => {
-	it("keeps escalation private and excludes delegation or mutation capabilities", () => {
-		expect(PAIR_SESSION_TOOLS).toContain("escalate");
+	it("keeps architectural consultation private and excludes delegation or mutation capabilities", () => {
+		expect(PAIR_SESSION_TOOLS).toContain("ask_advisor");
 		for (const forbidden of ["Agent", "pi_exec", "bash", "edit", "write", "mcp"]) {
 			expect(PAIR_SESSION_TOOLS).not.toContain(forbidden);
 		}
 	});
 
-	it("uses a separate concern/blocker-only tool instead of magic advise prose", async () => {
+	it("uses a separate concern/blocker-only tool instead of magic note prose", async () => {
 		const seen: any[] = [];
 		const tool = new EscalateTool((value) => {
 			seen.push(value);
@@ -85,7 +85,7 @@ describe("Pair escalation machinery", () => {
 			evidence: [{ kind: "call", ref: "call:abc" }],
 		});
 		expect(seen).toEqual([expect.objectContaining({ severity: "blocker", claim: "transaction order may lose data" })]);
-		expect(result.content[0]?.type === "text" ? result.content[0].text : "").toContain("host-controlled Advisor");
+		expect(result.content[0]?.type === "text" ? result.content[0].text : "").toContain("software architect");
 		const severities = (tool.parameters as any).properties.severity.anyOf.map((entry: any) => entry.const);
 		expect(severities).toEqual(["concern", "blocker"]);
 	});

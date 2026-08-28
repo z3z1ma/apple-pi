@@ -246,10 +246,10 @@ describe("owned subagent surface", () => {
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/Not local reconnaissance/);
+		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/external research partner/);
 		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/no docs tools/);
-		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/session extensions \(MCP\)/);
-		expect(DEFAULT_AGENTS.get("Advisor")?.systemPrompt).toMatch(/You advise; you do not implement/);
+		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/external research teammate/);
+		expect(DEFAULT_AGENTS.get("Advisor")?.systemPrompt).toMatch(/senior software architect/);
 		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
 		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
 	});
@@ -775,7 +775,7 @@ describe("owned subagent surface", () => {
 		);
 		expect(result.isError).not.toBe(true);
 		expect(result.content[0].text).toContain(
-			"Call get_subagent_result with this agent_id to wait for its final result.",
+			"Call get_subagent_result with this agent_id when you are ready for their final report.",
 		);
 		expect(spawn).toHaveBeenCalledOnce();
 		const options = spawn.mock.calls[0]?.[4] as any;
@@ -897,7 +897,7 @@ describe("owned subagent surface", () => {
 
 		const stopped = await stopTool.execute("stop-owned", { agent_id: owned.id });
 		expect(stopped.isError).toBe(false);
-		expect(stopped.content[0].text).toBe(`Stopped nested agent ${owned.id}.`);
+		expect(stopped.content[0].text).toBe(`Stopped teammate ${owned.id}.`);
 		expect(owned.status).toBe("stopped");
 
 		const stoppedAgain = await stopTool.execute("stop-settled", { agent_id: owned.id });

@@ -8,7 +8,7 @@ import {
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
-describe("standalone session_search extension", () => {
+describe("standalone search_session extension", () => {
 	const directories: string[] = [];
 
 	afterEach(() => {
@@ -16,7 +16,7 @@ describe("standalone session_search extension", () => {
 		delete process.env.PI_CODING_AGENT_DIR;
 	});
 
-	it("registers session_search without Pair notebook or a compact hook", async () => {
+	it("registers search_session without Pair notebook or a compact hook", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-session-search-standalone-"));
 		directories.push(root);
 		process.env.PI_CODING_AGENT_DIR = root;
@@ -32,10 +32,10 @@ describe("standalone session_search extension", () => {
 
 		const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 		const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
-		expect(tools.has("session_search")).toBe(true);
+		expect(tools.has("search_session")).toBe(true);
 		expect(result.extensions[0]?.handlers.has("session_before_compact")).toBe(false);
 		expect(commands.has("om:status")).toBe(false);
 		expect(commands.has("om:view")).toBe(false);
-		expect(tools.has("notebook_source")).toBe(false);
+		expect(tools.has("revisit_note")).toBe(false);
 	});
 });

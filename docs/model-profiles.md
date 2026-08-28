@@ -58,13 +58,13 @@ The inference profiles have these intended inference characteristics:
 | --- | --- |
 | `quick` | Latency-first inference intended for a fast, economical model with light-to-moderate reasoning effort. |
 | `balanced` | General-purpose inference intended for a broadly capable model with substantial but measured reasoning effort. |
-| `pair` | Economical persistent supervision intended to watch trajectories and route rare deep consultations. |
+| `pair` | An economical, attentive pair programming partner that follows the work, keeps context, and occasionally asks for deeper architectural judgment. |
 | `deep` | Maximum-depth inference intended for the strongest reasoning model available with high reasoning effort. |
 | `coding` | Software-engineering inference intended for a code-strong model with high reasoning effort. |
 | `visual-engineering` | Visual-engineering inference intended for a model strong in UI, spatial, and multimodal reasoning with moderate-to-high effort. |
 | `background` | Low-cost asynchronous inference intended for an economical model with low reasoning effort. |
 
-Built-in and custom Markdown agents may select one of these known names with `profile:`. The interactive `Agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agents.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent Pair always uses `pair`; the episodic Advisor sub-agent uses `deep`.
+Built-in and custom Markdown teammates may select one of these known names with `profile:`. The interactive `Agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agents.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent pair programming partner always uses `pair`; the episodic Advisor architect uses `deep`.
 
 Profiles select only model and thinking. They never grant tools, write access, extensions, skills, Pair use, persistence, or any other capability.
 

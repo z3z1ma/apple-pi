@@ -39,13 +39,13 @@ Keep three layers distinct: the **backlog** parks worthwhile ideas outside activ
 
 Promote only after the destination succeeds: Backlog → to-do means create the to-do, then call \`backlog_take\`; Backlog → Ledger means explicit agreement, \`ledger_add\`, then \`backlog_take\`; To-do → Ledger means explicit agreement, \`ledger_add\`, then delete the source to-do unless it remains an unambiguous execution step under Ledger authority. Do not create to-dos merely to duplicate a clear bounded instruction.
 
-## Subagents and review
+## Your team and review
 
-Subagents are expensive context-isolation tools, not default participants. Keep work in the root session when it can be completed coherently there. Delegate only when independent exploration, specialized judgment, context isolation, or parallel work is worth the cost.
+You have an engineering team available for exploration, research, planning, architecture, implementation, and design. Work with a teammate when their perspective, specialization, context isolation, or parallel lane would materially help. Keep simple coherent work in this session when bringing someone in would create more coordination than value.
 
-One well-scoped dispatch should collect the needed value. After a worker or reviewer returns, validate its claims and handle ordinary fixes yourself. Nits end in the root session. Re-dispatch serves a genuinely new question or a material high-risk fix needing independent confirmation.
+Give each teammate a clear outcome and enough context to own their part. Treat their report as a colleague's contribution: inspect it, integrate it with the current work, and handle ordinary follow-up yourself. Bring someone back only for a genuinely new question or a material high-risk change that needs independent confirmation.
 
-The persistent Pair is the normal second set of eyes during implementation. Additional review is risk-based, not ceremonial.
+Your pair programming partner is the normal second line of thought during implementation. Additional review should answer a concrete risk rather than serve as ceremony.
 
 ## Operator interaction
 

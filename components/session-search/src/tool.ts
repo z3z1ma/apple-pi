@@ -16,27 +16,27 @@ const MAX_PAGES = 5;
 export const invalidExpandIndices = (requested: number[], available: Set<number>): number[] =>
 	requested.filter((i) => !Number.isInteger(i) || !available.has(i));
 
-export const SESSION_SEARCH_TOOL_NAME = "session_search";
+export const SESSION_SEARCH_TOOL_NAME = "search_session";
 
 export const sessionSearchTool = defineTool({
 	name: SESSION_SEARCH_TOOL_NAME,
 	label: "Session search",
 	description:
-		"Search this session's compacted conversation, tool calls, and write/edit payloads. " +
-		"Use after compaction when you need prior decisions, earlier tool output, or a file version written in this session. " +
-		"This is not git history and not a repository search. " +
-		"Search text or regex, list files with mode:'touched', search only write/edit payloads with mode:'file', expand entries, use query:'#N:path' to recover a written file, or query:'call:<id>' to recover a persisted tool-result body. " +
-		"Defaults to the active lineage; scope:'all' includes branches.",
+		"Search this session's earlier conversation, tool calls, and write/edit payloads. " +
+		"Use it after compaction when you need to remember a prior decision, recover earlier tool output, or revisit a file version written during the session. " +
+		"This looks through session history, not git history or the current repository. " +
+		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
+		"It follows the active lineage by default; scope:'all' includes other branches.",
 	promptSnippet:
-		"session_search: Search this session's compacted transcript and file operations. " +
-		"Use mode:'touched' for a file inventory, mode:'file' for payload-only search, query:'#N:path[:offset[:limit]|:full]' for write/edit content, query:'call:<toolCallId>' for an omitted tool-result body, scope:'all' for branches, and expand:[indices] for full entries.",
+		"search_session: Search earlier conversation and file operations from this session. " +
+		"Use mode:'touched' for a file inventory, mode:'file' for write/edit payloads, query:'#N:path[:offset[:limit]|:full]' for written content, query:'call:<toolCallId>' for an omitted tool result, scope:'all' for branches, and expand:[indices] for full entries.",
 	promptGuidelines: [
-		"Use session_search after compaction when you need prior work, decisions, tool output, or a file version from this session that is no longer in context.",
-		"Use session_search with mode:'touched' to list files written or edited in this session, and query:'#N:path' to recover a specific write/edit payload.",
-		"Use session_search query 'call:<toolCallId>' to recover a persisted tool-result body by the call: address on pair receipts.",
-		"Use session_search with a text or regex query to find earlier conversation or tool results; multi-word queries are OR-ranked.",
-		"Do not use session_search to search the repository — use grep, find, or read for current files.",
-		"Do not use session_search as a notebook-id lookup. It searches the session transcript, not compacted observation or reflection ids.",
+		"Use search_session after compaction when you need earlier work, decisions, tool output, or a file version that is no longer in context.",
+		"Use search_session with mode:'touched' to see which files were written or edited, and query:'#N:path' to recover a specific write/edit payload.",
+		"Use search_session query 'call:<toolCallId>' to recover an omitted tool-result body from the call address on pair-programming receipts.",
+		"Use search_session with text or a regex to find earlier conversation or tool results; multi-word queries are OR-ranked.",
+		"Do not use search_session to search the repository — use grep, find, or read for current files.",
+		"Do not use search_session to look up a notebook id. Use revisit_note for a known observation or reflection id.",
 	],
 	parameters: Type.Object({
 		query: Type.Optional(

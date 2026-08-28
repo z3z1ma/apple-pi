@@ -39,7 +39,7 @@ describe("subagent team system prompt", () => {
 		expect(occurrences(block, profilesMarker)).toBe(1);
 		expect(catalogData(block)).toEqual({ members, profiles });
 		expect(block).toContain(
-			"Every entry shows the agent's `name`, configured inference `profile`, and its own `description`",
+			"Each entry shows the teammate's `name`, configured inference `profile`, and own `description`",
 		);
 	});
 
@@ -68,12 +68,12 @@ describe("subagent team system prompt", () => {
 		expect(second.startsWith("Root system prompt")).toBe(true);
 	});
 
-	it("renders explicit empty catalogs and keeps work in the parent", () => {
+	it("renders explicit empty catalogs and keeps work in the current session", () => {
 		const empty = appendTeamSystemPrompt(appendTeamSystemPrompt("Root", members, profiles), [], []);
 		expect(catalogData(empty)).toEqual({ members: [], profiles: [] });
-		expect(empty).toContain("No configured team members are currently available.");
+		expect(empty).toContain("No configured teammates are currently available.");
 		expect(empty).toContain("No named inference profiles are currently available.");
-		expect(empty).toContain("Keep this work in the parent session.");
+		expect(empty).toContain("keep the work in this session");
 	});
 
 	it("preserves the agent description and displays its configured profile", () => {
@@ -108,7 +108,7 @@ describe("subagent team system prompt", () => {
 
 	it("explains how team selection, inference profiles, and dynamic guidance compose", () => {
 		const block = buildTeamSystemPrompt(members, profiles);
-		expect(block).toContain("Select a team member with Agent's `subagent_type` or `agents.run`'s `type`");
+		expect(block).toContain("Choose a teammate with Agent's `subagent_type` or `agents.run`'s `type`");
 		expect(block).toContain("Select an inference profile with `profile`");
 		expect(block).toContain("Agent's `system_prompt`");
 		expect(block).toContain("`agents.run`'s `systemPrompt`");

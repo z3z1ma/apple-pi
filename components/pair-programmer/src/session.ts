@@ -27,13 +27,13 @@ export type PairSeedSource = {
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const PAIR_SESSION_TOOLS = [
-	"advise",
-	"escalate",
+	"share_note",
+	"ask_advisor",
 	"read",
 	"grep",
 	"find",
-	"notebook_source",
-	"session_search",
+	"revisit_note",
+	"search_session",
 ] as const;
 
 export async function pairCompactResult(
@@ -91,7 +91,7 @@ export async function createPairSession(opts: {
 				hidden: true,
 				factory: (pi: ExtensionAPI) => {
 					// Replay + reseed only. Never register the Pair notebook
-					// Runtime, triggers, commands, or notebook_source here — those stay
+					// Runtime, triggers, commands, or revisit_note here — those stay
 					// on the primary session. The parent packet is a read of that
 					// ledger, not a second notebook pipeline.
 					registerXaiCompactionReplayHooks(pi);

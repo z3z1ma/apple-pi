@@ -90,7 +90,7 @@ import { createPairSession } from "./session.js";
 //
 // Port of oh-my-pi's pair onto upstream pi's public extension surface. The
 // pair is a long-lived `Agent` with its own model, read-only tools
-// (read/grep/find, primary-bound notebook_source/session_search), and private
+// (read/grep/find, primary-bound revisit_note/search_session), and private
 // advise/escalate/update_notebook capabilities. It is fed the primary transcript one
 // turn-delta at a time and may inject concise advice back. It is NOT an
 // executor: it cannot edit, run commands, or change session state.
@@ -332,10 +332,10 @@ export function parsePairTestArgs(args: string): { severity: PairSeverity; note:
  * unrecorded until its actual boundary delivery.
  */
 export class AdviseTool {
-	readonly name = "advise";
+	readonly name = "share_note";
 	readonly label = "Advise";
 	readonly description =
-		"Send one concrete, ACTIONABLE piece of advice to the agent you are watching. Use sparingly; stay silent when nothing matters. Call it to head off likely-wrong or materially wasteful work. NEVER call it to report status, acknowledge, confirm, summarize, or signal that all is well / resolved / nothing-further-needed — in those cases emit nothing.";
+		"Share one concise, actionable note with your pair programming partner when you see something that could materially improve or protect the work. Say what you noticed and what they should check. Most turns need no note. Never use this for status, acknowledgement, praise, summaries, or to say that everything looks good or an earlier issue is resolved.";
 	readonly parameters = adviseSchema as any;
 	#delivered = new Map<string, number>();
 
@@ -361,18 +361,21 @@ export class AdviseTool {
 		const rank = rankOf(args.severity);
 		const prev = this.#delivered.get(key) ?? 0;
 		if (rank <= prev) {
-			return { content: [{ type: "text", text: "Duplicate advice ignored." }], details: { ...args, dropped: true } };
+			return {
+				content: [{ type: "text", text: "You already shared an equivalent note." }],
+				details: { ...args, dropped: true },
+			};
 		}
 		const delivered = this.onAdvice(args.note, args.severity);
 		if (!delivered) {
 			// Not recorded: it is queued for a boundary or dropped as stale.
 			return {
-				content: [{ type: "text", text: "Queued for boundary delivery (or dropped as stale)." }],
+				content: [{ type: "text", text: "Your note will be shared at the next safe moment if it still applies." }],
 				details: { ...args, held: true },
 			};
 		}
 		this.#delivered.set(key, rank);
-		return { content: [{ type: "text", text: "Recorded." }], details: { ...args } };
+		return { content: [{ type: "text", text: "Your note was shared." }], details: { ...args } };
 	}
 }
 

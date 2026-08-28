@@ -13,13 +13,11 @@ describe("notebook summary rendering", () => {
 
 		const summary = renderSummary([ref], []);
 
-		expect(summary).toContain(
-			"This is the Pair Programmer's notebook for the current session, restored after compaction.",
-		);
-		expect(summary).toContain("Honor current law");
-		expect(summary).toContain("Do not replay this list as a historical stack");
-		expect(summary).toContain("use notebook_source");
-		expect(summary).toContain("use session_search");
+		expect(summary).toContain("Your pair programming partner keeps this sourced notebook");
+		expect(summary).toContain("current shared understanding");
+		expect(summary).toContain("rather than replaying the notebook as a historical stack");
+		expect(summary).toContain("use revisit_note");
+		expect(summary).toContain("search_session");
 	});
 
 	it("renders reflections with ids", () => {

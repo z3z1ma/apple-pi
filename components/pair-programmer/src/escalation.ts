@@ -40,12 +40,12 @@ const escalationSchema = Type.Object({
 
 export type EscalationAcceptance = "accepted" | "suppressed" | "unavailable";
 
-/** Private Pair capability. It can request adjudication, not dispatch an agent. */
+/** Private pairing capability. It can ask for a second opinion, not dispatch an agent. */
 export class EscalateTool {
-	readonly name = "escalate";
+	readonly name = "ask_advisor";
 	readonly label = "Escalate to Advisor";
 	readonly description =
-		"Request expensive independent Advisor adjudication for one materially consequential suspicion that is hard to verify cheaply. This is not advice and does not assert that the claim is true. Never use for nits, generic uncertainty, known errors, or a nicer second opinion.";
+		"Ask a senior software architect for an independent second opinion on one consequential concern that is hard to verify cheaply. Explain what worries you, what you observed, and where you remain unsure. Asking does not make the concern true. Do not use this for nits, generic uncertainty, known errors, or routine reassurance.";
 	readonly parameters = escalationSchema as any;
 
 	constructor(private readonly onEscalation: (request: PairEscalation) => EscalationAcceptance) {}
@@ -71,10 +71,10 @@ export class EscalateTool {
 		});
 		const text =
 			acceptance === "accepted"
-				? "Escalation accepted for host-controlled Advisor adjudication."
+				? "The software architect has been asked to take a deeper look."
 				: acceptance === "suppressed"
-					? "Equivalent escalation suppressed by host deduplication or throttling."
-					: "Advisor orchestration is unavailable; no adjudication was started and no advice was produced.";
+					? "You already asked about an equivalent concern recently."
+					: "The software architect is unavailable, so no second opinion was started and no note was produced.";
 		return { content: [{ type: "text", text }], details: { acceptance } };
 	}
 }

@@ -100,7 +100,7 @@ export interface AgentDetails {
 	/** Effective max turns (undefined = unlimited). */
 	maxTurns?: number;
 	agentId?: string;
-	/** Pi session JSONL used by session_search for this agent. */
+	/** Pi session JSONL used by search_session for this agent. */
 	sessionFile?: string;
 	error?: string;
 }

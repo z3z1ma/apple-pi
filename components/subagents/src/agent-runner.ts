@@ -488,7 +488,7 @@ export async function runAgent(
 	const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
 	const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
 	// Frontmatter wins; top-level sessions persist by default so child
-	// transcripts remain searchable via session_search.
+	// transcripts remain searchable via search_session.
 	// Nested children stay in memory unless explicitly persisted by their own
 	// definition: their result is already recorded in the owning agent session.
 	const persistSession = agentConfig?.persistSession ?? (options.nested ? false : persistAgentSessions);

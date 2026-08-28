@@ -84,7 +84,7 @@ describe("user-global model profiles", () => {
 			/fast, economical model.*reasoning effort/,
 		);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "pair")?.description).toMatch(
-			/Economical persistent supervision.*route rare deep consultations/,
+			/economical, attentive pair programming partner.*architectural judgment/,
 		);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "deep")?.description).toMatch(
 			/strongest reasoning model.*high reasoning effort/,

@@ -138,7 +138,7 @@ describe("consultation context", () => {
 		});
 		const rendered = renderConsultationContext(context);
 
-		expect(rendered).toContain("UNTRUSTED CLAIM, NOT EVIDENCE");
+		expect(rendered).toContain("a colleague's hypothesis, not evidence");
 		expect(rendered).toContain("Working state unavailable");
 		expect(rendered).toContain("absence is not evidence");
 	});
@@ -168,10 +168,10 @@ describe("consultation context", () => {
 		expect(first.relevanceFingerprint).not.toBe(second.relevanceFingerprint);
 	});
 
-	it("keeps the Advisor overlay independent, read-only, and typed", () => {
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("independent adjudication");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("claims are not evidence");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("Do not implement");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("report_consultation exactly once");
+	it("keeps the architect's second opinion independent, read-only, and typed", () => {
+		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("senior software architect");
+		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("hypothesis, not as proof");
+		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("You do not outrank the programmers");
+		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("give_second_opinion exactly once");
 	});
 });

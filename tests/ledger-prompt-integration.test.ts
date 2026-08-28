@@ -111,7 +111,7 @@ describe("ledger system prompt distribution", () => {
 		expect(loadPairSystemPrompt(process.cwd(), false)).not.toContain(marker);
 	});
 
-	it("loads children with fast mode, the overflow guard, ledger, session_search, and MCP", () => {
+	it("loads children with fast mode, the overflow guard, ledger, search_session, and MCP", () => {
 		expect(childSessionExtensions()).toEqual({
 			noExtensions: true,
 			additionalExtensionPaths: [

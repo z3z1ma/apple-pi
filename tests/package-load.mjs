@@ -134,8 +134,8 @@ try {
 		"backlog_add",
 		"backlog_list",
 		"backlog_take",
-		"session_search",
-		"notebook_source",
+		"search_session",
+		"revisit_note",
 		"pi_exec",
 		"pi_discover_programs",
 		"pi_exec_program",
@@ -249,10 +249,10 @@ try {
 	assert.match(agentTool.definition.description, /<subagent-team>/);
 	assert.match(
 		agentTool.definition.description,
-		/every callable teammate with its name, configured inference profile, and own description/,
+		/lists everyone available, including each teammate's configured inference profile and own description/,
 	);
 	assert.match(agentTool.definition.description, /<inference-profiles>/);
-	assert.match(agentTool.definition.description, /dynamic guidance with system_prompt/);
+	assert.match(agentTool.definition.description, /system_prompt only for invocation-specific guidance/);
 	assert.match(piExecTool.definition.description, /<subagent-team>/);
 	assert.match(piExecTool.definition.description, /callable teammates with name, inference profile, and description/);
 	assert.match(piExecTool.definition.description, /<inference-profiles>/);
@@ -279,8 +279,8 @@ try {
 	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /very large positive value/);
 	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /not an agent timeout/);
 	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
-	assert.match(resultTool.definition.description, /use a very large yield_seconds value/);
-	assert.match(resultTool.definition.description, /not an agent timeout/);
+	assert.match(resultTool.definition.description, /use a very large value/);
+	assert.match(resultTool.definition.description, /leaves them working in the background/);
 	assert(existsSync("skills/review/references/plan-review-verify.js"), "missing review plan-review-verify reference");
 	assert(existsSync("skills/review/references/targeted-review.js"), "missing review targeted-review reference");
 	assert(existsSync("skills/review/references/multi-lens-review.js"), "missing review multi-lens reference");

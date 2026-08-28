@@ -19,10 +19,10 @@ export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 	if (!held.length) return "";
 	const items = held.map((note) => `- [${(note.severity ?? "nit").toUpperCase()}] ${note.note}`).join("\n");
 	return [
-		"### Held pair notes — reconfirm",
+		"### Things you flagged earlier",
 		"",
-		"You raised these on an earlier step; they were held pending reconfirmation, because by now the agent may have already addressed them. Re-check each against the latest activity below.",
-		"For every item that STILL applies, call `advise` again — same severity, or higher if it's gotten worse; never lower it. Say nothing for the rest — silence drops them. Do NOT call `advise` to announce that an item is resolved or that all are cleared; just stay silent.",
+		"Take another look at these against your partner's latest work; they may already have addressed them.",
+		"For every item that still applies, call `share_note` again with the same severity, or higher if the risk has grown. Say nothing about the rest; silence withdraws them. Do not send a note merely to say an item is resolved or everything looks good.",
 		"",
 		items,
 		"",
@@ -31,11 +31,11 @@ export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 	].join("\n");
 }
 
-const PAIR_GUIDANCE = "weigh, don't blindly obey";
+const PAIR_GUIDANCE = "pause, consider, then use your judgment";
 const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
- * Render notes as the agent-facing message body: one `<advisory>` per note.
+ * Render notes as the agent-facing message body: one `<pair-note>` per note.
  * `stale` adds a `context` attribute noting the advice is about an earlier step
  * (used for nits, which the pair always raises a little behind the agent).
  * `finalAnswer` appends guidance for advice delivered as a followup to a terminal
@@ -55,11 +55,11 @@ export function formatAdvisoryContent(
 			const sev = n.severity ? ` severity="${n.severity}"` : "";
 			const source = n.source ? ` source="${n.source}"` : "";
 			const disposition = n.adjudication ? ` disposition="${n.adjudication}"` : "";
-			return `<advisory${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</advisory>`;
+			return `<pair-note${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</pair-note>`;
 		})
 		.join("\n");
 	if (!opts?.finalAnswer) return body;
-	return `${body}\n\nYou had already returned a final answer to the user this turn. If you act on the advice above, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
+	return `${body}\n\nYou had already returned a final answer to the user this turn. If this note changes what you do, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
 }
 
 // ---- transcript delta formatting (primary turn → markdown for the pair) ----
@@ -176,7 +176,7 @@ function formatImplementingAgent(
 			}
 		}
 	}
-	return sub.length ? `#### Implementing agent\n\n${sub.join("\n\n")}` : "";
+	return sub.length ? `#### Your partner\n\n${sub.join("\n\n")}` : "";
 }
 
 function formatProjectedResults(
@@ -216,7 +216,7 @@ export function formatTurnDelta(opts: {
 }): string {
 	const parts: string[] = [];
 	if (opts.userPrompt?.trim()) {
-		parts.push(`#### User → implementing agent\n\n${opts.userPrompt.trim()}`);
+		parts.push(`#### What the user told your partner\n\n${opts.userPrompt.trim()}`);
 	}
 
 	const results = opts.toolResults ?? [];
@@ -267,7 +267,7 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[]): st
 		switch (message.role) {
 			case "user": {
 				const text = contextText(message.content).trim();
-				if (text) parts.push(`#### User → implementing agent\n\n${text}`);
+				if (text) parts.push(`#### What the user told your partner\n\n${text}`);
 				break;
 			}
 			case "assistant": {

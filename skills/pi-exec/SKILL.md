@@ -59,7 +59,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` for those program-specific workers. Ralph explicitly grants its write-capable tool list.
 - `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
 - `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
-- Workers load the ledger and `session_search` extensions. A worker with Pair enabled also loads the Pair sidecar. Workers do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
+- Workers load the ledger and `search_session` extensions. A worker with Pair enabled also loads the Pair sidecar. Workers do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
 - Prefer `agents.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
 - Pass file paths in `context` or `task`. The worker already has `read`; do not dump file bodies into the task.
 - `await parallel(items, mapper, concurrency?)` or `await parallel(jobs, concurrency?)` → `T[]`

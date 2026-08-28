@@ -122,7 +122,7 @@ describe("file recall", () => {
 		}
 	});
 
-	it("exposes mode:touched and #N:path through session_search", async () => {
+	it("exposes mode:touched and #N:path through search_session", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-search-file-recall-"));
 		const file = join(dir, "session.jsonl");
 		try {

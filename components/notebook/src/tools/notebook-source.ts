@@ -13,7 +13,7 @@ import type { Observation, Reflection } from "../session-ledger/index.js";
 import { renderRecallSourceEntries, renderRecallSourceEntry } from "../serialize.js";
 import { estimateEntryTokens } from "../tokens.js";
 
-export const NOTEBOOK_SOURCE_TOOL_NAME = "notebook_source";
+export const NOTEBOOK_SOURCE_TOOL_NAME = "revisit_note";
 
 const NOTEBOOK_ID_PATTERN = /^[a-f0-9]{12}$/;
 
@@ -557,25 +557,23 @@ export const recallObservationTool = defineTool({
 	name: NOTEBOOK_SOURCE_TOOL_NAME,
 	label: "Notebook source",
 	description:
-		"Recover the original session entries behind a compacted observation or reflection. " +
-		"Requires a specific 12-character lowercase hex id from compacted notebook, /pair notebook, or a previous notebook_source result. " +
-		"Use when a compressed notebook entry is important and you need exact wording, paths, commands, or provenance before acting. " +
-		"This is not search and not session transcript browsing.",
-	promptSnippet:
-		"Use notebook_source({ id }) to recover the original source entries behind a compacted observation or reflection id when precision matters.",
+		"Revisit one specific entry in the session notebook and recover the conversation, commands, or file changes behind it. " +
+		"Use the 12-character id shown beside an observation or reflection when its summary is too compressed to rely on confidently. " +
+		"This follows a known note back to its sources; it does not search the transcript by topic.",
+	promptSnippet: "Use revisit_note({ id }) to see the original session evidence behind a specific notebook entry.",
 	promptGuidelines: [
-		"Use notebook_source before making an important decision that depends on a compacted observation or reflection whose details are unclear.",
-		"Use notebook_source when you need exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered claim.",
-		"Use notebook_source when a broad reflection is relevant but you need its supporting observations or raw sources to continue safely.",
-		"Use notebook_source when the user asks why you believe something, what supports a notebook entry, or what was decided earlier.",
-		"Do not use notebook_source as semantic search or transcript browsing; you must already have a specific 12-character notebook id. Use session_search to search this session.",
-		"Do not call notebook_source for every id preemptively. Use it only when exact source context will materially improve the next action.",
+		"Use revisit_note before making an important decision that depends on a notebook entry whose details are unclear.",
+		"Use revisit_note when you need the exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered point.",
+		"Use revisit_note when a broad reflection matters but you need to see its supporting observations or original sources before continuing.",
+		"Use revisit_note when the user asks why you believe something, what supports a notebook entry, or what was decided earlier.",
+		"Do not use revisit_note as semantic search or transcript browsing; you must already have a specific 12-character notebook id. Use search_session to search the session.",
+		"Do not revisit every note preemptively. Look one up only when the original context will materially improve the next action.",
 	],
 	parameters: Type.Object({
 		id: Type.String({
 			pattern: "^[a-f0-9]{12}$",
 			description:
-				"12-character lowercase hex observation or reflection id shown in compacted notebook, /pair notebook, or a previous notebook_source result. Must be a specific id; this tool does not search by topic.",
+				"The 12-character lowercase hex id shown beside an observation or reflection in the compacted notebook, /pair notebook, or a previous revisit_note result. This tool follows a known note; it does not search by topic.",
 		}),
 	}),
 	renderCall(args) {

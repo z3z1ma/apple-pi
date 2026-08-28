@@ -125,8 +125,8 @@ export function preparePairNotebookBatch(args: {
 	const folded = foldLedger(args.entries);
 	const prompt = args.fullMaintenanceDue
 		? [
-				"### Pair notebook maintenance due",
-				"Revise your private notebook; do not advise the driver about the revision. Call `update_notebook` exactly once after reviewing the source-addressed trajectory. Include every durable new fact needed from the allowed source span, update current law, retire superseded law, and propose only safe drops. Arrays may be empty.",
+				"### Time to update the shared notebook",
+				"Review this sourced span and call `update_notebook` exactly once. Preserve every durable new fact your partner may need later, revise the current shared understanding, retire reflections that no longer apply, and propose only safe drops. This is quiet note-taking, not something to announce with `share_note`. Arrays may be empty.",
 				`Current local time: ${nowTimestamp()}`,
 				`Allowed source entry ids, oldest to newest: ${serialized.sourceEntryIds.join(", ")}`,
 				`Coverage endpoint: ${coversUpToId}`,
@@ -151,12 +151,12 @@ export function preparePairNotebookBatch(args: {
 	};
 }
 
-/** Private Pair capability. Calls stage data only; the root host commits it after a successful Pair turn. */
+/** Private pairing capability. Calls stage data only; the root host commits it after a successful Pair turn. */
 export class UpdateNotebookTool {
 	readonly name = "update_notebook";
 	readonly label = "Update Pair notebook";
 	readonly description =
-		"Stage one host-validated revision of the Pair Programmer's notebook: sourced observations, current reflections, retirements, and safe drops. This never edits repository files or arbitrary session state. When full maintenance is due, call exactly once even if every array is empty.";
+		"Update the sourced notebook you keep for this pair programming session. Add durable observations, revise the current shared understanding, retire reflections that no longer apply, and drop only safely covered detail. This never edits repository files or arbitrary session state. When a full notebook update is requested, call exactly once even if every array is empty.";
 	readonly parameters = UpdateNotebookSchema as any;
 
 	#batch: PairNotebookBatch | undefined;
@@ -302,7 +302,7 @@ export class UpdateNotebookTool {
 			content: [
 				{
 					type: "text",
-					text: `Staged ${observations.size} observation${observations.size === 1 ? "" : "s"}, ${reflections.size} reflection${reflections.size === 1 ? "" : "s"}, ${retiredIds.length} retirement${retiredIds.length === 1 ? "" : "s"}, and ${droppedIds.length} drop${droppedIds.length === 1 ? "" : "s"}${rejected > 0 ? `; rejected ${rejected} invalid proposal${rejected === 1 ? "" : "s"}` : ""}. The host will commit after this Pair turn settles successfully.`,
+					text: `Notebook update ready: ${observations.size} observation${observations.size === 1 ? "" : "s"}, ${reflections.size} reflection${reflections.size === 1 ? "" : "s"}, ${retiredIds.length} retirement${retiredIds.length === 1 ? "" : "s"}, and ${droppedIds.length} drop${droppedIds.length === 1 ? "" : "s"}${rejected > 0 ? `; rejected ${rejected} invalid proposal${rejected === 1 ? "" : "s"}` : ""}. It will be saved when this turn finishes successfully.`,
 				},
 			],
 			details: {

@@ -67,7 +67,7 @@ const makeSession = () => {
 	return { dir, file };
 };
 
-describe("session_search expand + query composition", () => {
+describe("search_session expand + query composition", () => {
 	it("expands matched entries to full content when query and expand are combined", async () => {
 		const { dir, file } = makeSession();
 		try {
