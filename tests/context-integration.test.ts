@@ -11,7 +11,7 @@ function message(id: string, role: string, content: unknown): Entry {
 	return { id, type: "message", message: { role, content } };
 }
 
-describe("observational memory after normal compaction", () => {
+describe("Pair memory after normal compaction", () => {
 	it("places the folded packet after a compaction entry for conversation continuity", () => {
 		const observation: Observation = {
 			id: "abc123abc123",

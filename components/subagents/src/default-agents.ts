@@ -140,7 +140,7 @@ Official docs, current API behavior, implementation examples, and version-specif
 			name: "Advisor",
 			displayName: "Advisor",
 			description:
-				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Sentinel (persistent trajectory supervision) and Review (structured change review).",
+				"On-demand high-reasoning advisor for architecture, costly trade-offs, persistent bugs, and YAGNI or simplification review. Read-only: it advises, it does not implement. Use after failed fix attempts or when a wrong choice is expensive. Do not use for routine how-to-implement planning (Plan), local search (Explore), external docs (Research), or as default verification after every edit. Distinct from Pair (persistent trajectory supervision) and Review (structured change review).",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -171,7 +171,7 @@ Architecture, costly trade-offs, persistent debugging, review, and simplificatio
 			extensions: false,
 			skills: false,
 			profile: "coding",
-			sentinel: true,
+			pair: true,
 			systemPrompt: `# Role
 You are Implement — a bounded execution specialist.
 Apply a complete task specification. Do not plan, research, or redesign.

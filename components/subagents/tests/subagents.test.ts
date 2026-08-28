@@ -127,7 +127,7 @@ describe("owned subagent surface", () => {
 			builtinToolNames: ["read", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
-			sentinel: false,
+			pair: false,
 			persistSession: false,
 			promptMode: "replace",
 		});
@@ -234,7 +234,7 @@ describe("owned subagent surface", () => {
 		});
 		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
 			profile: "coding",
-			sentinel: true,
+			pair: true,
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
@@ -284,7 +284,7 @@ describe("owned subagent surface", () => {
 			"---\nname: unknown-profile\ndescription: Invalid profile\nprofile: custom-fast\n---\n\nInvalid instructions.\n",
 		);
 		expect(() => loadCustomAgents({ cwd: root, projectTrusted: true }, true)).toThrow(
-			/profile must be one of: quick, balanced, sentinel, deep, coding, visual-engineering, background/,
+			/profile must be one of: quick, balanced, pair, deep, coding, visual-engineering, background/,
 		);
 	});
 
@@ -384,23 +384,23 @@ describe("owned subagent surface", () => {
 			run_in_background: false,
 			isolated: false,
 			inherit_context: false,
-			sentinel: false,
+			pair: false,
 			system_prompt: "  Focus on the requested boundary.  ",
 		});
 		expect(resolved).toMatchObject({
 			maxTurns: 11,
 			systemPrompt: "Focus on the requested boundary.",
 			inheritContext: false,
-			sentinel: false,
+			pair: false,
 			runInBackground: false,
 			isolated: false,
 		});
 	});
 
-	it("enables Sentinel only for write-capable default agents", () => {
-		const sentinelDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.sentinel === true);
-		expect(sentinelDefaults).not.toHaveLength(0);
-		for (const config of sentinelDefaults) {
+	it("enables Pair only for write-capable default agents", () => {
+		const pairDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.pair === true);
+		expect(pairDefaults).not.toHaveLength(0);
+		for (const config of pairDefaults) {
 			const tools = config.builtinToolNames ?? BUILTIN_TOOL_NAMES;
 			expect(
 				tools.some((tool) => (tool === "edit" || tool === "write") && !config.disallowedTools?.includes(tool)),
@@ -408,8 +408,8 @@ describe("owned subagent surface", () => {
 		}
 	});
 
-	it("uses agent Sentinel defaults while preserving explicit invocation overrides", () => {
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ sentinel: true });
+	it("uses agent Pair defaults while preserving explicit invocation overrides", () => {
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ pair: true });
 		expect(
 			resolveAgentInvocationConfig(
 				{
@@ -423,27 +423,27 @@ describe("owned subagent surface", () => {
 				},
 				{},
 			),
-		).toMatchObject({ sentinel: true });
-		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, sentinel: false }, {})).toMatchObject({
-			sentinel: false,
+		).toMatchObject({ pair: true });
+		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, pair: false }, {})).toMatchObject({
+			pair: false,
 		});
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ sentinel: false });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ pair: false });
 		expect(
 			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: false,
-				sentinel: false,
+				pair: false,
 			}),
-		).toMatchObject({ inheritContext: false, sentinel: false });
+		).toMatchObject({ inheritContext: false, pair: false });
 		expect(
 			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: true,
-				sentinel: true,
+				pair: true,
 			}),
-		).toMatchObject({ inheritContext: true, sentinel: true });
+		).toMatchObject({ inheritContext: true, pair: true });
 	});
 
 	it("retains the full branch only for explicit inheritance", () => {
@@ -665,11 +665,11 @@ describe("owned subagent surface", () => {
 		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
 		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context"]));
-		expect(agentSchema.required).not.toContain("sentinel");
+		expect(agentSchema.required).not.toContain("pair");
 		expect(agentSchema.properties.profile.anyOf.map((entry: any) => entry.const)).toEqual([
 			"quick",
 			"balanced",
-			"sentinel",
+			"pair",
 			"deep",
 			"coding",
 			"visual-engineering",
@@ -677,7 +677,7 @@ describe("owned subagent surface", () => {
 		]);
 		expect(agentSchema.properties.profile.description).toContain("model/thinking only");
 		expect(agentSchema.properties.system_prompt.description).toContain("appended after the selected definition");
-		expect(agentSchema.properties.sentinel.description).toContain("definition's Sentinel default");
+		expect(agentSchema.properties.pair.description).toContain("definition's Pair default");
 		expect(resultSchema.required).not.toContain("yield_seconds");
 		expect(resultSchema.properties.yield_seconds.minimum).toBe(0);
 		expect(resultSchema.properties.yield_seconds.description).toContain("very large positive value");

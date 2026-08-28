@@ -42,7 +42,7 @@ const entries: Entry[] = [
 	message("m3", "user", "Continue"),
 ];
 
-describe("observational memory context packet", () => {
+describe("Pair memory context packet", () => {
 	it("uses the latest compaction firstKeptEntryId as the projection boundary", () => {
 		expect(latestCompactionBoundary(entries)).toBe("m3");
 		expect(latestCompactionBoundary(entries.slice(0, 3))).toBeUndefined();

@@ -24,7 +24,7 @@ function surfaces(result: Awaited<ReturnType<typeof loadContextExtension>>) {
 	};
 }
 
-describe("observational memory is root-session only", () => {
+describe("standalone context extension", () => {
 	const directories: string[] = [];
 
 	afterEach(() => {
@@ -38,26 +38,24 @@ describe("observational memory is root-session only", () => {
 		process.env.PI_CODING_AGENT_DIR = root;
 	}
 
-	it("registers the OM pipeline on the main session", async () => {
+	it("registers only session_search on the main session", async () => {
 		isolate();
 		const loaded = surfaces(await loadContextExtension());
 		expect(loaded.errors).toEqual([]);
 		expect(loaded.tools.has("session_search")).toBe(true);
-		expect(loaded.tools.has("memory_source")).toBe(true);
-		expect(loaded.commands.has("om:status")).toBe(true);
-		expect(loaded.commands.has("om:view")).toBe(true);
-		expect((loaded.handlers.get("turn_end")?.length ?? 0) > 0).toBe(true);
-		expect((loaded.handlers.get("context")?.length ?? 0) > 0).toBe(true);
+		expect(loaded.tools.has("memory_source")).toBe(false);
+		expect(loaded.commands.size).toBe(0);
+		expect(loaded.handlers.has("turn_end")).toBe(false);
+		expect(loaded.handlers.has("context")).toBe(false);
 	});
 
-	it("skips the OM pipeline when loaded in a child session", async () => {
+	it("registers the same search-only surface in a child session", async () => {
 		isolate();
 		const loaded = surfaces(await runInChildSessionContext(() => loadContextExtension()));
 		expect(loaded.errors).toEqual([]);
 		expect(loaded.tools.has("session_search")).toBe(true);
 		expect(loaded.tools.has("memory_source")).toBe(false);
-		expect(loaded.commands.has("om:status")).toBe(false);
-		expect(loaded.commands.has("om:view")).toBe(false);
+		expect(loaded.commands.size).toBe(0);
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);
 	});

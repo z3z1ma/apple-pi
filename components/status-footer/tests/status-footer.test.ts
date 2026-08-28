@@ -138,7 +138,7 @@ const completeSnapshot: FooterSnapshot = {
 	availableProviderCount: 2,
 	statuses: [
 		{ key: "subagents", text: "2 running agents" },
-		{ key: "q-sentinel", text: "Sentinel reviewing · $0.42" },
+		{ key: "q-pair", text: "Pair reviewing · $0.42" },
 		{ key: "backlog", text: "backlog 3" },
 		{ key: "mcp-auth", text: "MCP authenticating docs" },
 		{ key: "mcp", text: "MCP 3 servers" },
@@ -219,7 +219,7 @@ describe("input card rendering", () => {
 		expect(output).toContain("\u001b[33mMCP authenticating docs\u001b[0m");
 		expect(output).toContain("\u001b[94mMCP 3 servers\u001b[0m");
 		expect(output).toContain("\u001b[36mbacklog 3\u001b[0m");
-		expect(output).toContain("\u001b[95mSentinel reviewing · $0.42\u001b[0m");
+		expect(output).toContain("\u001b[95mPair reviewing · $0.42\u001b[0m");
 		expect(output).toContain("\u001b[32m2 running agents\u001b[0m");
 		expect(output).toContain("\u001b[36mExtension active\u001b[0m");
 		expect(output).toContain("\u001b[93m↑12k\u001b[0m");
@@ -232,15 +232,15 @@ describe("input card rendering", () => {
 	});
 
 	it("restores producer color after nested status styling resets", () => {
-		const sentinelStatus = "\u001b[90m│\u001b[0m Sentinel reviewing";
+		const pairStatus = "\u001b[90m│\u001b[0m Pair reviewing";
 		const snapshot = {
 			...completeSnapshot,
-			statuses: [{ key: "q-sentinel", text: sentinelStatus }],
+			statuses: [{ key: "q-pair", text: pairStatus }],
 		};
 		const output = renderInputCard(snapshot, theme, 120, [""]).join("\n");
 
-		expect(output).toContain("\u001b[95m\u001b[90m│\u001b[0m\u001b[95m Sentinel reviewing\u001b[0m");
-		expect(stripTerminalSequences(output).split("│ Sentinel reviewing")).toHaveLength(2);
+		expect(output).toContain("\u001b[95m\u001b[90m│\u001b[0m\u001b[95m Pair reviewing\u001b[0m");
+		expect(stripTerminalSequences(output).split("│ Pair reviewing")).toHaveLength(2);
 	});
 
 	it("uses a safe theme role for an unknown future thinking level", () => {
@@ -358,19 +358,19 @@ describe("input card telemetry", () => {
 		expect(snapshot.model?.name).toBe("GPT Test");
 		expect(snapshot.model?.providerName).toBe("OpenAI");
 	});
-	it("orders todos after backlog and before sentinel and subagents", () => {
+	it("orders todos after backlog and before pair and subagents", () => {
 		const snapshot = {
 			...completeSnapshot,
 			statuses: [
 				{ key: "subagents", text: "agents 1" },
 				{ key: "todos", text: "todos 2" },
-				{ key: "q-sentinel", text: "sentinel idle" },
+				{ key: "q-pair", text: "pair idle" },
 				{ key: "backlog", text: "backlog 1" },
 			],
 		};
 		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 240, ["prompt"]).join("\n"));
 		expect(output.indexOf("backlog 1")).toBeLessThan(output.indexOf("todos 2"));
-		expect(output.indexOf("todos 2")).toBeLessThan(output.indexOf("sentinel idle"));
-		expect(output.indexOf("sentinel idle")).toBeLessThan(output.indexOf("agents 1"));
+		expect(output.indexOf("todos 2")).toBeLessThan(output.indexOf("pair idle"));
+		expect(output.indexOf("pair idle")).toBeLessThan(output.indexOf("agents 1"));
 	});
 });

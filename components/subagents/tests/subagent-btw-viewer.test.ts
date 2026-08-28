@@ -37,7 +37,7 @@ function mockRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
 		invocation: {
 			modelName: "claude-3-7-sonnet",
 			inheritContext: false,
-			sentinel: false,
+			pair: false,
 		},
 		...overrides,
 	} as AgentRecord;

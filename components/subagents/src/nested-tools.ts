@@ -51,7 +51,7 @@ interface NestedSpawnOptions {
 	maxTurns?: number;
 	isolated?: boolean;
 	inheritContext?: boolean;
-	sentinel?: boolean;
+	pair?: boolean;
 	thinkingLevel?: ThinkingLevel;
 	isBackground?: boolean;
 	invocation?: AgentInvocation;
@@ -150,10 +150,10 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				default: false,
 				description: "Include the full parent conversation before the initial task prompt.",
 			}),
-			sentinel: Type.Optional(
+			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's Sentinel default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's Pair default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 		}),
@@ -164,19 +164,19 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 					return textResult(`Nested agent not found or not owned by this parent: "${params.resume}".`, true);
 				}
 				const requestedInheritance = params.inherit_context === true;
-				const requestedSentinel = params.sentinel ?? existing.invocation?.sentinel === true;
+				const requestedPair = params.pair ?? existing.invocation?.pair === true;
 				const requestedIsolation = params.isolated === true;
 				const requestedProfile = params.profile ?? existing.invocation?.profile;
 				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
 				if (
 					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
-					requestedSentinel !== (existing.invocation?.sentinel === true) ||
+					requestedPair !== (existing.invocation?.pair === true) ||
 					requestedIsolation !== (existing.invocation?.isolated === true) ||
 					requestedProfile !== existing.invocation?.profile ||
 					requestedSystemPrompt !== existing.invocation?.systemPrompt
 				) {
 					return textResult(
-						"profile, system_prompt, inherit_context, sentinel, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
 						true,
 					);
 				}
@@ -225,7 +225,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				maxTurns: invocation.maxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
-				sentinel: invocation.sentinel,
+				pair: invocation.pair,
 				thinkingLevel: resolvedAgentProfile.thinkingLevel,
 				invocation: {
 					profile: resolvedAgentProfile.profile,
@@ -234,7 +234,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 					maxTurns: invocation.maxTurns,
 					isolated: invocation.isolated,
 					inheritContext: invocation.inheritContext,
-					sentinel: invocation.sentinel,
+					pair: invocation.pair,
 					runInBackground: invocation.runInBackground,
 				},
 				onAssistantUsage: (usage) => {

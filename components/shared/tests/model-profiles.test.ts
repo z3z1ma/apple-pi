@@ -83,7 +83,7 @@ describe("user-global model profiles", () => {
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "quick")?.description).toMatch(
 			/fast, economical model.*reasoning effort/,
 		);
-		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "sentinel")?.description).toMatch(
+		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "pair")?.description).toMatch(
 			/Economical persistent supervision.*route rare deep consultations/,
 		);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "deep")?.description).toMatch(

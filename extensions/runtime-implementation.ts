@@ -234,7 +234,7 @@ async function runAgent(
 			projectTrusted,
 			...(resolved.model ? { model: resolved.model } : {}),
 			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
-			...(resolved.sentinel ? { sentinel: true } : {}),
+			...(resolved.pair ? { pair: true } : {}),
 		},
 	);
 

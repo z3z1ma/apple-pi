@@ -74,7 +74,7 @@ describe("consultation context", () => {
 		const context = await buildConsultationContext({
 			pi: fakePi(),
 			ctx: ctx(entries),
-			source: "sentinel",
+			source: "pair",
 			trajectorySequence: 12,
 		});
 
@@ -104,7 +104,7 @@ describe("consultation context", () => {
 		const context = await buildConsultationContext({
 			pi: fakePi(),
 			ctx: ctx(entries),
-			source: "sentinel",
+			source: "pair",
 			trajectorySequence: 3,
 			hypothesis: {
 				severity: "concern",
@@ -123,11 +123,11 @@ describe("consultation context", () => {
 		expect(context.evidenceHandles).toContainEqual(expect.objectContaining({ ref: "src/retry.ts" }));
 	});
 
-	it("labels Sentinel hypotheses as untrusted and represents unavailable evidence", async () => {
+	it("labels Pair hypotheses as untrusted and represents unavailable evidence", async () => {
 		const context = await buildConsultationContext({
 			pi: fakePi({ "rev-parse --is-inside-work-tree": "false\n" }),
 			ctx: ctx([{ type: "message", message: { role: "user", content: "choose the safe queue path" } }]),
-			source: "sentinel",
+			source: "pair",
 			trajectorySequence: 1,
 			hypothesis: {
 				severity: "blocker",

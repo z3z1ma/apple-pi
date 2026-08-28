@@ -33,7 +33,7 @@ export const sessionSearchTool = defineTool({
 	promptGuidelines: [
 		"Use session_search after compaction when you need prior work, decisions, tool output, or a file version from this session that is no longer in context.",
 		"Use session_search with mode:'touched' to list files written or edited in this session, and query:'#N:path' to recover a specific write/edit payload.",
-		"Use session_search query 'call:<toolCallId>' to recover a persisted tool-result body by the call: address on sentinel receipts.",
+		"Use session_search query 'call:<toolCallId>' to recover a persisted tool-result body by the call: address on pair receipts.",
 		"Use session_search with a text or regex query to find earlier conversation or tool results; multi-word queries are OR-ranked.",
 		"Do not use session_search to search the repository — use grep, find, or read for current files.",
 		"Do not use session_search as a memory-id lookup. It searches the session transcript, not compacted observation or reflection ids.",

@@ -540,14 +540,14 @@ describe("Ledger visual companion", () => {
 		const state = join(victim, "state");
 		mkdirSync(state);
 		writeFileSync(join(victim, "keep.txt"), "keep\n");
-		writeFileSync(join(state, "server-info"), "sentinel\n");
+		writeFileSync(join(state, "server-info"), "pair\n");
 		symlinkSync(join(victim, "keep.txt"), join(state, "server-stopped"));
 		const escaped = `${prefix}/../${basename(victim)}`;
 		const stopped = spawnSync("bash", [join(scripts, "stop-server.sh"), escaped], { encoding: "utf8" });
 		expect(stopped.status).toBe(1);
 		expect(stopped.stdout).toContain("session_dir must be an existing direct");
 		expect(readFileSync(join(victim, "keep.txt"), "utf8")).toBe("keep\n");
-		expect(readFileSync(join(state, "server-info"), "utf8")).toBe("sentinel\n");
+		expect(readFileSync(join(state, "server-info"), "utf8")).toBe("pair\n");
 	});
 
 	it("rejects plaintext non-loopback bind and display hosts", () => {

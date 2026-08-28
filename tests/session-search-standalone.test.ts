@@ -16,7 +16,7 @@ describe("standalone session_search extension", () => {
 		delete process.env.PI_CODING_AGENT_DIR;
 	});
 
-	it("registers session_search without observational memory or a compact hook", async () => {
+	it("registers session_search without Pair memory or a compact hook", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-session-search-standalone-"));
 		directories.push(root);
 		process.env.PI_CODING_AGENT_DIR = root;

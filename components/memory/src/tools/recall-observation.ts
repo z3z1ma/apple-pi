@@ -552,7 +552,7 @@ export const recallObservationTool = defineTool({
 	label: "Memory source",
 	description:
 		"Recover the original session entries behind a compacted observation or reflection. " +
-		"Requires a specific 12-character lowercase hex id from compacted memory, /om:view, or a previous memory_source result. " +
+		"Requires a specific 12-character lowercase hex id from compacted memory, /pair memory, or a previous memory_source result. " +
 		"Use when a compressed memory claim is important and you need exact wording, paths, commands, or provenance before acting. " +
 		"This is not search and not session transcript browsing.",
 	promptSnippet:
@@ -569,7 +569,7 @@ export const recallObservationTool = defineTool({
 		id: Type.String({
 			pattern: "^[a-f0-9]{12}$",
 			description:
-				"12-character lowercase hex observation or reflection id shown in compacted memory, /om:view, or a previous memory_source result. Must be a specific id; this tool does not search by topic.",
+				"12-character lowercase hex observation or reflection id shown in compacted memory, /pair memory, or a previous memory_source result. Must be a specific id; this tool does not search by topic.",
 		}),
 	}),
 	renderCall(args) {

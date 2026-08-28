@@ -401,7 +401,7 @@ Answer the task.
 					description: "Incompatible continuation",
 					subagent_type: "tool-test",
 					resume: agentId,
-					sentinel: true,
+					pair: true,
 					inherit_context: false,
 					isolated: false,
 					run_in_background: false,
@@ -801,7 +801,7 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
-	it("runs internal Advisor adjudication from harness-assembled context with no recursive Sentinel", async () => {
+	it("runs internal Advisor adjudication from harness-assembled context with no recursive Pair", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({
@@ -896,7 +896,7 @@ RELOADED ROLE MUST NOT RUN.
 			const context = await buildConsultationContext({
 				pi,
 				ctx,
-				source: "sentinel",
+				source: "pair",
 				trajectorySequence: ctx.sessionManager.getBranch().length,
 				hypothesis: {
 					severity: "concern",
@@ -1007,17 +1007,17 @@ RELOADED ROLE MUST NOT RUN.
 		expect(requests[1]).toContain("latest-handoff");
 	}, 30_000);
 
-	it("loads the sentinel sidecar only when requested", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-sentinel-scope-"));
+	it("loads the pair sidecar only when requested", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-pair-scope-"));
 		temporaryDirectories.push(cwd);
-		const extensionPath = join(cwd, "pi-sentinel.ts");
+		const extensionPath = join(cwd, "pi-pair.ts");
 		writeFileSync(
 			extensionPath,
 			`
-export default function sentinelMarker(pi) {
+export default function pairMarker(pi) {
 	pi.registerTool({
-		name: "child_sentinel_marker",
-		label: "child_sentinel_marker",
+		name: "child_pair_marker",
+		label: "child_pair_marker",
 		description: "marker",
 		parameters: { type: "object", properties: {}, additionalProperties: false },
 		execute: async () => ({ content: [{ type: "text", text: "marker" }] }),
@@ -1027,25 +1027,25 @@ export default function sentinelMarker(pi) {
 		);
 		const faux = registerFauxProvider({
 			provider: "faux",
-			models: [{ id: "faux-sentinel-scope", contextWindow: 200_000 }],
+			models: [{ id: "faux-pair-scope", contextWindow: 200_000 }],
 		});
 		fauxProviders.push(faux);
 		faux.setResponses([
-			() => fauxAssistantMessage([fauxText("SENTINEL-OFF")]),
-			() => fauxAssistantMessage([fauxText("SENTINEL-ON")]),
-			() => fauxAssistantMessage([fauxText("SENTINEL-UNTRUSTED")]),
+			() => fauxAssistantMessage([fauxText("PAIR-OFF")]),
+			() => fauxAssistantMessage([fauxText("PAIR-ON")]),
+			() => fauxAssistantMessage([fauxText("PAIR-UNTRUSTED")]),
 		]);
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
 
-		const run = async (sentinel: boolean, projectTrusted = true) => {
+		const run = async (pair: boolean, projectTrusted = true) => {
 			registerAgents(
 				new Map<string, AgentConfig>([
 					[
-						"sentinel-scope",
+						"pair-scope",
 						{
-							name: "sentinel-scope",
-							description: "sentinel scope test",
+							name: "pair-scope",
+							description: "pair scope test",
 							builtinToolNames: ["read"],
 							extensions: [extensionPath],
 							skills: false,
@@ -1067,12 +1067,12 @@ export default function sentinelMarker(pi) {
 					sessionManager: { getSessionFile: () => undefined },
 					isProjectTrusted: () => projectTrusted,
 				} as any,
-				"sentinel-scope",
+				"pair-scope",
 				"answer",
 				{
 					pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
 					model,
-					sentinel,
+					pair,
 					onSessionCreated: (session) => {
 						tools = session.getAllTools().map((tool) => tool.name);
 					},
@@ -1084,14 +1084,14 @@ export default function sentinelMarker(pi) {
 		};
 
 		const off = await run(false);
-		expect(off.tools).not.toContain("child_sentinel_marker");
-		expect(off.systemPrompt).not.toContain("<sentinel-protocol>");
+		expect(off.tools).not.toContain("child_pair_marker");
+		expect(off.systemPrompt).not.toContain("<pair-protocol>");
 		const on = await run(true);
-		expect(on.tools).not.toContain("child_sentinel_marker");
-		expect(on.systemPrompt).toContain("<sentinel-protocol>");
+		expect(on.tools).not.toContain("child_pair_marker");
+		expect(on.systemPrompt).toContain("<pair-protocol>");
 		const untrusted = await run(true, false);
-		expect(untrusted.tools).not.toContain("child_sentinel_marker");
-		expect(untrusted.systemPrompt).toContain("<sentinel-protocol>");
+		expect(untrusted.tools).not.toContain("child_pair_marker");
+		expect(untrusted.systemPrompt).toContain("<pair-protocol>");
 	}, 30_000);
 
 	it("does not load a custom extensions path and keeps pi_exec out of child sessions", async () => {
@@ -1188,7 +1188,7 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("persists a child session with session_search and without observational memory", async () => {
+	it("persists a child session with session_search and without Pair memory", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
 

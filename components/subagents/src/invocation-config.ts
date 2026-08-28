@@ -4,16 +4,13 @@ interface AgentInvocationParams {
 	run_in_background?: boolean;
 	isolated?: boolean;
 	inherit_context?: boolean;
-	sentinel?: boolean;
+	pair?: boolean;
 	system_prompt?: string;
 }
 
 /** An explicit invocation value overrides the agent definition default. */
-export function resolveAgentSentinel(
-	agentConfig: AgentConfig | undefined,
-	requestedSentinel: boolean | undefined,
-): boolean {
-	return requestedSentinel ?? agentConfig?.sentinel ?? agentConfig?.name.toLowerCase() === "implement";
+export function resolveAgentPair(agentConfig: AgentConfig | undefined, requestedPair: boolean | undefined): boolean {
+	return requestedPair ?? agentConfig?.pair ?? agentConfig?.name.toLowerCase() === "implement";
 }
 
 export function resolveAgentInvocationConfig(
@@ -24,7 +21,7 @@ export function resolveAgentInvocationConfig(
 	/** Invocation-level guidance appended after the selected definition. */
 	systemPrompt?: string;
 	inheritContext: boolean;
-	sentinel: boolean;
+	pair: boolean;
 	runInBackground: boolean;
 	isolated: boolean;
 } {
@@ -33,7 +30,7 @@ export function resolveAgentInvocationConfig(
 		maxTurns: agentConfig?.maxTurns,
 		systemPrompt: params.system_prompt?.trim() || undefined,
 		inheritContext: params.inherit_context === true,
-		sentinel: resolveAgentSentinel(agentConfig, params.sentinel),
+		pair: resolveAgentPair(agentConfig, params.pair),
 		runInBackground: params.run_in_background === true,
 		isolated: params.isolated === true,
 	};

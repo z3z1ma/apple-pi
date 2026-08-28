@@ -182,7 +182,7 @@ export function buildInvocationTags(invocation: AgentInvocation | undefined): { 
 	if (invocation.thinking) tags.push(`thinking: ${invocation.thinking}`);
 	if (invocation.isolated) tags.push("isolated");
 	if (invocation.inheritContext) tags.push("parent context");
-	if (invocation.sentinel) tags.push("sentinel");
+	if (invocation.pair) tags.push("pair");
 	if (invocation.runInBackground) tags.push("background");
 	if (invocation.maxTurns != null) tags.push(`max turns: ${invocation.maxTurns}`);
 	return { modelName: invocation.modelName, tags };

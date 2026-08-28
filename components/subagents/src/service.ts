@@ -81,7 +81,7 @@ export interface ManagedBackgroundRequest {
 
 export interface ManagedConsultationRequest {
 	context: ConsultationContext;
-	/** Optional explicit inference override. Sentinel consultations use Advisor's configured deep profile. */
+	/** Optional explicit inference override. Pair consultations use Advisor's configured deep profile. */
 	profile?: string;
 	signal?: AbortSignal;
 	onActivity?: (activity: HarnessBoundedActivity) => void;
@@ -97,7 +97,7 @@ export interface ManagedSubagentService {
 	runFresh(ctx: ExtensionContext, request: ManagedAgentRequest): Promise<AgentRecord>;
 	/** Start one ordinary public background AgentRecord through the owned manager. */
 	startBackground(ctx: ExtensionContext, request: ManagedBackgroundRequest): ManagedBackgroundRun;
-	/** Run one hidden, read-only Advisor adjudication with Sentinel and nesting disabled. */
+	/** Run one hidden, read-only Advisor adjudication with Pair and nesting disabled. */
 	runConsultation(ctx: ExtensionContext, request: ManagedConsultationRequest): Promise<AdvisorConsultationResult>;
 	abort(agentId: string): boolean;
 }

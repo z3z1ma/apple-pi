@@ -30,8 +30,6 @@ function captureHandler(
 			passive: args.passive ?? false,
 		},
 		compactInFlight: args.compactInFlight ?? false,
-		observerPromise: new Promise(() => {}),
-		reflectDropPromise: new Promise(() => {}),
 	};
 	registerCompactionTrigger(pi as any, runtime as any, {
 		hostCompactionPending: args.hostCompactionPending,
@@ -63,7 +61,7 @@ function fakeCtx(branches: TestEntry[][], overrides: Record<string, unknown> = {
 const dueBranch = [textCustomMessage("raw-1", "aaaaaaaaaaaa")]; // 3 tokens
 const belowBranch = [textCustomMessage("raw-1", "aaaa")]; // 1 token
 
-describe("V3 compaction trigger", () => {
+describe("Pair memory compaction trigger", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -93,7 +91,7 @@ describe("V3 compaction trigger", () => {
 
 		expect(ctx.compact).toHaveBeenCalledTimes(1);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Observational memory: compaction threshold reached (~3 estimated source tokens); triggering compaction",
+			"Pair memory: compaction threshold reached (~3 estimated source tokens); triggering compaction",
 			"info",
 		);
 	});
@@ -152,7 +150,7 @@ describe("V3 compaction trigger", () => {
 
 		expect(compact).toHaveBeenCalledTimes(1);
 		expect(runtime.compactInFlight).toBe(false);
-		expect(ctx.ui.notify).not.toHaveBeenCalledWith("Observational memory: Already compacted", "error");
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith("Pair memory: Already compacted", "error");
 	});
 
 	it("skips when compaction is already in flight", async () => {
@@ -229,16 +227,6 @@ describe("V3 compaction trigger", () => {
 		expect(runtime.compactInFlight).toBe(false);
 	});
 
-	it("does not await observer or reflect/drop promises before compacting", async () => {
-		const { handler } = captureHandler({ compactAfterTokens: 3 });
-		const ctx = fakeCtx([dueBranch]);
-
-		handler(agentSettled(), ctx);
-		await vi.runAllTimersAsync();
-
-		expect(ctx.compact).toHaveBeenCalledTimes(1);
-	});
-
 	it("defers compaction if context is no longer idle", async () => {
 		const { handler, runtime } = captureHandler({ compactAfterTokens: 3 });
 		const ctx = fakeCtx([dueBranch], { isIdle: vi.fn(() => false) });
@@ -249,7 +237,7 @@ describe("V3 compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 		expect(runtime.compactInFlight).toBe(false);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Observational memory: compaction deferred — agent became busy before compaction",
+			"Pair memory: compaction deferred — agent became busy before compaction",
 			"info",
 		);
 	});
@@ -282,7 +270,7 @@ describe("V3 compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 		expect(runtime.compactInFlight).toBe(false);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Observational memory: compaction skipped — another compaction already ran before deferred compaction",
+			"Pair memory: compaction skipped — another compaction already ran before deferred compaction",
 			"info",
 		);
 	});

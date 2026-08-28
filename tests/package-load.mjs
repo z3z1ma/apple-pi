@@ -20,7 +20,7 @@ try {
 	const eventBus = createEventBus();
 	const result = await loadExtensions(
 		[
-			"extensions/pi-sentinel.ts",
+			"extensions/pi-pair.ts",
 			"extensions/ask-user-question.ts",
 			"extensions/backlog.ts",
 			"extensions/context.ts",
@@ -115,9 +115,7 @@ try {
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
 	for (const command of [
-		"sentinel",
-		"om:status",
-		"om:view",
+		"pair",
 		"mcp",
 		"mcp-auth",
 		"agents",
@@ -264,7 +262,7 @@ try {
 	assert("profile" in agentProperties, "Agent schema omits the inference profile selector");
 	assert.deepEqual(
 		agentProperties.profile.anyOf.map((entry) => entry.const),
-		["quick", "balanced", "sentinel", "deep", "coding", "visual-engineering", "background"],
+		["quick", "balanced", "pair", "deep", "coding", "visual-engineering", "background"],
 	);
 	assert("system_prompt" in agentProperties, "Agent schema omits invocation-level system guidance");
 	assert.match(
@@ -272,10 +270,7 @@ try {
 		/appended after the selected definition and preloaded skills/,
 	);
 	assert.match(agentProperties.system_prompt.description, /cannot change capabilities/);
-	assert(
-		!agentTool.definition.parameters.required.includes("sentinel"),
-		"sentinel must remain optional for config defaults",
-	);
+	assert(!agentTool.definition.parameters.required.includes("pair"), "pair must remain optional for config defaults");
 	const resultTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "get_subagent_result");

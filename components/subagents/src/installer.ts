@@ -8,7 +8,7 @@ import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
-import { bindPrimaryRecallTools } from "../../sentinel/src/recall.js";
+import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { ADVISOR_CONSULTATION_OVERLAY, renderConsultationContext, type AdvisorFinding } from "./consultation.js";
@@ -288,7 +288,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				systemPrompt: invocation.systemPrompt,
 				isolated: invocation.isolated,
 				inheritContext: false,
-				sentinel: invocation.sentinel,
+				pair: invocation.pair,
 				thinkingLevel: resolved.thinkingLevel,
 				cwd: request.cwd,
 				isBackground: true,
@@ -308,7 +308,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					maxTurns,
 					isolated: invocation.isolated,
 					inheritContext: false,
-					sentinel: invocation.sentinel,
+					pair: invocation.pair,
 					runInBackground: true,
 				},
 			});
@@ -330,7 +330,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (!configured) throw new Error('Unknown or disabled agent type: "Advisor"');
 			const agentConfig = {
 				...configured,
-				sentinel: false,
+				pair: false,
 				allowedSubagents: undefined,
 				persistSession: false,
 			};
@@ -478,7 +478,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						maxTurns: request.maxTurns,
 						isolated: false,
 						inheritContext: false,
-						sentinel: false,
+						pair: false,
 						runInBackground: false,
 					},
 					onToolActivity: tracker.callbacks.onToolActivity,
@@ -661,7 +661,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			`The parent session is a senior engineer who may implement. In the live <${TEAM_SYSTEM_PROMPT_TAG}> block, choose a teammate by its own description and use its configured inference profile unless the invocation needs an explicit profile override. If no teammate fits, keep the work in the parent session.`,
 			"Do not launch overlapping writers. Do not retry an unchanged rejected task.",
 			`Use the Agent tool for collaboration and pi_exec agents.run for program graphs. Agent subagent_type and agents.run type select a teammate; profile selects an available inference profile. Pair profile with Agent's system_prompt or agents.run's systemPrompt for dynamic specialization. Additional guidance cannot grant capabilities.`,
-			"The persistent Sentinel reviews the root session. Implement runs its supervision sidecar by default; set sentinel false to explicitly opt out for one new session. Other types follow their agent-definition Sentinel default.",
+			"The persistent Pair reviews the root session. Implement runs its supervision sidecar by default; set pair false to explicitly opt out for one new session. Other types follow their agent-definition Pair default.",
 			"Agent definitions and trusted settings own safety ceilings. Use stop_subagent if a live run should be terminated.",
 		],
 		parameters: Type.Object({
@@ -686,10 +686,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				default: false,
 				description: "Include the full parent conversation before the initial task prompt.",
 			}),
-			sentinel: Type.Optional(
+			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's Sentinel default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's Pair default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
@@ -703,19 +703,19 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				if (!existing || existing.parentAgentId || existing.internalOwner)
 					return textResult(`Agent not found: ${params.resume}`, undefined, true);
 				const requestedInheritance = params.inherit_context === true;
-				const requestedSentinel = params.sentinel ?? existing.invocation?.sentinel === true;
+				const requestedPair = params.pair ?? existing.invocation?.pair === true;
 				const requestedIsolation = params.isolated === true;
 				const requestedProfile = params.profile ?? existing.invocation?.profile;
 				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
 				if (
 					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
-					requestedSentinel !== (existing.invocation?.sentinel === true) ||
+					requestedPair !== (existing.invocation?.pair === true) ||
 					requestedIsolation !== (existing.invocation?.isolated === true) ||
 					requestedProfile !== existing.invocation?.profile ||
 					requestedSystemPrompt !== existing.invocation?.systemPrompt
 				) {
 					return textResult(
-						"profile, system_prompt, inherit_context, sentinel, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
+						"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
 						undefined,
 						true,
 					);
@@ -810,7 +810,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
-				sentinel: invocation.sentinel,
+				pair: invocation.pair,
 				runInBackground: invocation.runInBackground,
 			};
 			const options = {
@@ -822,7 +822,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				maxTurns: effectiveMaxTurns,
 				isolated: invocation.isolated,
 				inheritContext: invocation.inheritContext,
-				sentinel: invocation.sentinel,
+				pair: invocation.pair,
 				thinkingLevel: resolvedAgentProfile.thinkingLevel,
 				cwd: params.cwd,
 				invocation: invocationDetails,

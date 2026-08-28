@@ -18,7 +18,7 @@ Absence is often an architectural choice, not unfinished work. Consult this tabl
 Additional boundaries:
 
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
-- **One compaction hook.** Observational memory does not register a compact hook. It appends its packet on the `context` event after any compaction entry.
+- **One compaction hook.** Pair memory does not register a compact hook. It appends its packet on the `context` event after any compaction entry.
 - **Session ledger is authoritative.** Compaction projects memory but does not relocate it.
 - **Three-layer work authority.** Backlog parks session-local ideas, to-dos track active ephemeral execution, and Ledger owns durable intent, acceptance, decisions, and evidence. Backlog promotion creates the destination before `backlog_take`; to-do promotion creates the Ledger task before deleting the source. To-do completion is never Ledger acceptance evidence.
 - **Backlog is parked session state, not a second task system.** It follows Pi session branches. The model may take an item when it begins active work; promotion into Ledger still requires an explicit human/model decision and successful task creation. Human management owns editing, arbitrary deletion, and ordering. The backlog is not stored as a repository file.

@@ -222,7 +222,7 @@ export function fakeSessionContext(initialEntries: TestEntry[] = []) {
 
 export function fakeCompactionContext(entries: TestEntry[]) {
 	return {
-		cwd: "/tmp/pi-observational-memory-test",
+		cwd: "/tmp/pi-pair-memory-test",
 		sessionManager: {
 			getBranch: () => entries,
 		},

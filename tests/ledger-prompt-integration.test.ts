@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadSystemPrompt as loadSentinelSystemPrompt } from "../components/sentinel/src/config.js";
+import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
 import {
 	appendLedgerSystemPrompt,
 	LEDGER_SYSTEM_PROMPT,
@@ -17,7 +17,7 @@ import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { CODEX_FAST_EXTENSION_PATH } from "../extensions/codex-fast.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
-import { SENTINEL_EXTENSION_PATH } from "../extensions/pi-sentinel.js";
+import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
 import { WORKFLOW_EXTENSION_PATH } from "../extensions/workflow.js";
@@ -107,8 +107,8 @@ describe("ledger system prompt distribution", () => {
 		]);
 	});
 
-	it("does not copy the contract into the sentinel prompt", () => {
-		expect(loadSentinelSystemPrompt(process.cwd(), false)).not.toContain(marker);
+	it("does not copy the contract into the pair prompt", () => {
+		expect(loadPairSystemPrompt(process.cwd(), false)).not.toContain(marker);
 	});
 
 	it("loads children with fast mode, the overflow guard, ledger, session_search, and MCP", () => {
@@ -131,7 +131,7 @@ describe("ledger system prompt distribution", () => {
 		});
 	});
 
-	it("adds the sentinel sidecar only when requested", () => {
+	it("adds the pair sidecar only when requested", () => {
 		expect(childSessionExtensions(true)).toEqual({
 			noExtensions: true,
 			additionalExtensionPaths: [
@@ -140,7 +140,7 @@ describe("ledger system prompt distribution", () => {
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				MCP_EXTENSION_PATH,
-				SENTINEL_EXTENSION_PATH,
+				PAIR_EXTENSION_PATH,
 			],
 		});
 	});

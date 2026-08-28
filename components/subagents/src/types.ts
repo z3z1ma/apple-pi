@@ -23,8 +23,8 @@ export interface AgentConfig {
 	maxTurns?: number;
 	persistSession?: boolean;
 	sessionDir?: string;
-	/** Default Sentinel sidecar choice; an explicit invocation boolean overrides it. */
-	sentinel?: boolean;
+	/** Default Pair sidecar choice; an explicit invocation boolean overrides it. */
+	pair?: boolean;
 	allowedSubagents?: "all" | string[];
 	systemPrompt: string;
 	promptMode: "replace" | "append";
@@ -92,8 +92,8 @@ export interface AgentInvocation {
 	isolated?: boolean;
 	/** Whether this invocation received the parent conversation. */
 	inheritContext: boolean;
-	/** Whether this invocation enabled the continuous sentinel. */
-	sentinel: boolean;
+	/** Whether this invocation enabled the continuous pair. */
+	pair: boolean;
 	runInBackground?: boolean;
 }
 

@@ -46,7 +46,7 @@ describe("sidecar usage records", () => {
 
 	it("does not write when no session is bound", () => {
 		recordSidecarUsage({
-			agent: "sentinel",
+			agent: "pair",
 			trigger: "turn_end",
 			status: "stop",
 			provider: "anthropic",
@@ -58,7 +58,7 @@ describe("sidecar usage records", () => {
 	it("writes a session-scoped allowlisted record", () => {
 		withSidecarUsageContext({ sessionId: "session-123" }, () => {
 			recordSidecarUsage({
-				agent: "sentinel",
+				agent: "pair",
 				trigger: "turn_end",
 				status: "stop",
 				provider: "anthropic",
@@ -82,7 +82,7 @@ describe("sidecar usage records", () => {
 		expect(Object.keys(row).sort()).toEqual([...SIDECAR_USAGE_RECORD_KEYS].sort());
 		expect(row).toMatchObject({
 			sessionId: "session-123",
-			agent: "sentinel",
+			agent: "pair",
 			trigger: "turn_end",
 			status: "stop",
 			provider: "anthropic",
@@ -102,7 +102,7 @@ describe("sidecar usage records", () => {
 
 	it("falls back to the unscoped file without a usable session id", () => {
 		withSidecarUsageContext({}, () => {
-			recordSidecarUsage({ agent: "observer", trigger: "observeAfterTokens", status: "ok" });
+			recordSidecarUsage({ agent: "pair", trigger: "memory_maintenance", status: "ok" });
 		});
 		expect(existsSync(join(agentDir, sidecarUsageRelativePath(undefined)))).toBe(true);
 	});
@@ -112,7 +112,7 @@ describe("sidecar usage records", () => {
 		writeFileSync(mock.agentDir, "not-a-directory");
 		expect(() =>
 			withSidecarUsageContext({ sessionId: "session-123" }, () => {
-				recordSidecarUsage({ agent: "dropper", trigger: "observationsPoolTargetTokens", status: "error" });
+				recordSidecarUsage({ agent: "advisor", trigger: "consultation", status: "error" });
 			}),
 		).not.toThrow();
 	});
@@ -120,8 +120,8 @@ describe("sidecar usage records", () => {
 	it("records a zero-counter finish when no assistant message arrived", () => {
 		withSidecarUsageContext({ sessionId: "session-empty", threshold: 10_000 }, () => {
 			const tracker = startSidecarUsageTracker({
-				agent: "observer",
-				trigger: "observeAfterTokens",
+				agent: "pair",
+				trigger: "memory_maintenance",
 				provider: "openai-codex",
 				model: "gpt-5.6-luna",
 			});
@@ -129,8 +129,8 @@ describe("sidecar usage records", () => {
 		});
 		const [row] = readJsonLines(join(agentDir, sidecarUsageRelativePath("session-empty")));
 		expect(row).toMatchObject({
-			agent: "observer",
-			trigger: "observeAfterTokens",
+			agent: "pair",
+			trigger: "memory_maintenance",
 			status: "aborted",
 			input: 0,
 			cacheRead: 0,
@@ -144,7 +144,7 @@ describe("sidecar usage records", () => {
 	it("records each assistant message and skips finish after a real call", () => {
 		withSidecarUsageContext({ sessionId: "session-calls" }, () => {
 			const tracker = startSidecarUsageTracker({
-				agent: "sentinel",
+				agent: "pair",
 				trigger: "turn_end",
 				provider: "xai",
 				model: "grok-4.6",
@@ -181,7 +181,7 @@ describe("sidecar usage records", () => {
 	it("aggregates into the baseline table columns", () => {
 		const records = [
 			buildSidecarUsageRecord({
-				agent: "sentinel",
+				agent: "pair",
 				trigger: "turn_end",
 				status: "stop",
 				provider: "anthropic",
@@ -192,8 +192,8 @@ describe("sidecar usage records", () => {
 				cost: 1.5,
 			}),
 			buildSidecarUsageRecord({
-				agent: "observer",
-				trigger: "observeAfterTokens",
+				agent: "advisor",
+				trigger: "consultation",
 				status: "stop",
 				provider: "openai-codex",
 				model: "gpt-5.6-luna",
@@ -203,7 +203,7 @@ describe("sidecar usage records", () => {
 				cost: 0.01,
 			}),
 			buildSidecarUsageRecord({
-				agent: "sentinel",
+				agent: "pair",
 				trigger: "turn_end_replay",
 				status: "length",
 				provider: "anthropic",

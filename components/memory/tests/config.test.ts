@@ -16,7 +16,7 @@ function writeJson(path: string, value: unknown) {
 	writeFileSync(path, JSON.stringify(value), "utf-8");
 }
 
-describe("V3 config", () => {
+describe("Pair memory config", () => {
 	let root: string;
 	let cwd: string;
 	let agentDir: string;
@@ -34,61 +34,48 @@ describe("V3 config", () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	it("uses V3 defaults", () => {
+	it("uses Pair memory defaults", () => {
 		expect(DEFAULTS).toEqual({
-			observeAfterTokens: 20000,
-			reflectAfterTokens: 20000,
+			memoryAfterTokens: 20000,
 			compactAfterTokens: 81000,
 			compactAfterTokensMode: "calibrated",
 			compactAfterTokensRatio: 0.68,
 			observationsPoolMaxTokens: 20000,
 			observationsPoolTargetTokens: 10000,
-			agentMaxTurns: 24,
-			showWorkerNotifications: true,
 			passive: false,
-			debugLog: false,
 		});
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
 	});
 
-	it("merges global, project, and env V3 settings in order", () => {
+	it("merges global, project, and env Pair settings in order", () => {
 		writeJson(join(agentDir, "settings.json"), {
-			"observational-memory": {
-				observeAfterTokens: 10,
-				reflectAfterTokens: 20,
+			pair: {
+				memoryAfterTokens: 10,
 				compactAfterTokens: 30,
 				observationsPoolMaxTokens: 40,
 				observationsPoolTargetTokens: 15,
-				agentMaxTurns: 5,
-				showWorkerNotifications: true,
 				passive: false,
-				debugLog: true,
 			},
 		});
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
-				observeAfterTokens: 100,
-				showWorkerNotifications: false,
+			pair: {
+				memoryAfterTokens: 100,
 			},
 		});
 
-		expect(loadConfig(cwd, { PI_OBSERVATIONAL_MEMORY_PASSIVE: "true" })).toMatchObject({
-			observeAfterTokens: 100,
-			reflectAfterTokens: 20,
+		expect(loadConfig(cwd, { PI_PAIR_MEMORY_PASSIVE: "true" })).toMatchObject({
+			memoryAfterTokens: 100,
 			compactAfterTokens: 30,
 			observationsPoolMaxTokens: 40,
 			observationsPoolTargetTokens: 15,
-			agentMaxTurns: 5,
-			showWorkerNotifications: false,
 			passive: true,
-			debugLog: true,
 		});
 	});
 
-	it("ignores invalid V3 values", () => {
+	it("ignores invalid Pair values", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
-				observeAfterTokens: -1,
+			pair: {
+				memoryAfterTokens: -1,
 				reflectAfterTokens: 0,
 				compactAfterTokens: 1.5,
 				observationsPoolMaxTokens: "20000",
@@ -105,7 +92,7 @@ describe("V3 config", () => {
 
 	it("derives observation pool target from the final max when omitted", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
+			pair: {
 				observationsPoolMaxTokens: 40,
 			},
 		});
@@ -118,13 +105,13 @@ describe("V3 config", () => {
 
 	it("falls back to derived target when explicit target is invalid for the final max", () => {
 		writeJson(join(agentDir, "settings.json"), {
-			"observational-memory": {
+			pair: {
 				observationsPoolMaxTokens: 100,
 				observationsPoolTargetTokens: 80,
 			},
 		});
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			"observational-memory": {
+			pair: {
 				observationsPoolMaxTokens: 40,
 			},
 		});
@@ -136,15 +123,15 @@ describe("V3 config", () => {
 	});
 
 	it("parses passive env override", () => {
-		expect(readEnvConfig({ PI_OBSERVATIONAL_MEMORY_PASSIVE: "on" })).toEqual({ passive: true });
-		expect(readEnvConfig({ PI_OBSERVATIONAL_MEMORY_PASSIVE: "0" })).toEqual({ passive: false });
-		expect(readEnvConfig({ PI_OBSERVATIONAL_MEMORY_PASSIVE: "maybe" })).toEqual({});
+		expect(readEnvConfig({ PI_PAIR_MEMORY_PASSIVE: "on" })).toEqual({ passive: true });
+		expect(readEnvConfig({ PI_PAIR_MEMORY_PASSIVE: "0" })).toEqual({ passive: false });
+		expect(readEnvConfig({ PI_PAIR_MEMORY_PASSIVE: "maybe" })).toEqual({});
 	});
 
 	describe("compactAfterTokens ratio mode", () => {
 		it("accepts compactAfterTokensMode and compactAfterTokensRatio", () => {
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensMode: "ratio",
 					compactAfterTokensRatio: 0.5,
 				},
@@ -158,7 +145,7 @@ describe("V3 config", () => {
 
 		it("rejects invalid mode values and falls back to default calibrated", () => {
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensMode: "auto",
 				},
 			});
@@ -168,28 +155,28 @@ describe("V3 config", () => {
 
 		it("rejects ratio outside (0, 1) and falls back to default", () => {
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensRatio: 0,
 				},
 			});
 			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
 
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensRatio: 1,
 				},
 			});
 			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
 
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensRatio: 1.5,
 				},
 			});
 			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
 
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensRatio: -0.2,
 				},
 			});
@@ -198,7 +185,7 @@ describe("V3 config", () => {
 
 		it("rejects non-numeric ratio and falls back to default", () => {
 			writeJson(join(cwd, ".pi", "settings.json"), {
-				"observational-memory": {
+				pair: {
 					compactAfterTokensRatio: "0.5",
 				},
 			});

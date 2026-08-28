@@ -16,7 +16,7 @@ import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
 import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
-import { SENTINEL_EXTENSION_PATH } from "../extensions/pi-sentinel.js";
+import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import runtime, {
 	aggregateUsage,
 	deriveProgramEnvelope,
@@ -578,7 +578,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(contract).toContain("type?: string");
 		expect(contract).toContain("profile?: InferenceProfile");
 		expect(contract).toContain(
-			'type InferenceProfile = "quick"|"balanced"|"sentinel"|"deep"|"coding"|"visual-engineering"|"background"',
+			'type InferenceProfile = "quick"|"balanced"|"pair"|"deep"|"coding"|"visual-engineering"|"background"',
 		);
 		expect(contract).toContain(
 			"live <subagent-team> block lists callable teammates with name, inference profile, and description",
@@ -741,23 +741,23 @@ describe("pi_exec agent binding", () => {
 	});
 
 	it("parses a catalog type and keeps untyped workers generic", () => {
-		expect(parseAgentRequest({ task: "map auth", type: "  Explore  ", profile: "deep", sentinel: true })).toEqual({
+		expect(parseAgentRequest({ task: "map auth", type: "  Explore  ", profile: "deep", pair: true })).toEqual({
 			task: "map auth",
 			type: "Explore",
 			profile: "deep",
-			sentinel: true,
+			pair: true,
 		});
-		expect(agentOperationArgs({ task: "map auth", type: "Explore", sentinel: false })).toEqual({
+		expect(agentOperationArgs({ task: "map auth", type: "Explore", pair: false })).toEqual({
 			task: "map auth",
 			type: "Explore",
-			sentinel: false,
+			pair: false,
 		});
 	});
 
-	it("rejects empty tasks, padded profiles, and invalid sentinel values", () => {
+	it("rejects empty tasks, padded profiles, and invalid pair values", () => {
 		expect(() => parseAgentRequest({ task: "   " })).toThrow(/non-empty task/);
 		expect(() => parseAgentRequest({ task: "inspect", profile: " deep" })).toThrow(/unpadded/);
-		expect(() => parseAgentRequest({ task: "inspect", sentinel: "on" })).toThrow(/sentinel must be a boolean/);
+		expect(() => parseAgentRequest({ task: "inspect", pair: "on" })).toThrow(/pair must be a boolean/);
 	});
 
 	it("resolves catalog defaults and explicit profile overrides for agents.run", async () => {
@@ -789,7 +789,7 @@ describe("pi_exec agent binding", () => {
 		};
 		try {
 			const untyped = await resolveExecWorker({ task: "inspect" }, { cwd });
-			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"], sentinel: false });
+			expect(untyped).toEqual({ tools: ["read", "grep", "find", "ls"], pair: false });
 
 			const custom = await resolveExecWorker(
 				{ task: "review this diff", systemPrompt: "Focus on API boundaries." },
@@ -816,7 +816,7 @@ describe("pi_exec agent binding", () => {
 
 			const implement = await resolveExecWorker({ task: "apply the spec", type: "Implement" }, options);
 			expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
-			expect(implement.sentinel).toBe(true);
+			expect(implement.pair).toBe(true);
 			expect(implement.model).toBe("xai/coder");
 			expect(implement.thinking).toBe("high");
 
@@ -828,8 +828,8 @@ describe("pi_exec agent binding", () => {
 			expect(overridden.thinking).toBe("xhigh");
 			expect(overridden.model).toBe("anthropic/deep");
 
-			const optedOut = await resolveExecWorker({ task: "apply the spec", type: "Implement", sentinel: false }, options);
-			expect(optedOut.sentinel).toBe(false);
+			const optedOut = await resolveExecWorker({ task: "apply the spec", type: "Implement", pair: false }, options);
+			expect(optedOut.pair).toBe(false);
 
 			await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, options)).rejects.toThrow(
 				/Unknown or disabled agent type/,
@@ -920,7 +920,7 @@ describe("pi_exec agent binding", () => {
 		expect(resolveStructuredOutput(undefined, { id: 7 })).toEqual({});
 	});
 
-	it("injects Sentinel for an enabled worker and preserves explicit extension isolation", () => {
+	it("injects Pair for an enabled worker and preserves explicit extension isolation", () => {
 		const schema = {
 			type: "object",
 			properties: { id: { type: "number" } },
@@ -929,7 +929,7 @@ describe("pi_exec agent binding", () => {
 		};
 		const prepared = prepareAgentSpawn(
 			{ task: "apply the spec", outputSchema: schema },
-			{ tools: ["read", "edit"], projectTrusted: false, sentinel: true },
+			{ tools: ["read", "edit"], projectTrusted: false, pair: true },
 		);
 		try {
 			const toolsFlag = prepared.args.indexOf("--tools");
@@ -941,7 +941,7 @@ describe("pi_exec agent binding", () => {
 				CODEX_FAST_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
-				SENTINEL_EXTENSION_PATH,
+				PAIR_EXTENSION_PATH,
 				WORKER_RETURN_EXTENSION_PATH,
 			]);
 			expect(prepared.args.join("\0")).toContain(OUTPUT_SCHEMA_GUIDANCE);
@@ -1643,7 +1643,7 @@ return pi.read({ path: "result.txt" });
 		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(reloadedRoot);
 
-		// Auxiliary sessions such as Sentinel assemble their own tool catalogs
+		// Auxiliary sessions such as Pair assemble their own tool catalogs
 		// outside the subagent child-context marker. They must not displace the
 		// root catalog that owns pi_exec.
 		const auxiliaryRunner = Object.create(ExtensionRunner.prototype) as any;

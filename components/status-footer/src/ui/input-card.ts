@@ -25,7 +25,7 @@ import { collectUsageTotals } from "../usage.js";
 
 const SEGMENT_SEPARATOR = "  ·  ";
 const COMPACT_SEPARATOR = " · ";
-const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-sentinel", "subagents"];
+const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-pair", "subagents"];
 const FLEET_NAVIGATION_STATUS = "subagents-navigation";
 const FAST_MODE_STATUS = "fast-mode";
 
@@ -126,7 +126,7 @@ function statusColor(status: FooterStatus): ThemeColor {
 	if (/\b(?:error|failed|failure)\b/.test(text)) return "error";
 	if (status.key === "mcp-auth") return "warning";
 	if (status.key === "mcp") return /\b(?:connecting|authenticating)\b/.test(text) ? "warning" : "syntaxFunction";
-	if (status.key === "q-sentinel") return text.includes("reviewing") ? "customMessageLabel" : "muted";
+	if (status.key === "q-pair") return text.includes("reviewing") ? "customMessageLabel" : "muted";
 	if (status.key === "subagents") return /\b(?:queued|waiting|stopped)\b/.test(text) ? "warning" : "success";
 	return "muted";
 }

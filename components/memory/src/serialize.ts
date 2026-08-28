@@ -171,7 +171,7 @@ export type SourceAddressedSerializationOptions = {
 };
 
 const SOURCE_OMISSION_MARKER =
-	"\n\n[… middle omitted: source exceeds observer input budget; original source remains in the session ledger …]\n\n";
+	"\n\n[… middle omitted: source exceeds Pair memory input budget; original source remains in the session ledger …]\n\n";
 
 function truncateSourceBlockToTokenBudget(label: string, rendered: string, maxTokens: number): string | undefined {
 	const required = `${label}\n${SOURCE_OMISSION_MARKER}`;

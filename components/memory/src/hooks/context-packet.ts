@@ -45,7 +45,7 @@ export function buildMemoryContextPacket(
 }
 
 /**
- * After any compaction, append the current observational-memory packet to the
+ * After any compaction, append the current Pair memory packet to the
  * live conversation tail. Covers xAI server-side compaction, Pi default
  * summarization, and every compact-hook fallback that still writes a compaction
  * entry.

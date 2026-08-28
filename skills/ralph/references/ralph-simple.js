@@ -76,7 +76,7 @@ for (let iteration = 1; iteration <= iterations; iteration++) {
   const result = await agents.run({
     name: `ralph-${iteration}`,
     profile: "coding",
-    sentinel: true,
+    pair: true,
     tools: RALPH_TOOLS,
     systemPrompt: RALPH,
     task: `Goal:\n${goal}`,

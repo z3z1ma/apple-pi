@@ -123,7 +123,7 @@ export interface SpawnOptions {
 	retainUntilSessionEnd?: boolean;
 	isolated?: boolean;
 	inheritContext?: boolean;
-	sentinel?: boolean;
+	pair?: boolean;
 	thinkingLevel?: ThinkingLevel;
 	isBackground?: boolean;
 	/**
@@ -329,7 +329,7 @@ export class AgentManager {
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
-			sentinel: options.sentinel,
+			pair: options.pair,
 			thinkingLevel: options.thinkingLevel,
 			nested: options.parentAgentId !== undefined,
 			cwd: customCwd,

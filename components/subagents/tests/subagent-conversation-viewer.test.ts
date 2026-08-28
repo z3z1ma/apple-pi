@@ -326,8 +326,8 @@ describe("ConversationViewer", () => {
 
 		it("mock is intercepting wrapTextWithAnsi", async () => {
 			const { wrapTextWithAnsi } = await import("@earendil-works/pi-tui");
-			wrapOverride = () => ["MOCK_SENTINEL"];
-			expect(wrapTextWithAnsi("anything", 10)).toEqual(["MOCK_SENTINEL"]);
+			wrapOverride = () => ["MOCK_PAIR"];
+			expect(wrapTextWithAnsi("anything", 10)).toEqual(["MOCK_PAIR"]);
 			wrapOverride = null;
 		});
 

@@ -17,7 +17,7 @@ export const MODEL_PROFILE_THINKING_LEVELS: readonly ModelThinkingLevel[] = [
 export const INFERENCE_PROFILE_NAMES = [
 	"quick",
 	"balanced",
-	"sentinel",
+	"pair",
 	"deep",
 	"coding",
 	"visual-engineering",
@@ -42,7 +42,7 @@ export const INFERENCE_PROFILE_CATALOG: readonly InferenceProfileCatalogEntry[] 
 			"General-purpose inference intended for a broadly capable model with substantial but measured reasoning effort.",
 	},
 	{
-		profile: "sentinel",
+		profile: "pair",
 		description:
 			"Economical persistent supervision intended to track trajectories, detect concrete risk, and route rare deep consultations.",
 	},

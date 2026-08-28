@@ -21,7 +21,7 @@ it("compacts and retries the same run without sending the oversized continuation
 			join(cwd, ".pi", "settings.json"),
 			JSON.stringify({
 				compaction: { enabled: true, reserveTokens: 999, keepRecentTokens: 1 },
-				"observational-memory": { compactAfterTokens: 1 },
+				pair: { compactAfterTokens: 1 },
 			}),
 		);
 		const callsPath = join(cwd, "provider-calls.txt");

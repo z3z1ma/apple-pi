@@ -1,6 +1,6 @@
 # Review
 
-Review is an optional risk-control skill, not an automatic lifecycle gate. The root agent normally inspects bounded changes directly and already benefits from the persistent Sentinel.
+Review is an optional risk-control skill, not an automatic lifecycle gate. The root agent normally inspects bounded changes directly and already benefits from the persistent Pair.
 
 Load `/skill:review` when the operator requests an end-to-end defect-focused review. During ongoing implementation, use `review-commissioning` only when a concrete costly or hard-to-observe risk warrants an independent reviewer.
 
