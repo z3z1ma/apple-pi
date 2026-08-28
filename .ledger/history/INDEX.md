@@ -49,3 +49,7 @@
 - `.ledger/history/202608211615-implement-first-class-llm-wiki/task.md` — done — Implement a first-class LLM wiki — Design and build a packaged LLM wiki workflow with durable source provenance, compounding Markdown knowledge, safe querying, and only the supporting runtime components apple-pi actually needs.
 
 - `.ledger/history/202608212342-first-class-todo-system/task.md` — done — Build first-class to-do system — Adapt pi-tasks into an apple-pi-native task UI, persistence, model-tool, and subagent workflow integrated with existing backlog, Ledger, status, and package boundaries.
+
+- `.ledger/history/202608262359-sentinel-advisor-supervision/task.md` — done — Implement hierarchical Sentinel to Advisor supervision — Delivered one optional persistent Sentinel that escalated hard cases to Advisor; later superseded by the Pair Programmer consolidation task.
+
+- `.ledger/history/202608271751-consolidate-pair-programmer-supervision-and-memory/task.md` — done — Consolidate Pair Programmer supervision and memory — Replace Sentinel and standalone observational-memory curation with one persistent Pair Programmer that watches, keeps sourced notes, reflects, steers, and escalates to Advisor.

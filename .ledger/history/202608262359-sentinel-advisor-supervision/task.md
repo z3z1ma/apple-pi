@@ -1,6 +1,6 @@
-Status: active
+Status: done
 Created: 2026-08-26
-Updated: 2026-08-27
+Updated: 2026-08-28
 
 # Implement hierarchical Sentinel to Advisor supervision
 
@@ -10,7 +10,9 @@ Add one optional cheap Sentinel above the main agent and route selected hard cas
 
 ## Outcome
 
-Sentinel is the sole persistent supervisor and `/sentinel` is its sole command namespace. Advisor is a distinct episodic read-only sub-agent. The main agent retains implementation and validation ownership.
+At delivery, Sentinel was the sole persistent supervisor and `/sentinel` was its sole command namespace. Advisor was a distinct episodic read-only sub-agent. The main agent retained implementation and validation ownership.
+
+This outcome was later replaced. Pair Programmer is now the sole persistent watcher, `/pair` is the command namespace, and this record is not current product authority. See `.ledger/history/202608271751-consolidate-pair-programmer-supervision-and-memory/task.md`.
 
 ## Scope
 
@@ -52,7 +54,8 @@ Sentinel is the sole persistent supervisor and `/sentinel` is its sole command n
 
 ## References
 
-- `docs/sentinel.md`
+- `docs/sentinel.md` (historical; current contract is `docs/pair-programmer.md`)
 - `docs/subagents.md`
 - `docs/model-profiles.md`
 - `plans/implementation.md`
+- `.ledger/history/202608271751-consolidate-pair-programmer-supervision-and-memory/task.md`
