@@ -21,7 +21,7 @@ return change.changedFiles.filter((path) => path.endsWith(".ts"));
 - `pi_discover_programs({})` lists the valid saved programs as `{ name, description }` without evaluating them.
 - `pi_exec_program({ name, inputs?, state?, limits? })` loads and executes `.pi/programs/<name>.js` with the same bounded guest runtime as `pi_exec`. The JSDoc description supplies its execution label; `inputs`, `state`, and `limits` have the same contracts as `pi_exec`.
 
-Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it.
+Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it. Both tools require a trusted project because saved programs are repository-owned executable code.
 
 ## Guest surface
 
@@ -36,7 +36,7 @@ Available globals:
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
 - `inputs.<key>` for separately supplied strings, mutable `state` for reusable serialized data, and `print(...)`/`console.log(...)`
 
-`state` starts empty unless the tool call passes a state ID returned by an earlier call. When a successful program changes it, the result includes a new `state: <id>` line; pass that ID as the next call's `state` parameter. IDs are immutable and scoped to the live root session, so one snapshot can seed independent calls; failed and read-only calls create nothing. State accepts JSON objects, arrays, and primitives and rejects values that would serialize lossily. Snapshots stay in process memory and do not survive an extension or process restart.
+`state` starts empty unless the tool call passes a state ID returned by an earlier call. When a successful program changes it, the result includes a new `state: <id>` line; pass that ID as the next call's `state` parameter. IDs are immutable and scoped to the live root session, so one snapshot can seed independent calls; failed and read-only calls create nothing. State accepts JSON objects, arrays, and primitives and rejects values that would serialize lossily. A snapshot is capped at 200,000 serialized bytes; each session retains at most 32 snapshots and 1,000,000 bytes, with bounded process-wide retention and oldest-first eviction. Session shutdown removes that session's snapshots, and no snapshot survives an extension or process restart.
 
 `display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima.
 
@@ -117,11 +117,11 @@ Use `std.dev.findRelevantTests()` for discovery without execution. `std.dev.runR
 
 ## Envelope, fetch, and traces
 
-Pi Exec derives a default envelope from program shape: host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Pass optional `limits` on the tool call to raise or lower agent, call, concurrency, or timeout capacity up to package maxima. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped by terminating the disposable worker. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
+Pi Exec derives a default envelope from program shape: host calls, fan-out concurrency, model-worker count, worker memory, and elapsed time. Pass optional `limits` on the tool call to raise or lower agent, call, concurrency, or timeout capacity up to package maxima. The resolved envelope is included in result details; excess fan-out queues instead of failing, and synchronous runaway code is stopped at the configured `timeoutSeconds` deadline. There is no Node, direct filesystem, or shell global inside the guest; those effects are available only through explicit bridges.
 
 `fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
 
-`bash`, `edit`, and `write` return `{ ok, output }`; read/search tools return text. `agent` returns text, or the structured `outputSchema` value. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so `search_session`, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
+`bash`, `edit`, and `write` return `{ ok, output }` for success and failure; read/search tools return text. Every host-call argument and result, program return value, and state snapshot must cross the same strict JSON boundary—non-plain objects, BigInt, sparse arrays, cycles, accessors, and other lossy values fail instead of silently becoming a different value. Optional helper lookups such as an unknown `tools.describe()` name preserve `undefined` inside the guest without weakening that JSON boundary. `agent` returns text, or the structured `outputSchema` value. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so `search_session`, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
 
 ## TUI and captured tools
 

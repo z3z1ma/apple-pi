@@ -40,6 +40,14 @@ import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
 
 export { getAgentConversation } from "./conversation.js";
 
+function notifyObserver<Args extends unknown[]>(observer: ((...args: Args) => void) | undefined, ...args: Args): void {
+	try {
+		observer?.(...args);
+	} catch {
+		// Activity and UI observers never own model-session control flow.
+	}
+}
+
 /**
  * Tool names registered by THIS extension. Single source of truth so the
  * registration sites (index.ts) and the subagent exclusion list below can't
@@ -62,6 +70,7 @@ const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES)
 export function childSessionExtensions(
 	pair = false,
 	standard = true,
+	readOnly = false,
 ): {
 	noExtensions: true;
 	additionalExtensionPaths: string[];
@@ -70,6 +79,8 @@ export function childSessionExtensions(
 	if (standard) {
 		additionalExtensionPaths.push(LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH);
 		if (pair) additionalExtensionPaths.push(PAIR_EXTENSION_PATH);
+	} else if (readOnly) {
+		additionalExtensionPaths.push(SESSION_SEARCH_EXTENSION_PATH);
 	}
 	return { noExtensions: true, additionalExtensionPaths };
 }
@@ -389,9 +400,14 @@ export async function runAgent(
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to
 	// the task prompt below. Agent-definition `extensions:` is ignored.
+	// Read-only default roles receive no standard extension surface either:
+	// ledger and MCP can register mutation-capable tools independently of the
+	// built-in allowlist. This makes their policy structural, not prompt-based.
+	const structurallyReadOnly = new Set(["Explore", "Plan", "Research", "Advisor"]).has(agentConfig.name);
 	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(
 		options.pair === true,
-		options.loadStandardChildExtensions !== false,
+		options.loadStandardChildExtensions !== false && !structurallyReadOnly,
+		structurallyReadOnly,
 	);
 
 	const loader = new DefaultResourceLoader({
@@ -417,7 +433,7 @@ export async function runAgent(
 		const knownBuiltins = new Set(BUILTIN_TOOL_NAMES);
 		for (const name of agentConfig.builtinToolNames) {
 			if (!knownBuiltins.has(name)) {
-				options.onToolActivity?.({
+				notifyObserver(options.onToolActivity, {
 					type: "end",
 					toolName: `tools-error:tool "${name}" requested by agent "${type}" is not a known built-in`,
 				});
@@ -536,7 +552,7 @@ export async function runAgent(
 	await runInChildSessionContext(() =>
 		session.bindExtensions({
 			onError: (err) => {
-				options.onToolActivity?.({
+				notifyObserver(options.onToolActivity, {
 					type: "end",
 					toolName: `extension-error:${err.extensionPath}`,
 				});
@@ -571,7 +587,7 @@ export async function runAgent(
 		};
 	}
 
-	options.onSessionCreated?.(session);
+	notifyObserver(options.onSessionCreated, session);
 
 	// Track turns for graceful max_turns enforcement
 	let turnCount = 0;
@@ -583,7 +599,7 @@ export async function runAgent(
 	const unsubTurns = session.subscribe((event: AgentSessionEvent) => {
 		if (event.type === "turn_end") {
 			turnCount++;
-			options.onTurnEnd?.(turnCount);
+			notifyObserver(options.onTurnEnd, turnCount);
 			if (maxTurns != null) {
 				if (options.hardTurnLimit && turnCount >= maxTurns) {
 					aborted = true;
@@ -604,18 +620,18 @@ export async function runAgent(
 		}
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 			currentMessageText += event.assistantMessageEvent.delta;
-			options.onTextDelta?.(event.assistantMessageEvent.delta, currentMessageText);
+			notifyObserver(options.onTextDelta, event.assistantMessageEvent.delta, currentMessageText);
 		}
 		if (event.type === "tool_execution_start") {
-			options.onToolActivity?.({ type: "start", toolName: event.toolName });
+			notifyObserver(options.onToolActivity, { type: "start", toolName: event.toolName });
 		}
 		if (event.type === "tool_execution_end") {
-			options.onToolActivity?.({ type: "end", toolName: event.toolName });
+			notifyObserver(options.onToolActivity, { type: "end", toolName: event.toolName });
 		}
 		if (event.type === "message_end" && event.message.role === "assistant") {
 			const u = (event.message as any).usage;
 			if (u)
-				options.onAssistantUsage?.({
+				notifyObserver(options.onAssistantUsage, {
 					input: u.input ?? 0,
 					cacheRead: u.cacheRead ?? 0,
 					cacheWrite: u.cacheWrite ?? 0,
@@ -624,7 +640,7 @@ export async function runAgent(
 				});
 		}
 		if (event.type === "compaction_end" && !event.aborted && event.result) {
-			options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
+			notifyObserver(options.onCompaction, { reason: event.reason, tokensBefore: event.result.tokensBefore });
 		}
 	});
 
@@ -664,9 +680,13 @@ export async function resumeAgent(
 		onToolActivity?: (activity: ToolActivity) => void;
 		onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 		onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
+		onTextDelta?: (delta: string, fullText: string) => void;
+		onTurnEnd?: (turnCount: number) => void;
+		maxTurns?: number;
+		hardTurnLimit?: boolean;
 		signal?: AbortSignal;
 	} = {},
-): Promise<{ text: string; failure?: string }> {
+): Promise<{ text: string; failure?: string; aborted: boolean; steered: boolean }> {
 	// Boundary for the history fallback: the session already holds prior turns,
 	// so only assistant text produced by THIS resume prompt counts as its output
 	// — a failed resume must not surface the previous turn's answer (#144).
@@ -674,27 +694,67 @@ export async function resumeAgent(
 	const collector = collectResponseText(session);
 	const cleanupAbort = forwardAbortSignal(session, options.signal);
 
+	let turnCount = 0;
+	let softLimitReached = false;
+	let aborted = false;
+	const maxTurns = normalizeMaxTurns(options.maxTurns);
+	let currentMessageText = "";
 	const unsubEvents =
-		options.onToolActivity || options.onAssistantUsage || options.onCompaction
-			? session.subscribe((event: AgentSessionEvent) => {
-					if (event.type === "tool_execution_start")
-						options.onToolActivity?.({ type: "start", toolName: event.toolName });
-					if (event.type === "tool_execution_end") options.onToolActivity?.({ type: "end", toolName: event.toolName });
-					if (event.type === "message_end" && event.message.role === "assistant") {
-						const u = (event.message as any).usage;
-						if (u)
-							options.onAssistantUsage?.({
-								input: u.input ?? 0,
-								cacheRead: u.cacheRead ?? 0,
-								cacheWrite: u.cacheWrite ?? 0,
-								output: u.output ?? 0,
-								cost: typeof u.cost === "number" ? u.cost : (u.cost?.total ?? 0),
+		options.onToolActivity ||
+		options.onAssistantUsage ||
+		options.onCompaction ||
+		options.onTextDelta ||
+		options.onTurnEnd ||
+		maxTurns != null
+			? session.subscribe(
+					// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this callback owns the resumed turn's ceiling, activity, usage, and compaction events.
+					(event: AgentSessionEvent) => {
+						if (event.type === "turn_end") {
+							turnCount++;
+							notifyObserver(options.onTurnEnd, turnCount);
+							if (maxTurns != null) {
+								if (options.hardTurnLimit && turnCount >= maxTurns) {
+									aborted = true;
+									session.abort();
+								} else if (!softLimitReached && turnCount >= maxTurns) {
+									softLimitReached = true;
+									session.steer(
+										"You have reached your configured turn limit. Stop investigating and provide your final answer now.",
+									);
+								} else if (softLimitReached && turnCount >= maxTurns + graceTurns) {
+									aborted = true;
+									session.abort();
+								}
+							}
+						}
+						if (event.type === "message_start") currentMessageText = "";
+						if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+							currentMessageText += event.assistantMessageEvent.delta;
+							notifyObserver(options.onTextDelta, event.assistantMessageEvent.delta, currentMessageText);
+						}
+						if (event.type === "tool_execution_start")
+							notifyObserver(options.onToolActivity, { type: "start", toolName: event.toolName });
+						if (event.type === "tool_execution_end")
+							notifyObserver(options.onToolActivity, { type: "end", toolName: event.toolName });
+						if (event.type === "message_end" && event.message.role === "assistant") {
+							const u = (event.message as any).usage;
+							if (u)
+								notifyObserver(options.onAssistantUsage, {
+									input: u.input ?? 0,
+									cacheRead: u.cacheRead ?? 0,
+									cacheWrite: u.cacheWrite ?? 0,
+									output: u.output ?? 0,
+									cost: typeof u.cost === "number" ? u.cost : (u.cost?.total ?? 0),
+								});
+						}
+						if (event.type === "compaction_end" && !event.aborted && event.result) {
+							notifyObserver(options.onCompaction, {
+								reason: event.reason,
+								tokensBefore: event.result.tokensBefore,
 							});
-					}
-					if (event.type === "compaction_end" && !event.aborted && event.result) {
-						options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
-					}
-				})
+						}
+					},
+				)
 			: () => {};
 
 	try {
@@ -708,6 +768,8 @@ export async function resumeAgent(
 	return {
 		text: collector.getText().trim() || getLastAssistantText(session, startLen),
 		failure: finalTurnError(session, startLen),
+		aborted,
+		steered: softLimitReached,
 	};
 }
 

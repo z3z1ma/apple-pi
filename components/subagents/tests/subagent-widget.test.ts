@@ -68,7 +68,7 @@ describe("AgentWidget", () => {
 			toolUses: 0,
 			responseText: "",
 			turnCount: 1,
-			lifetimeUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 		};
 	}
 
@@ -80,7 +80,7 @@ describe("AgentWidget", () => {
 			status: "running",
 			toolUses: 0,
 			startedAt: Date.now(),
-			lifetimeUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 			compactionCount: 0,
 			isBackground: opts.isBackground,
 			parentAgentId: opts.parentAgentId,
@@ -167,7 +167,7 @@ describe("AgentWidget overflow accounting", () => {
 			toolUses: 0,
 			startedAt: Date.now(),
 			completedAt: status === "completed" ? Date.now() : undefined,
-			lifetimeUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 			compactionCount: 0,
 			isBackground: true,
 		};
@@ -188,7 +188,7 @@ describe("AgentWidget overflow accounting", () => {
 					toolUses: 0,
 					responseText: "",
 					turnCount: 1,
-					lifetimeUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 				} as AgentActivity,
 			]),
 		);
@@ -196,7 +196,7 @@ describe("AgentWidget overflow accounting", () => {
 		let factory: any;
 		widget.setUICtx({
 			setStatus: () => {},
-			setWidget: (_k, c) => {
+			setWidget: (_k: string, c: any) => {
 				factory = c;
 			},
 		} as any);
@@ -285,7 +285,7 @@ describe("AgentWidget overflow accounting", () => {
 					toolUses: 0,
 					responseText: "",
 					turnCount: 1,
-					lifetimeUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 				} as AgentActivity,
 			],
 		]);

@@ -18,6 +18,8 @@ export interface TouchedFile {
 }
 
 export interface SearchHit extends RenderedEntry {
+	/** Original transcript turn, captured before relevance ranking reorders hits. */
+	turnId?: number;
 	/** Context snippet around the first matched term (only when query provided) */
 	snippet?: string;
 	/** Number of query terms matched (for ranking) */
@@ -89,19 +91,67 @@ const expandSpellingVariants = (term: string): string => {
 
 // ── Regex safety ──
 
-// Maximum length for a compiled regex source. Prevents pathological
-// patterns (e.g. deeply nested groups) from consuming compilation time.
+// Regex queries run in the JavaScript engine, which has no execution timeout.
+// Keep the supported regex subset deliberately small: one bounded `.*`
+// wildcard is enough for the documented `fail.*build` use case, while
+// rejecting quantifiers eliminates catastrophic nested/backtracking patterns.
 const MAX_REGEX_SOURCE_LEN = 256;
+const MAX_WILDCARD_CHARS = 256;
 
-/** Try to compile as regex; fall back to escaped literal.
- *  Rejects patterns that are too long or fail to compile. */
+export class UnsafeSearchRegexError extends Error {
+	constructor(reason: string) {
+		super(`Unsafe regex query: ${reason}. Use literal terms or a simple pattern with at most one .* wildcard.`);
+		this.name = "UnsafeSearchRegexError";
+	}
+}
+
+/** Compile the bounded regex subset, falling back to a literal for syntax errors. */
 const safeRegex = (pattern: string): RegExp => {
 	if (pattern.length > MAX_REGEX_SOURCE_LEN) {
-		return new RegExp(escapeRegex(pattern.slice(0, 64)), "i");
+		throw new UnsafeSearchRegexError(`pattern exceeds ${MAX_REGEX_SOURCE_LEN} characters`);
 	}
 	try {
-		return new RegExp(pattern, "i");
+		// Preserve the historic literal fallback for malformed regex syntax.
+		new RegExp(pattern);
 	} catch {
+		return new RegExp(escapeRegex(pattern), "i");
+	}
+	// Even without quantifiers, repeated ambiguous groups can make a native
+	// engine explore exponentially many alternatives. Top-level alternation is
+	// still supported; grouping is deliberately outside the safe subset.
+	if (/[()]/.test(pattern)) {
+		throw new UnsafeSearchRegexError("grouped patterns are not supported");
+	}
+
+	let source = "";
+	let wildcardCount = 0;
+	let inClass = false;
+	for (let i = 0; i < pattern.length; i++) {
+		const char = pattern[i]!;
+		if (char === "\\") {
+			source += char + (pattern[++i] ?? "");
+			continue;
+		}
+		if (char === "[") inClass = true;
+		if (char === "]") inClass = false;
+		if (!inClass && (char === "+" || char === "?" || char === "{" || char === "}")) {
+			throw new UnsafeSearchRegexError("quantifiers other than .* are not supported");
+		}
+		if (!inClass && char === "*") {
+			// An escaped dot is a literal-dot repetition, which is also bounded
+			// safely here; all other repetitions are rejected.
+			if (pattern[i - 1] !== "." || ++wildcardCount > 1) {
+				throw new UnsafeSearchRegexError("only one .* wildcard is supported");
+			}
+			source += `{0,${MAX_WILDCARD_CHARS}}`;
+			continue;
+		}
+		source += char;
+	}
+	try {
+		return new RegExp(source, "i");
+	} catch {
+		// Malformed regexes have historically been treated as literal searches.
 		return new RegExp(escapeRegex(pattern), "i");
 	}
 };
@@ -457,6 +507,20 @@ export const searchEntries = (
 ): SearchHit[] => {
 	if (!query?.trim()) return entries;
 
+	// Capture transcript identity while entries are still in chronological order.
+	// BM25 later sorts by relevance, so deriving this after ranking would make
+	// unrelated hits look like a single chronological turn in the formatter.
+	let currentTurnId = entries[0]?.index ?? 0;
+	const turnIds = entries.map((entry) => {
+		if (entry.role === "user" || entry.role === "bash") currentTurnId = entry.index;
+		return currentTurnId;
+	});
+	const withTurn = (entry: SearchHit, offset: number): SearchHit => {
+		// Turn identity is formatter metadata, not a public search-result field.
+		Object.defineProperty(entry, "turnId", { value: turnIds[offset], enumerable: false });
+		return entry;
+	};
+
 	const rawQuery = query.trim();
 
 	// If query looks like a single regex pattern (contains metacharacters),
@@ -474,12 +538,9 @@ export const searchEntries = (
 			if (regex.test(hay)) {
 				const snip = lineSnippet(text, regex);
 				const fileMatches = matchingFiles(msg, regex);
-				hits.push({
-					...e,
-					snippet: snip,
-					matchCount: 1,
-					...(fileMatches.length > 0 ? { fileMatches } : {}),
-				});
+				hits.push(
+					withTurn({ ...e, snippet: snip, matchCount: 1, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),
+				);
 				if (hits.length >= MAX_SEARCH_RESULTS) break;
 			}
 		}
@@ -525,12 +586,7 @@ export const searchEntries = (
 		const snip = lineSnippet(text, snipRe);
 		const fileMatches = matchingFiles(msg, snipRe);
 		scored.push({
-			hit: {
-				...e,
-				snippet: snip,
-				matchCount: mc,
-				...(fileMatches.length > 0 ? { fileMatches } : {}),
-			},
+			hit: withTurn({ ...e, snippet: snip, matchCount: mc, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),
 			score,
 		});
 	}

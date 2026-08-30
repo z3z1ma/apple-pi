@@ -150,6 +150,17 @@ Pending completion of the undertaking.
 		expect(readdirSync(ledger)).not.toContain("202608170906-rejected");
 	});
 
+	it("serializes simultaneous writers without losing either index row", async () => {
+		const root = temporaryRoot();
+		const [first, second] = await Promise.all([
+			addLedgerTask(root, "First writer", "Retain the first concurrent row", undefined, new Date(2026, 7, 17, 9, 5)),
+			addLedgerTask(root, "Second writer", "Retain the second concurrent row", undefined, new Date(2026, 7, 17, 9, 6)),
+		]);
+		const index = readFileSync(join(root, ".ledger/INDEX.md"), "utf8");
+		expect(index).toContain(first.taskPath);
+		expect(index).toContain(second.taskPath);
+	});
+
 	it("refuses an empty description", async () => {
 		const root = temporaryRoot();
 		await expect(

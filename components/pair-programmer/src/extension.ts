@@ -60,27 +60,27 @@ import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-t
 import { registerNotebookContextPacket } from "../../notebook/src/hooks/context-packet.js";
 import {
 	commitPairNotebookUpdate,
-	preparePairNotebookBatch,
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
+	preparePairNotebookBatch,
 	UpdateNotebookTool,
 } from "../../notebook/src/notebook-maintenance.js";
 import { Runtime as NotebookRuntime } from "../../notebook/src/runtime.js";
 import {
+	type Entry,
 	entryIndexForId,
 	foldLedger,
 	isSourceEntry,
 	latestCoverageMarkerId,
 	NOTEBOOK_OBSERVATIONS_RECORDED,
 	rawTokensSinceObservationCoverage,
-	type Entry,
 } from "../../notebook/src/session-ledger/index.js";
 import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
-import { EscalateTool, RepeatedFailureDetector, PairEscalationController } from "./escalation.js";
+import { EscalateTool, PairEscalationController, RepeatedFailureDetector } from "./escalation.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } from "./seed.js";
 import { createPairSession } from "./session.js";
@@ -99,7 +99,7 @@ import { createPairSession } from "./session.js";
 export type { PairNote, PairSeverity } from "./types.js";
 
 import type { PrimaryTurnState } from "../../shared/src/types.js";
-import type { PairNote, PairSeverity, PairEscalationState } from "./types.js";
+import type { PairEscalationState, PairNote, PairSeverity } from "./types.js";
 
 export type { PrimaryTurnState } from "../../shared/src/types.js";
 
@@ -390,6 +390,12 @@ import {
 } from "./formatting.js";
 
 export {
+	EscalateTool,
+	MIN_TURNS_BETWEEN_ADVISOR,
+	PairEscalationController,
+	RepeatedFailureDetector,
+} from "./escalation.js";
+export {
 	buildReviewMessages,
 	formatActiveSessionContext,
 	formatAdvisoryContent,
@@ -402,19 +408,13 @@ export {
 	insertParentNotebookAfterCompaction,
 	registerPairParentNotebookPacket,
 } from "./parent-notebook.js";
-export {
-	EscalateTool,
-	MIN_TURNS_BETWEEN_ADVISOR,
-	RepeatedFailureDetector,
-	PairEscalationController,
-} from "./escalation.js";
 export { bindPrimaryRecallTools } from "./recall.js";
 export {
-	PAIR_RESEED_ENTRY_ID,
 	buildPairSeed,
 	collectRecentUserRequests,
 	formatPairSeed,
 	formatRecentTrajectory,
+	PAIR_RESEED_ENTRY_ID,
 	RECENT_TRAJECTORY_TURNS,
 } from "./seed.js";
 export { PAIR_SESSION_TOOLS, pairCompactResult } from "./session.js";
@@ -1099,13 +1099,13 @@ function sessionIdFromCtx(ctx: unknown): string | undefined {
 // session_start). Must match HANDOFF_SESSION_REPLACED_CHANNEL in handoff.ts.
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
 
-import { appendPrimaryPairPrompt, loadEnabled, loadSystemPrompt, saveEnabled, PAIR_MODEL_PROFILE } from "./config.js";
+import { appendPrimaryPairPrompt, loadEnabled, loadSystemPrompt, PAIR_MODEL_PROFILE, saveEnabled } from "./config.js";
 
 export {
 	appendPrimaryPairPrompt,
 	loadSystemPrompt,
-	PRIMARY_PAIR_PROTOCOL,
 	PAIR_MODEL_PROFILE,
+	PRIMARY_PAIR_PROTOCOL,
 } from "./config.js";
 
 // Wraps an advisory card's body in a severity-colored left rule (one line prefix
@@ -1144,6 +1144,9 @@ export default function (pi: ExtensionAPI) {
 	let modelProfileError: string | undefined;
 	let lastNotifiedProfileError: string | undefined;
 	let builtForCwd: string | undefined;
+	let builtForTrusted: boolean | undefined;
+	let runtimeBuild: { key: string; epoch: number; promise: Promise<PairRuntime | undefined> } | undefined;
+	let constructionEpoch = 0;
 	let pendingUserTexts: string[] = [];
 	let unwatchBash: (() => void) | undefined;
 	let escalationController: PairEscalationController | undefined;
@@ -1307,12 +1310,19 @@ export default function (pi: ExtensionAPI) {
 
 	function flushBoundaryFindings(): Promise<void> {
 		if (boundaryFlush) return boundaryFlush;
-		boundaryFlush = (async () => {
+		const generation = constructionEpoch;
+		const controller = escalationController;
+		const activeRuntime = runtime;
+		const activeAdviseTool = adviseTool;
+		const flush = (async () => {
 			if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
-			const prepared = await escalationController?.prepareDelivery();
+			const prepared = await controller?.prepareDelivery();
+			if (generation !== constructionEpoch || controller !== escalationController || activeRuntime !== runtime) return;
 			if ((turnState as PrimaryTurnState) === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
-			if (runtime) {
-				stagedBoundaryNotes.push(...(turnState === "ended-terminal" ? runtime.takeAllAdvice() : runtime.takeNits()));
+			if (activeRuntime) {
+				stagedBoundaryNotes.push(
+					...(turnState === "ended-terminal" ? activeRuntime.takeAllAdvice() : activeRuntime.takeNits()),
+				);
 			}
 			const direct = stagedBoundaryNotes.splice(0);
 			try {
@@ -1324,16 +1334,18 @@ export default function (pi: ExtensionAPI) {
 							finalAnswer: turnState === "ended-terminal",
 							stale: notes.every((note) => !isHighSeverity(note.severity)),
 						}),
-					onDirectDelivered: (note) => adviseTool?.markDelivered(note.note, note.severity),
-					onDirectFailed: (note) => runtime?.requeueAdvice(note.note, note.severity),
+					onDirectDelivered: (note) => activeAdviseTool?.markDelivered(note.note, note.severity),
+					onDirectFailed: (note) => activeRuntime?.requeueAdvice(note.note, note.severity),
 				});
 			} finally {
 				if (latestCtx) updateStatus(latestCtx);
 			}
-		})().finally(() => {
-			boundaryFlush = undefined;
+		})();
+		const tracked = flush.finally(() => {
+			if (boundaryFlush === tracked) boundaryFlush = undefined;
 		});
-		return boundaryFlush;
+		boundaryFlush = tracked;
+		return tracked;
 	}
 
 	function ensureEscalationController(): PairEscalationController {
@@ -1358,6 +1370,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function teardown(): void {
+		constructionEpoch++;
 		escalationController?.cancel();
 		escalationController = undefined;
 		unwatchBash?.();
@@ -1368,6 +1381,7 @@ export default function (pi: ExtensionAPI) {
 		activeModelLabel = undefined;
 		activePairContextWindow = undefined;
 		builtForCwd = undefined;
+		builtForTrusted = undefined;
 		pendingUserTexts = [];
 		consecutiveBlocks = 0;
 		autoResumeSuppressed = false;
@@ -1416,7 +1430,7 @@ export default function (pi: ExtensionAPI) {
 
 	function prepareNotebookBatch(ctx: ExtensionContext): PairNotebookBatch | undefined {
 		if (!rootNotebook || !notebookTool || !enabled) return undefined;
-		const config = rootNotebook.ensureConfig(ctx.cwd);
+		const config = rootNotebook.ensureConfig(ctx.cwd, ctx.isProjectTrusted());
 		if (config.passive) return undefined;
 		const getBranch = (ctx.sessionManager as { getBranch?: () => unknown }).getBranch;
 		if (typeof getBranch !== "function") return undefined;
@@ -1478,7 +1492,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ---- build the pair agent lazily (needs ctx for model/registry/cwd) ----
-	async function ensureRuntime(
+	async function buildRuntime(
 		ctx: {
 			cwd: string;
 			modelRegistry: any;
@@ -1489,10 +1503,10 @@ export default function (pi: ExtensionAPI) {
 		},
 		notifyProfileError = true,
 	): Promise<PairRuntime | undefined> {
-		if (runtime && builtForCwd === ctx.cwd) return runtime;
-		if (runtime && builtForCwd !== ctx.cwd) teardown();
-
 		const projectTrusted = ctx.isProjectTrusted?.() ?? false;
+		if (runtime && builtForCwd === ctx.cwd && builtForTrusted === projectTrusted) return runtime;
+		if (runtime) teardown();
+		const epoch = constructionEpoch;
 		let model: any;
 		let thinkingLevel: any;
 		const profile = PAIR_MODEL_PROFILE;
@@ -1524,7 +1538,6 @@ export default function (pi: ExtensionAPI) {
 			if (runtime !== builtRuntime || !builtRuntime.acceptingAdvice) return "unavailable";
 			return ensureEscalationController().submit("pair", request, primaryTurnSequence);
 		});
-		adviseTool = builtAdviseTool;
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
@@ -1553,6 +1566,12 @@ export default function (pi: ExtensionAPI) {
 			});
 		} catch (error) {
 			dbg("pair session unavailable", String(error));
+		}
+		if (constructionEpoch !== epoch) {
+			try {
+				session?.dispose();
+			} catch {}
+			return undefined;
 		}
 		const agent =
 			session?.agent ??
@@ -1588,12 +1607,42 @@ export default function (pi: ExtensionAPI) {
 			notebookTool,
 			commitNotebookUpdate,
 		);
+		if (constructionEpoch !== epoch) {
+			builtRuntime.dispose();
+			return undefined;
+		}
+		adviseTool = builtAdviseTool;
 		runtime = builtRuntime;
 		activeModelLabel = `${model.provider}/${model.id}`;
 		builtForCwd = ctx.cwd;
+		builtForTrusted = projectTrusted;
 		watchPrimaryBash(ctx);
 		dbg("built pair runtime, model=", activeModelLabel);
 		return runtime;
+	}
+
+	/** Serialize construction: concurrent hooks must share one private session. */
+	async function ensureRuntime(
+		ctx: Parameters<typeof buildRuntime>[0],
+		notifyProfileError = true,
+	): Promise<PairRuntime | undefined> {
+		const projectTrusted = ctx.isProjectTrusted?.() ?? false;
+		const key = `${ctx.cwd}\u0000${projectTrusted}`;
+		if (runtime && builtForCwd === ctx.cwd && builtForTrusted === projectTrusted) return runtime;
+		if (runtimeBuild) {
+			if (runtimeBuild.epoch === constructionEpoch && runtimeBuild.key === key) return runtimeBuild.promise;
+			// Teardown invalidates publication, but the next generation still waits
+			// for the stale session construction to settle and dispose.
+			await runtimeBuild.promise;
+			return ensureRuntime(ctx, notifyProfileError);
+		}
+		const promise = buildRuntime(ctx, notifyProfileError);
+		runtimeBuild = { key, epoch: constructionEpoch, promise };
+		try {
+			return await promise;
+		} finally {
+			if (runtimeBuild?.promise === promise) runtimeBuild = undefined;
+		}
 	}
 
 	// ---- event wiring ----

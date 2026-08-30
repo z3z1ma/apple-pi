@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TodoController } from "../src/controller.js";
 import { TodoExecution } from "../src/execution.js";
 import { SessionTodoRepository } from "../src/repository.js";
@@ -95,6 +95,7 @@ describe("TodoExecution", () => {
 			blockedBy: [1],
 		});
 		const runs: ReturnType<typeof deferred<any>>[] = [];
+		const managedCompletions = vi.fn();
 		const execution = new TodoExecution(
 			controller,
 			() => ({ cwd: process.cwd() }) as any,
@@ -114,6 +115,7 @@ describe("TodoExecution", () => {
 					abort: () => false,
 					runFresh: async () => null,
 				}) as any,
+			{ onManagedCompletion: managedCompletions },
 		);
 		execution.execute([1]);
 		runs[0].resolve({ status: "completed", result: "done" });
@@ -122,5 +124,6 @@ describe("TodoExecution", () => {
 		expect(controller.get(1)?.status).toBe("completed");
 		expect(controller.get(2)).toMatchObject({ status: "active" });
 		expect(runs).toHaveLength(2);
+		expect(managedCompletions).toHaveBeenCalledTimes(1);
 	});
 });

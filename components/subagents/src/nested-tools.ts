@@ -75,7 +75,12 @@ export interface NestedAgentManager {
 		onSpawned?: (id: string) => void,
 	): Promise<{ id: string; record: AgentRecord }>;
 	getRecord(id: string): AgentRecord | undefined;
-	resume(id: string, prompt: string, signal?: AbortSignal): Promise<AgentRecord | undefined>;
+	resume(
+		id: string,
+		prompt: string,
+		signal?: AbortSignal,
+		options?: { isBackground?: boolean },
+	): Promise<AgentRecord | undefined>;
 	steer(id: string, message: string): boolean;
 	abort(id: string): boolean;
 }
@@ -180,10 +185,16 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 						true,
 					);
 				}
-				const resumed = await context.manager.resume(params.resume, params.prompt, signal);
-				return resumed
-					? textResult(formatRecord(resumed, true), resumed.status === "error")
-					: textResult(`Could not resume teammate "${params.resume}".`, true);
+				const background = params.run_in_background === true;
+				const resumed = await context.manager.resume(params.resume, params.prompt, background ? undefined : signal, {
+					isBackground: background,
+				});
+				if (!resumed) return textResult(`Could not resume teammate "${params.resume}".`, true);
+				return background
+					? textResult(
+							`Your teammate resumed in the background. Agent ID: ${resumed.id}\n\nCall get_subagent_result with this agent_id when you are ready for their final report.`,
+						)
+					: textResult(formatRecord(resumed, true), resumed.status === "error");
 			}
 
 			if (context.depth >= context.maxSubagentDepth) {

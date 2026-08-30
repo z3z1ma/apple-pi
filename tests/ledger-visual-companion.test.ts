@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams, execFileSync, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn, spawnSync } from "node:child_process";
 import {
 	existsSync,
 	linkSync,
@@ -48,14 +48,14 @@ interface StartedServer {
 }
 
 interface DirectServer {
-	child: ChildProcessWithoutNullStreams;
+	child: ChildProcess;
 	info: StartedServer;
 	output(): string;
 }
 
 const runtimeDirs: string[] = [];
 const tempDirs: string[] = [];
-const childProcesses: ChildProcessWithoutNullStreams[] = [];
+const childProcesses: ChildProcess[] = [];
 
 function run(script: string, args: string[], cwd?: string): string {
 	return execFileSync("bash", [join(scripts, script), ...args], { cwd, encoding: "utf8" }).trim();
@@ -79,7 +79,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void
 	}
 }
 
-async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs = 3000): Promise<void> {
+async function waitForExit(child: ChildProcess, timeoutMs = 3000): Promise<void> {
 	if (child.exitCode !== null || child.signalCode !== null) return;
 	await Promise.race([
 		new Promise<void>((resolveExit) => child.once("exit", () => resolveExit())),
@@ -89,7 +89,7 @@ async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs = 30
 	]);
 }
 
-async function stopChild(child: ChildProcessWithoutNullStreams): Promise<void> {
+async function stopChild(child: ChildProcess): Promise<void> {
 	if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
 	await waitForExit(child);
 }

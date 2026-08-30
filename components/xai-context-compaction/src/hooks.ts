@@ -2,15 +2,18 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, serializeConversation } from "@earendil-works/pi-coding-agent";
 import { convertMessagesForXaiCompaction, isXaiResponsesModel } from "./convert.js";
-import { injectXaiCompaction, payloadHasXaiCompaction } from "./inject.js";
+import { injectXaiCompaction } from "./inject.js";
 import type { XaiCompactionItem } from "./types.js";
 
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
-const FALLBACK_EXCERPT_CHARS = 2_000;
+const FALLBACK_PROJECTION_CHARS = 12_000;
+const FALLBACK_PROJECTION_MESSAGES = 24;
+const FALLBACK_PRIOR_SUMMARY_CHARS = 4_000;
 
 type BranchEntry = {
 	type?: unknown;
 	details?: unknown;
+	summary?: unknown;
 };
 
 export function findLatestXaiCompaction(branchEntries: BranchEntry[]): XaiCompactionItem | undefined {
@@ -23,18 +26,61 @@ export function findLatestXaiCompaction(branchEntries: BranchEntry[]): XaiCompac
 	return undefined;
 }
 
+function findLatestCompactionSummary(branchEntries: BranchEntry[]): string | undefined {
+	for (let i = branchEntries.length - 1; i >= 0; i--) {
+		const entry = branchEntries[i];
+		if (entry?.type === "compaction" && typeof entry.summary === "string") return entry.summary;
+	}
+	return undefined;
+}
+
 function compactEndpoint(model: { baseUrl?: string }, authBaseUrl?: string): string {
 	const baseUrl = (authBaseUrl || model.baseUrl || DEFAULT_XAI_BASE_URL).replace(/\/+$/, "");
 	return `${baseUrl}/responses/compact`;
 }
 
-function fallbackSummary(compactionId: string, messages: AgentMessage[]): string {
-	const conversationText = serializeConversation(convertToLlm(messages));
-	const tailText =
-		conversationText.length > FALLBACK_EXCERPT_CHARS
-			? conversationText.slice(-FALLBACK_EXCERPT_CHARS)
-			: conversationText;
-	return `[xAI Server-Side Compaction ${compactionId}]\n\nSummarized ${messages.length} messages.\n\nRecent context:\n${tailText}`;
+function excerpt(text: string, maxChars: number): string {
+	if (text.length <= maxChars) return text;
+	const headChars = Math.ceil((maxChars - 32) * 0.6);
+	const tailChars = maxChars - 32 - headChars;
+	return `${text.slice(0, headChars)}\n… [middle omitted] …\n${text.slice(-tailChars)}`;
+}
+
+function projectionIndices(messageCount: number): number[] {
+	if (messageCount <= FALLBACK_PROJECTION_MESSAGES) return Array.from({ length: messageCount }, (_, index) => index);
+
+	const recentCount = Math.floor(FALLBACK_PROJECTION_MESSAGES * 0.7);
+	const historicalCount = FALLBACK_PROJECTION_MESSAGES - recentCount;
+	const historyEnd = messageCount - recentCount;
+	const historical = Array.from({ length: historicalCount }, (_, index) =>
+		Math.floor((index * historyEnd) / historicalCount),
+	);
+	return [...historical, ...Array.from({ length: recentCount }, (_, index) => historyEnd + index)];
+}
+
+/**
+ * A bounded local projection remains usable when xAI's opaque item cannot be replayed.
+ * It samples the whole compacted history, keeps recent messages verbatim where possible,
+ * and preserves both ends of long individual messages.
+ */
+export function fallbackSummary(compactionId: string, messages: AgentMessage[], previousSummary?: string): string {
+	const indices = projectionIndices(messages.length);
+	const omittedCount = messages.length - indices.length;
+	const header = `[xAI Server-Side Compaction ${compactionId}]\n\nText fallback for ${messages.length} compacted messages.\n`;
+	const priorContext = previousSummary
+		? `\n--- Prior compacted context ---\n${excerpt(previousSummary, FALLBACK_PRIOR_SUMMARY_CHARS)}\n`
+		: "";
+	const omission = omittedCount > 0 ? `[${omittedCount} messages are represented by the sampled history below.]\n` : "";
+	const availableChars = FALLBACK_PROJECTION_CHARS - header.length - priorContext.length - omission.length;
+	const charsPerMessage = Math.max(64, Math.floor(availableChars / Math.max(1, indices.length)) - 64);
+	const projection = indices
+		.map((index) => {
+			const text = serializeConversation(convertToLlm([messages[index]!])).trim();
+			return `\n--- Compacted message ${index + 1}/${messages.length} ---\n${excerpt(text, charsPerMessage)}`;
+		})
+		.join("");
+
+	return `${header}${priorContext}${omission}${projection}`.slice(0, FALLBACK_PROJECTION_CHARS);
 }
 
 function parseCompactionItem(data: unknown): XaiCompactionItem | undefined {
@@ -114,7 +160,12 @@ export async function compactWithXai(event: SessionBeforeCompactEvent, ctx: Exte
 
 		return {
 			compaction: {
-				summary: fallbackSummary(compactionItem.id, messagesToCompact),
+				summary: fallbackSummary(
+					compactionItem.id,
+					messagesToCompact,
+					event.preparation.previousSummary ??
+						findLatestCompactionSummary((event.branchEntries ?? []) as BranchEntry[]),
+				),
 				firstKeptEntryId: event.preparation.firstKeptEntryId,
 				tokensBefore: event.preparation.tokensBefore,
 				details: {
@@ -132,40 +183,62 @@ export async function compactWithXai(event: SessionBeforeCompactEvent, ctx: Exte
 	}
 }
 
-/** Replay the newest opaque item and disable injection after a 4xx. No compact hook. */
+/** Replay the newest opaque item and disable injection only after an attributable 4xx. No compact hook. */
 export function registerXaiCompactionReplayHooks(pi: ExtensionAPI): void {
 	let compactionDisabledForSession = false;
-	let lastRequestCarriedCompaction = false;
+	let outstandingRequests = 0;
+	let soleOutstandingRequestWasInjected = false;
+	let overlapAmbiguous = false;
+
+	const clearOutstanding = () => {
+		outstandingRequests = 0;
+		soleOutstandingRequestWasInjected = false;
+		overlapAmbiguous = false;
+	};
 
 	pi.on("session_start", () => {
 		compactionDisabledForSession = false;
-		lastRequestCarriedCompaction = false;
+		clearOutstanding();
+	});
+	pi.on("agent_end", clearOutstanding);
+	pi.on("model_select", clearOutstanding);
+	pi.on("session_shutdown", () => {
+		compactionDisabledForSession = false;
+		clearOutstanding();
 	});
 
 	pi.on("after_provider_response", (event, ctx) => {
-		if (lastRequestCarriedCompaction && event.status >= 400 && event.status < 500) {
+		// The extension API does not correlate responses to requests. A rejection is
+		// attributable only while our injected request is the sole request in flight.
+		const attributable = outstandingRequests === 1 && soleOutstandingRequestWasInjected && !overlapAmbiguous;
+		if (attributable && event.status >= 400 && event.status < 500) {
 			compactionDisabledForSession = true;
 			ctx.ui?.notify?.(
 				`xAI server-side compaction item rejected by provider (HTTP ${event.status}); falling back to the text summary for this session. This turn still fails.`,
 				"warning",
 			);
 		}
-		lastRequestCarriedCompaction = false;
+		outstandingRequests = Math.max(0, outstandingRequests - 1);
+		if (outstandingRequests === 0) {
+			soleOutstandingRequestWasInjected = false;
+			overlapAmbiguous = false;
+		}
 	});
 
 	pi.on("before_provider_request", (event, ctx) => {
+		const wasOnlyOutstandingRequest = outstandingRequests === 0;
+		outstandingRequests++;
+		if (!wasOnlyOutstandingRequest) overlapAmbiguous = true;
+
 		if (compactionDisabledForSession || !isXaiResponsesModel(ctx.model)) return undefined;
 
 		const latestCompaction = findLatestXaiCompaction((ctx.sessionManager?.getBranch?.() ?? []) as BranchEntry[]);
 		if (!latestCompaction) return undefined;
 
-		if (payloadHasXaiCompaction(event.payload, latestCompaction)) {
-			lastRequestCarriedCompaction = true;
-			return undefined;
-		}
-
 		const modified = injectXaiCompaction(event.payload, ctx.model, latestCompaction);
-		if (modified !== undefined) lastRequestCarriedCompaction = true;
+		// A pre-existing opaque item is not evidence that this extension injected it.
+		if (wasOnlyOutstandingRequest && modified !== undefined) soleOutstandingRequestWasInjected = true;
+		else soleOutstandingRequestWasInjected = false;
 		return modified;
 	});
 }

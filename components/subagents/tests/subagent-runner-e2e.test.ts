@@ -124,6 +124,16 @@ describe("subagent runner with Pi's real AgentSession", () => {
 				model,
 				onSessionCreated: (session) => {
 					activeTools = session.getActiveToolNames();
+					throw new Error("observer failure");
+				},
+				onTextDelta: () => {
+					throw new Error("observer failure");
+				},
+				onTurnEnd: () => {
+					throw new Error("observer failure");
+				},
+				onAssistantUsage: () => {
+					throw new Error("observer failure");
 				},
 			},
 		);
@@ -223,7 +233,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 						parameters: Type.Object({ value: Type.String() }),
 						async execute(_id, params) {
 							submitted = params.value;
-							return { content: [{ type: "text", text: "submitted" }], terminate: true };
+							return { content: [{ type: "text", text: "submitted" }], details: undefined, terminate: true };
 						},
 					}),
 				],
@@ -618,7 +628,7 @@ RELOADED ROLE MUST NOT RUN.
 			let omittedWaitSettled = false;
 			const omittedWait = checkResult
 				.execute("public-agent-omitted-result-wait", { agent_id: awaitedAgentId }, undefined)
-				.then((result) => {
+				.then((result: any) => {
 					omittedWaitSettled = true;
 					return result;
 				});
@@ -675,7 +685,7 @@ RELOADED ROLE MUST NOT RUN.
 			let queuedResumeSettled = false;
 			const queuedResumeWait = checkResult
 				.execute("public-agent-queued-resume-wait", { agent_id: awaitedAgentId }, undefined)
-				.then((result) => {
+				.then((result: any) => {
 					queuedResumeSettled = true;
 					return result;
 				});
@@ -920,18 +930,7 @@ RELOADED ROLE MUST NOT RUN.
 			expect(requestTexts[1]).toContain("finished investigating without sharing the required second opinion");
 			expect(requestTexts[1]).toContain("The risk appears to be flush ordering.");
 			expect(systemText).toContain("senior software architect");
-			expect(activeToolSets[0]).toEqual(
-				expect.arrayContaining([
-					"read",
-					"bash",
-					"grep",
-					"find",
-					"ls",
-					"revisit_note",
-					"search_session",
-					"give_second_opinion",
-				]),
-			);
+			expect(activeToolSets[0]).toEqual(expect.arrayContaining(["read", "grep", "find", "ls", "give_second_opinion"]));
 			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "share_note", "ask_advisor"]) {
 				expect(activeToolSets[0]).not.toContain(forbidden);
 			}
@@ -1193,7 +1192,12 @@ export default function childTools(pi) {
 		expect(registeredTools).not.toContain("safe_extension_tool");
 		expect(activeTools).not.toContain("safe_extension_tool");
 		expectActiveTools(
-			activeTools.filter((name) => !Object.values(SUBAGENT_TOOL_NAMES).includes(name)),
+			activeTools.filter(
+				(name) =>
+					!Object.values(SUBAGENT_TOOL_NAMES).includes(
+						name as (typeof SUBAGENT_TOOL_NAMES)[keyof typeof SUBAGENT_TOOL_NAMES],
+					),
+			),
 			["read"],
 		);
 		for (const name of Object.values(SUBAGENT_TOOL_NAMES)) {

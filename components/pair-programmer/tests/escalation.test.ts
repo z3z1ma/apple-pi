@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-
-import { PAIR_SESSION_TOOLS, EscalateTool, RepeatedFailureDetector, PairEscalationController } from "../src/index.js";
 import type { AdvisorConsultationResult } from "../../subagents/src/consultation.js";
+import { EscalateTool, PAIR_SESSION_TOOLS, PairEscalationController, RepeatedFailureDetector } from "../src/index.js";
 
 function harness(result: AdvisorConsultationResult, minTurnsBetween = 0) {
 	let state = "initial";
+	let captureGate: Promise<void> | undefined;
+	let releaseCapture: (() => void) | undefined;
+	let captureWaits = 0;
 	const pi = {
 		exec: async (_command: string, args: string[]) => {
+			if (captureGate) {
+				captureWaits++;
+				await captureGate;
+			}
 			const key = args.join(" ");
 			const stdout =
 				key === "rev-parse --is-inside-work-tree"
@@ -50,6 +56,18 @@ function harness(result: AdvisorConsultationResult, minTurnsBetween = 0) {
 		},
 		changeState: () => {
 			state = "changed";
+		},
+		suspendCapture: () => {
+			captureGate = new Promise<void>((resolve) => {
+				releaseCapture = resolve;
+			});
+		},
+		releaseCapture: () => {
+			captureGate = undefined;
+			releaseCapture?.();
+		},
+		get captureWaits() {
+			return captureWaits;
 		},
 	};
 }
@@ -169,6 +187,40 @@ describe("Pair escalation machinery", () => {
 		expect(h.service.runConsultation).toHaveBeenCalledTimes(1);
 		expect(h.outcomes[0]).toMatchObject({ disposition: "refute", delivered: false });
 		expect(h.controller.stats.suppressed).toBe(1);
+	});
+
+	it("does not retain unavailable or failed attempts in advisor deduplication", async () => {
+		const unavailable = new PairEscalationController({
+			pi: {} as never,
+			getContext: () => undefined,
+			getService: () => undefined,
+			onDeliveryReady: () => {},
+			onOutcome: () => {},
+			onStateChange: () => {},
+		});
+		expect(unavailable.submit("pair", request, 1)).toBe("unavailable");
+		expect(unavailable.submit("pair", request, 2)).toBe("unavailable");
+
+		const h = harness({ status: "failed", error: "offline", usage: { ...usage, cost: 0 } });
+		expect(h.controller.submit("pair", request, 1)).toBe("accepted");
+		await vi.waitFor(() => expect(h.outcomes).toHaveLength(1));
+		expect(h.controller.submit("pair", request, 2)).toBe("accepted");
+	});
+
+	it("drops an advisory delivery that finishes validation after disposal", async () => {
+		const h = harness({
+			status: "completed",
+			finding: { disposition: "confirm", finding: "Late finding.", evidence: [] },
+			usage,
+		});
+		h.controller.submit("pair", request, 1);
+		await vi.waitFor(() => expect(h.ready).toBe(1));
+		h.suspendCapture();
+		const prepared = h.controller.prepareDelivery();
+		await vi.waitFor(() => expect(h.captureWaits).toBeGreaterThan(0));
+		h.controller.cancel();
+		h.releaseCapture();
+		expect(await prepared).toBeUndefined();
 	});
 
 	it("drops a late finding when implicated working state changed", async () => {

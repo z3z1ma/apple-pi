@@ -85,6 +85,48 @@ describe("owned subagent surface", () => {
 		expect(manager.detachForeground("agent-1")).toBe(true);
 		expect(detachCallerSignal).toHaveBeenCalledOnce();
 		expect(manager.getRecord("agent-1")).toMatchObject({ isBackground: true, resultConsumed: false });
+		expect((manager as any).runningBackground).toBe(1);
+		manager.dispose();
+	});
+
+	it("refuses to detach a foreground run when the background pool is full", () => {
+		const manager = new AgentManager(undefined, 1);
+		(manager as any).runningBackground = 1;
+		(manager as any).agents.set("agent-1", {
+			id: "agent-1",
+			status: "running",
+			isBackground: false,
+			detachCallerSignal: vi.fn(),
+		});
+		expect(manager.detachForeground("agent-1")).toBe(false);
+		expect(manager.getRecord("agent-1")).toMatchObject({ isBackground: false });
+		manager.dispose();
+	});
+
+	it("releases partial capacity when a queued start throws", () => {
+		const manager = new AgentManager(undefined, 1);
+		const record = { id: "queued", status: "queued", isBackground: true };
+		(manager as any).agents.set(record.id, record);
+		(manager as any).queue.push({
+			id: record.id,
+			start: () => {
+				(manager as any).acquireCapacity(record);
+				throw new Error("startup failed");
+			},
+		});
+		(manager as any).drainQueue();
+		expect(record).toMatchObject({ status: "error", error: "startup failed" });
+		expect((manager as any).runningBackground).toBe(0);
+		manager.dispose();
+	});
+
+	it("rejects every attempt to resume an active record", async () => {
+		const manager = new AgentManager();
+		for (const status of ["queued", "running"] as const) {
+			(manager as any).agents.set(status, { id: status, status, session: {} });
+			expect(await manager.resume(status, "second prompt")).toBeUndefined();
+			expect(await manager.resume(status, "second prompt", undefined, { isBackground: true })).toBeUndefined();
+		}
 		manager.dispose();
 	});
 
@@ -120,6 +162,16 @@ describe("owned subagent surface", () => {
 
 	it("uses the quick profile for the built-in read-only explorer", () => {
 		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({ profile: "quick" });
+	});
+
+	it("structurally withholds shell and write tools from every read-only default", () => {
+		for (const type of ["Explore", "Plan", "Research", "Advisor"]) {
+			const tools = DEFAULT_AGENTS.get(type)?.builtinToolNames ?? [];
+			expect(tools).toEqual(["read", "grep", "find", "ls"]);
+			expect(tools).not.toContain("bash");
+			expect(tools).not.toContain("edit");
+			expect(tools).not.toContain("write");
+		}
 	});
 
 	it("keeps BTW private and read-only", () => {
@@ -222,14 +274,14 @@ describe("owned subagent surface", () => {
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
 		expect(DEFAULT_AGENTS.get("Research")).toMatchObject({
 			profile: "quick",
-			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
+			builtinToolNames: ["read", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Advisor")).toMatchObject({
 			profile: "deep",
-			builtinToolNames: ["read", "bash", "grep", "find", "ls"],
+			builtinToolNames: ["read", "grep", "find", "ls"],
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
@@ -305,7 +357,7 @@ describe("owned subagent surface", () => {
 		const previous = process.env.PI_CODING_AGENT_DIR;
 		process.env.PI_CODING_AGENT_DIR = globalRoot;
 		try {
-			const available = [
+			const available: any[] = [
 				{ provider: "anthropic", id: "fast", name: "fast" },
 				{ provider: "anthropic", id: "deep", name: "deep" },
 				{ provider: "openai-codex", id: "parent", name: "parent" },
@@ -778,7 +830,7 @@ describe("owned subagent surface", () => {
 			"Call get_subagent_result with this agent_id when you are ready for their final report.",
 		);
 		expect(spawn).toHaveBeenCalledOnce();
-		const options = spawn.mock.calls[0]?.[4] as any;
+		const options = (spawn.mock.calls[0] as any)?.[4] as any;
 		expect(options.agentConfig).toMatchObject({
 			name: "snapshot-agent",
 			description: "Scoped snapshot role",

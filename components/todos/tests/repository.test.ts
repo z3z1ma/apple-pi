@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { acquireExclusiveLease } from "../../shared/src/exclusive-lease.js";
 import { ProjectTodoRepository, recoverStaleClaim } from "../src/repository.js";
 import { createTodo } from "../src/state.js";
+
 describe("project repository", () =>
 	it("re-reads under lock and atomically persists", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "todos-"));
@@ -41,6 +43,30 @@ describe("stale recovery", () =>
 		expect(recoverStaleClaim(repo, 1, "run", () => true)).toBe(true);
 		expect(repo.read().todos[0].execution).toBeUndefined();
 	}));
+
+it("uses the shared operating-system lease for project mutations", () => {
+	const cwd = mkdtempSync(join(tmpdir(), "todos-"));
+	const repo = new ProjectTodoRepository(cwd);
+	const release = acquireExclusiveLease("todos", cwd, "active", {
+		owned: (owner) => `owned by ${owner.runId}`,
+		failed: "failed",
+	});
+	try {
+		expect(() =>
+			repo.mutate((state) => {
+				const result = createTodo(state, { title: "blocked" });
+				return { state: result.state, value: undefined };
+			}),
+		).toThrow(/active/);
+	} finally {
+		release();
+	}
+	repo.mutate((state) => {
+		const result = createTodo(state, { title: "recovered" });
+		return { state: result.state, value: undefined };
+	});
+	expect(repo.read().todos.map((todo) => todo.title)).toEqual(["recovered"]);
+});
 
 it("rejects invalid direct writes before persisting", () => {
 	const cwd = mkdtempSync(join(tmpdir(), "todos-"));

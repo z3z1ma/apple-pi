@@ -31,6 +31,7 @@ const ZERO_USAGE = {
 
 const PROACTIVE_OVERFLOW = Symbol.for("apple-pi.proactive-overflow");
 const OVERFLOW_RECOVERY_PATCH = Symbol.for("apple-pi.proactive-overflow-recovery-patch");
+const OVERFLOW_GUARD_STATE = Symbol.for("apple-pi.proactive-overflow-state");
 
 const INTERNAL_OVERFLOW_ERROR = "proactive compaction token limit exceeded";
 
@@ -54,6 +55,35 @@ type ArmedRequest = {
 	model: string;
 	toolCallIds: string[];
 };
+
+type OverflowGuardState = {
+	armed: Map<string, ArmedRequest>;
+};
+
+function guardState(): OverflowGuardState {
+	const host = globalThis as typeof globalThis & { [OVERFLOW_GUARD_STATE]?: OverflowGuardState };
+	if (!host[OVERFLOW_GUARD_STATE]) host[OVERFLOW_GUARD_STATE] = { armed: new Map() };
+	return host[OVERFLOW_GUARD_STATE];
+}
+
+const anonymousSessionKeys = new WeakMap<object, string>();
+let anonymousSessionCounter = 0;
+function sessionKey(ctx: ExtensionContext): string {
+	const manager = ctx.sessionManager as
+		| ({ getSessionId?: () => string; getSessionFile?: () => string } & object)
+		| undefined;
+	const durable = manager?.getSessionId?.() ?? manager?.getSessionFile?.();
+	if (durable) return durable;
+	if (manager) {
+		let key = anonymousSessionKeys.get(manager);
+		if (!key) {
+			key = `anonymous-${++anonymousSessionCounter}`;
+			anonymousSessionKeys.set(manager, key);
+		}
+		return key;
+	}
+	return `anonymous-${++anonymousSessionCounter}`;
+}
 
 function includesArmedToolResults(model: Model<Api>, context: Context, request: ArmedRequest): boolean {
 	if (model.api !== request.api || model.provider !== request.provider || model.id !== request.model) return false;
@@ -142,17 +172,22 @@ function nativeCompactionSettings(ctx: ExtensionContext) {
  */
 export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void {
 	const recoveryPatchError = installOverflowRecoveryPatch();
-	let armed: ArmedRequest | undefined;
+	const state = guardState();
+	const ownedSessions = new Set<string>();
 	const installedProviders = new Map<string, Api>();
 
 	function clearArmed(): void {
-		armed = undefined;
+		for (const key of ownedSessions) state.armed.delete(key);
+		ownedSessions.clear();
 	}
 
 	function intercept(model: Model<Api>, context: Context) {
-		if (!armed || !includesArmedToolResults(model, context, armed)) return undefined;
-		armed = undefined;
-		return syntheticOverflow(model);
+		for (const [key, request] of state.armed) {
+			if (!includesArmedToolResults(model, context, request)) continue;
+			state.armed.delete(key);
+			return syntheticOverflow(model);
+		}
+		return undefined;
 	}
 
 	function installProviderWrapper(model: Model<Api>): string | undefined {
@@ -172,7 +207,7 @@ export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void 
 
 	pi.on("turn_end", (event, ctx) => {
 		if (event.toolResults.length === 0) return;
-		runtime.ensureConfig(ctx.cwd);
+		runtime.ensureConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 		if (runtime.config.passive) return;
 
 		const model = ctx.model;
@@ -194,12 +229,14 @@ export function registerOverflowGuard(pi: ExtensionAPI, runtime: Runtime): void 
 			return;
 		}
 
-		armed = {
+		const key = sessionKey(ctx);
+		ownedSessions.add(key);
+		state.armed.set(key, {
 			api: model.api,
 			provider: model.provider,
 			model: model.id,
 			toolCallIds: event.toolResults.map((result) => result.toolCallId),
-		};
+		});
 	});
 
 	pi.on("model_select", clearArmed);

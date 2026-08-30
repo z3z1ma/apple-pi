@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -42,6 +42,26 @@ describe("ledger close", () => {
 		expect(readFileSync(join(root, closed.indexPath), "utf8")).toContain(
 			"- `.ledger/history/202608170905-implement-bounded-behavior/task.md` — done — Implement bounded behavior — Keep one production owner for the requested outcome",
 		);
+	});
+
+	it("shares the writer lease with add without losing either transaction", async () => {
+		const root = temporaryRoot();
+		const existing = await addLedgerTask(
+			root,
+			"Archive concurrently",
+			"Move this task while another one is added",
+			undefined,
+			new Date(2026, 7, 17, 9, 5),
+		);
+		const [closed, added] = await Promise.all([
+			closeLedgerTask(root, existing.taskId, "done"),
+			addLedgerTask(root, "Add concurrently", "Keep this new task live", undefined, new Date(2026, 7, 17, 9, 6)),
+		]);
+		expect(existsSync(join(root, closed.taskPath))).toBe(true);
+		const live = readFileSync(join(root, ".ledger/INDEX.md"), "utf8");
+		expect(live).not.toContain(existing.taskPath);
+		expect(live).toContain(added.taskPath);
+		expect(readFileSync(join(root, closed.indexPath), "utf8")).toContain(closed.taskPath);
 	});
 
 	it("accepts a task path and leaves an already-matching status in place", async () => {
@@ -114,6 +134,25 @@ describe("ledger close", () => {
 		const live = readFileSync(index, "utf8");
 		expect(live).toContain("202608170905-keep-me/task.md");
 		expect(live).not.toContain("202608170906-archive-me/task.md");
+	});
+
+	it("rejects invalid history-index preconditions before changing task status", async () => {
+		const root = temporaryRoot();
+		const created = await addLedgerTask(
+			root,
+			"Reject bad history",
+			"Invalid destinations cannot partially close tasks",
+			undefined,
+			new Date(2026, 7, 17, 9, 5),
+		);
+		const task = join(root, created.taskPath);
+		const original = readFileSync(task, "utf8");
+		mkdirSync(join(root, ".ledger/history"), { recursive: true });
+		writeFileSync(join(root, ".ledger/history/INDEX.md"), "not a task history\n");
+
+		await expect(closeLedgerTask(root, created.taskId, "done")).rejects.toThrow("# Task History");
+		expect(readFileSync(task, "utf8")).toBe(original);
+		expect(existsSync(join(root, ".ledger/history", created.taskId))).toBe(false);
 	});
 
 	it("refuses a missing, already archived, or history-path task", async () => {

@@ -42,6 +42,7 @@ export interface TodoExecutionObserver {
 	onActivity?(id: number, activity: HarnessBoundedActivity): void;
 	onUsage?(id: number, usage: { input: number; output: number; cacheWrite: number }): void;
 	onFinish?(id: number): void;
+	onManagedCompletion?(): void;
 }
 
 export class TodoExecution {
@@ -127,6 +128,7 @@ export class TodoExecution {
 			success ? undefined : bounded(record.error || `Agent ${record.status}`, 2_000),
 		);
 		if (!settled) return;
+		this.observer.onManagedCompletion?.();
 		this.refresh();
 		if (success && this.autoCascade()) this.cascade(id);
 	}

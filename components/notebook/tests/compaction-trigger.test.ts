@@ -442,7 +442,7 @@ describe("Pair notebook compaction trigger", () => {
 			rawMessage("assistant-1", "done", {
 				message: { role: "assistant", content: "done", stopReason: "end_turn", usage: { totalTokens: 60000 } },
 			}),
-			{ type: "model_change", id: "model-1", timestamp: "2026-05-02T10:00:00.000Z" },
+			{ type: "model_change", id: "model-1", parentId: "assistant-1", timestamp: "2026-05-02T10:00:00.000Z" },
 			textCustomMessage("raw-1", "aaaa"),
 		];
 		const ctx = fakeCtx([branch], {

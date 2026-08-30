@@ -62,7 +62,6 @@ describe("MCP through pi_exec", () => {
 			cwd,
 			agentDir: process.env.PI_CODING_AGENT_DIR,
 			model,
-			modelRegistry: backend.modelRegistry as never,
 			modelRuntime: backend.modelRuntime as never,
 			resourceLoader: loader,
 			sessionManager: SessionManager.inMemory(cwd),
@@ -72,7 +71,7 @@ describe("MCP through pi_exec", () => {
 
 		expect(session.getAllTools().map((tool) => tool.name)).toEqual(expect.arrayContaining(["pi_exec", "mcp"]));
 		const execInfo = session.getAllTools().find((tool) => tool.name === "pi_exec");
-		const codeDescription = String(execInfo?.parameters.properties.code.description ?? "");
+		const codeDescription = String((execInfo?.parameters as any)?.properties.code.description ?? "");
 		expect(codeDescription).toContain("extensions.mcp({");
 		expect(codeDescription).toContain("tool?");
 		expect(codeDescription).toContain("search?");

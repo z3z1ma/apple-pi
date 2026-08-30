@@ -12,28 +12,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": [
-    "extensions/**/*.ts",
-    "components/pair-programmer/src/**/*.ts",
-    "components/pair-programmer/tests/**/*.ts",
-    "components/ask-user-question/src/**/*.ts",
-    "components/backlog/src/**/*.ts",
-    "components/backlog/tests/**/*.ts",
-    "components/codex-fast/src/**/*.ts",
-    "components/codex-fast/tests/**/*.ts",
-    "components/shared/src/**/*.ts",
-    "components/session-search/src/**/*.ts",
-    "components/notebook/src/**/*.ts",
-    "components/subagents/src/**/*.ts",
-    "components/xai-hosted-tools/src/**/*.ts",
-    "components/xai-context-compaction/src/**/*.ts",
-    "components/notify/src/**/*.ts",
-    "components/notify/tests/**/*.ts",
-    "components/tmux-sessions/src/**/*.ts",
-    "components/tmux-sessions/tests/**/*.ts",
-    "components/status-footer/src/**/*.ts",
-    "components/status-footer/tests/**/*.ts",
-    "components/todos/src/**/*.ts",
-    "components/todos/tests/**/*.ts"
-  ]
+  "include": ["extensions/**/*.ts", "components/**/*.ts", "tests/**/*.ts"]
 }

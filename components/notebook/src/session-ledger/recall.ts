@@ -1,4 +1,5 @@
 import {
+	isNotebookMaintenanceEntry,
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
@@ -105,6 +106,21 @@ function indexLedger(entries: Entry[]): {
 
 	for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
 		const entry = entries[entryIndex];
+		if (isNotebookMaintenanceEntry(entry)) {
+			entry.data.observations.forEach((observation, recordIndex) => {
+				observations.push({ observation, entryId: entry.id, entryIndex, recordIndex });
+			});
+			entry.data.reflections.forEach((reflection, recordIndex) => {
+				reflections.push({ reflection, entryId: entry.id, entryIndex, recordIndex });
+			});
+			entry.data.droppedObservationIds.forEach((id) => {
+				droppedIds.add(id);
+			});
+			entry.data.retiredReflectionIds.forEach((id) => {
+				retiredIds.add(id);
+			});
+			continue;
+		}
 		if (isObservationsRecordedEntry(entry)) {
 			entry.data.observations.forEach((observation, recordIndex) => {
 				observations.push({ observation, entryId: entry.id, entryIndex, recordIndex });

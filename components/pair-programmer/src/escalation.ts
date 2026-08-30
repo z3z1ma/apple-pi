@@ -4,15 +4,15 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 
 import {
+	type AdvisorConsultationResult,
 	buildConsultationContext,
-	captureConsultationWorkingState,
 	type ConsultationContext,
 	type ConsultationSource,
-	type AdvisorConsultationResult,
+	captureConsultationWorkingState,
 	type EvidencePointer,
 } from "../../subagents/src/consultation.js";
 import type { ManagedSubagentService } from "../../subagents/src/service.js";
-import type { PairNote, EscalationOutcome, PairEscalation, PairEscalationState } from "./types.js";
+import type { EscalationOutcome, PairEscalation, PairEscalationState, PairNote } from "./types.js";
 
 const evidencePointerSchema = Type.Object({
 	kind: Type.Union([
@@ -258,6 +258,8 @@ export class PairEscalationController {
 		if (this.#disposed) return "unavailable";
 		this.stats.requests++;
 		this.#turn = Math.max(this.#turn, turn);
+		// Do not poison deduplication when the advisor cannot be started.
+		if (!this.deps.getService()) return "unavailable";
 		const identity = identityOf(request);
 		const prior = this.#seen.get(identity.key);
 		const rank = severityRank(request.severity);
@@ -278,7 +280,7 @@ export class PairEscalationController {
 		this.state = "escalation_pending";
 		this.deps.onStateChange();
 		void this.#pump();
-		return this.deps.getService() ? "accepted" : "unavailable";
+		return "accepted";
 	}
 
 	advanceTurn(turn: number): void {
@@ -290,14 +292,29 @@ export class PairEscalationController {
 	async prepareDelivery(): Promise<PreparedPairDelivery | undefined> {
 		const candidate = this.#delivery;
 		const ctx = this.deps.getContext();
-		if (!candidate || !ctx || this.#disposed) return undefined;
-		const current = await captureConsultationWorkingState(
-			this.deps.pi,
-			ctx.cwd,
-			candidate.context.workingState.fingerprintedPaths,
-		);
+		if (!candidate || this.#disposed) return undefined;
+		if (!ctx) {
+			this.#forget(candidate.queued);
+			this.#finishDelivery(candidate, false);
+			return undefined;
+		}
+		let current: Awaited<ReturnType<typeof captureConsultationWorkingState>>;
+		try {
+			current = await captureConsultationWorkingState(
+				this.deps.pi,
+				ctx.cwd,
+				candidate.context.workingState.fingerprintedPaths,
+			);
+		} catch {
+			this.stats.failed++;
+			this.#forget(candidate.queued);
+			this.#finishDelivery(candidate, false);
+			return undefined;
+		}
+		if (this.#disposed || this.#delivery !== candidate) return undefined;
 		if (current.relevanceFingerprint !== candidate.context.workingState.relevanceFingerprint) {
 			candidate.outcome.stale = true;
+			this.#forget(candidate.queued);
 			this.stats.stale++;
 			this.#finishDelivery(candidate, false);
 			return undefined;
@@ -319,13 +336,24 @@ export class PairEscalationController {
 		this.#disposed = true;
 		this.#activeAbort?.abort();
 		this.#pending.clear();
+		this.#seen.clear();
 		this.#delivery = undefined;
 		this.state = "cancelled";
 		this.deps.onStateChange();
 	}
 
+	#forget(queued: QueuedEscalation): void {
+		// A newer queued escalation owns the identity and must retain its dedup entry.
+		if (this.#pending.has(queued.identity.key)) return;
+		const seen = this.#seen.get(queued.identity.key);
+		if (seen?.evidence === queued.identity.evidence && seen.severity === severityRank(queued.request.severity)) {
+			this.#seen.delete(queued.identity.key);
+		}
+	}
+
 	#finishDelivery(candidate: DeliveryCandidate, delivered: boolean): void {
 		candidate.outcome.delivered = delivered;
+		if (!delivered) this.#forget(candidate.queued);
 		this.deps.onOutcome(candidate.outcome);
 		if (this.#delivery === candidate) this.#delivery = undefined;
 		this.state = this.#active ? "advisor_running" : this.#pending.size ? "escalation_pending" : "idle";
@@ -370,6 +398,7 @@ export class PairEscalationController {
 				triggerFeatures: queued.triggerFeatures,
 			});
 		} catch {
+			this.#forget(queued);
 			this.stats.failed++;
 			this.state = "failed";
 			this.deps.onOutcome({
@@ -436,6 +465,11 @@ export class PairEscalationController {
 		const deliverable =
 			result.status === "completed" && finding !== undefined && (disposition === "confirm" || disposition === "refine");
 		if (!deliverable) {
+			// A completed refutation/uncertain result is a real adjudication and
+			// remains deduped; transport/parse/cancellation attempts are retryable.
+			if (result.status === "failed" || result.status === "malformed" || result.status === "cancelled") {
+				this.#forget(queued);
+			}
 			this.state =
 				result.status === "cancelled" ? "cancelled" : result.status === "completed" ? "advisor_settled" : "failed";
 			this.deps.onOutcome(outcome);

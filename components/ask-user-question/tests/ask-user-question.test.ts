@@ -49,7 +49,7 @@ function fakeTui() {
 	} as any;
 }
 
-function keybindings(overrides: Record<string, string | string[]> = {}) {
+function keybindings(overrides: ConstructorParameters<typeof KeybindingsManager>[1] = {}) {
 	return new KeybindingsManager(TUI_KEYBINDINGS, overrides);
 }
 

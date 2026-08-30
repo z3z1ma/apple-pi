@@ -40,6 +40,7 @@ import {
 	piExecToolDescription,
 	savedProgramsSystemPromptContribution,
 } from "./runtime-api.js";
+import { serializeJsonValue } from "./runtime-json.js";
 import {
 	listSavedPrograms,
 	MAX_PROGRAM_NAME_CHARS,
@@ -108,10 +109,23 @@ const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
 
+const MAX_STATE_SNAPSHOTS_PER_SESSION = 32;
+const MAX_STATE_SNAPSHOT_BYTES = 200_000;
+const MAX_STATE_BYTES_PER_SESSION = 1_000_000;
+const MAX_STATE_SNAPSHOTS = 128;
+const MAX_STATE_BYTES = 4_000_000;
+
+interface StateSnapshot {
+	state: unknown;
+	bytes: number;
+	sequence: number;
+}
+
 interface ProgramStateStore {
-	snapshots: Map<string, Map<string, unknown>>;
+	snapshots: Map<string, Map<string, StateSnapshot>>;
 	prefix: string;
 	nextId: number;
+	nextSequence: number;
 }
 
 function restoreProgramState(
@@ -121,18 +135,56 @@ function restoreProgramState(
 ): unknown {
 	if (!stateId) return {};
 	const snapshots = sessionId ? store.snapshots.get(sessionId) : undefined;
-	if (!snapshots?.has(stateId)) throw new Error(`Unknown pi_exec state: ${stateId}`);
-	return snapshots.get(stateId);
+	const snapshot = snapshots?.get(stateId);
+	if (!snapshot) throw new Error(`Unknown pi_exec state: ${stateId}`);
+	return snapshot.state;
 }
 
 function saveProgramState(store: ProgramStateStore, sessionId: string, state: unknown): string {
+	const serialized = JSON.stringify(state);
+	if (typeof serialized !== "string") throw new Error("pi_exec state snapshot is not JSON-serializable");
+	const bytes = Buffer.byteLength(serialized);
+	if (bytes > MAX_STATE_SNAPSHOT_BYTES) {
+		throw new Error(`pi_exec state snapshot exceeds ${MAX_STATE_SNAPSHOT_BYTES.toLocaleString()} bytes`);
+	}
 	let snapshots = store.snapshots.get(sessionId);
 	if (!snapshots) {
 		snapshots = new Map();
 		store.snapshots.set(sessionId, snapshots);
 	}
+	const totalBytes = () => [...snapshots.values()].reduce((total, snapshot) => total + snapshot.bytes, 0);
+	const evictOldest = (allSessions: boolean) => {
+		if (!allSessions) return snapshots.delete(snapshots.keys().next().value!);
+		let oldest: { sessionId: string; stateId: string; sequence: number } | undefined;
+		for (const [candidateSessionId, candidateSnapshots] of store.snapshots) {
+			for (const [candidateStateId, candidate] of candidateSnapshots) {
+				if (!oldest || candidate.sequence < oldest.sequence) {
+					oldest = { sessionId: candidateSessionId, stateId: candidateStateId, sequence: candidate.sequence };
+				}
+			}
+		}
+		if (!oldest) return false;
+		const oldestSnapshots = store.snapshots.get(oldest.sessionId)!;
+		oldestSnapshots.delete(oldest.stateId);
+		if (oldestSnapshots.size === 0) store.snapshots.delete(oldest.sessionId);
+		return true;
+	};
+	while (
+		snapshots.size >= MAX_STATE_SNAPSHOTS_PER_SESSION ||
+		(totalBytes() + bytes > MAX_STATE_BYTES_PER_SESSION && snapshots.size > 0)
+	) {
+		evictOldest(false);
+	}
+	const allSnapshots = () => [...store.snapshots.values()].flatMap((session) => [...session.values()]);
+	while (
+		allSnapshots().length >= MAX_STATE_SNAPSHOTS ||
+		allSnapshots().reduce((total, snapshot) => total + snapshot.bytes, 0) + bytes > MAX_STATE_BYTES
+	) {
+		if (!evictOldest(true)) break;
+	}
+	if (!store.snapshots.has(sessionId)) store.snapshots.set(sessionId, snapshots);
 	const stateId = `${store.prefix}.${(store.nextId++).toString(36)}`;
-	snapshots.set(stateId, state);
+	snapshots.set(stateId, { state, bytes, sequence: store.nextSequence++ });
 	return stateId;
 }
 
@@ -396,18 +448,20 @@ function traceValue(value: unknown): unknown {
 
 function portableValue(value: unknown, maxChars = MAX_GUEST_TOOL_RESULT_CHARS): unknown {
 	if (value === undefined) return undefined;
-	try {
-		const json = JSON.stringify(value, (_key, nested) => (typeof nested === "bigint" ? String(nested) : nested));
-		if (json === undefined) return undefined;
-		if (json.length <= maxChars) return JSON.parse(json) as unknown;
-		return {
-			truncated: true,
-			originalChars: json.length,
-			preview: json.slice(0, maxChars),
-		};
-	} catch {
-		return String(value);
-	}
+	const json = serializeJsonValue(value, "pi_exec host result");
+	if (json.length <= maxChars) return JSON.parse(json) as unknown;
+	return {
+		truncated: true,
+		originalChars: json.length,
+		preview: json.slice(0, maxChars),
+	};
+}
+
+/** TypeBox schemas carry runtime metadata; the guest receives their JSON Schema projection. */
+function portableSchema(value: unknown): unknown {
+	const json = JSON.stringify(value);
+	if (json === undefined) return undefined;
+	return JSON.parse(json) as unknown;
 }
 
 function displayValue(value: unknown): string {
@@ -432,7 +486,11 @@ export default function runtime(pi: ExtensionAPI): void {
 		snapshots: new Map(),
 		prefix: randomBytes(6).toString("base64url"),
 		nextId: 1,
+		nextSequence: 1,
 	};
+	pi.on("session_shutdown", (_event, ctx) => {
+		stateStore.snapshots.delete(ctx.sessionManager.getSessionId());
+	});
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && event.toolName !== "pi_exec_program") || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
@@ -684,7 +742,7 @@ export default function runtime(pi: ExtensionAPI): void {
 						const descriptors = tools.map((tool) => ({
 							name: tool.name,
 							description: tool.description,
-							...(ref === "tools.describe" ? { parameters: portableValue(tool.parameters) } : {}),
+							...(ref === "tools.describe" ? { parameters: portableSchema(tool.parameters) } : {}),
 						}));
 						value =
 							ref === "tools.search"
@@ -706,10 +764,12 @@ export default function runtime(pi: ExtensionAPI): void {
 						emit();
 						const result = await invokeDefinition(tool.definition, args, operation, runtimeSignal);
 						const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${operation.ref} output`).value;
+						const content = portableValue(result.content);
+						const details = portableValue(result.details);
 						value = {
 							text,
-							content: portableValue(result.content),
-							details: portableValue(result.details),
+							...(content !== undefined ? { content } : {}),
+							...(details !== undefined ? { details } : {}),
 							...(result.usage ? { usage: result.usage } : {}),
 						};
 					} else if (ref === "skills.list") {
@@ -751,10 +811,19 @@ export default function runtime(pi: ExtensionAPI): void {
 						const name = match?.[1];
 						if (!name || !CORE_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
 						const definition = capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!;
-						const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
-						const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
-						value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
+						try {
+							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
+							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
+							value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
+						} catch (error) {
+							if (!ENVELOPE_TOOLS.has(name) || runtimeSignal.aborted) throw error;
+							const output = error instanceof Error ? error.message : String(error);
+							operation.outcome = "failed";
+							operation.error = output;
+							value = { ok: false, output: bounded(output, MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value };
+						}
 					}
+					if (value !== undefined) serializeJsonValue({ value }, "pi_exec host result");
 					operation.result =
 						ref === "fetch" && value && typeof value === "object"
 							? {
@@ -854,6 +923,9 @@ export default function runtime(pi: ExtensionAPI): void {
 		promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
+				throw new Error("pi_exec saved programs require a trusted project");
+			}
 			const programs = listSavedPrograms(ctx.cwd);
 			return {
 				content: [{ type: "text", text: JSON.stringify(programs, null, 2) }],
@@ -886,6 +958,9 @@ export default function runtime(pi: ExtensionAPI): void {
 			limits: piExecTool.parameters.properties.limits,
 		}),
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
+				throw new Error("pi_exec saved programs require a trusted project");
+			}
 			const program = readSavedProgram(ctx.cwd, params.name);
 			return piExecTool.execute(
 				toolCallId,

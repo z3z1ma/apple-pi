@@ -62,11 +62,11 @@ Teams commonly ignore `/.ledger/`; solo repositories may commit it. Ledger never
 
 `ledger_add` creates one new timestamped bundle, the two root files, the five supporting directories, and a live-index row. It is a structure-creation primitive, not a task selector, parser, dashboard, or execution engine.
 
-Required inputs are a one-line title and description. An optional lowercase kebab slug overrides the title-derived slug. Existing live or archived task IDs are never overwritten.
+Required inputs are a one-line title and description. An optional lowercase kebab slug overrides the title-derived slug. Existing live or archived task IDs are never overwritten. Add and close share one project-scoped cross-process lease backed by a held SQLite write transaction, so the operating system releases ownership after a process dies without deleting another process's lock. Index files are replaced through same-directory temporary files.
 
 ### `ledger_close`
 
-`ledger_close` archives one live bundle as `done` or `cancelled`. It updates `Status` in `task.md` when needed, moves the entire bundle under `.ledger/history/`, removes its live-index row, and appends a history-index row.
+`ledger_close` archives one live bundle as `done` or `cancelled`. It validates the source, destination, task, and both indexes before mutation; then it updates `Status` in `task.md`, moves the entire bundle under `.ledger/history/`, removes its live-index row, and appends a history-index row. A failure after mutation starts rolls those changes back or reports that rollback also failed.
 
 It does not decide whether the task is complete. Closure readiness comes from the promised outcome, unresolved blockers or dependencies, and verification proportionate to the claim. Plans, evidence, review dispositions, and the retrospective participate only when the task actually used them.
 

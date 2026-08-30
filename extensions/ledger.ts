@@ -1,21 +1,12 @@
-import {
-	appendFileSync,
-	chmodSync,
-	existsSync,
-	linkSync,
-	lstatSync,
-	mkdirSync,
-	readFileSync,
-	realpathSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import * as fs from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { acquireExclusiveLease } from "../components/shared/src/exclusive-lease.js";
 import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
 
 const SUPPORTING_DIRECTORIES = ["specs", "plans", "research", "decisions", "evidence"] as const;
@@ -24,6 +15,7 @@ const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CLOSED_STATUSES = ["done", "cancelled"] as const;
 const LIVE_INDEX = ".ledger/INDEX.md";
 const HISTORY_INDEX = ".ledger/history/INDEX.md";
+const LEDGER_LEASE_KIND = "ledger-transactions";
 
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
 
@@ -78,15 +70,28 @@ function slugFrom(title: string, requested?: string): string {
 	return slug;
 }
 
+function lstatIfPresent(path: string) {
+	try {
+		return lstatSync(path);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw error;
+	}
+}
+
+function pathExists(path: string): boolean {
+	return lstatIfPresent(path) !== undefined;
+}
+
 function assertDirectory(path: string, label: string): void {
-	if (!existsSync(path)) return;
-	const stat = lstatSync(path);
+	const stat = lstatIfPresent(path);
+	if (!stat) return;
 	if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`${label} must be a non-symlink directory`);
 }
 
 function assertRegularFile(path: string, label: string): void {
-	if (!existsSync(path)) return;
-	const stat = lstatSync(path);
+	const stat = lstatIfPresent(path);
+	if (!stat) return;
 	if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${label} must be a regular non-symlink file`);
 }
 
@@ -168,37 +173,44 @@ Pending completion of the undertaking.
 `;
 }
 
-function ensureIndex(indexPath: string, directory: string, heading: string, label: string): void {
-	if (!existsSync(indexPath)) {
-		const temporary = join(directory, `.index.${process.pid}.${Date.now()}.tmp`);
-		try {
-			writeFileSync(temporary, `${heading}\n`, { encoding: "utf8", flag: "wx" });
-			try {
-				linkSync(temporary, indexPath);
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-			}
-		} finally {
-			rmSync(temporary, { force: true });
-		}
+function readIndex(
+	indexPath: string,
+	heading: string,
+	label: string,
+	taskPath: string,
+	duplicateError: string,
+): string {
+	let current = `${heading}\n`;
+	if (pathExists(indexPath)) {
+		assertRegularFile(indexPath, label);
+		current = readFileSync(indexPath, "utf8");
 	}
-	assertRegularFile(indexPath, label);
+	if (!new RegExp(`^${escapeRegExp(heading)}\\s*$`, "m").test(current)) {
+		throw new Error(`${label} must contain a '${heading}' heading`);
+	}
+	if (current.includes(`\`${taskPath}\``)) throw new Error(duplicateError);
+	return current;
 }
 
-function validateLiveIndex(indexPath: string, taskPath: string): void {
-	const current = readFileSync(indexPath, "utf8");
-	if (!/^#\s+Task Ledger\s*$/m.test(current)) {
-		throw new Error(".ledger/INDEX.md must contain a '# Task Ledger' heading");
+/** Replace a file through a sibling temporary so readers never see a truncated index. */
+function writeAtomicTextFile(path: string, content: string): void {
+	const directory = join(path, "..");
+	const mode = pathExists(path) ? lstatSync(path).mode & 0o777 : undefined;
+	const temporary = join(directory, `.${process.pid}.${randomUUID()}.tmp`);
+	try {
+		writeFileSync(temporary, content, { encoding: "utf8", flag: "wx" });
+		if (mode !== undefined) chmodSync(temporary, mode);
+		fs.renameSync(temporary, path);
+	} finally {
+		rmSync(temporary, { force: true });
 	}
-	if (current.includes(`\`${taskPath}\``)) throw new Error(`Ledger index already contains ${taskPath}`);
 }
 
-function validateHistoryIndex(indexPath: string, taskPath: string): void {
-	const current = readFileSync(indexPath, "utf8");
-	if (!/^#\s+Task History\s*$/m.test(current)) {
-		throw new Error(".ledger/history/INDEX.md must contain a '# Task History' heading");
-	}
-	if (current.includes(`\`${taskPath}\``)) throw new Error(`History index already contains ${taskPath}`);
+function acquireLedgerLease(root: string): () => void {
+	return acquireExclusiveLease(LEDGER_LEASE_KIND, root, randomUUID(), {
+		owned: (owner) => `Ledger transaction is busy; owned by ${owner.pid}`,
+		failed: "Unable to acquire Ledger transaction lease",
+	});
 }
 
 function removeIndexRow(content: string, taskPath: string): { next: string; summary?: string } {
@@ -214,9 +226,7 @@ function titleFromTask(taskMarkdown: string, fallback: string): string {
 }
 
 function writeTextFile(path: string, content: string): void {
-	const mode = existsSync(path) ? lstatSync(path).mode & 0o777 : undefined;
-	writeFileSync(path, content, "utf8");
-	if (mode !== undefined) chmodSync(path, mode);
+	writeAtomicTextFile(path, content);
 }
 
 function applyTaskStatus(taskMarkdown: string, status: ClosedLedgerStatus): string {
@@ -263,27 +273,40 @@ export async function addLedgerTask(
 	const bundlePath = `.ledger/${taskId}`;
 	const taskPath = `${bundlePath}/task.md`;
 
-	mkdirIfNeeded(ledgerPath);
-	assertDirectory(ledgerPath, ".ledger");
-	if (existsSync(bundleAbsolute)) throw new Error(`Ledger task already exists: ${bundlePath}`);
-	if (existsSync(historyBundleAbsolute)) {
-		throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
-	}
-	ensureIndex(indexAbsolute, ledgerPath, "# Task Ledger", LIVE_INDEX);
-	validateLiveIndex(indexAbsolute, taskPath);
-
-	let createdBundle = false;
+	const release = acquireLedgerLease(root);
 	try {
-		mkdirSync(bundleAbsolute);
-		createdBundle = true;
-		for (const directory of SUPPORTING_DIRECTORIES) mkdirSync(join(bundleAbsolute, directory));
-		writeFileSync(taskAbsolute, taskTemplate(title, date), { encoding: "utf8", flag: "wx" });
-		writeFileSync(retrospectiveAbsolute, retrospectiveTemplate(date), { encoding: "utf8", flag: "wx" });
-		appendFileSync(indexAbsolute, `\n- \`${taskPath}\` — ${title} — ${description}\n`, "utf8");
-		return { taskId, bundlePath, taskPath, indexPath: LIVE_INDEX };
-	} catch (error) {
-		if (createdBundle) rmSync(bundleAbsolute, { recursive: true, force: true });
-		throw error;
+		mkdirIfNeeded(ledgerPath);
+		assertDirectory(ledgerPath, ".ledger");
+		if (pathExists(bundleAbsolute)) throw new Error(`Ledger task already exists: ${bundlePath}`);
+		const historyPath = join(ledgerPath, "history");
+		if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
+		if (pathExists(historyBundleAbsolute)) {
+			throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
+		}
+		const currentIndex = readIndex(
+			indexAbsolute,
+			"# Task Ledger",
+			LIVE_INDEX,
+			taskPath,
+			`Ledger index already contains ${taskPath}`,
+		);
+		const nextIndex = `${currentIndex.replace(/\n*$/, "\n")}\n- \`${taskPath}\` — ${title} — ${description}\n`;
+
+		let createdBundle = false;
+		try {
+			mkdirSync(bundleAbsolute);
+			createdBundle = true;
+			for (const directory of SUPPORTING_DIRECTORIES) mkdirSync(join(bundleAbsolute, directory));
+			writeFileSync(taskAbsolute, taskTemplate(title, date), { encoding: "utf8", flag: "wx" });
+			writeFileSync(retrospectiveAbsolute, retrospectiveTemplate(date), { encoding: "utf8", flag: "wx" });
+			writeAtomicTextFile(indexAbsolute, nextIndex);
+			return { taskId, bundlePath, taskPath, indexPath: LIVE_INDEX };
+		} catch (error) {
+			if (createdBundle) rmSync(bundleAbsolute, { recursive: true, force: true });
+			throw error;
+		}
+	} finally {
+		release();
 	}
 }
 
@@ -305,43 +328,89 @@ export async function closeLedgerTask(
 	const liveTaskPath = `.ledger/${taskId}/task.md`;
 	const historyTaskPath = `.ledger/history/${taskId}/task.md`;
 
-	assertDirectory(ledgerPath, ".ledger");
-	if (existsSync(historyBundleAbsolute)) throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
-	if (!existsSync(liveBundleAbsolute)) throw new Error(`Ledger task not found: .ledger/${taskId}`);
-	assertDirectory(liveBundleAbsolute, `.ledger/${taskId}`);
-	if (!existsSync(liveTaskAbsolute)) throw new Error(`Ledger task is missing task.md: ${liveTaskPath}`);
-	assertRegularFile(liveTaskAbsolute, liveTaskPath);
+	const release = acquireLedgerLease(root);
+	try {
+		assertDirectory(ledgerPath, ".ledger");
+		// Read and validate every source and destination before changing task.md.
+		if (pathExists(historyBundleAbsolute)) throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
+		if (!pathExists(liveBundleAbsolute)) throw new Error(`Ledger task not found: .ledger/${taskId}`);
+		assertDirectory(liveBundleAbsolute, `.ledger/${taskId}`);
+		if (!pathExists(liveTaskAbsolute)) throw new Error(`Ledger task is missing task.md: ${liveTaskPath}`);
+		assertRegularFile(liveTaskAbsolute, liveTaskPath);
+		if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
 
-	const liveTask = readFileSync(liveTaskAbsolute, "utf8");
-	const nextTask = applyTaskStatus(liveTask, status);
-	if (nextTask !== liveTask) writeTextFile(liveTaskAbsolute, nextTask);
-
-	mkdirIfNeeded(historyPath);
-	assertDirectory(historyPath, ".ledger/history");
-	ensureIndex(historyIndexAbsolute, historyPath, "# Task History", HISTORY_INDEX);
-	validateHistoryIndex(historyIndexAbsolute, historyTaskPath);
-
-	let liveIndexSummary: string | undefined;
-	let nextLiveIndex: string | undefined;
-	if (existsSync(liveIndexAbsolute)) {
-		assertRegularFile(liveIndexAbsolute, LIVE_INDEX);
-		const currentLiveIndex = readFileSync(liveIndexAbsolute, "utf8");
+		const liveTask = readFileSync(liveTaskAbsolute, "utf8");
+		const nextTask = applyTaskStatus(liveTask, status);
+		const currentLiveIndex = readIndex(
+			liveIndexAbsolute,
+			"# Task Ledger",
+			LIVE_INDEX,
+			historyTaskPath,
+			"Ledger index has an invalid history row",
+		);
+		const currentHistoryIndex = readIndex(
+			historyIndexAbsolute,
+			"# Task History",
+			HISTORY_INDEX,
+			historyTaskPath,
+			`History index already contains ${historyTaskPath}`,
+		);
 		const removed = removeIndexRow(currentLiveIndex, liveTaskPath);
-		liveIndexSummary = removed.summary;
-		if (removed.next !== currentLiveIndex) nextLiveIndex = removed.next;
-	}
+		const summary = removed.summary || titleFromTask(nextTask, taskId);
+		const nextHistoryIndex = `${currentHistoryIndex.replace(/\n*$/, "\n")}\n- \`${historyTaskPath}\` — ${status} — ${summary}\n`;
 
-	renameSync(liveBundleAbsolute, historyBundleAbsolute);
-	if (nextLiveIndex !== undefined) writeTextFile(liveIndexAbsolute, nextLiveIndex);
-	const summary = liveIndexSummary || titleFromTask(nextTask, taskId);
-	appendFileSync(historyIndexAbsolute, `\n- \`${historyTaskPath}\` — ${status} — ${summary}\n`, "utf8");
-	return {
-		taskId,
-		status,
-		bundlePath: `.ledger/history/${taskId}`,
-		taskPath: historyTaskPath,
-		indexPath: HISTORY_INDEX,
-	};
+		const historyExisted = pathExists(historyPath);
+		const historyIndexExisted = pathExists(historyIndexAbsolute);
+		let taskChanged = false;
+		let moved = false;
+		let liveIndexChanged = false;
+		let historyIndexChanged = false;
+		let historyCreated = false;
+		try {
+			// Stage the destination path before changing task metadata.
+			mkdirIfNeeded(historyPath);
+			historyCreated = !historyExisted;
+			assertDirectory(historyPath, ".ledger/history");
+			if (nextTask !== liveTask) {
+				writeTextFile(liveTaskAbsolute, nextTask);
+				taskChanged = true;
+			}
+			fs.renameSync(liveBundleAbsolute, historyBundleAbsolute);
+			moved = true;
+			if (removed.next !== currentLiveIndex) {
+				writeAtomicTextFile(liveIndexAbsolute, removed.next);
+				liveIndexChanged = true;
+			}
+			writeAtomicTextFile(historyIndexAbsolute, nextHistoryIndex);
+			historyIndexChanged = true;
+		} catch (error) {
+			// Restore indexes first, then return the bundle and its original status.
+			try {
+				if (historyIndexChanged) {
+					if (historyIndexExisted) writeAtomicTextFile(historyIndexAbsolute, currentHistoryIndex);
+					else rmSync(historyIndexAbsolute, { force: true });
+				}
+				if (liveIndexChanged) writeAtomicTextFile(liveIndexAbsolute, currentLiveIndex);
+				if (moved) fs.renameSync(historyBundleAbsolute, liveBundleAbsolute);
+				if (taskChanged) writeTextFile(liveTaskAbsolute, liveTask);
+				if (historyCreated) rmSync(historyPath, { recursive: false, force: true });
+			} catch (rollbackError) {
+				throw new Error(`Ledger close failed and rollback failed: ${(rollbackError as Error).message}`, {
+					cause: error,
+				});
+			}
+			throw error;
+		}
+		return {
+			taskId,
+			status,
+			bundlePath: `.ledger/history/${taskId}`,
+			taskPath: historyTaskPath,
+			indexPath: HISTORY_INDEX,
+		};
+	} finally {
+		release();
+	}
 }
 
 function createLedgerAddTool() {

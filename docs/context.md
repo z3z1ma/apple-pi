@@ -13,16 +13,16 @@ When the active model is `provider === "xai"` and `api === "openai-responses"`:
 1. The hook converts the messages being summarized with pi-ai's Responses converter.
 2. A previous xAI compaction item is prepended so successive compact calls chain.
 3. Auth comes from `ctx.modelRegistry.getApiKeyAndHeaders(model)`. The endpoint is `{model.baseUrl || https://api.x.ai/v1}/responses/compact`.
-4. A successful response stores `{ type: "compaction", id, encrypted_content }` in `details.xaiCompaction` and keeps a real text summary.
+4. A successful response stores `{ type: "compaction", id, encrypted_content }` in `details.xaiCompaction` and keeps a bounded whole-history text projection, including prior compacted context, as a usable fallback.
 5. Later xAI Responses requests inject only that newest item after a leading system or developer prompt.
 6. Auth failure, HTTP errors, or a missing compaction item return `undefined` so Pi's default summarizer runs.
-7. If a request carrying an injected item gets a 4xx, injection is disabled for the rest of the session and a warning is shown.
+7. Injection is disabled for the rest of the session only when a 4xx can be attributed to an isolated request where this extension injected the item. Pre-existing items and ambiguous concurrent requests do not disable replay.
 
 Completions-routed Grok is left to Pi default compaction.
 
 ## Pair notebook
 
-The pair programming partner is the only persistent model actor. It follows the main session as it unfolds, keeps a second line of thought while the main agent works, and periodically maintains sourced observations and reflections about the pair's current shared understanding through its private `update_notebook` tool. The tool proposes a typed update; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending records.
+The pair programming partner is the only persistent model actor. It follows the main session as it unfolds, keeps a second line of thought while the main agent works, and periodically maintains sourced observations and reflections about the pair's current shared understanding through its private `update_notebook` tool. The tool proposes a typed update; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending the complete maintenance result as one atomic session entry.
 
 Full maintenance becomes due when uncovered source tokens reach `notebookAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal Pair review. Empty full-maintenance results use a bounded retry backoff. If Pair is disabled or unavailable, note-taking pauses; existing observations, reflections, compaction packets, `search_session`, and `revisit_note` remain readable. No hidden notebook actor starts.
 
@@ -32,7 +32,7 @@ Commands and tools:
 
 - `/pair status` — Pair state, notebook coverage, and Pair/Advisor usage
 - `/pair notebook [full]` — visible or complete notebook projection
-- `search_session` — progressive search of this session's transcript and file-operation history
+- `search_session` — progressive search of this session's transcript and file-operation history; regex-like queries use a bounded safe subset and reject ambiguous grouped or repeated patterns
 - `revisit_note` — exact source lookup by a known observation or reflection ID
 
 Pair operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. Pair model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable proactive compaction and Pair notebook maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).

@@ -127,6 +127,7 @@ export function installTodos(pi: ExtensionAPI) {
 				onActivity: (id, activity) => widget.updateActivity(id, activity),
 				onUsage: (id, usage) => widget.addTokenUsage(usage.input, usage.output, id),
 				onFinish: (id) => widget.setActiveRun(id, false),
+				onManagedCompletion: () => autoClear.onRunEnded(),
 			},
 		);
 		cadence.reset();
@@ -161,7 +162,6 @@ export function installTodos(pi: ExtensionAPI) {
 		const todos = controller.list();
 		cadence.onTurnEnd(todos.some((todo) => todo.status === "active"));
 	});
-	pi.on("agent_settled", () => autoClear.onRunEnded());
 	pi.on("context", (event) => {
 		if (
 			unavailable ||

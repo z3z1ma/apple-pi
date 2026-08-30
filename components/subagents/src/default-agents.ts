@@ -6,27 +6,17 @@
 
 import type { AgentConfig } from "./types.js";
 
-const READ_ONLY_TOOLS = ["read", "bash", "grep", "find", "ls"];
+// Structural policy: these roles receive no shell or mutation capability. Prompts are
+// explanatory only; `builtinToolNames` is the enforcement boundary.
+const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
 
 const READ_ONLY_CONTRACT = `# CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
-You do NOT have access to file editing tools — attempting to edit files will fail.
-
-You are STRICTLY PROHIBITED from:
-- Creating new files
-- Modifying existing files
-- Deleting files
-- Moving or copying files
-- Creating temporary files anywhere, including /tmp
-- Using redirect operators (>, >>, |) or heredocs to write to files
-- Running ANY commands that change system state
-
-Use Bash ONLY for read-only operations: ls, git status, git log, git diff, find, cat, head, tail.
+You have no file editing or shell tool capability. Read-only access is enforced structurally.
 
 # Tool Usage
-- Use the find tool for file pattern matching (NOT the bash find command)
-- Use the grep tool for content search (NOT bash grep/rg command)
-- Use the read tool for reading files (NOT bash cat/head/tail)
-- Use Bash ONLY for read-only operations
+- Use the find tool for file pattern matching
+- Use the grep tool for content search
+- Use the read tool for reading files
 - Make independent tool calls in parallel for efficiency
 - Use absolute file paths
 - Do not use emojis`;

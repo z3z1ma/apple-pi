@@ -202,7 +202,8 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 		},
 	});
 
-	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	expect(handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx)).toBeUndefined();
+	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
@@ -225,7 +226,8 @@ test("suppresses the settle notification when the operator is already viewing th
 		message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
 	});
 
-	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(focusCheckCall(calls)));
 
 	const check = focusCheckCall(calls);
 	assert.ok(check, "focus-check.sh should run before delivery on the settle path");
@@ -268,7 +270,8 @@ test("reports terminal cyber_policy errors instead of completion", async () => {
 		},
 	});
 
-	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
@@ -293,7 +296,8 @@ test("reports an aborted task instead of completion", async () => {
 		},
 	});
 
-	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
@@ -320,7 +324,8 @@ test("clears a transient error when an automatic retry succeeds", async () => {
 		},
 	});
 
-	await handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");

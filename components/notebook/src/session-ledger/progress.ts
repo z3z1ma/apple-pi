@@ -1,5 +1,7 @@
 import { estimateEntryTokens } from "../tokens.js";
 import {
+	isNotebookMaintenanceEntry,
+	NOTEBOOK_MAINTENANCE,
 	NOTEBOOK_OBSERVATIONS_DROPPED,
 	NOTEBOOK_OBSERVATIONS_RECORDED,
 	NOTEBOOK_REFLECTIONS_RECORDED,
@@ -38,9 +40,14 @@ function isValidCoverageEntry(
 	entry: Entry,
 	customType: NotebookCustomType,
 ): entry is Entry & { data: { coversUpToId: string } } {
-	if (entry.type !== "custom" || entry.customType !== customType) return false;
+	if (entry.type !== "custom") return false;
 	if (!isObject(entry.data) || typeof entry.data.coversUpToId !== "string") return false;
+	// A maintenance envelope is the canonical coverage marker for every
+	// maintenance dimension, including intentionally empty reviews.
+	if (entry.customType === NOTEBOOK_MAINTENANCE) return isNotebookMaintenanceEntry(entry);
+	if (entry.customType !== customType) return false;
 
+	if (customType === NOTEBOOK_MAINTENANCE) return false;
 	if (customType === NOTEBOOK_OBSERVATIONS_RECORDED) return isNonEmptyArray(entry.data.observations);
 	if (customType === NOTEBOOK_REFLECTIONS_RECORDED) return isNonEmptyArray(entry.data.reflections);
 	if (customType === NOTEBOOK_REFLECTIONS_RETIRED) return isNonEmptyArray(entry.data.reflectionIds);

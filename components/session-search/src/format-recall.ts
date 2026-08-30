@@ -34,6 +34,33 @@ interface RecallSegment {
 const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[] => {
 	if (entries.length === 0) return [];
 
+	// Search results are relevance-ranked. When search supplied transcript turn
+	// ids, group by those stable identities rather than treating ranked neighbors
+	// as chronological neighbors.
+	if (entries.some((entry) => entry.turnId !== undefined)) {
+		const byTurn = new Map<number, SearchHit[]>();
+		for (const entry of entries) {
+			const turn = entry.turnId ?? entry.index;
+			const group = byTurn.get(turn) ?? [];
+			group.push(entry);
+			byTurn.set(turn, group);
+		}
+		return [...byTurn.values()].map((group) => {
+			group.sort((a, b) => a.index - b.index);
+			const matched = new Set<number>();
+			const assumeAllMatched =
+				hasQuery && group.every((entry) => entry.snippet === undefined && entry.matchCount === undefined);
+			for (let i = 0; i < group.length; i++) {
+				if (assumeAllMatched || group[i].snippet !== undefined || group[i].matchCount !== undefined) matched.add(i);
+			}
+			return {
+				range: `#${group[0]!.index}${group.length > 1 ? `-#${group[group.length - 1]!.index}` : ""}`,
+				entries: group,
+				matchedIndices: matched,
+			};
+		});
+	}
+
 	// Detect whether entries have snippet markers set.
 	// If none do but we have a query, treat the entire set as matched.
 	const anySnippet = entries.some((e) => e.snippet !== undefined);

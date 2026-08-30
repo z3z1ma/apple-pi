@@ -7,18 +7,13 @@ import { hashId } from "./ids.js";
 import { resolveNotebookSourceMaxTokens, type Config } from "./config.js";
 import { nowTimestamp, serializeSourceAddressedBranchEntries, truncateRecordContent } from "./serialize.js";
 import {
-	buildObservationsDroppedData,
-	buildObservationsRecordedData,
-	buildReflectionsRecordedData,
-	buildReflectionsRetiredData,
+	buildNotebookMaintenanceData,
 	foldLedger,
 	isSourceEntry,
 	latestCoverageIndex,
 	latestCoverageMarkerId,
-	NOTEBOOK_OBSERVATIONS_DROPPED,
+	NOTEBOOK_MAINTENANCE,
 	NOTEBOOK_OBSERVATIONS_RECORDED,
-	NOTEBOOK_REFLECTIONS_RECORDED,
-	NOTEBOOK_REFLECTIONS_RETIRED,
 	observationToSummaryLine,
 	reflectionToSummaryLine,
 	type Entry,
@@ -325,30 +320,17 @@ export function commitPairNotebookUpdate(
 ): boolean {
 	if (runtime.disposed || !entries.some((entry) => entry.id === update.coversUpToId)) return false;
 	const existing = foldLedger(entries);
-	const coverageId =
-		update.observations.length > 0
-			? update.coversUpToId
-			: latestCoverageMarkerId(entries, NOTEBOOK_OBSERVATIONS_RECORDED);
-
-	if (update.observations.length > 0) {
-		const data = buildObservationsRecordedData(update.observations, update.coversUpToId);
-		if (data) pi.appendEntry(NOTEBOOK_OBSERVATIONS_RECORDED, data);
-	}
-	if (!coverageId) return update.observations.length === 0;
-
-	const reflectionData = buildReflectionsRecordedData(update.reflections, coverageId);
-	if (reflectionData) pi.appendEntry(NOTEBOOK_REFLECTIONS_RECORDED, reflectionData);
-
 	const currentIds = new Set(existing.currentReflections.map((reflection) => reflection.id));
-	const retiredIds = update.retiredIds.filter((id) => currentIds.has(id));
-	const retirementData = buildReflectionsRetiredData(
-		retiredIds,
-		coverageId,
-		update.reflections.length > 0 ? update.reflections.map((reflection) => reflection.id) : undefined,
-	);
-	if (retirementData) pi.appendEntry(NOTEBOOK_REFLECTIONS_RETIRED, retirementData);
-
-	const dropData = buildObservationsDroppedData(update.droppedIds, coverageId);
-	if (dropData) pi.appendEntry(NOTEBOOK_OBSERVATIONS_DROPPED, dropData);
+	const data = buildNotebookMaintenanceData({
+		coversUpToId: update.coversUpToId,
+		observations: update.observations,
+		reflections: update.reflections,
+		retiredReflectionIds: update.retiredIds.filter((id) => currentIds.has(id)),
+		droppedObservationIds: update.droppedIds,
+	});
+	if (!data) return false;
+	// One append is the durable transaction boundary: a successful Pair review
+	// cannot leave observations committed without its matching retirements/drops.
+	pi.appendEntry(NOTEBOOK_MAINTENANCE, data);
 	return true;
 }

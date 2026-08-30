@@ -5,6 +5,7 @@ import {
 	diffProjection,
 	fullProjection,
 	latestFullFoldBoundaryId,
+	rawTokensSinceObservationCoverage,
 	visibleProjection,
 } from "../src/session-ledger/index.js";
 import {
@@ -38,6 +39,28 @@ describe("notebook ledger projections", () => {
 
 		expect(projection.observations.map((obs) => obs.id)).toEqual(["bbbbbbbbbbbb"]);
 		expect(projection.reflections.map((ref) => ref.id)).toEqual(["eeeeeeeeeeee"]);
+	});
+
+	it("folds a single maintenance envelope and treats its coverage as complete", () => {
+		const obs = observation("aaaaaaaaaaaa");
+		const ref = reflection("eeeeeeeeeeee", [obs.id]);
+		const entries = [
+			textCustomMessage("raw-1", "aaaa"),
+			{
+				type: "custom",
+				id: "maintenance-1",
+				customType: "notebook.maintenance",
+				data: {
+					coversUpToId: "raw-1",
+					observations: [obs],
+					reflections: [ref],
+					retiredReflectionIds: [],
+					droppedObservationIds: [],
+				},
+			},
+		];
+		expect(fullProjection(entries)).toEqual({ observations: [obs], reflections: [ref] });
+		expect(rawTokensSinceObservationCoverage(entries)).toBe(0);
 	});
 
 	it("visible projection is empty when there is no notebook compaction", () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { acquireExclusiveLease } from "../../shared/src/exclusive-lease.js";
 import { createTodoState, parseTodoState, restoreTodoState } from "./state.js";
 import type { TodoState } from "./types.js";
 export interface TodoRepository {
@@ -64,12 +65,8 @@ export function isProcessLive(pid: number): boolean {
 }
 export class ProjectTodoRepository implements TodoRepository {
 	readonly filePath: string;
-	private lockPath: string;
-	private recoveryLockPath: string;
-	constructor(cwd: string) {
-		this.filePath = join(cwd, ".pi", "todos", "shared.json");
-		this.lockPath = `${this.filePath}.lock`;
-		this.recoveryLockPath = `${this.lockPath}.recovery`;
+	constructor(private projectRoot: string) {
+		this.filePath = join(projectRoot, ".pi", "todos", "shared.json");
 	}
 	private readFile() {
 		if (!existsSync(this.filePath)) return createTodoState();
@@ -80,56 +77,18 @@ export class ProjectTodoRepository implements TodoRepository {
 		return clone(this.readFile());
 	}
 	private acquire() {
-		mkdirSync(dirname(this.filePath), { recursive: true });
-		const token = `${process.pid}:${randomUUID()}`;
-		for (let attempt = 0; attempt < 100; attempt++) {
-			try {
-				writeFileSync(this.lockPath, token, { flag: "wx" });
-				return token;
-			} catch (error: unknown) {
-				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-				this.recoverDeadLock();
-				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-			}
-		}
-		throw new Error("Failed to acquire todos project lock");
-	}
-	private recoverDeadLock(): void {
-		const recoveryToken = `${process.pid}:${randomUUID()}`;
-		try {
-			writeFileSync(this.recoveryLockPath, recoveryToken, { flag: "wx" });
-		} catch (error: unknown) {
-			if ((error as NodeJS.ErrnoException).code === "EEXIST") return;
-			throw error;
-		}
-		try {
-			let current: string;
-			try {
-				current = readFileSync(this.lockPath, "utf8");
-			} catch {
-				return;
-			}
-			const ownerPid = Number.parseInt(current, 10);
-			if (ownerPid > 0 && isProcessDead(ownerPid)) unlinkSync(this.lockPath);
-		} finally {
-			this.releasePath(this.recoveryLockPath, recoveryToken);
-		}
-	}
-	private releasePath(path: string, token: string): void {
-		try {
-			if (readFileSync(path, "utf8") === token) unlinkSync(path);
-		} catch {}
-	}
-	private release(token: string) {
-		this.releasePath(this.lockPath, token);
+		return acquireExclusiveLease("todos", this.projectRoot, randomUUID(), {
+			owned: (owner) => `Todos project state is locked by run ${owner.runId} (pid ${owner.pid})`,
+			failed: "Failed to acquire todos project lease",
+		});
 	}
 	write(state: TodoState) {
 		const valid = parseTodoState(state);
-		const token = this.acquire();
+		const release = this.acquire();
 		try {
 			this.atomicWrite(valid);
 		} finally {
-			this.release(token);
+			release();
 		}
 	}
 	private atomicWrite(state: TodoState) {
@@ -146,13 +105,13 @@ export class ProjectTodoRepository implements TodoRepository {
 		}
 	}
 	mutate<T>(fn: (state: TodoState) => { state: TodoState; value: T }) {
-		const token = this.acquire();
+		const release = this.acquire();
 		try {
 			const result = fn(clone(this.readFile()));
 			this.atomicWrite(parseTodoState(result.state));
 			return result.value;
 		} finally {
-			this.release(token);
+			release();
 		}
 	}
 }

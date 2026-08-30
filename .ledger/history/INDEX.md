@@ -53,3 +53,5 @@
 - `.ledger/history/202608262359-sentinel-advisor-supervision/task.md` — done — Implement hierarchical Sentinel to Advisor supervision — Delivered one optional persistent Sentinel that escalated hard cases to Advisor; later superseded by the Pair Programmer consolidation task.
 
 - `.ledger/history/202608271751-consolidate-pair-programmer-supervision-and-memory/task.md` — done — Consolidate Pair Programmer supervision and memory — Replace Sentinel and standalone observational-memory curation with one persistent Pair Programmer that watches, keeps sourced notes, reflects, steers, and escalates to Advisor.
+
+- `.ledger/history/202608281109-harden-harness-correctness/task.md` — done — Harden repository-wide harness correctness — Resolve the complete repository audit across trust, lifecycle, runtime contracts, persistence, compaction, search, and supporting correctness gaps.

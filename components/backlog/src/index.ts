@@ -49,8 +49,7 @@ function formatBacklog(items: readonly BacklogItem[]): string {
 async function openBacklogManager(
 	ctx: ExtensionCommandContext,
 	getState: () => BacklogState,
-	setState: (state: BacklogState) => void,
-	persist: () => void,
+	commit: (state: BacklogState) => void,
 ): Promise<void> {
 	if (ctx.mode !== "tui") {
 		ctx.ui.notify("/backlog requires interactive mode", "error");
@@ -72,9 +71,8 @@ async function openBacklogManager(
 			if (description === undefined) continue;
 			try {
 				const added = addBacklogItem(getState(), { title, description });
-				setState(added.state);
+				commit(added.state);
 				selectedId = added.item.id;
-				persist();
 			} catch (error) {
 				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 			}
@@ -83,8 +81,7 @@ async function openBacklogManager(
 
 		selectedId = action.id;
 		if (action.type === "move") {
-			setState(moveBacklogItem(getState(), action.id, action.direction));
-			persist();
+			commit(moveBacklogItem(getState(), action.id, action.direction));
 			continue;
 		}
 
@@ -93,8 +90,7 @@ async function openBacklogManager(
 		if (action.type === "delete") {
 			const confirmed = await ctx.ui.confirm("Delete backlog item?", `#${item.id} ${item.title}`);
 			if (confirmed) {
-				setState(deleteBacklogItem(getState(), item.id));
-				persist();
+				commit(deleteBacklogItem(getState(), item.id));
 			}
 			continue;
 		}
@@ -104,8 +100,7 @@ async function openBacklogManager(
 		const description = await ctx.ui.editor("Backlog description", item.description);
 		if (description === undefined) continue;
 		try {
-			setState(editBacklogItem(getState(), item.id, { title, description }));
-			persist();
+			commit(editBacklogItem(getState(), item.id, { title, description }));
 		} catch (error) {
 			ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 		}
@@ -114,8 +109,9 @@ async function openBacklogManager(
 
 export function installBacklog(pi: ExtensionAPI): void {
 	let state = createBacklogState();
-	const persist = (ui?: BacklogStatusUi) => {
-		pi.appendEntry(BACKLOG_STATE_ENTRY, snapshot(state));
+	const commit = (next: BacklogState, ui?: BacklogStatusUi) => {
+		pi.appendEntry(BACKLOG_STATE_ENTRY, snapshot(next));
+		state = next;
 		if (ui) publishBacklogCount(ui, state.items.length);
 	};
 	const restore = (ctx: { sessionManager: { getBranch(): readonly unknown[] }; ui: BacklogStatusUi }) => {
@@ -154,8 +150,7 @@ export function installBacklog(pi: ExtensionAPI): void {
 			executionMode: "sequential",
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const added = addBacklogItem(state, params);
-				state = added.state;
-				persist(ctx.ui);
+				commit(added.state, ctx.ui);
 				return {
 					content: [{ type: "text" as const, text: `Backlogged #${added.item.id}: ${added.item.title}` }],
 					details: { item: added.item, count: state.items.length } satisfies BacklogMutationDetails,
@@ -238,8 +233,7 @@ export function installBacklog(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const item = state.items.find((candidate) => candidate.id === params.id);
 				if (!item) throw new Error(`Backlog item #${params.id} not found`);
-				state = deleteBacklogItem(state, item.id);
-				persist(ctx.ui);
+				commit(deleteBacklogItem(state, item.id), ctx.ui);
 				return {
 					content: [{ type: "text" as const, text: `Removed #${item.id} from the backlog: ${item.title}` }],
 					details: { item, count: state.items.length } satisfies BacklogMutationDetails,
@@ -270,10 +264,7 @@ export function installBacklog(pi: ExtensionAPI): void {
 			openBacklogManager(
 				ctx,
 				() => state,
-				(next) => {
-					state = next;
-				},
-				() => persist(ctx.ui),
+				(next) => commit(next, ctx.ui),
 			),
 	});
 }

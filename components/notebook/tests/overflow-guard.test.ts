@@ -102,4 +102,57 @@ describe("proactive overflow guard", () => {
 			faux.unregister();
 		}
 	});
+
+	it("keeps simultaneous sessions armed in process-owned state without replacing the provider wrapper", async () => {
+		const faux = registerFauxProvider({
+			provider: "guard-process-owned",
+			models: [{ id: "guard-model", contextWindow: 1000 }],
+		});
+		try {
+			const first = captureExtension();
+			const second = captureExtension();
+			const runtime = {
+				ensureConfig() {},
+				config: {
+					compactAfterTokens: 10,
+					compactAfterTokensMode: "calibrated",
+					compactAfterTokensRatio: 0.68,
+					passive: false,
+				},
+			};
+			registerOverflowGuard(first.pi, runtime as never);
+			registerOverflowGuard(second.pi, runtime as never);
+			const model = faux.getModel();
+			const context = (id: string) =>
+				({
+					cwd: `/tmp/${id}`,
+					model,
+					isProjectTrusted: () => false,
+					sessionManager: { getSessionId: () => id },
+					getContextUsage: () => ({ tokens: 999, contextWindow: 1000, percent: 99 }),
+					ui: { notify() {} },
+				}) as unknown as ExtensionContext;
+			await first.handlers.get("turn_end")?.[0]?.({ toolResults: [{ toolCallId: "one" }] }, context("one"));
+			await second.handlers.get("turn_end")?.[0]?.({ toolResults: [{ toolCallId: "two" }] }, context("two"));
+			expect(first.providerRegistrations).toHaveLength(1);
+			expect(second.providerRegistrations).toHaveLength(1);
+			const streamSimple = first.providerRegistrations[0]!.config.streamSimple!;
+			for (const toolCallId of ["one", "two"]) {
+				const stream = await streamSimple(
+					model,
+					{
+						systemPrompt: "",
+						messages: [
+							{ role: "toolResult", toolCallId, toolName: "read", content: [], isError: false, timestamp: Date.now() },
+						],
+						tools: [],
+					},
+					{},
+				);
+				expect(await stream.result()).toMatchObject({ stopReason: "stop", content: [] });
+			}
+		} finally {
+			faux.unregister();
+		}
+	});
 });

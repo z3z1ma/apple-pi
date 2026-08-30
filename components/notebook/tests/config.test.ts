@@ -10,6 +10,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 
 import { DEFAULTS, loadConfig, readEnvConfig, resolveCompactAfterTokens } from "../src/config.js";
+import { Runtime } from "../src/runtime.js";
 
 function writeJson(path: string, value: unknown) {
 	mkdirSync(join(path, ".."), { recursive: true });
@@ -47,7 +48,20 @@ describe("Pair notebook config", () => {
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
 	});
 
-	it("merges global, project, and env Pair settings in order", () => {
+	it("loads project Pair settings only when trusted", () => {
+		writeJson(join(cwd, ".pi", "settings.json"), { pair: { notebookAfterTokens: 100 } });
+		expect(loadConfig(cwd, false, {})).toMatchObject({ notebookAfterTokens: DEFAULTS.notebookAfterTokens });
+		expect(loadConfig(cwd, true, {})).toMatchObject({ notebookAfterTokens: 100 });
+	});
+
+	it("does not reuse an untrusted config after trust changes", () => {
+		writeJson(join(cwd, ".pi", "settings.json"), { pair: { notebookAfterTokens: 100 } });
+		const runtime = new Runtime();
+		expect(runtime.ensureConfig(cwd, false).notebookAfterTokens).toBe(DEFAULTS.notebookAfterTokens);
+		expect(runtime.ensureConfig(cwd, true).notebookAfterTokens).toBe(100);
+	});
+
+	it("merges global, trusted project, and env Pair settings in order", () => {
 		writeJson(join(agentDir, "settings.json"), {
 			pair: {
 				notebookAfterTokens: 10,
@@ -63,7 +77,7 @@ describe("Pair notebook config", () => {
 			},
 		});
 
-		expect(loadConfig(cwd, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toMatchObject({
+		expect(loadConfig(cwd, true, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toMatchObject({
 			notebookAfterTokens: 100,
 			compactAfterTokens: 30,
 			observationsPoolMaxTokens: 40,
@@ -97,7 +111,7 @@ describe("Pair notebook config", () => {
 			},
 		});
 
-		expect(loadConfig(cwd, {})).toMatchObject({
+		expect(loadConfig(cwd, true, {})).toMatchObject({
 			observationsPoolMaxTokens: 40,
 			observationsPoolTargetTokens: 20,
 		});
@@ -116,7 +130,7 @@ describe("Pair notebook config", () => {
 			},
 		});
 
-		expect(loadConfig(cwd, {})).toMatchObject({
+		expect(loadConfig(cwd, true, {})).toMatchObject({
 			observationsPoolMaxTokens: 40,
 			observationsPoolTargetTokens: 20,
 		});
@@ -137,7 +151,7 @@ describe("Pair notebook config", () => {
 				},
 			});
 
-			expect(loadConfig(cwd, {})).toMatchObject({
+			expect(loadConfig(cwd, true, {})).toMatchObject({
 				compactAfterTokensMode: "ratio",
 				compactAfterTokensRatio: 0.5,
 			});

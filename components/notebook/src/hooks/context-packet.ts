@@ -53,7 +53,7 @@ export function buildNotebookContextPacket(
 export function registerNotebookContextPacket(pi: ExtensionAPI, notebook: Runtime): void {
 	pi.on("context", (event, ctx) => {
 		const branchEntries = (ctx.sessionManager?.getBranch?.() ?? []) as Entry[];
-		notebook.ensureConfig(ctx.cwd);
+		notebook.ensureConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 		const packet = buildNotebookContextPacket(branchEntries, notebook.config.observationsPoolMaxTokens);
 		if (!packet) return undefined;
 

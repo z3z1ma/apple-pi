@@ -55,6 +55,18 @@ describe("formatRecallOutput", () => {
 			expect(r).toContain("> #4 [assistant] auth bug");
 		});
 
+		it("does not fabricate a turn from relevance-ranked entries", () => {
+			const entries: SearchHit[] = [
+				{ index: 8, turnId: 8, role: "assistant", summary: "strong", snippet: "strong" },
+				{ index: 2, turnId: 0, role: "assistant", summary: "weak", snippet: "weak" },
+			];
+			const r = formatRecallOutput(entries, "match");
+			expect(r).toContain("2 matches across 2 segments");
+			expect(r).toContain("--- #8 ---");
+			expect(r).toContain("--- #2 ---");
+			expect(r).not.toContain("#8-#2");
+		});
+
 		it("shows segment context for adjacent turns", () => {
 			// Single match — adjacent segments shown as context
 			const entries: SearchHit[] = [

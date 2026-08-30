@@ -1,4 +1,5 @@
 import {
+	isNotebookMaintenanceEntry,
 	isObservationsDroppedData,
 	isObservationsRecordedData,
 	isReflectionsRecordedData,
@@ -53,6 +54,7 @@ function isCustomEntry(entry: Entry, customType: string): boolean {
  * Observations and reflections use first-valid-record-wins semantics. Drops and retirements are
  * tombstones and are retained even when the id is unknown at the time of folding.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one ordered reducer owns the notebook ledger's first-record and tombstone semantics.
 export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): FoldedLedger {
 	const observationsById = new Map<string, Observation>();
 	const reflectionsById = new Map<string, Reflection>();
@@ -63,6 +65,18 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 	for (let i = 0; i <= endIdx; i++) {
 		const entry = entries[i];
 		if (!entry) continue;
+
+		if (isNotebookMaintenanceEntry(entry)) {
+			for (const observation of entry.data.observations) {
+				if (!observationsById.has(observation.id)) observationsById.set(observation.id, observation);
+			}
+			for (const reflection of entry.data.reflections) {
+				if (!reflectionsById.has(reflection.id)) reflectionsById.set(reflection.id, reflection);
+			}
+			for (const observationId of entry.data.droppedObservationIds) droppedObservationIds.add(observationId);
+			for (const reflectionId of entry.data.retiredReflectionIds) retiredReflectionIds.add(reflectionId);
+			continue;
+		}
 
 		if (isCustomEntry(entry, NOTEBOOK_OBSERVATIONS_RECORDED)) {
 			if (!isObservationsRecordedData(entry.data)) continue;

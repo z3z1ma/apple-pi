@@ -82,6 +82,24 @@ describe("searchEntries", () => {
 		expect(r).toHaveLength(2);
 	});
 
+	it("rejects catastrophic regex quantifiers without evaluating them", () => {
+		expect(() => searchEntries(entries, messages, "(a+)+$")).toThrow(/Unsafe regex query/);
+	});
+
+	it("rejects ambiguous grouped alternation before native evaluation", () => {
+		expect(() => searchEntries(entries, messages, "(a|aa)(a|aa)(a|aa)z")).toThrow(/grouped patterns are not supported/);
+	});
+
+	it("bounds wildcard regex work on an adversarial non-match", () => {
+		const haystack = "x".repeat(20_000);
+		const r = searchEntries(
+			[{ index: 0, role: "user", summary: "large transcript" }],
+			[{ role: "user", content: haystack } as any],
+			"x.*y",
+		);
+		expect(r).toEqual([]);
+	});
+
 	// ── natural language queries (OR logic + ranking) ──
 
 	it("natural language query uses OR logic with multi-term minimum", () => {
@@ -320,6 +338,19 @@ describe("searchEntries", () => {
 		const indices = r.map((h) => h.index).sort();
 		expect(indices).toContain(0);
 		expect(indices).toContain(3);
+	});
+
+	it("retains true turn identity after relevance ranking", () => {
+		const turnEntries: RenderedEntry[] = [
+			{ index: 0, role: "user", summary: "first turn" },
+			{ index: 1, role: "assistant", summary: "needle weak" },
+			{ index: 2, role: "user", summary: "second turn" },
+			{ index: 3, role: "assistant", summary: "needle needle strong" },
+		];
+		const turnMessages = turnEntries.map((entry) => ({ role: entry.role, content: entry.summary }) as any);
+		const hits = searchEntries(turnEntries, turnMessages, "needle");
+		expect(hits.map((hit) => hit.index)).toEqual([3, 1]);
+		expect(hits.map((hit) => hit.turnId)).toEqual([2, 0]);
 	});
 
 	it("hard caps regex search results", () => {

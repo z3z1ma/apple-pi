@@ -7,8 +7,8 @@ import { invalidExpandIndices, registerRecallTool } from "../src/tool.js";
 describe("invalidExpandIndices", () => {
 	it("returns indices that are not in available lineage index set", () => {
 		const available = new Set([0, 2, 5]);
-		expect(invalidExpandIndices([0, 2], available)).toEqual([]);
-		expect(invalidExpandIndices([1, 2, 7], available)).toEqual([1, 7]);
+		expect(invalidExpandIndices([2, 5], available)).toEqual([]);
+		expect(invalidExpandIndices([-1, 0, 1, 2, 7], available)).toEqual([-1, 1, 7]);
 	});
 
 	it("rejects non-integer indices", () => {
@@ -61,7 +61,10 @@ const makeSession = () => {
 	const file = join(dir, "session.jsonl");
 	writeFileSync(
 		file,
-		`${JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: buildContent() } })}\n`,
+		`${[
+			JSON.stringify({ type: "message", id: "m0", message: { role: "user", content: "intro" } }),
+			JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: buildContent() } }),
+		].join("\n")}\n`,
 		"utf8",
 	);
 	return { dir, file };
@@ -79,10 +82,33 @@ describe("search_session expand + query composition", () => {
 			expect(baseline).not.toContain("PAIR_FULL_MARKER");
 
 			// Composed: expand the matching index → full content surfaces the pair.
-			const composed = await invoke(tool, file, { query: "SEARCHTOKEN", expand: [0] });
+			const composed = await invoke(tool, file, { query: "SEARCHTOKEN", expand: [1] });
 			expect(baseline).not.toContain("expanded");
 			expect(composed).toContain("PAIR_FULL_MARKER");
 			expect(composed).toContain("expanded 1 entry to full content");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps pages positive while rejecting fractional expansion values", async () => {
+		const { dir, file } = makeSession();
+		try {
+			const tool = register();
+			expect(await invoke(tool, file, { query: "SEARCHTOKEN", page: 0 })).toContain("page must be a positive integer");
+			expect(await invoke(tool, file, { query: "SEARCHTOKEN", expand: [1.5] })).toContain(
+				"every entry index must be a non-negative integer",
+			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns a clear tool error for an unsafe regex", async () => {
+		const { dir, file } = makeSession();
+		try {
+			const tool = register();
+			expect(await invoke(tool, file, { query: "(a+)+$" })).toContain("Unsafe regex query");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

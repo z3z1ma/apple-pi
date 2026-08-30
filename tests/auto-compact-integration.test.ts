@@ -115,17 +115,6 @@ export default function (pi) {
 			stream: (...args: Parameters<typeof streamSimple>) => activeStream(...args),
 			streamSimple: (...args: Parameters<typeof streamSimple>) => activeStream(...args),
 		};
-		const modelRegistry = {
-			find: () => model,
-			getAll: () => [model],
-			getAvailable: () => [model],
-			hasConfiguredAuth: () => true,
-			isUsingOAuth: () => false,
-			getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "faux", headers: {} }),
-			registerProvider: modelRuntime.registerProvider,
-			unregisterProvider: () => {},
-			runtime: modelRuntime,
-		};
 		const loader = new DefaultResourceLoader({
 			cwd,
 			agentDir: join(cwd, "agent"),
@@ -141,7 +130,6 @@ export default function (pi) {
 		const { session } = await createAgentSession({
 			cwd,
 			model,
-			modelRegistry: modelRegistry as never,
 			modelRuntime: modelRuntime as never,
 			resourceLoader: loader,
 			sessionManager: SessionManager.inMemory(cwd),

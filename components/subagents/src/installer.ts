@@ -809,6 +809,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const resumeRun = manager.resume(existing.id, params.prompt, background ? undefined : signal, {
 					isBackground: background,
 					onToolActivity: activity.callbacks.onToolActivity,
+					onTextDelta: activity.callbacks.onTextDelta,
+					onTurnEnd: activity.callbacks.onTurnEnd,
 					onAssistantUsage: activity.callbacks.onAssistantUsage,
 					onCompaction: () => widget.update(),
 				});

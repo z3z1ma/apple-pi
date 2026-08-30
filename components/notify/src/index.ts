@@ -578,7 +578,7 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		);
 	});
 
-	pi.on("agent_settled", async (_event, ctx) => {
+	pi.on("agent_settled", (_event, ctx) => {
 		if (process.platform !== "darwin" || notificationsDisabled() || ctx.mode !== "tui" || !ctx.isIdle()) return;
 
 		const sessionId = ctx.sessionManager.getSessionId();
@@ -594,7 +594,15 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 				: latestAborted
 					? "Task cancelled."
 					: latestAssistant || latestBranchText(ctx, "assistant");
-		await deliverNotification(pi, ctx, prompt, answer, "Task complete", true);
+		// Event handlers participate in settlement; delivery must continue independently.
+		void deliverNotification(pi, ctx, prompt, answer, "Task complete", true).catch((error) =>
+			appendLog({
+				ts: new Date().toISOString(),
+				success: false,
+				via: "error",
+				error: String(error),
+			}),
+		);
 	});
 
 	pi.registerCommand("notify-setup", {

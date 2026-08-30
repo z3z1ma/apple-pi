@@ -174,7 +174,7 @@ const setup = new vm.Script(
     const adopted = new NativePromise((resolve) => hostPromise.then(resolve));
     const promise = applyFunction(nativePromiseThen, adopted, [(serialized) => {
       const outcome = JSON.parse(serialized);
-      if (outcome.ok) return outcome.value;
+      if (outcome.ok) return outcome.undefined === true ? undefined : outcome.value;
       throw new Error(outcome.error || "host call failed");
     }]);
     applyFunction(nativeWeakMapSet, callHandles, [promise, hostPromise]);
@@ -235,7 +235,8 @@ const setup = new vm.Script(
     const prepared = typeof request === "string" ? { task: request } : request;
     if (!prepared || typeof prepared !== "object" || !hasContextMark(prepared.context)) return call("agents.run", prepared);
     const fitted = contextFit(prepared.context);
-    const result = await call("agents.run", { ...prepared, context: fitted.value });
+    const { context: _context, ...agentRequest } = prepared;
+    const result = await call("agents.run", fitted.value === undefined ? agentRequest : { ...agentRequest, context: fitted.value });
     return { ...result, context: { truncated: fitted.truncated, dropped: fitted.dropped, serializedChars: fitted.serializedChars } };
   };
   globalThis.agents = Object.freeze({ run: runAgent });
@@ -307,60 +308,60 @@ ${STDLIB_SETUP_SOURCE}
 
 const errorText = (error) => (error instanceof Error ? error.stack || error.message : String(error));
 const initialState = JSON.stringify(workerData.state ?? {});
-const snapshotState = new vm.Script(
-	`(() => {
+const serializeJsonValue = new vm.Script(
+	`(value, subject) => {
   const seen = new Set();
   const validate = (value) => {
     const type = typeof value;
     if (value === null || type === "string" || type === "boolean") return;
     if (type === "number") {
       if (!Number.isFinite(value) || Object.is(value, -0)) {
-        throw new TypeError("state contains a number that JSON cannot preserve");
+        throw new TypeError(subject + " contains a number that JSON cannot preserve");
       }
       return;
     }
-    if (type !== "object") throw new TypeError("state contains a value that JSON cannot preserve");
-    if (seen.has(value)) throw new TypeError("state contains a repeated or cyclic object reference");
+    if (type !== "object") throw new TypeError(subject + " contains a value that JSON cannot preserve");
+    if (seen.has(value)) throw new TypeError(subject + " contains a repeated or cyclic object reference");
     seen.add(value);
     if (Array.isArray(value)) {
       const keys = Reflect.ownKeys(value);
       if (keys.length !== value.length + 1 || keys.some((key) => typeof key !== "string")) {
-        throw new TypeError("state contains a sparse array or symbol key");
+        throw new TypeError(subject + " contains a sparse array or symbol key");
       }
       for (let index = 0; index < value.length; index++) {
         const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
         if (!descriptor?.enumerable || !("value" in descriptor)) {
-          throw new TypeError("state contains a sparse array or accessor");
+          throw new TypeError(subject + " contains a sparse array or accessor");
         }
         validate(descriptor.value);
       }
     } else {
       const prototype = Object.getPrototypeOf(value);
       if (prototype !== Object.prototype && prototype !== null) {
-        throw new TypeError("state contains a non-plain object");
+        throw new TypeError(subject + " contains a non-plain object");
       }
       for (const key of Reflect.ownKeys(value)) {
-        if (typeof key !== "string") throw new TypeError("state contains a symbol key");
+        if (typeof key !== "string") throw new TypeError(subject + " contains a symbol key");
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (!descriptor?.enumerable || !("value" in descriptor)) {
-          throw new TypeError("state contains an accessor or non-enumerable property");
+          throw new TypeError(subject + " contains an accessor or non-enumerable property");
         }
         validate(descriptor.value);
       }
     }
   };
-  validate(state);
-  return JSON.stringify(state);
-})()`,
+  validate(value);
+  return JSON.stringify(value);
+}`,
 	{ filename: "pi-exec-state.js" },
 );
 
 try {
-	setup.runInContext(context, { timeout: 1_000 });
+	setup.runInContext(context, { timeout: workerData.timeoutMs });
 	const program = new vm.Script(`(async () => {\n"use strict";\n${workerData.code}\n})()`, {
 		filename: "pi-exec-program.js",
 	});
-	const promise = program.runInContext(context, { timeout: 1_000 });
+	const promise = program.runInContext(context, { timeout: workerData.timeoutMs });
 	Promise.resolve(promise).then(
 		(value) => {
 			const unfinishedCalls = pending.size;
@@ -374,7 +375,7 @@ try {
 				}
 				let stateJson;
 				try {
-					stateJson = snapshotState.runInContext(context);
+					stateJson = serializeJsonValue.runInContext(context)(context.state, "state");
 				} catch (error) {
 					parentPort.postMessage({
 						type: "failed",
@@ -383,9 +384,10 @@ try {
 					return;
 				}
 				try {
+					const valueJson = serializeJsonValue.runInContext(context)(value, "result");
 					parentPort.postMessage({
 						type: "done",
-						value,
+						value: JSON.parse(valueJson),
 						...(stateJson !== initialState ? { state: JSON.parse(stateJson), stateChanged: true } : {}),
 					});
 				} catch (error) {

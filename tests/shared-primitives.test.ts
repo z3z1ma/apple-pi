@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +64,6 @@ describe("shared argv", () => {
 
 describe("exclusive leases", () => {
 	const messages = {
-		unreadable: (path: string) => `unreadable ${path}`,
 		owned: (owner: { runId: string }) => `owned by ${owner.runId}`,
 		failed: "failed",
 	};
@@ -83,24 +84,56 @@ describe("exclusive leases", () => {
 		recovered();
 	});
 
-	it("fails closed on an unreadable file lock", () => {
+	it("ignores malformed stale owner metadata when the OS lease is free", () => {
 		const agentDir = mkdtempSync(join(tmpdir(), "apple-ralph-lease-agent-"));
 		const project = mkdtempSync(join(tmpdir(), "apple-ralph-lease-project-"));
 		roots.push(agentDir, project);
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		const release = acquireExclusiveLease("ralph", project, "seed", messages);
 		const locksDir = join(agentDir, "ralph", "locks");
-		const lockFile = readdirSync(locksDir).find((name) => name.endsWith(".lock"));
-		expect(lockFile).toBeDefined();
+		const ownerFile = readdirSync(locksDir).find((name) => name.endsWith(".owner"));
+		expect(ownerFile).toBeDefined();
 		release();
-		writeFileSync(join(locksDir, lockFile!), "{", { mode: 0o600 });
-		expect(() =>
-			acquireExclusiveLease("ralph", project, "run-d", {
-				unreadable: (path) => `Ralph resource lease is unreadable: ${path}`,
-				owned: (owner) => `owned by ${owner.runId}`,
-				failed: "failed",
-			}),
-		).toThrow(/unreadable/);
+		writeFileSync(join(locksDir, ownerFile!), "{", { mode: 0o600 });
+		const recovered = acquireExclusiveLease("ralph", project, "run-d", messages);
+		expect(activeExclusiveLease("ralph", project)?.runId).toBe("run-d");
+		recovered();
+	});
+
+	it("recovers an operating-system lease after a competing process dies", async () => {
+		const agentDir = mkdtempSync(join(tmpdir(), "apple-review-lease-agent-"));
+		const project = mkdtempSync(join(tmpdir(), "apple-review-lease-project-"));
+		roots.push(agentDir, project);
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		const seed = acquireExclusiveLease("reviews", project, "seed", messages);
+		seed();
+		const locksDir = join(agentDir, "reviews", "locks");
+		const databasePath = join(locksDir, readdirSync(locksDir).find((name) => name.endsWith(".sqlite"))!);
+		const ownerPath = databasePath.replace(/\.sqlite$/, ".owner");
+		const child = spawn(
+			process.execPath,
+			[
+				"-e",
+				`const { DatabaseSync } = require("node:sqlite");
+const { writeFileSync } = require("node:fs");
+const database = new DatabaseSync(process.env.LEASE_DB);
+database.exec("BEGIN IMMEDIATE;");
+writeFileSync(process.env.LEASE_OWNER, JSON.stringify({ pid: process.pid, runId: "child", projectRoot: process.env.PROJECT_ROOT, acquiredAt: new Date().toISOString() }));
+process.stdout.write("ready\\n");
+setInterval(() => {}, 1000);`,
+			],
+			{
+				env: { ...process.env, LEASE_DB: databasePath, LEASE_OWNER: ownerPath, PROJECT_ROOT: project },
+				stdio: ["ignore", "pipe", "inherit"],
+			},
+		);
+		await once(child.stdout!, "data");
+		expect(() => acquireExclusiveLease("reviews", project, "parent", messages)).toThrow(/owned by child/);
+		child.kill("SIGKILL");
+		await once(child, "exit");
+		const recovered = acquireExclusiveLease("reviews", project, "parent", messages);
+		expect(activeExclusiveLease("reviews", project)?.runId).toBe("parent");
+		recovered();
 	});
 });
 

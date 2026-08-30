@@ -1,13 +1,13 @@
 import { Worker } from "node:worker_threads";
 
+import { serializeJsonValue } from "./runtime-json.js";
 import type { ProgramExecution, ProgramHostCall } from "./runtime-types.js";
 
 function serializeHostCallOutcome(ok: boolean, value: unknown): string {
+	if (!ok) return JSON.stringify({ ok: false, error: value instanceof Error ? value.message : String(value) });
+	if (value === undefined) return JSON.stringify({ ok: true, undefined: true });
 	try {
-		return JSON.stringify(
-			ok ? { ok: true, value } : { ok: false, error: value instanceof Error ? value.message : String(value) },
-			(_key, nested) => (typeof nested === "bigint" ? String(nested) : nested),
-		);
+		return serializeJsonValue({ ok: true, value }, "pi_exec host result");
 	} catch (error) {
 		return JSON.stringify({
 			ok: false,
@@ -28,9 +28,18 @@ export async function executeProgram(
 	state: unknown = {},
 ): Promise<ProgramExecution> {
 	if (signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted" };
+	let serializedState: string;
+	try {
+		serializedState = serializeJsonValue(state, "state");
+	} catch (error) {
+		return {
+			outcome: "failed",
+			error: `pi_exec state is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
 	const controller = new AbortController();
 	const worker = new Worker(new URL("./runtime-worker.mjs", import.meta.url), {
-		workerData: { code, inputs, state },
+		workerData: { code, inputs, state: JSON.parse(serializedState), timeoutMs },
 		resourceLimits: { maxOldGenerationSizeMb: memoryMb, stackSizeMb: 4 },
 	});
 	const hostTasks = new Set<Promise<void>>();
@@ -70,11 +79,28 @@ export async function executeProgram(
 				return;
 			}
 			if (message.type === "call") {
+				let args: Record<string, unknown>;
+				try {
+					args = JSON.parse(serializeJsonValue(message.args ?? {}, "pi_exec call arguments")) as Record<
+						string,
+						unknown
+					>;
+				} catch (error) {
+					worker.postMessage({
+						type: "call_result",
+						id: message.id,
+						outcome: serializeHostCallOutcome(
+							false,
+							`pi_exec call arguments are not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
+						),
+					});
+					return;
+				}
 				const callController = new AbortController();
 				const relayAbort = () => callController.abort(controller.signal.reason);
 				controller.signal.addEventListener("abort", relayAbort, { once: true });
 				hostCallControllers.set(message.id, callController);
-				const task = hostCall(message.ref, message.args ?? {}, callController.signal)
+				const task = hostCall(message.ref, args, callController.signal)
 					.then((value) => {
 						if (!settled)
 							worker.postMessage({

@@ -5,7 +5,15 @@ const assistBase = {
 	api: "messages" as any,
 	provider: "anthropic" as any,
 	model: "test",
-	usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	usage: {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		total: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	},
 	timestamp: ts,
 };
 

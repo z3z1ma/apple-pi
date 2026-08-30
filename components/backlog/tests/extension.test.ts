@@ -44,6 +44,61 @@ describe("backlog extension", () => {
 		);
 	});
 
+	it("keeps human-manager state and status unchanged when persistence fails", async () => {
+		const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> }>();
+		const tools = new Map<string, RegisteredTool>();
+		const appendEntry = vi.fn(() => {
+			throw new Error("disk full");
+		});
+		const setStatus = vi.fn();
+		const pi = {
+			appendEntry,
+			on: vi.fn(),
+			registerTool(tool: RegisteredTool) {
+				tools.set(tool.name, tool);
+			},
+			registerCommand(name: string, command: { handler: (args: string, ctx: any) => Promise<void> }) {
+				commands.set(name, command);
+			},
+		} as unknown as ExtensionAPI;
+		installBacklog(pi);
+		await commands.get("backlog")?.handler("", {
+			mode: "tui",
+			ui: {
+				custom: vi.fn().mockResolvedValueOnce({ type: "create" }).mockResolvedValueOnce({ type: "close" }),
+				editor: vi.fn().mockResolvedValueOnce("Human note").mockResolvedValueOnce("later"),
+				setStatus,
+				notify: vi.fn(),
+			},
+		});
+		const listed = await tools.get("backlog_list")?.execute("call-1", {});
+		expect(listed?.content[0]?.text).toBe("The session backlog is empty.");
+		expect(setStatus).not.toHaveBeenCalled();
+	});
+
+	it("keeps state unpublished when persistence fails", async () => {
+		const tools = new Map<string, RegisteredTool>();
+		const pi = {
+			appendEntry: vi.fn(() => {
+				throw new Error("disk full");
+			}),
+			on: vi.fn(),
+			registerTool(tool: RegisteredTool) {
+				tools.set(tool.name, tool);
+			},
+			registerCommand: vi.fn(),
+		} as unknown as ExtensionAPI;
+		installBacklog(pi);
+
+		await expect(
+			tools.get("backlog_add")?.execute("call-1", { title: "Follow up" }, undefined, undefined, {
+				ui: { setStatus: vi.fn() },
+			}),
+		).rejects.toThrow("disk full");
+		const listed = await tools.get("backlog_list")?.execute("call-2", {});
+		expect(listed?.content[0]?.text).toBe("The session backlog is empty.");
+	});
+
 	it("registers add/read/take tools, publishes the count, and persists mutations", async () => {
 		const tools = new Map<string, RegisteredTool>();
 		const commands = new Map<string, unknown>();

@@ -174,6 +174,10 @@ interface ResumeOptions {
 	onToolActivity?: (activity: ToolActivity) => void;
 	/** Called once per assistant message_end with that message's usage delta. */
 	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
+	/** Called on streaming text deltas from the resumed assistant response. */
+	onTextDelta?: (delta: string, fullText: string) => void;
+	/** Called at the end of each resumed agentic turn. */
+	onTurnEnd?: (turnCount: number) => void;
 	/** Called when the session successfully compacts. */
 	onCompaction?: (info: CompactionInfo) => void;
 	/**
@@ -198,6 +202,56 @@ export class AgentManager {
 	private queue: { id: string; start: () => void }[] = [];
 	/** Number of currently running background agents. */
 	private runningBackground = 0;
+	/** Each active pooled invocation owns one lease, released exactly once at settlement. */
+	private capacityLeases = new Set<symbol>();
+
+	private acquireCapacity(record: AgentRecord): void {
+		if (!occupiesPoolSlot(record) || record.capacityLease) return;
+		const lease = Symbol(record.id);
+		record.capacityLease = lease;
+		this.capacityLeases.add(lease);
+		this.runningBackground++;
+	}
+
+	private releaseCapacity(record: AgentRecord): void {
+		const lease = record.capacityLease;
+		if (!lease || !this.capacityLeases.delete(lease)) return;
+		record.capacityLease = undefined;
+		this.runningBackground--;
+	}
+
+	private beginInvocation(record: AgentRecord): symbol {
+		const invocation = Symbol(record.id);
+		record.activeInvocation = invocation;
+		return invocation;
+	}
+
+	private endInvocation(record: AgentRecord, invocation: symbol): void {
+		if (record.activeInvocation === invocation) record.activeInvocation = undefined;
+	}
+
+	private notifyStart(record: AgentRecord): void {
+		try {
+			this.onStart?.(record);
+		} catch {
+			// Observers cannot take ownership of, or prevent, a run.
+		}
+	}
+
+	private notifyComplete(record: AgentRecord): void {
+		try {
+			this.onComplete?.(record);
+		} catch {
+			// Completion observers are side effects, never lifecycle control flow.
+		}
+	}
+
+	private cleanupFailedStart(record: AgentRecord): void {
+		record.detachCallerSignal?.();
+		record.detachCallerSignal = undefined;
+		record.activeInvocation = undefined;
+		this.releaseCapacity(record);
+	}
 
 	constructor(
 		onComplete?: OnAgentComplete,
@@ -260,6 +314,8 @@ export class AgentManager {
 			maxSubagentDepth: options.maxSubagentDepth,
 			internalOwner: options.internalOwner,
 			retainUntilSessionEnd: options.retainUntilSessionEnd,
+			maxTurns: options.maxTurns ?? options.agentConfig?.maxTurns,
+			hardTurnLimit: options.hardTurnLimit,
 		};
 		this.agents.set(id, record);
 
@@ -276,6 +332,7 @@ export class AgentManager {
 		try {
 			this.startAgent(id, record, args);
 		} catch (err) {
+			this.cleanupFailedStart(record);
 			this.agents.delete(id);
 			throw err;
 		}
@@ -292,9 +349,9 @@ export class AgentManager {
 
 		record.status = "running";
 		record.startedAt = Date.now();
-		const occupiesBackgroundSlot = occupiesPoolSlot(record);
-		if (occupiesBackgroundSlot) this.runningBackground++;
-		this.onStart?.(record);
+		const invocation = this.beginInvocation(record);
+		this.acquireCapacity(record);
+		this.notifyStart(record);
 
 		// Wire parent abort signal to stop the subagent when the parent is interrupted
 		let detachParentSignal: (() => void) | undefined;
@@ -392,23 +449,16 @@ export class AgentManager {
 
 				detach();
 				this.abortOwnedChildren(id);
+				this.endInvocation(record, invocation);
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
 				if (!options.isBackground && record.isBackground !== true) {
 					record.resultConsumed = true;
-					try {
-						this.onComplete?.(record);
-					} catch {
-						/* ignore completion side-effect errors */
-					}
+					this.notifyComplete(record);
 				} else {
-					if (occupiesBackgroundSlot) this.runningBackground--;
-					try {
-						this.onComplete?.(record);
-					} catch {
-						/* ignore completion side-effect errors */
-					}
+					this.releaseCapacity(record);
+					this.notifyComplete(record);
 					this.drainQueue();
 				}
 				return responseText;
@@ -424,15 +474,16 @@ export class AgentManager {
 
 				detach();
 				this.abortOwnedChildren(id);
+				this.endInvocation(record, invocation);
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
 				if (!options.isBackground && record.isBackground !== true) {
 					record.resultConsumed = true;
-					this.onComplete?.(record);
+					this.notifyComplete(record);
 				} else {
-					if (occupiesBackgroundSlot) this.runningBackground--;
-					this.onComplete?.(record);
+					this.releaseCapacity(record);
+					this.notifyComplete(record);
 					this.drainQueue();
 				}
 				return "";
@@ -443,7 +494,11 @@ export class AgentManager {
 		// Notify caller that spawn is complete (record is in the map, promise is set).
 		// Called synchronously — onSessionCreated fires asynchronously inside runAgent.
 		// Used by spawnAndWait to let the caller set up output files before streaming starts.
-		this.onSpawned?.(id);
+		try {
+			this.onSpawned?.(id);
+		} catch {
+			// A caller observer must not orphan an already-started run.
+		}
 	}
 
 	/**
@@ -467,11 +522,13 @@ export class AgentManager {
 			try {
 				next.start();
 			} catch (err) {
-				// Surface late validation/startup failures and keep draining.
+				// Surface late validation/startup failures, release any partially
+				// acquired lease, and keep draining.
+				this.cleanupFailedStart(record);
 				record.status = "error";
 				record.error = err instanceof Error ? err.message : String(err);
 				record.completedAt = Date.now();
-				this.onComplete?.(record);
+				this.notifyComplete(record);
 			}
 		}
 	}
@@ -526,6 +583,9 @@ export class AgentManager {
 	): Promise<AgentRecord | undefined> {
 		const record = this.agents.get(id);
 		if (!record?.session || (record.internalOwner && record.internalOwner !== options?.internalOwner)) return undefined;
+		// Aborting changes visible status immediately, but the old prompt still owns
+		// session/controller/lease state until its settlement callback completes.
+		if (record.activeInvocation || record.status === "running" || record.status === "queued") return undefined;
 
 		// Background resume: settle asynchronously and notify on completion exactly
 		// like a background spawn, returning immediately with the record still
@@ -534,21 +594,11 @@ export class AgentManager {
 		// returned before its background branch, and resume() only ever awaited
 		// inline), so a resumed agent always blocked the caller until it finished.
 		if (options?.isBackground) {
-			// Never re-enter a run that is still in flight. Detaching means the caller
-			// gets control back while the record stays "running", so nothing stops the
-			// model from resuming the same agent again. Starting a second run would
-			// overwrite record.abortController — orphaning the live run beyond the
-			// reach of `/agents` stop and abortAll() — double-count the pool slot, and
-			// then reject from session.prompt() with "Agent is already processing",
-			// whose settle path would abort the LIVE run's children and report a
-			// failure for a run that is still going. Refuse instead, leaving the
-			// record untouched; the caller decides whether to wait or steer.
-			if (record.status === "running" || record.status === "queued") return undefined;
-
 			record.isBackground = true;
 			record.resultConsumed = false;
 			record.result = undefined;
 			record.error = undefined;
+			record.terminationCause = undefined;
 			record.completedAt = undefined;
 			// This record is entering a new run generation. A queued result waiter
 			// must not observe the previous generation's already-settled promise.
@@ -572,9 +622,11 @@ export class AgentManager {
 		record.resultConsumed = false;
 		record.status = "running";
 		record.startedAt = Date.now();
+		const invocation = this.beginInvocation(record);
 		record.completedAt = undefined;
 		record.result = undefined;
 		record.error = undefined;
+		record.terminationCause = undefined;
 		const abortController = new AbortController();
 		record.abortController = abortController;
 		let detachParentSignal: (() => void) | undefined;
@@ -594,18 +646,18 @@ export class AgentManager {
 		const settle = () => {
 			detach();
 			this.abortOwnedChildren(id);
+			this.endInvocation(record, invocation);
 			if (record.isBackground !== true) {
 				record.resultConsumed = true;
 				return;
 			}
-			try {
-				this.onComplete?.(record);
-			} catch {
-				/* ignore completion side-effect errors */
-			}
+			this.releaseCapacity(record);
+			this.notifyComplete(record);
 			this.drainQueue();
 		};
 		const promise = resumeAgent(record.session, prompt, {
+			maxTurns: record.maxTurns,
+			hardTurnLimit: record.hardTurnLimit,
 			onToolActivity: (activity) => {
 				if (activity.type === "end") record.toolUses++;
 				options?.onToolActivity?.(activity);
@@ -619,11 +671,14 @@ export class AgentManager {
 				this.onCompact?.(record, info);
 				options?.onCompaction?.(info);
 			},
+			onTextDelta: options?.onTextDelta,
+			onTurnEnd: options?.onTurnEnd,
 			signal: abortController.signal,
 		})
-			.then(({ text, failure }) => {
+			.then(({ text, failure, aborted, steered }) => {
 				if (record.status !== "stopped") {
-					record.status = failure ? "error" : "completed";
+					record.status = aborted ? "aborted" : failure ? "error" : steered ? "steered" : "completed";
+					if (aborted) record.terminationCause ??= "turn_ceiling";
 					if (failure) record.error = failure;
 				}
 				record.result = text;
@@ -663,13 +718,14 @@ export class AgentManager {
 
 		record.status = "running";
 		record.startedAt = Date.now();
-		if (occupiesPoolSlot(record)) this.runningBackground++;
-		this.onStart?.(record);
+		const invocation = this.beginInvocation(record);
+		this.acquireCapacity(record);
 
 		// Fresh abort controller so /agents stop and steering target THIS run rather
 		// than the previous one's settled controller.
 		const abortController = new AbortController();
 		record.abortController = abortController;
+		this.notifyStart(record);
 		// Optional, and NOT what the Agent tool passes for a detached resume: a
 		// parent signal aborts on the parent's own interrupt (user Esc), which is
 		// right for a foreground run whose result the caller is awaiting, and wrong
@@ -694,16 +750,15 @@ export class AgentManager {
 			detachParentSignal = undefined;
 			// Children spawned during the resumed turn must not outlive it.
 			this.abortOwnedChildren(id);
-			if (occupiesPoolSlot(record)) this.runningBackground--;
-			try {
-				this.onComplete?.(record);
-			} catch {
-				/* ignore completion side-effect errors */
-			}
+			this.endInvocation(record, invocation);
+			this.releaseCapacity(record);
+			this.notifyComplete(record);
 			this.drainQueue();
 		};
 
 		const promise = resumeAgent(record.session, prompt, {
+			maxTurns: record.maxTurns,
+			hardTurnLimit: record.hardTurnLimit,
 			onToolActivity: (activity) => {
 				if (activity.type === "end") record.toolUses++;
 				options.onToolActivity?.(activity);
@@ -717,14 +772,17 @@ export class AgentManager {
 				this.onCompact?.(record, info);
 				options.onCompaction?.(info);
 			},
+			onTextDelta: options.onTextDelta,
+			onTurnEnd: options.onTurnEnd,
 			signal: abortController.signal,
 		})
-			.then(({ text, failure }) => {
+			.then(({ text, failure, aborted, steered }) => {
 				// Don't overwrite status if externally stopped via abort().
 				if (record.status !== "stopped") {
 					// Same contract as the spawn path (#144): a failed final turn is an
 					// error, not a completion — but the resumed text stays available.
-					record.status = failure ? "error" : "completed";
+					record.status = aborted ? "aborted" : failure ? "error" : steered ? "steered" : "completed";
+					if (aborted) record.terminationCause ??= "turn_ceiling";
 					if (failure) record.error = failure;
 				}
 				record.result = text;
@@ -770,8 +828,13 @@ export class AgentManager {
 	detachForeground(id: string): boolean {
 		const record = this.agents.get(id);
 		if (record?.status !== "running" || record.isBackground !== false) return false;
+		// A live foreground run cannot be queued after detachment. Refuse the
+		// transition when no background capacity is available.
+		if (this.runningBackground >= this.maxConcurrent) return false;
 		record.detachCallerSignal?.();
 		record.isBackground = true;
+		// Detached foreground work now owns capacity until this invocation settles.
+		this.acquireCapacity(record);
 		record.resultConsumed = false;
 		return true;
 	}
@@ -803,11 +866,7 @@ export class AgentManager {
 			record.status = "stopped";
 			record.terminationCause = cause;
 			record.completedAt = Date.now();
-			try {
-				this.onComplete?.(record);
-			} catch {
-				/* ignore completion side-effect errors */
-			}
+			this.notifyComplete(record);
 			return true;
 		}
 
@@ -892,6 +951,8 @@ export class AgentManager {
 			return session;
 		});
 		this.agents.clear();
+		this.capacityLeases.clear();
+		this.runningBackground = 0;
 		void Promise.all(sessions.map(disposeAgentSession));
 	}
 }

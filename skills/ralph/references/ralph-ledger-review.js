@@ -10,12 +10,14 @@ const VERIFIER = "<adapt the review skill's verifier prompt for this increment; 
 const RALPH = "<adapt references/ledger-increment.md for this goal, supplied review findings and coverage gaps, and the reviewed loop; inline it here>";
 
 const goal = (inputs.goal || "").trim();
+const task = (inputs.task || "").trim();
 const stack = (inputs.stack || "")
   .split("\n")
   .map((path) => path.trim())
   .filter(Boolean);
 const iterationInput = String(inputs.iterations ?? "").trim();
 if (!goal) throw new Error("inputs.goal is required");
+if (!task) throw new Error("inputs.task is required (ledger task.md path)");
 if (stack.length === 0) throw new Error("inputs.stack is required (newline-separated context paths)");
 if (!/^[1-9]\d*$/.test(iterationInput)) {
   throw new Error("inputs.iterations is required (positive safe integer)");
@@ -27,6 +29,11 @@ if (!Number.isSafeInteger(iterations)) {
 
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
+}
+
+async function terminalTaskStatus() {
+  const matches = await pi.grep({ path: task, pattern: "^Status:\\s*(?:done|blocked)\\s*$" });
+  return /Status:\s*(done|blocked)\b/.exec(matches)?.[1];
 }
 
 async function gitOutput(command) {
@@ -595,12 +602,25 @@ const reviewedPaths = new Set();
 const failures = [];
 
 for (let iteration = 1; iteration <= iterations; iteration++) {
+  const taskStatusBefore = await terminalTaskStatus();
+  if (taskStatusBefore) {
+    return {
+      status: "stopped",
+      stopReason: `task-${taskStatusBefore}`,
+      requestedIterations: iterations,
+      completedIterations: iteration - 1,
+      iterations: iteration - 1,
+      findings,
+      coverageGaps,
+      failures,
+    };
+  }
   const headBefore = (await gitOutput("git rev-parse HEAD")).trim();
   const before = await workspaceSnapshot();
   const feedback = reviewFeedback(findings, coverageGaps, priorRisks);
   const boundedWorkerContext = std.context.fit(
     {
-      stack: std.context.required(stack),
+      stack: std.context.required([...new Set([task, ...stack])]),
       reviewFeedback: std.context.required(feedback),
     },
     { maxSerializedChars: 32000 },
@@ -616,6 +636,20 @@ for (let iteration = 1; iteration <= iterations; iteration++) {
   if (result.status === "failed") {
     failures.push({ iteration, error: result.error || String(result.text).slice(0, 500) });
     return { status: "failed", iterations: iteration, failedAt: iteration, findings, coverageGaps, failures };
+  }
+
+  const taskStatusAfter = await terminalTaskStatus();
+  if (taskStatusAfter) {
+    return {
+      status: "stopped",
+      stopReason: `task-${taskStatusAfter}`,
+      requestedIterations: iterations,
+      completedIterations: iteration,
+      iterations: iteration,
+      findings,
+      coverageGaps,
+      failures,
+    };
   }
 
   const headAfter = (await gitOutput("git rev-parse HEAD")).trim();

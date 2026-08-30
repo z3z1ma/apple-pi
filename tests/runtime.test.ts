@@ -509,10 +509,66 @@ return value.text;
 		expect(result.error).toContain("timed out");
 	});
 
+	it("uses the configured wall timeout for synchronous VM work", async () => {
+		const result = await execute(
+			`const until = Date.now() + 1_100; while (Date.now() < until) {} return "finished";`,
+			async () => undefined,
+			1_500,
+		);
+		expect(result).toEqual({ outcome: "succeeded", value: "finished" });
+	});
+
 	it("fails clearly when the returned value cannot cross the worker boundary", async () => {
 		const result = await execute("return () => 1;", async () => undefined);
 		expect(result.outcome).toBe("failed");
 		expect(result.error).toContain("not serializable");
+	});
+
+	it("rejects lossy Map return values rather than serializing them as objects", async () => {
+		const result = await execute('return new Map([["key", "value"]]);', async () => undefined);
+		expect(result.outcome).toBe("failed");
+		expect(result.error).toContain("result contains a non-plain object");
+	});
+
+	it("rejects lossy host-call results before they enter the guest realm", async () => {
+		const result = await execute(`return pi.read({ path: "ignored" });`, async () => new Map([["key", "value"]]));
+		expect(result.outcome).toBe("failed");
+		expect(result.error).toContain("pi_exec host result is not JSON-serializable");
+	});
+
+	it("preserves an undefined host result for optional helper lookups", async () => {
+		const result = await execute(
+			`const missing = await tools.describe("missing"); return { missing: missing === undefined };`,
+			async () => undefined,
+		);
+		expect(result).toEqual({ outcome: "succeeded", value: { missing: true } });
+	});
+
+	it("rejects non-JSON host-call arguments before dispatch", async () => {
+		let dispatched = false;
+		const result = await execute(`await tools.search(new Map()); return "unreachable";`, async () => {
+			dispatched = true;
+			return [];
+		});
+		expect(result.outcome).toBe("failed");
+		expect(result.error).toContain("pi_exec call arguments are not JSON-serializable");
+		expect(result.error).toContain("non-plain object");
+		expect(dispatched).toBe(false);
+	});
+
+	it("rejects a non-JSON initial state before it reaches the guest realm", async () => {
+		const result = await executeProgram(
+			"return state;",
+			{},
+			2_000,
+			async () => undefined,
+			undefined,
+			undefined,
+			128,
+			new Map(),
+		);
+		expect(result.outcome).toBe("failed");
+		expect(result.error).toContain("state contains a non-plain object");
 	});
 
 	it("reports unawaited rejected host calls as failures", async () => {
@@ -663,6 +719,17 @@ return { fitted, packed, schema: std.schema({ id: "int", tag: ["high", "low"], r
 		});
 	});
 
+	it("drops a root droppable context value without serializing undefined", async () => {
+		const result = await execute(
+			`return std.context.fit(std.context.droppable("x".repeat(100)), { maxSerializedChars: 2 });`,
+			async () => undefined,
+		);
+		expect(result).toEqual({
+			outcome: "succeeded",
+			value: { truncated: [], dropped: ["$"], serializedChars: 0 },
+		});
+	});
+
 	it("rejects flags that would disappear behind a root context mark", async () => {
 		const result = await execute(
 			`return std.context.fit(std.context.required({ patch: std.context.clippable("x", { maxChars: 1 }) }), { flags: { patchTruncated: "$.patch" } });`,
@@ -801,7 +868,7 @@ describe("pi_exec agent binding", () => {
 
 			const explore = await resolveExecWorker({ task: "where is X?", type: "Explore" }, options);
 			expect(explore.type).toBe("Explore");
-			expect(explore.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
+			expect(explore.tools).toEqual(["read", "grep", "find", "ls"]);
 			expect(explore.model).toBe("xai/fast");
 			expect(explore.thinking).toBe("medium");
 			expect(explore.systemPrompt).toContain("Agent type: Explore");
@@ -867,7 +934,7 @@ describe("pi_exec agent binding", () => {
 			);
 			expect(resolved.model).toBe("anthropic/route-advisor");
 			expect(resolved.thinking).toBe("high");
-			expect(resolved.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
+			expect(resolved.tools).toEqual(["read", "grep", "find", "ls"]);
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
@@ -1022,12 +1089,14 @@ describe("pi_exec tool", () => {
 	const register = () => {
 		const tools = new Map<string, any>();
 		let resultHandler: any;
+		let shutdownHandler: any;
 		runtime({
 			registerTool(value: any) {
 				tools.set(value.name, value);
 			},
 			on(event: string, handler: any) {
 				if (event === "tool_result") resultHandler = handler;
+				if (event === "session_shutdown") shutdownHandler = handler;
 			},
 		} as any);
 		return {
@@ -1035,6 +1104,7 @@ describe("pi_exec tool", () => {
 			discoverProgramsTool: tools.get("pi_discover_programs"),
 			execProgramTool: tools.get("pi_exec_program"),
 			resultHandler,
+			shutdownHandler,
 		};
 	};
 
@@ -1067,7 +1137,9 @@ describe("pi_exec tool", () => {
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		const exec = { ...echo, name: "pi_exec" };
 		const savedProgram = { ...echo, name: "pi_exec_program" };
-		const subagentTools = Object.values(SUBAGENT_TOOL_NAMES).map((name) => [name, { definition: { ...echo, name } }]);
+		const subagentTools: Array<[string, { definition: typeof echo }]> = Object.values(SUBAGENT_TOOL_NAMES).map(
+			(name) => [name, { definition: { ...echo, name } }],
+		);
 		runner.extensions = [
 			{
 				tools: new Map([
@@ -1107,7 +1179,8 @@ describe("pi_exec tool", () => {
 			expect(execProgramTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.executeSnippet);
 			expect(execProgramTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
 			expect(execProgramTool.parameters.properties.name.pattern).toBe("^[a-z0-9]+(?:-[a-z0-9]+)*$");
-			const discovered = await discoverProgramsTool.execute("discover", {}, undefined, undefined, { cwd: dir });
+			const trustedCtx = { cwd: dir, isProjectTrusted: () => true };
+			const discovered = await discoverProgramsTool.execute("discover", {}, undefined, undefined, trustedCtx);
 			expect(JSON.parse(discovered.content[0].text)).toEqual([
 				{ name: "echo-input", description: "Return the named input unchanged." },
 			]);
@@ -1117,7 +1190,7 @@ describe("pi_exec tool", () => {
 				{ name: "echo-input", inputs: { value: "saved result" } },
 				undefined,
 				undefined,
-				{ cwd: dir },
+				trustedCtx,
 			);
 			expect(result.content[0].text).toBe("saved result");
 			expect(result.details.activity).toMatchObject({
@@ -1125,7 +1198,7 @@ describe("pi_exec tool", () => {
 				description: "Return the named input unchanged.",
 			});
 			await expect(
-				execProgramTool.execute("invalid", { name: "../echo-input" }, undefined, undefined, { cwd: dir }),
+				execProgramTool.execute("invalid", { name: "../echo-input" }, undefined, undefined, trustedCtx),
 			).rejects.toThrow(/program name must contain/);
 
 			writeFileSync(
@@ -1134,13 +1207,24 @@ describe("pi_exec tool", () => {
 				"utf8",
 			);
 			await expect(
-				execProgramTool.execute("saved-failure", { name: "failure" }, undefined, undefined, { cwd: dir }),
+				execProgramTool.execute("saved-failure", { name: "failure" }, undefined, undefined, trustedCtx),
 			).rejects.toThrow("expected failure");
 			const failure = resultHandler({ toolName: "pi_exec_program", toolCallId: "saved-failure", isError: true });
 			expect(failure.details.trace.outcome).toBe("failed");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("requires project trust before discovering or running saved programs", async () => {
+		const { discoverProgramsTool, execProgramTool } = register();
+		const ctx = { cwd: process.cwd(), isProjectTrusted: () => false };
+		await expect(discoverProgramsTool.execute("untrusted-discover", {}, undefined, undefined, ctx)).rejects.toThrow(
+			/trusted project/,
+		);
+		await expect(
+			execProgramTool.execute("untrusted-run", { name: "example" }, undefined, undefined, ctx),
+		).rejects.toThrow(/trusted project/);
 	});
 
 	it("rejects malformed and out-of-project program directories", () => {
@@ -1196,6 +1280,54 @@ describe("pi_exec tool", () => {
 			);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns bash nonzero exits as documented structured results", async () => {
+		const { tool } = register();
+		const result = await tool.execute(
+			"bash-nonzero",
+			{ code: `return pi.bash({ command: "printf failed; exit 7" });` },
+			undefined,
+			undefined,
+			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "bash-nonzero", getSessionFile: () => undefined } },
+		);
+		expect(JSON.parse(result.content[0].text)).toEqual({
+			ok: false,
+			output: expect.stringContaining("Command exited with code 7"),
+		});
+	});
+
+	it("returns edit and write failures as documented structured results", async () => {
+		const { tool } = register();
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mutation-failures" } };
+		const editResult = await tool.execute(
+			"edit-failure",
+			{
+				code: `return pi.edit({ path: "missing-file", edits: [{ oldText: "before", newText: "after" }] });`,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		const writeResult = await tool.execute(
+			"write-failure",
+			{ code: `return pi.write({ path: ".", content: "not a directory replacement" });` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		for (const [result, ref] of [
+			[editResult, "pi.edit"],
+			[writeResult, "pi.write"],
+		] as const) {
+			expect(JSON.parse(result.content[0].text)).toEqual({
+				ok: false,
+				output: expect.any(String),
+			});
+			expect(result.details.trace.operations).toContainEqual(
+				expect.objectContaining({ ref, outcome: "failed", error: expect.any(String) }),
+			);
 		}
 	});
 
@@ -1268,6 +1400,28 @@ describe("pi_exec tool", () => {
 		expect(afterFailure.content[0].text).toBe("3");
 	});
 
+	it("cleans session state snapshots on session teardown", async () => {
+		const { tool, shutdownHandler } = register();
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-cleanup" } };
+		const created = await tool.execute(
+			"state-cleanup-create",
+			{ code: `state.value = 1; return 1;` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		shutdownHandler({}, ctx);
+		await expect(
+			tool.execute(
+				"state-cleanup-read",
+				{ code: `return state.value;`, state: created.details.stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(`Unknown pi_exec state: ${created.details.stateId}`);
+	});
+
 	it("does not reuse expired state ids after the runtime reloads", async () => {
 		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-reload" } };
 		const firstRuntime = register().tool;
@@ -1327,6 +1481,24 @@ describe("pi_exec tool", () => {
 				ctx,
 			),
 		).rejects.toThrow(/Code generation from strings disallowed/);
+		await expect(
+			tool.execute(
+				"state-map",
+				{ code: `state.values = new Map(); return true;`, state: stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/state contains a non-plain object/);
+		await expect(
+			tool.execute(
+				"state-too-large",
+				{ code: `state.payload = "x".repeat(200_001); return true;`, state: stateId },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/state snapshot exceeds 200,000 bytes/);
 		await expect(
 			tool.execute(
 				"state-date",
@@ -1615,6 +1787,14 @@ return pi.read({ path: "result.txt" });
 				return { content: [{ type: "text", text: `echo:${params.value}` }], details: { echoed: true } };
 			},
 		};
+		const noDetails = {
+			...echo,
+			name: "no_details",
+			parameters: Type.Object({}),
+			async execute() {
+				return { content: [{ type: "text", text: "without details" }] };
+			},
+		};
 		const exec = { ...echo, name: "pi_exec" };
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		runner.extensions = [
@@ -1636,6 +1816,7 @@ return pi.read({ path: "result.txt" });
 			{
 				tools: new Map([
 					["echo_value", { definition: echo }],
+					["no_details", { definition: noDetails }],
 					["reload_value", { definition: reloaded }],
 					["pi_exec", { definition: exec }],
 				]),
@@ -1660,16 +1841,26 @@ return pi.read({ path: "result.txt" });
 			{
 				code: `
 const available = await tools.list();
+const described = await tools.describe("echo_value");
+const missing = await tools.describe("missing");
 const echoed = await extensions.echo_value({ value: "hello" });
-return { names: available.map((tool) => tool.name), text: echoed.text };
+const noDetails = await extensions.no_details({});
+return { names: available.map((tool) => tool.name), schemaType: described.parameters.type, missing: missing === undefined, text: echoed.text, noDetails: noDetails.text };
 `,
 			},
 			undefined,
 			undefined,
 			{ cwd: process.cwd() },
 		);
-		expect(JSON.parse(result.content[0].text)).toEqual({ names: ["echo_value", "reload_value"], text: "echo:hello" });
-		expect(result.details.trace.operations[1]).toMatchObject({ ref: "extensions.echo_value", outcome: "succeeded" });
+		expect(JSON.parse(result.content[0].text)).toEqual({
+			names: ["echo_value", "no_details", "reload_value"],
+			schemaType: "object",
+			missing: true,
+			text: "echo:hello",
+			noDetails: "without details",
+		});
+		expect(result.details.trace.operations[3]).toMatchObject({ ref: "extensions.echo_value", outcome: "succeeded" });
+		expect(result.details.trace.operations[4]).toMatchObject({ ref: "extensions.no_details", outcome: "succeeded" });
 	});
 
 	it("mounts and clears the live activity widget in TUI mode", async () => {

@@ -80,6 +80,13 @@ export interface AgentRecord {
 	terminationCause?: AgentTerminationCause;
 	/** Internal cleanup for a foreground caller signal when the run settles or becomes detached. */
 	detachCallerSignal?: () => void;
+	/** Immutable identity for the currently active invocation; retained through abort until it settles. */
+	activeInvocation?: symbol;
+	/** Immutable capacity lease for the currently active invocation. */
+	capacityLease?: symbol;
+	/** Turn policy captured at spawn, reused by every resume of this session. */
+	maxTurns?: number;
+	hardTurnLimit?: boolean;
 }
 
 export interface AgentInvocation {

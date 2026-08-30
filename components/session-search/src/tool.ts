@@ -14,7 +14,10 @@ const PAGE_SIZE = 5;
 const MAX_PAGES = 5;
 
 export const invalidExpandIndices = (requested: number[], available: Set<number>): number[] =>
-	requested.filter((i) => !Number.isInteger(i) || !available.has(i));
+	requested.filter((i) => !Number.isSafeInteger(i) || i < 0 || !available.has(i));
+
+const invalidPositiveInteger = (value: unknown): boolean =>
+	typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0;
 
 export const SESSION_SEARCH_TOOL_NAME = "search_session";
 
@@ -46,13 +49,16 @@ export const sessionSearchTool = defineTool({
 			}),
 		),
 		expand: Type.Optional(
-			Type.Array(Type.Number(), {
+			Type.Array(Type.Integer({ minimum: 0 }), {
 				description:
-					"Entry indices to return full untruncated content for. Works alone (any index in scope) or alongside query (expands matching entries on the current page).",
+					"Non-negative entry indices to return full untruncated content for. Works alone (any index in scope) or alongside query (expands matching entries on the current page).",
 			}),
 		),
 		page: Type.Optional(
-			Type.Number({ description: "Page number (1-based) for paginated search results. Default: 1." }),
+			Type.Integer({
+				minimum: 1,
+				description: "Positive page number (1-based) for paginated search results. Default: 1.",
+			}),
 		),
 		mode: Type.Optional(
 			Type.Union([Type.Literal("history"), Type.Literal("file"), Type.Literal("touched")], {
@@ -67,6 +73,19 @@ export const sessionSearchTool = defineTool({
 	}),
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recall resolution owns the complete request-validation and scope-selection flow.
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		if (params.page !== undefined && invalidPositiveInteger(params.page)) {
+			return {
+				content: [{ type: "text", text: "Invalid page: page must be a positive integer." }],
+				details: undefined,
+			};
+		}
+		if (params.expand !== undefined && (!Array.isArray(params.expand) || params.expand.some(invalidPositiveInteger))) {
+			return {
+				content: [{ type: "text", text: "Invalid expand: every entry index must be a non-negative integer." }],
+				details: undefined,
+			};
+		}
+
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		if (!sessionFile) {
 			return {
@@ -138,13 +157,19 @@ export const sessionSearchTool = defineTool({
 		}
 
 		const { rendered: msgs, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
-		const allResults = params.query?.trim()
-			? searchEntries(msgs, rawMessages, params.query, mode)
-			: msgs.slice(-DEFAULT_RECENT).map((entry, offset) => {
-					const rawOffset = Math.max(0, rawMessages.length - DEFAULT_RECENT) + offset;
-					const fileMatches = getFileIndicators(rawMessages[rawOffset]!);
-					return fileMatches.length > 0 ? { ...entry, fileMatches } : entry;
-				});
+		let allResults: SearchHit[];
+		try {
+			allResults = params.query?.trim()
+				? searchEntries(msgs, rawMessages, params.query, mode)
+				: msgs.slice(-DEFAULT_RECENT).map((entry, offset) => {
+						const rawOffset = Math.max(0, rawMessages.length - DEFAULT_RECENT) + offset;
+						const fileMatches = getFileIndicators(rawMessages[rawOffset]!);
+						return fileMatches.length > 0 ? { ...entry, fileMatches } : entry;
+					});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unable to evaluate search query.";
+			return { content: [{ type: "text", text: message }], details: undefined };
+		}
 
 		if (params.query?.trim()) {
 			const page = Math.max(1, params.page ?? 1);

@@ -168,7 +168,12 @@ export const STDLIB_SETUP_SOURCE = String.raw`
       tree[key] = false;
     }
     const current = () => resolveContext(tree);
-    const size = () => measure(current());
+    // A dropped root resolves to undefined, which is intentionally represented by
+    // zero serialized characters rather than passed to JSON.stringify.
+    const size = () => {
+      const resolved = current();
+      return resolved === undefined ? 0 : measure(resolved);
+    };
     const dropped = [];
     const truncated = slots.filter((slot) => slot.policy.kind === "clippable" && slot.truncated).map((slot) => slot.path);
     for (const slot of slots.filter((slot) => slot.policy.kind === "droppable").sort((left, right) => (left.policy.priority || 0) - (right.policy.priority || 0))) {
@@ -191,9 +196,9 @@ export const STDLIB_SETUP_SOURCE = String.raw`
       tree[key] = truncated.includes(path);
     }
     const result = current();
-    const serializedChars = measure(result);
+    const serializedChars = result === undefined ? 0 : measure(result);
     if (serializedChars > maxSerializedChars) throw new Error("std.context.fit cannot meet the context budget without dropping required data");
-    return { value: result, truncated, dropped, serializedChars };
+    return { ...(result === undefined ? {} : { value: result }), truncated, dropped, serializedChars };
   };
   const contextPack = (items, options = {}) => {
     requireArray(items, "std.context.pack");

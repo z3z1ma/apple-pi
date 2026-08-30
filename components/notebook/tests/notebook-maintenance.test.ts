@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULTS } from "../src/config.js";
 import { hashId } from "../src/ids.js";
 import { commitPairNotebookUpdate, preparePairNotebookBatch, UpdateNotebookTool } from "../src/notebook-maintenance.js";
-import {
-	NOTEBOOK_OBSERVATIONS_RECORDED,
-	NOTEBOOK_REFLECTIONS_RECORDED,
-	type Entry,
-} from "../src/session-ledger/index.js";
+import { NOTEBOOK_MAINTENANCE, type Entry } from "../src/session-ledger/index.js";
 
 function sourceEntries(): Entry[] {
 	return [
@@ -121,9 +117,30 @@ describe("Pair notebook maintenance", () => {
 		);
 		expect(appendEntry).toHaveBeenCalledTimes(1);
 		expect(appendEntry).toHaveBeenCalledWith(
-			NOTEBOOK_OBSERVATIONS_RECORDED,
-			expect.objectContaining({ coversUpToId: "source-assistant" }),
+			NOTEBOOK_MAINTENANCE,
+			expect.objectContaining({ coversUpToId: "source-assistant", observations: [expect.anything()] }),
 		);
-		expect(appendEntry).not.toHaveBeenCalledWith(NOTEBOOK_REFLECTIONS_RECORDED, expect.anything());
+	});
+
+	it("commits an empty full review as one coverage envelope", () => {
+		const entries = sourceEntries();
+		const appendEntry = vi.fn();
+		expect(
+			commitPairNotebookUpdate({ appendEntry } as never, { disposed: false } as never, entries, {
+				batchId: "empty",
+				coversUpToId: "source-assistant",
+				observations: [],
+				reflections: [],
+				retiredIds: [],
+				droppedIds: [],
+				fullMaintenanceDue: true,
+				sourceTokens: 42,
+			}),
+		).toBe(true);
+		expect(appendEntry).toHaveBeenCalledTimes(1);
+		expect(appendEntry).toHaveBeenCalledWith(
+			NOTEBOOK_MAINTENANCE,
+			expect.objectContaining({ observations: [], reflections: [], coversUpToId: "source-assistant" }),
+		);
 	});
 });

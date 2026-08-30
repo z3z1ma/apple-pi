@@ -1,6 +1,7 @@
 import {
 	NOTEBOOK_FOLDED,
 	isNotebookDetails,
+	isNotebookMaintenanceEntry,
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
@@ -68,6 +69,7 @@ function isCoveredAtOrBefore(
 	return isAtOrBefore(coverageIndex(entry, indexes), boundaryIndex);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one ordered projection reducer preserves notebook coverage and tombstone semantics.
 function foldProjection(entries: Entry[], boundary: ProjectionBoundary): Projection {
 	const indexes = entryIndexById(entries);
 	const cut = boundaryIndex(entries, indexes, boundary);
@@ -79,6 +81,22 @@ function foldProjection(entries: Entry[], boundary: ProjectionBoundary): Project
 	const retiredReflectionIds = new Set<string>();
 
 	for (const entry of entries) {
+		if (isNotebookMaintenanceEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
+			for (const observation of entry.data.observations) {
+				if (observationsById.has(observation.id)) continue;
+				observationsById.add(observation.id);
+				observations.push(observation);
+			}
+			for (const reflection of entry.data.reflections) {
+				if (reflectionsById.has(reflection.id)) continue;
+				reflectionsById.add(reflection.id);
+				reflections.push(reflection);
+			}
+			for (const observationId of entry.data.droppedObservationIds) droppedObservationIds.add(observationId);
+			for (const reflectionId of entry.data.retiredReflectionIds) retiredReflectionIds.add(reflectionId);
+			continue;
+		}
+
 		if (isObservationsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, cut)) {
 			for (const observation of entry.data.observations) {
 				if (observationsById.has(observation.id)) continue;

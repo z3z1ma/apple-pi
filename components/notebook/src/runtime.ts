@@ -12,6 +12,7 @@ export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;
 	configCwd: string | undefined;
+	configProjectTrusted: boolean | undefined;
 	disposed = false;
 	compactInFlight = false;
 	notebookEmptyBackoff:
@@ -22,13 +23,11 @@ export class Runtime {
 		  }
 		| undefined;
 
-	ensureConfig(cwd: string): Config {
-		if (this.configLoaded && (this.configCwd === cwd || this.configCwd === undefined)) {
-			this.configCwd = cwd;
-			return this.config;
-		}
-		this.config = loadConfig(cwd);
+	ensureConfig(cwd: string, projectTrusted = false): Config {
+		if (this.configLoaded && this.configCwd === cwd && this.configProjectTrusted === projectTrusted) return this.config;
+		this.config = loadConfig(cwd, projectTrusted);
 		this.configCwd = cwd;
+		this.configProjectTrusted = projectTrusted;
 		this.configLoaded = true;
 		return this.config;
 	}

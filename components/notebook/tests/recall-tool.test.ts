@@ -5,6 +5,7 @@ import {
 	formatRecallRenderedResultForTui,
 	NOTEBOOK_SOURCE_TOOL_NAME,
 	recallObservationTool,
+	type RecallObservationToolDetails,
 	registerRecallTool,
 } from "../src/tools/notebook-source.js";
 import {
@@ -27,7 +28,16 @@ function fakeCtx(entries: TestEntry[]) {
 
 async function execute(id: string, entries: TestEntry[]) {
 	const { ctx, getBranch, getEntries } = fakeCtx(entries);
-	const result = await recallObservationTool.execute("tool-1", { id }, undefined as any, undefined as any, ctx as any);
+	const result = (await recallObservationTool.execute(
+		"tool-1",
+		{ id },
+		undefined as any,
+		undefined as any,
+		ctx as any,
+	)) as {
+		content: Array<{ type: string; text?: string }>;
+		details?: RecallObservationToolDetails;
+	};
 	const text = result.content
 		.filter((part): part is { type: "text"; text: string } => part.type === "text")
 		.map((part) => part.text)
@@ -45,6 +55,29 @@ describe("revisit note tool", () => {
 		expect(recallObservationTool.label).toBe("Notebook source");
 		expect(formatRecallCallForTui("aaaaaaaaaaaa")).toBe("notebook_source aaaaaaaaaaaa");
 		expect(pi.registerTool).toHaveBeenCalledWith(recallObservationTool);
+	});
+
+	it("finds observations and reflections recorded in a maintenance envelope", async () => {
+		const obs = observation("aaaaaaaaaaaa", { content: "Envelope evidence.", sourceEntryIds: ["raw-1"] });
+		const ref = reflection("eeeeeeeeeeee", [obs.id]);
+		const entries = [
+			rawMessage("raw-1", "durable source"),
+			{
+				type: "custom",
+				id: "maintenance-1",
+				customType: "notebook.maintenance",
+				data: {
+					coversUpToId: "raw-1",
+					observations: [obs],
+					reflections: [ref],
+					retiredReflectionIds: [],
+					droppedObservationIds: [],
+				},
+			},
+		] as TestEntry[];
+		const { text } = await execute(ref.id, entries);
+		expect(text).toContain("Envelope evidence.");
+		expect(text).toContain("durable source");
 	});
 
 	it("renders active observation source evidence", async () => {

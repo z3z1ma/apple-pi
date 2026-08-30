@@ -3,6 +3,8 @@ export const NOTEBOOK_REFLECTIONS_RECORDED = "notebook.reflections.recorded";
 export const NOTEBOOK_OBSERVATIONS_DROPPED = "notebook.observations.dropped";
 export const NOTEBOOK_REFLECTIONS_RETIRED = "notebook.reflections.retired";
 export const NOTEBOOK_FOLDED = "notebook.folded";
+/** One atomic record for a completed Pair maintenance review. */
+export const NOTEBOOK_MAINTENANCE = "notebook.maintenance";
 
 export const RELEVANCE_VALUES = ["low", "medium", "high", "critical"] as const;
 export type Relevance = (typeof RELEVANCE_VALUES)[number];
@@ -60,6 +62,14 @@ export type ReflectionsRetiredEntryData = {
 	successorIds?: string[];
 };
 
+export type NotebookMaintenanceEntryData = {
+	coversUpToId: string;
+	observations: Observation[];
+	reflections: Reflection[];
+	retiredReflectionIds: string[];
+	droppedObservationIds: string[];
+};
+
 export type NotebookDetails = {
 	type: typeof NOTEBOOK_FOLDED;
 	version: 1;
@@ -72,7 +82,8 @@ export type NotebookCustomType =
 	| typeof NOTEBOOK_OBSERVATIONS_RECORDED
 	| typeof NOTEBOOK_REFLECTIONS_RECORDED
 	| typeof NOTEBOOK_OBSERVATIONS_DROPPED
-	| typeof NOTEBOOK_REFLECTIONS_RETIRED;
+	| typeof NOTEBOOK_REFLECTIONS_RETIRED
+	| typeof NOTEBOOK_MAINTENANCE;
 
 export function isRelevance(value: unknown): value is Relevance {
 	return typeof value === "string" && (RELEVANCE_VALUES as readonly string[]).includes(value);
@@ -153,6 +164,21 @@ export function isReflectionsRetiredData(value: unknown): value is ReflectionsRe
 	return isNonEmptyStringArray(value.successorIds);
 }
 
+export function isNotebookMaintenanceData(value: unknown): value is NotebookMaintenanceEntryData {
+	if (!isPlainRecord(value)) return false;
+	return (
+		isNonEmptyString(value.coversUpToId) &&
+		Array.isArray(value.observations) &&
+		value.observations.every(isObservation) &&
+		Array.isArray(value.reflections) &&
+		value.reflections.every(isReflection) &&
+		Array.isArray(value.retiredReflectionIds) &&
+		value.retiredReflectionIds.every(isNonEmptyString) &&
+		Array.isArray(value.droppedObservationIds) &&
+		value.droppedObservationIds.every(isNonEmptyString)
+	);
+}
+
 export function isNotebookDetails(value: unknown): value is NotebookDetails {
 	if (!isPlainRecord(value)) return false;
 	return (
@@ -164,6 +190,14 @@ export function isNotebookDetails(value: unknown): value is NotebookDetails {
 		Array.isArray(value.reflections) &&
 		value.reflections.every(isReflection)
 	);
+}
+
+export function isNotebookMaintenanceEntry(entry: Entry): entry is Entry & {
+	type: "custom";
+	customType: typeof NOTEBOOK_MAINTENANCE;
+	data: NotebookMaintenanceEntryData;
+} {
+	return entry.type === "custom" && entry.customType === NOTEBOOK_MAINTENANCE && isNotebookMaintenanceData(entry.data);
 }
 
 export function isObservationsRecordedEntry(entry: Entry): entry is Entry & {
@@ -210,6 +244,12 @@ export function isReflectionsRetiredEntry(entry: Entry): entry is Entry & {
 	return (
 		entry.type === "custom" && entry.customType === NOTEBOOK_REFLECTIONS_RETIRED && isReflectionsRetiredData(entry.data)
 	);
+}
+
+export function buildNotebookMaintenanceData(
+	data: NotebookMaintenanceEntryData,
+): NotebookMaintenanceEntryData | undefined {
+	return isNotebookMaintenanceData(data) ? data : undefined;
 }
 
 export function buildObservationsRecordedData(
