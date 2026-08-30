@@ -1,14 +1,15 @@
 import type {
-	ConsultationHypothesis,
-	ConsultationSource,
 	AdvisorConsultationUsage,
 	AdvisorDisposition,
+	ConsultationHypothesis,
+	ConsultationSource,
 	EvidencePointer,
 } from "../../subagents/src/consultation.js";
 
 export type PairSeverity = "nit" | "concern" | "blocker";
 
 export interface PairNote {
+	id?: string;
 	note: string;
 	severity?: PairSeverity;
 	source?: "pair" | "advisor";

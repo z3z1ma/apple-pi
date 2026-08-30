@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AdvisorConsultationResult } from "../../subagents/src/consultation.js";
-import { EscalateTool, PAIR_SESSION_TOOLS, PairEscalationController, RepeatedFailureDetector } from "../src/index.js";
+import {
+	EscalateTool,
+	MIN_TURNS_BETWEEN_ADVISOR,
+	PAIR_SESSION_TOOLS,
+	PairEscalationController,
+	RepeatedFailureDetector,
+} from "../src/index.js";
 
 function harness(result: AdvisorConsultationResult, minTurnsBetween = 0) {
 	let state = "initial";
@@ -144,6 +150,8 @@ describe("Pair escalation machinery", () => {
 		const delivered: any[] = [];
 		const prepared = await h.controller.prepareDelivery();
 		expect(prepared).toBeDefined();
+		expect(prepared?.dedupeKeys.some((key) => key.startsWith("acknowledgement precedes durable insertion"))).toBe(true);
+		expect(prepared?.dedupeKeys).toContain("the retry path may bypass durable enqueue.");
 		if (prepared) {
 			delivered.push(prepared.note);
 			prepared.commit(true);
@@ -269,10 +277,10 @@ describe("Pair escalation machinery", () => {
 		expect(h.outcomes[0]).toMatchObject({ disposition: "uncertain", delivered: false });
 	});
 
-	it("throttles starts by turns without imposing an absolute consultation maximum", async () => {
+	it("throttles starts by four turns without imposing an absolute consultation maximum", async () => {
 		const h = harness(
 			{ status: "completed", finding: { disposition: "refute", finding: "No issue.", evidence: [] }, usage },
-			2,
+			MIN_TURNS_BETWEEN_ADVISOR,
 		);
 		h.controller.submit("pair", request, 1);
 		await vi.waitFor(() => expect(h.service.runConsultation).toHaveBeenCalledTimes(1));
@@ -281,7 +289,10 @@ describe("Pair escalation machinery", () => {
 		h.controller.submit("pair", changedEvidence, 1);
 		await new Promise((resolve) => setTimeout(resolve, 5));
 		expect(h.service.runConsultation).toHaveBeenCalledTimes(1);
-		h.controller.advanceTurn(3);
+		h.controller.advanceTurn(4);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(h.service.runConsultation).toHaveBeenCalledTimes(1);
+		h.controller.advanceTurn(5);
 		await vi.waitFor(() => expect(h.service.runConsultation).toHaveBeenCalledTimes(2));
 	});
 });

@@ -30,15 +30,11 @@
  * review reconfirm it (held notes ride a reconfirm preamble; the pair re-
  * raises survivors, stays silent on the resolved ones).
  *
- * Catch-up block: while a high-severity note is held — or whenever a turn is
- * about to idle — we stall the primary's next step (by awaiting in the `turn_end`
- * hook, which the agent loop awaits) so the pair can catch up. The wait backs
- * off 15s→30s→60s… capped at 120s, is Escape-abortable, and is reflected in the
- * persistent footer state (formatPairFooterText: "Pair (reviewing)" vs
- * "Pair") rather than a one-shot notify — a toast for a wait that hasn't
- * resolved yet is the ambiguity this footer state exists to remove. Once the
- * pair settles, surviving held notes are steered in against the now-unraced
- * state. This is a deliberate throttle (omp's syncBacklog idea).
+ * Catch-up gate: non-terminal turns never await Pair. A terminal turn gives
+ * construction and review one absolute 10-second opportunity to settle, then
+ * returns control while healthy review continues in the background. Timeout,
+ * failure, or abort does not promote unconfirmed findings. The persistent
+ * footer reports review activity without a blocking toast.
  *
  * An optional PAIR.md in a trusted cwd is appended to the pair's system
  * prompt (pair-only guidance: review priorities, project traps).
@@ -48,10 +44,9 @@
  * including repeats. That text is for the agent being reviewed, not the pair.
  */
 
-import { Agent, type AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Model, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { convertToLlm, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
@@ -80,8 +75,23 @@ import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { getManagedSubagentService } from "../../subagents/src/service.js";
-import { EscalateTool, PairEscalationController, RepeatedFailureDetector } from "./escalation.js";
-import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
+import {
+	formatPairAcknowledgmentReminder,
+	identifyMaterialPairNotes,
+	PAIR_ACK_REMINDER_TYPE,
+	PAIR_FINDING_ACKNOWLEDGED,
+	PAIR_FINDING_UNACKNOWLEDGED,
+	PairAcknowledgmentTracker,
+	type PairFindingAcknowledgment,
+	pairFindingId,
+} from "./acknowledgments.js";
+import {
+	EscalateTool,
+	type EscalationAcceptance,
+	PairEscalationController,
+	RepeatedFailureDetector,
+} from "./escalation.js";
+import type { PrimarySessionManager } from "./recall.js";
 import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } from "./seed.js";
 import { createPairSession } from "./session.js";
 
@@ -96,10 +106,17 @@ import { createPairSession } from "./session.js";
 // executor: it cannot edit, run commands, or change session state.
 // ===========================================================================
 
+export type { PairFindingAcknowledgment, PairFindingDisposition, PendingPairFinding } from "./acknowledgments.js";
+export {
+	formatPairAcknowledgmentReminder,
+	identifyMaterialPairNotes,
+	PairAcknowledgmentTracker,
+	pairFindingId,
+} from "./acknowledgments.js";
 export type { PairNote, PairSeverity } from "./types.js";
 
 import type { PrimaryTurnState } from "../../shared/src/types.js";
-import type { PairEscalationState, PairNote, PairSeverity } from "./types.js";
+import type { PairEscalation, PairEscalationState, PairNote, PairSeverity } from "./types.js";
 
 export type { PrimaryTurnState } from "../../shared/src/types.js";
 
@@ -107,27 +124,38 @@ const ADVISORY_TYPE = "advisory";
 
 type PreparedBoundaryFinding = {
 	note: PairNote;
-	commit(delivered: boolean): void;
+	dedupeKeys?: readonly string[];
+	commit(delivered: boolean, retainIdentity?: boolean): void;
 };
+
+const findingIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 
 /** Commit direct Pair and prepared Advisor findings through one outbound batch. */
 export function deliverBoundaryBatch(args: {
 	direct: PairNote[];
 	advisor?: PreparedBoundaryFinding;
+	knownKeys?: ReadonlySet<string>;
 	send(notes: PairNote[]): void;
 	onDirectDelivered(note: PairNote): void;
 	onDirectFailed(note: PairNote): void;
 }): boolean {
-	const notes = [...args.direct, ...(args.advisor ? [args.advisor.note] : [])];
-	if (notes.length === 0) return false;
+	const directKeys = new Set(args.direct.map((note) => findingIdentity(note.note)));
+	const advisorDuplicate = args.advisor?.dedupeKeys?.some(
+		(key) => directKeys.has(findingIdentity(key)) || args.knownKeys?.has(findingIdentity(key)),
+	);
+	const notes = [...args.direct, ...(args.advisor && !advisorDuplicate ? [args.advisor.note] : [])];
+	if (notes.length === 0) {
+		if (advisorDuplicate) args.advisor?.commit(false, true);
+		return false;
+	}
 	try {
 		args.send(notes);
 		for (const note of args.direct) args.onDirectDelivered(note);
-		args.advisor?.commit(true);
+		if (advisorDuplicate) args.advisor?.commit(false, true);
+		else args.advisor?.commit(true);
 		return true;
 	} catch (error) {
 		for (const note of args.direct) args.onDirectFailed(note);
-		args.advisor?.commit(false);
 		throw error;
 	}
 }
@@ -143,18 +171,32 @@ const adviseSchema = Type.Object({
 			description: "How strongly to weigh this. Omit for a plain nit.",
 		}),
 	),
+	finding_id: Type.Optional(
+		Type.String({
+			description:
+				"The host-provided id of an earlier concern or blocker that still applies. Use only an id shown in the reconfirmation list.",
+			pattern: "^pair-[a-f0-9]{12}$",
+		}),
+	),
+});
+
+const pairAcknowledgmentSchema = Type.Object({
+	findings: Type.Array(
+		Type.Object({
+			id: Type.String({ minLength: 1 }),
+			disposition: Type.Union([Type.Literal("address"), Type.Literal("decline"), Type.Literal("defer")]),
+			reason: Type.String({ minLength: 1, maxLength: 500 }),
+		}),
+		{ minItems: 1 },
+	),
 });
 
 const SEVERITY_RANK: Record<PairSeverity, number> = { nit: 1, concern: 2, blocker: 3 };
 const rankOf = (s: PairSeverity | undefined): number => SEVERITY_RANK[s ?? "nit"];
 const dedupeKey = (note: string): string => note.trim().replace(/\s+/g, " ");
+const pairNoteKey = (note: Pick<PairNote, "id" | "note">): string => note.id ?? dedupeKey(note.note);
 /** High severity (concern/blocker) is always held + reconfirmed; nits deliver now. */
 export const isHighSeverity = (s: PairSeverity | undefined): boolean => s === "concern" || s === "blocker";
-
-/** Catch-up block backoff: base, 2×, 4×… capped. consecutive=0 → base (15s default). */
-export function nextBackoffMs(consecutive: number, baseMs = 15_000, capMs = 120_000): number {
-	return Math.min(capMs, baseMs * 2 ** Math.max(0, consecutive));
-}
 
 /**
  * A turn is terminal (the agent is about to go idle) when its assistant message
@@ -247,74 +289,46 @@ export interface TurnBlockRuntime {
 	readonly hasHighPriority: boolean;
 	startDrain(): void;
 	takeAllAdvice(): PairNote[];
-	requeueAdvice(note: string, severity?: PairSeverity): void;
+	requeueAdvice(note: string, severity?: PairSeverity, findingId?: string): void;
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed">;
 }
 
 /**
- * The catch-up block, run once per primary `turn_end` (after the delta is pushed).
- * Returns the next `consecutiveBlocks` count for the caller to carry.
- *
- * - Non-terminal turn with nothing held → no block (streak resets to 0).
- * - Otherwise block, racing pair-settled vs a timeout vs the abort signal:
- *     - terminal → timeout = cap (block until the pair finishes the last turn).
- *     - mid-run  → timeout = backoff(consecutiveBlocks); on timeout, keep the held
- *                  notes and lengthen the next wait (return consecutiveBlocks+1).
- * - On settle: steer in whatever survived reconfirmation (may be empty), reset streak.
- * - On timeout / failed reconfirm (pair errored out): non-terminal keeps the
- *   queued advice and lengthens the next wait; terminal delivers concerns/blockers
- *   best-effort (it's the last chance before control returns to the user, and
- *   the stakes justify an unconfirmed delivery) but requeues NITS without marking
- *   them reconfirmed. A successful late review can then prune or confirm them;
- *   after failure, the next primary boundary applies normal nit policy.
- * - On abort (user hit Escape): bail, keep held notes + streak.
+ * Give a terminal primary turn one brief opportunity to catch up with Pair.
+ * Non-terminal turns never wait. Timeout, failure, and user abort leave advice
+ * queued for a later successful/current review rather than promoting an
+ * unconfirmed finding merely because the latency budget expired.
  */
+export type TurnBlockOutcome = "skipped" | "settled" | "timeout" | "aborted" | "failed";
+
+export function terminalReviewCoversBoundary(args: {
+	outcome: TurnBlockOutcome;
+	reviewedThrough: number;
+	boundarySequence: number;
+	currentSequence: number;
+	turnState: PrimaryTurnState;
+	generation: number;
+	currentGeneration: number;
+}): boolean {
+	return (
+		args.outcome === "settled" &&
+		args.reviewedThrough >= args.boundarySequence &&
+		args.boundarySequence === args.currentSequence &&
+		args.turnState === "ended-terminal" &&
+		args.generation === args.currentGeneration
+	);
+}
+
 export async function runTurnBlock(opts: {
 	terminal: boolean;
 	runtime: TurnBlockRuntime;
-	consecutiveBlocks: number;
-	baseMs?: number;
 	capMs?: number;
 	signal?: AbortSignal;
-	notify: (msg: string) => void;
-	deliverHeld: (notes: PairNote[], opts?: { terminal?: boolean }) => void;
-}): Promise<number> {
+}): Promise<TurnBlockOutcome> {
 	const { terminal, runtime } = opts;
-	const baseMs = opts.baseMs ?? 15_000;
-	const capMs = opts.capMs ?? 120_000;
-	if (!terminal && !runtime.hasHighPriority) return 0;
+	if (!terminal) return "skipped";
 	runtime.startDrain();
-
-	const timeoutMs = terminal ? capMs : nextBackoffMs(opts.consecutiveBlocks, baseMs, capMs);
-	// No "catching up"/"waiting up to Ns" notify here: a toast for an in-progress,
-	// not-yet-resolved wait is exactly the symptom this task fixed. The footer's
-	// reviewing/idle state (see formatPairFooterText) is the persistent, self-
-	// resolving signal for "is it still working" now. `notify` below stays for the
-	// timeout/failure branch, which reports a concrete, already-decided outcome.
-	const result = await runtime.waitUntilSettled(timeoutMs, opts.signal);
-	if (result === "aborted") return opts.consecutiveBlocks; // user bailed; keep held + streak
-	if (result === "settled") {
-		// Only a successful reconfirmation settles; the pair has pruned recanted
-		// entries, so the shared queue is the confirmed survivor set.
-		const held = runtime.takeAllAdvice();
-		if (held.length) opts.deliverHeld(held, { terminal });
-		return 0;
-	}
-	// timeout OR failed (pair errored 3x and dropped the reconfirm). Either way
-	// the held notes are NOT confirmed.
-	if (terminal) {
-		// Best-effort only for concerns/blockers. Requeue nits WITHOUT marking a
-		// reconfirmation; a late successful review may still prune them.
-		const held = runtime.takeAllAdvice();
-		const high = held.filter((n) => isHighSeverity(n.severity));
-		for (const n of held) if (!isHighSeverity(n.severity)) runtime.requeueAdvice(n.note, n.severity);
-		if (high.length) {
-			opts.deliverHeld(high, { terminal: true });
-			opts.notify("pair didn't reconfirm in time; delivering held advice anyway");
-		}
-		return 0;
-	}
-	return opts.consecutiveBlocks + 1; // mid-run: keep held unconfirmed, lengthen next wait
+	return runtime.waitUntilSettled(opts.capMs ?? 10_000, opts.signal);
 }
 
 /** Parse the hidden `/pair test <nit|concern|blocker> <note>` test hook args. */
@@ -335,12 +349,12 @@ export class AdviseTool {
 	readonly name = "share_note";
 	readonly label = "Advise";
 	readonly description =
-		"Share one concise, actionable note with your pair programming partner when you see something that could materially improve or protect the work. Say what you noticed and what they should check. Most turns need no note. Never use this for status, acknowledgement, praise, summaries, or to say that everything looks good or an earlier issue is resolved.";
+		"Share one concise, actionable finding with your pair programming partner when you see something that could materially improve or protect the work. Consolidate symptoms that share one root cause, but keep distinct material issues separate. Do not manage implementation, narrate status, acknowledge progress, praise, summarize, or say that everything looks good or an earlier issue is resolved. Use ask_advisor instead of also sharing the same issue when it needs deep independent judgment.";
 	readonly parameters = adviseSchema as any;
 	#delivered = new Map<string, number>();
 
 	// onAdvice returns true if delivered, false if queued or dropped.
-	constructor(private readonly onAdvice: (note: string, severity?: PairSeverity) => boolean) {}
+	constructor(private readonly onAdvice: (note: string, severity?: PairSeverity, findingId?: string) => boolean) {}
 
 	resetDelivered(): void {
 		this.#delivered.clear();
@@ -352,12 +366,15 @@ export class AdviseTool {
 	 * notes go through `onAdvice`→false, which intentionally does NOT record, so
 	 * the actual delivery point must).
 	 */
-	markDelivered(note: string, severity?: PairSeverity): void {
-		this.#delivered.set(dedupeKey(note), rankOf(severity));
+	markDelivered(note: string, severity?: PairSeverity, findingId?: string): void {
+		this.#delivered.set(findingId ?? dedupeKey(note), rankOf(severity));
 	}
 
-	async execute(_id: string, args: { note: string; severity?: PairSeverity }): Promise<AgentToolResult<unknown>> {
-		const key = dedupeKey(args.note);
+	async execute(
+		_id: string,
+		args: { note: string; severity?: PairSeverity; finding_id?: string },
+	): Promise<AgentToolResult<unknown>> {
+		const key = args.finding_id ?? dedupeKey(args.note);
 		const rank = rankOf(args.severity);
 		const prev = this.#delivered.get(key) ?? 0;
 		if (rank <= prev) {
@@ -366,7 +383,7 @@ export class AdviseTool {
 				details: { ...args, dropped: true },
 			};
 		}
-		const delivered = this.onAdvice(args.note, args.severity);
+		const delivered = this.onAdvice(args.note, args.severity, args.finding_id);
 		if (!delivered) {
 			// Not recorded: it is queued for a boundary or dropped as stale.
 			return {
@@ -419,50 +436,14 @@ export {
 } from "./seed.js";
 export { PAIR_SESSION_TOOLS, pairCompactResult } from "./session.js";
 
-// ---- build the persistent pair Agent ----
-
-function buildPairAgent(opts: {
-	cwd: string;
-	model: Model<any>;
-	thinkingLevel: string;
-	systemPrompt: string;
-	modelRegistry: any;
-	adviseTool: AdviseTool;
-	escalateTool: EscalateTool;
-	notebookTool?: UpdateNotebookTool;
-	primarySessionManager: PrimarySessionManager;
-}): Agent {
-	const readOnly = createReadOnlyTools(opts.cwd);
-	const thinkingLevel = opts.model.reasoning ? (opts.thinkingLevel as any) : ("off" as any);
-	return new Agent({
-		initialState: {
-			systemPrompt: opts.systemPrompt,
-			model: opts.model,
-			thinkingLevel,
-			tools: [
-				opts.adviseTool,
-				opts.escalateTool,
-				...(opts.notebookTool ? [opts.notebookTool] : []),
-				...readOnly,
-				...bindPrimaryRecallTools(opts.primarySessionManager),
-			] as any,
-		},
-		convertToLlm,
-		// Pi installs its provider-aware default stream function before loading
-		// extensions. Agent's runtime intentionally accepts undefined here even
-		// though the standalone AgentOptions type requires an explicit function.
-		streamFn: undefined as any,
-		getApiKey: (provider: string) => opts.modelRegistry.getApiKeyForProvider(provider),
-	});
-}
-
 // ---- PairRuntime — drives the pair agent off primary turn deltas ----
 
 /**
  * Feeds the persistent pair conversation one delta per primary turn.
  * Identity change uses `reset()`. Overflow uses the pair session compact hook.
  */
-type PendingDelta = { text: string; lowSignal: boolean; notebookBatch?: PairNotebookBatch };
+type PendingDelta = { text: string; lowSignal: boolean; boundary?: number; notebookBatch?: PairNotebookBatch };
+type AttemptEffects = { advice: PairNote[]; escalations: PairEscalation[] };
 
 export class PairRuntime {
 	#pending: PendingDelta[] = [];
@@ -477,19 +458,21 @@ export class PairRuntime {
 	#advice: PairNote[] = [];
 	// Keys re-raised during the in-flight review; drives the post-review prune.
 	#reraised: Set<string> | undefined;
-	// Outcome of the most recently completed drain batch: "ok" (successful review)
-	// or "failed" (errored 3x and dropped). Lets waitUntilSettled distinguish a
-	// genuine settle from a give-up, so queued advice isn't delivered as confirmed.
+	#offeredFindingIds: Set<string> | undefined;
+	// Outcome of the most recently completed drain batch. Lets waitUntilSettled
+	// distinguish a genuine settle from a failed review so queued advice is never
+	// delivered as confirmed.
 	#lastOutcome: "ok" | "failed" | undefined;
 	// Epoch of the in-flight review; advice callbacks are honored only while it still
 	// matches #epoch. A reset/dispose bumps #epoch, orphaning a stale review whose
 	// late advise() calls would otherwise leak into the moved-on session.
 	#reviewEpoch = -1;
+	#attemptEffects: AttemptEffects | undefined;
 	#settleWaiters: Array<{ settle: () => void; cancel: () => void }> = [];
 	#busy = false;
 	#backlog = 0;
-	#failures = 0;
 	#epoch = 0;
+	#unhealthy = false;
 	#agentResetPending = false;
 	// Lifetime input/output/cost from pair turns already discarded by compact.
 	// The agent's message list only holds the CURRENT context, so without folding
@@ -499,21 +482,28 @@ export class PairRuntime {
 	#cumOutput = 0;
 	#cumCost = 0;
 	#reviewCount = 0;
+	#reviewedThrough = 0;
 	// Production turn_end binds this so #drain can emit after the hook returns.
 	// Tests that construct PairRuntime directly leave it unset and write nothing.
 	#usageSession?: { sessionId?: string };
 	disposed = false;
+	reviewDeadlineMs = 75_000;
 
 	constructor(
 		private readonly agent: Agent,
 		private readonly adviseTool: AdviseTool,
-		private readonly retryDelayMs = 1000,
+		_retryDelayMs = 1000,
 		private readonly onDebug?: (...a: unknown[]) => void,
-		private readonly onSettled?: (outcome: "ok" | "failed") => void,
-		private readonly session?: { prompt(text: string): Promise<void>; dispose?: () => void },
+		private readonly onSettled?: (outcome: "ok" | "failed", reviewedThrough: number) => void,
+		private readonly session?: {
+			prompt(text: string): Promise<void>;
+			abort?: () => Promise<void> | void;
+			dispose?: () => void;
+		},
 		private readonly seed?: () => string,
 		private readonly notebookTool?: UpdateNotebookTool,
 		private readonly onNotebookUpdate?: (update: PairNotebookUpdate) => void,
+		private readonly onEscalation?: (request: PairEscalation) => EscalationAcceptance,
 	) {}
 
 	/** Enable durable per-prompt usage records for this runtime. */
@@ -548,11 +538,10 @@ export class PairRuntime {
 		const model = this.agent.state.model as { provider?: string; id?: string } | undefined;
 		let seed: string | undefined;
 		if (this.#needsSeed) seed = this.seed?.();
-		try {
-			if (this.session) await this.session.prompt(this.#reviewText(messages, seed));
-			else {
-				const prefixed =
-					seed?.trim() && messages[0]
+		const prompt = this.session
+			? this.session.prompt(this.#reviewText(messages, seed))
+			: this.agent.prompt(
+					(seed?.trim() && messages[0]
 						? [
 								{
 									role: "user" as const,
@@ -561,11 +550,27 @@ export class PairRuntime {
 								},
 								...messages,
 							]
-						: messages;
-				await this.agent.prompt(prefixed as never);
-			}
+						: messages) as never,
+				);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const deadline = new Promise<never>((_resolve, reject) => {
+			timer = setTimeout(() => {
+				this.#unhealthy = true;
+				try {
+					this.agent.abort();
+				} catch {}
+				try {
+					void this.session?.abort?.();
+				} catch {}
+				reject(new Error(`Pair review exceeded its ${this.reviewDeadlineMs}ms deadline`));
+			}, this.reviewDeadlineMs);
+		});
+		try {
+			await Promise.race([prompt, deadline]);
 			this.#needsSeed = false;
 		} finally {
+			if (timer) clearTimeout(timer);
+			void prompt.catch(() => {});
 			this.#foldDiscardedUsage(prior);
 			this.#recordPromptUsage(before, Date.now() - started, trigger, model);
 		}
@@ -616,6 +621,14 @@ export class PairRuntime {
 		return this.#reviewCount;
 	}
 
+	get reviewedThrough(): number {
+		return this.#reviewedThrough;
+	}
+
+	get unhealthy(): boolean {
+		return this.#unhealthy;
+	}
+
 	/** True when no batch is in flight and nothing is queued. */
 	get idle(): boolean {
 		return !this.#busy && this.#pending.length === 0;
@@ -636,39 +649,88 @@ export class PairRuntime {
 		return this.#advice.some((n) => isHighSeverity(n.severity));
 	}
 
-	#upsertAdvice(note: string, severity?: PairSeverity): void {
+	#upsertAdviceIn(
+		target: PairNote[],
+		note: string,
+		severity?: PairSeverity,
+		findingId?: string,
+		assignMaterialId = false,
+	): void {
 		if (this.disposed) return;
 		const key = dedupeKey(note);
-		const existing = this.#advice.find((n) => dedupeKey(n.note) === key);
-		if (!existing) this.#advice.push({ note, severity });
-		else if (rankOf(severity) > rankOf(existing.severity)) existing.severity = severity;
+		const existing = target.find((item) => (findingId ? item.id === findingId : dedupeKey(item.note) === key));
+		if (!existing) {
+			const id = findingId ?? (assignMaterialId && isHighSeverity(severity) ? pairFindingId() : undefined);
+			target.push({ note, severity, ...(id ? { id } : {}) });
+			return;
+		}
+		if (findingId && existing.id === findingId) existing.note = note;
+		if (!existing.id && (findingId || (assignMaterialId && isHighSeverity(severity)))) {
+			existing.id = findingId ?? pairFindingId();
+		}
+		if (rankOf(severity) > rankOf(existing.severity)) existing.severity = severity;
 	}
 
-	/** Pair observation: upsert and count as a genuine reconfirmation. */
-	enqueueAdvice(note: string, severity?: PairSeverity): void {
+	#upsertAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
+		this.#upsertAdviceIn(this.#advice, note, severity, findingId);
+	}
+
+	/** Stage Pair advice inside the active review; out-of-review callers seed the live queue. */
+	enqueueAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
 		if (this.disposed) return;
-		this.#reraised?.add(dedupeKey(note));
-		this.#upsertAdvice(note, severity);
+		if (this.#attemptEffects && this.#reviewEpoch === this.#epoch) {
+			const offeredId = findingId && this.#offeredFindingIds?.has(findingId) ? findingId : undefined;
+			const inferredId = this.#advice.find((item) => dedupeKey(item.note) === dedupeKey(note))?.id;
+			this.#upsertAdviceIn(this.#attemptEffects.advice, note, severity, offeredId ?? inferredId, true);
+			return;
+		}
+		this.#upsertAdvice(note, severity, findingId);
+	}
+
+	/** Stage an Advisor request so failed or stale Pair attempts cannot launch work. */
+	stageEscalation(request: PairEscalation): EscalationAcceptance {
+		const attempt = this.#attemptEffects;
+		if (!attempt || !this.acceptingAdvice) return "unavailable";
+		const key = JSON.stringify([
+			dedupeKey(request.topic || request.claim),
+			request.evidence.map((item) => [item.kind, dedupeKey(item.ref), item.path ? dedupeKey(item.path) : ""]),
+		]);
+		const duplicate = attempt.escalations.some(
+			(item) =>
+				JSON.stringify([
+					dedupeKey(item.topic || item.claim),
+					item.evidence.map((evidence) => [
+						evidence.kind,
+						dedupeKey(evidence.ref),
+						evidence.path ? dedupeKey(evidence.path) : "",
+					]),
+				]) === key,
+		);
+		if (duplicate) return "suppressed";
+		attempt.escalations.push(request);
+		return "accepted";
 	}
 
 	/** Boundary bookkeeping: put advice back without faking a reconfirmation. */
-	requeueAdvice(note: string, severity?: PairSeverity): void {
-		this.#upsertAdvice(note, severity);
+	requeueAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
+		this.#upsertAdvice(note, severity, findingId);
 	}
 
 	/** Drain nits only; concerns/blockers remain queued for reconfirmation. */
 	takeNits(): PairNote[] {
-		const nits = this.#advice.filter((n) => !isHighSeverity(n.severity));
-		this.#advice = this.#advice.filter((n) => isHighSeverity(n.severity));
-		this.#rememberSettled(nits, "delivered");
+		const nits = this.#advice.filter((note) => !isHighSeverity(note.severity));
+		this.#advice = this.#advice.filter((note) => isHighSeverity(note.severity));
 		return nits;
 	}
 
 	/** Drain every queued survivor after successful boundary reconciliation. */
 	takeAllAdvice(): PairNote[] {
-		const notes = this.#advice.splice(0);
+		return this.#advice.splice(0);
+	}
+
+	/** Record delivery only after the primary session accepted the outbound message. */
+	markAdviceDelivered(notes: readonly PairNote[]): void {
 		this.#rememberSettled(notes, "delivered");
-		return notes;
 	}
 
 	get rollingAdvice(): readonly SettledAdvice[] {
@@ -683,7 +745,7 @@ export class PairRuntime {
 	/** Whether advice from the in-flight review is still valid (not orphaned by a
 	 *  reset/dispose). The delivery layer consults this to drop late stale callbacks. */
 	get acceptingAdvice(): boolean {
-		return !this.disposed && this.#reviewEpoch === this.#epoch;
+		return !this.disposed && this.#attemptEffects !== undefined && this.#reviewEpoch === this.#epoch;
 	}
 
 	/**
@@ -757,11 +819,15 @@ export class PairRuntime {
 	}
 
 	/** Queue a rendered primary-turn delta. Drain starts only when required. */
-	push(deltaText: string, opts?: { lowSignal?: boolean; terminal?: boolean; notebookBatch?: PairNotebookBatch }): void {
+	push(
+		deltaText: string,
+		opts?: { lowSignal?: boolean; terminal?: boolean; boundary?: number; notebookBatch?: PairNotebookBatch },
+	): void {
 		if (this.disposed || !deltaText.trim()) return;
 		this.#pending.push({
 			text: deltaText,
 			lowSignal: opts?.lowSignal === true,
+			...(opts?.boundary === undefined ? {} : { boundary: opts.boundary }),
 			...(opts?.notebookBatch ? { notebookBatch: opts.notebookBatch } : {}),
 		});
 		this.#backlog++;
@@ -837,11 +903,15 @@ export class PairRuntime {
 		this.#rolling = [];
 		this.#needsSeed = true;
 		this.#reraised = undefined;
+		this.#offeredFindingIds = undefined;
+		this.#attemptEffects = undefined;
+		this.#reviewEpoch = -1;
 		this.#lastOutcome = undefined;
 		this.#backlog = 0;
-		this.#failures = 0;
+		this.#unhealthy = false;
 		this.#cumInput = this.#cumOutput = this.#cumCost = 0;
 		this.#reviewCount = 0;
+		this.#reviewedThrough = 0;
 		this.adviseTool.resetDelivered();
 		try {
 			this.agent.abort();
@@ -860,8 +930,12 @@ export class PairRuntime {
 		this.#advice = [];
 		this.#rolling = [];
 		this.#reraised = undefined;
+		this.#offeredFindingIds = undefined;
+		this.#attemptEffects = undefined;
+		this.#reviewEpoch = -1;
 		this.#lastOutcome = undefined;
 		this.#backlog = 0;
+		this.#reviewedThrough = 0;
 		try {
 			this.agent.abort();
 		} catch {}
@@ -877,16 +951,23 @@ export class PairRuntime {
 		if (notebookBatch?.prompt) texts.push(notebookBatch.prompt);
 		this.notebookTool?.begin(notebookBatch);
 		const epoch = this.#epoch;
-		// Re-offer the shared advice queue without removing it. On success, entries
-		// not re-raised are resolved and pruned. Snapshot by value so a discarded
-		// overflow attempt can restore prior severities without resurrecting entries
-		// concurrently drained at a primary turn boundary.
-		const offered = this.#advice.map((n) => ({ ...n }));
-		const offeredKeys = new Set(offered.map((n) => dedupeKey(n.note)));
+		const attempt: AttemptEffects = { advice: [], escalations: [] };
+		this.#attemptEffects = attempt;
+		// Re-offer the shared advice queue without removing it. Attempt-created
+		// effects remain private until the response completes successfully.
+		const offered = this.#advice.map((note) => ({ ...note }));
+		const offeredKeys = new Set(offered.map(pairNoteKey));
+		const offeredFindingIds = new Set(offered.flatMap((note) => (note.id ? [note.id] : [])));
+		this.#offeredFindingIds = offeredFindingIds;
 		const preamble = formatReconfirmPreamble(offered);
 		const primedContext = this.#primedContext;
 		this.#reraised = new Set();
 		this.#reviewEpoch = epoch;
+		const finishAttempt = () => {
+			if (this.#attemptEffects === attempt) this.#attemptEffects = undefined;
+			if (this.#offeredFindingIds === offeredFindingIds) this.#offeredFindingIds = undefined;
+			if (this.#reviewEpoch === epoch) this.#reviewEpoch = -1;
+		};
 		const messages = buildReviewMessages(preamble, texts, primedContext);
 		const promptChars = messages.reduce(
 			(n, m) =>
@@ -901,54 +982,61 @@ export class PairRuntime {
 		);
 		try {
 			this.onDebug?.("prompting pair agent, delta chars=", promptChars, "held=", offered.length);
-			const trigger = this.#failures > 0 ? "turn_end_retry" : "turn_end";
-			await this.#promptAndRecord(messages, trigger);
+			await this.#promptAndRecord(messages, "turn_end");
 			if (this.#epoch !== epoch) {
 				this.notebookTool?.clear();
+				finishAttempt();
 				this.#reraised = undefined;
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
 				return "stale";
 			}
 			const last = this.agent.state.messages[this.agent.state.messages.length - 1] as AssistantMessage;
 			if (last?.stopReason === "error" || last?.stopReason === "aborted" || last?.stopReason === "length") {
-				if (last.stopReason === "length") {
-					const before = new Map(offered.map((n) => [dedupeKey(n.note), n]));
-					this.#advice = this.#advice.flatMap((current) => {
-						const prior = before.get(dedupeKey(current.note));
-						return prior ? [{ ...current, severity: prior.severity }] : [];
-					});
-					this.#reraised = new Set();
-				}
 				this.notebookTool?.clear();
+				finishAttempt();
 				this.onDebug?.("pair review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
 				this.#reraised = undefined;
 				return "failed";
 			}
+			const notebookUpdate = this.notebookTool?.takeStaged();
+			if (notebookUpdate) this.onNotebookUpdate?.(notebookUpdate);
+			const delegated = new Set<string>();
+			for (const request of attempt.escalations) {
+				let acceptance: EscalationAcceptance = "unavailable";
+				try {
+					acceptance = this.onEscalation?.(request) ?? "unavailable";
+				} catch (error) {
+					this.onDebug?.("pair escalation commit callback threw", String(error));
+				}
+				if (acceptance !== "unavailable") delegated.add(dedupeKey(request.topic || request.claim));
+			}
+			for (const note of attempt.advice) {
+				const key = pairNoteKey(note);
+				if (delegated.has(dedupeKey(note.note))) continue;
+				this.#reraised?.add(key);
+				this.#upsertAdvice(note.note, note.severity, note.id);
+			}
 			const dropped: PairNote[] = [];
 			for (const key of offeredKeys) {
 				if (this.#reraised?.has(key)) continue;
-				const i = this.#advice.findIndex((n) => dedupeKey(n.note) === key);
+				const i = this.#advice.findIndex((note) => pairNoteKey(note) === key);
 				if (i < 0) continue;
 				dropped.push(this.#advice[i]!);
 				this.#advice.splice(i, 1);
 			}
 			this.#rememberSettled(dropped, "dropped");
-			const notebookUpdate = this.notebookTool?.takeStaged();
-			if (notebookUpdate) {
-				try {
-					this.onNotebookUpdate?.(notebookUpdate);
-				} catch (error) {
-					this.onDebug?.("pair notebook commit callback threw", String(error));
-				}
-			}
 			if (this.#primedContext === primedContext) this.#primedContext = undefined;
+			for (const item of batch) {
+				if (item.boundary !== undefined) this.#reviewedThrough = Math.max(this.#reviewedThrough, item.boundary);
+			}
+			finishAttempt();
 			this.#lastOutcome = "ok";
-			this.#failures = 0;
 			this.#reraised = undefined;
 			this.onDebug?.("pair turn done, stop=", last?.stopReason);
 			return "ok";
 		} catch (e) {
 			this.notebookTool?.clear();
+			finishAttempt();
 			this.#reraised = undefined;
 			this.onDebug?.("pair prompt threw", String(e));
 			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
@@ -980,19 +1068,7 @@ export class PairRuntime {
 				// Rough gauge of how many turns are still unreviewed (status display only).
 				this.#backlog = Math.max(0, this.#backlog - turns);
 				const result = await this.#reviewBatch(batch);
-				if (result === "stale" || result === "ok") continue;
-				this.#failures++;
-				if (this.#failures >= 3) {
-					// Gave up reconfirming this batch. Mark failed so waitUntilSettled
-					// reports it (don't deliver held notes as if confirmed).
-					this.#failures = 0;
-					this.#lastOutcome = "failed";
-				} else {
-					this.#pending.unshift(...batch);
-					this.#backlog += turns;
-					this.#forceDrain = true;
-					await new Promise((r) => setTimeout(r, this.retryDelayMs));
-				}
+				if (result === "failed") this.#lastOutcome = "failed";
 			}
 		} finally {
 			this.#busy = false;
@@ -1001,7 +1077,7 @@ export class PairRuntime {
 			if (!restart && this.#caughtUp) this.#notifySettled();
 			if (reviewed) {
 				try {
-					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok");
+					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok", this.#reviewedThrough);
 				} catch (e) {
 					this.onDebug?.("pair onSettled callback threw", String(e));
 				}
@@ -1050,8 +1126,7 @@ const DEBUG = !!process.env.PAIR_DEBUG;
 const dbg = (...a: unknown[]) => {
 	if (DEBUG) console.error("[pair]", ...a);
 };
-const BLOCK_BASE_MS = 15_000;
-const BLOCK_CAP_MS = 120_000;
+const TERMINAL_GATE_MS = 10_000;
 
 // Set by the handoff extension (pi-amplike) via the same Symbol.for key while a
 // handoff is in flight — from the moment it becomes pending until the new
@@ -1129,7 +1204,6 @@ class AdvisoryBorder implements Component {
 
 export default function (pi: ExtensionAPI) {
 	const rootNotebook = inChildSessionContext() ? undefined : new NotebookRuntime();
-	const notebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
 	if (rootNotebook) {
 		registerCompactionTrigger(pi, rootNotebook);
 		registerNotebookContextPacket(pi, rootNotebook);
@@ -1155,14 +1229,11 @@ export default function (pi: ExtensionAPI) {
 	let projectedThroughSourceId: string | undefined;
 	const directFindings = { nit: 0, concern: 0, blocker: 0 };
 	const repeatedFailures = new RepeatedFailureDetector();
+	const acknowledgments = new PairAcknowledgmentTracker();
 
 	// The advise tool bound to the live runtime (held so the catch-up block can
 	// mark held notes delivered at the actual delivery point).
 	let adviseTool: AdviseTool | undefined;
-
-	// Consecutive mid-run catch-up blocks, for the backoff (reset when the pair
-	// settles or a turn doesn't need to block).
-	let consecutiveBlocks = 0;
 
 	// Set when the user aborts (Escape) around a catch-up block: while true, late
 	// pair advice is delivered WITHOUT triggerTurn so it can't auto-resume the run
@@ -1176,7 +1247,8 @@ export default function (pi: ExtensionAPI) {
 	// One source of truth for which primary boundary a queue flush belongs to.
 	let turnState: PrimaryTurnState = "ended-nonterminal";
 	let stagedBoundaryNotes: PairNote[] = [];
-	let boundaryFlush: Promise<void> | undefined;
+	let advisorFlush: Promise<void> | undefined;
+	const deliveredFindingKeys = new Set<string>();
 
 	// Most recent ctx seen from any hook that carries one. `updateStatus` needs this
 	// so the runtime's async `onSettled` callback — which fires whenever a review
@@ -1186,6 +1258,63 @@ export default function (pi: ExtensionAPI) {
 	// silent settle was indistinguishable from a stuck pair. A persistent,
 	// self-resolving footer state removes the need for a terminal message at all.
 	let latestCtx: ExtensionContext | undefined;
+
+	pi.registerTool({
+		name: "acknowledge_pair_findings",
+		label: "Acknowledge Pair findings",
+		description:
+			"Record that you considered one or more delivered Pair concerns or blockers. Use address when acting on a finding, decline when evidence shows it does not apply, or defer when it is valid but outside the authorized work. Give a concise reason. This records consideration only; it does not claim the work is fixed or validated.",
+		promptSnippet: "Acknowledge delivered Pair concerns and blockers with a typed disposition and concise reason",
+		promptGuidelines: [
+			"Call acknowledge_pair_findings for each delivered Pair concern or blocker after checking it against current code and user intent.",
+			"Use address when acting on it, decline with evidence when it does not apply, or defer with a reason when it is valid but outside the current authorized work.",
+			"An acknowledgment records consideration only; it does not prove implementation or validation.",
+		],
+		parameters: pairAcknowledgmentSchema,
+		async execute(_toolCallId, params) {
+			const findings = (params as { findings: PairFindingAcknowledgment[] }).findings.map((finding) => ({
+				...finding,
+				id: finding.id.trim(),
+				reason: finding.reason.trim(),
+			}));
+			const errors = acknowledgments.validate(findings);
+			if (errors.length) {
+				return {
+					content: [{ type: "text" as const, text: `Acknowledgment rejected: ${errors.join("; ")}.` }],
+					details: { accepted: [], errors },
+				};
+			}
+			const accepted: string[] = [];
+			const failed: string[] = [];
+			for (const finding of findings) {
+				const pending = acknowledgments.get(finding.id);
+				if (!pending) continue;
+				try {
+					pi.appendEntry(PAIR_FINDING_ACKNOWLEDGED, {
+						...pending,
+						disposition: finding.disposition,
+						reason: finding.reason,
+					});
+					acknowledgments.resolve(finding.id);
+					accepted.push(finding.id);
+				} catch (error) {
+					failed.push(`${finding.id}: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}
+			if (latestCtx) updateStatus(latestCtx);
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: failed.length
+							? `Recorded ${accepted.length} acknowledgment${accepted.length === 1 ? "" : "s"}; ${failed.length} could not be persisted.`
+							: `Recorded ${accepted.length} Pair finding acknowledgment${accepted.length === 1 ? "" : "s"}.`,
+					},
+				],
+				details: { accepted, errors: failed },
+			};
+		},
+	});
 
 	// ---- statusbar: per-session pair cost + live reviewing/idle state ----
 	// Reflects the live pair lifetime cost (rt.usage.cost) and whether a review
@@ -1231,17 +1360,87 @@ export default function (pi: ExtensionAPI) {
 	// ---- advice delivery into the primary session ----
 	function sendNotes(notes: readonly PairNote[], opts: { stale?: boolean; finalAnswer?: boolean }): void {
 		if (!notes.length) return;
-		const delivered = notes.map((note) => ({ ...note, source: note.source ?? "pair" }) satisfies PairNote);
-		for (const note of delivered) {
-			if (note.source === "pair") directFindings[note.severity ?? "nit"]++;
-		}
+		const delivered = identifyMaterialPairNotes(
+			notes.map((note) => ({ ...note, source: note.source ?? "pair" }) satisfies PairNote),
+		);
 		const triggerTurn = !autoResumeSuppressed;
-		if (opts.finalAnswer && triggerTurn) awaitingUserAfterAdvisory = true;
 		const content = formatAdvisoryContent(delivered, opts);
 		pi.sendMessage(
 			{ customType: ADVISORY_TYPE, content, display: true, details: { notes: delivered } },
 			{ deliverAs: "steer", triggerTurn },
 		);
+		acknowledgments.recordDelivered(delivered);
+		for (const note of delivered) {
+			if (note.source === "pair") directFindings[note.severity ?? "nit"]++;
+		}
+		if (opts.finalAnswer && triggerTurn) awaitingUserAfterAdvisory = true;
+	}
+
+	function restoreAcknowledgments(entries: readonly unknown[]): void {
+		acknowledgments.reset();
+		for (const entry of entries) {
+			if (!entry || typeof entry !== "object") continue;
+			const record = entry as {
+				type?: string;
+				customType?: string;
+				data?: { id?: unknown };
+				details?: { notes?: unknown; findings?: unknown };
+			};
+			if (
+				record.type === "custom_message" &&
+				record.customType === ADVISORY_TYPE &&
+				Array.isArray(record.details?.notes)
+			) {
+				acknowledgments.recordDelivered(record.details.notes as PairNote[]);
+			} else if (
+				record.type === "custom_message" &&
+				record.customType === PAIR_ACK_REMINDER_TYPE &&
+				Array.isArray(record.details?.findings)
+			) {
+				acknowledgments.markReminded(
+					record.details.findings
+						.map((finding) => (finding && typeof finding === "object" ? (finding as { id?: unknown }).id : undefined))
+						.filter((id): id is string => typeof id === "string"),
+				);
+			} else if (
+				record.type === "custom" &&
+				(record.customType === PAIR_FINDING_ACKNOWLEDGED || record.customType === PAIR_FINDING_UNACKNOWLEDGED) &&
+				typeof record.data?.id === "string"
+			) {
+				acknowledgments.resolve(record.data.id);
+			}
+		}
+	}
+
+	function handleTerminalAcknowledgments(): void {
+		const { remind, close } = acknowledgments.terminalActions();
+		for (const finding of close) {
+			try {
+				pi.appendEntry(PAIR_FINDING_UNACKNOWLEDGED, { ...finding, status: "unacknowledged" });
+				acknowledgments.resolve(finding.id);
+			} catch (error) {
+				dbg("Pair unacknowledged telemetry failed", finding.id, String(error));
+			}
+		}
+		if (remind.length) {
+			const triggerTurn = !autoResumeSuppressed;
+			try {
+				pi.sendMessage(
+					{
+						customType: PAIR_ACK_REMINDER_TYPE,
+						content: formatPairAcknowledgmentReminder(remind),
+						display: true,
+						details: { findings: remind },
+					},
+					{ deliverAs: "steer", triggerTurn },
+				);
+				acknowledgments.markReminded(remind.map((finding) => finding.id));
+				if (triggerTurn) awaitingUserAfterAdvisory = true;
+			} catch (error) {
+				dbg("Pair acknowledgment reminder failed", String(error));
+			}
+		}
+		if ((close.length || remind.length) && latestCtx) updateStatus(latestCtx);
 	}
 
 	// The only immediate boundary flush: non-terminal turns drain queued nits in one
@@ -1253,8 +1452,13 @@ export default function (pi: ExtensionAPI) {
 
 	// Pair callbacks only enqueue. Delivery policy lives at primary boundaries,
 	// where terminality and reconfirmation state are actually known.
-	function deliverAdvice(note: string, severity?: PairSeverity, sourceRuntime?: PairRuntime): boolean {
-		if (awaitingUserAfterAdvisory) return false;
+	function deliverAdvice(
+		note: string,
+		severity?: PairSeverity,
+		sourceRuntime?: PairRuntime,
+		findingId?: string,
+	): boolean {
+		if (!enabled || awaitingUserAfterAdvisory) return false;
 		// Stand down entirely while a handoff is being performed (see comment on
 		// HANDOFF_IN_PROGRESS_KEY).
 		if (handoffInProgress()) {
@@ -1266,7 +1470,16 @@ export default function (pi: ExtensionAPI) {
 		// Drop late callbacks the session has moved past: pair turned off, or a
 		// reset/dispose orphaned the in-flight review (its epoch no longer matches).
 		const targetRuntime = sourceRuntime ?? runtime;
-		if (!enabled || (sourceRuntime && sourceRuntime !== runtime) || (targetRuntime && !targetRuntime.acceptingAdvice)) {
+		// The hidden command test hook is the only caller without a source runtime.
+		// Keep it deterministic even when background warm-up built an idle runtime.
+		if (!sourceRuntime && !isHighSeverity(severity) && turnState !== "running") {
+			sendNotes([{ note, severity, source: "pair", ...(findingId ? { id: findingId } : {}) }], {
+				stale: true,
+				finalAnswer: turnState === "ended-terminal",
+			});
+			return true;
+		}
+		if ((sourceRuntime && sourceRuntime !== runtime) || (targetRuntime && !targetRuntime.acceptingAdvice)) {
 			dbg("dropping stale/disabled advice", severity, JSON.stringify(note).slice(0, 80));
 			// Especially after reset/replacement, never let an old callback enqueue into
 			// the fresh runtime or poison its cleared dedup map.
@@ -1274,78 +1487,109 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		if (targetRuntime) {
-			targetRuntime.enqueueAdvice(note, severity);
+			targetRuntime.enqueueAdvice(note, severity, findingId);
 			dbg("queued advice", severity, JSON.stringify(note).slice(0, 120));
 			return false; // AdviseTool records only at the real boundary delivery.
 		}
 
-		// Hidden no-model test hook only: production pair callbacks always have the
-		// runtime that created their AdviseTool. Keep idle command testing convenient.
-		if (!isHighSeverity(severity) && turnState !== "running") {
-			sendNotes([{ note, severity, source: "pair" }], {
-				stale: true,
-				finalAnswer: turnState === "ended-terminal",
-			});
-			return true;
-		}
 		return false;
 	}
 
-	// ---- steer held survivors into the primary (called by the catch-up block) ----
-	function stageHeld(notes: PairNote[], opts?: { terminal?: boolean }): void {
+	function stageHeld(notes: PairNote[]): void {
 		if (handoffInProgress() || !notes.length) return;
-		const terminal = turnState === "ended-terminal";
-		if (opts && opts.terminal !== undefined && opts.terminal !== terminal)
-			dbg("stageHeld: opts.terminal diverged from turnState", opts.terminal, turnState);
 		stagedBoundaryNotes.push(...notes);
 	}
 
-	// Reviews can finish after a primary turn_end timeout. Reuse the same boundary
-	// policy instead of creating a late-callback delivery path. This synchronous
-	// callback drains before a runTurnBlock waiter resumes; the latter then sees empty.
-	function flushSettledAdvice(outcome: "ok" | "failed"): void {
-		if (outcome !== "ok" || turnState === "running") return;
-		void flushBoundaryFindings();
+	// Reviews can finish after a primary turn_end timeout. Deliver only when that
+	// successful review covers the latest ended primary boundary.
+	function flushSettledAdvice(outcome: "ok" | "failed", reviewedThrough: number, sourceRuntime: PairRuntime): void {
+		if (
+			outcome !== "ok" ||
+			sourceRuntime !== runtime ||
+			turnState === "running" ||
+			reviewedThrough < primaryTurnSequence
+		)
+			return;
+		flushBoundaryFindings();
 	}
 
-	function flushBoundaryFindings(): Promise<void> {
-		if (boundaryFlush) return boundaryFlush;
-		const generation = constructionEpoch;
-		const controller = escalationController;
+	function flushDirectFindings(): void {
+		if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		const activeRuntime = runtime;
 		const activeAdviseTool = adviseTool;
+		if (activeRuntime) {
+			stagedBoundaryNotes.push(
+				...(turnState === "ended-terminal" ? activeRuntime.takeAllAdvice() : activeRuntime.takeNits()),
+			);
+		}
+		const direct = stagedBoundaryNotes.splice(0);
+		if (!direct.length) return;
+		try {
+			deliverBoundaryBatch({
+				direct,
+				send: (notes) =>
+					sendNotes(notes, {
+						finalAnswer: turnState === "ended-terminal",
+						stale: notes.every((note) => !isHighSeverity(note.severity)),
+					}),
+				onDirectDelivered: (note) => {
+					activeAdviseTool?.markDelivered(note.note, note.severity, note.id);
+					activeRuntime?.markAdviceDelivered([note]);
+					deliveredFindingKeys.add(findingIdentity(note.note));
+				},
+				onDirectFailed: (note) => activeRuntime?.requeueAdvice(note.note, note.severity, note.id),
+			});
+		} catch (error) {
+			dbg("direct Pair delivery failed", String(error));
+		} finally {
+			if (latestCtx) updateStatus(latestCtx);
+		}
+	}
+
+	function flushAdvisorFinding(): Promise<void> {
+		if (advisorFlush) return advisorFlush;
+		const generation = constructionEpoch;
+		const controller = escalationController;
+		if (!controller) return Promise.resolve();
 		const flush = (async () => {
 			if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
-			const prepared = await controller?.prepareDelivery();
-			if (generation !== constructionEpoch || controller !== escalationController || activeRuntime !== runtime) return;
+			const prepared = await controller.prepareDelivery();
+			if (!prepared || generation !== constructionEpoch || controller !== escalationController) return;
 			if ((turnState as PrimaryTurnState) === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
-			if (activeRuntime) {
-				stagedBoundaryNotes.push(
-					...(turnState === "ended-terminal" ? activeRuntime.takeAllAdvice() : activeRuntime.takeNits()),
-				);
-			}
-			const direct = stagedBoundaryNotes.splice(0);
 			try {
-				deliverBoundaryBatch({
-					direct,
+				const delivered = deliverBoundaryBatch({
+					direct: [],
 					advisor: prepared,
+					knownKeys: deliveredFindingKeys,
 					send: (notes) =>
 						sendNotes(notes, {
 							finalAnswer: turnState === "ended-terminal",
-							stale: notes.every((note) => !isHighSeverity(note.severity)),
+							stale: false,
 						}),
-					onDirectDelivered: (note) => activeAdviseTool?.markDelivered(note.note, note.severity),
-					onDirectFailed: (note) => activeRuntime?.requeueAdvice(note.note, note.severity),
+					onDirectDelivered: () => {},
+					onDirectFailed: () => {},
 				});
+				if (delivered) {
+					deliveredFindingKeys.add(findingIdentity(prepared.note.note));
+					for (const key of prepared.dedupeKeys ?? []) deliveredFindingKeys.add(findingIdentity(key));
+				}
+			} catch (error) {
+				dbg("Advisor delivery failed", String(error));
 			} finally {
 				if (latestCtx) updateStatus(latestCtx);
 			}
 		})();
 		const tracked = flush.finally(() => {
-			if (boundaryFlush === tracked) boundaryFlush = undefined;
+			if (advisorFlush === tracked) advisorFlush = undefined;
 		});
-		boundaryFlush = tracked;
+		advisorFlush = tracked;
 		return tracked;
+	}
+
+	function flushBoundaryFindings(): void {
+		if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
+		flushDirectFindings();
+		void flushAdvisorFinding();
 	}
 
 	function ensureEscalationController(): PairEscalationController {
@@ -1383,11 +1627,11 @@ export default function (pi: ExtensionAPI) {
 		builtForCwd = undefined;
 		builtForTrusted = undefined;
 		pendingUserTexts = [];
-		consecutiveBlocks = 0;
 		autoResumeSuppressed = false;
 		awaitingUserAfterAdvisory = false;
 		stagedBoundaryNotes = [];
-		boundaryFlush = undefined;
+		advisorFlush = undefined;
+		deliveredFindingKeys.clear();
 		turnState = "ended-nonterminal";
 		primaryTurnSequence = 0;
 		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
@@ -1429,7 +1673,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function prepareNotebookBatch(ctx: ExtensionContext): PairNotebookBatch | undefined {
-		if (!rootNotebook || !notebookTool || !enabled) return undefined;
+		if (!rootNotebook || !enabled) return undefined;
 		const config = rootNotebook.ensureConfig(ctx.cwd, ctx.isProjectTrusted());
 		if (config.passive) return undefined;
 		const getBranch = (ctx.sessionManager as { getBranch?: () => unknown }).getBranch;
@@ -1459,10 +1703,14 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function commitNotebookUpdate(update: PairNotebookUpdate): void {
-		if (!rootNotebook || !latestCtx) return;
-		if (update.sessionIdentity && update.sessionIdentity !== sessionIdFromCtx(latestCtx)) return;
+		if (!rootNotebook || !latestCtx) throw new Error("Pair notebook context is unavailable");
+		if (update.sessionIdentity && update.sessionIdentity !== sessionIdFromCtx(latestCtx)) {
+			throw new Error("Pair notebook update belongs to a replaced session");
+		}
 		const entries = latestCtx.sessionManager.getBranch() as Entry[];
-		if (!commitPairNotebookUpdate(pi, rootNotebook, entries, update)) return;
+		if (!commitPairNotebookUpdate(pi, rootNotebook, entries, update)) {
+			throw new Error("Pair notebook update was rejected");
+		}
 		if (update.observations.length > 0) {
 			rootNotebook.notebookEmptyBackoff = undefined;
 		} else if (update.fullMaintenanceDue) {
@@ -1533,11 +1781,14 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		let builtRuntime!: PairRuntime;
-		const builtAdviseTool = new AdviseTool((note, severity) => deliverAdvice(note, severity, builtRuntime));
+		const builtAdviseTool = new AdviseTool((note, severity, findingId) =>
+			deliverAdvice(note, severity, builtRuntime, findingId),
+		);
 		const builtEscalateTool = new EscalateTool((request) => {
 			if (runtime !== builtRuntime || !builtRuntime.acceptingAdvice) return "unavailable";
-			return ensureEscalationController().submit("pair", request, primaryTurnSequence);
+			return builtRuntime.stageEscalation(request);
 		});
+		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
@@ -1559,36 +1810,44 @@ export default function (pi: ExtensionAPI) {
 				systemPrompt,
 				adviseTool: builtAdviseTool as never,
 				escalateTool: builtEscalateTool as never,
-				...(notebookTool ? { notebookTool: notebookTool as never } : {}),
+				...(builtNotebookTool ? { notebookTool: builtNotebookTool as never } : {}),
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
 			});
 		} catch (error) {
-			dbg("pair session unavailable", String(error));
+			modelProfileError = `private session construction failed: ${error instanceof Error ? error.message : String(error)}`;
+			dbg("pair session unavailable", modelProfileError);
+			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
+				lastNotifiedProfileError = modelProfileError;
+				ctx.ui.notify(`Pair unavailable: ${modelProfileError}`, "warning");
+			}
+			return undefined;
 		}
 		if (constructionEpoch !== epoch) {
 			try {
-				session?.dispose();
+				session.dispose();
 			} catch {}
 			return undefined;
 		}
-		const agent =
-			session?.agent ??
-			buildPairAgent({
-				cwd: ctx.cwd,
-				model,
-				thinkingLevel,
-				systemPrompt,
-				modelRegistry: ctx.modelRegistry,
-				adviseTool: builtAdviseTool,
-				escalateTool: builtEscalateTool,
-				...(notebookTool ? { notebookTool } : {}),
-				primarySessionManager: ctx.sessionManager,
-			});
-		const onSettled = (outcome: "ok" | "failed") => {
+		const agent = session.agent;
+		const onSettled = (outcome: "ok" | "failed", reviewedThrough: number) => {
 			if (runtime !== builtRuntime) return;
-			flushSettledAdvice(outcome);
+			if (builtRuntime.unhealthy) {
+				builtRuntime.dispose();
+				runtime = undefined;
+				adviseTool = undefined;
+				activeModelLabel = undefined;
+				activePairContextWindow = undefined;
+				builtForCwd = undefined;
+				builtForTrusted = undefined;
+				if (latestCtx) {
+					updateStatus(latestCtx);
+					void ensureRuntime(latestCtx as Parameters<typeof ensureRuntime>[0], false);
+				}
+				return;
+			}
+			flushSettledAdvice(outcome, reviewedThrough, builtRuntime);
 			if (latestCtx) updateStatus(latestCtx);
 		};
 		builtRuntime = new PairRuntime(
@@ -1604,8 +1863,12 @@ export default function (pi: ExtensionAPI) {
 					rollingAdvice: builtRuntime.rollingAdvice,
 					unresolvedNotebook: unresolvedNotebook(),
 				}),
-			notebookTool,
+			builtNotebookTool,
 			commitNotebookUpdate,
+			(request) => {
+				if (runtime !== builtRuntime) return "unavailable";
+				return ensureEscalationController().submit("pair", request, primaryTurnSequence);
+			},
 		);
 		if (constructionEpoch !== epoch) {
 			builtRuntime.dispose();
@@ -1628,7 +1891,7 @@ export default function (pi: ExtensionAPI) {
 	): Promise<PairRuntime | undefined> {
 		const projectTrusted = ctx.isProjectTrusted?.() ?? false;
 		const key = `${ctx.cwd}\u0000${projectTrusted}`;
-		if (runtime && builtForCwd === ctx.cwd && builtForTrusted === projectTrusted) return runtime;
+		if (runtime && !runtime.disposed && builtForCwd === ctx.cwd && builtForTrusted === projectTrusted) return runtime;
 		if (runtimeBuild) {
 			if (runtimeBuild.epoch === constructionEpoch && runtimeBuild.key === key) return runtimeBuild.promise;
 			// Teardown invalidates publication, but the next generation still waits
@@ -1683,48 +1946,38 @@ export default function (pi: ExtensionAPI) {
 		turnState = "running";
 	});
 
-	// One delta per primary turn (assistant message + its tool results). After
-	// pushing, run the catch-up block: this hook is awaited by the agent loop, so
-	// awaiting here stalls the primary's next step until the pair catches up.
+	// One source-addressed delta per primary turn. Non-terminal turns only enqueue
+	// background work. Terminal turns give the whole boundary one brief absolute
+	// catch-up budget; construction, review, and Advisor work may continue later
+	// without holding the primary session.
 	pi.on("turn_end", async (event, ctx) => {
-		// Terminality is real session state even while supervision is disabled; the
-		// hidden deterministic test hook relies on the same safe-boundary semantics.
 		const terminal = isTerminalTurn(event.message as any);
 		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!enabled) return;
 		latestCtx = ctx;
+		acknowledgments.advanceTurn();
+		if (terminal) handleTerminalAcknowledgments();
 		if (awaitingUserAfterAdvisory) {
 			pendingUserTexts = [];
 			updateStatus(ctx);
 			return;
 		}
 		primaryTurnSequence++;
-		escalationController?.advanceTurn(primaryTurnSequence);
-
-		// This is the authoritative boundary: Pi has finalized the assistant message,
-		// and any steer observed during `running` will be inserted immediately after it.
-		// Set state before any await so concurrent pair callbacks see the result.
-
-		// Test seam: skip live model review. The hidden command delivers directly when
-		// no runtime exists, so no queue work is needed here.
+		const boundarySequence = primaryTurnSequence;
+		escalationController?.advanceTurn(boundarySequence);
 		if (process.env.PAIR_NO_REVIEW) return;
 
-		const rt = await ensureRuntime(ctx as any);
-		dbg("turn_end", "state=", turnState, "enabled=", enabled, "runtime=", !!rt, "model=", activeModelLabel);
-		if (!rt) return;
+		// An existing runtime can release already-confirmed nits synchronously. A
+		// runtime still being constructed has no advice to release.
+		if (!terminal) stageNits(runtime);
 
-		// At a non-terminal boundary, queued nits preserve their low-latency behavior.
-		// At a terminal boundary they remain in the SAME queue and ride the final
-		// review's reconfirmation preamble alongside concerns/blockers.
-		if (!terminal) stageNits(rt);
-
-		rt.setUsageSession(sessionIdFromCtx(ctx));
+		const generation = constructionEpoch;
 		const userPrompt = pendingUserTexts.join("\n\n");
 		pendingUserTexts = [];
 		const toolResults = event.toolResults as ToolResultMessage[];
-		const repeatedFailure = repeatedFailures.observe(event.message as never, toolResults, primaryTurnSequence);
+		const repeatedFailure = repeatedFailures.observe(event.message as never, toolResults, boundarySequence);
 		if (repeatedFailure) {
-			ensureEscalationController().submit("gate", repeatedFailure, primaryTurnSequence, {
+			ensureEscalationController().submit("gate", repeatedFailure, boundarySequence, {
 				repeatedFailure: true,
 				testFailure: /\b(test|check|lint|typecheck)\b/i.test(repeatedFailure.claim),
 			});
@@ -1740,35 +1993,65 @@ export default function (pi: ExtensionAPI) {
 			sourceEntryIds,
 		);
 		const notebookBatch = prepareNotebookBatch(ctx);
-		rt.push(delta, {
-			lowSignal: isLowSignalTurn({ hasUserText: Boolean(userPrompt), toolResults }),
-			terminal,
-			...(notebookBatch ? { notebookBatch } : {}),
-		});
+		const lowSignal = isLowSignalTurn({ hasUserText: Boolean(userPrompt), toolResults });
 
-		// Don't block during a handoff teardown (we'd stall the replacement).
-		if (handoffInProgress()) return;
-		updateStatus(ctx);
-		consecutiveBlocks = await runTurnBlock({
-			terminal,
-			runtime: rt,
-			consecutiveBlocks,
-			baseMs: BLOCK_BASE_MS,
-			capMs: BLOCK_CAP_MS,
-			signal: (ctx as any).signal,
-			notify: (m) => {
-				try {
-					(ctx as any).ui?.notify?.(m, "info");
-				} catch {}
-			},
-			deliverHeld: stageHeld,
-		});
-		// If the user aborted (Escape) around the block, suppress auto-resume so a late
-		// pair callback from the still-running review can't restart the stopped run.
-		if ((ctx as any).signal?.aborted) autoResumeSuppressed = true;
-		await flushBoundaryFindings();
-		// Refresh the footer cost after the Pair and any settled consultation caught up.
-		updateStatus(ctx);
+		const boundaryWork = (async () => {
+			const rt = await ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0]);
+			if (!rt || !enabled || generation !== constructionEpoch) return;
+			dbg("turn_end", "terminal=", terminal, "runtime=", true, "model=", activeModelLabel);
+			rt.setUsageSession(sessionIdFromCtx(ctx));
+			rt.push(delta, {
+				lowSignal,
+				terminal,
+				boundary: boundarySequence,
+				...(notebookBatch ? { notebookBatch } : {}),
+			});
+			if (handoffInProgress()) return;
+			updateStatus(ctx);
+			if (terminal) {
+				const outcome = await runTurnBlock({
+					terminal: true,
+					runtime: rt,
+					capMs: TERMINAL_GATE_MS,
+					signal: (ctx as any).signal,
+				});
+				const current = terminalReviewCoversBoundary({
+					outcome,
+					reviewedThrough: rt.reviewedThrough,
+					boundarySequence,
+					currentSequence: primaryTurnSequence,
+					turnState,
+					generation,
+					currentGeneration: constructionEpoch,
+				});
+				if (!current) {
+					void flushAdvisorFinding();
+					updateStatus(ctx);
+					return;
+				}
+				stageHeld(rt.takeAllAdvice());
+			}
+			if ((ctx as any).signal?.aborted) autoResumeSuppressed = true;
+			flushBoundaryFindings();
+			updateStatus(ctx);
+		})().catch((error) => dbg("pair boundary work failed", String(error)));
+
+		if (!terminal) {
+			void boundaryWork;
+			return;
+		}
+		let gate: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				boundaryWork,
+				new Promise<void>((resolve) => {
+					gate = setTimeout(resolve, TERMINAL_GATE_MS);
+				}),
+			]);
+		} finally {
+			if (gate) clearTimeout(gate);
+			updateStatus(ctx);
+		}
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
@@ -1777,22 +2060,39 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_tree", (_event, ctx) => {
 		teardown();
 		const entries = (ctx.sessionManager as { getBranch?: () => Entry[] }).getBranch?.();
-		if (entries) resetProjectedSourceCursor(entries);
+		if (entries) {
+			resetProjectedSourceCursor(entries);
+			restoreAcknowledgments(entries);
+		}
 		updateStatus(ctx);
 	});
 	pi.on("session_start", (_event, ctx) => {
 		teardown();
 		const entries = (ctx.sessionManager as { getBranch?: () => Entry[] }).getBranch?.();
-		if (entries) resetProjectedSourceCursor(entries);
+		if (entries) {
+			resetProjectedSourceCursor(entries);
+			restoreAcknowledgments(entries);
+		}
 		updateStatus(ctx);
+		if (enabled && !process.env.PAIR_NO_REVIEW) {
+			void ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0], false)
+				.then(() => updateStatus(ctx))
+				.catch((error) => dbg("pair warmup failed", String(error)));
+		}
 	});
 
 	pi.events.on(HANDOFF_SESSION_REPLACED_CHANNEL, () => {
 		teardown();
+		const entries = (latestCtx?.sessionManager as { getBranch?: () => Entry[] } | undefined)?.getBranch?.();
+		if (entries) {
+			resetProjectedSourceCursor(entries);
+			restoreAcknowledgments(entries);
+		}
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		teardown();
+		acknowledgments.reset();
 		rootNotebook?.dispose();
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
 	});
@@ -1865,7 +2165,7 @@ export default function (pi: ExtensionAPI) {
 				const notebook = foldLedger(entries);
 				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
-					`Pair Programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
+					`Pair Programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Advisor — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",

@@ -61,15 +61,31 @@ The pair programming partner receives a stable pairing policy followed by:
 
 The partner has three private typed tools:
 
-- `share_note` sends one current, actionable `nit`, `concern`, or `blocker` to the main agent;
+- `share_note` stages one current, actionable `nit`, `concern`, or `blocker` for delivery to the main agent;
 - `ask_advisor` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
 - `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation.
+
+A review attempt commits its staged notes, Advisor requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. Pair instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
 The partner cannot invoke arbitrary agents, shell commands, MCP, `pi_exec`, mutation tools, or arbitrary extension tools. `ask_advisor` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
 Free-form prose does not start an Advisor consultation. Generic uncertainty, style preference, known errors, and the mere possibility of a problem are not reasons to ask.
 
 One conservative repeated-failure gate may also ask Advisor for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
+
+## Review timing and retries
+
+Non-terminal main-agent turns enqueue Pair work and return without awaiting Pair construction, model work, retry delay, Advisor work, or delivery preparation. A terminal turn gives the entire Pair boundary one absolute 10-second catch-up opportunity. Healthy review may continue after that gate expires, but unconfirmed findings remain queued until a later successful current review.
+
+Pair uses these runtime limits:
+
+- 30-second HTTP stream idle timeout;
+- 75-second logical review deadline;
+- zero provider transport retries;
+- one automatic AgentSession retry;
+- no whole-review PairRuntime retry.
+
+A logical deadline aborts and invalidates the private Pair session. The next review constructs a fresh private session from authoritative main-session context. Construction failure remains visible and retryable; Pair does not fall back to a weaker raw-agent path.
 
 ## Advisor consultation
 
@@ -100,15 +116,25 @@ Only typed `confirm` and `refine` findings are eligible for delivery. Refutation
 
 ## Routing and delivery
 
-Only one Advisor consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Starts are separated by a minimum number of main-session turns. There is no lifetime or per-task consultation maximum.
+Only one Advisor consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Advisor starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
 
-Before delivery, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Settled results are delivered only at a safe primary-session boundary. Findings ready at the same boundary share one steer instead of interrupting serially.
+Direct Pair findings do not wait for Advisor consultation, working-state recapture, or Advisor validation. Before an Advisor finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. An already validated Advisor finding may share the direct finding's safe-boundary steer; otherwise it arrives later. Equivalent direct and Advisor findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
 
 A terminal note closes the current pairing episode. The partner does not review the main agent's resulting correction run; the next user message opens a new episode. This prevents one note from creating its own review loop.
 
 Asking Advisor is a request to investigate, not a finding. If Advisor fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and Pair disablement cancel late delivery.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
+
+## Material-finding acknowledgment
+
+Each delivered `concern` or `blocker` receives a stable host-generated id. Nits do not require acknowledgment. The main agent records consideration with the primary-only `acknowledge_pair_findings` tool using one disposition and a concise reason:
+
+- `address`: the finding applies and the main agent is acting on it;
+- `decline`: current evidence shows the finding does not apply;
+- `defer`: the finding is valid but outside the current authorized action.
+
+Acknowledgment does not claim implementation or validation. The first subsequent assistant run is the normal acknowledgment opportunity. At its terminal boundary, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and terminal unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
 
 ## Direct Advisor use
 
@@ -118,7 +144,7 @@ The partner's `ask_advisor` path uses a separate, hidden host operation. It cann
 
 ## Status and accounting
 
-The footer uses `q-pair` and shows Pair review plus Advisor queued, running, or ready state. `/pair` reports direct findings, Advisor dispositions, suppressions, stale results, usage, cost, and duration.
+The footer uses `q-pair` and shows Pair review plus Advisor queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, Advisor dispositions, suppressions, stale results, usage, cost, and duration.
 
 Sidecar telemetry records `pair` and `advisor` calls separately. Consultation outcomes are structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes. Private hypothesis and finding text are not persisted there.
 

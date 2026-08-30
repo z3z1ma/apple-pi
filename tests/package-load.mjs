@@ -130,6 +130,7 @@ try {
 		assert(commands.has(command), `missing /${command}`);
 	}
 	for (const tool of [
+		"acknowledge_pair_findings",
 		"ask_user_question",
 		"backlog_add",
 		"backlog_list",

@@ -17,12 +17,17 @@ const ADVISORY_TYPE = "advisory";
 /** Render held pair notes as the reconfirmation preamble for the next review. */
 export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 	if (!held.length) return "";
-	const items = held.map((note) => `- [${(note.severity ?? "nit").toUpperCase()}] ${note.note}`).join("\n");
+	const items = held
+		.map((note) => {
+			const id = note.id ? ` id=${note.id}` : "";
+			return `- [${(note.severity ?? "nit").toUpperCase()}${id}] ${note.note}`;
+		})
+		.join("\n");
 	return [
 		"### Things you flagged earlier",
 		"",
 		"Take another look at these against your partner's latest work; they may already have addressed them.",
-		"For every item that still applies, call `share_note` again with the same severity, or higher if the risk has grown. Say nothing about the rest; silence withdraws them. Do not send a note merely to say an item is resolved or everything looks good.",
+		"For every item that still applies, call `share_note` again. When an item shows an `id`, pass that exact value as `finding_id`, even if you refine the concise wording; keep the same severity or raise it only when the risk grew. Consolidate shared-root symptoms, but never merge distinct material issues. Say nothing about the rest; silence withdraws them. Do not send implementation management, resolution notices, or an all-clear.",
 		"",
 		items,
 		"",
@@ -52,10 +57,11 @@ export function formatAdvisoryContent(
 	const context = opts?.stale ? ` context="raised about an earlier step"` : "";
 	const body = notes
 		.map((n) => {
+			const id = n.id ? ` id="${escapeXml(n.id)}"` : "";
 			const sev = n.severity ? ` severity="${n.severity}"` : "";
 			const source = n.source ? ` source="${n.source}"` : "";
 			const disposition = n.adjudication ? ` disposition="${n.adjudication}"` : "";
-			return `<pair-note${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</pair-note>`;
+			return `<pair-note${id}${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</pair-note>`;
 		})
 		.join("\n");
 	if (!opts?.finalAnswer) return body;

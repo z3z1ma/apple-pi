@@ -45,7 +45,7 @@ export class EscalateTool {
 	readonly name = "ask_advisor";
 	readonly label = "Escalate to Advisor";
 	readonly description =
-		"Ask a senior software architect for an independent second opinion on one consequential concern that is hard to verify cheaply. Explain what worries you, what you observed, and where you remain unsure. Asking does not make the concern true. Do not use this for nits, generic uncertainty, known errors, or routine reassurance.";
+		"Ask a senior software architect for an independent second opinion on one consequential concern that is hard to verify cheaply. Explain the consolidated root issue, what you observed, and where you remain unsure. Asking does not make the concern true. Do not also call share_note for the same issue, and do not use this for nits, implementation management, generic uncertainty, known errors, or routine reassurance.";
 	readonly parameters = escalationSchema as any;
 
 	constructor(private readonly onEscalation: (request: PairEscalation) => EscalationAcceptance) {}
@@ -126,7 +126,8 @@ interface DeliveryCandidate {
 
 export type PreparedPairDelivery = {
 	note: PairNote;
-	commit(delivered: boolean): void;
+	dedupeKeys: string[];
+	commit(delivered: boolean, retainIdentity?: boolean): void;
 };
 
 export interface EscalationControllerStats {
@@ -145,7 +146,7 @@ export interface EscalationControllerStats {
 	cost: number;
 }
 
-export const MIN_TURNS_BETWEEN_ADVISOR = 2;
+export const MIN_TURNS_BETWEEN_ADVISOR = 4;
 
 /** Conservative host gate: the exact same failing command must recur three times. */
 export class RepeatedFailureDetector {
@@ -322,11 +323,14 @@ export class PairEscalationController {
 		let committed = false;
 		return {
 			note: candidate.note,
-			commit: (delivered) => {
+			dedupeKeys: [candidate.note.note, candidate.queued.request.claim, candidate.queued.request.topic ?? ""]
+				.filter(Boolean)
+				.map(normalized),
+			commit: (delivered, retainIdentity = false) => {
 				if (committed || this.#delivery !== candidate) return;
 				committed = true;
 				if (delivered) this.stats.delivered++;
-				this.#finishDelivery(candidate, delivered);
+				this.#finishDelivery(candidate, delivered, retainIdentity);
 			},
 		};
 	}
@@ -351,9 +355,9 @@ export class PairEscalationController {
 		}
 	}
 
-	#finishDelivery(candidate: DeliveryCandidate, delivered: boolean): void {
+	#finishDelivery(candidate: DeliveryCandidate, delivered: boolean, retainIdentity = false): void {
 		candidate.outcome.delivered = delivered;
-		if (!delivered) this.#forget(candidate.queued);
+		if (!delivered && !retainIdentity) this.#forget(candidate.queued);
 		this.deps.onOutcome(candidate.outcome);
 		if (this.#delivery === candidate) this.#delivery = undefined;
 		this.state = this.#active ? "advisor_running" : this.#pending.size ? "escalation_pending" : "idle";

@@ -17,7 +17,10 @@ import {
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
 import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
-import { PAIR_RESEED_ENTRY_ID, buildPairSeed, type SettledAdvice } from "./seed.js";
+import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
+
+export const PAIR_HTTP_IDLE_TIMEOUT_MS = 30_000;
+export const PAIR_AGENT_RETRIES = 1;
 
 export type PairSeedSource = {
 	entries(): readonly unknown[];
@@ -73,6 +76,13 @@ export async function createPairSession(opts: {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.inMemory({
 		compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 },
+		httpIdleTimeoutMs: PAIR_HTTP_IDLE_TIMEOUT_MS,
+		retry: {
+			enabled: true,
+			maxRetries: PAIR_AGENT_RETRIES,
+			baseDelayMs: 1_000,
+			provider: { maxRetries: 0, maxRetryDelayMs: 1_000 },
+		},
 	});
 	const loader = new DefaultResourceLoader({
 		cwd: opts.cwd,

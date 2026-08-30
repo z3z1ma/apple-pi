@@ -72,6 +72,17 @@ const renderDelta = (o) => A.formatTurnDelta(o);
 
 initTheme();
 
+// Keep loader-level lifecycle tests independent from the operator's real Pair
+// enablement and prompt state. Individual tests may temporarily override this.
+const ORIGINAL_AGENT_DIR = process.env.PI_CODING_AGENT_DIR;
+const TEST_AGENT_DIR = mkdtempSync(join(tmpdir(), "pair-agent-dir-"));
+process.env.PI_CODING_AGENT_DIR = TEST_AGENT_DIR;
+process.on("exit", () => {
+	if (ORIGINAL_AGENT_DIR === undefined) delete process.env.PI_CODING_AGENT_DIR;
+	else process.env.PI_CODING_AGENT_DIR = ORIGINAL_AGENT_DIR;
+	rmSync(TEST_AGENT_DIR, { recursive: true, force: true });
+});
+
 let passed = 0;
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -86,16 +97,6 @@ test("isHighSeverity: only concern/blocker are held + reconfirmed", () => {
 	assert.equal(A.isHighSeverity("nit"), false);
 	assert.equal(A.isHighSeverity("concern"), true);
 	assert.equal(A.isHighSeverity("blocker"), true);
-});
-
-test("nextBackoffMs: base, doubling, capped, guarded", () => {
-	assert.equal(A.nextBackoffMs(0, 15000, 120000), 15000);
-	assert.equal(A.nextBackoffMs(1, 15000, 120000), 30000);
-	assert.equal(A.nextBackoffMs(2, 15000, 120000), 60000);
-	assert.equal(A.nextBackoffMs(3, 15000, 120000), 120000);
-	assert.equal(A.nextBackoffMs(4, 15000, 120000), 120000); // capped
-	assert.equal(A.nextBackoffMs(-1, 15000, 120000), 15000); // negative guarded to base
-	assert.equal(A.nextBackoffMs(0), 15000); // defaults
 });
 
 test("formatPairFooterText: Pair is default and Advisor work is visible", () => {
@@ -141,12 +142,14 @@ test("isLowSignalTurn: read-only is low-signal; user/error/mutation/command are 
 test("formatReconfirmPreamble: empty when nothing held, else lists held notes", () => {
 	assert.equal(A.formatReconfirmPreamble([]), "");
 	const p = A.formatReconfirmPreamble([
-		{ note: "races on shared map", severity: "blocker" },
+		{ id: "pair-123456789abc", note: "races on shared map", severity: "blocker" },
 		{ note: "missing await", severity: "concern" },
 	]);
 	assert.match(p, /Things you flagged earlier/);
 	assert.match(p, /call `share_note` again/);
-	assert.match(p, /- \[BLOCKER\] races on shared map/);
+	assert.match(p, /finding_id/);
+	assert.match(p, /never merge distinct material issues/);
+	assert.match(p, /- \[BLOCKER id=pair-123456789abc\] races on shared map/);
 	assert.match(p, /- \[CONCERN\] missing await/);
 	assert.match(p, /\n---\n/); // separates preamble from the session update below
 });
@@ -176,11 +179,62 @@ test("appendPrimaryPairPrompt: appends the protocol once and is idempotent", () 
 	assert.equal(A.appendPrimaryPairPrompt(""), A.PRIMARY_PAIR_PROTOCOL);
 });
 
-test("formatAdvisoryContent: wraps with severity + guidance, escapes XML", () => {
-	const c = A.formatAdvisoryContent([{ note: "use <T> & stuff", severity: "concern" }]);
-	assert.match(c, /<pair-note severity="concern" guidance="pause, consider, then use your judgment">/);
+test("formatAdvisoryContent: wraps with finding id, severity + guidance, escapes XML", () => {
+	const c = A.formatAdvisoryContent([{ id: "pair-123", note: "use <T> & stuff", severity: "concern" }]);
+	assert.match(c, /<pair-note id="pair-123" severity="concern" guidance="pause, consider, then use your judgment">/);
 	assert.match(c, /use &lt;T&gt; &amp; stuff/);
 	assert.match(c, /<\/pair-note>/);
+});
+
+test("material Pair findings receive opaque ids that remain stable when carried forward", () => {
+	const first = A.identifyMaterialPairNotes([
+		{ note: "Inspect the durable boundary.", severity: "concern" },
+		{ note: "Tidy the name.", severity: "nit" },
+	]);
+	const second = A.identifyMaterialPairNotes([{ note: "Inspect the durable boundary.", severity: "blocker" }]);
+	const carried = A.identifyMaterialPairNotes([first[0]]);
+	assert.match(first[0].id, /^pair-[a-f0-9]{12}$/);
+	assert.notEqual(first[0].id, second[0].id);
+	assert.equal(carried[0].id, first[0].id);
+	assert.equal(first[1].id, undefined);
+});
+
+test("PairAcknowledgmentTracker allows one reminder then closes an unacknowledged finding", () => {
+	const tracker = new A.PairAcknowledgmentTracker();
+	const [finding] = A.identifyMaterialPairNotes([{ note: "Persist before acknowledging.", severity: "blocker" }]);
+	tracker.recordDelivered([finding]);
+	assert.equal(tracker.pendingCount, 1);
+	assert.deepEqual(tracker.terminalActions(), { remind: [], close: [] });
+
+	tracker.advanceTurn();
+	const firstTerminal = tracker.terminalActions();
+	assert.deepEqual(firstTerminal.close, []);
+	assert.deepEqual(
+		firstTerminal.remind.map((item) => item.id),
+		[finding.id],
+	);
+	tracker.markReminded([finding.id]);
+
+	tracker.advanceTurn();
+	const secondTerminal = tracker.terminalActions();
+	assert.deepEqual(secondTerminal.remind, []);
+	assert.deepEqual(
+		secondTerminal.close.map((item) => item.id),
+		[finding.id],
+	);
+	assert.equal(tracker.resolve(finding.id).id, finding.id);
+	assert.equal(tracker.pendingCount, 0);
+});
+
+test("PairAcknowledgmentTracker validates a typed reason without mutating pending findings", () => {
+	const tracker = new A.PairAcknowledgmentTracker();
+	const [finding] = A.identifyMaterialPairNotes([{ note: "Keep the transaction atomic.", severity: "concern" }]);
+	tracker.recordDelivered([finding]);
+	assert.deepEqual(tracker.validate([{ id: finding.id, disposition: "address", reason: "Use one commit point." }]), []);
+	assert.deepEqual(tracker.validate([{ id: finding.id, disposition: "decline", reason: "   " }]), [
+		`finding ${finding.id} requires a concise reason`,
+	]);
+	assert.equal(tracker.pendingCount, 1);
 });
 
 test("formatAdvisoryContent: omits severity attr when absent (plain nit)", () => {
@@ -932,7 +986,7 @@ test("pair parent-notebook hook does not register the notebook pipeline", () => 
 	assert.deepEqual(events, ["context"]);
 });
 
-test("runtime: a thrown first prompt keeps the seed for the retry", async () => {
+test("runtime: a failed prompt keeps the seed for the next review", async () => {
 	const prompts = [];
 	let fail = true;
 	const agent = {
@@ -958,8 +1012,10 @@ test("runtime: a thrown first prompt keeps the seed for the retry", async () => 
 		() => "ORIENTATION-SEED",
 	);
 	rt.push("delta one", { terminal: true });
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	rt.push("delta two", { terminal: true });
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(prompts.length, 2);
+	assert.equal(prompts.length, 2, "PairRuntime owns no whole-review retry loop");
 	assert.match(JSON.stringify(prompts[0]), /ORIENTATION-SEED/);
 	assert.match(JSON.stringify(prompts[1]), /ORIENTATION-SEED/);
 	rt.dispose();
@@ -981,6 +1037,9 @@ test("default pair prompt names primary-bound recall tools", () => {
 		assert.match(prompt, /call:<id>/);
 		assert.match(prompt, /You are pair programming with another capable coding agent/);
 		assert.match(prompt, /Call `ask_advisor` instead/);
+		assert.match(prompt, /Consolidate symptoms and consequences that share one root cause/);
+		assert.match(prompt, /Never call both tools for the same issue/);
+		assert.match(prompt, /there is no finding quota/);
 		assert.match(prompt, /Generic uncertainty.*keep them to yourself/);
 	} finally {
 		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -1366,184 +1425,47 @@ function stubRuntime({ held = [], settleResult = "settled" } = {}) {
 		},
 	};
 }
-const blockArgs = (over) => ({ consecutiveBlocks: 0, notify: () => {}, deliverHeld: () => {}, ...over });
+const blockArgs = (over) => over;
 
-test("runTurnBlock: non-terminal with nothing held → no block, streak resets", async () => {
-	const rt = stubRuntime({ held: [] });
-	const delivered = [];
-	const n = await A.runTurnBlock(
-		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 3, deliverHeld: (x) => delivered.push(...x) }),
-	);
-	assert.equal(n, 0);
-	assert.equal(rt.started, false, "must not force a deferred drain");
-	assert.equal(rt.waited, false, "must not block");
-	assert.equal(delivered.length, 0);
+test("runTurnBlock: non-terminal turns never start or await review", async () => {
+	for (const held of [[], [{ note: "small cleanup", severity: "nit" }], [{ note: "x", severity: "blocker" }]]) {
+		const rt = stubRuntime({ held });
+		assert.equal(await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt })), "skipped");
+		assert.equal(rt.started, false);
+		assert.equal(rt.waited, false);
+	}
 });
 
-test("runTurnBlock: non-terminal with only queued nits does not block", async () => {
-	const rt = stubRuntime({ held: [{ note: "small cleanup", severity: "nit" }] });
-	assert.equal(await A.runTurnBlock(blockArgs({ terminal: false, runtime: rt })), 0);
-	assert.equal(rt.waited, false, "nits are drained by boundary flush, not catch-up blocking");
+test("runTurnBlock: terminal returns the review settlement outcome without draining advice", async () => {
+	for (const settleResult of ["settled", "timeout", "aborted", "failed"]) {
+		const rt = stubRuntime({ held: [{ note: "x", severity: "concern" }], settleResult });
+		assert.equal(await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt })), settleResult);
+		assert.equal(rt.started, true);
+		assert.equal(rt.waited, true);
+		assert.deepEqual(rt._held, [{ note: "x", severity: "concern" }]);
+	}
 });
 
-test("runTurnBlock: non-terminal + held + settled → delivers survivors, resets streak", async () => {
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "settled" });
-	const n = await A.runTurnBlock(
-		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }),
-	);
-	assert.equal(n, 0);
-	assert.deepEqual(delivered, [{ note: "x", severity: "blocker" }]);
-});
-
-test("runTurnBlock: non-terminal + held + timeout → keeps held, doubles streak", async () => {
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "timeout" });
-	const n = await A.runTurnBlock(
-		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }),
-	);
-	assert.equal(n, 2, "streak doubles via consecutiveBlocks+1");
-	assert.equal(delivered.length, 0);
-	assert.equal(rt.hasHighPriority, true, "held notes are kept, not taken");
-});
-
-test("runTurnBlock: terminal blocks unconditionally (even with nothing held)", async () => {
-	const rt = stubRuntime({ held: [], settleResult: "settled" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt }));
-	assert.equal(rt.started, true, "terminal catch-up must start drain before waiting");
-	assert.equal(rt.waited, true, "terminal must block until the pair settles");
-	assert.equal(n, 0);
-});
-
-test("runTurnBlock: never notifies an unresolved 'catching up'/'waiting up to' wait — the footer owns that signal", async () => {
-	const notified = [];
-	const notify = (msg) => notified.push(msg);
-
-	await A.runTurnBlock(
-		blockArgs({ terminal: true, runtime: stubRuntime({ held: [], settleResult: "settled" }), notify }),
-	);
-	await A.runTurnBlock(
-		blockArgs({
-			terminal: false,
-			runtime: stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "timeout" }),
-			notify,
-		}),
-	);
-	assert.equal(notified.length, 0, `expected no notify calls while waiting, got: ${JSON.stringify(notified)}`);
-
-	// The timeout/failure outcome notify (a resolved, concrete result) still fires.
-	const outcomeNotified = [];
-	await A.runTurnBlock(
-		blockArgs({
-			terminal: true,
-			runtime: stubRuntime({ held: [{ note: "x", severity: "concern" }], settleResult: "timeout" }),
-			notify: (msg) => outcomeNotified.push(msg),
-		}),
-	);
-	assert.equal(outcomeNotified.length, 1);
-	assert.match(outcomeNotified[0], /didn't reconfirm in time/);
-});
-
-test("runTurnBlock: terminal timeout → delivers held best-effort (current, not stale)", async () => {
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "concern" }], settleResult: "timeout" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt, deliverHeld: (x) => delivered.push(...x) }));
-	assert.equal(n, 0);
-	assert.deepEqual(delivered, [{ note: "x", severity: "concern" }]);
-});
-
-test("runTurnBlock: passes { terminal } through to deliverHeld (settled + timeout paths)", async () => {
-	// runTurnBlock must forward the turn's terminality to deliverHeld from both the
-	// settled and timeout paths. deliverHeld derives final-answer guidance from the
-	// turn lifecycle state and uses this value as a divergence-check invariant, so
-	// this test pins the passthrough contract, not the guidance decision.
-	const calls = [];
-	const record = (notes, opts) => calls.push({ notes, opts });
-
-	// terminal + settled → { terminal: true }
-	await A.runTurnBlock(
-		blockArgs({
-			terminal: true,
-			runtime: stubRuntime({ held: [{ note: "a" }], settleResult: "settled" }),
-			deliverHeld: record,
-		}),
-	);
-	// non-terminal + settled → { terminal: false }
-	await A.runTurnBlock(
-		blockArgs({
-			terminal: false,
-			runtime: stubRuntime({ held: [{ note: "b", severity: "concern" }], settleResult: "settled" }),
-			deliverHeld: record,
-		}),
-	);
-	// terminal + timeout (best-effort) → { terminal: true }
-	await A.runTurnBlock(
-		blockArgs({
-			terminal: true,
-			runtime: stubRuntime({ held: [{ note: "c", severity: "concern" }], settleResult: "timeout" }),
-			deliverHeld: record,
-		}),
-	); // high-sev: a nit would stay held
-
-	assert.equal(calls.length, 3);
-	assert.equal(calls[0].opts?.terminal, true, "terminal settled → terminal:true");
-	assert.equal(calls[1].opts?.terminal, false, "non-terminal settled → terminal:false");
-	assert.equal(calls[2].opts?.terminal, true, "terminal timeout best-effort → terminal:true");
-});
-
-test("runTurnBlock: aborted (user Escape) → keeps held + streak, no delivery", async () => {
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "aborted" });
-	const n = await A.runTurnBlock(
-		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 2, deliverHeld: (x) => delivered.push(...x) }),
-	);
-	assert.equal(n, 2, "streak preserved");
-	assert.equal(delivered.length, 0);
-	assert.equal(rt.hasHighPriority, true);
-});
-
-test("runTurnBlock: non-terminal + failed reconfirm → keeps held unconfirmed, backs off", async () => {
-	// A failed reconfirm (pair errored out) must NOT deliver held notes as if
-	// confirmed — same handling as a timeout.
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "blocker" }], settleResult: "failed" });
-	const n = await A.runTurnBlock(
-		blockArgs({ terminal: false, runtime: rt, consecutiveBlocks: 1, deliverHeld: (x) => delivered.push(...x) }),
-	);
-	assert.equal(n, 2, "backoff lengthens");
-	assert.equal(delivered.length, 0, "unconfirmed held note is NOT delivered mid-run");
-	assert.equal(rt.hasHighPriority, true);
-});
-
-test("runTurnBlock: terminal + failed reconfirm → best-effort delivers", async () => {
-	const delivered = [];
-	const rt = stubRuntime({ held: [{ note: "x", severity: "concern" }], settleResult: "failed" });
-	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt, deliverHeld: (x) => delivered.push(...x) }));
-	assert.equal(n, 0);
-	assert.deepEqual(delivered, [{ note: "x", severity: "concern" }], "last chance before idle → deliver best-effort");
-});
-
-test("runTurnBlock: terminal + timeout → only concerns/blockers ship best-effort; nits stay held", async () => {
-	const delivered = [];
-	const rt = stubRuntime({
-		held: [
-			{ note: "x", severity: "concern" },
-			{ note: "y", severity: "nit" },
-		],
-		settleResult: "timeout",
-	});
-	const n = await A.runTurnBlock(blockArgs({ terminal: true, runtime: rt, deliverHeld: (x) => delivered.push(...x) }));
-	assert.equal(n, 0);
-	assert.deepEqual(
-		delivered,
-		[{ note: "x", severity: "concern" }],
-		"only high severity is worth an unconfirmed delivery",
-	);
-	assert.deepEqual(
-		rt._held,
-		[{ note: "y", severity: "nit" }],
-		"unconfirmed nit is re-held, not steered after the final answer",
-	);
+test("terminalReviewCoversBoundary requires a successful current-generation review of the latest terminal boundary", () => {
+	const current = {
+		outcome: "settled",
+		reviewedThrough: 2,
+		boundarySequence: 2,
+		currentSequence: 2,
+		turnState: "ended-terminal",
+		generation: 3,
+		currentGeneration: 3,
+	};
+	assert.equal(A.terminalReviewCoversBoundary(current), true);
+	for (const changed of [
+		{ outcome: "timeout" },
+		{ reviewedThrough: 1 },
+		{ currentSequence: 3 },
+		{ turnState: "running" },
+		{ currentGeneration: 4 },
+	]) {
+		assert.equal(A.terminalReviewCoversBoundary({ ...current, ...changed }), false);
+	}
 });
 
 // --- real PairRuntime + stub Agent: hold → reconfirm → deliver/drop ---
@@ -1554,9 +1476,9 @@ function buildIntegration({ onReview } = {}) {
 	let reviewCount = 0;
 	// Mirrors the extension's turnState at turn_end while the catch-up block runs.
 	const state = { turn: "ended-nonterminal" };
-	const tool = new A.AdviseTool((note, severity) => {
+	const tool = new A.AdviseTool((note, severity, findingId) => {
 		if (rt && !rt.acceptingAdvice) return false;
-		rt.enqueueAdvice(note, severity); // production callback only enqueues
+		rt.enqueueAdvice(note, severity, findingId); // production callback only enqueues
 		return false;
 	});
 	const agent = {
@@ -1587,13 +1509,13 @@ function buildIntegration({ onReview } = {}) {
 	const deliverHeld = (notes) => {
 		for (const n of notes) {
 			delivered.push({ ...n, kind: "held" });
-			tool.markDelivered(n.note, n.severity);
+			tool.markDelivered(n.note, n.severity, n.id);
 		}
 	};
 	const flushNits = () => {
 		for (const n of rt.takeNits()) {
 			delivered.push({ ...n, kind: "nit", stale: true, finalAnswer: false });
-			tool.markDelivered(n.note, n.severity);
+			tool.markDelivered(n.note, n.severity, n.id);
 		}
 	};
 	const onSettled = (outcome) => {
@@ -1605,7 +1527,7 @@ function buildIntegration({ onReview } = {}) {
 	const block = (terminal, opts = {}) => {
 		state.turn = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!terminal) flushNits();
-		return A.runTurnBlock({ terminal, runtime: rt, consecutiveBlocks: 0, notify: () => {}, deliverHeld, ...opts });
+		return A.runTurnBlock({ terminal, runtime: rt, ...opts });
 	};
 	return { rt, tool, delivered, deliverHeld, block, getReviewCount: () => reviewCount };
 }
@@ -1619,7 +1541,7 @@ test("integration: a nit is delivered during review, not held, never blocks", as
 	h.rt.push("turn 1");
 	const cb = await h.block(false);
 	await h.rt.waitUntilSettled(5000);
-	assert.equal(cb, 0, "no block (nits never hold)");
+	assert.equal(cb, "skipped", "non-terminal turns never block");
 	assert.equal(h.rt.hasHighPriority, false);
 	assert.equal(h.delivered.length, 1);
 	assert.equal(h.delivered[0].kind, "nit");
@@ -1653,13 +1575,8 @@ test("integration: a queued nit enters terminal reconfirmation and surviving adv
 	// leaves it in the shared queue before pushing/reviewing the final delta.
 	rt.enqueueAdvice("queued race", "nit");
 	rt.push("final turn");
-	await A.runTurnBlock({
-		terminal: true,
-		runtime: rt,
-		consecutiveBlocks: 0,
-		notify: () => {},
-		deliverHeld: (notes, opts) => delivered.push({ notes, opts }),
-	});
+	const outcome = await A.runTurnBlock({ terminal: true, runtime: rt });
+	if (outcome === "settled") delivered.push({ notes: rt.takeAllAdvice(), opts: { terminal: true } });
 	assert.deepEqual(delivered, [{ notes: [{ note: "queued race", severity: "nit" }], opts: { terminal: true } }]);
 });
 
@@ -1689,10 +1606,7 @@ test("integration: terminal timeout requeue does not fake reconfirmation when la
 	await A.runTurnBlock({
 		terminal: true,
 		runtime: rt,
-		consecutiveBlocks: 0,
 		capMs: 5,
-		notify: () => {},
-		deliverHeld: (notes) => delivered.push(...notes),
 	});
 	assert.deepEqual(delivered, [], "timeout does not deliver an unconfirmed nit");
 	release();
@@ -1727,10 +1641,7 @@ test("integration: terminal timeout delivers a nit that the late review genuinel
 	await A.runTurnBlock({
 		terminal: true,
 		runtime: rt,
-		consecutiveBlocks: 0,
 		capMs: 5,
-		notify: () => {},
-		deliverHeld: (notes) => delivered.push(...notes),
 	});
 	assert.deepEqual(delivered, []);
 	release();
@@ -1754,7 +1665,7 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 	// Review 1 lags: turn 2's delta is queued before review 1's async prompt runs.
 	h.rt.push("turn 1");
 	h.rt.push("final turn");
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 2);
 	assert.deepEqual(
 		h.delivered,
@@ -1773,7 +1684,7 @@ test("integration: terminal turn — a lagging-review nit the final turn's revie
 	});
 	h.rt.push("turn 1");
 	h.rt.push("final turn");
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 2);
 	assert.equal(h.delivered.length, 0, "stale previous-turn nit is dropped, not steered after the final answer");
 	assert.equal(h.rt.hasHighPriority, false);
@@ -1786,38 +1697,36 @@ test("integration: terminal turn — a nit from the final turn's OWN review land
 		},
 	});
 	h.rt.push("final turn"); // pair idle → the review includes the final turn (current, no reconfirm needed)
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 1, "no extra reconfirm review — the nit skips the prune and waits for settle");
 	assert.deepEqual(h.delivered, [{ note: "rename var", severity: "nit", kind: "held" }]);
 	assert.equal(h.rt.hasHighPriority, false);
 });
 
-test("integration (regression): a reconfirm-as-nit followed by a provider error survives the retry (no premature dedup)", async () => {
-	// The de-escalating reconfirm (held blocker re-raised as a nit) must be
-	// reported as HELD, not recorded as delivered: if the review then errors and
-	// is retried, a recorded nit would be duplicate-dropped on the retry before it
-	// can re-reconfirm, and the successful retry's prune would silently lose the
-	// held blocker.
+test("integration: a failed reconfirm preserves held advice for a later successful review", async () => {
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) {
 				await tool.execute("a1", { note: "off-by-one", severity: "blocker" });
 			} else if (reviewCount === 2) {
-				await tool.execute("a2", { note: "off-by-one", severity: "nit" }); // de-escalating reconfirm…
-				throw new Error("provider blip"); // …then the review errors → retried
+				await tool.execute("a2", { note: "off-by-one", severity: "nit" });
+				throw new Error("provider blip");
 			} else if (reviewCount === 3) {
-				await tool.execute("a3", { note: "off-by-one", severity: "nit" }); // retry must NOT be duplicate-dropped
+				await tool.execute("a3", { note: "off-by-one", severity: "nit" });
 			}
 		},
 	});
 	h.rt.push("turn 1");
-	await h.block(false);
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
-	h.rt.push("turn 2"); // NON-terminal: same-queue upsert reconfirms without de-escalating
-	assert.equal(await h.block(false), 0);
-	assert.equal(h.getReviewCount(), 3);
-	assert.equal(h.delivered.length, 1, "held blocker survives the errored reconfirm's retry");
+	h.rt.push("turn 2");
+	assert.equal(await h.rt.waitUntilSettled(5000), "failed");
+	assert.equal(h.delivered.length, 0);
+	assert.equal(h.rt.hasHighPriority, true);
+	h.rt.push("turn 3", { terminal: true });
+	assert.equal(await h.block(true), "settled");
+	assert.equal(h.getReviewCount(), 3, "failed logical review was not retried inside PairRuntime");
+	assert.equal(h.delivered.length, 1);
 	assert.equal(h.delivered[0].severity, "blocker");
 });
 
@@ -1834,17 +1743,44 @@ test("integration: blocker held on turn 1, survives reconfirm, delivered after t
 	});
 	// turn 1: non-terminal, nothing held yet → no block; review 1 holds the blocker
 	h.rt.push("turn 1");
-	assert.equal(await h.block(false), 0);
+	assert.equal(await h.block(false), "skipped");
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
 	assert.equal(h.delivered.length, 0, "nothing delivered on the flagging turn");
 	// turn 2: terminal → block until settled; review 2 reconfirms; survivor delivered
 	h.rt.push("turn 2");
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 2);
 	assert.equal(h.delivered.length, 1);
 	assert.equal(h.delivered[0].kind, "held");
 	assert.equal(h.delivered[0].severity, "blocker");
+});
+
+test("integration: a material finding keeps its opaque id across a paraphrased reconfirmation", async () => {
+	let findingId;
+	const h = buildIntegration({
+		onReview: async (text, { tool, reviewCount }) => {
+			if (reviewCount === 1) {
+				await tool.execute("a1", { note: "durable insert happens after acknowledgment", severity: "blocker" });
+			} else if (reviewCount === 2) {
+				findingId = text.match(/id=(pair-[a-f0-9]{12})/)?.[1];
+				assert.ok(findingId, "the reconfirmation preamble supplies the host identity");
+				await tool.execute("a2", {
+					note: "acknowledgment precedes the durable insert",
+					severity: "blocker",
+					finding_id: findingId,
+				});
+			}
+		},
+	});
+	h.rt.push("turn 1");
+	await h.block(false);
+	await h.rt.waitUntilSettled(5000);
+	h.rt.push("turn 2");
+	assert.equal(await h.block(true), "settled");
+	assert.equal(h.delivered.length, 1);
+	assert.equal(h.delivered[0].id, findingId);
+	assert.equal(h.delivered[0].note, "acknowledgment precedes the durable insert");
 });
 
 test("integration: a blocker first raised ON the terminal turn is caught + delivered (Q1)", async () => {
@@ -1856,7 +1792,7 @@ test("integration: a blocker first raised ON the terminal turn is caught + deliv
 		},
 	});
 	h.rt.push("final turn");
-	assert.equal(await h.block(true), 0, "terminal block waits for the review that raises the blocker");
+	assert.equal(await h.block(true), "settled", "terminal block waits for the review that raises the blocker");
 	assert.equal(h.getReviewCount(), 1);
 	assert.equal(h.delivered.length, 1, "blocker raised on the terminal turn lands before idle");
 	assert.equal(h.delivered[0].kind, "held");
@@ -1902,7 +1838,7 @@ test("integration (F2): a held blocker re-raised as a nit is kept, not de-escala
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
 	h.rt.push("turn 2");
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.delivered.length, 1, "no nit delivered; the held note survives");
 	assert.equal(h.delivered[0].kind, "held");
 	assert.equal(h.delivered[0].severity, "blocker", "kept at blocker severity, not lowered to nit");
@@ -1920,57 +1856,49 @@ test("integration: held blocker is dropped when the reconfirm review recants", a
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
 	h.rt.push("turn 2");
-	assert.equal(await h.block(true), 0);
+	assert.equal(await h.block(true), "settled");
 	assert.equal(h.delivered.length, 0, "recanted blocker is dropped, not delivered");
 	assert.equal(h.rt.hasHighPriority, false);
 });
 
-test("integration (regression): a held note survives push() and blocks + delivers mid-run", async () => {
-	// Regression for the synchronous-#drain-splice bug: push() runs the drain up to
-	// its first await, which must NOT empty the queue — otherwise a non-terminal
-	// turn sees hasHighPriority=false and never blocks.
+test("integration: a held note survives non-terminal push without blocking or delivery", async () => {
 	const h = buildIntegration({
 		onReview: async (text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "races on cache", severity: "blocker" });
 			else if (reviewCount === 2) {
 				assert.match(text, /Things you flagged earlier/);
-				await tool.execute("a2", { note: "races on cache", severity: "blocker" }); // still applies
+				await tool.execute("a2", { note: "races on cache", severity: "blocker" });
 			}
 		},
 	});
 	h.rt.push("turn 1");
-	await h.block(false);
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
-	// turn 2 is NON-terminal; the held note must keep hasHighPriority true across push
 	h.rt.push("turn 2");
 	assert.equal(h.rt.hasHighPriority, true, "held note survives push() (no mid-flight splice)");
-	const cb = await h.block(false);
-	assert.equal(h.delivered.length, 1, "prior queued blocker delivered at the non-terminal boundary");
-	assert.equal(h.delivered[0].kind, "held");
-	assert.equal(cb, 0, "settled → streak reset");
+	assert.equal(await h.block(false), "skipped");
+	assert.equal(h.delivered.length, 0, "non-terminal progress never waits for or delivers held advice");
+	assert.equal(await h.rt.waitUntilSettled(5000), "settled");
+	assert.equal(h.rt.hasHighPriority, true);
 });
 
-test("integration (regression): terminal timeout delivers a held note stuck mid-reconfirm", async () => {
-	// Regression for Finding 2: pre-existing advice must remain queued while
-	// its reconfirm review is in flight, so a terminal timeout can still deliver it.
+test("integration: terminal timeout leaves a held note unconfirmed", async () => {
 	let releaseReview2;
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "fd leak", severity: "blocker" });
-			else if (reviewCount === 2) await new Promise((r) => (releaseReview2 = r)); // hang past the timeout
+			else if (reviewCount === 2) await new Promise((resolve) => (releaseReview2 = resolve));
 		},
 	});
 	h.rt.push("turn 1");
-	await h.block(false);
 	await h.rt.waitUntilSettled(5000);
 	assert.equal(h.rt.hasHighPriority, true);
 	h.rt.push("turn 2");
-	const cb = await h.block(true, { capMs: 30 }); // terminal, review 2 hangs → times out
-	assert.equal(h.delivered.length, 1, "pre-existing held note delivered best-effort on terminal timeout");
-	assert.equal(h.delivered[0].severity, "blocker");
-	assert.equal(cb, 0);
-	releaseReview2?.(); // let the hung review finish for a clean exit
+	assert.equal(await h.block(true, { capMs: 30 }), "timeout");
+	assert.equal(h.delivered.length, 0, "terminal latency expiry does not promote unconfirmed advice");
+	assert.equal(h.rt.hasHighPriority, true);
+	releaseReview2?.();
+	await h.rt.waitUntilSettled(5000);
 });
 
 test("runtime.waitUntilSettled: settles on drain, times out, and aborts", async () => {
@@ -2120,7 +2048,7 @@ test("runtime: onSettled fires after a review even if more low-signal work is st
 	rt.dispose();
 });
 
-test("runtime.waitUntilSettled: a dropped (3x-failed) review resolves 'failed', held preserved", async () => {
+test("runtime.waitUntilSettled: a failed review resolves 'failed' once, held preserved", async () => {
 	let attempts = 0;
 	const agent = {
 		state: { messages: [], model: {} },
@@ -2135,11 +2063,11 @@ test("runtime.waitUntilSettled: a dropped (3x-failed) review resolves 'failed', 
 	rt.enqueueAdvice("data race", "blocker"); // pre-existing held note
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
-	assert.equal(attempts, 3, "retried 3x then dropped");
+	assert.equal(attempts, 1, "PairRuntime does not multiply AgentSession retries");
 	assert.equal(rt.hasHighPriority, true, "held note preserved across a failed reconfirm");
 });
 
-test("runtime.waitUntilSettled: a provider error (stopReason, no throw) resolves 'failed', held preserved", async () => {
+test("runtime.waitUntilSettled: a provider error resolves 'failed' once, held preserved", async () => {
 	// The real Agent records provider failures as an assistant message with
 	// stopReason "error" rather than throwing — that must count as a failed review.
 	let attempts = 0;
@@ -2156,7 +2084,7 @@ test("runtime.waitUntilSettled: a provider error (stopReason, no throw) resolves
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
-	assert.equal(attempts, 3, "errored review retried 3x then dropped");
+	assert.equal(attempts, 1, "provider-error result is not retried by PairRuntime");
 	assert.equal(rt.hasHighPriority, true, "held note NOT pruned by an errored (non-throwing) review");
 });
 
@@ -2255,7 +2183,38 @@ test("runtime.waitUntilSettled: reset() cancels a pending waiter as 'aborted' im
 	resolvePrompt?.(); // let the hung prompt unwind for a clean exit
 });
 
-test("runtime.waitUntilSettled: a truncated review retries 3 times then fails, without resetting the agent", async () => {
+test("runtime: the logical review deadline aborts and invalidates the private session", async () => {
+	let agentAborts = 0;
+	let sessionAborts = 0;
+	let promptCalls = 0;
+	const agent = {
+		state: { messages: [], model: {} },
+		abort() {
+			agentAborts++;
+		},
+		reset() {},
+	};
+	const session = {
+		prompt() {
+			promptCalls++;
+			return new Promise(() => {});
+		},
+		abort() {
+			sessionAborts++;
+		},
+	};
+	const rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0, undefined, undefined, session);
+	rt.reviewDeadlineMs = 20;
+	rt.push("turn", { terminal: true });
+	assert.equal(await rt.waitUntilSettled(1000), "failed");
+	assert.equal(promptCalls, 1);
+	assert.equal(agentAborts, 1);
+	assert.equal(sessionAborts, 1);
+	assert.equal(rt.unhealthy, true);
+	rt.dispose();
+});
+
+test("runtime.waitUntilSettled: a truncated review fails once without resetting the agent", async () => {
 	let attempts = 0;
 	let resets = 0;
 	const agent = {
@@ -2274,8 +2233,8 @@ test("runtime.waitUntilSettled: a truncated review retries 3 times then fails, w
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
-	assert.equal(attempts, 3);
-	assert.equal(resets, 0, "overflow is the session compact hook, not a private reset");
+	assert.equal(attempts, 1);
+	assert.equal(resets, 0, "overflow is handled by AgentSession, not a PairRuntime retry/reset");
 	assert.equal(rt.hasHighPriority, true, "held note NOT pruned by a truncated review");
 });
 
@@ -2298,6 +2257,9 @@ test("runtime.waitUntilSettled: a later successful review still prunes recanted 
 	const rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("data race", "blocker");
 	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.equal(rt.hasHighPriority, true, "failed review keeps the pre-existing hold");
+	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(attempts, 2);
 	assert.equal(rt.hasHighPriority, false);
@@ -2329,9 +2291,12 @@ test("runtime: a concern/blocker held by a DISCARDED overflowed attempt is rolle
 	};
 	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.equal(rt.hasHighPriority, false, "the discarded attempt committed no phantom blocker");
+	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(attempts, 2, "overflow then a successful fresh replay");
-	assert.equal(rt.hasHighPriority, false, "the phantom blocker from the discarded attempt was rolled back");
+	assert.equal(attempts, 2, "a later primary delta starts the next logical review");
+	assert.equal(rt.hasHighPriority, false);
 });
 
 test("runtime: overflow rollback restores pre-existing held severity by value", async () => {
@@ -2357,9 +2322,13 @@ test("runtime: overflow rollback restores pre-existing held severity by value", 
 	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("shared mutation", "concern");
 	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.deepEqual(rt.takeAllAdvice(), [{ note: "shared mutation", severity: "concern" }]);
+	rt.requeueAdvice("shared mutation", "concern");
+	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.deepEqual(
-		rt.takeAllAdvice(),
+		rt.takeAllAdvice().map(({ id: _id, ...note }) => note),
 		[{ note: "shared mutation", severity: "concern" }],
 		"discarded blocker escalation must not mutate rollback snapshot",
 	);
@@ -2386,6 +2355,9 @@ test("runtime: attempt-only queued advice is rolled back after reactive overflow
 	};
 	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.deepEqual(rt.takeAllAdvice(), []);
+	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.deepEqual(rt.takeAllAdvice(), []);
 });
@@ -2412,6 +2384,9 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("already delivered", "nit");
 	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.deepEqual(rt.takeAllAdvice(), []);
+	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.deepEqual(rt.takeAllAdvice(), []);
 });
@@ -2481,7 +2456,7 @@ test("runtime: does not privately reset when context is a large fraction of the 
 	assert.equal(rt.usage.input, 90005);
 });
 
-test("runtime: bound session records each prompt including a self-compaction replay", async () => {
+test("runtime: bound session records one failed logical prompt without an outer retry", async () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pair-usage-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -2511,17 +2486,15 @@ test("runtime: bound session records each prompt including a self-compaction rep
 		const rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 		rt.setUsageSession("session-usage");
 		rt.push("secret primary delta");
-		assert.equal(await rt.waitUntilSettled(2000), "settled");
+		assert.equal(await rt.waitUntilSettled(2000), "failed");
 		const path = join(agentDir, "sidecar-usage", "session-usage.ndjson");
 		const rows = readFileSync(path, "utf8")
 			.trim()
 			.split("\n")
 			.map((line) => JSON.parse(line));
-		assert.equal(rows.length, 2);
+		assert.equal(rows.length, 1);
 		assert.equal(rows[0].trigger, "turn_end");
 		assert.equal(rows[0].status, "length");
-		assert.equal(rows[1].trigger, "turn_end_retry");
-		assert.equal(rows[1].status, "stop");
 		assert.equal(rows[0].provider, "anthropic");
 		assert.equal(rows[0].model, "claude-opus-5");
 		assert.equal(JSON.stringify(rows).includes("secret primary delta"), false);
@@ -2580,6 +2553,161 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 	assert.equal(afterReset, false, "advice rejected once the review's epoch is orphaned");
 });
 
+test("runtime: failed reviews commit no direct, Advisor, or notebook effects", async () => {
+	let attempt = 0;
+	let rt;
+	const escalations = [];
+	const notebookCommits = [];
+	let stagedNotebook;
+	const notebookTool = {
+		begin() {
+			stagedNotebook = { batchId: `batch-${attempt + 1}` };
+		},
+		clear() {
+			stagedNotebook = undefined;
+		},
+		takeStaged() {
+			const update = stagedNotebook;
+			stagedNotebook = undefined;
+			return update;
+		},
+	};
+	const request = {
+		severity: "concern",
+		claim: "deep queue ownership risk",
+		whyDeepReasoning: "ownership spans several layers",
+		evidence: [{ kind: "file", ref: "src/queue.ts" }],
+	};
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			attempt++;
+			rt.enqueueAdvice("direct retry risk", "concern");
+			assert.equal(rt.stageEscalation(request), "accepted");
+			if (attempt === 1) throw new Error("provider failed after tools ran");
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	rt = new A.PairRuntime(
+		agent,
+		new A.AdviseTool(() => false),
+		0,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		notebookTool,
+		(update) => notebookCommits.push(update),
+		(requestValue) => {
+			escalations.push(requestValue);
+			return "accepted";
+		},
+	);
+	rt.push("first turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.deepEqual(rt.takeAllAdvice(), []);
+	assert.deepEqual(escalations, []);
+	assert.deepEqual(notebookCommits, []);
+
+	rt.push("second turn");
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.deepEqual(
+		rt.takeAllAdvice().map(({ id: _id, ...note }) => note),
+		[{ note: "direct retry risk", severity: "concern" }],
+	);
+	assert.equal(escalations.length, 1);
+	assert.equal(notebookCommits.length, 1);
+});
+
+test("runtime: notebook persistence failure publishes no direct or Advisor effects", async () => {
+	let rt;
+	const escalations = [];
+	const notebookTool = {
+		begin() {},
+		clear() {},
+		takeStaged: () => ({ batchId: "batch-1" }),
+	};
+	const request = {
+		severity: "concern",
+		claim: "deep queue ownership risk",
+		whyDeepReasoning: "ownership spans several layers",
+		evidence: [{ kind: "file", ref: "src/queue.ts" }],
+	};
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			rt.enqueueAdvice("direct retry risk", "concern");
+			rt.stageEscalation(request);
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	rt = new A.PairRuntime(
+		agent,
+		new A.AdviseTool(() => false),
+		0,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		notebookTool,
+		() => {
+			throw new Error("session append failed");
+		},
+		(requestValue) => {
+			escalations.push(requestValue);
+			return "accepted";
+		},
+	);
+	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "failed");
+	assert.deepEqual(rt.takeAllAdvice(), []);
+	assert.deepEqual(escalations, []);
+});
+
+test("runtime: one successful attempt collapses an exact direct/Advisor shared root", async () => {
+	let rt;
+	const escalations = [];
+	const request = {
+		severity: "concern",
+		claim: "shared queue ownership",
+		whyDeepReasoning: "ownership spans several layers",
+		evidence: [{ kind: "file", ref: "src/queue.ts" }],
+	};
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			rt.enqueueAdvice("shared queue ownership", "concern");
+			rt.stageEscalation(request);
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	rt = new A.PairRuntime(
+		agent,
+		new A.AdviseTool(() => false),
+		0,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		(requestValue) => {
+			escalations.push(requestValue);
+			return "accepted";
+		},
+	);
+	rt.push("turn");
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.equal(escalations.length, 1);
+	assert.deepEqual(rt.takeAllAdvice(), [], "the same root is not queued on both delivery paths");
+});
+
 test("runtime queue: re-raising advice at higher severity escalates it", () => {
 	const rt = new A.PairRuntime(
 		{ state: { messages: [], model: {} }, async prompt() {}, abort() {}, reset() {} },
@@ -2595,6 +2723,54 @@ test("runtime queue: re-raising advice at higher severity escalates it", () => {
 	rt.enqueueAdvice("x", "blocker");
 	rt.enqueueAdvice("x", "concern");
 	assert.equal(rt.takeAllAdvice()[0].severity, "blocker");
+});
+
+test("boundary: a send failure requeues direct findings and retains Advisor delivery", () => {
+	const delivered = [];
+	const failed = [];
+	const advisorCommits = [];
+	assert.throws(
+		() =>
+			A.deliverBoundaryBatch({
+				direct: [{ note: "retry this", severity: "concern" }],
+				advisor: {
+					note: { note: "validated finding", severity: "concern", source: "advisor" },
+					commit: (...args) => advisorCommits.push(args),
+				},
+				send: () => {
+					throw new Error("session closed");
+				},
+				onDirectDelivered: (note) => delivered.push(note),
+				onDirectFailed: (note) => failed.push(note),
+			}),
+		/session closed/,
+	);
+	assert.deepEqual(delivered, []);
+	assert.deepEqual(failed, [{ note: "retry this", severity: "concern" }]);
+	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated Advisor candidate pending");
+});
+
+test("boundary: an exact cross-source duplicate keeps the direct finding only", () => {
+	const sent = [];
+	const commits = [];
+	const direct = [{ note: "Shared queue ownership", severity: "concern", source: "pair" }];
+	const advisor = {
+		note: { note: "Advisor restatement", severity: "concern", source: "advisor" },
+		dedupeKeys: ["shared queue ownership"],
+		commit: (...args) => commits.push(args),
+	};
+	assert.equal(
+		A.deliverBoundaryBatch({
+			direct,
+			advisor,
+			send: (notes) => sent.push(notes),
+			onDirectDelivered: () => {},
+			onDirectFailed: () => {},
+		}),
+		true,
+	);
+	assert.deepEqual(sent, [direct]);
+	assert.deepEqual(commits, [[false, true]], "duplicate Advisor identity remains suppressed without a second send");
 });
 
 test("boundary: direct Pair and ready Advisor findings share one outbound batch", () => {
@@ -2751,8 +2927,10 @@ test("agent-core ordering: a steer queued during streaming is inserted after tha
 // callbacks use PairRuntime's shared queue (covered by integration tests).
 async function lifecycleHarness() {
 	const sent = [];
+	const appended = [];
 	const runtime = createExtensionRuntime();
-	runtime.sendMessage = (msg, opts) => sent.push({ content: msg.content, opts });
+	runtime.sendMessage = (msg, opts) => sent.push({ ...msg, opts });
+	runtime.appendEntry = (customType, data) => appended.push({ customType, data });
 	const res = await loadExtensions(["index.ts"], SOURCE_DIR, createEventBus(), runtime);
 	assert.deepEqual(res.errors, []);
 	const ext = res.extensions[0];
@@ -2760,9 +2938,16 @@ async function lifecycleHarness() {
 		const v = ext.handlers.get(name);
 		return Array.isArray(v) ? v[0] : v;
 	};
+	const emit = async (name, ...args) => {
+		const value = ext.handlers.get(name);
+		for (const handler of Array.isArray(value) ? value : [value]) await handler?.(...args);
+	};
 	return {
 		sent,
+		appended,
 		h,
+		emit,
+		ack: ext.tools.get("acknowledge_pair_findings").definition,
 		cmd: ext.commands.get("pair").handler,
 		uiCtx: { ui: { notify: () => {} } },
 		turnCtx: { model: undefined, cwd: HERE },
@@ -2809,52 +2994,168 @@ test("lifecycle: primary compact leaves the pair alone; identity change does not
 	assert.deepEqual(x.sent, [], "identity change never emits advice by itself");
 });
 
+async function withPairReviewDisabled(run) {
+	const previous = process.env.PAIR_NO_REVIEW;
+	process.env.PAIR_NO_REVIEW = "1";
+	try {
+		await run();
+	} finally {
+		if (previous === undefined) delete process.env.PAIR_NO_REVIEW;
+		else process.env.PAIR_NO_REVIEW = previous;
+	}
+}
+
 test("lifecycle: a direct late nit after terminal turn_end restates", async () => {
-	assert.ok(!process.env.PAIR_NO_REVIEW, "needs the real turn_end handler");
-	const x = await lifecycleHarness();
-	await x.h("turn_end")(
-		{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
-		x.turnCtx,
-	);
-	await x.cmd("test nit parked", x.uiCtx);
-	assert.equal(x.sent.length, 1);
-	assert.match(x.sent[0].content, /self-contained final answer/);
-	assert.match(x.sent[0].content, /context="raised about an earlier step"/);
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
+			x.turnCtx,
+		);
+		await x.cmd("test nit parked", x.uiCtx);
+		assert.equal(x.sent.length, 1);
+		assert.match(x.sent[0].content, /self-contained final answer/);
+		assert.match(x.sent[0].content, /context="raised about an earlier step"/);
+	});
 });
 
 test("lifecycle: a terminal advisory closes review until the next user message", async () => {
-	assert.ok(!process.env.PAIR_NO_REVIEW, "needs the real turn_end handler");
-	const x = await lifecycleHarness();
-	await x.h("turn_end")(
-		{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
-		x.turnCtx,
-	);
-	await x.cmd("test nit first", x.uiCtx);
-	assert.equal(x.sent.length, 1);
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } },
+			x.turnCtx,
+		);
+		await x.cmd("test nit first", x.uiCtx);
+		assert.equal(x.sent.length, 1);
 
-	await x.h("turn_end")(
-		{ message: { role: "assistant", content: [{ type: "text", text: "revised answer" }] } },
-		x.turnCtx,
-	);
-	await x.cmd("test nit suppressed", x.uiCtx);
-	assert.equal(x.sent.length, 1, "the advisory-triggered correction must not start another review loop");
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "revised answer" }] } },
+			x.turnCtx,
+		);
+		await x.cmd("test nit suppressed", x.uiCtx);
+		assert.equal(x.sent.length, 1, "the advisory-triggered correction must not start another review loop");
 
-	x.h("message_end")({ message: { role: "user", content: [{ type: "text", text: "next request" }] } });
-	await x.cmd("test nit next", x.uiCtx);
-	assert.equal(x.sent.length, 2, "new user input opens a new supervision episode");
+		await x.emit("message_end", { message: { role: "user", content: [{ type: "text", text: "next request" }] } });
+		await x.cmd("test nit next", x.uiCtx);
+		assert.equal(x.sent.length, 2, "new user input opens a new supervision episode");
+	});
+});
+
+test("lifecycle: a typed material-finding acknowledgment is persisted and prevents a reminder", async () => {
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		const [finding] = A.identifyMaterialPairNotes([
+			{ note: "Persist before acknowledging.", severity: "concern", source: "pair" },
+		]);
+		const ctx = {
+			cwd: HERE,
+			sessionManager: {
+				getBranch: () => [{ type: "custom_message", customType: "advisory", details: { notes: [finding] } }],
+			},
+			ui: { setStatus: () => {} },
+		};
+		x.h("session_start")({}, ctx);
+
+		const result = await x.ack.execute("ack-1", {
+			findings: [{ id: finding.id, disposition: "address", reason: "Move the acknowledgment after commit." }],
+		});
+		assert.deepEqual(result.details, { accepted: [finding.id], errors: [] });
+		assert.deepEqual(x.appended, [
+			{
+				customType: "pair.finding.acknowledged",
+				data: {
+					id: finding.id,
+					note: "Persist before acknowledging.",
+					severity: "concern",
+					source: "pair",
+					deliveredTurn: 0,
+					disposition: "address",
+					reason: "Move the acknowledgment after commit.",
+				},
+			},
+		]);
+
+		await x.h("turn_end")({ message: { role: "assistant", content: [{ type: "text", text: "revised answer" }] } }, ctx);
+		assert.equal(x.sent.length, 0, "an acknowledged finding must not produce a reminder");
+	});
+});
+
+test("lifecycle: an unacknowledged material finding gets one reminder then telemetry", async () => {
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		const [finding] = A.identifyMaterialPairNotes([
+			{ note: "Preserve the durable state.", severity: "blocker", source: "pair" },
+		]);
+		const ctx = {
+			cwd: HERE,
+			sessionManager: {
+				getBranch: () => [{ type: "custom_message", customType: "advisory", details: { notes: [finding] } }],
+			},
+			ui: { setStatus: () => {} },
+		};
+		x.h("session_start")({}, ctx);
+
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "correction without acknowledgment" }] } },
+			ctx,
+		);
+		assert.equal(x.sent.length, 1);
+		assert.equal(x.sent[0].customType, "pair-ack-reminder");
+		assert.match(x.sent[0].content, new RegExp(finding.id));
+
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "reminder response" }] } },
+			ctx,
+		);
+		assert.equal(x.sent.length, 1, "the reminder must not repeat");
+		assert.equal(x.appended.length, 1);
+		assert.equal(x.appended[0].customType, "pair.finding.unacknowledged");
+		assert.equal(x.appended[0].data.id, finding.id);
+	});
+});
+
+test("lifecycle: restoring a persisted reminder closes the finding without sending another", async () => {
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		const [finding] = A.identifyMaterialPairNotes([
+			{ note: "Preserve the durable state.", severity: "blocker", source: "pair" },
+		]);
+		const ctx = {
+			cwd: HERE,
+			sessionManager: {
+				getBranch: () => [
+					{ type: "custom_message", customType: "advisory", details: { notes: [finding] } },
+					{ type: "custom_message", customType: "pair-ack-reminder", details: { findings: [finding] } },
+				],
+			},
+			ui: { setStatus: () => {} },
+		};
+		x.h("session_start")({}, ctx);
+
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "resumed after the reminder" }] } },
+			ctx,
+		);
+		assert.equal(x.sent.length, 0, "a persisted reminder must not repeat after reload");
+		assert.equal(x.appended.length, 1);
+		assert.equal(x.appended[0].customType, "pair.finding.unacknowledged");
+		assert.equal(x.appended[0].data.id, finding.id);
+	});
 });
 
 test("lifecycle: a direct late nit after non-terminal turn_end does not restate", async () => {
-	assert.ok(!process.env.PAIR_NO_REVIEW, "needs the real turn_end handler");
-	const x = await lifecycleHarness();
-	await x.h("turn_end")(
-		{ message: { role: "assistant", content: [{ type: "text", text: "working" }, { type: "toolCall" }] } },
-		x.turnCtx,
-	);
-	await x.cmd("test nit midrun", x.uiCtx);
-	assert.equal(x.sent.length, 1);
-	assert.doesNotMatch(x.sent[0].content, /self-contained final answer/);
-	assert.match(x.sent[0].content, /context="raised about an earlier step"/);
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		await x.h("turn_end")(
+			{ message: { role: "assistant", content: [{ type: "text", text: "working" }, { type: "toolCall" }] } },
+			x.turnCtx,
+		);
+		await x.cmd("test nit midrun", x.uiCtx);
+		assert.equal(x.sent.length, 1);
+		assert.doesNotMatch(x.sent[0].content, /self-contained final answer/);
+		assert.match(x.sent[0].content, /context="raised about an earlier step"/);
+	});
 });
 
 // ===========================================================================
