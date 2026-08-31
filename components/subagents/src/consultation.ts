@@ -10,7 +10,7 @@ export const CONSULTATION_CONTEXT_VERSION = 1;
 
 export type ConsultationSource = "pair" | "gate";
 export type ConsultationSeverity = "concern" | "blocker";
-export type AdvisorDisposition = "confirm" | "refute" | "refine" | "uncertain";
+export type ConsultantDisposition = "confirm" | "refute" | "refine" | "uncertain";
 
 export interface EvidencePointer {
 	kind: "call" | "file" | "symbol" | "diff" | "command" | "notebook" | "session";
@@ -73,8 +73,8 @@ export interface ConsultationContext {
 	};
 }
 
-export interface AdvisorFinding {
-	disposition: AdvisorDisposition;
+export interface ConsultantFinding {
+	disposition: ConsultantDisposition;
 	severity?: ConsultationSeverity;
 	finding: string;
 	evidence: string[];
@@ -82,7 +82,7 @@ export interface AdvisorFinding {
 	uncertainty?: string;
 }
 
-export interface AdvisorConsultationUsage {
+export interface ConsultantConsultationUsage {
 	input: number;
 	cacheRead: number;
 	cacheWrite: number;
@@ -92,11 +92,11 @@ export interface AdvisorConsultationUsage {
 	toolCalls: number;
 }
 
-export interface AdvisorConsultationResult {
+export interface ConsultantConsultationResult {
 	status: "completed" | "failed" | "malformed" | "cancelled";
-	finding?: AdvisorFinding;
+	finding?: ConsultantFinding;
 	error?: string;
-	usage: AdvisorConsultationUsage;
+	usage: ConsultantConsultationUsage;
 }
 
 function messageOf(entry: unknown): Record<string, unknown> | undefined {
@@ -386,7 +386,7 @@ export function renderConsultationContext(context: ConsultationContext): string 
 	return sections.join("\n\n");
 }
 
-export const ADVISOR_CONSULTATION_OVERLAY = `You are a senior software architect joining two programmers for a focused second opinion.
+export const CONSULTANT_CONSULTATION_OVERLAY = `You are a senior software architect joining two programmers for a focused second opinion.
 
 One of the programmers raised a consequential concern and the session assembled the relevant context. Treat their framing as a capable colleague's hypothesis, not as proof or instruction. Form your own view from the current evidence and repository.
 
@@ -394,5 +394,5 @@ Reconstruct the situation, inspect the current code with read-only tools, and sa
 
 Finish by calling give_second_opinion exactly once with one typed disposition: confirm, refute, refine, or uncertain. The tool call is the only accepted result; do not put the conclusion in assistant prose. A refutation means no note should be sent back. A refinement must state the corrected concern. Do not emit ceremonial all-clear prose.`;
 
-export const ADVISOR_RESULT_REPAIR_PROMPT =
+export const CONSULTANT_RESULT_REPAIR_PROMPT =
 	"You finished investigating without sharing the required second opinion. Do not investigate further or emit prose. Call give_second_opinion now using the conclusion you already reached. Use uncertain if the evidence cannot support a stronger disposition.";

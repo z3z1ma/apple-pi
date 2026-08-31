@@ -33,9 +33,9 @@ import {
 import { registerBtwCommand } from "./btw.js";
 import { inChildSessionContext } from "./child-context.js";
 import {
-	ADVISOR_CONSULTATION_OVERLAY,
-	ADVISOR_RESULT_REPAIR_PROMPT,
-	type AdvisorFinding,
+	CONSULTANT_CONSULTATION_OVERLAY,
+	CONSULTANT_RESULT_REPAIR_PROMPT,
+	type ConsultantFinding,
 	renderConsultationContext,
 } from "./consultation.js";
 import { loadCustomAgents } from "./custom-agents.js";
@@ -331,10 +331,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		},
 		async runConsultation(ctx, request) {
 			bindSessionContext(ctx);
-			const dispatch = resolveSpawnType("Advisor");
+			const dispatch = resolveSpawnType("Consultant");
 			if (!dispatch.ok) throw new Error(dispatch.message);
 			const configured = getAgentConfig(dispatch.type);
-			if (!configured) throw new Error('Unknown or disabled agent type: "Advisor"');
+			if (!configured) throw new Error('Unknown or disabled agent type: "Consultant"');
 			const agentConfig = {
 				...configured,
 				pair: false,
@@ -349,7 +349,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				explicitProfile: request.profile,
 			});
 			if (resolved.error) throw new Error(resolved.error);
-			let finding: AdvisorFinding | undefined;
+			let finding: ConsultantFinding | undefined;
 			const reportTool = defineTool({
 				name: "give_second_opinion",
 				label: "Report Consultation",
@@ -394,16 +394,16 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			try {
 				record = await managedService.runFresh(ctx, {
 					type: dispatch.type,
-					description: "Advisor consultation",
+					description: "Consultant consultation",
 					prompt: renderConsultationContext(request.context),
 					agentConfig,
 					model: resolved.model,
 					thinkingLevel: resolved.thinkingLevel,
-					systemPrompt: ADVISOR_CONSULTATION_OVERLAY,
+					systemPrompt: CONSULTANT_CONSULTATION_OVERLAY,
 					customTools: [reportTool, ...bindPrimaryRecallTools(ctx.sessionManager)],
 					requiredResult: {
 						isSatisfied: () => finding !== undefined,
-						repairPrompt: ADVISOR_RESULT_REPAIR_PROMPT,
+						repairPrompt: CONSULTANT_RESULT_REPAIR_PROMPT,
 						toolNames: [reportTool.name],
 					},
 					toolExecution: "sequential",
@@ -437,11 +437,11 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					: thrown
 						? String(thrown)
 						: (record?.error ??
-							(resultStatus === "malformed" ? "Advisor returned without a typed disposition." : undefined));
+							(resultStatus === "malformed" ? "Consultant returned without a typed disposition." : undefined));
 			const sessionId = ctx.sessionManager.getSessionId?.() ?? ctx.sessionManager.getSessionFile?.() ?? undefined;
 			withSidecarUsageContext({ sessionId }, () => {
 				recordSidecarUsage({
-					agent: "advisor",
+					agent: "consultant",
 					trigger: `consultation:${request.context.metadata.source}`,
 					status: finding?.disposition ?? resultStatus,
 					provider: resolved.model?.provider,
@@ -738,7 +738,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			`You are the senior engineer integrating the work. Use the live <${TEAM_SYSTEM_PROMPT_TAG}> block to choose a teammate whose role genuinely fits, and normally keep their configured inference profile. If nobody fits or coordination would cost more than it saves, keep the work in this session.`,
 			"Do not ask multiple teammates to write the same files. Do not retry an unchanged rejected task.",
 			`Use the agent tool to collaborate with a teammate and pi_exec agent.run to compose model workers in a program graph. agent subagent_type and agent.run type choose a teammate; profile chooses an inference profile. The agent tool's system_prompt and agent.run's systemPrompt add focused guidance without changing capabilities.`,
-			"Your pair programming partner follows the root session. Implement pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
+			"Your pair programming partner follows the root session. Builder pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
 			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
 		],
 		parameters: Type.Object({

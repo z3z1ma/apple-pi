@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AdvisorConsultationResult } from "../../subagents/src/consultation.js";
+import type { ConsultantConsultationResult } from "../../subagents/src/consultation.js";
 import {
 	EscalateTool,
-	MIN_TURNS_BETWEEN_ADVISOR,
+	MIN_TURNS_BETWEEN_CONSULTANT,
 	PAIR_SESSION_TOOLS,
 	PairEscalationController,
 	RepeatedFailureDetector,
 } from "../src/index.js";
 
-function harness(result: AdvisorConsultationResult, minTurnsBetween = 0) {
+function harness(result: ConsultantConsultationResult, minTurnsBetween = 0) {
 	let state = "initial";
 	let captureGate: Promise<void> | undefined;
 	let releaseCapture: (() => void) | undefined;
@@ -90,7 +90,7 @@ const usage = { input: 100, cacheRead: 50, cacheWrite: 0, output: 20, cost: 0.2,
 
 describe("pair programmer escalation machinery", () => {
 	it("keeps architectural consultation private and excludes delegation or mutation capabilities", () => {
-		expect(PAIR_SESSION_TOOLS).toContain("ask_advisor");
+		expect(PAIR_SESSION_TOOLS).toContain("ask_consultant");
 		for (const forbidden of ["Agent", "pi_exec", "bash", "edit", "write", "mcp"]) {
 			expect(PAIR_SESSION_TOOLS).not.toContain(forbidden);
 		}
@@ -159,7 +159,7 @@ describe("pair programmer escalation machinery", () => {
 
 		expect(delivered).toEqual([
 			expect.objectContaining({
-				source: "advisor",
+				source: "consultant",
 				adjudication: "confirm",
 				severity: "blocker",
 				note: expect.stringContaining("Acknowledgement precedes durable insertion"),
@@ -173,8 +173,8 @@ describe("pair programmer escalation machinery", () => {
 	});
 
 	it("suppresses a refutation and collapses an equivalent concurrent escalation", async () => {
-		let settle!: (result: AdvisorConsultationResult) => void;
-		const pending = new Promise<AdvisorConsultationResult>((resolve) => {
+		let settle!: (result: ConsultantConsultationResult) => void;
+		const pending = new Promise<ConsultantConsultationResult>((resolve) => {
 			settle = resolve;
 		});
 		const h = harness({
@@ -197,7 +197,7 @@ describe("pair programmer escalation machinery", () => {
 		expect(h.controller.stats.suppressed).toBe(1);
 	});
 
-	it("does not retain unavailable or failed attempts in advisor deduplication", async () => {
+	it("does not retain unavailable or failed attempts in Consultant deduplication", async () => {
 		const unavailable = new PairEscalationController({
 			pi: {} as never,
 			getContext: () => undefined,
@@ -249,7 +249,7 @@ describe("pair programmer escalation machinery", () => {
 
 	it.each([
 		{ status: "failed" as const, error: "deep provider unavailable" },
-		{ status: "malformed" as const, error: "Advisor returned without a typed disposition." },
+		{ status: "malformed" as const, error: "Consultant returned without a typed disposition." },
 	])("records $status without promoting the escalation hypothesis to advice", async ({ status, error }) => {
 		const h = harness({ status, error, usage: { ...usage, cost: 0 } });
 		h.controller.submit("pair", request, 1);
@@ -280,7 +280,7 @@ describe("pair programmer escalation machinery", () => {
 	it("throttles starts by four turns without imposing an absolute consultation maximum", async () => {
 		const h = harness(
 			{ status: "completed", finding: { disposition: "refute", finding: "No issue.", evidence: [] }, usage },
-			MIN_TURNS_BETWEEN_ADVISOR,
+			MIN_TURNS_BETWEEN_CONSULTANT,
 		);
 		h.controller.submit("pair", request, 1);
 		await vi.waitFor(() => expect(h.service.runConsultation).toHaveBeenCalledTimes(1));

@@ -21,7 +21,7 @@ import { resolveAgentProfile } from "../components/subagents/src/model-routing.j
 import type { AgentConfig, SubagentConfigScope } from "../components/subagents/src/types.js";
 
 import { AUTO_COMPACT_EXTENSION_PATH } from "./auto-compact.js";
-import { CODEX_FAST_EXTENSION_PATH } from "./codex-fast.js";
+import { CODEX_FAST_EXTENSION_PATH } from "./codex-vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "./home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "./ledger.js";
 import { PAIR_EXTENSION_PATH } from "./pi-pair.js";

@@ -99,16 +99,19 @@ test("isHighSeverity: only concern/blocker are held + reconfirmed", () => {
 	assert.equal(A.isHighSeverity("blocker"), true);
 });
 
-test("formatPairFooterText: pair programmer is default and Advisor work is visible", () => {
+test("formatPairFooterText: pair programmer is default and Consultant work is visible", () => {
 	assert.equal(A.formatPairFooterText(false, 0), "pair programmer: $0.00");
 	assert.equal(A.formatPairFooterText(true, 0.02), "pair programmer (reviewing): $0.02");
 	assert.equal(A.formatPairFooterText(false, 1.5), "pair programmer: $1.50");
-	assert.equal(A.formatPairFooterText(false, 0.02, "advisor_running", 0.5), "pair programmer → Advisor: $0.52");
+	assert.equal(A.formatPairFooterText(false, 0.02, "consultant_running", 0.5), "pair programmer → Consultant: $0.52");
 	assert.equal(
 		A.formatPairFooterText(false, 0.02, "escalation_pending", 0.5),
-		"pair programmer (Advisor queued): $0.52",
+		"pair programmer (Consultant queued): $0.52",
 	);
-	assert.equal(A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5), "pair programmer (Advisor ready): $0.52");
+	assert.equal(
+		A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5),
+		"pair programmer (Consultant ready): $0.52",
+	);
 });
 
 test("formatReconfirmPreamble: empty when nothing held, else lists held notes", () => {
@@ -1009,7 +1012,7 @@ test("default pair prompt names primary-bound recall tools", () => {
 		assert.match(prompt, /your partner's transcript/);
 		assert.match(prompt, /call:<id>/);
 		assert.match(prompt, /You are pair programming with another capable coding agent/);
-		assert.match(prompt, /Call `ask_advisor` instead/);
+		assert.match(prompt, /Call `ask_consultant` instead/);
 		assert.match(prompt, /Consolidate symptoms and consequences that share one root cause/);
 		assert.match(prompt, /Never call both tools for the same issue/);
 		assert.match(prompt, /there is no finding quota/);
@@ -2380,7 +2383,7 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 	assert.equal(afterReset, false, "advice rejected once the review's epoch is orphaned");
 });
 
-test("runtime: failed reviews commit no direct, Advisor, or notebook effects", async () => {
+test("runtime: failed reviews commit no direct, Consultant, or notebook effects", async () => {
 	let attempt = 0;
 	let rt;
 	const escalations = [];
@@ -2448,7 +2451,7 @@ test("runtime: failed reviews commit no direct, Advisor, or notebook effects", a
 	assert.equal(notebookCommits.length, 2);
 });
 
-test("runtime: notebook persistence failure publishes no direct or Advisor effects", async () => {
+test("runtime: notebook persistence failure publishes no direct or Consultant effects", async () => {
 	let rt;
 	const escalations = [];
 	const notebookTool = {
@@ -2495,7 +2498,7 @@ test("runtime: notebook persistence failure publishes no direct or Advisor effec
 	assert.deepEqual(escalations, []);
 });
 
-test("runtime: one successful attempt collapses an exact direct/Advisor shared root", async () => {
+test("runtime: one successful attempt collapses an exact direct/Consultant shared root", async () => {
 	let rt;
 	const escalations = [];
 	const request = {
@@ -2552,7 +2555,7 @@ test("runtime queue: re-raising advice at higher severity escalates it", () => {
 	assert.equal(rt.takeAllAdvice()[0].severity, "blocker");
 });
 
-test("boundary: a send failure requeues direct findings and retains Advisor delivery", () => {
+test("boundary: a send failure requeues direct findings and retains Consultant delivery", () => {
 	const delivered = [];
 	const failed = [];
 	const advisorCommits = [];
@@ -2561,7 +2564,7 @@ test("boundary: a send failure requeues direct findings and retains Advisor deli
 			A.deliverBoundaryBatch({
 				direct: [{ note: "retry this", severity: "concern" }],
 				advisor: {
-					note: { note: "validated finding", severity: "concern", source: "advisor" },
+					note: { note: "validated finding", severity: "concern", source: "consultant" },
 					commit: (...args) => advisorCommits.push(args),
 				},
 				send: () => {
@@ -2574,7 +2577,7 @@ test("boundary: a send failure requeues direct findings and retains Advisor deli
 	);
 	assert.deepEqual(delivered, []);
 	assert.deepEqual(failed, [{ note: "retry this", severity: "concern" }]);
-	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated Advisor candidate pending");
+	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated Consultant candidate pending");
 });
 
 test("boundary: an exact cross-source duplicate keeps the direct finding only", () => {
@@ -2582,7 +2585,7 @@ test("boundary: an exact cross-source duplicate keeps the direct finding only", 
 	const commits = [];
 	const direct = [{ note: "Shared queue ownership", severity: "concern", source: "pair" }];
 	const advisor = {
-		note: { note: "Advisor restatement", severity: "concern", source: "advisor" },
+		note: { note: "Consultant restatement", severity: "concern", source: "consultant" },
 		dedupeKeys: ["shared queue ownership"],
 		commit: (...args) => commits.push(args),
 	};
@@ -2597,16 +2600,16 @@ test("boundary: an exact cross-source duplicate keeps the direct finding only", 
 		true,
 	);
 	assert.deepEqual(sent, [direct]);
-	assert.deepEqual(commits, [[false, true]], "duplicate Advisor identity remains suppressed without a second send");
+	assert.deepEqual(commits, [[false, true]], "duplicate Consultant identity remains suppressed without a second send");
 });
 
-test("boundary: direct pair programmer and ready Advisor findings share one outbound batch", () => {
+test("boundary: direct pair programmer and ready Consultant findings share one outbound batch", () => {
 	const sent = [];
 	const delivered = [];
 	const commits = [];
 	const direct = [{ note: "pair programmer finding", severity: "concern", source: "pair" }];
 	const advisor = {
-		note: { note: "Advisor finding", severity: "blocker", source: "advisor", adjudication: "confirm" },
+		note: { note: "Consultant finding", severity: "blocker", source: "consultant", adjudication: "confirm" },
 		commit: (value) => commits.push(value),
 	};
 
@@ -2623,7 +2626,7 @@ test("boundary: direct pair programmer and ready Advisor findings share one outb
 	assert.equal(sent.length, 1, "one boundary produces one outbound send");
 	assert.deepEqual(
 		sent[0].map((note) => note.source),
-		["pair", "advisor"],
+		["pair", "consultant"],
 	);
 	assert.deepEqual(delivered, ["pair programmer finding"]);
 	assert.deepEqual(commits, [true]);

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	buildConsultationContext,
 	captureConsultationWorkingState,
-	ADVISOR_CONSULTATION_OVERLAY,
+	CONSULTANT_CONSULTATION_OVERLAY,
 	renderConsultationContext,
 } from "../src/consultation.js";
 
@@ -169,9 +169,9 @@ describe("consultation context", () => {
 	});
 
 	it("keeps the architect's second opinion independent, read-only, and typed", () => {
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("senior software architect");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("hypothesis, not as proof");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("You do not outrank the programmers");
-		expect(ADVISOR_CONSULTATION_OVERLAY).toContain("give_second_opinion exactly once");
+		expect(CONSULTANT_CONSULTATION_OVERLAY).toContain("senior software architect");
+		expect(CONSULTANT_CONSULTATION_OVERLAY).toContain("hypothesis, not as proof");
+		expect(CONSULTANT_CONSULTATION_OVERLAY).toContain("You do not outrank the programmers");
+		expect(CONSULTANT_CONSULTATION_OVERLAY).toContain("give_second_opinion exactly once");
 	});
 });

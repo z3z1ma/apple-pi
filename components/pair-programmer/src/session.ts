@@ -30,7 +30,7 @@ export type PairSeedSource = {
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const PAIR_SESSION_TOOLS = [
 	"share_note",
-	"ask_advisor",
+	"ask_consultant",
 	"read",
 	"grep",
 	"find",

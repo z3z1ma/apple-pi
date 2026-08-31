@@ -10,7 +10,7 @@ interface AgentInvocationParams {
 
 /** An explicit invocation value overrides the agent definition default. */
 export function resolveAgentPair(agentConfig: AgentConfig | undefined, requestedPair: boolean | undefined): boolean {
-	return requestedPair ?? agentConfig?.pair ?? agentConfig?.name.toLowerCase() === "implement";
+	return requestedPair ?? agentConfig?.pair ?? agentConfig?.name.toLowerCase() === "builder";
 }
 
 export function resolveAgentInvocationConfig(

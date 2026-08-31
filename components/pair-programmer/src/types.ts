@@ -1,6 +1,6 @@
 import type {
-	AdvisorConsultationUsage,
-	AdvisorDisposition,
+	ConsultantConsultationUsage,
+	ConsultantDisposition,
 	ConsultationHypothesis,
 	ConsultationSource,
 	EvidencePointer,
@@ -12,8 +12,8 @@ export interface PairNote {
 	id?: string;
 	note: string;
 	severity?: PairSeverity;
-	source?: "pair" | "advisor";
-	adjudication?: AdvisorDisposition;
+	source?: "pair" | "consultant" | "advisor";
+	adjudication?: ConsultantDisposition;
 }
 
 export type PairEscalation = ConsultationHypothesis;
@@ -22,8 +22,8 @@ export type PairEvidencePointer = EvidencePointer;
 export type PairEscalationState =
 	| "idle"
 	| "escalation_pending"
-	| "advisor_running"
-	| "advisor_settled"
+	| "consultant_running"
+	| "consultant_settled"
 	| "delivery_pending"
 	| "failed"
 	| "cancelled";
@@ -31,7 +31,7 @@ export type PairEscalationState =
 export interface EscalationOutcome {
 	id: string;
 	source: ConsultationSource;
-	disposition?: AdvisorDisposition;
+	disposition?: ConsultantDisposition;
 	originalSeverity: "concern" | "blocker";
 	finalSeverity?: "concern" | "blocker";
 	delivered: boolean;
@@ -39,7 +39,7 @@ export interface EscalationOutcome {
 	adoption: "unknown";
 	validationOutcome: "unknown";
 	status: "completed" | "failed" | "malformed" | "cancelled";
-	usage: AdvisorConsultationUsage;
+	usage: ConsultantConsultationUsage;
 }
 
 export type { PrimaryTurnState } from "../../shared/src/types.js";

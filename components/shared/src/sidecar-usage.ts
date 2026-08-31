@@ -24,7 +24,7 @@ export const SIDECAR_USAGE_RECORD_KEYS = [
 	"threshold",
 ] as const;
 
-export type SidecarAgent = "pair" | "advisor";
+export type SidecarAgent = "pair" | "consultant";
 
 export type SidecarUsageRecord = {
 	ts: string;

@@ -1,7 +1,7 @@
 /**
  * /pair — persistent read-only supervision of the main agent's work.
  * The pair programmer is the sole persistent watcher and can submit typed hypotheses to a
- * host-controlled, non-recursive Advisor consultation.
+ * host-controlled, non-recursive Consultant consultation.
  *
  * Delivery model. Every advise() call enters one shared output queue. The pair programmer's
  * review and primary execution remain independent; only Pi's exact
@@ -112,7 +112,7 @@ type PreparedBoundaryFinding = {
 
 const findingIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 
-/** Commit direct pair programmer and prepared Advisor findings through one outbound batch. */
+/** Commit direct pair programmer and prepared Consultant findings through one outbound batch. */
 export function deliverBoundaryBatch(args: {
 	direct: PairNote[];
 	advisor?: PreparedBoundaryFinding;
@@ -237,7 +237,7 @@ export class AdviseTool {
 	readonly name = "share_note";
 	readonly label = "Advise";
 	readonly description =
-		"Share one concise, actionable finding with your pair programming partner when you see something that could materially improve or protect the work. Consolidate symptoms that share one root cause, but keep distinct material issues separate. Do not manage implementation, narrate status, acknowledge progress, praise, summarize, or say that everything looks good or an earlier issue is resolved. Use ask_advisor instead of also sharing the same issue when it needs deep independent judgment.";
+		"Share one concise, actionable finding with your pair programming partner when you see something that could materially improve or protect the work. Consolidate symptoms that share one root cause, but keep distinct material issues separate. Do not manage implementation, narrate status, acknowledge progress, praise, summarize, or say that everything looks good or an earlier issue is resolved. Use ask_consultant instead of also sharing the same issue when it needs deep independent judgment.";
 	readonly parameters = adviseSchema as any;
 	#delivered = new Map<string, number>();
 
@@ -296,7 +296,7 @@ import {
 
 export {
 	EscalateTool,
-	MIN_TURNS_BETWEEN_ADVISOR,
+	MIN_TURNS_BETWEEN_CONSULTANT,
 	PairEscalationController,
 	RepeatedFailureDetector,
 } from "./escalation.js";
@@ -616,7 +616,7 @@ export class PairRuntime {
 		this.#upsertAdvice(note, severity, findingId);
 	}
 
-	/** Stage an Advisor request so failed or stale pair programmer attempts cannot launch work. */
+	/** Stage a Consultant request so failed or stale pair programmer attempts cannot launch work. */
 	stageEscalation(request: PairEscalation): EscalationAcceptance {
 		const attempt = this.#attemptEffects;
 		if (!attempt || !this.acceptingAdvice) return "unavailable";
@@ -979,12 +979,12 @@ export function formatPairFooterText(
 	advisorCostUsd = 0,
 ): string {
 	const state =
-		advisorState === "advisor_running"
-			? "pair programmer → Advisor"
+		advisorState === "consultant_running"
+			? "pair programmer → Consultant"
 			: advisorState === "escalation_pending"
-				? "pair programmer (Advisor queued)"
+				? "pair programmer (Consultant queued)"
 				: advisorState === "delivery_pending"
-					? "pair programmer (Advisor ready)"
+					? "pair programmer (Consultant ready)"
 					: reviewing
 						? "pair programmer (reviewing)"
 						: "pair programmer";
@@ -1395,7 +1395,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function flushAdvisorFinding(): Promise<void> {
+	function flushConsultantFinding(): Promise<void> {
 		if (advisorFlush) return advisorFlush;
 		const generation = constructionEpoch;
 		const controller = escalationController;
@@ -1423,7 +1423,7 @@ export default function (pi: ExtensionAPI) {
 					for (const key of prepared.dedupeKeys ?? []) deliveredFindingKeys.add(findingIdentity(key));
 				}
 			} catch (error) {
-				dbg("Advisor delivery failed", String(error));
+				dbg("Consultant delivery failed", String(error));
 			} finally {
 				if (latestCtx) updateStatus(latestCtx);
 			}
@@ -1438,7 +1438,7 @@ export default function (pi: ExtensionAPI) {
 	function flushBoundaryFindings(): void {
 		if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		flushDirectFindings();
-		void flushAdvisorFinding();
+		void flushConsultantFinding();
 	}
 
 	function ensureEscalationController(): PairEscalationController {
@@ -1813,7 +1813,7 @@ export default function (pi: ExtensionAPI) {
 
 	// One source-addressed delta per primary turn. Every turn enqueues background
 	// work and returns without awaiting construction, review, tools, retries,
-	// Advisor work, or delivery preparation.
+	// Consultant work, or delivery preparation.
 	pi.on("turn_end", (event, ctx) => {
 		// This is only a writer commit point, not an output/scheduling boundary.
 		if (!enabled) return;
@@ -1918,7 +1918,7 @@ export default function (pi: ExtensionAPI) {
 			if (index > 0) container.addChild(new Spacer(1));
 			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
-			const role = n.source === "advisor" ? "Advisor" : "pair programmer";
+			const role = n.source === "consultant" || n.source === "advisor" ? "Consultant" : "pair programmer";
 			const card = new Container();
 			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));
 			card.addChild(new Spacer(1));
@@ -1973,7 +1973,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(
 					`pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
-						`Advisor — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
+						`Consultant — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
 				);
 				return;

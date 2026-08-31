@@ -7,7 +7,7 @@ import { installTodos, promptTodoFields } from "../src/installer.js";
 
 describe("todo manager field mapping", () => {
 	it("maps optional execution fields and preserves explicit clearing", async () => {
-		const answers = ["Updated", "Context", "Running", "Implement", "coding"];
+		const answers = ["Updated", "Context", "Running", "Builder", "coding"];
 		const fields = await promptTodoFields({
 			editor: async () => answers.shift(),
 		});
@@ -15,12 +15,12 @@ describe("todo manager field mapping", () => {
 			title: "Updated",
 			description: "Context",
 			activeForm: "Running",
-			agentType: "Implement",
+			agentType: "Builder",
 			agentProfile: "coding",
 		});
 		const cleared = await promptTodoFields(
 			{ editor: async (label) => (label === "Todo title" ? "Keep" : "") },
-			{ title: "Old", activeForm: "Old form", agentType: "Explore", agentProfile: "quick" },
+			{ title: "Old", activeForm: "Old form", agentType: "Explorer", agentProfile: "quick" },
 		);
 		expect(cleared).toMatchObject({ title: "Keep", activeForm: "", agentType: "", agentProfile: "" });
 	});
@@ -51,13 +51,13 @@ describe("todos extension", () =>
 		const created = await byName("todo_create").execute("call", {
 			title: "one",
 			description: "full context",
-			agent_type: "Implement",
+			agent_type: "Builder",
 			profile: "coding",
 			active_form: "Creating",
 		});
 		expect(created.content[0].text).toContain("Created #1");
 		expect(created.details).toMatchObject({
-			agentType: "Implement",
+			agentType: "Builder",
 			agentProfile: "coding",
 			activeForm: "Creating",
 		});
@@ -73,7 +73,7 @@ describe("todos extension", () =>
 		expect(got.content[0].text).toContain("one");
 		expect(got.content[0].text).toContain("Description: full context");
 		expect(got.content[0].text).toContain("Active form: Creating");
-		expect(got.content[0].text).toContain("Agent type: Implement");
+		expect(got.content[0].text).toContain("Agent type: Builder");
 		expect(got.content[0].text).toContain("Profile: coding");
 		expect(got.content[0].text).toContain("Created:");
 		expect(got.content[0].text).toContain("Updated:");
@@ -135,7 +135,7 @@ it("settles local execution before tree navigation and never appends old state a
 	};
 	handlers.get("session_start")({}, ctx);
 	const byName = (name: string) => tools.find((tool) => tool.name === name);
-	await byName("todo_create").execute("call", { title: "run", agent_type: "Implement" }, undefined, undefined, ctx);
+	await byName("todo_create").execute("call", { title: "run", agent_type: "Builder" }, undefined, undefined, ctx);
 	await byName("todo_execute").execute("call", { ids: [1] }, undefined, undefined, ctx);
 	appendEntry.mockClear();
 	await handlers.get("session_before_tree")({}, ctx);

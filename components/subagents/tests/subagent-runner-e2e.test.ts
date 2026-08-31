@@ -73,7 +73,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 
 			const untrusted = beforeStart({ systemPrompt: "root" }, { cwd, isProjectTrusted: () => false } as any)
 				.systemPrompt as string;
-			expect(untrusted).toContain('"name": "Explore"');
+			expect(untrusted).toContain('"name": "Explorer"');
 			expect(untrusted).not.toContain("project-injected");
 			expect(untrusted).not.toContain("UNTRUSTED SYSTEM TEXT");
 		} finally {
@@ -787,7 +787,7 @@ RELOADED ROLE MUST NOT RUN.
 					resume: record.id,
 					prompt: "continue",
 					description: "resume",
-					subagent_type: "Explore",
+					subagent_type: "Explorer",
 				},
 				undefined,
 				undefined,
@@ -811,7 +811,7 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
-	it("runs internal Advisor adjudication from harness-assembled context with no recursive pair programmer", async () => {
+	it("runs internal Consultant adjudication from harness-assembled context with no recursive pair programmer", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({
@@ -931,7 +931,16 @@ RELOADED ROLE MUST NOT RUN.
 			expect(requestTexts[1]).toContain("The risk appears to be flush ordering.");
 			expect(systemText).toContain("senior software architect");
 			expect(activeToolSets[0]).toEqual(expect.arrayContaining(["read", "grep", "find", "ls", "give_second_opinion"]));
-			for (const forbidden of ["agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "share_note", "ask_advisor"]) {
+			for (const forbidden of [
+				"agent",
+				"pi_exec",
+				"edit",
+				"write",
+				"ledger_add",
+				"mcp",
+				"share_note",
+				"ask_consultant",
+			]) {
 				expect(activeToolSets[0]).not.toContain(forbidden);
 			}
 			expect(activeToolSets[1]).toEqual(["give_second_opinion"]);

@@ -23,12 +23,12 @@ You have no file editing or shell tool capability. Read-only access is enforced 
 
 export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 	[
-		"Explore",
+		"Explorer",
 		{
-			name: "Explore",
-			displayName: "Explore",
+			name: "Explorer",
+			displayName: "Explorer",
 			description:
-				'A quick read-only codebase scout for broad local discovery across multiple areas, naming conventions, or hypotheses. Bring Explore in when a compact map of unfamiliar code would save you time. Prefer your own grep, find, and read calls for known paths or targeted symbols. Explore is not the teammate for external docs (Research), architecture or costly judgment (Advisor), implementation planning (Plan), code review, design-doc auditing, or open-ended analysis; it reads excerpts and may miss content past its read window. Ask for "quick", "medium", or "very thorough" search breadth.',
+				'A quick read-only codebase scout for broad local discovery across multiple areas, naming conventions, or hypotheses. Bring Explorer in when a compact map of unfamiliar code would save you time. Prefer your own grep, find, and read calls for known paths or targeted symbols. Explorer is not the teammate for external docs (Researcher), architecture or costly judgment (Consultant), implementation planning (Planner), code review, design-doc auditing, or open-ended analysis; it reads excerpts and may miss content past its read window. Ask for "quick", "medium", or "very thorough" search breadth.',
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -47,18 +47,18 @@ Your role is exclusively read-only search and analysis.
 # Output
 - Report findings as regular messages
 - Be thorough and precise
-- Do not replace a Research lookup of official docs with guesses about this repository`,
+- Do not replace a Researcher lookup of official docs with guesses about this repository`,
 			promptMode: "replace",
 			isDefault: true,
 		},
 	],
 	[
-		"Plan",
+		"Planner",
 		{
-			name: "Plan",
-			displayName: "Plan",
+			name: "Planner",
+			displayName: "Planner",
 			description:
-				"An architecture-minded planning teammate for non-trivial implementation work with cross-module dependencies, consequential trade-offs, migrations, or unclear ownership. Plan returns a step-by-step implementation approach and identifies the critical files. Keep routine planning in your own session; use Advisor for high-stakes should/root-cause/YAGNI judgment, and use an implementation teammate to write code.",
+				"An architecture-minded planning teammate for non-trivial implementation work with cross-module dependencies, consequential trade-offs, migrations, or unclear ownership. Planner returns a step-by-step implementation approach and identifies the critical files. Keep routine planning in your own session; use Consultant for high-stakes should/root-cause/YAGNI judgment, and use a Builder to write code.",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -80,7 +80,7 @@ You do not implement the plan.
 - Identify dependencies and sequencing
 - Anticipate potential challenges
 - Follow existing patterns where appropriate
-- Do not implement. Do not treat this as Advisor: the primary artifact is a how-to-implement plan, not a should-we verdict.
+- Do not implement. Do not treat this as Consultant: the primary artifact is a how-to-implement plan, not a should-we verdict.
 
 # Output Format
 End your response with:
@@ -93,12 +93,12 @@ List 3-5 files most critical for implementing this plan:
 		},
 	],
 	[
-		"Research",
+		"Researcher",
 		{
-			name: "Research",
-			displayName: "Research",
+			name: "Researcher",
+			displayName: "Researcher",
 			description:
-				"An external research teammate for official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Bring Research in when current sourced knowledge would materially help. Use Explore for local codebase maps, Advisor for architecture or costly trade-offs, and an implementation teammate for code. Without documentation tools or bound sources, Research will not invent version-specific APIs.",
+				"An external research teammate for official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Bring Researcher in when current sourced knowledge would materially help. Use Explorer for local codebase maps, Consultant for architecture or costly trade-offs, and Builder for code. Without documentation tools or bound sources, Researcher will not invent version-specific APIs.",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -119,18 +119,18 @@ This is not local codebase reconnaissance.
 
 # Constraints
 - Do not implement, plan a migration, or redesign the caller's architecture
-- Do not replace an Explore search of this repository with speculation`,
+- Do not replace an Explorer search of this repository with speculation`,
 			promptMode: "replace",
 			isDefault: true,
 		},
 	],
 	[
-		"Advisor",
+		"Consultant",
 		{
-			name: "Advisor",
-			displayName: "Advisor",
+			name: "Consultant",
+			displayName: "Consultant",
 			description:
-				"A senior software architect who joins the team for difficult decisions, costly trade-offs, persistent bugs, and simplification judgment. Advisor gives a fresh, read-only second opinion and does not implement. Bring Advisor in after failed fix attempts or when a wrong choice would be expensive. Do not use this teammate for routine implementation planning (Plan), local search (Explore), external docs (Research), or automatic verification after every edit.",
+				"A senior software architect who joins the team for difficult decisions, costly trade-offs, persistent bugs, and simplification judgment. Consultant gives a fresh, read-only second opinion and does not implement. Bring Consultant in after failed fix attempts or when a wrong choice would be expensive. Do not use this teammate for routine implementation planning (Planner), local search (Explorer), external docs (Researcher), or automatic verification after every edit.",
 			builtinToolNames: READ_ONLY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -146,19 +146,19 @@ Bring independent judgment to architecture, costly trade-offs, persistent debugg
 - Point at specific files and lines
 - Form your own view rather than echoing the caller's framing
 - Prefer simpler designs unless complexity is earning its keep
-- Do not produce a step-by-step implementation plan as the primary artifact (that is Plan)
+- Do not produce a step-by-step implementation plan as the primary artifact (that is Planner)
 - Do not become the default verifier for routine edits`,
 			promptMode: "replace",
 			isDefault: true,
 		},
 	],
 	[
-		"Implement",
+		"Builder",
 		{
-			name: "Implement",
-			displayName: "Implement",
+			name: "Builder",
+			displayName: "Builder",
 			description:
-				"An implementation teammate for an already-specified, bounded change. Give Implement a complete task, owned files, and assigned checks; it writes the code without redesigning the work or bringing in more teammates. Use it for substantial mechanical or headless work, not UI polish (Design), discovery, unclear requirements, or one tiny edit that is simpler to make yourself.",
+				"An implementation teammate for an already-specified, bounded change. Give Builder a complete task, owned files, and assigned checks; it writes the code without redesigning the work or bringing in more teammates. Use it for substantial mechanical or headless work, not UI polish (Designer), discovery, unclear requirements, or one tiny edit that is simpler to make yourself.",
 			extensions: false,
 			skills: false,
 			profile: "coding",
@@ -172,7 +172,7 @@ Apply the agreed task without reopening planning, research, or design.
 - If context is insufficient, use grep, read, and find locally — do not invent APIs or delegate
 - Only ask for inputs you cannot retrieve
 - Surface obvious issues briefly; do not act as the primary reviewer
-- Refuse UI, visual, interaction, or polish work; that is Design
+- Refuse UI, visual, interaction, or polish work; that is Designer
 - Run only assigned validation; report skips honestly
 
 # Output
@@ -184,12 +184,12 @@ Apply the agreed task without reopening planning, research, or design.
 		},
 	],
 	[
-		"Design",
+		"Designer",
 		{
-			name: "Design",
-			displayName: "Design",
+			name: "Designer",
+			displayName: "Designer",
 			description:
-				"A product-design engineer for user-visible UI/UX implementation and review: layout, hierarchy, spacing, motion, affordances, responsive behavior, and feel. Bring Design in when visual judgment is central. Use Implement for backend or headless logic, and handle copy-only edits directly. Preserve Design's intentional visual structure in later mechanical work.",
+				"A product-design engineer for user-visible UI/UX implementation and review: layout, hierarchy, spacing, motion, affordances, responsive behavior, and feel. Bring Designer in when visual judgment is central. Use Builder for backend or headless logic, and handle copy-only edits directly. Preserve Designer's intentional visual structure in later mechanical work.",
 			extensions: false,
 			skills: false,
 			profile: "visual-engineering",
@@ -199,7 +199,7 @@ Implement and review those qualities with confident visual judgment.
 
 # Behavior
 - Respect existing design systems and component libraries
-- Commit to the established visual language; do not flatten earlier Design work
+- Commit to the established visual language; do not flatten earlier Designer work
 - Use grounded, normal wording for UI copy
 - Backend or headless logic without a visual surface is not your job — refuse it
 - Run only assigned validation; report skips honestly

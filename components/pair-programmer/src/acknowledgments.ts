@@ -18,7 +18,7 @@ export type PendingPairFinding = {
 	id: string;
 	note: string;
 	severity: Extract<PairSeverity, "concern" | "blocker">;
-	source: "pair" | "advisor";
+	source: "pair" | "consultant";
 	deliveredTurn: number;
 	reminderTurn?: number;
 };
@@ -68,7 +68,7 @@ export class PairAcknowledgmentTracker {
 				id: note.id,
 				note: note.note,
 				severity: note.severity,
-				source: note.source === "advisor" ? "advisor" : "pair",
+				source: note.source === "consultant" || note.source === "advisor" ? "consultant" : "pair",
 				deliveredTurn: current?.deliveredTurn ?? this.#turn,
 				...(current?.reminderTurn === undefined ? {} : { reminderTurn: current.reminderTurn }),
 			});

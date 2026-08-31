@@ -9,7 +9,7 @@ import { childSessionExtensions } from "../components/subagents/src/agent-runner
 import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
-import { CODEX_FAST_EXTENSION_PATH } from "../extensions/codex-fast.js";
+import { CODEX_FAST_EXTENSION_PATH } from "../extensions/codex-vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";

@@ -188,7 +188,7 @@ describe("TodoWidget", () => {
 				title: "Running subagent task",
 				activeForm: "Building tests",
 				description: "",
-				agentType: "Implement",
+				agentType: "Builder",
 				status: "active",
 				execution: {
 					runId: "run-123",
@@ -209,7 +209,7 @@ describe("TodoWidget", () => {
 		widget.update();
 
 		const lines = renderWidget(ui.state);
-		expect(lines[1]).toContain("Building tests (Implement)…");
+		expect(lines[1]).toContain("Building tests (Builder)…");
 		expect(lines[1]).toContain("↑ 1.2k ↓ 450");
 	});
 

@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 
 import {
-	type AdvisorConsultationResult,
+	type ConsultantConsultationResult,
 	buildConsultationContext,
 	type ConsultationContext,
 	type ConsultationSource,
@@ -42,8 +42,8 @@ export type EscalationAcceptance = "accepted" | "suppressed" | "unavailable";
 
 /** Private pairing capability. It can ask for a second opinion, not dispatch an agent. */
 export class EscalateTool {
-	readonly name = "ask_advisor";
-	readonly label = "Escalate to Advisor";
+	readonly name = "ask_consultant";
+	readonly label = "Escalate to Consultant";
 	readonly description =
 		"Ask a senior software architect for an independent second opinion on one consequential concern that is hard to verify cheaply. Explain the consolidated root issue, what you observed, and where you remain unsure. Asking does not make the concern true. Do not also call share_note for the same issue, and do not use this for nits, implementation management, generic uncertainty, known errors, or routine reassurance.";
 	readonly parameters = escalationSchema as any;
@@ -119,7 +119,7 @@ interface QueuedEscalation {
 interface DeliveryCandidate {
 	queued: QueuedEscalation;
 	context: ConsultationContext;
-	result: AdvisorConsultationResult;
+	result: ConsultantConsultationResult;
 	note: PairNote;
 	outcome: EscalationOutcome;
 }
@@ -146,7 +146,7 @@ export interface EscalationControllerStats {
 	cost: number;
 }
 
-export const MIN_TURNS_BETWEEN_ADVISOR = 4;
+export const MIN_TURNS_BETWEEN_CONSULTANT = 4;
 
 /** Conservative host gate: the exact same failing command must recur three times. */
 export class RepeatedFailureDetector {
@@ -259,7 +259,7 @@ export class PairEscalationController {
 		if (this.#disposed) return "unavailable";
 		this.stats.requests++;
 		this.#turn = Math.max(this.#turn, turn);
-		// Do not poison deduplication when the advisor cannot be started.
+		// Do not poison deduplication when the Consultant cannot be started.
 		if (!this.deps.getService()) return "unavailable";
 		const identity = identityOf(request);
 		const prior = this.#seen.get(identity.key);
@@ -360,14 +360,14 @@ export class PairEscalationController {
 		if (!delivered && !retainIdentity) this.#forget(candidate.queued);
 		this.deps.onOutcome(candidate.outcome);
 		if (this.#delivery === candidate) this.#delivery = undefined;
-		this.state = this.#active ? "advisor_running" : this.#pending.size ? "escalation_pending" : "idle";
+		this.state = this.#active ? "consultant_running" : this.#pending.size ? "escalation_pending" : "idle";
 		this.deps.onStateChange();
 		void this.#pump();
 	}
 
 	async #pump(): Promise<void> {
 		if (this.#disposed || this.#active || this.#delivery || this.#pending.size === 0) return;
-		const minimum = this.deps.minTurnsBetween ?? MIN_TURNS_BETWEEN_ADVISOR;
+		const minimum = this.deps.minTurnsBetween ?? MIN_TURNS_BETWEEN_CONSULTANT;
 		if (this.#turn - this.#lastStartedTurn < minimum) return;
 		const ctx = this.deps.getContext();
 		if (!ctx) return;
@@ -377,7 +377,7 @@ export class PairEscalationController {
 		this.#active = queued;
 		this.#activeAbort = new AbortController();
 		this.#lastStartedTurn = this.#turn;
-		this.state = "advisor_running";
+		this.state = "consultant_running";
 		this.stats.consultations++;
 		this.deps.onStateChange();
 		await this.#run(queued, ctx, this.#activeAbort.signal);
@@ -421,13 +421,13 @@ export class PairEscalationController {
 			return;
 		}
 		const service = this.deps.getService();
-		let result: AdvisorConsultationResult;
+		let result: ConsultantConsultationResult;
 		try {
 			result = service
 				? await service.runConsultation(ctx, { context, signal })
 				: {
 						status: "failed",
-						error: "Managed Advisor consultation service is unavailable.",
+						error: "Managed Consultant consultation service is unavailable.",
 						usage: {
 							input: 0,
 							cacheRead: 0,
@@ -475,7 +475,7 @@ export class PairEscalationController {
 				this.#forget(queued);
 			}
 			this.state =
-				result.status === "cancelled" ? "cancelled" : result.status === "completed" ? "advisor_settled" : "failed";
+				result.status === "cancelled" ? "cancelled" : result.status === "completed" ? "consultant_settled" : "failed";
 			this.deps.onOutcome(outcome);
 			this.deps.onStateChange();
 			return;
@@ -487,7 +487,7 @@ export class PairEscalationController {
 			note: {
 				note: [finding.finding, finding.recommendedAction].filter(Boolean).join("\n\n"),
 				severity: finding.severity ?? queued.request.severity,
-				source: "advisor",
+				source: "consultant",
 				adjudication: disposition,
 			},
 			outcome,

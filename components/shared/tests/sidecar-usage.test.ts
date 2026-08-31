@@ -112,7 +112,7 @@ describe("sidecar usage records", () => {
 		writeFileSync(mock.agentDir, "not-a-directory");
 		expect(() =>
 			withSidecarUsageContext({ sessionId: "session-123" }, () => {
-				recordSidecarUsage({ agent: "advisor", trigger: "consultation", status: "error" });
+				recordSidecarUsage({ agent: "consultant", trigger: "consultation", status: "error" });
 			}),
 		).not.toThrow();
 	});
@@ -192,7 +192,7 @@ describe("sidecar usage records", () => {
 				cost: 1.5,
 			}),
 			buildSidecarUsageRecord({
-				agent: "advisor",
+				agent: "consultant",
 				trigger: "consultation",
 				status: "stop",
 				provider: "openai-codex",

@@ -145,7 +145,7 @@ describe("owned subagent surface", () => {
 		const notification = formatNotification(
 			{
 				id: "agent-1",
-				type: "Explore",
+				type: "Explorer",
 				description: "large result",
 				status: "completed",
 				result: output,
@@ -161,11 +161,11 @@ describe("owned subagent surface", () => {
 	});
 
 	it("uses the quick profile for the built-in read-only explorer", () => {
-		expect(DEFAULT_AGENTS.get("Explore")).toMatchObject({ profile: "quick" });
+		expect(DEFAULT_AGENTS.get("Explorer")).toMatchObject({ profile: "quick" });
 	});
 
 	it("structurally withholds shell and write tools from every read-only default", () => {
-		for (const type of ["Explore", "Plan", "Research", "Advisor"]) {
+		for (const type of ["Explorer", "Planner", "Researcher", "Consultant"]) {
 			const tools = DEFAULT_AGENTS.get(type)?.builtinToolNames ?? [];
 			expect(tools).toEqual(["read", "grep", "find", "ls"]);
 			expect(tools).not.toContain("bash");
@@ -272,43 +272,46 @@ describe("owned subagent surface", () => {
 
 	it("registers the specialist catalog as built-ins with lane-specific tools", () => {
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
-		expect(DEFAULT_AGENTS.get("Research")).toMatchObject({
+		for (const retired of ["Explore", "Plan", "Research", "Advisor", "Implement", "Design"]) {
+			expect(DEFAULT_AGENTS.has(retired)).toBe(false);
+		}
+		expect(DEFAULT_AGENTS.get("Researcher")).toMatchObject({
 			profile: "quick",
 			builtinToolNames: ["read", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Advisor")).toMatchObject({
+		expect(DEFAULT_AGENTS.get("Consultant")).toMatchObject({
 			profile: "deep",
 			builtinToolNames: ["read", "grep", "find", "ls"],
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Implement")).toMatchObject({
+		expect(DEFAULT_AGENTS.get("Builder")).toMatchObject({
 			profile: "coding",
 			pair: true,
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Implement")?.builtinToolNames).toBeUndefined();
-		expect(DEFAULT_AGENTS.get("Design")).toMatchObject({
+		expect(DEFAULT_AGENTS.get("Builder")?.builtinToolNames).toBeUndefined();
+		expect(DEFAULT_AGENTS.get("Designer")).toMatchObject({
 			profile: "visual-engineering",
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/external research partner/);
-		expect(DEFAULT_AGENTS.get("Research")?.systemPrompt).toMatch(/no docs tools/);
-		expect(DEFAULT_AGENTS.get("Research")?.description).toMatch(/external research teammate/);
-		expect(DEFAULT_AGENTS.get("Advisor")?.systemPrompt).toMatch(/senior software architect/);
-		expect(DEFAULT_AGENTS.get("Implement")?.systemPrompt).toMatch(/that is Design/);
-		expect(DEFAULT_AGENTS.get("Design")?.systemPrompt).toMatch(/refuse it/);
+		expect(DEFAULT_AGENTS.get("Researcher")?.systemPrompt).toMatch(/external research partner/);
+		expect(DEFAULT_AGENTS.get("Researcher")?.systemPrompt).toMatch(/no docs tools/);
+		expect(DEFAULT_AGENTS.get("Researcher")?.description).toMatch(/external research teammate/);
+		expect(DEFAULT_AGENTS.get("Consultant")?.systemPrompt).toMatch(/senior software architect/);
+		expect(DEFAULT_AGENTS.get("Builder")?.systemPrompt).toMatch(/that is Designer/);
+		expect(DEFAULT_AGENTS.get("Designer")?.systemPrompt).toMatch(/refuse it/);
 	});
 
 	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {
 		const disabled = {
-			...DEFAULT_AGENTS.get("Implement")!,
+			...DEFAULT_AGENTS.get("Builder")!,
 			name: "Disabled",
 			enabled: false,
 			isDefault: false,
@@ -371,7 +374,7 @@ describe("owned subagent surface", () => {
 			const quick = resolveAgentProfile({
 				registry,
 				parentModel,
-				config: DEFAULT_AGENTS.get("Explore"),
+				config: DEFAULT_AGENTS.get("Explorer"),
 			});
 			expect(quick.model).toMatchObject({ provider: "anthropic", id: "fast" });
 			expect(quick.thinkingLevel).toBe("low");
@@ -380,7 +383,7 @@ describe("owned subagent surface", () => {
 			const overridden = resolveAgentProfile({
 				registry,
 				parentModel,
-				config: DEFAULT_AGENTS.get("Explore"),
+				config: DEFAULT_AGENTS.get("Explorer"),
 				explicitProfile: "deep",
 			});
 			expect(overridden.model).toMatchObject({ provider: "anthropic", id: "deep" });
@@ -389,7 +392,7 @@ describe("owned subagent surface", () => {
 
 			const off = resolveAgentProfile({
 				registry,
-				config: DEFAULT_AGENTS.get("Explore"),
+				config: DEFAULT_AGENTS.get("Explorer"),
 				explicitProfile: "background",
 			});
 			expect(off).toMatchObject({ model: available[0], thinking: "off", thinkingLevel: "off" });
@@ -461,11 +464,11 @@ describe("owned subagent surface", () => {
 	});
 
 	it("uses agent pair programmer defaults while preserving explicit invocation overrides", () => {
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ pair: true });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Builder"), {})).toMatchObject({ pair: true });
 		expect(
 			resolveAgentInvocationConfig(
 				{
-					name: "Implement",
+					name: "Builder",
 					description: "Custom implementation agent",
 					builtinToolNames: ["read", "edit"],
 					extensions: false,
@@ -476,12 +479,12 @@ describe("owned subagent surface", () => {
 				{},
 			),
 		).toMatchObject({ pair: true });
-		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Implement")!, pair: false }, {})).toMatchObject({
+		expect(resolveAgentInvocationConfig({ ...DEFAULT_AGENTS.get("Builder")!, pair: false }, {})).toMatchObject({
 			pair: false,
 		});
-		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explore"), {})).toMatchObject({ pair: false });
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Explorer"), {})).toMatchObject({ pair: false });
 		expect(
-			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Builder"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: false,
@@ -489,7 +492,7 @@ describe("owned subagent surface", () => {
 			}),
 		).toMatchObject({ inheritContext: false, pair: false });
 		expect(
-			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {
+			resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Builder"), {
 				run_in_background: false,
 				isolated: false,
 				inherit_context: true,
@@ -845,7 +848,7 @@ describe("owned subagent surface", () => {
 	it("lets a nested orchestrator inspect a running child's recent transcript without waiting", async () => {
 		const record = {
 			id: "child-1",
-			type: "Explore",
+			type: "Explorer",
 			description: "inspect",
 			status: "running",
 			toolUses: 0,

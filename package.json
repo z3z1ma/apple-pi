@@ -21,7 +21,7 @@
   "files": [
     "components/pair-programmer/src/",
     "components/ask-user-question/src/",
-    "components/codex-fast/src/",
+    "components/codex-vroom/src/",
     "components/home-search-guard/src/",
     "components/shared/src/",
     "components/session-search/src/",
@@ -58,7 +58,7 @@
       "./extensions/context.ts",
       "./extensions/remind-me.ts",
       "./extensions/auto-compact.ts",
-      "./extensions/codex-fast.ts",
+      "./extensions/codex-vroom.ts",
       "./extensions/home-search-guard.ts",
       "./extensions/runtime.ts",
       "./extensions/mcp.ts",
