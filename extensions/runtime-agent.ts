@@ -27,6 +27,7 @@ import { LEDGER_EXTENSION_PATH } from "./ledger.js";
 import { PAIR_EXTENSION_PATH } from "./pi-pair.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "./session-search.js";
+import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "./wiki.js";
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
 
@@ -45,6 +46,8 @@ export {
 	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
 	SESSION_SEARCH_EXTENSION_PATH,
+	WIKI_EXTENSION_PATH,
+	WIKI_TOOL_NAMES,
 };
 
 export interface AgentRequest {
@@ -343,6 +346,7 @@ export function buildAgentCliArgs(
 	]
 		.filter(Boolean)
 		.join("\n\n");
+	const workerTools = [...new Set([...options.tools, ...WIKI_TOOL_NAMES])];
 	const args = [
 		"--mode",
 		"json",
@@ -352,7 +356,7 @@ export function buildAgentCliArgs(
 		"--no-extensions",
 		"--no-skills",
 		"--tools",
-		options.tools.join(","),
+		workerTools.join(","),
 		"--append-system-prompt",
 		guidance,
 		"--extension",
@@ -363,6 +367,8 @@ export function buildAgentCliArgs(
 		HOME_SEARCH_GUARD_EXTENSION_PATH,
 		"--extension",
 		LEDGER_EXTENSION_PATH,
+		"--extension",
+		WIKI_EXTENSION_PATH,
 		"--extension",
 		SESSION_SEARCH_EXTENSION_PATH,
 	];

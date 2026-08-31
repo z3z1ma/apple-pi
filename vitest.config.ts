@@ -19,6 +19,7 @@ export default defineConfig({
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
 			"components/status-footer/tests/**/*.test.ts",
+			"components/wiki/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

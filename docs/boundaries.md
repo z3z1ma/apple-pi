@@ -19,6 +19,7 @@ Additional boundaries:
 
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
 - **One compaction hook.** The pair programmer's notebook does not register a compact hook. It appends its packet on the `context` event after any compaction entry.
+- **Wiki graph is derived, not stored.** `.wiki/` Markdown pages and their Obsidian `[[slug]]` links are the source of truth. `wiki_lint` and `wiki_references` scan them on demand; there is no wiki database, cache, watcher, registry, embedding index, or synchronization service.
 - **Session ledger is authoritative.** Compaction projects the pair programmer's notebook but does not relocate it.
 - **Optional backlog and to-do systems.** Their complete supported implementations are packaged under `optional-extensions/` and are not default model surfaces. The default harness uses only explicit one-shot self-reminders for next-turn follow-up.
 - **No second subagent runtime.** To-dos launch owned public subagents and use their existing record, queue, lifecycle, FleetView, and stop boundaries; no external RPC, controller worker, duplicate transcript, or process tracker is retained.

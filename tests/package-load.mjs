@@ -31,6 +31,7 @@ try {
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
 			"extensions/ledger.ts",
+			"extensions/wiki.ts",
 			"extensions/xai-hosted-tools.ts",
 			"extensions/xai-context-compaction.ts",
 			"extensions/notify.ts",
@@ -42,7 +43,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 16);
+	assert.equal(result.extensions.length, 17);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -119,6 +120,13 @@ try {
 		"missing ledger system-prompt injection",
 	);
 	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("wiki.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
+		),
+		"missing wiki workbench system-prompt injection",
+	);
+	assert(
 		!result.extensions.some((extension) => extension.path.endsWith("workflow.ts")),
 		"default package must not load a workflow extension",
 	);
@@ -160,6 +168,8 @@ try {
 		"steer_subagent",
 		"ledger_add",
 		"ledger_close",
+		"wiki_lint",
+		"wiki_references",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
@@ -214,6 +224,7 @@ try {
 		manifest.pi.extensions.includes("./extensions/remind-me.ts"),
 		"package manifest omits self-reminder extension",
 	);
+	assert(manifest.pi.extensions.includes("./extensions/wiki.ts"), "package manifest omits wiki workbench");
 	assert(!manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest must not load todos extension");
 	assert(
 		!manifest.pi.extensions.includes("./extensions/backlog.ts"),
@@ -225,6 +236,7 @@ try {
 		"package manifest omits home search guard source",
 	);
 	assert(manifest.files.includes("components/reminders/src/"), "package manifest omits self-reminder source");
+	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
 	assert(
 		manifest.files.includes("optional-extensions/todos/index.ts"),
 		"package manifest omits optional todos entrypoint",
@@ -355,6 +367,9 @@ try {
 	assert(existsSync("skills/ralph/references/ralph-simple.js"), "missing general Ralph reference");
 	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing ledger Ralph reference");
 	assert(existsSync("skills/ralph/references/ralph-ledger-review.js"), "missing reviewed ledger Ralph reference");
+	for (const procedure of ["initialize", "ingest", "query", "maintain"]) {
+		assert(existsSync(`skills/llm-wiki/references/${procedure}.md`), `missing llm-wiki ${procedure} procedure`);
+	}
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
 	delete process.env.PI_CODING_AGENT_DIR;
