@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { registerAgents } from "../src/agent-types.js";
 import { renderRunningAgentStatus } from "../src/index.js";
 import type { WidgetMode } from "../src/types.js";
 import {
@@ -75,7 +76,7 @@ describe("AgentWidget", () => {
 	function makeRecord(id: string, opts: { isBackground?: boolean; parentAgentId?: string } = {}) {
 		return {
 			id,
-			type: "Explorer",
+			type: "explorer",
 			description: `${id} description`,
 			status: "running",
 			toolUses: 0,
@@ -106,9 +107,10 @@ describe("AgentWidget", () => {
 
 	// "all" (and the no-policy constructor default) shows every agent.
 	it("shows foreground agents in 'all' mode (and by default)", () => {
+		registerAgents(new Map());
 		const manager = { listAgents: () => [makeRecord("foreground", { isBackground: false })] };
 		expect(renderLines(manager, "foreground")).toContain("foreground description");
-		expect(renderLines(manager, "foreground", () => "all")).toContain("foreground description");
+		expect(renderLines(manager, "foreground", () => "all")).toContain("Explorer");
 	});
 
 	it("hides nested children in every coordinator widget mode", () => {
@@ -161,7 +163,7 @@ describe("AgentWidget overflow accounting", () => {
 	function record(id: string, status: string) {
 		return {
 			id,
-			type: "Explorer",
+			type: "explorer",
 			description: `${id} description`,
 			status,
 			toolUses: 0,

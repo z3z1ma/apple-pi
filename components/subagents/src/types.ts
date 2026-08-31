@@ -5,7 +5,7 @@ import type { LifetimeUsage } from "./usage.js";
 export type ThinkingLevel = ModelThinkingLevel;
 export type SubagentType = string;
 export type SubagentConfigScope = Readonly<{ cwd: string; projectTrusted: boolean }>;
-export const DEFAULT_AGENT_NAMES = ["Explorer", "Planner", "Researcher", "Consultant", "Builder", "Designer"] as const;
+export const DEFAULT_AGENT_NAMES = ["explorer", "planner", "researcher", "consultant", "builder", "designer"] as const;
 
 export interface AgentConfig {
 	name: string;

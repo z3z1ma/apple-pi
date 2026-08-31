@@ -37,7 +37,7 @@ const SAMPLE_TODOS: TodoView[] = [
 		blockedBy: [],
 		blocked: false,
 		blocks: [2],
-		agentType: "Designer",
+		agentType: "designer",
 		createdAt: "2026-08-21T12:00:00.000Z",
 		updatedAt: "2026-08-21T12:10:00.000Z",
 		result: "Created widget and manager successfully",
@@ -50,7 +50,7 @@ const SAMPLE_TODOS: TodoView[] = [
 		blockedBy: [1],
 		blocked: false,
 		blocks: [],
-		agentType: "Builder",
+		agentType: "builder",
 		execution: {
 			runId: "run-abc-123",
 			ownerPid: 9876,

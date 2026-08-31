@@ -27,7 +27,7 @@ function catalogData(block: string): { members: TeamMember[]; profiles: Inferenc
 }
 
 const members: TeamMember[] = [
-	{ name: "Explorer", profile: "quick", description: "Fast read-only search agent." },
+	{ name: "explorer", profile: "quick", description: "Fast read-only search agent." },
 	{ name: "reviewer", profile: "deep", description: "Project-specific reviewer." },
 ];
 const profiles = INFERENCE_PROFILE_CATALOG.filter((entry) => entry.profile === "quick" || entry.profile === "deep");
@@ -48,7 +48,7 @@ describe("subagent team system prompt", () => {
 		const catalogs = catalogData(block);
 		expect(block).toContain("<inference-profiles>\n# Inference profiles");
 		expect(catalogs.members[0]).toEqual({
-			name: "Explorer",
+			name: "explorer",
 			profile: "quick",
 			description: "Fast read-only search agent.",
 		});
@@ -64,7 +64,7 @@ describe("subagent team system prompt", () => {
 		expect(occurrences(second, marker)).toBe(1);
 		expect(occurrences(second, profilesMarker)).toBe(1);
 		expect(catalogData(second)).toEqual({ members: changedMembers, profiles: changedProfiles });
-		expect(second).not.toContain('"name": "Explorer"');
+		expect(second).not.toContain('"name": "explorer"');
 		expect(second.startsWith("Root system prompt")).toBe(true);
 	});
 

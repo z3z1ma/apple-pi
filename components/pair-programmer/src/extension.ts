@@ -1,20 +1,21 @@
 /**
  * /pair — persistent read-only supervision of the main agent's work.
  * The pair programmer is the sole persistent watcher and can submit typed hypotheses to a
- * host-controlled, non-recursive Consultant consultation.
+ * host-controlled, non-recursive consultant consultation.
  *
  * Delivery model. Every advise() call enters one shared output queue. The pair programmer's
- * review and primary execution remain independent; only Pi's exact
- * `agent_settled` boundary releases queued output through `steer`. Nothing is a
- * hard interrupt and we never call `abort()` on the primary agent. Findings
- * emitted while the primary is active remain queued, and an advisory-triggered
- * correction run is still consumed while recursive output stays suppressed.
+ * review and primary execution remain independent. At an assistant-turn boundary,
+ * ready advice is sent through `steer`, which places it before the main agent's next
+ * step without aborting the response in flight. Terminal advice can trigger a
+ * correction run after settlement. An advisory-triggered correction run is still
+ * consumed while recursive terminal output stays suppressed.
  *
- * Why always-hold for high severity: the pair reviews turn N asynchronously
- * (seconds), so by the time any advice could land the primary has almost always
- * done follow-up work — the advice is stale. Instead we hold it and let the next
- * review reconfirm it (held notes ride a reconfirm preamble; the pair re-
- * raises survivors, stays silent on the resolved ones).
+ * Why every finding is held once: the pair reviews turn N asynchronously, so by
+ * the time advice could land the primary has usually done follow-up work. The
+ * next successful frontier review must reconfirm it before nonterminal delivery
+ * (held notes ride a reconfirmation preamble; silence withdraws them). Findings
+ * first raised by the review covering the terminal turn are current and can land
+ * without another otherwise-impossible review.
  *
  * The pair programmer's review is fully asynchronous: each completed primary turn appends an
  * immutable spool delta, no primary turn waits for pair programmer work, and the reader
@@ -100,7 +101,7 @@ export {
 } from "./acknowledgments.js";
 export type { PairNote, PairSeverity } from "./types.js";
 
-import type { PairEscalation, PairEscalationState, PairNote, PairSeverity } from "./types.js";
+import type { PairEscalation, PairEscalationState, PairNote, PairSeverity, PrimaryTurnState } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
 
@@ -112,7 +113,7 @@ type PreparedBoundaryFinding = {
 
 const findingIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 
-/** Commit direct pair programmer and prepared Consultant findings through one outbound batch. */
+/** Commit direct pair programmer and prepared consultant findings through one outbound batch. */
 export function deliverBoundaryBatch(args: {
 	direct: PairNote[];
 	advisor?: PreparedBoundaryFinding;
@@ -156,7 +157,7 @@ const adviseSchema = Type.Object({
 	finding_id: Type.Optional(
 		Type.String({
 			description:
-				"The host-provided id of an earlier concern or blocker that still applies. Use only an id shown in the reconfirmation list.",
+				"The host-provided id of an earlier nit, concern, or blocker that still applies. Use only an id shown in the reconfirmation list.",
 			pattern: "^pair-[a-f0-9]{12}$",
 		}),
 	),
@@ -177,8 +178,13 @@ const SEVERITY_RANK: Record<PairSeverity, number> = { nit: 1, concern: 2, blocke
 const rankOf = (s: PairSeverity | undefined): number => SEVERITY_RANK[s ?? "nit"];
 const dedupeKey = (note: string): string => note.trim().replace(/\s+/g, " ");
 const pairNoteKey = (note: Pick<PairNote, "id" | "note">): string => note.id ?? dedupeKey(note.note);
-/** High severity (concern/blocker) is always held + reconfirmed; nits deliver now. */
+/** Concerns and blockers retain priority metadata, but all severities share delivery policy. */
 export const isHighSeverity = (s: PairSeverity | undefined): boolean => s === "concern" || s === "blocker";
+
+/** A turn without tool calls is the agent loop's terminal response candidate. */
+export function isTerminalTurn(message: { content?: ReadonlyArray<{ type?: string }> } | undefined): boolean {
+	return !(message?.content ?? []).some((part) => part.type === "toolCall");
+}
 
 const BASH_APPEND_WATCHED = Symbol("pair.bashAppendWatched");
 
@@ -242,7 +248,10 @@ export class AdviseTool {
 	#delivered = new Map<string, number>();
 
 	// onAdvice returns true if delivered, false if queued or dropped.
-	constructor(private readonly onAdvice: (note: string, severity?: PairSeverity, findingId?: string) => boolean) {}
+	constructor(
+		private readonly onAdvice: (note: string, severity?: PairSeverity, findingId?: string) => boolean,
+		private readonly canonicalizeFindingId?: (note: string, findingId?: string) => string | undefined,
+	) {}
 
 	resetDelivered(): void {
 		this.#delivered.clear();
@@ -255,32 +264,39 @@ export class AdviseTool {
 	 * the actual delivery point must).
 	 */
 	markDelivered(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#delivered.set(findingId ?? dedupeKey(note), rankOf(severity));
+		const rank = rankOf(severity);
+		this.#delivered.set(dedupeKey(note), rank);
+		if (findingId) this.#delivered.set(findingId, rank);
 	}
 
 	async execute(
 		_id: string,
 		args: { note: string; severity?: PairSeverity; finding_id?: string },
 	): Promise<AgentToolResult<unknown>> {
-		const key = args.finding_id ?? dedupeKey(args.note);
+		const findingId = this.canonicalizeFindingId
+			? this.canonicalizeFindingId(args.note, args.finding_id)
+			: args.finding_id;
+		const canonicalArgs = { ...args, finding_id: findingId };
+		const key = findingId ?? dedupeKey(args.note);
 		const rank = rankOf(args.severity);
-		const prev = this.#delivered.get(key) ?? 0;
+		const prev = Math.max(this.#delivered.get(key) ?? 0, this.#delivered.get(dedupeKey(args.note)) ?? 0);
 		if (rank <= prev) {
 			return {
 				content: [{ type: "text", text: "You already shared an equivalent note." }],
-				details: { ...args, dropped: true },
+				details: { ...canonicalArgs, dropped: true },
 			};
 		}
-		const delivered = this.onAdvice(args.note, args.severity, args.finding_id);
+		const delivered = this.onAdvice(args.note, args.severity, findingId);
 		if (!delivered) {
 			// Not recorded: it is queued for a boundary or dropped as stale.
 			return {
 				content: [{ type: "text", text: "Your note will be shared at the next safe moment if it still applies." }],
-				details: { ...args, held: true },
+				details: { ...canonicalArgs, held: true },
 			};
 		}
 		this.#delivered.set(key, rank);
-		return { content: [{ type: "text", text: "Your note was shared." }], details: { ...args } };
+		this.#delivered.set(dedupeKey(args.note), rank);
+		return { content: [{ type: "text", text: "Your note was shared." }], details: canonicalArgs };
 	}
 }
 
@@ -405,9 +421,10 @@ export class PairRuntime {
 	#primedContext: string | undefined;
 	#rolling: SettledAdvice[] = [];
 	#needsSeed = true;
-	// The ONE pending-advice queue. Nits, concerns, and blockers all enter here;
-	// boundary policy decides which severities can leave and when.
+	// Newly observed findings wait here until a newer successful frontier review.
 	#advice: PairNote[] = [];
+	// Reconfirmed findings wait separately for the next safe delivery boundary.
+	#readyAdvice: PairNote[] = [];
 	// Keys re-raised during the in-flight review; drives the post-review prune.
 	#reraised: Set<string> | undefined;
 	#offeredFindingIds: Set<string> | undefined;
@@ -573,9 +590,9 @@ export class PairRuntime {
 		return !this.#busy && !this.spool.hasPending;
 	}
 
-	/** Whether the shared queue contains anything worth blocking a mid-run turn for. */
+	/** Whether pending or ready findings include material priority. */
 	get hasHighPriority(): boolean {
-		return this.#advice.some((n) => isHighSeverity(n.severity));
+		return [...this.#advice, ...this.#readyAdvice].some((n) => isHighSeverity(n.severity));
 	}
 
 	#upsertAdviceIn(
@@ -583,25 +600,35 @@ export class PairRuntime {
 		note: string,
 		severity?: PairSeverity,
 		findingId?: string,
-		assignMaterialId = false,
+		assignFindingId = false,
 	): void {
 		if (this.disposed) return;
 		const key = dedupeKey(note);
 		const existing = target.find((item) => (findingId ? item.id === findingId : dedupeKey(item.note) === key));
 		if (!existing) {
-			const id = findingId ?? (assignMaterialId && isHighSeverity(severity) ? pairFindingId() : undefined);
+			const id = findingId ?? (assignFindingId ? pairFindingId() : undefined);
 			target.push({ note, severity, ...(id ? { id } : {}) });
 			return;
 		}
 		if (findingId && existing.id === findingId) existing.note = note;
-		if (!existing.id && (findingId || (assignMaterialId && isHighSeverity(severity)))) {
+		if (!existing.id && (findingId || assignFindingId)) {
 			existing.id = findingId ?? pairFindingId();
 		}
 		if (rankOf(severity) > rankOf(existing.severity)) existing.severity = severity;
 	}
 
 	#upsertAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#upsertAdviceIn(this.#advice, note, severity, findingId);
+		this.#upsertAdviceIn(this.#advice, note, severity, findingId, true);
+	}
+
+	#upsertReadyAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
+		this.#upsertAdviceIn(this.#readyAdvice, note, severity, findingId, true);
+	}
+
+	/** Accept only identities currently owned by the host's pending or ready queues. */
+	canonicalFindingId(findingId?: string): string | undefined {
+		if (!findingId) return undefined;
+		return [...this.#advice, ...this.#readyAdvice].some((note) => note.id === findingId) ? findingId : undefined;
 	}
 
 	/** Stage pair programmer advice inside the active review; out-of-review callers seed the live queue. */
@@ -609,14 +636,16 @@ export class PairRuntime {
 		if (this.disposed) return;
 		if (this.#attemptEffects && this.#reviewEpoch === this.#epoch) {
 			const offeredId = findingId && this.#offeredFindingIds?.has(findingId) ? findingId : undefined;
-			const inferredId = this.#advice.find((item) => dedupeKey(item.note) === dedupeKey(note))?.id;
-			this.#upsertAdviceIn(this.#attemptEffects.advice, note, severity, offeredId ?? inferredId, true);
+			const inferredId = [...this.#advice, ...this.#readyAdvice].find(
+				(item) => dedupeKey(item.note) === dedupeKey(note),
+			)?.id;
+			this.#upsertAdviceIn(this.#attemptEffects.advice, note, severity, offeredId ?? findingId ?? inferredId, true);
 			return;
 		}
 		this.#upsertAdvice(note, severity, findingId);
 	}
 
-	/** Stage a Consultant request so failed or stale pair programmer attempts cannot launch work. */
+	/** Stage a consultant request so failed or stale pair programmer attempts cannot launch work. */
 	stageEscalation(request: PairEscalation): EscalationAcceptance {
 		const attempt = this.#attemptEffects;
 		if (!attempt || !this.acceptingAdvice) return "unavailable";
@@ -640,21 +669,19 @@ export class PairRuntime {
 		return "accepted";
 	}
 
-	/** Boundary bookkeeping: put advice back without faking a reconfirmation. */
-	requeueAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#upsertAdvice(note, severity, findingId);
+	/** Delivery retry bookkeeping: keep an already-confirmed finding ready. */
+	requeueReadyAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
+		this.#upsertReadyAdvice(note, severity, findingId);
 	}
 
-	/** Drain nits only; concerns/blockers remain queued for reconfirmation. */
-	takeNits(): PairNote[] {
-		const nits = this.#advice.filter((note) => !isHighSeverity(note.severity));
-		this.#advice = this.#advice.filter((note) => isHighSeverity(note.severity));
-		return nits;
+	/** Drain findings reconfirmed by a newer successful frontier review. */
+	takeConfirmedAdvice(): PairNote[] {
+		return this.#readyAdvice.splice(0);
 	}
 
-	/** Drain every queued survivor after successful boundary reconciliation. */
+	/** Terminal review makes both reconfirmed and newly observed findings current. */
 	takeAllAdvice(): PairNote[] {
-		return this.#advice.splice(0);
+		return [...this.#readyAdvice.splice(0), ...this.#advice.splice(0)];
 	}
 
 	/** Record delivery only after the primary session accepted the outbound message. */
@@ -786,6 +813,7 @@ export class PairRuntime {
 		this.spool.reset();
 		this.#primedContext = undefined;
 		this.#advice = [];
+		this.#readyAdvice = [];
 		this.#rolling = [];
 		this.#needsSeed = true;
 		this.#reraised = undefined;
@@ -808,6 +836,7 @@ export class PairRuntime {
 		this.#epoch++;
 		this.#primedContext = undefined;
 		this.#advice = [];
+		this.#readyAdvice = [];
 		this.#rolling = [];
 		this.#reraised = undefined;
 		this.#offeredFindingIds = undefined;
@@ -834,7 +863,9 @@ export class PairRuntime {
 		// Re-offer the shared advice queue without removing it. Attempt-created
 		// effects remain private until the response completes successfully.
 		const offered = this.#advice.map((note) => ({ ...note }));
-		const offeredKeys = new Set(offered.map(pairNoteKey));
+		const offeredByKey = new Map(offered.map((note) => [pairNoteKey(note), note]));
+		const offeredKeys = new Set(offeredByKey.keys());
+		const readyByKey = new Map(this.#readyAdvice.map((note) => [pairNoteKey(note), { ...note }]));
 		const offeredFindingIds = new Set(offered.flatMap((note) => (note.id ? [note.id] : [])));
 		this.#offeredFindingIds = offeredFindingIds;
 		const preamble = formatReconfirmPreamble(offered);
@@ -891,16 +922,27 @@ export class PairRuntime {
 			for (const note of attempt.advice) {
 				const key = pairNoteKey(note);
 				if (delegated.has(dedupeKey(note.note))) continue;
-				this.#reraised?.add(key);
-				this.#upsertAdvice(note.note, note.severity, note.id);
+				if (offeredKeys.has(key)) {
+					this.#reraised?.add(key);
+					const offeredNote = offeredByKey.get(key);
+					if (offeredNote) this.#upsertReadyAdvice(offeredNote.note, offeredNote.severity, offeredNote.id);
+					this.#upsertReadyAdvice(note.note, note.severity, note.id);
+				} else if (readyByKey.has(key)) {
+					const currentReady = this.#readyAdvice.find((item) => pairNoteKey(item) === key);
+					const snapshotReady = readyByKey.get(key);
+					if (currentReady || (snapshotReady && rankOf(note.severity) > rankOf(snapshotReady.severity))) {
+						this.#upsertReadyAdvice(note.note, note.severity, note.id);
+					}
+				} else {
+					this.#upsertAdvice(note.note, note.severity, note.id);
+				}
 			}
 			const dropped: PairNote[] = [];
 			for (const key of offeredKeys) {
-				if (this.#reraised?.has(key)) continue;
 				const i = this.#advice.findIndex((note) => pairNoteKey(note) === key);
 				if (i < 0) continue;
-				dropped.push(this.#advice[i]!);
-				this.#advice.splice(i, 1);
+				const [offeredNote] = this.#advice.splice(i, 1);
+				if (!this.#reraised?.has(key) && offeredNote) dropped.push(offeredNote);
 			}
 			this.#rememberSettled(dropped, "dropped");
 			if (this.#primedContext === primedContext) this.#primedContext = undefined;
@@ -980,14 +1022,14 @@ export function formatPairFooterText(
 ): string {
 	const state =
 		advisorState === "consultant_running"
-			? "pair programmer → Consultant"
+			? "Pair programmer → Consultant"
 			: advisorState === "escalation_pending"
-				? "pair programmer (Consultant queued)"
+				? "Pair programmer (consultant queued)"
 				: advisorState === "delivery_pending"
-					? "pair programmer (Consultant ready)"
+					? "Pair programmer (consultant ready)"
 					: reviewing
-						? "pair programmer (reviewing)"
-						: "pair programmer";
+						? "Pair programmer (reviewing)"
+						: "Pair programmer";
 	const total = costUsd + advisorCostUsd;
 	return `${state}: $${total.toFixed(2)}`;
 }
@@ -1111,8 +1153,9 @@ export default function (pi: ExtensionAPI) {
 	// run belongs to the main agent and is not reviewed again until the user speaks.
 	let awaitingUserAfterAdvisory = false;
 
-	// Pi lifecycle owns primary busy/idle; output delivery is independent of turn shape.
-	let primaryBusy = false;
+	// Assistant-turn state identifies the safe boundary where a steer can enter an
+	// active run before its next step.
+	let turnState: PrimaryTurnState = "ended-nonterminal";
 	const inputSpool = new PairSpool();
 	let stagedBoundaryNotes: PairNote[] = [];
 	let advisorFlush: Promise<void> | undefined;
@@ -1333,11 +1376,17 @@ export default function (pi: ExtensionAPI) {
 		// reset/dispose orphaned the in-flight review (its epoch no longer matches).
 		const targetRuntime = sourceRuntime ?? runtime;
 		// The hidden command test hook is the only caller without a source runtime.
-		// Keep it deterministic even when background warm-up built an idle runtime.
-		if (!sourceRuntime && !isHighSeverity(severity) && !primaryBusy) {
-			sendNotes([{ note, severity, source: "pair", ...(findingId ? { id: findingId } : {}) }], {
+		// It injects a synthetic ready finding so every severity exercises the same
+		// boundary-delivery path without pretending a model review occurred.
+		if (!sourceRuntime) {
+			const staged = { note, severity, source: "pair" as const, id: findingId ?? pairFindingId() };
+			if (turnState === "running") {
+				stagedBoundaryNotes.push(staged);
+				return false;
+			}
+			sendNotes([staged], {
 				stale: true,
-				finalAnswer: true,
+				finalAnswer: turnState === "ended-terminal",
 			});
 			return true;
 		}
@@ -1357,19 +1406,28 @@ export default function (pi: ExtensionAPI) {
 		return false;
 	}
 
-	// Reviews finish asynchronously after primary turn_end. Deliver only when a
-	// successful review covers the latest ended primary boundary.
-	function flushSettledAdvice(outcome: "ok" | "failed", _reviewedThrough: number, sourceRuntime: PairRuntime): void {
-		if (outcome !== "ok" || sourceRuntime !== runtime || primaryBusy) return;
+	// Reviews finish asynchronously after primary turn_end. A nonterminal boundary
+	// releases only findings reconfirmed by a newer successful frontier review.
+	// Terminal delivery waits for final-turn coverage, where both reconfirmed and
+	// newly observed findings are current.
+	function flushSettledAdvice(outcome: "ok" | "failed", reviewedThrough: number, sourceRuntime: PairRuntime): void {
+		if (outcome !== "ok" || sourceRuntime !== runtime || turnState === "running") return;
+		if (turnState === "ended-terminal" && reviewedThrough < primaryTurnSequence) return;
 		flushBoundaryFindings();
 	}
 
+	function deliveryBlocked(): boolean {
+		return turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress();
+	}
+
 	function flushDirectFindings(): void {
-		if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
+		if (deliveryBlocked()) return;
 		const activeRuntime = runtime;
 		const activeAdviseTool = adviseTool;
 		if (activeRuntime) {
-			stagedBoundaryNotes.push(...activeRuntime.takeAllAdvice());
+			stagedBoundaryNotes.push(
+				...(turnState === "ended-terminal" ? activeRuntime.takeAllAdvice() : activeRuntime.takeConfirmedAdvice()),
+			);
 		}
 		const direct = stagedBoundaryNotes.splice(0);
 		if (!direct.length) return;
@@ -1378,15 +1436,15 @@ export default function (pi: ExtensionAPI) {
 				direct,
 				send: (notes) =>
 					sendNotes(notes, {
-						finalAnswer: true,
-						stale: notes.every((note) => !isHighSeverity(note.severity)),
+						finalAnswer: turnState === "ended-terminal",
+						stale: turnState !== "ended-terminal",
 					}),
 				onDirectDelivered: (note) => {
 					activeAdviseTool?.markDelivered(note.note, note.severity, note.id);
 					activeRuntime?.markAdviceDelivered([note]);
 					deliveredFindingKeys.add(findingIdentity(note.note));
 				},
-				onDirectFailed: (note) => activeRuntime?.requeueAdvice(note.note, note.severity, note.id),
+				onDirectFailed: (note) => activeRuntime?.requeueReadyAdvice(note.note, note.severity, note.id),
 			});
 		} catch (error) {
 			dbg("direct pair programmer delivery failed", String(error));
@@ -1401,10 +1459,10 @@ export default function (pi: ExtensionAPI) {
 		const controller = escalationController;
 		if (!controller) return Promise.resolve();
 		const flush = (async () => {
-			if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
+			if (deliveryBlocked()) return;
 			const prepared = await controller.prepareDelivery();
 			if (!prepared || generation !== constructionEpoch || controller !== escalationController) return;
-			if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
+			if (deliveryBlocked()) return;
 			try {
 				const delivered = deliverBoundaryBatch({
 					direct: [],
@@ -1412,7 +1470,7 @@ export default function (pi: ExtensionAPI) {
 					knownKeys: deliveredFindingKeys,
 					send: (notes) =>
 						sendNotes(notes, {
-							finalAnswer: true,
+							finalAnswer: turnState === "ended-terminal",
 							stale: false,
 						}),
 					onDirectDelivered: () => {},
@@ -1423,7 +1481,7 @@ export default function (pi: ExtensionAPI) {
 					for (const key of prepared.dedupeKeys ?? []) deliveredFindingKeys.add(findingIdentity(key));
 				}
 			} catch (error) {
-				dbg("Consultant delivery failed", String(error));
+				dbg("consultant delivery failed", String(error));
 			} finally {
 				if (latestCtx) updateStatus(latestCtx);
 			}
@@ -1436,7 +1494,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function flushBoundaryFindings(): void {
-		if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
+		if (deliveryBlocked()) return;
 		flushDirectFindings();
 		void flushConsultantFinding();
 	}
@@ -1448,7 +1506,7 @@ export default function (pi: ExtensionAPI) {
 			getContext: () => latestCtx,
 			getService: () => getManagedSubagentService(pi.events, { processFallback: false }),
 			onDeliveryReady: () => {
-				if (!primaryBusy) void flushBoundaryFindings();
+				if (turnState !== "running") void flushBoundaryFindings();
 			},
 			onOutcome: (outcome) => {
 				try {
@@ -1482,7 +1540,7 @@ export default function (pi: ExtensionAPI) {
 		stagedBoundaryNotes = [];
 		advisorFlush = undefined;
 		deliveredFindingKeys.clear();
-		primaryBusy = false;
+		turnState = "ended-nonterminal";
 		primaryTurnSequence = 0;
 		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
 		repeatedFailures.reset();
@@ -1622,14 +1680,15 @@ export default function (pi: ExtensionAPI) {
 			modelProfileError = error instanceof Error ? error.message : String(error);
 			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
 				lastNotifiedProfileError = modelProfileError;
-				ctx.ui.notify(`pair programmer unavailable: ${modelProfileError}`, "warning");
+				ctx.ui.notify(`Pair programmer unavailable: ${modelProfileError}`, "warning");
 			}
 			return undefined;
 		}
 
 		let builtRuntime!: PairRuntime;
-		const builtAdviseTool = new AdviseTool((note, severity, findingId) =>
-			deliverAdvice(note, severity, builtRuntime, findingId),
+		const builtAdviseTool = new AdviseTool(
+			(note, severity, findingId) => deliverAdvice(note, severity, builtRuntime, findingId),
+			(_note, findingId) => builtRuntime.canonicalFindingId(findingId),
 		);
 		const builtEscalateTool = new EscalateTool((request) => {
 			if (runtime !== builtRuntime || !builtRuntime.acceptingAdvice) return "unavailable";
@@ -1668,7 +1727,7 @@ export default function (pi: ExtensionAPI) {
 			dbg("pair session unavailable", modelProfileError);
 			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
 				lastNotifiedProfileError = modelProfileError;
-				ctx.ui.notify(`pair programmer unavailable: ${modelProfileError}`, "warning");
+				ctx.ui.notify(`Pair programmer unavailable: ${modelProfileError}`, "warning");
 			}
 			return undefined;
 		}
@@ -1769,7 +1828,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
-		primaryBusy = true;
+		turnState = "running";
 		return { systemPrompt: appendPrimaryPairPrompt(event.systemPrompt ?? "") };
 	});
 
@@ -1794,45 +1853,50 @@ export default function (pi: ExtensionAPI) {
 	// Fires for every assistant turn, including advisory-triggered runs and same-run
 	// continuations. Every real turn_start is paired with turn_end (also on failure).
 	pi.on("agent_start", () => {
-		if (enabled) primaryBusy = true;
+		if (!enabled) return;
+		turnState = "running";
 	});
 	pi.on("agent_settled", (_event, ctx) => {
 		if (!enabled) return;
 		latestCtx = ctx;
-		primaryBusy = false;
+		turnState = "ended-terminal";
 		handleTerminalAcknowledgments();
-		flushBoundaryFindings();
+		if (!runtime || runtime.reviewedThrough >= primaryTurnSequence) flushBoundaryFindings();
+		else void flushConsultantFinding();
 		if (inputSpool.hasPending) pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
 		updateStatus(ctx);
 	});
 
 	pi.on("turn_start", () => {
 		if (!enabled) return;
-		primaryBusy = true;
+		turnState = "running";
 	});
 
-	// One source-addressed delta per primary turn. Every turn enqueues background
-	// work and returns without awaiting construction, review, tools, retries,
-	// Consultant work, or delivery preparation.
+	// One source-addressed delta per primary turn. The completed assistant turn is
+	// also the safe scheduling boundary where ready advice can steer the active run.
+	// Pair review itself remains asynchronous and never delays this hook.
 	pi.on("turn_end", (event, ctx) => {
-		// This is only a writer commit point, not an output/scheduling boundary.
 		if (!enabled) return;
+		const terminal = isTerminalTurn(event.message as AssistantMessage);
+		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
 		latestCtx = ctx;
 		acknowledgments.advanceTurn();
 		primaryTurnSequence++;
 		const boundarySequence = primaryTurnSequence;
 		escalationController?.advanceTurn(boundarySequence);
-		if (process.env.PAIR_NO_REVIEW) return;
 
 		const generation = constructionEpoch;
 		const signal = (ctx as { signal?: AbortSignal }).signal;
 		const suppressAutoResume = () => {
-			if (generation === constructionEpoch && boundarySequence === primaryTurnSequence && !primaryBusy) {
+			if (generation === constructionEpoch && boundarySequence === primaryTurnSequence) {
 				autoResumeSuppressed = true;
 			}
 		};
 		if (signal?.aborted) suppressAutoResume();
 		else signal?.addEventListener("abort", suppressAutoResume, { once: true });
+
+		if (!terminal) flushBoundaryFindings();
+		if (process.env.PAIR_NO_REVIEW) return;
 		const userPrompt = pendingUserTexts.join("\n\n");
 		pendingUserTexts = [];
 		const toolResults = event.toolResults as ToolResultMessage[];
@@ -1918,7 +1982,7 @@ export default function (pi: ExtensionAPI) {
 			if (index > 0) container.addChild(new Spacer(1));
 			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
-			const role = n.source === "consultant" || n.source === "advisor" ? "Consultant" : "pair programmer";
+			const role = n.source === "consultant" || n.source === "advisor" ? "consultant" : "pair programmer";
 			const card = new Container();
 			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));
 			card.addChild(new Spacer(1));
@@ -1937,7 +2001,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (arg === "notebook" || arg === "notebook full") {
 				if (!rootNotebook) {
-					ctx.ui.notify("pair programmer notebook is available only in the root session.", "warning");
+					ctx.ui.notify("Pair programmer notebook is available only in the root session.", "warning");
 					return;
 				}
 				const entries = ctx.sessionManager.getBranch() as Entry[];
@@ -1948,7 +2012,7 @@ export default function (pi: ExtensionAPI) {
 			if (arg === "status" || arg === "") {
 				if (!enabled) {
 					ctx.ui.notify(
-						`pair programmer disabled — notebook maintenance paused; profile ${PAIR_MODEL_PROFILE}`,
+						`Pair programmer disabled — notebook maintenance paused; profile ${PAIR_MODEL_PROFILE}`,
 						"info",
 					);
 					updateStatus(ctx);
@@ -1957,7 +2021,7 @@ export default function (pi: ExtensionAPI) {
 				const rt = await ensureRuntime(ctx as any, false);
 				if (!rt) {
 					ctx.ui.notify(
-						`pair programmer enabled but unavailable — profile ${PAIR_MODEL_PROFILE}: ${modelProfileError ?? "unknown profile error"}`,
+						`Pair programmer enabled but unavailable — profile ${PAIR_MODEL_PROFILE}: ${modelProfileError ?? "unknown profile error"}`,
 						"warning",
 					);
 					return;
@@ -1971,7 +2035,7 @@ export default function (pi: ExtensionAPI) {
 				const notebook = foldLedger(entries);
 				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
-					`pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
+					`Pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Consultant — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
@@ -1986,8 +2050,8 @@ export default function (pi: ExtensionAPI) {
 				updateStatus(ctx);
 				ctx.ui.notify(
 					rt
-						? `pair programmer on — ${activeModelLabel}`
-						: `pair programmer on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
+						? `Pair programmer on — ${activeModelLabel}`
+						: `Pair programmer on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
 					rt ? "info" : "warning",
 				);
 				return;
@@ -1997,23 +2061,23 @@ export default function (pi: ExtensionAPI) {
 				saveEnabled(false);
 				teardown();
 				updateStatus(ctx);
-				ctx.ui.notify("pair programmer off — notebook maintenance paused", "info");
+				ctx.ui.notify("Pair programmer off — notebook maintenance paused", "info");
 				return;
 			}
 
-			// Hidden test hook. An idle nit delivers directly so it remains useful even
-			// before the runtime's first review; running/high-severity cases use the queue.
+			// Hidden test hook. Inject a synthetic ready finding so delivery can be
+			// exercised without running the pair model's confirmation cycle.
 			if (arg.startsWith("test")) {
 				const parsed = parsePairTestArgs(args);
 				if (!parsed) {
-					ctx.ui.notify("usage: /pair test <nit|concern|blocker> <note>", "warning");
+					ctx.ui.notify("Usage: /pair test <nit|concern|blocker> <note>", "warning");
 					return;
 				}
 				deliverAdvice(parsed.note, parsed.severity);
 				return;
 			}
 
-			ctx.ui.notify("usage: /pair [on|off|status|notebook [full]]", "warning");
+			ctx.ui.notify("Usage: /pair [on|off|status|notebook [full]]", "warning");
 		},
 	});
 }

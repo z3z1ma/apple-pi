@@ -46,7 +46,7 @@ function mockSession(messages: any[] = []) {
 function mockRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
 	return {
 		id: "test-1",
-		type: "Explorer",
+		type: "explorer",
 		description: "test agent",
 		status: "running",
 		toolUses: 0,
@@ -658,7 +658,7 @@ describe("ConversationViewer", () => {
 				mockTui(),
 				mockSession(messages),
 				mockRecord({
-					type: "Planner",
+					type: "planner",
 					description: "Plan events-mgmt slice",
 					status: "running",
 				}),

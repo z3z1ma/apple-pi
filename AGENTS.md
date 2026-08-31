@@ -55,7 +55,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | Area | Responsibility | Important relationships |
 | --- | --- | --- |
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
-| `components/pair-programmer/` | Gives the main agent a persistent read-only pair programming partner | Uses the user-global `pair` model profile, keeps the shared notebook, shares concise notes, and can ask the deep Consultant teammate for an independent architectural opinion; neither role may implement. |
+| `components/pair-programmer/` | Gives the main agent a persistent read-only pair programming partner | Uses the user-global `pair` model profile, keeps the shared notebook, shares concise notes, and can ask the consultant teammate for an independent architectural opinion using the `deep` profile; neither role may implement. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/reminders/` | Queues explicit model-authored follow-up guidance for the next root turn | A reminder is one-shot, in-memory continuation guidance, not persistent task state or new authority. |
 | `optional-extensions/` | Retained backlog and to-do implementations that are packaged and tested but not loaded by default | Keep these extensions self-contained and opt-in; they must not add tools, commands, widgets, or prompt guidance to the default harness. |

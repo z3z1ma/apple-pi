@@ -92,7 +92,7 @@ const selectedPaths = new Set(files);
 const partitions = plan.partitions.map((partition, partitionIndex) => {
   const outsideScope = partition.files.filter((path) => !selectedPaths.has(path));
   if (outsideScope.length > 0) {
-    throw new Error(`Planner assigned non-selected changed paths: ${outsideScope.join(", ")}`);
+    throw new Error(`The planner assigned non-selected changed paths: ${outsideScope.join(", ")}`);
   }
   return { id: `partition-${partitionIndex + 1}`, ...partition };
 });
@@ -111,7 +111,7 @@ const assignmentReport = {
   overlapping: [...new Set(assignedPaths.filter((path, index) => assignedPaths.indexOf(path) !== index))],
 };
 if (!assignmentCoverage.complete) {
-  throw new Error(`planner coverage is incomplete: ${assignmentReport.missing.join(", ")}`);
+  throw new Error(`The planner's coverage is incomplete: ${assignmentReport.missing.join(", ")}`);
 }
 const uncoveredFiles = assignmentReport.missing;
 const focuses = partitions.flatMap((partition) =>

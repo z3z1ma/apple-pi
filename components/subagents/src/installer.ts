@@ -331,10 +331,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		},
 		async runConsultation(ctx, request) {
 			bindSessionContext(ctx);
-			const dispatch = resolveSpawnType("Consultant");
+			const dispatch = resolveSpawnType("consultant");
 			if (!dispatch.ok) throw new Error(dispatch.message);
 			const configured = getAgentConfig(dispatch.type);
-			if (!configured) throw new Error('Unknown or disabled agent type: "Consultant"');
+			if (!configured) throw new Error('Unknown or disabled agent type: "consultant"');
 			const agentConfig = {
 				...configured,
 				pair: false,
@@ -394,7 +394,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			try {
 				record = await managedService.runFresh(ctx, {
 					type: dispatch.type,
-					description: "Consultant consultation",
+					description: "consultant consultation",
 					prompt: renderConsultationContext(request.context),
 					agentConfig,
 					model: resolved.model,
@@ -437,7 +437,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					: thrown
 						? String(thrown)
 						: (record?.error ??
-							(resultStatus === "malformed" ? "Consultant returned without a typed disposition." : undefined));
+							(resultStatus === "malformed" ? "The consultant returned without a typed disposition." : undefined));
 			const sessionId = ctx.sessionManager.getSessionId?.() ?? ctx.sessionManager.getSessionFile?.() ?? undefined;
 			withSidecarUsageContext({ sessionId }, () => {
 				recordSidecarUsage({
@@ -738,7 +738,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			`You are the senior engineer integrating the work. Use the live <${TEAM_SYSTEM_PROMPT_TAG}> block to choose a teammate whose role genuinely fits, and normally keep their configured inference profile. If nobody fits or coordination would cost more than it saves, keep the work in this session.`,
 			"Do not ask multiple teammates to write the same files. Do not retry an unchanged rejected task.",
 			`Use the agent tool to collaborate with a teammate and pi_exec agent.run to compose model workers in a program graph. agent subagent_type and agent.run type choose a teammate; profile chooses an inference profile. The agent tool's system_prompt and agent.run's systemPrompt add focused guidance without changing capabilities.`,
-			"Your pair programming partner follows the root session. Builder pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
+			"Your pair programming partner follows the root session. The builder pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
 			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
 		],
 		parameters: Type.Object({

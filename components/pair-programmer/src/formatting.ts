@@ -27,7 +27,7 @@ export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 		"### Things you flagged earlier",
 		"",
 		"Take another look at these against your partner's latest work; they may already have addressed them.",
-		"For every item that still applies, call `share_note` again. When an item shows an `id`, pass that exact value as `finding_id`, even if you refine the concise wording; keep the same severity or raise it only when the risk grew. Consolidate shared-root symptoms, but never merge distinct material issues. Say nothing about the rest; silence withdraws them. Do not send implementation management, resolution notices, or an all-clear.",
+		"For every item that still applies, call `share_note` again and pass its exact `id` as `finding_id`, even if you refine the concise wording; keep the same severity or raise it only when the risk grew. This applies equally to nits, concerns, and blockers. Consolidate shared-root symptoms, but never merge distinct material issues. Say nothing about the rest; silence withdraws them. Do not send implementation management, resolution notices, or an all-clear.",
 		"",
 		items,
 		"",
@@ -42,7 +42,7 @@ const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, 
 /**
  * Render notes as the agent-facing message body: one `<pair-note>` per note.
  * `stale` adds a `context` attribute noting the advice is about an earlier step
- * (used for nits, which the pair always raises a little behind the agent).
+ * (used for any finding released at a later nonterminal boundary).
  * `finalAnswer` appends guidance for advice delivered as a followup to a terminal
  * message: at the moment it is steered in, the primary is stopped having returned
  * a final answer this turn — regardless of which turn generated the note. If the
@@ -178,7 +178,15 @@ function formatImplementingAgent(
 				sub.push(formatWriteCall(args, Boolean(callId && failedCallIds.has(callId))));
 			} else {
 				const argsText = renderToolArgs(args);
-				sub.push(argsText ? `→ tool \`${c.name}\`:\n${argsText}` : `→ tool \`${c.name}\``);
+				if (c.name === "acknowledge_pair_findings") {
+					sub.push(
+						argsText
+							? `→ Your partner's feedback on earlier findings:\n${argsText}`
+							: "→ Your partner responded to earlier findings.",
+					);
+				} else {
+					sub.push(argsText ? `→ tool \`${c.name}\`:\n${argsText}` : `→ tool \`${c.name}\``);
+				}
 			}
 		}
 	}
@@ -234,6 +242,9 @@ export function formatTurnDelta(opts: {
 		if (agent) parts.push(agent);
 	}
 	parts.push(...formatProjectedResults(results, argsByCallId));
+	if (parts.length === 0 && opts.assistant) {
+		return `#### Your partner\n\nAssistant turn ended without visible content (stop reason: ${opts.assistant.stopReason ?? "unknown"}).`;
+	}
 	return parts.join("\n\n");
 }
 

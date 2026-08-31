@@ -43,7 +43,7 @@ export type EscalationAcceptance = "accepted" | "suppressed" | "unavailable";
 /** Private pairing capability. It can ask for a second opinion, not dispatch an agent. */
 export class EscalateTool {
 	readonly name = "ask_consultant";
-	readonly label = "Escalate to Consultant";
+	readonly label = "Escalate to consultant";
 	readonly description =
 		"Ask a senior software architect for an independent second opinion on one consequential concern that is hard to verify cheaply. Explain the consolidated root issue, what you observed, and where you remain unsure. Asking does not make the concern true. Do not also call share_note for the same issue, and do not use this for nits, implementation management, generic uncertainty, known errors, or routine reassurance.";
 	readonly parameters = escalationSchema as any;
@@ -259,7 +259,7 @@ export class PairEscalationController {
 		if (this.#disposed) return "unavailable";
 		this.stats.requests++;
 		this.#turn = Math.max(this.#turn, turn);
-		// Do not poison deduplication when the Consultant cannot be started.
+		// Do not poison deduplication when the consultant cannot be started.
 		if (!this.deps.getService()) return "unavailable";
 		const identity = identityOf(request);
 		const prior = this.#seen.get(identity.key);
@@ -427,7 +427,7 @@ export class PairEscalationController {
 				? await service.runConsultation(ctx, { context, signal })
 				: {
 						status: "failed",
-						error: "Managed Consultant consultation service is unavailable.",
+						error: "Managed consultant consultation service is unavailable.",
 						usage: {
 							input: 0,
 							cacheRead: 0,

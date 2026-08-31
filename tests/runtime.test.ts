@@ -821,15 +821,15 @@ describe("pi_exec agent binding", () => {
 	});
 
 	it("parses a catalog type and keeps untyped workers generic", () => {
-		expect(parseAgentRequest({ task: "map auth", type: "  Explorer  ", profile: "deep", pair: true })).toEqual({
+		expect(parseAgentRequest({ task: "map auth", type: "  explorer  ", profile: "deep", pair: true })).toEqual({
 			task: "map auth",
-			type: "Explorer",
+			type: "explorer",
 			profile: "deep",
 			pair: true,
 		});
-		expect(agentOperationArgs({ task: "map auth", type: "Explorer", pair: false })).toEqual({
+		expect(agentOperationArgs({ task: "map auth", type: "explorer", pair: false })).toEqual({
 			task: "map auth",
-			type: "Explorer",
+			type: "explorer",
 			pair: false,
 		});
 	});
@@ -879,36 +879,36 @@ describe("pi_exec agent binding", () => {
 			expect(custom.systemPrompt).toBe("Focus on API boundaries.");
 			expect(custom.model).toBe("xai/parent");
 
-			const explore = await resolveExecWorker({ task: "where is X?", type: "Explorer" }, options);
-			expect(explore.type).toBe("Explorer");
+			const explore = await resolveExecWorker({ task: "where is X?", type: "explorer" }, options);
+			expect(explore.type).toBe("explorer");
 			expect(explore.tools).toEqual(["read", "grep", "find", "ls"]);
 			expect(explore.model).toBe("xai/fast");
 			expect(explore.thinking).toBe("medium");
-			expect(explore.systemPrompt).toContain("Agent type: Explorer");
+			expect(explore.systemPrompt).toContain("Agent type: explorer");
 			expect(explore.systemPrompt).toMatch(/team's codebase scout/i);
 
 			const guided = await resolveExecWorker(
-				{ task: "where is X?", type: "Explorer", systemPrompt: "Prefer src/ over tests/." },
+				{ task: "where is X?", type: "explorer", systemPrompt: "Prefer src/ over tests/." },
 				options,
 			);
-			expect(guided.systemPrompt).toContain("Agent type: Explorer");
+			expect(guided.systemPrompt).toContain("Agent type: explorer");
 			expect(guided.systemPrompt).toContain("Prefer src/ over tests/.");
 
-			const implement = await resolveExecWorker({ task: "apply the spec", type: "Builder" }, options);
+			const implement = await resolveExecWorker({ task: "apply the spec", type: "builder" }, options);
 			expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
 			expect(implement.pair).toBe(true);
 			expect(implement.model).toBe("xai/coder");
 			expect(implement.thinking).toBe("high");
 
 			const overridden = await resolveExecWorker(
-				{ task: "apply the spec", type: "Builder", tools: ["read", "edit"], profile: "deep" },
+				{ task: "apply the spec", type: "builder", tools: ["read", "edit"], profile: "deep" },
 				options,
 			);
 			expect(overridden.tools).toEqual(["read", "edit"]);
 			expect(overridden.thinking).toBe("xhigh");
 			expect(overridden.model).toBe("anthropic/deep");
 
-			const optedOut = await resolveExecWorker({ task: "apply the spec", type: "Builder", pair: false }, options);
+			const optedOut = await resolveExecWorker({ task: "apply the spec", type: "builder", pair: false }, options);
 			expect(optedOut.pair).toBe(false);
 
 			await expect(resolveExecWorker({ task: "nope", type: "not-a-lane" }, options)).rejects.toThrow(
@@ -934,7 +934,7 @@ describe("pi_exec agent binding", () => {
 		try {
 			const available = [{ provider: "anthropic", id: "route-advisor", name: "route-advisor" }];
 			const resolved = await resolveExecWorker(
-				{ task: "should we split this module?", type: "Consultant" },
+				{ task: "should we split this module?", type: "consultant" },
 				{
 					cwd: root,
 					parentModel: "openai-codex/parent",

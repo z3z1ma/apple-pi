@@ -30,14 +30,14 @@ The ledger keeps source-addressed observations, reflections, retirement records,
 
 Commands and tools:
 
-- `/pair status` — pair programmer state, notebook coverage, and pair programmer and Consultant usage
+- `/pair status` — pair programmer state, notebook coverage, and pair programmer and consultant usage
 - `/pair notebook [full]` — visible or complete notebook projection
 - `search_session` — progressive search of this session's transcript and file-operation history; regex-like queries use a bounded safe subset and reject ambiguous grouped or repeated patterns
 - `revisit_note` — exact source lookup by a known observation or reflection ID
 
 The pair programmer's operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. The pair programmer's model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable proactive compaction and pair programmer notebook maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-The pair programmer and episodic Consultant sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only Codex fast mode, the overflow guard, and the home search guard.
+The pair programmer and episodic consultant sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only Codex fast mode, the overflow guard, and the home search guard.
 
 ## Where the notebook persists
 
@@ -49,12 +49,12 @@ Notebook records remain in Pi's append-only session JSONL, normally under:
 
 They are project-associated through Pi's session location, but they are not repository state and are not shared through Git. apple-pi intentionally does not create a `.pi/notebook` mirror because that would create a second source of truth and an implicit privacy policy.
 
-## Pair programmer and Consultant usage records
+## Pair programmer and consultant usage records
 
-Pair programmer reviews and Consultant consultations write one NDJSON line per model call to:
+Pair programmer reviews and consultant consultations write one NDJSON line per model call to:
 
 ```text
 ~/.pi/agent/sidecar-usage/<session-id>.ndjson
 ```
 
-Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change pair programmer or Consultant behavior.
+Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change pair programmer or consultant behavior.

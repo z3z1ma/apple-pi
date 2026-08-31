@@ -197,7 +197,7 @@ describe("pair programmer escalation machinery", () => {
 		expect(h.controller.stats.suppressed).toBe(1);
 	});
 
-	it("does not retain unavailable or failed attempts in Consultant deduplication", async () => {
+	it("does not retain unavailable or failed attempts in consultant deduplication", async () => {
 		const unavailable = new PairEscalationController({
 			pi: {} as never,
 			getContext: () => undefined,
@@ -249,7 +249,7 @@ describe("pair programmer escalation machinery", () => {
 
 	it.each([
 		{ status: "failed" as const, error: "deep provider unavailable" },
-		{ status: "malformed" as const, error: "Consultant returned without a typed disposition." },
+		{ status: "malformed" as const, error: "The consultant returned without a typed disposition." },
 	])("records $status without promoting the escalation hypothesis to advice", async ({ status, error }) => {
 		const h = harness({ status, error, usage: { ...usage, cost: 0 } });
 		h.controller.submit("pair", request, 1);

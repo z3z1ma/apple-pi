@@ -1,12 +1,12 @@
 # The pair programmer
 
-The pair programmer gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask the deep **Consultant** teammate for an independent architectural opinion.
+The pair programmer gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask the **consultant** teammate, using the deep profile, for an independent architectural opinion.
 
 The responsibilities are distinct:
 
 1. **Main agent** has the keyboard, speaks to the user, implements, decides, and validates.
 2. The **pair programmer** keeps a second line of thought and the shared notebook while following the work.
-3. **Consultant** is a senior software architect who joins episodically for difficult, consequential questions.
+3. The **consultant** is a senior software architect who joins episodically for difficult, consequential questions.
 4. **Review** remains a separate end-to-end activity when requested.
 
 The two programmers are peers with different capabilities in this session. The main agent does not direct or manage its partner. There is no mode selector for the pair programmer and no second persistent pairing role.
@@ -21,7 +21,7 @@ The pair programmer's state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-
 }
 ```
 
-The pair programmer always uses the user-global `pair` model profile. Consultant uses the `deep` profile.
+The pair programmer always uses the user-global `pair` model profile. The consultant uses the `deep` profile.
 
 ```json
 {
@@ -45,7 +45,7 @@ Commands:
 - `/pair off`
 - `/pair notebook [full]`
 
-Disabling the pair programmer cancels queued and active Consultant consultations.
+Disabling the pair programmer cancels queued and active consultant consultations.
 
 ## Behavior
 
@@ -57,25 +57,27 @@ The pair programming partner receives a stable pairing policy followed by:
 - a read-only projection of the shared notebook after compaction;
 - optional global or trusted-project `PAIR.md` guidance.
 
-`PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask Consultant.
+`PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask the consultant.
 
 The partner has three private typed tools:
 
-- `share_note` stages one current, actionable `nit`, `concern`, or `blocker` for delivery to the main agent;
+- `share_note` stages one current, actionable `nit`, `concern`, or `blocker` for frontier confirmation before delivery to the main agent;
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
 - `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation.
 
-A review attempt commits its staged notes, Consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
+A review attempt commits its staged notes, consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
 The partner cannot invoke arbitrary agents, shell commands, MCP, `pi_exec`, mutation tools, or arbitrary extension tools. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
-Free-form prose does not start a Consultant consultation. Generic uncertainty, style preference, known errors, and the mere possibility of a problem are not reasons to ask.
+Free-form prose does not start a consultant consultation. Generic uncertainty, style preference, known errors, and the mere possibility of a problem are not reasons to ask.
 
-One conservative repeated-failure gate may also ask Consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
+One conservative repeated-failure gate may also ask the consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
 
 ## Review timing and retries
 
-The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any pair programmer construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting pair programmer construction, model work, tool calls, retry delay, Consultant work, or delivery preparation.
+The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any pair programmer construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting pair programmer construction, model work, tool calls, retry delay, consultant work, or delivery preparation.
+
+Every direct finding, including a nit, is initially held with a stable host id. The next successful frontier review sees it alongside the newer trajectory. Repeating it with that id confirms it for nonterminal delivery; silence withdraws it. A confirmed finding steers at the next safe assistant boundary, so stale protection does not defer material advice until settlement. Findings first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
 
 The pair programmer uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
 
@@ -101,11 +103,11 @@ The packet includes:
 
 The extension imposes no character ceiling on consultation packets or Git diffs. Pi and the selected model own context-window behavior.
 
-Consultant joins as a fresh, foreground, hidden managed teammate. The consultation prompt presents Consultant as a senior software architect giving two programmers an independent second opinion. Consultant receives only read-only repository tools, primary-bound `revisit_note` and `search_session`, and the private typed `give_second_opinion` result tool. It does not receive the pair programmer sidecar, nested agents, `pi_exec`, mutation tools, ledger mutation tools, MCP, or project extension discovery.
+The consultant joins as a fresh, foreground, hidden managed teammate. The consultation prompt presents the consultant as a senior software architect giving two programmers an independent second opinion. The consultant receives only read-only repository tools, primary-bound `revisit_note` and `search_session`, and the private typed `give_second_opinion` result tool. It does not receive the pair programmer sidecar, nested agents, `pi_exec`, mutation tools, ledger mutation tools, MCP, or project extension discovery.
 
-The host accepts only a validated `give_second_opinion` call as the consultation result. If Consultant ends with prose instead, the managed runner keeps the same session alive, disables every tool except `give_second_opinion`, and allows one finalization turn. Prose is never parsed into a disposition.
+The host accepts only a validated `give_second_opinion` call as the consultation result. If the consultant ends with prose instead, the managed runner keeps the same session alive, disables every tool except `give_second_opinion`, and allows one finalization turn. Prose is never parsed into a disposition.
 
-Consultant returns exactly one disposition:
+The consultant returns exactly one disposition:
 
 - `confirm`
 - `refute`
@@ -116,36 +118,36 @@ Only typed `confirm` and `refine` findings are eligible for delivery. Refutation
 
 ## Routing and delivery
 
-Only one Consultant consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Consultant starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
+Only one consultant consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Consultation starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
 
-Input review and output delivery are separate. The pair programmer continues consuming every trajectory delta, including an advisory-triggered correction run. Pi's `agent_start` and `agent_settled` lifecycle events mark the primary busy or idle; only the exact settled event releases outbound findings. Direct pair programmer findings do not wait for Consultant consultation, working-state recapture, or Consultant validation. Before a Consultant finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and Consultant findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
+Input review and output delivery are separate. The pair programmer continues consuming every trajectory delta, including an advisory-triggered correction run. Frontier-confirmed findings of every severity are sent through Pi's `steer` path at assistant-turn boundaries, so they can enter an active run before its next model step without aborting the response in flight. Terminal delivery waits until a successful pair programmer review covers the final turn; findings raised by that current review can trigger a correction run after settlement. Direct pair programmer findings do not wait for consultant consultation, working-state recapture, or consultant validation. Before a consultant finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and consultant findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings ready for retry without requiring another confirmation.
 
 An advisory-triggered correction episode suppresses further outbound advice to avoid recursive steering, but it never suppresses pair programmer input consumption. The next user message reopens outbound delivery.
 
-Asking Consultant is a request to investigate, not a finding. If Consultant fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
+Asking the consultant is a request to investigate, not a finding. If the consultant fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 
 ## Material-finding acknowledgment
 
-Each delivered `concern` or `blocker` receives a stable host-generated id. Nits do not require acknowledgment. The main agent records consideration with the primary-only `acknowledge_pair_findings` tool using one disposition and a concise reason:
+Every direct finding receives a stable host-generated id for frontier confirmation. Delivered nits do not require acknowledgment. For each delivered `concern` or `blocker`, the main agent records consideration with the primary-only `acknowledge_pair_findings` tool using one disposition and a concise reason:
 
 - `address`: the finding applies and the main agent is acting on it;
 - `decline`: current evidence shows the finding does not apply;
 - `defer`: the finding is valid but outside the current authorized action.
 
-Acknowledgment does not claim implementation or validation. The first subsequent assistant run is the normal acknowledgment opportunity. Once Pi reports the primary session settled, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
+Acknowledgment does not claim implementation or validation. The acknowledgment tool call, including its disposition and reason, is presented to the pair programmer in the next trajectory delta as direct feedback. The first subsequent assistant run is the normal acknowledgment opportunity. Once Pi reports the primary session settled, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
 
-## Direct Consultant use
+## Direct consultant use
 
-The main agent can invoke Consultant through `agent` as an ordinary read-only sub-agent. That public path uses the normal agent prompt and optional `inherit_context`; it does not expose the pair programmer's harness context or typed adjudication protocol.
+The main agent can invoke the consultant through `agent` as an ordinary read-only sub-agent. That public path uses the normal agent prompt and optional `inherit_context`; it does not expose the pair programmer's harness context or typed adjudication protocol.
 
-The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through Agent parameters.
+The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through `agent` parameters.
 
 ## Status and accounting
 
-The footer uses `q-pair` and shows pair programmer review plus Consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, Consultant dispositions, suppressions, stale results, usage, cost, and duration.
+The footer uses `q-pair` and shows pair programmer review plus consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, consultant dispositions, suppressions, stale results, usage, cost, and duration.
 
 Sidecar telemetry records `pair` and `consultant` calls separately. Consultation outcomes are structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes. Private hypothesis and finding text are not persisted there.
 
-The pair programmer and Consultant use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.
+The pair programmer and the consultant use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.

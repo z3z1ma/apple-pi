@@ -20,6 +20,6 @@ The programs under [`skills/review/references`](../skills/review/references) rem
 
 Give a commissioned reviewer the intended behavior, changed paths, comparison boundary, relevant contracts, checks already run, and all important risk questions in one call. Findings must establish patch causality, a reachable trigger, evidence, observable impact, and a bounded correction.
 
-The root agent validates the findings and makes ordinary fixes itself. Nits conclude in the root. A scoped follow-up serves a material high-risk fix that remains difficult to verify from code and tests. Planner/reviewer/verifier and residual topologies remain exceptional tools.
+The root agent validates the findings and makes ordinary fixes itself. Nits conclude in the root. A scoped follow-up serves a material high-risk fix that remains difficult to verify from code and tests. Composed planner/reviewer/verifier and residual topologies remain exceptional tools.
 
 See [`skills/review`](../skills/review) for finding semantics and [`docs/exec.md`](exec.md) for optional `pi_exec` composition.

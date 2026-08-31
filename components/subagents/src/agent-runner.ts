@@ -155,7 +155,7 @@ export function selectAgentModel(
 export interface RunOptions {
 	/** ExtensionAPI instance — used for pi.exec() instead of execSync. */
 	pi: ExtensionAPI;
-	/** Manager-assigned id; suffixes session name to disambiguate parallel spawns (e.g. `Explorer#a1b2c3d4`). */
+	/** Manager-assigned id; suffixes session name to disambiguate parallel spawns (e.g. `explorer#a1b2c3d4`). */
 	agentId?: string;
 	model?: Model<any>;
 	/** True when the caller has already resolved model routing at its spawn boundary. */
@@ -409,7 +409,7 @@ export async function runAgent(
 	// Read-only default roles receive no standard extension surface either:
 	// ledger and MCP can register mutation-capable tools independently of the
 	// built-in allowlist. This makes their policy structural, not prompt-based.
-	const structurallyReadOnly = new Set(["Explorer", "Planner", "Researcher", "Consultant"]).has(agentConfig.name);
+	const structurallyReadOnly = new Set(["explorer", "planner", "researcher", "consultant"]).has(agentConfig.name);
 	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(
 		options.pair === true,
 		options.loadStandardChildExtensions !== false && !structurallyReadOnly,

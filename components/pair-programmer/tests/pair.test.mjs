@@ -92,25 +92,33 @@ const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 // 1. pure logic
 // ===========================================================================
 
-test("isHighSeverity: only concern/blocker are held + reconfirmed", () => {
+test("isHighSeverity: only concern/blocker carry priority metadata", () => {
 	assert.equal(A.isHighSeverity(undefined), false);
 	assert.equal(A.isHighSeverity("nit"), false);
 	assert.equal(A.isHighSeverity("concern"), true);
 	assert.equal(A.isHighSeverity("blocker"), true);
 });
 
-test("formatPairFooterText: pair programmer is default and Consultant work is visible", () => {
-	assert.equal(A.formatPairFooterText(false, 0), "pair programmer: $0.00");
-	assert.equal(A.formatPairFooterText(true, 0.02), "pair programmer (reviewing): $0.02");
-	assert.equal(A.formatPairFooterText(false, 1.5), "pair programmer: $1.50");
-	assert.equal(A.formatPairFooterText(false, 0.02, "consultant_running", 0.5), "pair programmer → Consultant: $0.52");
+test("isTerminalTurn: only a response without tool calls is terminal", () => {
+	assert.equal(A.isTerminalTurn({ content: [{ type: "text" }] }), true);
+	assert.equal(A.isTerminalTurn({ content: [] }), true);
+	assert.equal(A.isTerminalTurn(undefined), true);
+	assert.equal(A.isTerminalTurn({ content: [{ type: "toolCall" }] }), false);
+	assert.equal(A.isTerminalTurn({ content: [{ type: "text" }, { type: "toolCall" }] }), false);
+});
+
+test("formatPairFooterText: pair programmer is default and consultant work is visible", () => {
+	assert.equal(A.formatPairFooterText(false, 0), "Pair programmer: $0.00");
+	assert.equal(A.formatPairFooterText(true, 0.02), "Pair programmer (reviewing): $0.02");
+	assert.equal(A.formatPairFooterText(false, 1.5), "Pair programmer: $1.50");
+	assert.equal(A.formatPairFooterText(false, 0.02, "consultant_running", 0.5), "Pair programmer → Consultant: $0.52");
 	assert.equal(
 		A.formatPairFooterText(false, 0.02, "escalation_pending", 0.5),
-		"pair programmer (Consultant queued): $0.52",
+		"Pair programmer (consultant queued): $0.52",
 	);
 	assert.equal(
 		A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5),
-		"pair programmer (Consultant ready): $0.52",
+		"Pair programmer (consultant ready): $0.52",
 	);
 });
 
@@ -118,14 +126,14 @@ test("formatReconfirmPreamble: empty when nothing held, else lists held notes", 
 	assert.equal(A.formatReconfirmPreamble([]), "");
 	const p = A.formatReconfirmPreamble([
 		{ id: "pair-123456789abc", note: "races on shared map", severity: "blocker" },
-		{ note: "missing await", severity: "concern" },
+		{ id: "pair-abcdef123456", note: "missing await", severity: "nit" },
 	]);
 	assert.match(p, /Things you flagged earlier/);
 	assert.match(p, /call `share_note` again/);
 	assert.match(p, /finding_id/);
 	assert.match(p, /never merge distinct material issues/);
 	assert.match(p, /- \[BLOCKER id=pair-123456789abc\] races on shared map/);
-	assert.match(p, /- \[CONCERN\] missing await/);
+	assert.match(p, /- \[NIT id=pair-abcdef123456\] missing await/);
 	assert.match(p, /\n---\n/); // separates preamble from the session update below
 });
 
@@ -267,6 +275,46 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 	assert.match(md, /here is my plan/);
 	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
 	assert.match(md, /#### Tool result: `write`\n\ncall: 1\nwrote a\.js/);
+});
+
+test("formatTurnDelta: presents material-finding acknowledgments as feedback to the pair programmer", () => {
+	const rendered = A.formatTurnDelta({
+		assistant: {
+			role: "assistant",
+			content: [
+				{
+					type: "toolCall",
+					id: "ack-1",
+					name: "acknowledge_pair_findings",
+					arguments: {
+						findings: [
+							{
+								id: "pair-abc123",
+								disposition: "decline",
+								reason: "The current implementation already preserves the turn boundary.",
+							},
+						],
+					},
+				},
+			],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "ack-1",
+				toolName: "acknowledge_pair_findings",
+				content: [{ type: "text", text: "Recorded 1 pair programmer finding acknowledgment." }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
+	});
+	assert.match(rendered, /Your partner's feedback on earlier findings/);
+	assert.match(rendered, /disposition: decline/);
+	assert.match(rendered, /already preserves the turn boundary/);
 });
 
 test("formatTurnDelta: successful write omits content and addresses the result", () => {
@@ -713,8 +761,20 @@ test("formatTurnDelta: marks tool errors", () => {
 	assert.match(md, /#### Tool result: `bash` \(error\)/);
 });
 
-test("formatTurnDelta: empty turn ⇒ empty string", () => {
+test("formatTurnDelta: empty input stays empty, but a completed empty assistant turn keeps its boundary", () => {
 	assert.equal(A.formatTurnDelta({}), "");
+	assert.match(
+		A.formatTurnDelta({
+			assistant: {
+				role: "assistant",
+				content: [],
+				usage: {},
+				stopReason: "aborted",
+				timestamp: 1,
+			},
+		}),
+		/Assistant turn ended without visible content \(stop reason: aborted\)/,
+	);
 });
 
 test("seed: recent users are current plus two completed requests, labeled as implementer-bound", () => {
@@ -1371,6 +1431,26 @@ test("AdviseTool: held notes (onAdvice→false) stay unrecorded so they can re-f
 	assert.equal(calls.length, 3);
 });
 
+test("AdviseTool: rejects model-invented finding ids before deduplication", async () => {
+	const calls = [];
+	const invented = "pair-deadbeefcafe";
+	const tool = new A.AdviseTool(
+		(note, severity, findingId) => {
+			calls.push({ note, severity, findingId });
+			return false;
+		},
+		() => undefined,
+	);
+	tool.markDelivered("earlier issue", "concern", invented);
+	const result = await tool.execute("new", {
+		note: "distinct new issue",
+		severity: "concern",
+		finding_id: invented,
+	});
+	assert.deepEqual(calls, [{ note: "distinct new issue", severity: "concern", findingId: undefined }]);
+	assert.equal(result.details.finding_id, undefined);
+});
+
 test("AdviseTool: markDelivered records dedup at the real delivery point", async () => {
 	const calls = [];
 	const tool = new A.AdviseTool((note, severity) => {
@@ -1449,22 +1529,22 @@ function buildIntegration({ onReview } = {}) {
 			tool.markDelivered(n.note, n.severity, n.id);
 		}
 	};
-	const flushNits = () => {
-		for (const n of rt.takeNits()) {
-			delivered.push({ ...n, kind: "nit", stale: true, finalAnswer: false });
+	const flushConfirmed = () => {
+		for (const n of rt.takeConfirmedAdvice()) {
+			delivered.push({ ...n, kind: "confirmed", stale: true, finalAnswer: false });
 			tool.markDelivered(n.note, n.severity, n.id);
 		}
 	};
 	const onSettled = (outcome) => {
 		if (outcome !== "ok") return;
 		if (state.turn === "ended-terminal") deliverHeld(rt.takeAllAdvice());
-		else if (state.turn === "ended-nonterminal") flushNits();
+		else if (state.turn === "ended-nonterminal") flushConfirmed();
 	};
 	rt = new A.PairRuntime(agent, tool, 0, undefined, onSettled);
 	const block = (terminal, opts = {}) => {
 		state.turn = terminal ? "ended-terminal" : "ended-nonterminal";
 		if (!terminal) {
-			flushNits();
+			flushConfirmed();
 			return Promise.resolve("skipped");
 		}
 		return settleRuntime(rt, opts.capMs, opts.signal);
@@ -1472,23 +1552,37 @@ function buildIntegration({ onReview } = {}) {
 	return { rt, tool, delivered, deliverHeld, block, getReviewCount: () => reviewCount };
 }
 
-test("integration: a nit is delivered during review, not held, never blocks", async () => {
+test("integration: every finding waits for a newer frontier review, then steers during the active run", async () => {
+	let findingId;
 	const h = buildIntegration({
-		onReview: async (_t, { tool, reviewCount }) => {
-			if (reviewCount === 1) await tool.execute("n1", { note: "rename var", severity: "nit" });
+		onReview: async (text, { tool, reviewCount }) => {
+			if (reviewCount === 1) {
+				await tool.execute("n1", { note: "rename var", severity: "nit" });
+			} else if (reviewCount === 2) {
+				findingId = text.match(/id=(pair-[a-f0-9]{12})/)?.[1];
+				assert.ok(findingId, "nits receive the same stable reconfirmation identity as every other finding");
+				await tool.execute("n2", { note: "rename variable", severity: "nit", finding_id: findingId });
+			}
 		},
 	});
 	h.rt.push("turn 1");
-	const cb = await h.block(false);
+	assert.equal(await h.block(false), "skipped", "non-terminal turns never block");
 	await h.rt.waitUntilSettled(5000);
-	assert.equal(cb, "skipped", "non-terminal turns never block");
-	assert.equal(h.rt.hasHighPriority, false);
-	assert.equal(h.delivered.length, 1);
-	assert.equal(h.delivered[0].kind, "nit");
-	// oracle: a mid-run inline nit is about an earlier/superseded step and carries no
-	// restate (the agent hasn't returned a final answer this turn).
-	assert.equal(h.delivered[0].stale, true, "mid-run inline nit is stale");
-	assert.equal(h.delivered[0].finalAnswer, false, "mid-run inline nit does not restate");
+	assert.equal(h.delivered.length, 0, "a first observation is held even when it is a nit");
+
+	h.rt.push("turn 2");
+	assert.equal(await h.block(false), "skipped");
+	await h.rt.waitUntilSettled(5000);
+	assert.deepEqual(h.delivered, [
+		{
+			id: findingId,
+			note: "rename variable",
+			severity: "nit",
+			kind: "confirmed",
+			stale: true,
+			finalAnswer: false,
+		},
+	]);
 });
 
 test("integration: a queued nit enters terminal reconfirmation and surviving advice restates", async () => {
@@ -1516,7 +1610,9 @@ test("integration: a queued nit enters terminal reconfirmation and surviving adv
 	rt.enqueueAdvice("queued race", "nit");
 	rt.push("final turn");
 	const outcome = await settleRuntime(rt);
-	if (outcome === "settled") delivered.push({ notes: rt.takeAllAdvice(), opts: { terminal: true } });
+	if (outcome === "settled") {
+		delivered.push({ notes: rt.takeAllAdvice().map(({ id: _id, ...note }) => note), opts: { terminal: true } });
+	}
 	assert.deepEqual(delivered, [{ notes: [{ note: "queued race", severity: "nit" }], opts: { terminal: true } }]);
 });
 
@@ -1578,7 +1674,10 @@ test("integration: settlement observation timeout preserves a nit the late revie
 	assert.deepEqual(delivered, []);
 	release();
 	await rt.waitUntilSettled(2000);
-	assert.deepEqual(delivered, [{ note: "still valid", severity: "nit" }]);
+	assert.deepEqual(
+		delivered.map(({ id: _id, ...note }) => note),
+		[{ note: "still valid", severity: "nit" }],
+	);
 });
 
 test("integration: terminal turn — a nit from the lagging previous-turn review is held, reconfirmed by the final turn's review, then delivered", async () => {
@@ -1589,7 +1688,7 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 				await tool.execute("n1", { note: "rename var", severity: "nit" });
 			} else if (reviewCount === 2) {
 				assert.match(text, /Things you flagged earlier/, "the held nit rides the final turn's reconfirm preamble");
-				assert.match(text, /\[NIT\] rename var/);
+				assert.match(text, /\[NIT id=pair-[a-f0-9]{12}\] rename var/);
 				await tool.execute("n2", { note: "rename var", severity: "nit" }); // still applies
 			}
 		},
@@ -1600,7 +1699,7 @@ test("integration: terminal turn — a nit from the lagging previous-turn review
 	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 2);
 	assert.deepEqual(
-		h.delivered,
+		h.delivered.map(({ id: _id, ...note }) => note),
 		[{ note: "rename var", severity: "nit", kind: "held" }],
 		"nit waits for the final turn's review, then lands as held",
 	);
@@ -1631,7 +1730,10 @@ test("integration: terminal turn — a nit from the final turn's OWN review land
 	h.rt.push("final turn"); // pair idle → the review includes the final turn (current, no reconfirm needed)
 	assert.equal(await h.block(true), "settled");
 	assert.equal(h.getReviewCount(), 1, "no extra reconfirm review — the nit skips the prune and waits for settle");
-	assert.deepEqual(h.delivered, [{ note: "rename var", severity: "nit", kind: "held" }]);
+	assert.deepEqual(
+		h.delivered.map(({ id: _id, ...note }) => note),
+		[{ note: "rename var", severity: "nit", kind: "held" }],
+	);
 	assert.equal(h.rt.hasHighPriority, false);
 });
 
@@ -1767,7 +1869,7 @@ test("integration: held blocker is dropped when the reconfirm review recants", a
 	assert.equal(h.rt.hasHighPriority, false);
 });
 
-test("integration: a held note survives non-terminal push without blocking or delivery", async () => {
+test("integration: a held finding is released after nonterminal frontier reconfirmation", async () => {
 	const h = buildIntegration({
 		onReview: async (text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "races on cache", severity: "blocker" });
@@ -1783,9 +1885,12 @@ test("integration: a held note survives non-terminal push without blocking or de
 	h.rt.push("turn 2");
 	assert.equal(h.rt.hasHighPriority, true, "held note survives push() (no mid-flight splice)");
 	assert.equal(await h.block(false), "skipped");
-	assert.equal(h.delivered.length, 0, "non-terminal progress never waits for or delivers held advice");
+	assert.equal(h.delivered.length, 0, "nonterminal progress does not wait for the review");
 	assert.equal(await h.rt.waitUntilSettled(5000), "settled");
-	assert.equal(h.rt.hasHighPriority, true);
+	assert.equal(h.rt.hasHighPriority, false);
+	assert.equal(h.delivered.length, 1, "the reconfirmed finding is released during the active run");
+	assert.equal(h.delivered[0].kind, "confirmed");
+	assert.equal(h.delivered[0].severity, "blocker");
 });
 
 test("integration: settlement observation timeout leaves a held note unconfirmed", async () => {
@@ -2153,8 +2258,11 @@ test("runtime: overflow rollback restores pre-existing held severity by value", 
 	rt.enqueueAdvice("shared mutation", "concern");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
-	assert.deepEqual(rt.takeAllAdvice(), [{ note: "shared mutation", severity: "concern" }]);
-	rt.requeueAdvice("shared mutation", "concern");
+	assert.deepEqual(
+		rt.takeAllAdvice().map(({ id: _id, ...note }) => note),
+		[{ note: "shared mutation", severity: "concern" }],
+	);
+	rt.enqueueAdvice("shared mutation", "concern");
 	rt.push("next turn");
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.deepEqual(
@@ -2200,7 +2308,7 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 		async prompt() {
 			attempts++;
 			if (attempts === 1) {
-				assert.deepEqual(rt.takeNits(), [{ note: "already delivered", severity: "nit" }]);
+				assert.deepEqual(rt.takeConfirmedAdvice(), []);
 				this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "length" });
 			} else {
 				this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
@@ -2212,7 +2320,7 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 		},
 	};
 	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
-	rt.enqueueAdvice("already delivered", "nit");
+	rt.requeueReadyAdvice("already delivered", "nit");
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
 	assert.deepEqual(rt.takeAllAdvice(), []);
@@ -2221,14 +2329,61 @@ test("runtime: overflow rollback does not resurrect advice concurrently drained 
 	assert.deepEqual(rt.takeAllAdvice(), []);
 });
 
-test("runtime: one queue dedupes, escalates, splits nits, and resets", () => {
+test("runtime: a stale ready snapshot cannot resurrect a concurrently delivered finding", async () => {
+	const findingId = "pair-123456789abc";
+	let rt;
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			assert.deepEqual(rt.takeConfirmedAdvice(), [{ id: findingId, note: "already confirmed", severity: "concern" }]);
+			rt.enqueueAdvice("already confirmed", "concern", findingId);
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt.requeueReadyAdvice("already confirmed", "concern", findingId);
+	rt.push("next turn");
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.deepEqual(rt.takeConfirmedAdvice(), []);
+	assert.deepEqual(rt.takeAllAdvice(), []);
+});
+
+test("runtime: a concurrent genuine escalation remains ready after the lower-severity finding was delivered", async () => {
+	const findingId = "pair-123456789abc";
+	let rt;
+	const agent = {
+		state: { messages: [], model: {} },
+		async prompt() {
+			assert.equal(rt.takeConfirmedAdvice()[0]?.severity, "concern");
+			rt.enqueueAdvice("risk is now proven", "blocker", findingId);
+			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+		},
+		abort() {},
+		reset() {},
+	};
+	rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
+	rt.requeueReadyAdvice("possible risk", "concern", findingId);
+	rt.push("next turn");
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.deepEqual(rt.takeConfirmedAdvice(), [{ id: findingId, note: "risk is now proven", severity: "blocker" }]);
+});
+
+test("runtime: the pending queue dedupes and escalates every severity", () => {
 	const agent = { state: { messages: [], model: {} }, abort() {}, reset() {} };
 	const rt = new A.PairRuntime(agent, new A.AdviseTool(() => false), 0);
 	rt.enqueueAdvice("shared mutation", "nit");
 	rt.enqueueAdvice("shared   mutation", "blocker");
 	rt.enqueueAdvice("small cleanup", "nit");
-	assert.deepEqual(rt.takeNits(), [{ note: "small cleanup", severity: "nit" }]);
-	assert.deepEqual(rt.takeAllAdvice(), [{ note: "shared mutation", severity: "blocker" }]);
+	assert.deepEqual(rt.takeConfirmedAdvice(), []);
+	assert.deepEqual(
+		rt.takeAllAdvice().map(({ id: _id, ...note }) => note),
+		[
+			{ note: "shared mutation", severity: "blocker" },
+			{ note: "small cleanup", severity: "nit" },
+		],
+	);
 	rt.enqueueAdvice("old transcript", "nit");
 	rt.reset();
 	assert.deepEqual(rt.takeAllAdvice(), []);
@@ -2383,7 +2538,7 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 	assert.equal(afterReset, false, "advice rejected once the review's epoch is orphaned");
 });
 
-test("runtime: failed reviews commit no direct, Consultant, or notebook effects", async () => {
+test("runtime: failed reviews commit no direct, consultant, or notebook effects", async () => {
 	let attempt = 0;
 	let rt;
 	const escalations = [];
@@ -2451,7 +2606,7 @@ test("runtime: failed reviews commit no direct, Consultant, or notebook effects"
 	assert.equal(notebookCommits.length, 2);
 });
 
-test("runtime: notebook persistence failure publishes no direct or Consultant effects", async () => {
+test("runtime: notebook persistence failure publishes no direct or consultant effects", async () => {
 	let rt;
 	const escalations = [];
 	const notebookTool = {
@@ -2498,7 +2653,7 @@ test("runtime: notebook persistence failure publishes no direct or Consultant ef
 	assert.deepEqual(escalations, []);
 });
 
-test("runtime: one successful attempt collapses an exact direct/Consultant shared root", async () => {
+test("runtime: one successful attempt collapses an exact direct/consultant shared root", async () => {
 	let rt;
 	const escalations = [];
 	const request = {
@@ -2555,7 +2710,7 @@ test("runtime queue: re-raising advice at higher severity escalates it", () => {
 	assert.equal(rt.takeAllAdvice()[0].severity, "blocker");
 });
 
-test("boundary: a send failure requeues direct findings and retains Consultant delivery", () => {
+test("boundary: a send failure requeues direct findings and retains consultant delivery", () => {
 	const delivered = [];
 	const failed = [];
 	const advisorCommits = [];
@@ -2577,7 +2732,7 @@ test("boundary: a send failure requeues direct findings and retains Consultant d
 	);
 	assert.deepEqual(delivered, []);
 	assert.deepEqual(failed, [{ note: "retry this", severity: "concern" }]);
-	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated Consultant candidate pending");
+	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated consultant candidate pending");
 });
 
 test("boundary: an exact cross-source duplicate keeps the direct finding only", () => {
@@ -2585,7 +2740,7 @@ test("boundary: an exact cross-source duplicate keeps the direct finding only", 
 	const commits = [];
 	const direct = [{ note: "Shared queue ownership", severity: "concern", source: "pair" }];
 	const advisor = {
-		note: { note: "Consultant restatement", severity: "concern", source: "consultant" },
+		note: { note: "consultant restatement", severity: "concern", source: "consultant" },
 		dedupeKeys: ["shared queue ownership"],
 		commit: (...args) => commits.push(args),
 	};
@@ -2600,16 +2755,16 @@ test("boundary: an exact cross-source duplicate keeps the direct finding only", 
 		true,
 	);
 	assert.deepEqual(sent, [direct]);
-	assert.deepEqual(commits, [[false, true]], "duplicate Consultant identity remains suppressed without a second send");
+	assert.deepEqual(commits, [[false, true]], "duplicate consultant identity remains suppressed without a second send");
 });
 
-test("boundary: direct pair programmer and ready Consultant findings share one outbound batch", () => {
+test("boundary: direct pair programmer and ready consultant findings share one outbound batch", () => {
 	const sent = [];
 	const delivered = [];
 	const commits = [];
 	const direct = [{ note: "pair programmer finding", severity: "concern", source: "pair" }];
 	const advisor = {
-		note: { note: "Consultant finding", severity: "blocker", source: "consultant", adjudication: "confirm" },
+		note: { note: "consultant finding", severity: "blocker", source: "consultant", adjudication: "confirm" },
 		commit: (value) => commits.push(value),
 	};
 
@@ -2689,7 +2844,7 @@ test("/pair notebook renders the notebook and keeps no memory alias", async () =
 	assert.match(notices.at(-1), /User selected Notebook terminology/);
 
 	await ext.commands.get("pair").handler("memory", ctx);
-	assert.match(notices.at(-1), /usage: \/pair \[on\|off\|status\|notebook \[full\]\]/);
+	assert.match(notices.at(-1), /Usage: \/pair \[on\|off\|status\|notebook \[full\]\]/);
 });
 
 test("agent-core ordering: a steer queued during streaming is inserted after that assistant turn_end", async () => {
@@ -2875,6 +3030,57 @@ async function withPairReviewDisabled(run) {
 	}
 }
 
+test("lifecycle: a pair programmer nit steers the active run at the next assistant-turn boundary", async () => {
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		x.h("before_agent_start")({ prompt: "go", systemPrompt: "base" }, x.uiCtx);
+		x.h("agent_start")();
+		x.h("turn_start")();
+		await x.cmd("test nit Stop before compounding this mistake.", x.uiCtx);
+		assert.equal(x.sent.length, 0, "streaming work is not interrupted mid-turn");
+
+		x.h("turn_end")(
+			{
+				message: {
+					role: "assistant",
+					content: [{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "README.md" } }],
+				},
+				toolResults: [],
+			},
+			x.turnCtx,
+		);
+
+		assert.equal(x.sent.length, 1, "the note must steer before the overall agent run settles");
+		assert.equal(x.sent[0].opts.deliverAs, "steer");
+		assert.equal(x.sent[0].opts.triggerTurn, true);
+		assert.match(x.sent[0].content, /Stop before compounding this mistake/);
+	});
+});
+
+test("lifecycle: an aborted turn can receive advice without autonomously restarting", async () => {
+	await withPairReviewDisabled(async () => {
+		const x = await lifecycleHarness();
+		x.h("before_agent_start")({ prompt: "go", systemPrompt: "base" }, x.uiCtx);
+		x.h("turn_start")();
+		await x.cmd("test nit Preserve this note after abort.", x.uiCtx);
+
+		x.h("turn_end")(
+			{
+				message: {
+					role: "assistant",
+					content: [{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "README.md" } }],
+				},
+				toolResults: [],
+			},
+			{ ...x.turnCtx, signal: AbortSignal.abort() },
+		);
+
+		assert.equal(x.sent.length, 1);
+		assert.equal(x.sent[0].opts.deliverAs, "steer");
+		assert.equal(x.sent[0].opts.triggerTurn, false);
+	});
+});
+
 test("lifecycle: a typed material-finding acknowledgment is persisted and prevents a reminder", async () => {
 	await withPairReviewDisabled(async () => {
 		const x = await lifecycleHarness();
@@ -2976,13 +3182,12 @@ test("render: multiple advisory notes in one message render as separate bordered
 });
 
 // ===========================================================================
-// 4. pi harness (E2E) — nit delivers immediately + triggers a turn
+// 4. pi harness (E2E) — a synthetic ready finding triggers a turn
 //
-// Only the nit path is live-testable: the /pair test hook runs under
-// PAIR_NO_REVIEW (no pair model), so high-severity notes have no runtime
-// to hold them and no turn_end block to deliver them. The hold → reconfirm →
-// catch-up-block → deliver flow is covered deterministically by the offline
-// runtime tests above.
+// The /pair test hook runs under PAIR_NO_REVIEW and injects a ready finding, so
+// this covers Pi delivery rather than the pair model's confirmation cycle. The
+// hold → reconfirm → active-run delivery flow is covered deterministically by
+// the offline runtime tests above.
 // ===========================================================================
 
 class RpcPi {

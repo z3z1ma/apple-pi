@@ -48,7 +48,7 @@ Before ingesting, querying, or linting:
 
 Use relative Markdown links and stable, descriptive paths. Do not treat a filename stem or basename as globally unique; resolve ambiguous links and similarly named subjects from context before merging them.
 
-Use ordinary tools directly for small operations. Use existing Researcher, Explorer, MCP, or `pi_exec` capabilities only when source acquisition or bounded fan-out materially helps. Acquisition and synthesis are separate boundaries: obtain and inspect a source before changing wiki knowledge, and keep fetch, extraction, privacy, or format failures visible. Do not create wiki-specific runtime machinery.
+Use ordinary tools directly for small operations. Use the existing researcher, explorer, MCP, or `pi_exec` capabilities only when source acquisition or bounded fan-out materially helps. Acquisition and synthesis are separate boundaries: obtain and inspect a source before changing wiki knowledge, and keep fetch, extraction, privacy, or format failures visible. Do not create wiki-specific runtime machinery.
 
 ## Initialize
 

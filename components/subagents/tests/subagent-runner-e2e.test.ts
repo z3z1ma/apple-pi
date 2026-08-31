@@ -73,7 +73,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 
 			const untrusted = beforeStart({ systemPrompt: "root" }, { cwd, isProjectTrusted: () => false } as any)
 				.systemPrompt as string;
-			expect(untrusted).toContain('"name": "Explorer"');
+			expect(untrusted).toContain('"name": "explorer"');
 			expect(untrusted).not.toContain("project-injected");
 			expect(untrusted).not.toContain("UNTRUSTED SYSTEM TEXT");
 		} finally {
@@ -787,7 +787,7 @@ RELOADED ROLE MUST NOT RUN.
 					resume: record.id,
 					prompt: "continue",
 					description: "resume",
-					subagent_type: "Explorer",
+					subagent_type: "explorer",
 				},
 				undefined,
 				undefined,
@@ -811,7 +811,7 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
-	it("runs internal Consultant adjudication from harness-assembled context with no recursive pair programmer", async () => {
+	it("runs internal consultant adjudication from harness-assembled context with no recursive pair programmer", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({

@@ -92,7 +92,7 @@ export interface ManagedBackgroundRequest {
 
 export interface ManagedConsultationRequest {
 	context: ConsultationContext;
-	/** Optional explicit inference override. Pair programmer consultations use Consultant's configured deep profile. */
+	/** Optional explicit inference override. Pair programmer consultations use the consultant's configured deep profile. */
 	profile?: string;
 	signal?: AbortSignal;
 	onActivity?: (activity: HarnessBoundedActivity) => void;
@@ -108,7 +108,7 @@ export interface ManagedSubagentService {
 	runFresh(ctx: ExtensionContext, request: ManagedAgentRequest): Promise<AgentRecord>;
 	/** Start one ordinary public background AgentRecord through the owned manager. */
 	startBackground(ctx: ExtensionContext, request: ManagedBackgroundRequest): ManagedBackgroundRun;
-	/** Run one hidden, read-only Consultant adjudication with pair programmer and nesting disabled. */
+	/** Run one hidden, read-only consultant adjudication with pair programmer and nesting disabled. */
 	runConsultation(ctx: ExtensionContext, request: ManagedConsultationRequest): Promise<ConsultantConsultationResult>;
 	abort(agentId: string): boolean;
 }

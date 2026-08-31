@@ -25,7 +25,7 @@ Inspect normalized status and the complete bounded diff, including untracked fil
 - **One independent reviewer:** use when fresh context adds meaningful value or the operator asks for independent review. Give it the complete bounded assignment once.
 - **Multiple independent lenses:** reserve for genuinely separate high-risk contracts such as authorization plus migration compatibility. Each lens runs once; the root reconciles.
 
-Planner/reviewer/verifier chains and residual loops serve exceptional composed reviews with explicit independent risk questions. The `pi_exec` programs under `references/` remain available for those cases.
+These planner/reviewer/verifier chains and residual loops serve exceptional composed reviews with explicit independent risk questions. The `pi_exec` programs under `references/` remain available for those cases.
 
 ## Finding standard
 

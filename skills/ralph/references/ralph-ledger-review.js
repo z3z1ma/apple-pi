@@ -168,7 +168,7 @@ async function reviewChange(files, background, priorFindings, priorCoverageGaps,
   const partitions = plan.partitions.map((partition, partitionIndex) => {
     const outsideScope = partition.files.filter((path) => !selectedPaths.has(path));
     if (outsideScope.length > 0) {
-      throw new Error(`Planner assigned non-selected changed paths: ${outsideScope.join(", ")}`);
+      throw new Error(`The planner assigned non-selected changed paths: ${outsideScope.join(", ")}`);
     }
     return { id: `partition-${partitionIndex + 1}`, ...partition };
   });
@@ -480,7 +480,7 @@ async function reviewChange(files, background, priorFindings, priorCoverageGaps,
   );
   const localCoverageGaps = [
     ...uncoveredFiles.map((path) => `Changed file was not assigned to a review partition: ${path}`),
-    ...unexpectedAssignedFiles.map((path) => `Planner assigned a path outside the selected change: ${path}`),
+    ...unexpectedAssignedFiles.map((path) => `The planner assigned a path outside the selected change: ${path}`),
     ...focusCoverageResult.missing.map((focus) => `Review focus did not return a result: ${focus.id}`),
     ...focusCoverageResult.unexpected.map((focus) => `Review returned an unexpected focus result: ${focus.id}`),
     ...focusCoverageResult.duplicates.map((focus) => `Review returned duplicate results for focus: ${focus.id}`),

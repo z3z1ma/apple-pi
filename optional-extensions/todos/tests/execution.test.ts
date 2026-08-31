@@ -12,7 +12,7 @@ function deferred<T>() {
 describe("TodoExecution", () => {
 	it("resets an atomic claim when catalog launch fails", () => {
 		const controller = new TodoController(new SessionTodoRepository());
-		controller.create({ title: "run", agentType: "Builder" });
+		controller.create({ title: "run", agentType: "builder" });
 		const execution = new TodoExecution(
 			controller,
 			() => ({ cwd: process.cwd() }) as any,
@@ -37,8 +37,8 @@ describe("TodoExecution", () => {
 
 	it("reports partial batch launch failures without hiding already-started IDs", () => {
 		const controller = new TodoController(new SessionTodoRepository());
-		controller.create({ title: "first", agentType: "Builder" });
-		controller.create({ title: "second", agentType: "Builder" });
+		controller.create({ title: "first", agentType: "builder" });
+		controller.create({ title: "second", agentType: "builder" });
 		const execution = new TodoExecution(
 			controller,
 			() => ({ cwd: process.cwd() }) as any,
@@ -64,8 +64,8 @@ describe("TodoExecution", () => {
 
 	it("rejects completed and manually active work", () => {
 		const controller = new TodoController(new SessionTodoRepository());
-		controller.create({ title: "completed", agentType: "Builder" });
-		controller.create({ title: "manual", agentType: "Builder" });
+		controller.create({ title: "completed", agentType: "builder" });
+		controller.create({ title: "manual", agentType: "builder" });
 		controller.update(1, { status: "completed" });
 		controller.update(2, { status: "active" });
 		const execution = new TodoExecution(
@@ -88,10 +88,10 @@ describe("TodoExecution", () => {
 
 	it("settles success and cascades only its now-unblocked dependent", async () => {
 		const controller = new TodoController(new SessionTodoRepository());
-		controller.create({ title: "first", agentType: "Builder" });
+		controller.create({ title: "first", agentType: "builder" });
 		controller.create({
 			title: "second",
-			agentType: "Builder",
+			agentType: "builder",
 			blockedBy: [1],
 		});
 		const runs: ReturnType<typeof deferred<any>>[] = [];
