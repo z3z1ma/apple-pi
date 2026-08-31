@@ -52,7 +52,7 @@ describe("file recall", () => {
 					version: 1,
 					operations: [
 						{
-							ref: "agents.run",
+							ref: "agent.run",
 							args: { task: "update auth" },
 							outcome: "succeeded",
 							children: [

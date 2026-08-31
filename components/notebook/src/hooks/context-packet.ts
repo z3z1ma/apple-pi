@@ -4,7 +4,7 @@ import type { Runtime } from "../runtime.js";
 import { buildCompactionProjection, type Entry, renderSummary } from "../session-ledger/index.js";
 
 export const NOTEBOOK_PACKET_CUSTOM_TYPE = "notebook.packet";
-export const NOTEBOOK_PACKET_HEADER = "## Pair Notebook";
+export const NOTEBOOK_PACKET_HEADER = "## Pair programmer notebook";
 
 export function latestCompactionBoundary(entries: Entry[]): string | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
@@ -45,7 +45,7 @@ export function buildNotebookContextPacket(
 }
 
 /**
- * After any compaction, append the current Pair notebook packet to the
+ * After any compaction, append the current pair programmer notebook packet to the
  * live conversation tail. Covers xAI server-side compaction, Pi default
  * summarization, and every compact-hook fallback that still writes a compaction
  * entry.

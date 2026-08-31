@@ -299,7 +299,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 		result.session.dispose();
 	}, 30_000);
 
-	it("resumes a completed public Agent with its model-visible ID and prior context", async () => {
+	it("resumes a completed public agent with its model-visible ID and prior context", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-tool-"));
 		temporaryDirectories.push(cwd);
 		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
@@ -354,7 +354,7 @@ Answer the task.
 		process.chdir(cwd);
 		try {
 			installSubagents(pi);
-			const tool = tools.get("Agent");
+			const tool = tools.get("agent");
 			expect(tool).toBeDefined();
 			const extensionCtx = {
 				cwd,
@@ -781,7 +781,7 @@ RELOADED ROLE MUST NOT RUN.
 			expect(managedToolNames).not.toContain("escalate_to_parent");
 			expect(record.internalOwner).toBe("managed:managed-test");
 			expect(record.session).toBeUndefined();
-			const resume = await tools.get("Agent").execute(
+			const resume = await tools.get("agent").execute(
 				"resume-managed",
 				{
 					resume: record.id,
@@ -811,7 +811,7 @@ RELOADED ROLE MUST NOT RUN.
 		}
 	}, 30_000);
 
-	it("runs internal Advisor adjudication from harness-assembled context with no recursive Pair", async () => {
+	it("runs internal Advisor adjudication from harness-assembled context with no recursive pair programmer", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisor-consultation-"));
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({
@@ -905,7 +905,7 @@ RELOADED ROLE MUST NOT RUN.
 		process.chdir(cwd);
 		try {
 			installSubagents(pi);
-			const agentParameters = Object.keys(tools.get("Agent").parameters.properties);
+			const agentParameters = Object.keys(tools.get("agent").parameters.properties);
 			expect(agentParameters).not.toContain("context_mode");
 			expect(agentParameters).not.toContain("draft");
 			const context = await buildConsultationContext({
@@ -931,7 +931,7 @@ RELOADED ROLE MUST NOT RUN.
 			expect(requestTexts[1]).toContain("The risk appears to be flush ordering.");
 			expect(systemText).toContain("senior software architect");
 			expect(activeToolSets[0]).toEqual(expect.arrayContaining(["read", "grep", "find", "ls", "give_second_opinion"]));
-			for (const forbidden of ["Agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "share_note", "ask_advisor"]) {
+			for (const forbidden of ["agent", "pi_exec", "edit", "write", "ledger_add", "mcp", "share_note", "ask_advisor"]) {
 				expect(activeToolSets[0]).not.toContain(forbidden);
 			}
 			expect(activeToolSets[1]).toEqual(["give_second_opinion"]);
@@ -1209,7 +1209,7 @@ export default function childTools(pi) {
 		result.session.dispose();
 	}, 30_000);
 
-	it("persists a child session with search_session and without the Pair notebook", async () => {
+	it("persists a child session with search_session and without the pair programmer notebook", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-context-"));
 		temporaryDirectories.push(cwd);
 

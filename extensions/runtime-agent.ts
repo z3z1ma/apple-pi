@@ -83,29 +83,29 @@ export interface ExecWorkerResolveOptions {
 
 export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentRequest {
 	if (typeof rawArgs.task !== "string" || rawArgs.task.trim() === "") {
-		throw new Error("agents.run requires a non-empty task string");
+		throw new Error("agent.run requires a non-empty task string");
 	}
 	if (
 		rawArgs.tools !== undefined &&
 		(!Array.isArray(rawArgs.tools) || rawArgs.tools.some((tool) => typeof tool !== "string"))
 	) {
-		throw new Error("agents.run tools must be an array of Pi core tool names");
+		throw new Error("agent.run tools must be an array of Pi core tool names");
 	}
 	if (rawArgs.model !== undefined || rawArgs.thinking !== undefined) {
-		throw new Error("agents.run selects inference with profile; raw model/thinking options are not supported");
+		throw new Error("agent.run selects inference with profile; raw model/thinking options are not supported");
 	}
 	if (rawArgs.pair !== undefined && typeof rawArgs.pair !== "boolean") {
-		throw new Error("agents.run pair must be a boolean");
+		throw new Error("agent.run pair must be a boolean");
 	}
 	const name = typeof rawArgs.name === "string" ? rawArgs.name.trim() : "";
 	const type = typeof rawArgs.type === "string" ? rawArgs.type.trim() : "";
 	const rawProfile = typeof rawArgs.profile === "string" ? rawArgs.profile : undefined;
 	const profile = rawProfile?.trim();
 	if (rawArgs.profile !== undefined && (!profile || profile !== rawProfile)) {
-		throw new Error("agents.run profile must be a non-empty, unpadded string");
+		throw new Error("agent.run profile must be a non-empty, unpadded string");
 	}
 	if (profile && !isInferenceProfileName(profile)) {
-		throw new Error(`agents.run profile must be one of: ${INFERENCE_PROFILE_NAMES.join(", ")}`);
+		throw new Error(`agent.run profile must be one of: ${INFERENCE_PROFILE_NAMES.join(", ")}`);
 	}
 	const validatedProfile: InferenceProfileName | undefined = profile as InferenceProfileName | undefined;
 	const request: AgentRequest = {
@@ -145,7 +145,7 @@ function typedSystemPrompt(config: AgentConfig, additional?: string): string {
 }
 
 /**
- * Resolve tools, model, thinking, and the definition prompt for an agents.run worker.
+ * Resolve tools, model, thinking, and the definition prompt for an agent.run worker.
  * Omitting type keeps the generic read-only worker. A catalog type supplies
  * that agent's defaults; an explicit profile overrides only inference selection.
  * systemPrompt appends and does not replace the selected agent definition.
@@ -164,7 +164,7 @@ export async function resolveExecWorker(
 				...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
 			};
 		}
-		if (!options.registry) throw new Error("agents.run profile resolution requires Pi's model registry");
+		if (!options.registry) throw new Error("agent.run profile resolution requires Pi's model registry");
 		const resolved = resolveAgentProfile({
 			registry: options.registry as Parameters<typeof resolveAgentProfile>[0]["registry"],
 			parentModel: options.parentModelObject as never,
@@ -187,7 +187,7 @@ export async function resolveExecWorker(
 	);
 	const tools = request.tools ?? defaultToolsFor(config);
 	if (!options.registry && (request.profile || config.profile)) {
-		throw new Error("agents.run profile resolution requires Pi's model registry");
+		throw new Error("agent.run profile resolution requires Pi's model registry");
 	}
 	const resolved = options.registry
 		? resolveAgentProfile({
@@ -218,23 +218,23 @@ export function serializeAgentContext(context: unknown): string {
 		json = JSON.stringify(context, (_key, nested) => (typeof nested === "bigint" ? String(nested) : nested));
 	} catch (error) {
 		throw new Error(
-			`agents.run context must be JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
+			`agent.run context must be JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}
 	if (json === undefined) {
-		throw new Error("agents.run context must be JSON-serializable");
+		throw new Error("agent.run context must be JSON-serializable");
 	}
 	return json;
 }
 
 export function normalizeOutputSchema(value: unknown): Record<string, unknown> {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new Error("agents.run outputSchema must be a JSON Schema object");
+		throw new Error("agent.run outputSchema must be a JSON Schema object");
 	}
 	const schema = JSON.parse(serializeAgentContext(value)) as Record<string, unknown>;
 	const types = typeof schema.type === "string" ? [schema.type] : Array.isArray(schema.type) ? schema.type : [];
 	if (!types.includes("object") && schema.properties === undefined) {
-		throw new Error("agents.run outputSchema must describe an object");
+		throw new Error("agent.run outputSchema must describe an object");
 	}
 	if (!types.includes("object")) schema.type = "object";
 	if (schema.additionalProperties === undefined) schema.additionalProperties = false;
@@ -247,10 +247,10 @@ export function resolveStructuredOutput(
 ): { value?: unknown; error?: string } {
 	if (!schema) return {};
 	if (returnedValue === undefined) {
-		return { error: `agents.run outputSchema was not satisfied: ${PI_EXEC_RETURN_TOOL} was not called` };
+		return { error: `agent.run outputSchema was not satisfied: ${PI_EXEC_RETURN_TOOL} was not called` };
 	}
 	if (!returnedValue || typeof returnedValue !== "object" || Array.isArray(returnedValue)) {
-		return { error: "agents.run outputSchema validation failed: return arguments must be an object" };
+		return { error: "agent.run outputSchema validation failed: return arguments must be an object" };
 	}
 	const value = structuredClone(returnedValue);
 	Value.Convert(schema as never, value);
@@ -259,13 +259,13 @@ export function resolveStructuredOutput(
 			.slice(0, 3)
 			.map((issue) => `${issue.instancePath || "/"}: ${issue.message}`)
 			.join("; ");
-		return { error: `agents.run outputSchema validation failed: ${issues || "value does not match schema"}` };
+		return { error: `agent.run outputSchema validation failed: ${issues || "value does not match schema"}` };
 	}
 	try {
 		JSON.stringify(value);
 	} catch (error) {
 		return {
-			error: `agents.run outputSchema result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
+			error: `agent.run outputSchema result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
 	return { value };

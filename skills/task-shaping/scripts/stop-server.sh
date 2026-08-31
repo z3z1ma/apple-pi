@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Stop the Ledger visual companion server and clean up
+# Stop the ledger visual companion server and clean up
 # Usage: stop-server.sh [--status] <session_dir>
 #
 # Kills the server process and deletes its direct-child /tmp runtime directory.
-# Persistent Ledger evidence directories are kept so mockups can be reviewed later.
+# Persistent ledger evidence directories are kept so mockups can be reviewed later.
 # --status checks the PID plus per-start server instance ID without changing state.
 
 STATUS_ONLY="false"

@@ -1,4 +1,5 @@
 import {
+	type Entry,
 	isNotebookMaintenanceEntry,
 	isObservationsDroppedData,
 	isObservationsRecordedData,
@@ -8,7 +9,6 @@ import {
 	NOTEBOOK_OBSERVATIONS_RECORDED,
 	NOTEBOOK_REFLECTIONS_RECORDED,
 	NOTEBOOK_REFLECTIONS_RETIRED,
-	type Entry,
 	type Observation,
 	type Reflection,
 } from "./types.js";

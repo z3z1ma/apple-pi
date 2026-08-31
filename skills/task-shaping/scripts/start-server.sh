@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Ledger visual companion server and output connection info
+# Start the ledger visual companion server and output connection info
 # Usage: start-server.sh [--task-dir <path>] [--host <bind-host>] [--url-host <display-host>] [--foreground] [--background]
 #
 # Starts server on a random high port, outputs JSON with URL.
@@ -129,7 +129,7 @@ SESSION_DIR="/tmp/ledger-visual-${SESSION_ID}"
 STATE_DIR="${SESSION_DIR}/state"
 if [[ -n "$TASK_DIR" ]]; then
   if [[ ! -f "$TASK_DIR/task.md" ]]; then
-    echo "{\"error\": \"--task-dir must name a Ledger task bundle containing task.md\"}"
+    echo "{\"error\": \"--task-dir must name a ledger task bundle containing task.md\"}"
     exit 1
   fi
   CONTENT_DIR="${TASK_DIR}/evidence/.storage/visual-companion/${SESSION_ID}/content"
@@ -138,7 +138,7 @@ else
 fi
 
 # Authentication keys, events, PIDs, and logs are always ephemeral. Only visual
-# content may persist with the task, so a committed Ledger never captures the URL key.
+# content may persist with the task, so a committed ledger never captures the URL key.
 export LEDGER_VISUAL_PORT_FILE="${STATE_DIR}/last-port"
 export LEDGER_VISUAL_TOKEN_FILE="${STATE_DIR}/token"
 PID_FILE="${STATE_DIR}/server.pid"

@@ -108,10 +108,10 @@ describe("subagent team system prompt", () => {
 
 	it("explains how team selection, inference profiles, and dynamic guidance compose", () => {
 		const block = buildTeamSystemPrompt(members, profiles);
-		expect(block).toContain("Choose a teammate with Agent's `subagent_type` or `agents.run`'s `type`");
+		expect(block).toContain("Choose a teammate with agent's `subagent_type` or `agent.run`'s `type`");
 		expect(block).toContain("Select an inference profile with `profile`");
-		expect(block).toContain("Agent's `system_prompt`");
-		expect(block).toContain("`agents.run`'s `systemPrompt`");
+		expect(block).toContain("agent's `system_prompt`");
+		expect(block).toContain("`agent.run`'s `systemPrompt`");
 		expect(block).toContain("dynamically specialized agent");
 		expect(block).toContain("do not grant tools, skills, permissions");
 	});

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { acquireExclusiveLease } from "../../shared/src/exclusive-lease.js";
+import { acquireExclusiveLease } from "../../../components/shared/src/exclusive-lease.js";
 import { ProjectTodoRepository, recoverStaleClaim } from "../src/repository.js";
 import { createTodo } from "../src/state.js";
 

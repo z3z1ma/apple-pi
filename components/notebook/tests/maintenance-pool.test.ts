@@ -10,7 +10,7 @@ import {
 	textCustomMessage,
 } from "./fixtures/session.js";
 
-describe("Pair notebook observation pool metrics", () => {
+describe("pair programmer notebook observation pool metrics", () => {
 	it("reports below-target pools as not ready", () => {
 		const observations = [observation("aaaaaaaaaaaa", { relevance: "low" })];
 

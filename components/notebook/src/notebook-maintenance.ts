@@ -1,27 +1,9 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import type { Static } from "typebox";
-
+import { Type } from "typebox";
+import { type Config, resolveNotebookSourceMaxTokens } from "./config.js";
 import { hashId } from "./ids.js";
-import { resolveNotebookSourceMaxTokens, type Config } from "./config.js";
-import { nowTimestamp, serializeSourceAddressedBranchEntries, truncateRecordContent } from "./serialize.js";
-import {
-	buildNotebookMaintenanceData,
-	foldLedger,
-	isSourceEntry,
-	latestCoverageIndex,
-	latestCoverageMarkerId,
-	NOTEBOOK_MAINTENANCE,
-	NOTEBOOK_OBSERVATIONS_RECORDED,
-	observationToSummaryLine,
-	reflectionToSummaryLine,
-	type Entry,
-	type Observation,
-	type Reflection,
-	type Relevance,
-} from "./session-ledger/index.js";
-import { estimateStringTokens, observationLineTokenCount } from "./tokens.js";
 import { resolveDropGuardrails, selectDropCandidates } from "./maintenance/drop.js";
 import {
 	normalizeRetiredReflectionIds,
@@ -30,6 +12,23 @@ import {
 	OBSERVATION_TIMESTAMP_PATTERN,
 } from "./maintenance/validation.js";
 import type { Runtime } from "./runtime.js";
+import { nowTimestamp, serializeSourceAddressedBranchEntries, truncateRecordContent } from "./serialize.js";
+import {
+	buildNotebookMaintenanceData,
+	type Entry,
+	foldLedger,
+	isSourceEntry,
+	latestCoverageIndex,
+	latestCoverageMarkerId,
+	NOTEBOOK_MAINTENANCE,
+	NOTEBOOK_OBSERVATIONS_RECORDED,
+	type Observation,
+	observationToSummaryLine,
+	type Reflection,
+	type Relevance,
+	reflectionToSummaryLine,
+} from "./session-ledger/index.js";
+import { estimateStringTokens, observationLineTokenCount } from "./tokens.js";
 
 const RelevanceSchema = Type.Union([
 	Type.Literal("low"),
@@ -146,10 +145,10 @@ export function preparePairNotebookBatch(args: {
 	};
 }
 
-/** Private pairing capability. Calls stage data only; the root host commits it after a successful Pair turn. */
+/** Private pairing capability. Calls stage data only; the root host commits it after a successful pair programmer turn. */
 export class UpdateNotebookTool {
 	readonly name = "update_notebook";
-	readonly label = "Update Pair notebook";
+	readonly label = "Update pair programmer notebook";
 	readonly description =
 		"Update the sourced notebook you keep for this pair programming session. Add durable observations, revise the current shared understanding, retire reflections that no longer apply, and drop only safely covered detail. This never edits repository files or arbitrary session state. When a full notebook update is requested, call exactly once even if every array is empty.";
 	readonly parameters = UpdateNotebookSchema as any;
@@ -329,7 +328,7 @@ export function commitPairNotebookUpdate(
 		droppedObservationIds: update.droppedIds,
 	});
 	if (!data) return false;
-	// One append is the durable transaction boundary: a successful Pair review
+	// One append is the durable transaction boundary: a successful pair programmer review
 	// cannot leave observations committed without its matching retirements/drops.
 	pi.appendEntry(NOTEBOOK_MAINTENANCE, data);
 	return true;

@@ -17,7 +17,7 @@ Planning is appropriate when requirements are settled and one or more are true:
 - migration, rollout, or recovery order matters;
 - the operator explicitly asks for a plan.
 
-A clear instruction to implement a bounded change follows the direct path. A Ledger task accompanies a plan when durable continuity is valuable.
+A clear instruction to implement a bounded change follows the direct path. A ledger task accompanies a plan when durable continuity is valuable.
 
 ## Plan for execution, not ceremony
 
@@ -44,7 +44,7 @@ Most Work Items omit the field. A plan explains why any independent review is wo
 
 ## Plan format
 
-For a durable Ledger plan:
+For a durable ledger plan:
 
 ```markdown
 Status: active

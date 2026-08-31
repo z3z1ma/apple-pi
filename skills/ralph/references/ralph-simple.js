@@ -73,7 +73,7 @@ function stopped(completedIterations, details = {}) {
 let lowMutationStreak = 0;
 for (let iteration = 1; iteration <= iterations; iteration++) {
   const before = await mutationSnapshot();
-  const result = await agents.run({
+  const result = await agent.run({
     name: `ralph-${iteration}`,
     profile: "coding",
     pair: true,

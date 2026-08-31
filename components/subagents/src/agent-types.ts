@@ -141,7 +141,7 @@ export type SpawnTypeResolution =
  * substitutes a different agent.
  *
  * Pure over `registry` — callers that need fresh agent files reload before
- * calling (the Agent tool already does, per spawn). Reloading here would mean
+ * calling (the agent tool already does, per spawn). Reloading here would mean
  * importing custom-agents.ts, which imports this module.
  */
 export function resolveSpawnTypeIn(registry: Map<string, AgentConfig>, requested: unknown): SpawnTypeResolution {

@@ -18,7 +18,7 @@
 
 If the main agent is busy, injection is delivered as a follow-up after its current work settles rather than steering or interrupting it. Injection does not clear BTW, so the side conversation can continue.
 
-The conversation uses the model and thinking level that were active when it started. It has only `read`, `grep`, `find`, and `ls`; it cannot change files or call apple-pi's task, notebook, MCP, exec, or delegation tools. It loads neither the Pair nor Pair notebook.
+The conversation uses the model and thinking level that were active when it started. It has only `read`, `grep`, `find`, and `ls`; it cannot change files or call apple-pi's task, notebook, MCP, exec, or delegation tools. It loads neither the pair programmer nor its notebook.
 
 ## Context and caching
 

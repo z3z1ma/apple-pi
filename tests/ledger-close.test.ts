@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, st
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { closeLedgerTask, addLedgerTask } from "../extensions/ledger.js";
+import { addLedgerTask, closeLedgerTask } from "../extensions/ledger.js";
 
 const roots: string[] = [];
 
@@ -42,6 +42,32 @@ describe("ledger close", () => {
 		expect(readFileSync(join(root, closed.indexPath), "utf8")).toContain(
 			"- `.ledger/history/202608170905-implement-bounded-behavior/task.md` — done — Implement bounded behavior — Keep one production owner for the requested outcome",
 		);
+	});
+
+	it("accepts legacy live and history index headings", async () => {
+		const root = temporaryRoot();
+		const first = await addLedgerTask(
+			root,
+			"First",
+			"Create the history index",
+			undefined,
+			new Date(2026, 7, 17, 9, 5),
+		);
+		await closeLedgerTask(root, first.taskId, "done");
+		const second = await addLedgerTask(
+			root,
+			"Second",
+			"Close through legacy headings",
+			undefined,
+			new Date(2026, 7, 17, 9, 6),
+		);
+		const liveIndex = join(root, ".ledger/INDEX.md");
+		const historyIndex = join(root, ".ledger/history/INDEX.md");
+		writeFileSync(liveIndex, readFileSync(liveIndex, "utf8").replace("# Task ledger", "# Task Ledger"));
+		writeFileSync(historyIndex, readFileSync(historyIndex, "utf8").replace("# Task history", "# Task History"));
+
+		const closed = await closeLedgerTask(root, second.taskId, "done");
+		expect(readFileSync(historyIndex, "utf8")).toContain(closed.taskPath);
 	});
 
 	it("shares the writer lease with add without losing either transaction", async () => {
@@ -150,7 +176,7 @@ describe("ledger close", () => {
 		mkdirSync(join(root, ".ledger/history"), { recursive: true });
 		writeFileSync(join(root, ".ledger/history/INDEX.md"), "not a task history\n");
 
-		await expect(closeLedgerTask(root, created.taskId, "done")).rejects.toThrow("# Task History");
+		await expect(closeLedgerTask(root, created.taskId, "done")).rejects.toThrow("# Task history");
 		expect(readFileSync(task, "utf8")).toBe(original);
 		expect(existsSync(join(root, ".ledger/history", created.taskId))).toBe(false);
 	});

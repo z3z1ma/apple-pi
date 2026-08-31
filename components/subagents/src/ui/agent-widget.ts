@@ -78,7 +78,7 @@ export interface AgentActivity {
 	lifetimeUsage: LifetimeUsage;
 }
 
-/** Metadata attached to Agent tool results for custom rendering. */
+/** Metadata attached to agent tool results for custom rendering. */
 export interface AgentDetails {
 	displayName: string;
 	description: string;

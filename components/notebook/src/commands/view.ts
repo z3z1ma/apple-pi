@@ -1,10 +1,10 @@
 import {
+	type Entry,
 	fullProjection,
 	observationToSummaryLine,
+	type Projection,
 	reflectionToSummaryLine,
 	visibleProjection,
-	type Entry,
-	type Projection,
 } from "../session-ledger/index.js";
 
 function renderList<T>(items: T[], render: (item: T) => string, empty: string): string {

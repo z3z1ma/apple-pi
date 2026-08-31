@@ -61,7 +61,7 @@ function fakeCtx(branches: TestEntry[][], overrides: Record<string, unknown> = {
 const dueBranch = [textCustomMessage("raw-1", "aaaaaaaaaaaa")]; // 3 tokens
 const belowBranch = [textCustomMessage("raw-1", "aaaa")]; // 1 token
 
-describe("Pair notebook compaction trigger", () => {
+describe("pair programmer notebook compaction trigger", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -91,7 +91,7 @@ describe("Pair notebook compaction trigger", () => {
 
 		expect(ctx.compact).toHaveBeenCalledTimes(1);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Pair notebook: compaction threshold reached (~3 estimated source tokens); triggering compaction",
+			"pair programmer notebook: compaction threshold reached (~3 estimated source tokens); triggering compaction",
 			"info",
 		);
 	});
@@ -150,7 +150,7 @@ describe("Pair notebook compaction trigger", () => {
 
 		expect(compact).toHaveBeenCalledTimes(1);
 		expect(runtime.compactInFlight).toBe(false);
-		expect(ctx.ui.notify).not.toHaveBeenCalledWith("Pair notebook: Already compacted", "error");
+		expect(ctx.ui.notify).not.toHaveBeenCalledWith("pair programmer notebook: Already compacted", "error");
 	});
 
 	it("skips when compaction is already in flight", async () => {
@@ -237,7 +237,7 @@ describe("Pair notebook compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 		expect(runtime.compactInFlight).toBe(false);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Pair notebook: compaction deferred — agent became busy before compaction",
+			"pair programmer notebook: compaction deferred — agent became busy before compaction",
 			"info",
 		);
 	});
@@ -270,7 +270,7 @@ describe("Pair notebook compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 		expect(runtime.compactInFlight).toBe(false);
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Pair notebook: compaction skipped — another compaction already ran before deferred compaction",
+			"pair programmer notebook: compaction skipped — another compaction already ran before deferred compaction",
 			"info",
 		);
 	});

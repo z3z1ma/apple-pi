@@ -40,7 +40,7 @@ const baselines = [
 const reviews = await parallel(
   baselines,
   async (baseline) => {
-    const result = await agents.run({
+    const result = await agent.run({
       name: baseline.id,
       profile: "balanced",
       tools: READ_ONLY,

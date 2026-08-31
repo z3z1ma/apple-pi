@@ -23,7 +23,7 @@ export interface AgentConfig {
 	maxTurns?: number;
 	persistSession?: boolean;
 	sessionDir?: string;
-	/** Default Pair sidecar choice; an explicit invocation boolean overrides it. */
+	/** Default pair programmer sidecar choice; an explicit invocation boolean overrides it. */
 	pair?: boolean;
 	allowedSubagents?: "all" | string[];
 	systemPrompt: string;

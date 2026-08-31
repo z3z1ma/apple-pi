@@ -72,7 +72,7 @@ const renderDelta = (o) => A.formatTurnDelta(o);
 
 initTheme();
 
-// Keep loader-level lifecycle tests independent from the operator's real Pair
+// Keep loader-level lifecycle tests independent from the operator's real pair programmer
 // enablement and prompt state. Individual tests may temporarily override this.
 const ORIGINAL_AGENT_DIR = process.env.PI_CODING_AGENT_DIR;
 const TEST_AGENT_DIR = mkdtempSync(join(tmpdir(), "pair-agent-dir-"));
@@ -99,13 +99,16 @@ test("isHighSeverity: only concern/blocker are held + reconfirmed", () => {
 	assert.equal(A.isHighSeverity("blocker"), true);
 });
 
-test("formatPairFooterText: Pair is default and Advisor work is visible", () => {
-	assert.equal(A.formatPairFooterText(false, 0), "Pair: $0.00");
-	assert.equal(A.formatPairFooterText(true, 0.02), "Pair (reviewing): $0.02");
-	assert.equal(A.formatPairFooterText(false, 1.5), "Pair: $1.50");
-	assert.equal(A.formatPairFooterText(false, 0.02, "advisor_running", 0.5), "Pair → Advisor: $0.52");
-	assert.equal(A.formatPairFooterText(false, 0.02, "escalation_pending", 0.5), "Pair (Advisor queued): $0.52");
-	assert.equal(A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5), "Pair (Advisor ready): $0.52");
+test("formatPairFooterText: pair programmer is default and Advisor work is visible", () => {
+	assert.equal(A.formatPairFooterText(false, 0), "pair programmer: $0.00");
+	assert.equal(A.formatPairFooterText(true, 0.02), "pair programmer (reviewing): $0.02");
+	assert.equal(A.formatPairFooterText(false, 1.5), "pair programmer: $1.50");
+	assert.equal(A.formatPairFooterText(false, 0.02, "advisor_running", 0.5), "pair programmer → Advisor: $0.52");
+	assert.equal(
+		A.formatPairFooterText(false, 0.02, "escalation_pending", 0.5),
+		"pair programmer (Advisor queued): $0.52",
+	);
+	assert.equal(A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5), "pair programmer (Advisor ready): $0.52");
 });
 
 test("formatReconfirmPreamble: empty when nothing held, else lists held notes", () => {
@@ -155,7 +158,7 @@ test("formatAdvisoryContent: wraps with finding id, severity + guidance, escapes
 	assert.match(c, /<\/pair-note>/);
 });
 
-test("material Pair findings receive opaque ids that remain stable when carried forward", () => {
+test("material pair programmer findings receive opaque ids that remain stable when carried forward", () => {
 	const first = A.identifyMaterialPairNotes([
 		{ note: "Inspect the durable boundary.", severity: "concern" },
 		{ note: "Tidy the name.", severity: "nit" },
@@ -991,7 +994,7 @@ test("runtime: a failed prompt keeps the seed for the next review", async () => 
 	rt.dispose();
 });
 
-test("Pair uses one fixed inference profile", () => {
+test("pair programmer uses one fixed inference profile", () => {
 	assert.equal(A.PAIR_MODEL_PROFILE, "pair");
 });
 
@@ -1238,7 +1241,7 @@ test("buildReviewMessages: re-prime context precedes but is distinct from the ne
 	assert.equal(messages[2].content[0].text, "LATEST-ACTIVITY");
 });
 
-test("Pair settings inherit Pi's native HTTP idle timeout", () => {
+test("pair programmer settings inherit Pi's native HTTP idle timeout", () => {
 	const root = mkdtempSync(join(tmpdir(), "pair-settings-"));
 	const agentDir = join(root, "agent");
 	const cwd = join(root, "project");
@@ -1263,7 +1266,7 @@ test("Pair settings inherit Pi's native HTTP idle timeout", () => {
 	}
 });
 
-test("the global Pair prompt and trusted project PAIR guidance have separate authority", async () => {
+test("the global pair programmer prompt and trusted project PAIR guidance have separate authority", async () => {
 	const root = mkdtempSync(join(tmpdir(), "pair-trust-"));
 	const agentDir = join(root, "agent");
 	const cwd = join(root, "project");
@@ -1390,7 +1393,7 @@ test("AdviseTool: markDelivered records dedup at the real delivery point", async
 // ===========================================================================
 // 1b. runtime mechanics (offline, stub agent)
 //
-// The hold/reconfirm/deliver flow needs the real runtime + a controllable Pair,
+// The hold/reconfirm/deliver flow needs the real runtime + a controllable pair programmer,
 // which a live E2E cannot make deterministic.
 // ===========================================================================
 
@@ -1711,7 +1714,7 @@ test("integration: a material finding keeps its opaque id across a paraphrased r
 
 test("integration: a blocker first raised ON the terminal turn is caught + delivered (Q1)", async () => {
 	// The pair flags for the first time while the terminal turn is blocked; the
-	// agent did no follow-up (it's stopping), so it's delivered without a reconfirm.
+	// The agent did no follow-up (it's stopping), so it's delivered without a reconfirm.
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "leaks an fd", severity: "blocker" });
@@ -2597,11 +2600,11 @@ test("boundary: an exact cross-source duplicate keeps the direct finding only", 
 	assert.deepEqual(commits, [[false, true]], "duplicate Advisor identity remains suppressed without a second send");
 });
 
-test("boundary: direct Pair and ready Advisor findings share one outbound batch", () => {
+test("boundary: direct pair programmer and ready Advisor findings share one outbound batch", () => {
 	const sent = [];
 	const delivered = [];
 	const commits = [];
-	const direct = [{ note: "Pair finding", severity: "concern", source: "pair" }];
+	const direct = [{ note: "pair programmer finding", severity: "concern", source: "pair" }];
 	const advisor = {
 		note: { note: "Advisor finding", severity: "blocker", source: "advisor", adjudication: "confirm" },
 		commit: (value) => commits.push(value),
@@ -2622,7 +2625,7 @@ test("boundary: direct Pair and ready Advisor findings share one outbound batch"
 		sent[0].map((note) => note.source),
 		["pair", "advisor"],
 	);
-	assert.deepEqual(delivered, ["Pair finding"]);
+	assert.deepEqual(delivered, ["pair programmer finding"]);
 	assert.deepEqual(commits, [true]);
 });
 
@@ -2797,7 +2800,7 @@ test("lifecycle: before_agent_start appends the primary protocol only while enab
 	}
 });
 
-test("lifecycle: terminal turn_end returns synchronously while Pair construction is pending", async () => {
+test("lifecycle: terminal turn_end returns synchronously while pair programmer construction is pending", async () => {
 	const root = mkdtempSync(join(tmpdir(), "pair-detached-"));
 	const agentDir = join(root, "agent");
 	mkdirSync(agentDir, { recursive: true });
@@ -2828,8 +2831,8 @@ test("lifecycle: terminal turn_end returns synchronously while Pair construction
 			{ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] }, toolResults: [] },
 			ctx,
 		);
-		assert.equal(result, undefined, "the primary hook must not return Pair's pending work");
-		assert.equal(authStarted, true, "Pair construction still starts in the background");
+		assert.equal(result, undefined, "the primary hook must not return pair programmer's pending work");
+		assert.equal(authStarted, true, "pair programmer construction still starts in the background");
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
@@ -2947,8 +2950,8 @@ test("render: advisory card has a left border on both the heading and body lines
 	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
 	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
 	assert.ok(
-		lines.some((line) => /Pair/.test(line) && /CONCERN/.test(line)),
-		"heading line carries both the Pair label and severity tag",
+		lines.some((line) => /pair programmer/.test(line) && /CONCERN/.test(line)),
+		"heading line carries both the pair programmer label and severity tag",
 	);
 });
 

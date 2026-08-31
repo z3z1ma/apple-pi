@@ -1,10 +1,10 @@
 import {
+	type Entry,
 	isNotebookMaintenanceEntry,
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
 	isReflectionsRetiredEntry,
-	type Entry,
 	type Observation,
 	type Reflection,
 } from "./types.js";

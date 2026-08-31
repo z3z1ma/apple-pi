@@ -7,7 +7,7 @@ export function isStaleExtensionCtxError(error: unknown): boolean {
 	return message.includes(STALE_EXTENSION_CTX_MESSAGE);
 }
 
-/** Root-owned deterministic notebook state. Pair Programmer owns the model work. */
+/** Root-owned deterministic notebook state. The pair programmer owns the model work. */
 export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;

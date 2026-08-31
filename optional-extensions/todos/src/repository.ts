@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { acquireExclusiveLease } from "../../shared/src/exclusive-lease.js";
+import { acquireExclusiveLease } from "../../../components/shared/src/exclusive-lease.js";
 import { createTodoState, parseTodoState, restoreTodoState } from "./state.js";
 import type { TodoState } from "./types.js";
 export interface TodoRepository {

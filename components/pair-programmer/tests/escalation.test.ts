@@ -88,7 +88,7 @@ const request = {
 
 const usage = { input: 100, cacheRead: 50, cacheWrite: 0, output: 20, cost: 0.2, durationMs: 10, toolCalls: 3 };
 
-describe("Pair escalation machinery", () => {
+describe("pair programmer escalation machinery", () => {
 	it("keeps architectural consultation private and excludes delegation or mutation capabilities", () => {
 		expect(PAIR_SESSION_TOOLS).toContain("ask_advisor");
 		for (const forbidden of ["Agent", "pi_exec", "bash", "edit", "write", "mcp"]) {

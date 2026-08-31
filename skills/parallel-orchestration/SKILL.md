@@ -53,8 +53,8 @@ Minor feedback concludes in the root. Resume a worker for a materially incomplet
 - conflict discovered: choose one owner and reconcile in the root;
 - scope ambiguity: ask only if it changes observable behavior or authority.
 
-## Ledger
+## ledger
 
-When a Ledger plan exists, record owners and dependency edges when they help recovery. Worker reports are claims; concise validated outcomes are enough.
+When a ledger plan exists, record owners and dependency edges when they help recovery. Worker reports are claims; concise validated outcomes are enough.
 
 Parallel orchestration ends after the results are reconciled and combined checks run. Commit, merge, or other integration remains operator-directed; parallel work does not imply per-worker review, re-review, or a final multi-agent tribunal.

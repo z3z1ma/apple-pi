@@ -39,9 +39,9 @@ Root inspection and checks are sufficient unless the plan names an independent r
 
 After review, validate findings and make normal corrections in the root session. Nits conclude there. Rerun affected checks after fixes. A second reviewer or follow-up review serves new material risk.
 
-## Ledger
+## ledger
 
-When Ledger is in use, keep plan state concise: active, blocked, complete, or cancelled; evidence notes preserve only observations another session needs.
+When ledger is in use, keep plan state concise: active, blocked, complete, or cancelled; evidence notes preserve only observations another session needs.
 
 ## Stop conditions
 

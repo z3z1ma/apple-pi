@@ -61,7 +61,7 @@ without repeating it.
 
 **Finding connection info:** The server writes its startup JSON to `$STATE_DIR/server-info`. If you launched the server in the background and did not capture stdout, read that file to recover the complete URL and port.
 
-**Storage boundary:** With `--task-dir`, HTML content persists under the task's `evidence/.storage/visual-companion/` directory. Authentication tokens, URLs, browser events, PIDs, and logs stay under `/tmp` and are removed on stop; never copy them into Ledger records. Without `--task-dir`, content is ephemeral too. Respect the repository's existing Ledger storage policy; this skill never edits `.gitignore`.
+**Storage boundary:** With `--task-dir`, HTML content persists under the task's `evidence/.storage/visual-companion/` directory. Authentication tokens, URLs, browser events, PIDs, and logs stay under `/tmp` and are removed on stop; never copy them into ledger records. Without `--task-dir`, content is ephemeral too. Respect the repository's existing ledger storage policy; this skill never edits `.gitignore`.
 
 **Launching from Pi:**
 

@@ -152,7 +152,7 @@ let warnedLastLoad = new Set<string>();
 let warnedThisLoad = new Set<string>();
 
 /**
- * Agents reload on activation and again on every `Agent` call, so an unchanged
+ * Agents reload on activation and again on every `agent` call, so an unchanged
  * problem would re-warn all session — over a painted TUI, since pi does not
  * redirect console output. Compare against the previous load rather than every
  * load ever, so a file that is fixed and then broken again still reports.

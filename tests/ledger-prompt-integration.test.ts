@@ -5,11 +5,6 @@ import {
 	LEDGER_SYSTEM_PROMPT,
 	LEDGER_SYSTEM_PROMPT_TAG,
 } from "../components/shared/src/ledger-system-prompt.js";
-import {
-	appendLedgerWorkflowSystemPrompt,
-	LEDGER_WORKFLOW_SYSTEM_PROMPT,
-	LEDGER_WORKFLOW_SYSTEM_PROMPT_TAG,
-} from "../components/shared/src/workflow-system-prompt.js";
 import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
@@ -21,10 +16,8 @@ import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
-import { WORKFLOW_EXTENSION_PATH } from "../extensions/workflow.js";
 
 const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
-const workflowMarker = `<${LEDGER_WORKFLOW_SYSTEM_PROMPT_TAG}>`;
 const env: EnvInfo = { isGitRepo: true, branch: "main", platform: "test" };
 const config: AgentConfig = {
 	name: "test-agent",
@@ -40,55 +33,22 @@ function occurrences(value: string, needle: string): number {
 }
 
 describe("ledger system prompt distribution", () => {
-	it("appends the contract idempotently", () => {
+	it("appends the operational-memory contract idempotently", () => {
 		const once = appendLedgerSystemPrompt("Root system prompt");
 		const twice = appendLedgerSystemPrompt(once);
 		expect(once).toBe(`Root system prompt\n\n${LEDGER_SYSTEM_PROMPT}`);
 		expect(twice).toBe(once);
 		expect(occurrences(twice, marker)).toBe(1);
+		expect(LEDGER_SYSTEM_PROMPT).toContain("searchable project-local operational memory");
+		expect(LEDGER_SYSTEM_PROMPT).toContain("retrospective.md");
+		expect(LEDGER_SYSTEM_PROMPT).not.toContain("Skill routing");
 	});
 
-	it("appends the root workflow bootstrap exactly once", () => {
-		const once = appendLedgerWorkflowSystemPrompt("Root system prompt");
-		const twice = appendLedgerWorkflowSystemPrompt(once);
-		expect(once).toBe(`Root system prompt\n\n${LEDGER_WORKFLOW_SYSTEM_PROMPT}`);
-		expect(twice).toBe(once);
-		expect(occurrences(twice, workflowMarker)).toBe(1);
-		const collision = appendLedgerWorkflowSystemPrompt("Project text mentions <ledger-workflow> as an example.");
-		expect(collision.endsWith(LEDGER_WORKFLOW_SYSTEM_PROMPT)).toBe(true);
-		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("Keep three layers distinct");
-		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("Backlog → to-do");
-		expect(LEDGER_WORKFLOW_SYSTEM_PROMPT).toContain("completed to-do as Ledger acceptance evidence");
-	});
-
-	it("keeps the root workflow extension out of child and worker extension lists", () => {
-		expect(childSessionExtensions().additionalExtensionPaths).not.toContain(WORKFLOW_EXTENSION_PATH);
-		expect(childSessionExtensions(true).additionalExtensionPaths).not.toContain(WORKFLOW_EXTENSION_PATH);
-		const args = buildAgentCliArgs(
-			{ task: "Inspect the task", systemPrompt: "Custom worker guidance" },
-			{ tools: ["read"], projectTrusted: false, model: "provider/model", thinking: "high" },
-		);
-		expect(args).not.toContain(WORKFLOW_EXTENSION_PATH);
-	});
-
-	it("does not copy root-only contracts into subagent prompt text", () => {
-		const replaced = buildAgentPrompt(config, "/repo", env);
-		const inherited = buildAgentPrompt({ ...config, promptMode: "append" }, "/repo", env, replaced);
-		expect(replaced).not.toContain(marker);
-		expect(inherited).not.toContain(marker);
-		const rootPrompt = appendLedgerWorkflowSystemPrompt("Root system prompt");
+	it("inherits the parent prompt unchanged in append-mode subagents", () => {
+		const rootPrompt = appendLedgerSystemPrompt("Root system prompt");
 		const appendChild = buildAgentPrompt({ ...config, promptMode: "append" }, "/repo", env, rootPrompt);
-		expect(appendChild).not.toContain(workflowMarker);
-	});
-
-	it("appends invocation-specific system guidance after preloaded skills", () => {
-		const prompt = buildAgentPrompt(config, "/repo", env, undefined, {
-			skillBlocks: [{ name: "demo", content: "Generic skill guidance." }],
-			additionalSystemPrompt: "Invocation-specific guidance.",
-		});
-		expect(prompt.indexOf("Do the assigned work.")).toBeLessThan(prompt.indexOf("Generic skill guidance."));
-		expect(prompt.indexOf("Generic skill guidance.")).toBeLessThan(prompt.indexOf("Invocation-specific guidance."));
-		expect(prompt).toContain("<invocation_instructions>\nInvocation-specific guidance.\n</invocation_instructions>");
+		expect(appendChild).toContain(marker);
+		expect(appendChild).toContain(LEDGER_SYSTEM_PROMPT);
 	});
 
 	it("loads the ledger extension on workers instead of pasting the contract", () => {
@@ -109,11 +69,11 @@ describe("ledger system prompt distribution", () => {
 		]);
 	});
 
-	it("does not copy the contract into the pair prompt", () => {
+	it("does not copy the contract into the pair programmer prompt", () => {
 		expect(loadPairSystemPrompt(process.cwd(), false)).not.toContain(marker);
 	});
 
-	it("loads children with fast mode, safety guards, ledger, search_session, and MCP", () => {
+	it("loads children with fast mode, safety guards, the ledger, search_session, and MCP", () => {
 		expect(childSessionExtensions()).toEqual({
 			noExtensions: true,
 			additionalExtensionPaths: [
@@ -138,7 +98,7 @@ describe("ledger system prompt distribution", () => {
 		});
 	});
 
-	it("adds the pair sidecar only when requested", () => {
+	it("adds the pair programmer sidecar only when requested", () => {
 		expect(childSessionExtensions(true)).toEqual({
 			noExtensions: true,
 			additionalExtensionPaths: [

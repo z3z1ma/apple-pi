@@ -196,9 +196,9 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 }
 
 /**
- * Render the still-uncovered primary trajectory once for Pair session seeding.
+ * Render the still-uncovered primary trajectory once for pair programmer session seeding.
  * Source ids remain attached while successful tool bodies use the same compact
- * receipts as live Pair review rather than submitting a second notebook transcript.
+ * receipts as live pair programmer review rather than submitting a second notebook transcript.
  */
 export function formatSourceAddressedTrajectory(
 	entries: readonly unknown[],

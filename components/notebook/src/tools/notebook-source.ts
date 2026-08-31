@@ -1,16 +1,16 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type } from "@earendil-works/pi-ai";
 import type { Message, ToolResultMessage } from "@earendil-works/pi-ai";
+import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import {
-	recallNotebookSources,
-	type Entry,
-	type RecallResult,
-	type RecalledObservation,
-} from "../session-ledger/recall.js";
-import type { Observation, Reflection } from "../session-ledger/index.js";
 import { renderRecallSourceEntries, renderRecallSourceEntry } from "../serialize.js";
+import type { Observation, Reflection } from "../session-ledger/index.js";
+import {
+	type Entry,
+	type RecalledObservation,
+	type RecallResult,
+	recallNotebookSources,
+} from "../session-ledger/recall.js";
 import { estimateEntryTokens } from "../tokens.js";
 
 export const NOTEBOOK_SOURCE_TOOL_NAME = "revisit_note";

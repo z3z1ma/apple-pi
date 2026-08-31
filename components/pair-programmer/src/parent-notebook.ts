@@ -2,9 +2,9 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import {
+	messageHasNotebookPacket,
 	NOTEBOOK_PACKET_CUSTOM_TYPE,
 	NOTEBOOK_PACKET_HEADER,
-	messageHasNotebookPacket,
 } from "../../notebook/src/hooks/context-packet.js";
 import { fullProjection } from "../../notebook/src/session-ledger/index.js";
 import { observationToSummaryLine, reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";

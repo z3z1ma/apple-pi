@@ -138,7 +138,7 @@ const completeSnapshot: FooterSnapshot = {
 	availableProviderCount: 2,
 	statuses: [
 		{ key: "subagents", text: "2 running agents" },
-		{ key: "q-pair", text: "Pair reviewing · $0.42" },
+		{ key: "q-pair", text: "pair programmer reviewing · $0.42" },
 		{ key: "backlog", text: "backlog 3" },
 		{ key: "mcp-auth", text: "MCP authenticating docs" },
 		{ key: "mcp", text: "MCP 3 servers" },
@@ -219,7 +219,7 @@ describe("input card rendering", () => {
 		expect(output).toContain("\u001b[33mMCP authenticating docs\u001b[0m");
 		expect(output).toContain("\u001b[94mMCP 3 servers\u001b[0m");
 		expect(output).toContain("\u001b[36mbacklog 3\u001b[0m");
-		expect(output).toContain("\u001b[95mPair reviewing · $0.42\u001b[0m");
+		expect(output).toContain("\u001b[95mpair programmer reviewing · $0.42\u001b[0m");
 		expect(output).toContain("\u001b[32m2 running agents\u001b[0m");
 		expect(output).toContain("\u001b[36mExtension active\u001b[0m");
 		expect(output).toContain("\u001b[93m↑12k\u001b[0m");
@@ -232,15 +232,15 @@ describe("input card rendering", () => {
 	});
 
 	it("restores producer color after nested status styling resets", () => {
-		const pairStatus = "\u001b[90m│\u001b[0m Pair reviewing";
+		const pairStatus = "\u001b[90m│\u001b[0m pair programmer reviewing";
 		const snapshot = {
 			...completeSnapshot,
 			statuses: [{ key: "q-pair", text: pairStatus }],
 		};
 		const output = renderInputCard(snapshot, theme, 120, [""]).join("\n");
 
-		expect(output).toContain("\u001b[95m\u001b[90m│\u001b[0m\u001b[95m Pair reviewing\u001b[0m");
-		expect(stripTerminalSequences(output).split("│ Pair reviewing")).toHaveLength(2);
+		expect(output).toContain("\u001b[95m\u001b[90m│\u001b[0m\u001b[95m pair programmer reviewing\u001b[0m");
+		expect(stripTerminalSequences(output).split("│ pair programmer reviewing")).toHaveLength(2);
 	});
 
 	it("uses a safe theme role for an unknown future thinking level", () => {

@@ -46,7 +46,7 @@ const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, 
  * `finalAnswer` appends guidance for advice delivered as a followup to a terminal
  * message: at the moment it is steered in, the primary is stopped having returned
  * a final answer this turn — regardless of which turn generated the note. If the
- * agent acts on it, it should reply with a fresh, self-contained final answer rather
+ * The agent acts on it, it should reply with a fresh, self-contained final answer rather
  * than a terse follow-up — so the user reads one complete answer, not a
  * back-and-forth thread it has to stitch together.
  */

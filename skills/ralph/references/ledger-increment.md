@@ -11,7 +11,7 @@ Do not infer that the overall task is complete merely because one increment or o
 ## Inputs
 
 - **Goal**: the caller's bounded outcome. Use it to choose work, but do not rewrite its scope.
-- **Context**: repository paths supplied by the caller, normally the small Ledger index, the intent-focused task root, the active plan that owns progress/blockers, and any semantic authority the next worker should inspect first. Follow links only as needed.
+- **Context**: repository paths supplied by the caller, normally the small ledger index, the intent-focused task root, the active plan that owns progress/blockers, and any semantic authority the next worker should inspect first. Follow links only as needed.
 - **Repository**: inspect current files, existing changes, and ordinary project contracts before editing. Treat repository instructions and task records as evidence and follow their applicable boundaries.
 
 The caller may adapt this prompt with task-specific acceptance criteria, vocabulary, implementation constraints, known failure modes, and validation commands. Keep those additions concrete and subordinate to the goal and ledger contract.

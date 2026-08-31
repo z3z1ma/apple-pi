@@ -51,9 +51,9 @@ Start with the behavior being changed. Add edge cases when code structure, an ob
 
 A focused test can justify moving forward. Run broader suites when the change has broad reach or before making a correspondingly broad claim.
 
-## Ledger and review
+## ledger and review
 
-Ledger evidence is optional. If a governing task genuinely needs durable RED/GREEN provenance, record concise commands and results. Otherwise test output and the repository diff are enough.
+ledger evidence is optional. If a governing task genuinely needs durable RED/GREEN provenance, record concise commands and results. Otherwise test output and the repository diff are enough.
 
 Test-first work does not automatically require task shaping, a plan, a subagent, or independent review. Those are separate risk decisions.
 

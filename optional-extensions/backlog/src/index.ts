@@ -127,12 +127,12 @@ export function installBacklog(pi: ExtensionAPI): void {
 			name: "backlog_add",
 			label: "Backlog Add",
 			description:
-				"Park one concrete item in the current session's branch-aware backlog. This records worthwhile work that is outside the active scope; it does not start the work or create a Ledger task.",
+				"Park one concrete item in the current session's branch-aware backlog. This records worthwhile work that is outside the active scope; it does not start the work or create a ledger task.",
 			promptSnippet: "Park a concrete out-of-scope item in the session backlog",
 			promptGuidelines: [
 				"Use backlog_add when current work reveals a concrete worthwhile item that should be preserved but not pursued now.",
-				"Do not use backlog_add for active implementation steps, vague possibilities, or work already represented by a Ledger task.",
-				"Treat backlog_add as parking an item, not as a commitment to execute it or promote it to Ledger.",
+				"Do not use backlog_add for active implementation steps, vague possibilities, or work already represented by a ledger task.",
+				"Treat backlog_add as parking an item, not as a commitment to execute it or promote it to ledger.",
 			],
 			parameters: Type.Object({
 				title: Type.String({
@@ -176,7 +176,7 @@ export function installBacklog(pi: ExtensionAPI): void {
 			name: "backlog_list",
 			label: "Backlog List",
 			description:
-				"Read the ordered backlog for the current session branch. Use the stable numeric IDs with backlog_take when an item moves into active work or is recorded as a Ledger task; editing and ordering remain human-owned through /backlog.",
+				"Read the ordered backlog for the current session branch. Use the stable numeric IDs with backlog_take when an item moves into active work or is recorded as a ledger task; editing and ordering remain human-owned through /backlog.",
 			promptSnippet: "Read the current session backlog when the user refers to parked items",
 			promptGuidelines: [
 				"Use backlog_list when the user asks about, selects, or wants to act on items already parked in the session backlog.",
@@ -216,10 +216,10 @@ export function installBacklog(pi: ExtensionAPI): void {
 			name: "backlog_take",
 			label: "Backlog Take",
 			description:
-				"Remove one item from the current session backlog because it is now being handled in the active work or has been recorded as a durable Ledger task. This does not itself complete the work or create a Ledger task.",
-			promptSnippet: "Take an item out of the session backlog when active work or a Ledger task assumes ownership",
+				"Remove one item from the current session backlog because it is now being handled in the active work or has been recorded as a durable ledger task. This does not itself complete the work or create a ledger task.",
+			promptSnippet: "Take an item out of the session backlog when active work or a ledger task assumes ownership",
 			promptGuidelines: [
-				"Use backlog_take when you begin handling a listed item in the active work, or after the user and agent agree to promote it and it has been successfully recorded as a Ledger task.",
+				"Use backlog_take when you begin handling a listed item in the active work, or after the user and agent agree to promote it and it has been successfully recorded as a ledger task.",
 				"Do not remove an item merely because it was discussed, and do not treat removal as evidence that the underlying work is complete.",
 				"Use backlog_list first when the item's stable numeric ID is not already known.",
 			],

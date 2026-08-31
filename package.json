@@ -21,7 +21,6 @@
   "files": [
     "components/pair-programmer/src/",
     "components/ask-user-question/src/",
-    "components/backlog/src/",
     "components/codex-fast/src/",
     "components/home-search-guard/src/",
     "components/shared/src/",
@@ -34,7 +33,6 @@
     "components/notify/assets/",
     "components/notify/scripts/",
     "components/notify/LICENSE",
-    "components/todos/src/",
     "components/tmux-sessions/src/",
     "components/tmux-sessions/scripts/",
     "components/tmux-sessions/pi_session_manager.tmux",
@@ -46,14 +44,19 @@
     "docs/",
     "LICENSE",
     "README.md",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "components/reminders/src/",
+    "optional-extensions/backlog/index.ts",
+    "optional-extensions/backlog/src/",
+    "optional-extensions/todos/index.ts",
+    "optional-extensions/todos/src/"
   ],
   "pi": {
     "extensions": [
       "./extensions/pi-pair.ts",
       "./extensions/ask-user-question.ts",
-      "./extensions/backlog.ts",
       "./extensions/context.ts",
+      "./extensions/remind-me.ts",
       "./extensions/auto-compact.ts",
       "./extensions/codex-fast.ts",
       "./extensions/home-search-guard.ts",
@@ -61,13 +64,11 @@
       "./extensions/mcp.ts",
       "./extensions/subagents.ts",
       "./extensions/ledger.ts",
-      "./extensions/workflow.ts",
       "./extensions/xai-hosted-tools.ts",
       "./extensions/xai-context-compaction.ts",
       "./extensions/notify.ts",
       "./extensions/tmux-sessions.ts",
-      "./extensions/status-footer.ts",
-      "./extensions/todos.ts"
+      "./extensions/status-footer.ts"
     ],
     "skills": [
       "./skills"
@@ -77,9 +78,9 @@
     ]
   },
   "scripts": {
-    "format": "biome format --write components extensions tests docs README.md package.json tsconfig.json vitest.config.ts biome.json",
-    "format:check": "biome format components extensions tests docs README.md package.json tsconfig.json vitest.config.ts biome.json",
-    "lint": "biome lint components extensions tests",
+    "format": "biome format --write components optional-extensions extensions tests docs README.md package.json tsconfig.json vitest.config.ts biome.json",
+    "format:check": "biome format components optional-extensions extensions tests docs README.md package.json tsconfig.json vitest.config.ts biome.json",
+    "lint": "biome lint components optional-extensions extensions tests",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:pair && npm run test:loader",

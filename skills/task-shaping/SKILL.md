@@ -24,7 +24,7 @@ Use for clear, reversible work that the root session can complete coherently.
 3. Run a targeted check.
 4. Report and let the operator react to the artifact.
 
-No Ledger, design artifact, subagent, or independent review is required.
+No ledger, design artifact, subagent, or independent review is required.
 
 ### Collaborative
 
@@ -39,7 +39,7 @@ A few sentences in chat and one decision point are usually enough.
 
 ### Durable design
 
-Use a Ledger task and optional specification only when the work needs cold-start continuity, coordinates substantial independent outcomes, changes a costly architecture or public contract, or will likely span sessions. Record only decisions that a future executor cannot safely recover from the repository and operator request.
+Use a ledger task and optional specification only when the work needs cold-start continuity, coordinates substantial independent outcomes, changes a costly architecture or public contract, or will likely span sessions. Record only decisions that a future executor cannot safely recover from the repository and operator request.
 
 A specification is justified when behavior, invariants, failure semantics, or migration boundaries must remain stable independently of implementation. A plan is justified when sequencing and ownership materially reduce execution risk. Neither artifact is an automatic next step.
 

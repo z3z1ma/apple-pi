@@ -16,7 +16,7 @@ Good reasons:
 - a large integrated change has a subtle contract difficult to verify locally;
 - the root agent is genuinely stuck after gathering evidence.
 
-Small reversible changes with adequate checks rely on root inspection and the persistent Pair. Independent review serves the concrete reasons above.
+Small reversible changes with adequate checks rely on root inspection and the persistent pair programmer. Independent review serves the concrete reasons above.
 
 ## One-shot contract
 
@@ -44,9 +44,9 @@ The root agent owns the result:
 
 Nits and ordinary disagreements conclude in the root. One scoped follow-up review serves a material high-risk fix that remains difficult to verify through code and tests. Otherwise the root's reconciliation ends the review.
 
-## Ledger
+## ledger
 
-When a Ledger task already uses durable review evidence, record only material findings, dispositions, and residual risk needed by a future session. If a preferred review mechanism fails, use another bounded mechanism only when the original risk still justifies the cost.
+When a ledger task already uses durable review evidence, record only material findings, dispositions, and residual risk needed by a future session. If a preferred review mechanism fails, use another bounded mechanism only when the original risk still justifies the cost.
 
 ## Severity
 

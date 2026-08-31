@@ -17,7 +17,7 @@ function writeJson(path: string, value: unknown) {
 	writeFileSync(path, JSON.stringify(value), "utf-8");
 }
 
-describe("Pair notebook config", () => {
+describe("pair programmer notebook config", () => {
 	let root: string;
 	let cwd: string;
 	let agentDir: string;
@@ -35,7 +35,7 @@ describe("Pair notebook config", () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	it("uses Pair notebook defaults", () => {
+	it("uses pair programmer notebook defaults", () => {
 		expect(DEFAULTS).toEqual({
 			notebookAfterTokens: 20000,
 			compactAfterTokens: 81000,
@@ -48,7 +48,7 @@ describe("Pair notebook config", () => {
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
 	});
 
-	it("loads project Pair settings only when trusted", () => {
+	it("loads project pair programmer settings only when trusted", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), { pair: { notebookAfterTokens: 100 } });
 		expect(loadConfig(cwd, false, {})).toMatchObject({ notebookAfterTokens: DEFAULTS.notebookAfterTokens });
 		expect(loadConfig(cwd, true, {})).toMatchObject({ notebookAfterTokens: 100 });
@@ -61,7 +61,7 @@ describe("Pair notebook config", () => {
 		expect(runtime.ensureConfig(cwd, true).notebookAfterTokens).toBe(100);
 	});
 
-	it("merges global, trusted project, and env Pair settings in order", () => {
+	it("merges global, trusted project, and env pair programmer settings in order", () => {
 		writeJson(join(agentDir, "settings.json"), {
 			pair: {
 				notebookAfterTokens: 10,
@@ -86,7 +86,7 @@ describe("Pair notebook config", () => {
 		});
 	});
 
-	it("ignores invalid Pair values", () => {
+	it("ignores invalid pair programmer values", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
 			pair: {
 				notebookAfterTokens: -1,

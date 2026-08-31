@@ -1,14 +1,14 @@
 # apple-pi 🥧
 
-My own personal [Pi](https://github.com/badlogic/pi-mono) package: pair, questions, session backlog and active to-dos, context, exec, subagents, and the workflow skills I actually use.
+My own personal [Pi](https://github.com/badlogic/pi-mono) package: pair programming, questions, self-reminders, context, exec, subagents, and the workflow skills I actually use.
 
 ## Why this exists
 
 This repository is my take on what should be in a coding harness, based on real work, accumulated lessons, and my own taste. Pi is the base that made it practical to build. Above that, the rule is simple: the best software asset has the least code and the most function, clarity, and leverage. AI makes it cheap to add another abstraction, state store, or agent; it does not make the result free to understand. I borrow freely from [Superpowers](https://github.com/obra/superpowers), [10x](https://github.com/z3z1ma/10x), [Prime Intellect](https://github.com/PrimeIntellect-ai/prime-agent), [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent), and anywhere else something works, then reduce it into the version I want to carry.
 
-There is no single success story for [Pair](docs/pair-programmer.md). The value is letting the main agent work with a persistent pair programming partner who follows the same session, carries a sourced notebook, and taps it on the shoulder when a nit, concern, or blocker deserves attention. The partner can ask a read-only senior software architect for an independent opinion on difficult questions. The main agent keeps the keyboard and remains responsible for code, decisions, and validation.
+There is no single success story for [pair programmer](docs/pair-programmer.md). The value is letting the main agent work with a persistent pair programming partner who follows the same session, carries a sourced notebook, and taps it on the shoulder when a nit, concern, or blocker deserves attention. The partner can ask a read-only senior software architect for an independent opinion on difficult questions. The main agent keeps the keyboard and remains responsible for code, decisions, and validation.
 
-Long-horizon context took longer to work out. The persistent [Pair Programmer](docs/pair-programmer.md) keeps a sourced [notebook](docs/context.md) as the conversation develops: observations record what it sees, reflections keep current conclusions, and the notebook returns after compaction. [10x](https://github.com/z3z1ma/10x) (originally loom) was my first distillation of the rest of this problem, but one project directory growing forever did not match how I work. I work on a task. [Ledger](docs/ledger.md) takes the provenance and learning from 10x and builds the small graph that task needs: specification, plan, research, decisions, evidence, and retrospective, all moving to history together when the task ends. Around that durable core, the [backlog](docs/backlog.md) gives both me and the model somewhere to park worthwhile things that are outside the current scope; I can later action them or promote them into Ledger without derailing the work that found them. [To-dos](docs/todos.md) keep the model on a concrete sequence during ad hoc work, or mirror a Ledger plan so I can see execution progress. They are wired into branches, reminders, dependencies, the UI, and the owned subagent runtime, while remaining execution state rather than evidence of completion. Knowledge that should survive many tasks goes into the [wiki](skills/llm-wiki): Karpathy-style plain files, an index and log, pages and raw sources, with enough structure to accumulate useful context and almost nothing to operate.
+Long-horizon context took longer to work out. The persistent [pair programmer](docs/pair-programmer.md) keeps a sourced [notebook](docs/context.md) as the conversation develops: observations record what it sees, reflections keep current conclusions, and the notebook returns after compaction. [10x](https://github.com/z3z1ma/10x) (originally loom) was my first distillation of the rest of this problem, but one project directory growing forever did not match how I work. I work on a task. The [ledger](docs/ledger.md) keeps the operational context that task needs—plans, specifications, notes, decisions, evidence, assets, progress, outcomes, and retrospective learning—together through history when it ends. The default [self-reminder](docs/reminders.md) lets the model explicitly carry selected follow-up work into the next turn without ambient nagging or a second task system. The retained [backlog and to-do extensions](docs/optional-extensions.md) remain available when an installation explicitly wants their managers and persistent execution state. Knowledge that should survive many tasks goes into the [wiki](skills/llm-wiki): Karpathy-style plain files, an index and log, pages and raw sources, with enough structure to accumulate useful context and almost nothing to operate.
 
 [`pi_exec`](docs/exec.md) fundamentally changes how the agent composes work. It can put tools and model calls into bounded JavaScript, then use normal control flow, concurrency, pipelines, fan-out, or map-reduce without dragging every intermediate value through the conversation. The agent reaches for it constantly and writes programs I would never have imagined turning into tools. NVIDIA's [AVO result](https://developer.nvidia.com/blog/nvidia-avo-reaches-100-on-arc-agi-3-demonstrating-a-frontier-level-general-purpose-architecture-for-long-horizon-autonomous-agents/) shows the extreme: Claude Opus 5 inside that harness completed the full public ARC-AGI-3 set—183 levels across 25 environments—with a 100.00 RHAE score. Pi Exec keeps that kind of composition bounded by budgets, concurrency and time limits, cancellation, output limits, and explicit tool bridges. Useful programs can be saved under `.pi/programs`, discovered later, and run again; alongside skills, this gives the agent a legible way to improve its own harness. The built-in [engineering team](docs/subagents.md) gives those fan-outs purposefully different roles—Explore, Research, Plan, Advisor, Implement, and Design—with prompts, tools, and [model profiles](docs/model-profiles.md) that match the job. The harness only has to suit the way I work, and I am happy to leave out a good idea when carrying it would cost more clarity than it adds.
 
@@ -31,7 +31,7 @@ I think about the package in four groups. They are all installed together, but e
 
 These are the pieces I interact with directly while a session is running.
 
-- [`Pair`](docs/pair-programmer.md) — a persistent pair programming partner with episodic guidance from a deep software architect
+- [`pair programmer`](docs/pair-programmer.md) — a persistent pair programming partner with episodic guidance from a deep software architect
 - [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
 - [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
 - [`Distill`](docs/distill.md) — proposal-first extraction of durable lessons via `/distill [focus]`
@@ -41,10 +41,10 @@ These are the pieces I interact with directly while a session is running.
 
 These handle continuity at different timescales without turning everything into one task system.
 
-- [Notebook](docs/context.md) — Pre-provider auto-compaction, the Pair Programmer's sourced observations and reflections, `search_session`, and `revisit_note`
-- [Session Backlog](docs/backlog.md) — model-assisted parking with a human-owned `/backlog` manager
-- [To-dos](docs/todos.md) — active-execution checklist, `/todos` manager, branch snapshots, and owned subagent runs
-- [Ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory
+- [Notebook](docs/context.md) — Pre-provider auto-compaction, the pair programmer's sourced observations and reflections, `search_session`, and `revisit_note`
+- [Self-reminders](docs/reminders.md) — explicit, one-shot model follow-up after the current run
+- [The ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory
+- [Optional extensions](docs/optional-extensions.md) — retained backlog and to-do systems, not loaded by default
 
 ### Running and delegating work
 
@@ -93,7 +93,7 @@ These cover the path from figuring out what the work means through implementatio
 These provide bounded ways to inspect a change or make progress through fresh-context iterations.
 
 - [`/skill:review`](skills/review) — inspect directly or use the smallest justified independent topology
-- [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared Ledger tasks
+- [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared ledger tasks
 
 ### Harness authoring
 

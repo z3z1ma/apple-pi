@@ -57,3 +57,5 @@
 - `.ledger/history/202608281109-harden-harness-correctness/task.md` — done — Harden repository-wide harness correctness — Resolve the complete repository audit across trust, lifecycle, runtime contracts, persistence, compaction, search, and supporting correctness gaps.
 
 - `.ledger/history/202608301046-refine-pair-review-responsiveness/task.md` — done — Refine Pair review responsiveness — Eliminate review stalls, advice bursts, supervisory thrash, and inconsistent primary-agent response while preserving a sparse, high-value Pair workflow.
+
+- `.ledger/history/202608301913-simplify-harness-surface/task.md` — done — Simplify the model-facing harness surface — Replace default to-do and backlog machinery with self-reminders, remove pi_exec contract duplication, and simplify the operational ledger instructions and structure without weakening long-horizon continuity.

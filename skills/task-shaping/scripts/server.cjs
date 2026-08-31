@@ -118,12 +118,12 @@ const rawHost = process.env.LEDGER_VISUAL_HOST || '127.0.0.1';
 const HOST = rawHost === '[::1]' ? '::1' : rawHost;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1']);
 if (!LOOPBACK_HOSTS.has(HOST)) {
-  throw new Error('Ledger visual companion only binds to loopback; use an operator-approved encrypted tunnel for remote access');
+  throw new Error('The ledger visual companion only binds to loopback; use an operator-approved encrypted tunnel for remote access');
 }
 const rawUrlHost = process.env.LEDGER_VISUAL_URL_HOST || HOST;
 const URL_HOST = rawUrlHost === '[::1]' ? '::1' : rawUrlHost;
 if (!LOOPBACK_HOSTS.has(URL_HOST)) {
-  throw new Error('Ledger visual companion only emits loopback URLs; use the local endpoint of an operator-approved encrypted tunnel');
+  throw new Error('The ledger visual companion only emits loopback URLs; use the local endpoint of an operator-approved encrypted tunnel');
 }
 const SESSION_DIR = process.env.LEDGER_VISUAL_DIR || '/tmp/ledger-visual';
 const CONTENT_DIR = process.env.LEDGER_VISUAL_CONTENT_DIR || path.join(SESSION_DIR, 'content');
@@ -139,7 +139,7 @@ if (ownerPid && !ownerIdentity) ownerPid = null;
 // remote binds — and defeats DNS rebinding — where a Host/Origin allowlist
 // cannot. It rides the served URL as ?key= and is mirrored into a cookie on
 // first load so same-origin subresources and the WebSocket carry it for free.
-// Stored in the ephemeral state directory so the capability key never enters Ledger content.
+// Stored in the ephemeral state directory so the capability key never enters ledger content.
 const TOKEN_FILE = process.env.LEDGER_VISUAL_TOKEN_FILE || null;
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -181,7 +181,7 @@ const MIME_TYPES = {
 function waitingPage() {
   return renderBranding(`<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Ledger Visual Companion</title>
+<head><meta charset="utf-8"><title>The ledger visual companion</title>
 <style>
 body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; }
 h1 { color: #333; } p { color: #666; }
@@ -191,7 +191,7 @@ h1 { color: #333; } p { color: #666; }
 .brand-logo { display: block; height: 1em; width: auto; max-width: 180px; filter: invert(1); }
 </style>
 </head>
-<body><!-- BRANDING --><h1>Ledger Visual Companion</h1>
+<body><!-- BRANDING --><h1>The ledger visual companion</h1>
 <p>Waiting for the agent to push a screen...</p></body></html>`);
 }
 
@@ -208,7 +208,7 @@ h1 { color: #333; } p { color: #666; } code { background: #f0f0f0; padding: 0.1e
 function bootstrapPage() {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Opening Ledger Visual Companion</title></head>
+<head><meta charset="utf-8"><title>Opening ledger visual companion</title></head>
 <body><script>location.replace('/');</script></body>
 </html>`;
 }
@@ -269,7 +269,7 @@ function escapeHtmlText(value) {
 
 function brandMarkup() {
   const version = escapeHtmlText(APPLE_PI_VERSION);
-  return '<div class="brand"><span class="brand-copy">apple-pi Ledger visual companion v' + version + '</span></div>';
+  return '<div class="brand"><span class="brand-copy">apple-pi ledger visual companion v' + version + '</span></div>';
 }
 
 function renderBranding(html) {

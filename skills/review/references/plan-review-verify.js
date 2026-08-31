@@ -146,7 +146,7 @@ const reviews = await parallel(
       return { focus, status: "failed", findings: [], notes: [], patchTruncated: false, error: String(error) };
     }
 
-    const result = await agents.run({
+    const result = await agent.run({
       name: focus.id,
       profile: "quick",
       tools: READ_ONLY,

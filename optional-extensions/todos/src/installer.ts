@@ -5,7 +5,7 @@ import { AutoClear } from "./auto-clear.js";
 import { DEFAULT_TODOS_CONFIG, loadTodosConfigLayers } from "./config.js";
 import { TodoController } from "./controller.js";
 import { TodoExecution } from "./execution.js";
-import { getManagedSubagentService } from "../../subagents/src/service.js";
+import { getManagedSubagentService } from "../../../components/subagents/src/service.js";
 import { ReminderCadence, TODO_REMINDER_CUSTOM_TYPE } from "./reminder-cadence.js";
 import { ProjectTodoRepository, SessionTodoRepository } from "./repository.js";
 import { TODOS_STATE_ENTRY } from "./state.js";
@@ -199,7 +199,7 @@ export function installTodos(pi: ExtensionAPI) {
 				description,
 				promptSnippet: description,
 				promptGuidelines: [
-					"To-dos are active execution checklists; backlog parks ideas and Ledger holds durable project intent and evidence.",
+					"To-dos are active execution checklists; backlog parks ideas and ledger holds durable project intent and evidence.",
 				],
 				parameters,
 				executionMode: "sequential",

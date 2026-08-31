@@ -1,13 +1,13 @@
 ---
 name: pi-exec
-description: "Author or troubleshoot JavaScript passed to pi_exec. Use when asked to compose Pi tools, fetch, captured extension or MCP calls, parallel or pipeline stages, or agent workers in one program; bind context or outputSchema; or fix guest-runtime errors such as invalid pi.* arguments, missing pi_exec_return, or 'display is not defined'. Not for ordinary direct tool calls or interactive Agent collaboration."
+description: "Author or troubleshoot JavaScript passed to pi_exec. Use when asked to compose Pi tools, fetch, captured extension or MCP calls, parallel or pipeline stages, or agent workers in one program; bind context or outputSchema; or fix guest-runtime errors such as invalid pi.* arguments, missing pi_exec_return, or 'display is not defined'. Not for ordinary direct tool calls or interactive agent collaboration."
 ---
 
 # Pi Exec Guest API
 
 `pi_exec` runs a JavaScript async-function body. Intermediate tool output stays inside the worker; only the returned value enters the main context.
 
-Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and eligible captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Interactive subagent tools are deliberately excluded; use `agent()` or `agents.run()` instead. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
+Write the program from the **live signatures on the `pi_exec` `code` parameter**. That list includes every `pi.*` wrapper, guest global, and eligible captured session extension tool (`extensions.<name>({…})`), including the MCP gateway when captured. Interactive subagent tools are deliberately excluded; use `agent()` or `agent.run()` instead. Do not rely on runtime discovery for `pi.*` or already-listed extension schemas; use `tools.search` or `tools.describe` only when discovering captured extension tools is itself part of the program.
 
 `display`, `inputs`, `state`, and `limits` are parameters on the `pi_exec` tool call, not program assignments.
 
@@ -49,18 +49,18 @@ The live `code` parameter lists every host signature, including web methods and 
 
 - `await fetch(input: string | URL | Request, init?: RequestInit)` → `Response` (10 MiB body cap)
 - `await skills.list()` → `[{ name, description }]` — session skills (package, project, user). `await skills.body({ name })` → SKILL.md body with frontmatter stripped. Throws if the skill is missing.
-- `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — eligible captured extension tools only, not `pi.*` or the interactive `Agent`, result, steer, and stop tools
+- `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — eligible captured extension tools only, not `pi.*` or the interactive `agent`, result, steer, and stop tools
 - `await extensions.<name>(args)` → `{ text, content, details, usage? }`
 - `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, pair?, systemPrompt?, context?, outputSchema? }`
 - `await agent(request: AgentRequest)` → `string | JSONValue` — returns the `outputSchema` value when set, otherwise text. Throws if the worker fails.
-- `await agents.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
-- `std` is deliberately small: normalized Git/change-neighborhood evidence, context budgets and clipping, coverage/reconciliation, relevant-test discovery/execution, and strict terse-schema compilation. `std.git.patch` is the cheap narrow-diff path; `std.git.change.statusText` is ready-to-bind status text. `std.context.fit` accepts budget-accounted `flags`, `std.context.pack` clips declared string `fields`, and marked contexts nested anywhere in `agent()` / `agents.run()` are automatically fitted before binding (the latter reports the result in `context`). Use `std.schema({ id: "int", name: "string?" })` for strict output schemas. The live `code` description gives every exposed function's complete input and output type. Use JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, and `pipeline` directly instead of looking for duplicate wrappers. `std.dev.runRelevantTests` is the only function that directly executes a host command by design: it runs discovered neighboring test paths, and a custom command must contain the `{tests}` placeholder, and the global `maxTests` limit defaults to 128 and fails rather than truncating.
-- The live `<subagent-team>` block lists every callable teammate with its `name`, configured inference `profile`, and own `description`. The separate `<inference-profiles>` block lists the inference profiles as `{ profile, description }` entries. `type` selects a teammate; `profile` selects an inference profile; `systemPrompt` appends dynamic specialization without replacing the teammate definition or granting capabilities. Implement enables Pair by default; set `pair: false` to explicitly opt out. The interactive Agent tool uses the equivalent `subagent_type`, `profile`, and `system_prompt` combination. Explicit `tools` override capabilities. Omit `type` for a generic read-only worker.
+- `await agent.run(request: AgentRequest)` → `{ status: "completed"|"failed", text: string, value?: JSONValue, error?, usage?, toolCalls }`
+- `std` is deliberately small: normalized Git/change-neighborhood evidence, context budgets and clipping, coverage/reconciliation, relevant-test discovery/execution, and strict terse-schema compilation. `std.git.patch` is the cheap narrow-diff path; `std.git.change.statusText` is ready-to-bind status text. `std.context.fit` accepts budget-accounted `flags`, `std.context.pack` clips declared string `fields`, and marked contexts nested anywhere in `agent()` / `agent.run()` are automatically fitted before binding (the latter reports the result in `context`). Use `std.schema({ id: "int", name: "string?" })` for strict output schemas. The live `code` description gives every exposed function's complete input and output type. Use JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agent.run`, `parallel`, and `pipeline` directly instead of looking for duplicate wrappers. `std.dev.runRelevantTests` is the only function that directly executes a host command by design: it runs discovered neighboring test paths, and a custom command must contain the `{tests}` placeholder, and the global `maxTests` limit defaults to 128 and fails rather than truncating.
+- The live `<subagent-team>` block lists every callable teammate with its `name`, configured inference `profile`, and own `description`. The separate `<inference-profiles>` block lists the inference profiles as `{ profile, description }` entries. `type` selects a teammate; `profile` selects an inference profile; `systemPrompt` appends dynamic specialization without replacing the teammate definition or granting capabilities. Implement enables the pair programmer by default; set `pair: false` to explicitly opt out. The interactive agent tool uses the equivalent `subagent_type`, `profile`, and `system_prompt` combination. Explicit `tools` override capabilities. Omit `type` for a generic read-only worker.
 - Review planner/reviewer/verifier and Ralph stay custom `systemPrompt` workers. Do not set `type` for those program-specific workers. Ralph explicitly grants its write-capable tool list.
 - `context` must be JSON-serializable and is bound as an `@file` attachment. Keep `task` short. Do not interpolate payloads into `task`.
-- `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agents.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
-- Workers load the ledger and `search_session` extensions. A worker with Pair enabled also loads the Pair sidecar. Workers do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
-- Prefer `agents.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
+- `outputSchema` must be a JSON Schema object that describes an object; omitted `additionalProperties` becomes `false`. The worker must call `pi_exec_return`; `agent.run.value` / `agent()` receive those arguments. Never `JSON.parse` assistant text.
+- Workers load the ledger and `search_session` extensions. A worker with pair programmer enabled also loads the pair programmer sidecar. Workers do not load `pi_exec` or the subagent manager, and they cannot call MCP. Call MCP and other host extension tools here, then bind the compact result as `context`.
+- Prefer `agent.run` for fan-out (one failure does not throw). Use `agent()` when a single worker must succeed.
 - Pass file paths in `context` or `task`. The worker already has `read`; do not dump file bodies into the task.
 - `await parallel(items, mapper, concurrency?)` or `await parallel(jobs, concurrency?)` → `T[]`
 - `await pipeline(items, ...stages)` → `unknown[]`
@@ -70,7 +70,7 @@ The live `code` parameter lists every host signature, including web methods and 
 - `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, `TextEncoder`, `TextDecoder`, `DOMException`, `atob`, `btoa`, `structuredClone`
 - No `process`, `require`, `Buffer`, direct filesystem API, or shell global is available. Use `pi.*`, `fetch`, or captured extension tools for host effects.
 
-`agent` / `agents.run` are Pi Exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. The root session's `Agent`, `get_subagent_result`, `steer_subagent`, and `stop_subagent` tools are for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog, but the interactive tools are intentionally unavailable through Pi Exec's generic extension bridge.
+`agent` / `agent.run` are Pi Exec workers for **composition**: typed lanes in a program graph with core tools, MCP, and bound context. The root session's `agent`, `get_subagent_result`, `steer_subagent`, and `stop_subagent` tools are for **collaboration**: backgrounding, FleetView, steer/stop, and resume. They share the same type catalog, but the interactive tools are intentionally unavailable through Pi Exec's generic extension bridge.
 
 ## Gather, bind, then run workers
 
@@ -100,14 +100,14 @@ const verdict = await agent({
 return verdict.id;
 ```
 
-Use `std.git.change` and `std.context.fit` to collect and bound repository evidence. For a fixed fan-out, use the existing `parallel` and `agents.run` APIs directly:
+Use `std.git.change` and `std.context.fit` to collect and bound repository evidence. For a fixed fan-out, use the existing `parallel` and `agent.run` APIs directly:
 
 ```javascript
 const change = await std.git.change({ compare: "HEAD", paths: ["src/a.ts", "src/b.ts"] });
 const bounded = std.context.fit({
   patch: std.context.clippable(change.patch, { maxChars: 12_000, priority: 100 }),
 }, { maxSerializedChars: 16_000 });
-return parallel(change.changedFiles, (path) => agents.run({
+return parallel(change.changedFiles, (path) => agent.run({
   task: "Inspect this changed path and name its user-visible consequence.",
   context: { path, patch: bounded.value.patch },
 }), 2);
@@ -120,7 +120,7 @@ const dir = inputs.root;
 const listing = await pi.ls({ path: dir });
 const files = listing.split("\n").filter((name) => name.endsWith(".ts"));
 return parallel(files, async (name) => {
-  const result = await agents.run({
+  const result = await agent.run({
     task: "Name the riskiest export and quote the evidence.",
     name,
     context: { path: `${dir}/${name}` },
@@ -142,7 +142,7 @@ The worker reads `context.path`. Do not `pi.read` the file in the parent just to
 Select a catalog teammate when the worker should follow that agent definition. Untyped workers default to generic and read-only; program-specific workers such as review and Ralph provide their own `systemPrompt`, and Ralph explicitly grants write-capable tools.
 
 ```javascript
-const map = await agents.run({
+const map = await agent.run({
   type: "Explore",
   task: "Where is session compaction owned? Return paths and a concise map.",
   name: "compaction-map",

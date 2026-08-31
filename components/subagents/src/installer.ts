@@ -6,19 +6,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
-import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
-import {
-	ADVISOR_CONSULTATION_OVERLAY,
-	ADVISOR_RESULT_REPAIR_PROMPT,
-	renderConsultationContext,
-	type AdvisorFinding,
-} from "./consultation.js";
 import { renderAgentName } from "./agent-color.js";
-import { registerBtwCommand } from "./btw.js";
 import { AgentManager, disposeAgentSession } from "./agent-manager.js";
 import {
 	getAgentConversation,
@@ -37,7 +30,14 @@ import {
 	resolveSpawnType,
 	setDefaultsDisabled,
 } from "./agent-types.js";
+import { registerBtwCommand } from "./btw.js";
 import { inChildSessionContext } from "./child-context.js";
+import {
+	ADVISOR_CONSULTATION_OVERLAY,
+	ADVISOR_RESULT_REPAIR_PROMPT,
+	type AdvisorFinding,
+	renderConsultationContext,
+} from "./consultation.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import {
 	formatInterruptedResultWait,
@@ -68,7 +68,6 @@ import type {
 	SubagentConfigScope,
 	WidgetMode,
 } from "./types.js";
-import { addUsage } from "./usage.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -83,6 +82,7 @@ import {
 } from "./ui/agent-widget.js";
 import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./ui/conversation-viewer.js";
 import { FleetList } from "./ui/fleet-list.js";
+import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
@@ -737,8 +737,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			`You are the senior engineer integrating the work. Use the live <${TEAM_SYSTEM_PROMPT_TAG}> block to choose a teammate whose role genuinely fits, and normally keep their configured inference profile. If nobody fits or coordination would cost more than it saves, keep the work in this session.`,
 			"Do not ask multiple teammates to write the same files. Do not retry an unchanged rejected task.",
-			`Use the Agent tool to collaborate with a teammate and pi_exec agents.run to compose model workers in a program graph. Agent subagent_type and agents.run type choose a teammate; profile chooses an inference profile. Agent's system_prompt and agents.run's systemPrompt add focused guidance without changing capabilities.`,
-			"Your pair programming partner follows the root session. Implement pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own Pair default.",
+			`Use the agent tool to collaborate with a teammate and pi_exec agent.run to compose model workers in a program graph. agent subagent_type and agent.run type choose a teammate; profile chooses an inference profile. The agent tool's system_prompt and agent.run's systemPrompt add focused guidance without changing capabilities.`,
+			"Your pair programming partner follows the root session. Implement pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
 			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
 		],
 		parameters: Type.Object({
@@ -768,12 +768,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's Pair default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's pair programmer default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Public Agent spawn, resume, detachment, and escalation share one lifecycle boundary.
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Public agent spawn, resume, detachment, and escalation share one lifecycle boundary.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			bindSessionContext(ctx);
 

@@ -41,7 +41,7 @@ export function formatPairAcknowledgmentReminder(findings: readonly PendingPairF
 		.join("\n");
 	return [
 		"<pair-ack-reminder>",
-		"These material Pair findings still need a recorded disposition:",
+		"These material pair programmer findings still need a recorded disposition:",
 		items,
 		"Call `acknowledge_pair_findings` with `address`, `decline`, or `defer` and a concise reason for each id. This records consideration only; it does not claim the work is fixed or validated.",
 		"</pair-ack-reminder>",

@@ -2,7 +2,7 @@
 
 apple-pi contains modified source imports and one pinned runtime dependency. apple-pi takes maintenance responsibility for copied sources; the MCP dependency retains upstream protocol/auth maintenance ownership.
 
-## pi-omplike-advisor → Pair
+## pi-omplike-advisor → pair programmer
 
 - Source: <https://github.com/pasky/pi-omplike-advisor>
 - Imported commit: `43eb9a976d751c06016a62b5423e2c6ddaff43a1`
@@ -65,7 +65,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Imported commit: `86a559cf5e378cc21fa0c7015a92c358e7227094`
 - Upstream version at import: `0.8.0`
 - Author named by the source package: tintinweb
-- Local paths: `components/todos/`, `extensions/todos.ts`, `docs/todos.md`, `components/shared/src/workflow-system-prompt.ts`, `tests/ledger-prompt-integration.test.ts`, `tests/package-load.mjs`
+- Local paths: `optional-extensions/todos/`, `docs/todos.md`, `docs/optional-extensions.md`, `tests/package-load.mjs`
 - License: MIT
 - Original notice: `Copyright (c) 2026 tintinweb`
 - apple-pi adapts the upstream active-checklist model, dependency validation/display, branch-aware snapshots, safe shared-project persistence concepts, data-only settings, reminders, auto-clear, manager/widget concepts, and execution cascade. It replaces upstream aliases and external execution paths with lowercase native tools and apple-pi's owned managed-subagent service; it does not retain the generic process tracker, compatibility storage, arbitrary metadata, independently stored reverse edges, or reference media.
@@ -106,20 +106,20 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Source: <https://github.com/obra/superpowers>
 - Imported commit: `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`
 - Author named by the source package: Jesse Vincent
-- Local paths: `components/shared/src/workflow-system-prompt.ts`, `extensions/workflow.ts`, `skills/task-shaping/`, `skills/implementation-planning/`, `skills/plan-execution/`, `skills/work-item-orchestration/`, `skills/parallel-orchestration/`, `skills/root-cause-debugging/`, `skills/test-first-development/`, `skills/review-commissioning/`, `skills/review-reconciliation/`, `skills/completion-verification/`, `skills/workspace-isolation/`, `skills/task-closure/`, `skills/skill-authoring/`, `tests/ledger-prompt-integration.test.ts`, `tests/package-load.mjs`
+- Local paths: `skills/task-shaping/`, `skills/implementation-planning/`, `skills/plan-execution/`, `skills/work-item-orchestration/`, `skills/parallel-orchestration/`, `skills/root-cause-debugging/`, `skills/test-first-development/`, `skills/review-commissioning/`, `skills/review-reconciliation/`, `skills/completion-verification/`, `skills/workspace-isolation/`, `skills/task-closure/`, `skills/skill-authoring/`
 - License: MIT
 - Original notice: `Copyright (c) 2025 Jesse Vincent`
-- The injected root prompt adapts upstream skill-routing behavior to Pi's native available-skills catalog and package discovery. The listed engineering skills retain the upstream process while translating storage, skill references, operator authority, Ledger ownership, and worktree integration to apple-pi. apple-pi retains maintenance responsibility for these adapted paths.
+- The listed engineering skills retain the upstream process while translating storage, skill references, operator authority, ledger ownership, and worktree integration to apple-pi. apple-pi retains maintenance responsibility for these adapted paths.
 
-## z3z1ma/10x → Ledger foundation
+## z3z1ma/10x → ledger foundation
 
 - Source: <https://github.com/z3z1ma/10x>
 - Reviewed and adapted commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
 - Author and copyright holder named by the source: Alexander M. Butler
-- Local paths: `components/shared/src/ledger-system-prompt.ts`, `components/shared/src/workflow-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, the lifecycle `skills/*/SKILL.md` files listed in the package catalog, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
+- Local paths: `components/shared/src/ledger-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, the lifecycle `skills/*/SKILL.md` files listed in the package catalog, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Alexander M. Butler`
-- apple-pi adapts 10x's durable-judgment concepts—authority and provenance, shaping/orchestration/execution separation, evidence limits, adversarial review, proportional records, retrospective compounding, and instruction evaluation—into the existing single-task Ledger bundle and descriptively named lifecycle skills. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.
+- apple-pi adapts 10x's durable-judgment concepts—authority and provenance, shaping/orchestration/execution separation, evidence limits, adversarial review, proportional records, retrospective compounding, and instruction evaluation—into the existing single-task ledger bundle and descriptively named lifecycle skills. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.
 
 ## MIT license applying to the imported works
 

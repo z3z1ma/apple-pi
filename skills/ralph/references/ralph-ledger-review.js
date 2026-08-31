@@ -1,5 +1,5 @@
-// Advanced example: Ledger Ralph increments with an inlined Review spine.
-// Not the default. Prefer the ralph skill's Ledger program, then load review separately.
+// Advanced example: ledger Ralph increments with an inlined Review spine.
+// Not the default. Prefer the ralph skill's ledger program, then load review separately.
 const READ_ONLY = ["read", "grep", "find", "ls"];
 const RALPH_TOOLS = [...READ_ONLY, "bash", "edit", "write"];
 // Load the review skill and adapt its planner, reviewer, and verifier prompt contracts before inlining them.
@@ -213,7 +213,7 @@ async function reviewChange(files, background, priorFindings, priorCoverageGaps,
       } catch (error) {
         return { focus, status: "failed", findings: [], notes: [], patchTruncated: false, error: String(error) };
       }
-      const result = await agents.run({
+      const result = await agent.run({
         name: focus.id,
         profile: "quick",
         tools: READ_ONLY,
@@ -625,7 +625,7 @@ for (let iteration = 1; iteration <= iterations; iteration++) {
     },
     { maxSerializedChars: 32000 },
   );
-  const result = await agents.run({
+  const result = await agent.run({
     name: `ralph-${iteration}`,
     profile: "coding",
     tools: RALPH_TOOLS,

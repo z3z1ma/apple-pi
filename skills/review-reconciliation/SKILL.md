@@ -36,7 +36,7 @@ If several findings are valid, batch them into one coherent fix rather than disp
 
 Respond to the technical substance, not the reviewer's tone. External replies, PR comments, and publication require operator authorization; draft locally otherwise.
 
-When Ledger is already serving as continuity, preserve material findings and their final dispositions; nits stay in the working report.
+When ledger is already serving as continuity, preserve material findings and their final dispositions; nits stay in the working report.
 
 ## Finish
 

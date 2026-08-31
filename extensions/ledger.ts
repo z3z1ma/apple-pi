@@ -1,7 +1,7 @@
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
@@ -9,7 +9,6 @@ import { Type } from "typebox";
 import { acquireExclusiveLease } from "../components/shared/src/exclusive-lease.js";
 import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
 
-const SUPPORTING_DIRECTORIES = ["specs", "plans", "research", "decisions", "evidence"] as const;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CLOSED_STATUSES = ["done", "cancelled"] as const;
@@ -118,29 +117,13 @@ Updated: ${date}
 
 Pending shaping.
 
+## Current State
+
+Open; pending shaping.
+
 ## Outcome
 
 Pending shaping.
-
-## Scope
-
-Pending shaping.
-
-## Non-goals
-
-- Pending shaping.
-
-## Acceptance Criteria
-
-- AC-001: Pending shaping.
-
-## Constraints
-
-- Pending shaping.
-
-## References
-
-- Pending shaping.
 `;
 }
 
@@ -151,15 +134,7 @@ Updated: ${date}
 
 # Retrospective
 
-## Summary
-
-Pending completion of the undertaking.
-
-## What Worked
-
-Pending completion of the undertaking.
-
-## What Could Improve
+## What Mattered
 
 Pending completion of the undertaking.
 
@@ -185,7 +160,12 @@ function readIndex(
 		assertRegularFile(indexPath, label);
 		current = readFileSync(indexPath, "utf8");
 	}
-	if (!new RegExp(`^${escapeRegExp(heading)}\\s*$`, "m").test(current)) {
+	const legacyHeading =
+		heading === "# Task ledger" ? "# Task Ledger" : heading === "# Task history" ? "# Task History" : heading;
+	if (
+		!new RegExp(`^${escapeRegExp(heading)}\\s*$`, "m").test(current) &&
+		!new RegExp(`^${escapeRegExp(legacyHeading)}\\s*$`, "m").test(current)
+	) {
 		throw new Error(`${label} must contain a '${heading}' heading`);
 	}
 	if (current.includes(`\`${taskPath}\``)) throw new Error(duplicateError);
@@ -208,8 +188,8 @@ function writeAtomicTextFile(path: string, content: string): void {
 
 function acquireLedgerLease(root: string): () => void {
 	return acquireExclusiveLease(LEDGER_LEASE_KIND, root, randomUUID(), {
-		owned: (owner) => `Ledger transaction is busy; owned by ${owner.pid}`,
-		failed: "Unable to acquire Ledger transaction lease",
+		owned: (owner) => `A ledger transaction is busy; owned by ${owner.pid}`,
+		failed: "Unable to acquire the ledger transaction lease",
 	});
 }
 
@@ -242,7 +222,7 @@ function parseTaskId(input: string): string {
 	const parts = withoutFile.split("/").filter(Boolean);
 	const taskId = parts.at(-1) ?? "";
 	if (!TASK_ID.test(taskId)) throw new Error("task must be a YYYYMMDDhhmm-kebab-slug id or .ledger path");
-	if (parts.includes("history")) throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
+	if (parts.includes("history")) throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
 	return taskId;
 }
 
@@ -277,18 +257,18 @@ export async function addLedgerTask(
 	try {
 		mkdirIfNeeded(ledgerPath);
 		assertDirectory(ledgerPath, ".ledger");
-		if (pathExists(bundleAbsolute)) throw new Error(`Ledger task already exists: ${bundlePath}`);
+		if (pathExists(bundleAbsolute)) throw new Error(`The ledger task already exists: ${bundlePath}`);
 		const historyPath = join(ledgerPath, "history");
 		if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
 		if (pathExists(historyBundleAbsolute)) {
-			throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
+			throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
 		}
 		const currentIndex = readIndex(
 			indexAbsolute,
-			"# Task Ledger",
+			"# Task ledger",
 			LIVE_INDEX,
 			taskPath,
-			`Ledger index already contains ${taskPath}`,
+			`The ledger index already contains ${taskPath}`,
 		);
 		const nextIndex = `${currentIndex.replace(/\n*$/, "\n")}\n- \`${taskPath}\` — ${title} — ${description}\n`;
 
@@ -296,7 +276,6 @@ export async function addLedgerTask(
 		try {
 			mkdirSync(bundleAbsolute);
 			createdBundle = true;
-			for (const directory of SUPPORTING_DIRECTORIES) mkdirSync(join(bundleAbsolute, directory));
 			writeFileSync(taskAbsolute, taskTemplate(title, date), { encoding: "utf8", flag: "wx" });
 			writeFileSync(retrospectiveAbsolute, retrospectiveTemplate(date), { encoding: "utf8", flag: "wx" });
 			writeAtomicTextFile(indexAbsolute, nextIndex);
@@ -332,10 +311,11 @@ export async function closeLedgerTask(
 	try {
 		assertDirectory(ledgerPath, ".ledger");
 		// Read and validate every source and destination before changing task.md.
-		if (pathExists(historyBundleAbsolute)) throw new Error(`Ledger task already archived: .ledger/history/${taskId}`);
-		if (!pathExists(liveBundleAbsolute)) throw new Error(`Ledger task not found: .ledger/${taskId}`);
+		if (pathExists(historyBundleAbsolute))
+			throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
+		if (!pathExists(liveBundleAbsolute)) throw new Error(`Requested ledger task not found: .ledger/${taskId}`);
 		assertDirectory(liveBundleAbsolute, `.ledger/${taskId}`);
-		if (!pathExists(liveTaskAbsolute)) throw new Error(`Ledger task is missing task.md: ${liveTaskPath}`);
+		if (!pathExists(liveTaskAbsolute)) throw new Error(`The ledger task is missing task.md: ${liveTaskPath}`);
 		assertRegularFile(liveTaskAbsolute, liveTaskPath);
 		if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
 
@@ -343,14 +323,14 @@ export async function closeLedgerTask(
 		const nextTask = applyTaskStatus(liveTask, status);
 		const currentLiveIndex = readIndex(
 			liveIndexAbsolute,
-			"# Task Ledger",
+			"# Task ledger",
 			LIVE_INDEX,
 			historyTaskPath,
-			"Ledger index has an invalid history row",
+			"The ledger index has an invalid history row",
 		);
 		const currentHistoryIndex = readIndex(
 			historyIndexAbsolute,
-			"# Task History",
+			"# Task history",
 			HISTORY_INDEX,
 			historyTaskPath,
 			`History index already contains ${historyTaskPath}`,
@@ -395,7 +375,7 @@ export async function closeLedgerTask(
 				if (taskChanged) writeTextFile(liveTaskAbsolute, liveTask);
 				if (historyCreated) rmSync(historyPath, { recursive: false, force: true });
 			} catch (rollbackError) {
-				throw new Error(`Ledger close failed and rollback failed: ${(rollbackError as Error).message}`, {
+				throw new Error(`The ledger close failed and rollback failed: ${(rollbackError as Error).message}`, {
 					cause: error,
 				});
 			}
@@ -416,9 +396,9 @@ export async function closeLedgerTask(
 function createLedgerAddTool() {
 	return defineTool({
 		name: "ledger_add",
-		label: "Ledger Add",
+		label: "Add to ledger",
 		description:
-			"Create one new timestamped .ledger task bundle, its full supporting directory tree, structural task.md, and live index row with title and description. Not for listing, inspecting, selecting, updating, closing, or executing existing tasks.",
+			"Create one new timestamped .ledger task bundle with task.md, retrospective.md, and a live index row. Add plans, specifications, notes, decisions, evidence, or assets later only when useful. Not for listing, inspecting, selecting, updating, closing, or executing existing tasks.",
 		promptSnippet: "Add a new .ledger task bundle when the user asks to create one",
 		promptGuidelines: [
 			"Use ledger_add only to create a new ledger task; read and edit existing .ledger files with ordinary repository tools.",
@@ -442,7 +422,7 @@ function createLedgerAddTool() {
 			};
 		},
 		renderCall(args, theme) {
-			return new Text(`${theme.fg("toolTitle", theme.bold("Ledger Add "))}${theme.fg("accent", args.title)}`, 0, 0);
+			return new Text(`${theme.fg("toolTitle", theme.bold("Add to ledger "))}${theme.fg("accent", args.title)}`, 0, 0);
 		},
 		renderResult(result, _options, theme) {
 			const content = result.content[0]?.type === "text" ? result.content[0].text : "No output";
@@ -454,7 +434,7 @@ function createLedgerAddTool() {
 function createLedgerCloseTool() {
 	return defineTool({
 		name: "ledger_close",
-		label: "Ledger Close",
+		label: "Close ledger task",
 		description:
 			"Archive one live .ledger task into .ledger/history with a terminal status of done or cancelled. Updates Status in task.md when needed, moves the bundle, and transfers the index row including that status, title, and description. Not for creating, inspecting, shaping, executing, or judging completeness.",
 		promptSnippet: "Close or cancel a ledger task by archiving it into .ledger/history",
@@ -470,7 +450,7 @@ function createLedgerCloseTool() {
 			}),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			if (!ctx.isProjectTrusted()) throw new Error("Ledger closing requires a trusted session repository");
+			if (!ctx.isProjectTrusted()) throw new Error("Closing a ledger task requires a trusted session repository");
 			const result = await closeLedgerTask(ctx.cwd, params.task, params.status);
 			return {
 				content: [{ type: "text" as const, text: `Archived ${result.taskPath} as ${result.status}` }],
@@ -479,7 +459,7 @@ function createLedgerCloseTool() {
 		},
 		renderCall(args, theme) {
 			return new Text(
-				`${theme.fg("toolTitle", theme.bold("Ledger Close "))}${theme.fg("accent", `${args.status} ${args.task}`)}`,
+				`${theme.fg("toolTitle", theme.bold("Close ledger task "))}${theme.fg("accent", `${args.status} ${args.task}`)}`,
 				0,
 				0,
 			);

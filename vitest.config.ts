@@ -5,7 +5,8 @@ export default defineConfig({
 		environment: "node",
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
-			"components/backlog/tests/**/*.test.ts",
+			"components/reminders/tests/**/*.test.ts",
+			"optional-extensions/backlog/tests/**/*.test.ts",
 			"components/codex-fast/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
@@ -18,7 +19,7 @@ export default defineConfig({
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
 			"components/status-footer/tests/**/*.test.ts",
-			"components/todos/tests/**/*.test.ts",
+			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],
 	},

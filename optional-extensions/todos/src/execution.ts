@@ -3,7 +3,7 @@ import type {
 	HarnessBoundedActivity,
 	ManagedBackgroundRun,
 	ManagedSubagentService,
-} from "../../subagents/src/service.js";
+} from "../../../components/subagents/src/service.js";
 import type { TodoController } from "./controller.js";
 import type { TodoView } from "./types.js";
 

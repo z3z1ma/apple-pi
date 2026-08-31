@@ -449,7 +449,7 @@ describe("owned subagent surface", () => {
 		});
 	});
 
-	it("enables Pair only for write-capable default agents", () => {
+	it("enables pair programmer only for write-capable default agents", () => {
 		const pairDefaults = [...DEFAULT_AGENTS.values()].filter((config) => config.pair === true);
 		expect(pairDefaults).not.toHaveLength(0);
 		for (const config of pairDefaults) {
@@ -460,7 +460,7 @@ describe("owned subagent surface", () => {
 		}
 	});
 
-	it("uses agent Pair defaults while preserving explicit invocation overrides", () => {
+	it("uses agent pair programmer defaults while preserving explicit invocation overrides", () => {
 		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("Implement"), {})).toMatchObject({ pair: true });
 		expect(
 			resolveAgentInvocationConfig(
@@ -714,7 +714,7 @@ describe("owned subagent surface", () => {
 			configCwd: process.cwd(),
 			projectTrusted: false,
 		});
-		const agentSchema = tools.find((tool) => tool.name === "Agent")!.parameters as any;
+		const agentSchema = tools.find((tool) => tool.name === "agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
 		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context"]));
 		expect(agentSchema.required).not.toContain("pair");
@@ -729,7 +729,7 @@ describe("owned subagent surface", () => {
 		]);
 		expect(agentSchema.properties.profile.description).toContain("model/thinking only");
 		expect(agentSchema.properties.system_prompt.description).toContain("appended after the selected definition");
-		expect(agentSchema.properties.pair.description).toContain("definition's Pair default");
+		expect(agentSchema.properties.pair.description).toContain("definition's pair programmer default");
 		expect(resultSchema.required).not.toContain("yield_seconds");
 		expect(resultSchema.properties.yield_seconds.minimum).toBe(0);
 		expect(resultSchema.properties.yield_seconds.description).toContain("very large positive value");
@@ -805,7 +805,7 @@ describe("owned subagent surface", () => {
 			configCwd: root,
 			projectTrusted: true,
 		});
-		const agentTool = tools.find((tool) => tool.name === "Agent") as any;
+		const agentTool = tools.find((tool) => tool.name === "agent") as any;
 		const result = await agentTool.execute(
 			"spawn-child",
 			{

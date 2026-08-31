@@ -1,19 +1,19 @@
-# Pair
+# The pair programmer
 
-Pair gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask the deep **Advisor** teammate for an independent architectural opinion.
+The pair programmer gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask the deep **Advisor** teammate for an independent architectural opinion.
 
 The responsibilities are distinct:
 
 1. **Main agent** has the keyboard, speaks to the user, implements, decides, and validates.
-2. **Pair programming partner** keeps a second line of thought and the shared notebook while following the work.
+2. The **pair programmer** keeps a second line of thought and the shared notebook while following the work.
 3. **Advisor** is a senior software architect who joins episodically for difficult, consequential questions.
 4. **Review** remains a separate end-to-end activity when requested.
 
-The two programmers are peers with different capabilities in this session. The main agent does not direct or manage its partner. There is no Pair mode selector and no second persistent pairing role.
+The two programmers are peers with different capabilities in this session. The main agent does not direct or manage its partner. There is no mode selector for the pair programmer and no second persistent pairing role.
 
 ## Configuration
 
-Pair state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-state.json`:
+The pair programmer's state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-state.json`:
 
 ```json
 {
@@ -21,7 +21,7 @@ Pair state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-state.json`:
 }
 ```
 
-Pair always uses the user-global `pair` model profile. Advisor consultations use the Advisor sub-agent's `deep` profile.
+The pair programmer always uses the user-global `pair` model profile. Advisor consultations use the Advisor sub-agent's `deep` profile.
 
 ```json
 {
@@ -45,9 +45,9 @@ Commands:
 - `/pair off`
 - `/pair notebook [full]`
 
-Disabling Pair cancels queued and active Advisor consultations.
+Disabling the pair programmer cancels queued and active Advisor consultations.
 
-## Pair behavior
+## Behavior
 
 The pair programming partner receives a stable pairing policy followed by:
 
@@ -65,7 +65,7 @@ The partner has three private typed tools:
 - `ask_advisor` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
 - `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation.
 
-A review attempt commits its staged notes, Advisor requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. Pair instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
+A review attempt commits its staged notes, Advisor requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
 The partner cannot invoke arbitrary agents, shell commands, MCP, `pi_exec`, mutation tools, or arbitrary extension tools. `ask_advisor` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
@@ -75,17 +75,17 @@ One conservative repeated-failure gate may also ask Advisor for help: the exact 
 
 ## Review timing and retries
 
-Pair is an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any Pair construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting Pair construction, model work, tool calls, retry delay, Advisor work, or delivery preparation.
+The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any pair programmer construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting pair programmer construction, model work, tool calls, retry delay, Advisor work, or delivery preparation.
 
-Pair uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
+The pair programmer uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
 
-Pair also uses:
+The pair programmer also uses:
 
 - zero provider transport retries;
 - one automatic AgentSession retry;
-- no whole-review PairRuntime retry.
+- no whole-review `PairRuntime` retry.
 
-Construction failure remains visible and retryable; Pair does not fall back to a weaker raw-agent path.
+Construction failure remains visible and retryable; the pair programmer does not fall back to a weaker raw-agent path.
 
 ## Advisor consultation
 
@@ -101,7 +101,7 @@ The packet includes:
 
 The extension imposes no character ceiling on consultation packets or Git diffs. Pi and the selected model own context-window behavior.
 
-Advisor joins as a fresh, foreground, hidden managed teammate. The consultation prompt presents Advisor as a senior software architect giving two programmers an independent second opinion. Advisor receives only read-only repository tools, primary-bound `revisit_note` and `search_session`, and the private typed `give_second_opinion` result tool. It does not receive the Pair sidecar, nested agents, `pi_exec`, mutation tools, Ledger mutation tools, MCP, or project extension discovery.
+Advisor joins as a fresh, foreground, hidden managed teammate. The consultation prompt presents Advisor as a senior software architect giving two programmers an independent second opinion. Advisor receives only read-only repository tools, primary-bound `revisit_note` and `search_session`, and the private typed `give_second_opinion` result tool. It does not receive the pair programmer sidecar, nested agents, `pi_exec`, mutation tools, ledger mutation tools, MCP, or project extension discovery.
 
 The host accepts only a validated `give_second_opinion` call as the consultation result. If Advisor ends with prose instead, the managed runner keeps the same session alive, disables every tool except `give_second_opinion`, and allows one finalization turn. Prose is never parsed into a disposition.
 
@@ -118,11 +118,11 @@ Only typed `confirm` and `refine` findings are eligible for delivery. Refutation
 
 Only one Advisor consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Advisor starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
 
-Input review and output delivery are separate. Pair continues consuming every trajectory delta, including an advisory-triggered correction run. Pi's `agent_start` and `agent_settled` lifecycle events mark the primary busy or idle; only the exact settled event releases outbound findings. Direct Pair findings do not wait for Advisor consultation, working-state recapture, or Advisor validation. Before an Advisor finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and Advisor findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
+Input review and output delivery are separate. The pair programmer continues consuming every trajectory delta, including an advisory-triggered correction run. Pi's `agent_start` and `agent_settled` lifecycle events mark the primary busy or idle; only the exact settled event releases outbound findings. Direct pair programmer findings do not wait for Advisor consultation, working-state recapture, or Advisor validation. Before an Advisor finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and Advisor findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
 
-An advisory-triggered correction episode suppresses further outbound advice to avoid recursive steering, but it never suppresses Pair input consumption. The next user message reopens outbound delivery.
+An advisory-triggered correction episode suppresses further outbound advice to avoid recursive steering, but it never suppresses pair programmer input consumption. The next user message reopens outbound delivery.
 
-Asking Advisor is a request to investigate, not a finding. If Advisor fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and Pair disablement cancel late delivery.
+Asking Advisor is a request to investigate, not a finding. If Advisor fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 
@@ -138,14 +138,14 @@ Acknowledgment does not claim implementation or validation. The first subsequent
 
 ## Direct Advisor use
 
-The main agent can invoke Advisor through `Agent` as an ordinary read-only sub-agent. That public path uses the normal Agent prompt and optional `inherit_context`; it does not expose Pair's harness context or typed adjudication protocol.
+The main agent can invoke Advisor through `agent` as an ordinary read-only sub-agent. That public path uses the normal agent prompt and optional `inherit_context`; it does not expose the pair programmer's harness context or typed adjudication protocol.
 
 The partner's `ask_advisor` path uses a separate, hidden host operation. It cannot be selected through Agent parameters.
 
 ## Status and accounting
 
-The footer uses `q-pair` and shows Pair review plus Advisor queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, Advisor dispositions, suppressions, stale results, usage, cost, and duration.
+The footer uses `q-pair` and shows pair programmer review plus Advisor queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, Advisor dispositions, suppressions, stale results, usage, cost, and duration.
 
 Sidecar telemetry records `pair` and `advisor` calls separately. Consultation outcomes are structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes. Private hypothesis and finding text are not persisted there.
 
-Pair and Advisor use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.
+The pair programmer and Advisor use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.

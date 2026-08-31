@@ -79,7 +79,7 @@ function clampLimit(value: number | undefined, fallback: number, min: number, ma
 
 /** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
 export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
-	const hasWorkers = /\bagent\s*\(|\bagents\.run\s*\(|\bstd\.dev\b/.test(code);
+	const hasWorkers = /\bagent(?:\.run)?\s*\(|\bstd\.dev\b/.test(code);
 	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(|\bstd\.dev\b/.test(code);
 	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
 	const derived: ProgramEnvelope = {
@@ -275,10 +275,10 @@ async function runAgent(
 		parentModelObject: ctx.model,
 	});
 	if (resolved.tools.some((tool) => !CORE_TOOL_NAMES.has(tool))) {
-		throw new Error(`agent tools must be selected from: ${CORE_TOOL_LIST.join(", ")}`);
+		throw new Error(`Agent tools must be selected from: ${CORE_TOOL_LIST.join(", ")}`);
 	}
 	if (resolved.thinking && !THINKING_LEVELS.has(resolved.thinking)) {
-		throw new Error(`agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
+		throw new Error(`Agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
 	}
 	const prepared = prepareAgentSpawn(
 		{ ...request, ...(resolved.systemPrompt ? { systemPrompt: resolved.systemPrompt } : {}) },
@@ -391,10 +391,10 @@ async function runAgent(
 				signal?.removeEventListener("abort", abort);
 				if (buffered.trim()) consume(buffered);
 				const exitCode = code ?? 1;
-				if (aborted) error = "agent aborted";
-				if (!error && exitCode !== 0) error = stderr.trim() || `agent exited with code ${exitCode}`;
+				if (aborted) error = "Agent aborted";
+				if (!error && exitCode !== 0) error = stderr.trim() || `Agent exited with code ${exitCode}`;
 				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
-					error = stderr.trim() || `agent stopped with ${stopReason}`;
+					error = stderr.trim() || `Agent stopped with ${stopReason}`;
 				}
 				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
 				if (!error && structured.error) error = structured.error;
@@ -541,7 +541,7 @@ export default function runtime(pi: ExtensionAPI): void {
 							Type.Integer({
 								minimum: 1,
 								maximum: PROGRAM_ENVELOPE_MAXIMA.agentBudget,
-								description: "Max nested agent() / agents.run workers for this program.",
+								description: "Max nested agent() / agent.run workers for this program.",
 							}),
 						),
 						callBudget: Type.Optional(
@@ -716,11 +716,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					sequence: calls - 1,
 					ref,
 					args:
-						ref === "fetch"
-							? fetchOperationArgs(rawArgs)
-							: ref === "agents.run"
-								? agentOperationArgs(rawArgs)
-								: rawArgs,
+						ref === "fetch" ? fetchOperationArgs(rawArgs) : ref === "agent.run" ? agentOperationArgs(rawArgs) : rawArgs,
 					outcome: "succeeded",
 				};
 				operations.push(operation);
@@ -778,7 +774,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					} else if (ref === "skills.body") {
 						const name = typeof rawArgs.name === "string" ? rawArgs.name : "";
 						value = readSkillBody(name, { cwd: ctx.cwd });
-					} else if (ref === "agents.run") {
+					} else if (ref === "agent.run") {
 						agentCalls++;
 						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);
 						const request = parseAgentRequest(rawArgs);

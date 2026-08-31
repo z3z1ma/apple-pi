@@ -53,7 +53,7 @@ const reviews = await parallel(
       checks: ["Trace the assigned contract through its producers, consumers, guards, and tests."],
       rationale: background,
     };
-    const result = await agents.run({
+    const result = await agent.run({
       name: lens.id,
       profile: "quick",
       tools: READ_ONLY,

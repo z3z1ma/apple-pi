@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import type { AgentManager } from "./agent-manager.js";
 import { extractText } from "./context.js";
 import type { AgentConfig, AgentRecord } from "./types.js";
-import { BtwViewer, BTW_VIEWPORT_HEIGHT_PCT } from "./ui/btw-viewer.js";
+import { BTW_VIEWPORT_HEIGHT_PCT, BtwViewer } from "./ui/btw-viewer.js";
 
 const BTW_OWNER = "apple-pi:btw";
 const BTW_PARENT_CONTEXT_MAX_CHARS = 12_000;

@@ -10,7 +10,7 @@ function sourceEntries(): Entry[] {
 		{
 			type: "message",
 			id: "source-user",
-			message: { role: "user", content: [{ type: "text", text: "Use the Pair Programmer paradigm." }] },
+			message: { role: "user", content: [{ type: "text", text: "Use the pair programmer paradigm." }] },
 		},
 		{
 			type: "message",
@@ -20,7 +20,7 @@ function sourceEntries(): Entry[] {
 	];
 }
 
-describe("Pair notebook maintenance", () => {
+describe("pair programmer notebook maintenance", () => {
 	it("prepares one source-addressed maintenance span from uncovered primary entries", () => {
 		const batch = preparePairNotebookBatch({
 			entries: sourceEntries(),
@@ -51,7 +51,7 @@ describe("Pair notebook maintenance", () => {
 		expect(batch).toBeDefined();
 		const tool = new UpdateNotebookTool();
 		tool.begin(batch);
-		const observationContent = "The user selected Pair Programmer as the persistent companion paradigm.";
+		const observationContent = "The user selected pair programmer as the persistent companion paradigm.";
 		const observationId = hashId(observationContent);
 		const result = await tool.execute("notebook-1", {
 			observations: [
@@ -64,7 +64,7 @@ describe("Pair notebook maintenance", () => {
 			],
 			reflections: [
 				{
-					content: "The persistent companion is the Pair Programmer.",
+					content: "The persistent companion is the pair programmer.",
 					supportingObservationIds: [observationId],
 				},
 			],
@@ -100,7 +100,7 @@ describe("Pair notebook maintenance", () => {
 				},
 				{
 					timestamp: "2026-08-27 18:01",
-					content: "The Pair shares the primary trajectory.",
+					content: "The pair programmer shares the primary trajectory.",
 					relevance: "high",
 					sourceEntryIds: ["source-user"],
 				},

@@ -113,7 +113,7 @@ export interface SpawnOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Direct Agent children only: asynchronously alert the owning root session. */
+	/** Direct agent children only: asynchronously alert the owning root session. */
 	onParentEscalation?: ParentEscalationHandler;
 	/** Disable standard child extensions for a narrowly owned internal session. */
 	loadStandardChildExtensions?: boolean;
@@ -590,7 +590,7 @@ export class AgentManager {
 		// Background resume: settle asynchronously and notify on completion exactly
 		// like a background spawn, returning immediately with the record still
 		// "running" — or "queued" when at the concurrency limit. Previously
-		// run_in_background was ignored on resume (the Agent tool's resume branch
+		// run_in_background was ignored on resume (the agent tool's resume branch
 		// returned before its background branch, and resume() only ever awaited
 		// inline), so a resumed agent always blocked the caller until it finished.
 		if (options?.isBackground) {
@@ -702,7 +702,7 @@ export class AgentManager {
 
 	/**
 	 * Start a background resume run: detached, settling and notifying like
-	 * startAgent's background path. Invoked immediately, or from drainQueue when
+	 * startagent's background path. Invoked immediately, or from drainQueue when
 	 * a concurrency slot frees. The session already exists (resume reuses it), so
 	 * there is no onSessionCreated to hang per-run wiring off — callers use
 	 * `options.onStarted`, which fires on both the immediate and the drained path.
@@ -726,7 +726,7 @@ export class AgentManager {
 		const abortController = new AbortController();
 		record.abortController = abortController;
 		this.notifyStart(record);
-		// Optional, and NOT what the Agent tool passes for a detached resume: a
+		// Optional, and NOT what the agent tool passes for a detached resume: a
 		// parent signal aborts on the parent's own interrupt (user Esc), which is
 		// right for a foreground run whose result the caller is awaiting, and wrong
 		// for a detached one — background spawns omit it for exactly this reason.
@@ -824,7 +824,7 @@ export class AgentManager {
 		return true;
 	}
 
-	/** Detach an in-flight foreground Agent call after it escalates so its run can continue in the background. */
+	/** Detach an in-flight foreground agent call after it escalates so its run can continue in the background. */
 	detachForeground(id: string): boolean {
 		const record = this.agents.get(id);
 		if (record?.status !== "running" || record.isBackground !== false) return false;

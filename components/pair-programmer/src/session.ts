@@ -116,7 +116,7 @@ export async function createPairSession(opts: {
 				name: "pair-reseed",
 				hidden: true,
 				factory: (pi: ExtensionAPI) => {
-					// Replay + reseed only. Never register the Pair notebook
+					// Replay + reseed only. Never register the pair programmer notebook
 					// Runtime, triggers, commands, or revisit_note here — those stay
 					// on the primary session. The parent packet is a read of that
 					// ledger, not a second notebook pipeline.

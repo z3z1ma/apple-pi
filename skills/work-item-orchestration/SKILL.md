@@ -34,7 +34,7 @@ Give one implementer everything needed to complete the coherent assignment:
 - explicit non-goals;
 - a concise report contract.
 
-Use the real `Agent` tool with the appropriate type/profile, `inherit_context: false`, and no child delegation. Avoid pasting transcript history; point to authoritative files.
+Use the real `agent` tool with the appropriate type/profile, `inherit_context: false`, and no child delegation. Avoid pasting transcript history; point to authoritative files.
 
 One agent may own multiple related Work Items when that reduces repeated context loading. Writers receive disjoint ownership.
 
@@ -45,7 +45,7 @@ The root session remains the senior engineer. It:
 - validates the worker's claims against the diff and checks;
 - integrates the result;
 - fixes ordinary omissions, formatting, small regressions, and any cheap clearly useful nits itself;
-- updates any shared plan or Ledger state;
+- updates any shared plan or ledger state;
 - decides whether a reported concern is material.
 
 The root handles routine feedback. Resume or replace a worker when it is genuinely blocked on missing context, the implementation is materially incomplete, or a distinct unresolved problem still benefits from its context.

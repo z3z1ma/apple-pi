@@ -62,7 +62,7 @@ export { SUBAGENT_TOOL_NAMES };
  *
  * `pi_exec` is root-only because its host bridge can launch independent model
  * workers and invoke captured root extension tools. Exposing it to a child
- * would bypass the ownership and depth limits enforced by the nested Agent
+ * would bypass the ownership and depth limits enforced by the nested agent
  * tools below.
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
@@ -172,7 +172,7 @@ export interface RunOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Disable ledger, session-search, MCP, and optional Pair; fast mode and both safety guards remain mandatory. */
+	/** Disable ledger, session-search, MCP, and optional pair programmer; fast mode and both safety guards remain mandatory. */
 	loadStandardChildExtensions?: boolean;
 	signal?: AbortSignal;
 	isolated?: boolean;
@@ -400,7 +400,7 @@ export async function runAgent(
 
 	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
 	// Ordinary children load fast mode, the overflow guard, the home-search guard, ledger, session search,
-	// MCP, and optional Pair; narrowly owned internal sessions may opt out of everything except fast mode
+	// MCP, and optional pair programmer; narrowly owned internal sessions may opt out of everything except fast mode
 	// and the safety guards. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
 	// re-appends both AFTER systemPromptOverride, which would defeat
@@ -447,8 +447,8 @@ export async function runAgent(
 		}
 	}
 
-	// Top-level and nested Agent tools resolve routing before queueing a spawn so
-	// queued work cannot observe a later config change. Direct runAgent callers
+	// Top-level and nested agent tools resolve routing before queueing a spawn so
+	// queued work cannot observe a later config change. Direct runagent callers
 	// retain the same resolution here.
 	const resolvedProfile = options.modelResolved
 		? { model: options.model, thinkingLevel: options.thinkingLevel }
@@ -493,7 +493,7 @@ export async function runAgent(
 	if (customToolNames.size !== customTools.length)
 		throw new Error(`Agent "${type}" received duplicate custom tool names`);
 
-	// Ledger (and optional pair) load via explicit `-e`, so their tools must
+	// ledger (and optional pair) load via explicit `-e`, so their tools must
 	// be able to register. Leave `allowedToolNames` unset and deny the stable
 	// names that must never appear: orchestration tools the agent did not opt
 	// into, built-ins it did not ask for, and `disallowedTools`.
@@ -554,7 +554,7 @@ export async function runAgent(
 
 	// Bind the explicit `-e` extensions so session_start fires. Registry scope
 	// is `excludeTools` from session construction. Stay in child-session ALS so
-	// a leaked context.ts factory cannot register the Pair notebook.
+	// a leaked context.ts factory cannot register the pair programmer notebook.
 	await runInChildSessionContext(() =>
 		session.bindExtensions({
 			onError: (err) => {

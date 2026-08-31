@@ -33,13 +33,13 @@ When a check cannot run, say `Not verified` and why. This limits the claim; it d
 
 ## Review and delegation
 
-Pair, agent, and reviewer reports are useful claims, not proof. Validate material points once. Completion does not require an independent review unless the operator requested it or a concrete named risk justifies it.
+The pair programmer, agent, and reviewer reports are useful claims, not proof. Validate material points once. Completion does not require an independent review unless the operator requested it or a concrete named risk justifies it.
 
 Nits and optional cleanup remain optional; confirmed material defects block completion.
 
-## Ledger
+## ledger
 
-If a Ledger task is active, map only its load-bearing Acceptance Criteria to adequate observations. A concise task may close from verified repository state; use its retrospective only when there is learning worth preserving.
+If a ledger task is active, map only its load-bearing Acceptance Criteria to adequate observations. A concise task may close from verified repository state; use its retrospective only when there is learning worth preserving.
 
 ## Before integration
 

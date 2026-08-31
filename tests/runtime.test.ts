@@ -113,26 +113,38 @@ return values.map((value) => value.toUpperCase());
 		expect(calls.sort()).toEqual(["a", "b"]);
 	});
 
-	it("passes a model profile through the guest agents.run bridge", async () => {
-		const result = await execute(`return agents.run({ task: "inspect", profile: "deep" });`, async (_ref, args) => ({
+	it("passes a model profile through the guest agent.run bridge", async () => {
+		const result = await execute(`return agent.run({ task: "inspect", profile: "deep" });`, async (_ref, args) => ({
 			status: "completed",
 			text: String(args.profile),
 		}));
 		expect(result.value).toEqual({ status: "completed", text: "deep" });
 	});
 
-	it("supports structured agents.run and the text-returning agent convenience", async () => {
+	it("supports structured agent.run and the text-returning agent convenience", async () => {
 		const result = await execute(
 			`
-const structured = await agents.run({ task: "inspect", name: "reviewer" });
+const structured = await agent.run({ task: "inspect", name: "reviewer" });
 const text = await agent("summarize");
 return { structured, text };
 `,
 			async (ref, args) => ({ status: "completed", text: String(args.task).toUpperCase(), ref }),
 		);
 		expect(result.value).toEqual({
-			structured: { status: "completed", text: "INSPECT", ref: "agents.run" },
+			structured: { status: "completed", text: "INSPECT", ref: "agent.run" },
 			text: "SUMMARIZE",
+		});
+	});
+
+	it("exposes a frozen agent.run property without an agents global", async () => {
+		const result = await execute(
+			`const descriptor = Object.getOwnPropertyDescriptor(agent, "run"); return { agents: typeof agents, frozen: Object.isFrozen(agent), descriptor: { configurable: descriptor.configurable, enumerable: descriptor.enumerable, writable: descriptor.writable, callable: typeof descriptor.value } };`,
+			async () => ({ status: "completed", text: "unused" }),
+		);
+		expect(result.value).toEqual({
+			agents: "undefined",
+			frozen: true,
+			descriptor: { configurable: false, enumerable: true, writable: false, callable: "function" },
 		});
 	});
 
@@ -256,7 +268,7 @@ return { structured, text };
 	it("forwards bound agent context without interpolating it into the task", async () => {
 		const seen: Record<string, unknown>[] = [];
 		const result = await execute(
-			`return agents.run({ task: "judge these rows", name: "judge", context: { ids: [1, 2] } });`,
+			`return agent.run({ task: "judge these rows", name: "judge", context: { ids: [1, 2] } });`,
 			async (_ref, args) => {
 				seen.push(args);
 				return { status: "completed", text: "ok" };
@@ -273,7 +285,7 @@ return { structured, text };
 	it("automatically fits marked worker contexts and reports the bound changes", async () => {
 		const seen: Record<string, unknown>[] = [];
 		const result = await execute(
-			`return agents.run({ task: "inspect", context: { patch: std.context.clippable("x".repeat(50_000), { maxChars: 50_000 }) } });`,
+			`return agent.run({ task: "inspect", context: { patch: std.context.clippable("x".repeat(50_000), { maxChars: 50_000 }) } });`,
 			async (_ref, args) => {
 				seen.push(args);
 				return { status: "completed", text: "ok" };
@@ -483,7 +495,7 @@ return values.filter((length) => length > 3);
 			'return URL.constructor("return process")();',
 			'return setTimeout.constructor("return process")();',
 			'return inputs.constructor.constructor("return process")();',
-			'const result = await agents.run("inspect"); return result.constructor.constructor("return process")();',
+			'const result = await agent.run("inspect"); return result.constructor.constructor("return process")();',
 		]) {
 			const result = await execute(code, async () => ({ status: "completed", text: "ok" }));
 			expect(result.outcome).toBe("failed");
@@ -496,7 +508,7 @@ return values.filter((length) => length > 3);
 			`
 Promise.resolve = () => { throw new Error("Promise.resolve intercepted a host value"); };
 WeakMap.prototype.set = () => { throw new Error("WeakMap.set intercepted a host value"); };
-const value = await agents.run("inspect");
+const value = await agent.run("inspect");
 return value.text;
 `,
 			async () => ({ status: "completed", text: "safe" }),
@@ -631,7 +643,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(PI_EXEC_DESCRIPTION).toContain("value?");
 		expect(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION).toMatch(/not a program global/i);
 		expect(contract).toContain("agent(request: AgentRequest)");
-		expect(contract).toContain("agents.run(request: AgentRequest)");
+		expect(contract).toContain("agent.run(request: AgentRequest)");
 		expect(contract).toContain("type?: string");
 		expect(contract).toContain("profile?: InferenceProfile");
 		expect(contract).toContain(
@@ -828,7 +840,7 @@ describe("pi_exec agent binding", () => {
 		expect(() => parseAgentRequest({ task: "inspect", pair: "on" })).toThrow(/pair must be a boolean/);
 	});
 
-	it("resolves catalog defaults and explicit profile overrides for agents.run", async () => {
+	it("resolves catalog defaults and explicit profile overrides for agent.run", async () => {
 		const cwd = process.cwd();
 		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-exec-profiles-"));
 		const previous = process.env.PI_CODING_AGENT_DIR;
@@ -909,7 +921,7 @@ describe("pi_exec agent binding", () => {
 		}
 	});
 
-	it("routes a typed agents.run worker through its semantic model profile", async () => {
+	it("routes a typed agent.run worker through its semantic model profile", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-exec-type-"));
 		const globalRoot = join(root, "pi-agent");
 		mkdirSync(globalRoot, { recursive: true });
@@ -988,7 +1000,7 @@ describe("pi_exec agent binding", () => {
 		expect(resolveStructuredOutput(undefined, { id: 7 })).toEqual({});
 	});
 
-	it("injects Pair for an enabled worker and preserves explicit extension isolation", () => {
+	it("injects pair programmer for an enabled worker and preserves explicit extension isolation", () => {
 		const schema = {
 			type: "object",
 			properties: { id: { type: "number" } },
@@ -1115,13 +1127,12 @@ describe("pi_exec tool", () => {
 		expect(tool.promptGuidelines).toEqual([...PI_EXEC_PROMPT_GUIDELINES]);
 		expect(tool.parameters.properties.display.description).toBe(PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION);
 		expect(tool.parameters.properties.state.description).toContain("state snapshot");
-		expect(tool.description).toContain(PI_EXEC_DESCRIPTION);
-		expect(tool.description).toContain("pi.read({");
-		expect(tool.description).toContain("outputSchema?");
-		expect(tool.description).toContain("agent(request: AgentRequest)");
-		expect(tool.description).toContain("std.schema(shape: SchemaShape)");
+		expect(tool.description).toBe(PI_EXEC_DESCRIPTION);
+		expect(tool.description).not.toContain("pi.read({");
+		expect(tool.description).not.toContain("agent(request: AgentRequest)");
+		expect(tool.description).not.toContain("std.schema(shape: SchemaShape)");
 		expect(tool.parameters.properties.code.description).toBe(piExecGuestApiContract());
-		expect(tool.parameters.properties.code.description).toContain("agents.run(");
+		expect(tool.parameters.properties.code.description).toContain("agent.run(");
 		expect(tool.parameters.properties.code.description).toContain("std.context.fit<T>(");
 		expect(tool.parameters.properties.code.description).toContain("outputSchema?: object");
 		expect(tool.parameters.properties.code.description).toContain("value?: JSONValue");
@@ -1156,7 +1167,7 @@ describe("pi_exec tool", () => {
 
 		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
-		expect(tool.description).toContain("extensions.echo_value({ value: string })");
+		expect(tool.description).not.toContain("extensions.echo_value({ value: string })");
 		for (const name of Object.values(SUBAGENT_TOOL_NAMES)) {
 			expect(tool.parameters.properties.code.description).not.toContain(`extensions.${name}(`);
 		}
@@ -1588,10 +1599,12 @@ describe("pi_exec tool", () => {
 
 	it("scales the envelope from optional tool-call limits and clamps to package maxima", () => {
 		const workers = 'return agent({ task: "x" });';
+		const structuredWorkers = 'return agent.run({ task: "x" });';
 		const bookkeeping = "return std.context.fit({ value: std.context.required(1) });";
 		const dev = "return std.dev.findRelevantTests();";
 		const plain = "return 1;";
 		expect(deriveProgramEnvelope(workers).agentBudget).toBe(8);
+		expect(deriveProgramEnvelope(structuredWorkers).agentBudget).toBe(8);
 		expect(deriveProgramEnvelope(bookkeeping).agentBudget).toBe(0);
 		expect(deriveProgramEnvelope(dev).agentBudget).toBe(8);
 
@@ -1855,7 +1868,7 @@ return pi.read({ path: "result.txt" });
 		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(reloadedRoot);
 
-		// Auxiliary sessions such as Pair assemble their own tool catalogs
+		// Auxiliary sessions such as pair programmer assemble their own tool catalogs
 		// outside the subagent child-context marker. They must not displace the
 		// root catalog that owns pi_exec.
 		const auxiliaryRunner = Object.create(ExtensionRunner.prototype) as any;
@@ -2021,7 +2034,7 @@ describe("pi_exec TUI rendering", () => {
 						calls: [
 							{
 								sequence: 0,
-								ref: "agents.run",
+								ref: "agent.run",
 								args: { task: "inspect runtime" },
 								status: "running",
 								activity: "thinking",
@@ -2052,7 +2065,7 @@ describe("pi_exec TUI rendering", () => {
 						calls: [
 							{
 								sequence: 0,
-								ref: "agents.run",
+								ref: "agent.run",
 								args: { task: "inspect runtime", name: "reviewer" },
 								status: "running",
 								activity: "thinking",

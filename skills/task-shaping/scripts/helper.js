@@ -57,7 +57,7 @@
       'background:rgba(20,20,22,0.92);color:#f5f5f7;font-family:system-ui,sans-serif';
     el.innerHTML = '<div style="max-width:480px">' +
       '<h2 style="margin:0 0 .5rem;font-weight:600">Companion paused</h2>' +
-      '<p style="margin:0;opacity:.85">This Ledger visual companion has stopped. ' +
+      '<p style="margin:0;opacity:.85">This ledger visual companion has stopped. ' +
       'Ask your coding agent to bring it back — this page reconnects automatically.</p></div>';
     if (document.body) document.body.appendChild(el);
   }

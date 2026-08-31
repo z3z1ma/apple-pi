@@ -2,7 +2,6 @@
  * prompts.ts — System prompt builder for agents.
  */
 
-import { stripLedgerWorkflowSystemPrompt } from "../../shared/src/workflow-system-prompt.js";
 import type { AgentConfig, EnvInfo } from "./types.js";
 
 /** Extra sections to inject into the system prompt. */
@@ -57,9 +56,7 @@ Platform: ${env.platform}`;
 	const extrasSuffix = extraSections.length > 0 ? `\n\n${extraSections.join("\n")}` : "";
 
 	if (config.promptMode === "append") {
-		const identity = parentSystemPrompt
-			? stripLedgerWorkflowSystemPrompt(parentSystemPrompt) || genericBase
-			: genericBase;
+		const identity = parentSystemPrompt || genericBase;
 
 		const bridge = `<sub_agent_context>
 You are operating as a sub-agent invoked to handle a specific task.

@@ -12,7 +12,7 @@ import type { AgentRecord } from "./types.js";
 
 /**
  * Explicit parenthetical note for a non-normal terminal outcome, so the parent
- * agent can't mistake partial output for a completed result. Empty string for a
+ * The agent can't mistake partial output for a completed result. Empty string for a
  * clean completion (and any unknown/non-terminal status).
  *
  * `stopped` (a human aborted it) is deliberately distinct from `aborted` (the
@@ -94,5 +94,5 @@ export function partialOutputSuffix(record: AgentRecord): string {
  * exists; startup failures can create records that cannot be resumed.
  */
 export function continuationSuffix(record: Pick<AgentRecord, "id" | "session">): string {
-	return record.session ? `\n\nAgent ID: ${record.id} (resume with the Agent tool's resume parameter)` : "";
+	return record.session ? `\n\nAgent ID: ${record.id} (resume with the agent tool's resume parameter)` : "";
 }

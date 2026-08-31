@@ -1,9 +1,9 @@
 /**
  * /pair — persistent read-only supervision of the main agent's work.
- * Pair is the sole persistent watcher and can submit typed hypotheses to a
+ * The pair programmer is the sole persistent watcher and can submit typed hypotheses to a
  * host-controlled, non-recursive Advisor consultation.
  *
- * Delivery model. Every advise() call enters one shared output queue. Pair
+ * Delivery model. Every advise() call enters one shared output queue. The pair programmer's
  * review and primary execution remain independent; only Pi's exact
  * `agent_settled` boundary releases queued output through `steer`. Nothing is a
  * hard interrupt and we never call `abort()` on the primary agent. Findings
@@ -16,8 +16,8 @@
  * review reconfirm it (held notes ride a reconfirm preamble; the pair re-
  * raises survivors, stays silent on the resolved ones).
  *
- * Pair review is fully asynchronous: each completed primary turn appends an
- * immutable spool delta, no primary turn waits for Pair work, and the reader
+ * The pair programmer's review is fully asynchronous: each completed primary turn appends an
+ * immutable spool delta, no primary turn waits for pair programmer work, and the reader
  * advances its committed frontier only after a successful transactional review.
  * The persistent footer reports review activity without a blocking toast.
  *
@@ -81,7 +81,7 @@ import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } fr
 import { createPairSession } from "./session.js";
 
 // ===========================================================================
-// Pair core — persistent second model that watches the main agent.
+// Pair programmer core — persistent second model that watches the main agent.
 //
 // Port of oh-my-pi's pair onto upstream pi's public extension surface. The
 // pair is a long-lived `Agent` with its own model, read-only tools
@@ -112,7 +112,7 @@ type PreparedBoundaryFinding = {
 
 const findingIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 
-/** Commit direct Pair and prepared Advisor findings through one outbound batch. */
+/** Commit direct pair programmer and prepared Advisor findings through one outbound batch. */
 export function deliverBoundaryBatch(args: {
 	direct: PairNote[];
 	advisor?: PreparedBoundaryFinding;
@@ -338,7 +338,7 @@ type PendingDelta = Readonly<{
 }>;
 type AttemptEffects = { advice: PairNote[]; escalations: PairEscalation[] };
 
-/** Ordered input ownership shared across Pair runtime construction and replacement. */
+/** Ordered input ownership shared across pair programmer runtime construction and replacement. */
 export class PairSpool {
 	#pending: PendingDelta[] = [];
 	#claimedCount = 0;
@@ -369,7 +369,7 @@ export class PairSpool {
 		if (!claim.length) return;
 		for (let index = 0; index < claim.length; index++) {
 			if (this.#pending[index]?.sequence !== claim[index]?.sequence) {
-				throw new Error("Pair spool commit does not match its contiguous pending prefix");
+				throw new Error("pair programmer spool commit does not match its contiguous pending prefix");
 			}
 		}
 		this.#pending.splice(0, claim.length);
@@ -604,7 +604,7 @@ export class PairRuntime {
 		this.#upsertAdviceIn(this.#advice, note, severity, findingId);
 	}
 
-	/** Stage Pair advice inside the active review; out-of-review callers seed the live queue. */
+	/** Stage pair programmer advice inside the active review; out-of-review callers seed the live queue. */
 	enqueueAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
 		if (this.disposed) return;
 		if (this.#attemptEffects && this.#reviewEpoch === this.#epoch) {
@@ -616,7 +616,7 @@ export class PairRuntime {
 		this.#upsertAdvice(note, severity, findingId);
 	}
 
-	/** Stage an Advisor request so failed or stale Pair attempts cannot launch work. */
+	/** Stage an Advisor request so failed or stale pair programmer attempts cannot launch work. */
 	stageEscalation(request: PairEscalation): EscalationAcceptance {
 		const attempt = this.#attemptEffects;
 		if (!attempt || !this.acceptingAdvice) return "unavailable";
@@ -962,7 +962,7 @@ export class PairRuntime {
 
 // Footer status key. Statuses are ordered alphabetically by key; "q-pair"
 // sorts after "permissions"/"provider-system-prompt" but before "sub-bar", so
-// Pair shows as a middle segment. Change this to reposition it (e.g.
+// The pair programmer shows as a middle segment. Change this to reposition it (e.g.
 // "a-pair" for leftmost).
 const STATUS_KEY = "q-pair";
 
@@ -980,14 +980,14 @@ export function formatPairFooterText(
 ): string {
 	const state =
 		advisorState === "advisor_running"
-			? "Pair → Advisor"
+			? "pair programmer → Advisor"
 			: advisorState === "escalation_pending"
-				? "Pair (Advisor queued)"
+				? "pair programmer (Advisor queued)"
 				: advisorState === "delivery_pending"
-					? "Pair (Advisor ready)"
+					? "pair programmer (Advisor ready)"
 					: reviewing
-						? "Pair (reviewing)"
-						: "Pair";
+						? "pair programmer (reviewing)"
+						: "pair programmer";
 	const total = costUsd + advisorCostUsd;
 	return `${state}: $${total.toFixed(2)}`;
 }
@@ -1102,7 +1102,7 @@ export default function (pi: ExtensionAPI) {
 	// notes delivered at the actual send point.
 	let adviseTool: AdviseTool | undefined;
 
-	// Set when the user aborts (Escape): while true, late Pair advice is delivered
+	// Set when the user aborts (Escape): while true, late pair programmer advice is delivered
 	// WITHOUT triggerTurn so it cannot auto-resume the run the user just stopped.
 	// Cleared when the user drives the next turn.
 	let autoResumeSuppressed = false;
@@ -1129,12 +1129,13 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "acknowledge_pair_findings",
-		label: "Acknowledge Pair findings",
+		label: "Acknowledge pair programmer findings",
 		description:
-			"Record that you considered one or more delivered Pair concerns or blockers. Use address when acting on a finding, decline when evidence shows it does not apply, or defer when it is valid but outside the authorized work. Give a concise reason. This records consideration only; it does not claim the work is fixed or validated.",
-		promptSnippet: "Acknowledge delivered Pair concerns and blockers with a typed disposition and concise reason",
+			"Record that you considered one or more delivered pair programmer concerns or blockers. Use address when acting on a finding, decline when evidence shows it does not apply, or defer when it is valid but outside the authorized work. Give a concise reason. This records consideration only; it does not claim the work is fixed or validated.",
+		promptSnippet:
+			"Acknowledge delivered pair programmer concerns and blockers with a typed disposition and concise reason",
 		promptGuidelines: [
-			"Call acknowledge_pair_findings for each delivered Pair concern or blocker after checking it against current code and user intent.",
+			"Call acknowledge_pair_findings for each delivered pair programmer concern or blocker after checking it against current code and user intent.",
 			"Use address when acting on it, decline with evidence when it does not apply, or defer with a reason when it is valid but outside the current authorized work.",
 			"An acknowledgment records consideration only; it does not prove implementation or validation.",
 		],
@@ -1176,7 +1177,7 @@ export default function (pi: ExtensionAPI) {
 						type: "text" as const,
 						text: failed.length
 							? `Recorded ${accepted.length} acknowledgment${accepted.length === 1 ? "" : "s"}; ${failed.length} could not be persisted.`
-							: `Recorded ${accepted.length} Pair finding acknowledgment${accepted.length === 1 ? "" : "s"}.`,
+							: `Recorded ${accepted.length} pair programmer finding acknowledgment${accepted.length === 1 ? "" : "s"}.`,
 					},
 				],
 				details: { accepted, errors: failed },
@@ -1186,18 +1187,18 @@ export default function (pi: ExtensionAPI) {
 
 	// ---- statusbar: per-session pair cost + live reviewing/idle state ----
 	// Reflects the live pair lifetime cost (rt.usage.cost) and whether a review
-	// is currently in flight (`Pair (reviewing): $N` vs `Pair: $N`) in the
+	// is currently in flight (`pair programmer (reviewing): $N` vs `pair programmer: $N`) in the
 	// footer status bar. Cleared when the pair is off or torn down.
 	//
 	// Footer ordering: pi sorts extension statuses alphabetically BY KEY and joins
 	// them with a single space (no separators of its own). So the key controls
 	// position and we draw our own `│` divider in the text. STATUS_KEY sorts after
-	// "permissions"/"provider-system-prompt" but before "sub-bar", placing Pair as
+	// "permissions"/"provider-system-prompt" but before "sub-bar", placing the pair programmer as
 	// a middle segment rather than the leftmost.
 	//
 	// LEADING bar only (no trailing): whatever follows draws its own separator
 	// (e.g. pi-sub-bar with statusLeadingDivider:true starts with `│`), so a trailing
-	// bar here would double up (`│ Pair │ │ …`).
+	// bar here would double up (`│ pair programmer │ │ …`).
 	function updateStatus(ctx: unknown): void {
 		latestCtx = ctx as ExtensionContext;
 		const ui = (
@@ -1287,7 +1288,7 @@ export default function (pi: ExtensionAPI) {
 				pi.appendEntry(PAIR_FINDING_UNACKNOWLEDGED, { ...finding, status: "unacknowledged" });
 				acknowledgments.resolve(finding.id);
 			} catch (error) {
-				dbg("Pair unacknowledged telemetry failed", finding.id, String(error));
+				dbg("pair programmer unacknowledged telemetry failed", finding.id, String(error));
 			}
 		}
 		if (remind.length) {
@@ -1305,13 +1306,13 @@ export default function (pi: ExtensionAPI) {
 				acknowledgments.markReminded(remind.map((finding) => finding.id));
 				if (triggerTurn) awaitingUserAfterAdvisory = true;
 			} catch (error) {
-				dbg("Pair acknowledgment reminder failed", String(error));
+				dbg("pair programmer acknowledgment reminder failed", String(error));
 			}
 		}
 		if ((close.length || remind.length) && latestCtx) updateStatus(latestCtx);
 	}
 
-	// Pair callbacks only enqueue. Delivery policy lives at primary boundaries,
+	// Pair programmer callbacks only enqueue. Delivery policy lives at primary boundaries,
 	// where terminality and reconfirmation state are actually known.
 	function deliverAdvice(
 		note: string,
@@ -1388,7 +1389,7 @@ export default function (pi: ExtensionAPI) {
 				onDirectFailed: (note) => activeRuntime?.requeueAdvice(note.note, note.severity, note.id),
 			});
 		} catch (error) {
-			dbg("direct Pair delivery failed", String(error));
+			dbg("direct pair programmer delivery failed", String(error));
 		} finally {
 			if (latestCtx) updateStatus(latestCtx);
 		}
@@ -1552,13 +1553,13 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function commitNotebookUpdate(update: PairNotebookUpdate): void {
-		if (!rootNotebook || !latestCtx) throw new Error("Pair notebook context is unavailable");
+		if (!rootNotebook || !latestCtx) throw new Error("pair programmer notebook context is unavailable");
 		if (update.sessionIdentity && update.sessionIdentity !== sessionIdFromCtx(latestCtx)) {
-			throw new Error("Pair notebook update belongs to a replaced session");
+			throw new Error("pair programmer notebook update belongs to a replaced session");
 		}
 		const entries = latestCtx.sessionManager.getBranch() as Entry[];
 		if (!commitPairNotebookUpdate(pi, rootNotebook, entries, update)) {
-			throw new Error("Pair notebook update was rejected");
+			throw new Error("pair programmer notebook update was rejected");
 		}
 		if (update.observations.length > 0) {
 			rootNotebook.notebookEmptyBackoff = undefined;
@@ -1621,7 +1622,7 @@ export default function (pi: ExtensionAPI) {
 			modelProfileError = error instanceof Error ? error.message : String(error);
 			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
 				lastNotifiedProfileError = modelProfileError;
-				ctx.ui.notify(`Pair unavailable: ${modelProfileError}`, "warning");
+				ctx.ui.notify(`pair programmer unavailable: ${modelProfileError}`, "warning");
 			}
 			return undefined;
 		}
@@ -1667,7 +1668,7 @@ export default function (pi: ExtensionAPI) {
 			dbg("pair session unavailable", modelProfileError);
 			if (notifyProfileError && ctx.hasUI && ctx.ui && lastNotifiedProfileError !== modelProfileError) {
 				lastNotifiedProfileError = modelProfileError;
-				ctx.ui.notify(`Pair unavailable: ${modelProfileError}`, "warning");
+				ctx.ui.notify(`pair programmer unavailable: ${modelProfileError}`, "warning");
 			}
 			return undefined;
 		}
@@ -1903,7 +1904,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory card rendering ----
-	// Bordered card (severity-colored left rule, bold "Pair <SEVERITY>" heading,
+	// Bordered card (severity-colored left rule, bold "pair programmer <SEVERITY>" heading,
 	// body in the default readable `text` color) replacing the single dim inline
 	// line, matching the visual clarity of richer third-party pair UIs surveyed
 	// during UX research. `text` (not `muted`/`dim`) for the body follows the same
@@ -1917,7 +1918,7 @@ export default function (pi: ExtensionAPI) {
 			if (index > 0) container.addChild(new Spacer(1));
 			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
 			const tag = (n.severity ?? "nit").toUpperCase();
-			const role = n.source === "advisor" ? "Advisor" : "Pair";
+			const role = n.source === "advisor" ? "Advisor" : "pair programmer";
 			const card = new Container();
 			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));
 			card.addChild(new Spacer(1));
@@ -1929,14 +1930,14 @@ export default function (pi: ExtensionAPI) {
 
 	// ---- /pair command ----
 	pi.registerCommand("pair", {
-		description: "Control the Pair Programmer. Usage: /pair [on|off|status|notebook [full]]",
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one command dispatcher owns Pair activation, status, notebook view, and the private test hook.
+		description: "Control the pair programmer. Usage: /pair [on|off|status|notebook [full]]",
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one command dispatcher owns pair programmer activation, status, notebook view, and the private test hook.
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 
 			if (arg === "notebook" || arg === "notebook full") {
 				if (!rootNotebook) {
-					ctx.ui.notify("Pair notebook is available only in the root session.", "warning");
+					ctx.ui.notify("pair programmer notebook is available only in the root session.", "warning");
 					return;
 				}
 				const entries = ctx.sessionManager.getBranch() as Entry[];
@@ -1947,7 +1948,7 @@ export default function (pi: ExtensionAPI) {
 			if (arg === "status" || arg === "") {
 				if (!enabled) {
 					ctx.ui.notify(
-						`Pair Programmer disabled — notebook maintenance paused; profile ${PAIR_MODEL_PROFILE}`,
+						`pair programmer disabled — notebook maintenance paused; profile ${PAIR_MODEL_PROFILE}`,
 						"info",
 					);
 					updateStatus(ctx);
@@ -1956,7 +1957,7 @@ export default function (pi: ExtensionAPI) {
 				const rt = await ensureRuntime(ctx as any, false);
 				if (!rt) {
 					ctx.ui.notify(
-						`Pair enabled but unavailable — profile ${PAIR_MODEL_PROFILE}: ${modelProfileError ?? "unknown profile error"}`,
+						`pair programmer enabled but unavailable — profile ${PAIR_MODEL_PROFILE}: ${modelProfileError ?? "unknown profile error"}`,
 						"warning",
 					);
 					return;
@@ -1970,7 +1971,7 @@ export default function (pi: ExtensionAPI) {
 				const notebook = foldLedger(entries);
 				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
-					`Pair Programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
+					`pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Advisor — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
@@ -1985,8 +1986,8 @@ export default function (pi: ExtensionAPI) {
 				updateStatus(ctx);
 				ctx.ui.notify(
 					rt
-						? `Pair Programmer on — ${activeModelLabel}`
-						: `Pair Programmer on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
+						? `pair programmer on — ${activeModelLabel}`
+						: `pair programmer on, but unavailable: ${modelProfileError ?? "unknown profile error"}`,
 					rt ? "info" : "warning",
 				);
 				return;
@@ -1996,7 +1997,7 @@ export default function (pi: ExtensionAPI) {
 				saveEnabled(false);
 				teardown();
 				updateStatus(ctx);
-				ctx.ui.notify("Pair Programmer off — notebook maintenance paused", "info");
+				ctx.ui.notify("pair programmer off — notebook maintenance paused", "info");
 				return;
 			}
 

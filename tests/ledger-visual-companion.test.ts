@@ -240,7 +240,7 @@ afterEach(async () => {
 	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("Ledger visual companion", () => {
+describe("ledger visual companion", () => {
 	it("keeps capability state ephemeral while serving task-owned visual evidence", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-ledger-visual-test-"));
 		tempDirs.push(root);
@@ -269,19 +269,19 @@ describe("Ledger visual companion", () => {
 		const capability = new URL(started.url).searchParams.get("key") ?? "";
 		expect(await bootstrap.clone().text()).not.toContain(capability);
 
-		writeFileSync(join(started.screen_dir, "layout option.html"), "<h2>Ledger layout choice</h2>\n");
+		writeFileSync(join(started.screen_dir, "layout option.html"), "<h2>ledger layout choice</h2>\n");
 		await waitFor(() => readFileSync(join(started.state_dir, "server.log"), "utf8").includes("screen-added"));
 		const screen = await fetch(`http://localhost:${started.port}/`, { headers: { cookie } });
 		const html = await screen.text();
 		expect(screen.status).toBe(200);
-		expect(html).toContain("Ledger layout choice");
-		expect(html).toContain("apple-pi Ledger visual companion");
+		expect(html).toContain("ledger layout choice");
+		expect(html).toContain("apple-pi ledger visual companion");
 
 		const stopped = JSON.parse(run("stop-server.sh", [runtime])) as { status: string };
 		runtimeDirs.pop();
 		expect(stopped.status).toBe("stopped");
 		expect(existsSync(runtime)).toBe(false);
-		expect(readFileSync(join(started.screen_dir, "layout option.html"), "utf8")).toContain("Ledger layout choice");
+		expect(readFileSync(join(started.screen_dir, "layout option.html"), "utf8")).toContain("ledger layout choice");
 	});
 
 	it("serves only authenticated regular files inside the content directory", async () => {

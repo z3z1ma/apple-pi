@@ -47,7 +47,7 @@ const reviewContext = std.context.fit(
   { flags: { ["patchTruncated"]: `$.${"patch"}` } },
 ).value;
 
-const review = await agents.run({
+const review = await agent.run({
   name: focus.id,
   profile: "quick",
   tools: READ_ONLY,

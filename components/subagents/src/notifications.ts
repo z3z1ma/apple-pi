@@ -48,7 +48,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		record.toolCallId ? `<tool-use-id>${escapeXml(record.toolCallId)}</tool-use-id>` : undefined,
 		record.sessionFile ? `<session-file>${escapeXml(record.sessionFile)}</session-file>` : undefined,
 		`<status>${escapeXml(statusLabel(record))}</status>`,
-		`<summary>Agent "${escapeXml(record.description)}" ${record.status}${getStatusNote(record.status)}</summary>`,
+		`<summary>agent "${escapeXml(record.description)}" ${record.status}${getStatusNote(record.status)}</summary>`,
 		`<result>${escapeXml(preview)}</result>`,
 		`<usage><total_tokens>${getLifetimeTotal(record.lifetimeUsage)}</total_tokens><tool_uses>${record.toolUses}</tool_uses><compactions>${record.compactionCount}</compactions></usage>`,
 		"</task-notification>",

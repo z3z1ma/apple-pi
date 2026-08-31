@@ -1,6 +1,6 @@
 ---
 name: task-closure
-description: "Use when a Ledger task should be archived or completed work should be committed, pushed, merged, or otherwise integrated."
+description: "Use when a ledger task should be archived or completed work should be committed, pushed, merged, or otherwise integrated."
 ---
 
 # Close Work Without Ceremony
@@ -20,7 +20,7 @@ The full repository suite serves broad changes and broad claims. Evidence artifa
 
 If a required check fails because of the change, stop integration and fix it. If an unrelated pre-existing failure is proven and does not make the requested integration unsafe, report it and continue only within the operator's stated tolerance.
 
-## Reconcile Ledger when present
+## Reconcile ledger when present
 
 For an active task:
 

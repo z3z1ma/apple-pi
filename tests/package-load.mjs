@@ -22,8 +22,8 @@ try {
 		[
 			"extensions/pi-pair.ts",
 			"extensions/ask-user-question.ts",
-			"extensions/backlog.ts",
 			"extensions/context.ts",
+			"extensions/remind-me.ts",
 			"extensions/auto-compact.ts",
 			"extensions/codex-fast.ts",
 			"extensions/home-search-guard.ts",
@@ -31,20 +31,34 @@ try {
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
 			"extensions/ledger.ts",
-			"extensions/workflow.ts",
 			"extensions/xai-hosted-tools.ts",
 			"extensions/xai-context-compaction.ts",
 			"extensions/notify.ts",
 			"extensions/tmux-sessions.ts",
 			"extensions/status-footer.ts",
-			"extensions/todos.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 18);
+	assert.equal(result.extensions.length, 16);
+	const optionalResult = await loadExtensions(
+		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
+		process.cwd(),
+		createEventBus(),
+		createExtensionRuntime(),
+	);
+	assert.deepEqual(optionalResult.errors, []);
+	assert.equal(optionalResult.extensions.length, 2);
+	assert(
+		optionalResult.extensions.some((extension) => extension.tools.has("backlog_add")),
+		"optional backlog is not loadable",
+	);
+	assert(
+		optionalResult.extensions.some((extension) => extension.tools.has("todo_create")),
+		"optional todos are not loadable",
+	);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -104,14 +118,10 @@ try {
 		),
 		"missing ledger system-prompt injection",
 	);
-	const workflowExtension = result.extensions.find((extension) => extension.path.endsWith("workflow.ts"));
-	assert(workflowExtension, "missing root workflow extension");
-	const workflowStart = workflowExtension.handlers.get("before_agent_start")?.[0];
-	assert(workflowStart, "missing root workflow bootstrap injection");
-	const workflowOnce = await workflowStart({ systemPrompt: "Root system prompt" });
-	assert.equal((workflowOnce.systemPrompt.match(/<ledger-workflow>/g) ?? []).length, 1);
-	const workflowTwice = await workflowStart({ systemPrompt: workflowOnce.systemPrompt });
-	assert.equal((workflowTwice.systemPrompt.match(/<ledger-workflow>/g) ?? []).length, 1);
+	assert(
+		!result.extensions.some((extension) => extension.path.endsWith("workflow.ts")),
+		"default package must not load a workflow extension",
+	);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -128,32 +138,35 @@ try {
 		"mcp-auth",
 		"agents",
 		"btw",
-		"backlog",
 		"fast",
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
-		"todos",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
 	for (const tool of [
 		"acknowledge_pair_findings",
 		"ask_user_question",
-		"backlog_add",
-		"backlog_list",
-		"backlog_take",
+		"remind_me",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
 		"pi_discover_programs",
 		"pi_exec_program",
 		"mcp",
-		"Agent",
+		"agent",
 		"get_subagent_result",
 		"steer_subagent",
 		"ledger_add",
 		"ledger_close",
+	]) {
+		assert(tools.has(tool), `missing ${tool} tool`);
+	}
+	for (const name of [
+		"backlog_add",
+		"backlog_list",
+		"backlog_take",
 		"todo_create",
 		"todo_list",
 		"todo_get",
@@ -163,8 +176,19 @@ try {
 		"todo_output",
 		"todo_stop",
 	]) {
-		assert(tools.has(tool), `missing ${tool} tool`);
+		assert(!tools.has(name), `default package must not expose ${name}`);
 	}
+	for (const name of ["backlog", "todos"]) assert(!commands.has(name), `default package must not expose /${name}`);
+	const reminderTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "remind_me");
+	assert(reminderTool, "missing remind_me tool");
+	assert.deepEqual(Object.keys(reminderTool.definition.parameters.properties), ["message"]);
+	assert(
+		result.extensions.some((extension) => extension.path.endsWith("remind-me.ts")),
+		"missing self-reminder extension",
+	);
+
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "pi_exec");
@@ -174,27 +198,43 @@ try {
 	assert.equal(limits.callBudget.maximum, 2048);
 	assert.equal(limits.concurrency.maximum, 32);
 	assert.equal(limits.timeoutSeconds.maximum, 7200);
-	let managedService;
-	eventBus.emit("apple-pi:managed-subagent-service:request", (service) => {
-		managedService ??= service;
-	});
-	assert(managedService, "managed subagent service is not visible across isolated extension module graphs");
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
-	assert(manifest.pi.extensions.includes("./extensions/workflow.ts"), "package manifest omits root workflow extension");
+	assert(
+		!manifest.pi.extensions.includes("./extensions/workflow.ts"),
+		"package manifest must not load workflow extension",
+	);
 	assert(manifest.pi.extensions.includes("./extensions/codex-fast.ts"), "package manifest omits Codex fast mode");
 	assert(
 		manifest.pi.extensions.includes("./extensions/home-search-guard.ts"),
 		"package manifest omits home search guard",
 	);
-	assert(manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest omits todos extension");
+	assert(
+		manifest.pi.extensions.includes("./extensions/remind-me.ts"),
+		"package manifest omits self-reminder extension",
+	);
+	assert(!manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest must not load todos extension");
+	assert(
+		!manifest.pi.extensions.includes("./extensions/backlog.ts"),
+		"package manifest must not load backlog extension",
+	);
 	assert(manifest.files.includes("components/codex-fast/src/"), "package manifest omits Codex fast-mode source");
 	assert(
 		manifest.files.includes("components/home-search-guard/src/"),
 		"package manifest omits home search guard source",
 	);
-	assert(manifest.files.includes("components/todos/src/"), "package manifest omits todos source");
+	assert(manifest.files.includes("components/reminders/src/"), "package manifest omits self-reminder source");
+	assert(
+		manifest.files.includes("optional-extensions/todos/index.ts"),
+		"package manifest omits optional todos entrypoint",
+	);
+	assert(manifest.files.includes("optional-extensions/todos/src/"), "package manifest omits optional todos source");
+	assert(
+		manifest.files.includes("optional-extensions/backlog/index.ts"),
+		"package manifest omits optional backlog entrypoint",
+	);
+	assert(manifest.files.includes("optional-extensions/backlog/src/"), "package manifest omits optional backlog source");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
 	const promptTemplates = loadPromptTemplates({
@@ -253,7 +293,7 @@ try {
 		"skills/task-shaping/scripts/start-server.sh",
 		"skills/task-shaping/scripts/stop-server.sh",
 	]) {
-		assert(existsSync(visualPath), `missing Ledger brainstorming support: ${visualPath}`);
+		assert(existsSync(visualPath), `missing ledger brainstorming support: ${visualPath}`);
 	}
 	const askUserTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
@@ -261,8 +301,8 @@ try {
 	assert(askUserTool, "missing ask_user_question tool definition");
 	const agentTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "Agent");
-	assert(agentTool, "missing Agent tool definition");
+		.find((tool) => tool.definition.name === "agent");
+	assert(agentTool, "missing agent tool definition");
 	assert.match(agentTool.definition.description, /<subagent-team>/);
 	assert.match(
 		agentTool.definition.description,
@@ -270,11 +310,14 @@ try {
 	);
 	assert.match(agentTool.definition.description, /<inference-profiles>/);
 	assert.match(agentTool.definition.description, /system_prompt only for invocation-specific guidance/);
-	assert.match(piExecTool.definition.description, /<subagent-team>/);
-	assert.match(piExecTool.definition.description, /callable teammates with name, inference profile, and description/);
-	assert.match(piExecTool.definition.description, /<inference-profiles>/);
-	assert.match(piExecTool.definition.description, /profile selects an inference profile/);
-	assert.match(piExecTool.definition.description, /systemPrompt appends dynamic specialization/);
+	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
+	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);
+	assert.doesNotMatch(piExecTool.definition.description, /<inference-profiles>/);
+	assert.match(piExecCodeDescription, /<subagent-team>/);
+	assert.match(piExecCodeDescription, /callable teammates with name, inference profile, and description/);
+	assert.match(piExecCodeDescription, /<inference-profiles>/);
+	assert.match(piExecCodeDescription, /profile selects an inference profile/);
+	assert.match(piExecCodeDescription, /systemPrompt appends dynamic specialization/);
 	const agentProperties = agentTool.definition.parameters.properties;
 	assert("profile" in agentProperties, "Agent schema omits the inference profile selector");
 	assert.deepEqual(
@@ -310,8 +353,8 @@ try {
 	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
 	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
 	assert(existsSync("skills/ralph/references/ralph-simple.js"), "missing general Ralph reference");
-	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing Ledger Ralph reference");
-	assert(existsSync("skills/ralph/references/ralph-ledger-review.js"), "missing reviewed Ledger Ralph reference");
+	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing ledger Ralph reference");
+	assert(existsSync("skills/ralph/references/ralph-ledger-review.js"), "missing reviewed ledger Ralph reference");
 	console.log("apple-pi: all extension entrypoints loaded");
 } finally {
 	delete process.env.PI_CODING_AGENT_DIR;

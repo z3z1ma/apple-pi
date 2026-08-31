@@ -34,7 +34,7 @@ const initialFocus = {
   rationale: background,
 };
 async function investigate(id, focus) {
-  const result = await agents.run({
+  const result = await agent.run({
     name: id,
     profile: "quick",
     tools: READ_ONLY,

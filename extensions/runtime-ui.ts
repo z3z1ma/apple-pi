@@ -86,7 +86,7 @@ const resultSummary = (value: unknown): string => {
 };
 
 const callLabel = (call: ExecActivityCall): string => {
-	const ref = call.ref === "agents.run" ? "agent" : call.ref.replace(/^pi\./, "");
+	const ref = call.ref === "agent.run" ? "agent" : call.ref.replace(/^pi\./, "");
 	const target = callTarget(call);
 	const detail = call.activity || resultSummary(call.result);
 	return `${ref}${target ? ` ${target}` : ""}${detail ? ` · ${oneLine(detail, 72)}` : ""}`;

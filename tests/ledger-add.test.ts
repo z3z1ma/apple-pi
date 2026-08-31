@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("ledger add", () => {
-	it("creates the full structural bundle and index row", async () => {
+	it("creates the minimal task and retrospective bundle with an index row", async () => {
 		const root = temporaryRoot();
 		const result = await addLedgerTask(
 			root,
@@ -33,12 +33,7 @@ describe("ledger add", () => {
 			taskPath: ".ledger/202608170905-implement-bounded-behavior/task.md",
 			indexPath: ".ledger/INDEX.md",
 		});
-		expect(readdirSync(join(root, result.bundlePath)).sort()).toEqual(
-			["decisions", "evidence", "plans", "research", "retrospective.md", "specs", "task.md"].sort(),
-		);
-		for (const directory of ["decisions", "evidence", "plans", "research", "specs"]) {
-			expect(statSync(join(root, result.bundlePath, directory)).isDirectory()).toBe(true);
-		}
+		expect(readdirSync(join(root, result.bundlePath)).sort()).toEqual(["retrospective.md", "task.md"]);
 		expect(statSync(join(root, result.taskPath)).isFile()).toBe(true);
 		expect(statSync(join(root, result.bundlePath, "retrospective.md")).isFile()).toBe(true);
 		const task = readFileSync(join(root, result.taskPath), "utf8");
@@ -52,29 +47,13 @@ Updated: 2026-08-17
 
 Pending shaping.
 
+## Current State
+
+Open; pending shaping.
+
 ## Outcome
 
 Pending shaping.
-
-## Scope
-
-Pending shaping.
-
-## Non-goals
-
-- Pending shaping.
-
-## Acceptance Criteria
-
-- AC-001: Pending shaping.
-
-## Constraints
-
-- Pending shaping.
-
-## References
-
-- Pending shaping.
 `);
 		expect(readFileSync(join(root, result.bundlePath, "retrospective.md"), "utf8")).toBe(`Status: pending
 Created: 2026-08-17
@@ -82,15 +61,7 @@ Updated: 2026-08-17
 
 # Retrospective
 
-## Summary
-
-Pending completion of the undertaking.
-
-## What Worked
-
-Pending completion of the undertaking.
-
-## What Could Improve
+## What Mattered
 
 Pending completion of the undertaking.
 
@@ -132,6 +103,16 @@ Pending completion of the undertaking.
 		expect(content).toContain("202608170906-second/task.md");
 	});
 
+	it("accepts the legacy live-index heading", async () => {
+		const root = temporaryRoot();
+		await addLedgerTask(root, "First", "Create the current live index", undefined, new Date(2026, 7, 17, 9, 5));
+		const index = join(root, ".ledger/INDEX.md");
+		writeFileSync(index, readFileSync(index, "utf8").replace("# Task ledger", "# Task Ledger"));
+
+		await addLedgerTask(root, "Second", "Append through the legacy heading", undefined, new Date(2026, 7, 17, 9, 6));
+		expect(readFileSync(index, "utf8")).toContain("202608170906-second/task.md");
+	});
+
 	it("does not leave a bundle when the existing index is invalid", async () => {
 		const root = temporaryRoot();
 		const ledger = join(root, ".ledger");
@@ -146,7 +127,7 @@ Pending completion of the undertaking.
 				undefined,
 				new Date(2026, 7, 17, 9, 6),
 			),
-		).rejects.toThrow("# Task Ledger");
+		).rejects.toThrow("# Task ledger");
 		expect(readdirSync(ledger)).not.toContain("202608170906-rejected");
 	});
 

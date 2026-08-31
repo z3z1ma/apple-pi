@@ -52,7 +52,7 @@ export function registerCompactionTrigger(
 
 		if (hasUI)
 			ui?.notify(
-				`Pair notebook: compaction threshold reached (~${progress.toLocaleString()} estimated source tokens); triggering compaction`,
+				`pair programmer notebook: compaction threshold reached (~${progress.toLocaleString()} estimated source tokens); triggering compaction`,
 				"info",
 			);
 
@@ -65,7 +65,8 @@ export function registerCompactionTrigger(
 				}
 				if (!ctx.isIdle()) {
 					runtime.compactInFlight = false;
-					if (hasUI) ui?.notify("Pair notebook: compaction deferred — agent became busy before compaction", "info");
+					if (hasUI)
+						ui?.notify("pair programmer notebook: compaction deferred — agent became busy before compaction", "info");
 					return;
 				}
 				const currentEntries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
@@ -82,7 +83,7 @@ export function registerCompactionTrigger(
 					runtime.compactInFlight = false;
 					if (hasUI)
 						ui?.notify(
-							"Pair notebook: compaction skipped — another compaction already ran before deferred compaction",
+							"pair programmer notebook: compaction skipped — another compaction already ran before deferred compaction",
 							"info",
 						);
 					return;
@@ -95,7 +96,7 @@ export function registerCompactionTrigger(
 				ctx.compact({
 					onComplete: () => {
 						runtime.compactInFlight = false;
-						if (hasUI) ui?.notify("Pair notebook: compaction complete", "info");
+						if (hasUI) ui?.notify("pair programmer notebook: compaction complete", "info");
 					},
 					onError: (error: { message: string }) => {
 						runtime.compactInFlight = false;
@@ -104,14 +105,14 @@ export function registerCompactionTrigger(
 							// Already compacted: the branch leaf is a compaction; a no-op.
 							return;
 						}
-						if (hasUI) ui?.notify(`Pair notebook: ${error.message}`, "error");
+						if (hasUI) ui?.notify(`pair programmer notebook: ${error.message}`, "error");
 					},
 				});
 			} catch (error) {
 				runtime.compactInFlight = false;
 				if (isStaleExtensionCtxError(error)) return;
 				const msg = error instanceof Error ? error.message : String(error);
-				if (hasUI) ui?.notify(`Pair notebook: compact threw: ${msg}`, "error");
+				if (hasUI) ui?.notify(`pair programmer notebook: compact threw: ${msg}`, "error");
 			}
 		}, 0);
 	});

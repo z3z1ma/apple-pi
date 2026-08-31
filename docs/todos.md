@@ -1,22 +1,9 @@
 # To-dos
 
-To-dos are the first-class, active-execution checklist. They complement—not replace—the [session backlog](backlog.md) and [Ledger](ledger.md).
 
-## Authority and promotion
+> **Optional extension.** The default harness does not load to-do tools, `/todos`, its widget, persistence, or reminder cadence. Activate `optional-extensions/todos/index.ts` explicitly; see [optional extensions](optional-extensions.md).
 
-The three layers have distinct owners:
-
-- **Backlog** parks worthwhile ideas outside current scope. It is session-branch state and its human manager owns editing, deletion, and order.
-- **To-dos** track active, disposable execution steps. Completion is not durable acceptance evidence.
-- **Ledger** owns consequential project intent, acceptance criteria, decisions, and evidence.
-
-Promote in order, never by silently reclassifying state:
-
-1. Backlog → to-do: create the to-do, then call `backlog_take` only after creation succeeds.
-2. Backlog → Ledger: agree the promotion, call `ledger_add`, then `backlog_take` only after success.
-3. To-do → Ledger: agree the promotion, call `ledger_add`, then delete the original to-do only after success—unless it remains an unambiguous execution step under the new Ledger task.
-
-A Ledger task may use to-dos as its ephemeral checklist, but a completed to-do does not prove Ledger acceptance.
+To-dos are the first-class, active-execution checklist available through that optional extension. They complement the [session backlog](backlog.md) when both optional extensions are enabled and can be used alongside the [ledger](ledger.md).
 
 ## Model tools
 
@@ -43,7 +30,7 @@ The above-editor widget shows total/completed/active/open counts, completed item
 
 ## Reminders and cleanup
 
-When enabled, reminders are transient context entries (`apple-pi.todos-reminder`), not saved prompt authority. They become due after two idle turns with an active to-do or four otherwise, reset after any to-do tool call, and show at most ten actionable items / 1,200 characters. They explicitly remind the model that this checklist is not durable Ledger authority.
+When enabled, reminders are transient context entries (`apple-pi.todos-reminder`), not saved prompt authority. They become due after two idle turns with an active to-do or four otherwise, reset after any to-do tool call, and show at most ten actionable items / 1,200 characters. They explicitly remind the model that this checklist is not durable ledger authority.
 
 Auto-clear is session-only: `never` retains completed rows; `on_list_complete` clears a fully completed list after four turns; `on_todo_complete` clears each completed row after four turns. Completed batches may also retire before a new to-do is created after a managed run ends. Auto-clear never mutates a shared project list.
 

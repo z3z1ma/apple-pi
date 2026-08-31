@@ -233,24 +233,30 @@ const setup = new vm.Script(
   };
   const runAgent = async (request) => {
     const prepared = typeof request === "string" ? { task: request } : request;
-    if (!prepared || typeof prepared !== "object" || !hasContextMark(prepared.context)) return call("agents.run", prepared);
+    if (!prepared || typeof prepared !== "object" || !hasContextMark(prepared.context)) return call("agent.run", prepared);
     const fitted = contextFit(prepared.context);
     const { context: _context, ...agentRequest } = prepared;
-    const result = await call("agents.run", fitted.value === undefined ? agentRequest : { ...agentRequest, context: fitted.value });
+    const result = await call("agent.run", fitted.value === undefined ? agentRequest : { ...agentRequest, context: fitted.value });
     return { ...result, context: { truncated: fitted.truncated, dropped: fitted.dropped, serializedChars: fitted.serializedChars } };
   };
-  globalThis.agents = Object.freeze({ run: runAgent });
+  const agent = async (request) => {
+    const result = await runAgent(request);
+    if (!result || result.status !== "completed") {
+      throw new Error(result && result.error ? result.error : "Agent did not complete");
+    }
+    return result.value !== undefined ? result.value : result.text;
+  };
+  Object.defineProperty(agent, "run", {
+    enumerable: true,
+    configurable: false,
+    writable: false,
+    value: runAgent,
+  });
+  globalThis.agent = Object.freeze(agent);
   globalThis.skills = Object.freeze({
     list: () => call("skills.list", {}),
     body: (request = {}) => call("skills.body", request),
   });
-  globalThis.agent = async (request) => {
-    const result = await runAgent(request);
-    if (!result || result.status !== "completed") {
-      throw new Error(result && result.error ? result.error : "agent did not complete");
-    }
-    return result.value !== undefined ? result.value : result.text;
-  };
   globalThis.print = (...values) => emitLog(...values);
   globalThis.console = Object.freeze({ log: print, info: print, warn: print, error: print });
   globalThis.setTimeout = (callback, milliseconds = 0, ...args) => scheduleTimeout(callback, milliseconds, ...args);

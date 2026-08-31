@@ -2,7 +2,7 @@
 
 `pi_exec` executes a JavaScript async-function body in a disposable worker. Intermediate tool output remains inside the program; only its returned value enters the main model context.
 
-`pi_exec` is deliberately available only to the root session. Interactive subagents do not receive it, even when their extension configuration explicitly selects the runtime; nested delegation must use their ownership- and depth-scoped `Agent` tools. This prevents child sessions from bypassing those limits through `agents.run` or the captured root extension-tool catalog.
+`pi_exec` is deliberately available only to the root session. Interactive subagents do not receive it, even when their extension configuration explicitly selects the runtime; nested delegation must use their ownership- and depth-scoped `agent` tools. This prevents child sessions from bypassing those limits through `agent.run` or the captured root extension-tool catalog.
 
 The packaged [`pi-exec`](../skills/pi-exec) skill has the guest signatures and the common authoring mistakes. Write programs from the live signatures on the `pi_exec` `code` parameter.
 
@@ -30,8 +30,8 @@ Available globals:
 - `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
 - `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, and `DOMException`
 - `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `structuredClone`, and `queueMicrotask`
-- `tools.list/search/describe/call` and `extensions.<tool>(args)` for eligible registered Pi extension tools. Interactive subagent tools (`Agent`, result retrieval, steering, and stopping) are excluded because `agent()` / `agents.run()` is the runtime-owned worker abstraction. The `pi_exec` `code` parameter lists every available guest signature, including captured extension tools such as the MCP gateway, before the program is written.
-- `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agents.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
+- `tools.list/search/describe/call` and `extensions.<tool>(args)` for eligible registered Pi extension tools. Interactive subagent tools (`agent`, result retrieval, steering, and stopping) are excluded because `agent()` / `agent.run()` is the runtime-owned worker abstraction. The `pi_exec` `code` parameter lists every available guest signature, including captured extension tools such as the MCP gateway, before the program is written.
+- `agent(taskOrOptions)` for worker text or a typed `outputSchema` value, and `agent.run(options)` for structured status, text, `value`, errors, and usage. Bind JSON-serializable results as `context` instead of interpolating them into `task`.
 - ordinary JavaScript branching, loops, `reduce`, and `Promise.all`, plus `parallel(items, mapper, concurrency)` and `pipeline(items, ...stages)`
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and `sleep`
 - `inputs.<key>` for separately supplied strings, mutable `state` for reusable serialized data, and `print(...)`/`console.log(...)`
@@ -40,9 +40,9 @@ Available globals:
 
 `display` is a `pi_exec` tool parameter, not a guest global. Pass `display: { name, description }` on the tool call so the TUI card and activity widget show intent. Optional `limits: { agentBudget, callBudget, concurrency, timeoutSeconds }` scales that program's envelope up to package maxima.
 
-Agent options include `task`, `type`, `name`, `profile`, `tools`, `pair`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `Agent` tool and supplies that type's tools, prompt, and default semantic model profile. Implement enables Pair by default; `pair: false` explicitly opts out. Other types use their agent-definition Pair default. An explicit `profile` overrides only model/thinking; it never changes capabilities. Explicit `tools` still override the type's tool set. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier roles, which are program prompts, not catalog types. A generic worker may select a model/thinking bundle with `profile`; with no profile it inherits the parent session. Ralph is also a program-only role: its worker receives the `coding` profile, an explicit system prompt, and a write-capable tool list rather than a catalog type. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers inherit the root session's project-trust decision: typed workers may resolve project agent definitions only when trusted, and the child Pi process receives the matching `--approve` or `--no-approve` flag. Workers load Codex fast mode, the proactive overflow guard, the [home search guard](home-search-guard.md), ledger, and `search_session` extensions via `--no-extensions` plus `-e`. They cannot call MCP or other host extension tools; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
+Agent options include `task`, `type`, `name`, `profile`, `tools`, `pair`, `systemPrompt`, `context`, and `outputSchema`. `type` selects a built-in or Markdown agent from the same catalog as the `agent` tool and supplies that type's tools, prompt, and default semantic model profile. Implement enables the pair programmer by default; `pair: false` explicitly opts out. Other types use their agent-definition pair programmer default. An explicit `profile` overrides only model/thinking; it never changes capabilities. Explicit `tools` still override the type's tool set. `systemPrompt` appends additional guidance and does not replace the type role. Omit `type` for a generic read-only worker — that is the pattern for review planner/reviewer/verifier roles, which are program prompts, not catalog types. A generic worker may select a model/thinking bundle with `profile`; with no profile it inherits the parent session. Ralph is also a program-only role: its worker receives the `coding` profile, an explicit system prompt, and a write-capable tool list rather than a catalog type. Untyped workers default to read-only core tools; a program can explicitly grant any subset of `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`. Workers inherit the root session's project-trust decision: typed workers may resolve project agent definitions only when trusted, and the child Pi process receives the matching `--approve` or `--no-approve` flag. Workers load Codex fast mode, the proactive overflow guard, the [home search guard](home-search-guard.md), ledger, and `search_session` extensions via `--no-extensions` plus `-e`. They cannot call MCP or other host extension tools; gather those results in the program and bind them as `context`. `name` labels the worker row and is passed through to `pi --name`.
 
-`context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: the worker loads Codex fast mode, the proactive overflow guard, the home search guard, ledger, and `search_session` extensions, plus a worker-only `pi_exec_return` tool when a schema is set, via explicit `-e` under `--no-extensions`. The typed arguments become `agents.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agents.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
+`context` is JSON-cloned to a temporary file and attached with Pi's `@file` channel so the payload is not stuffed into argv. `outputSchema` is a JSON Schema object for the worker's return value: the worker loads Codex fast mode, the proactive overflow guard, the home search guard, ledger, and `search_session` extensions, plus a worker-only `pi_exec_return` tool when a schema is set, via explicit `-e` under `--no-extensions`. The typed arguments become `agent.run.value` / `agent()`'s return; a run that never calls the tool fails. Prefer `agent.run` for fan-out so one failed worker does not abort the program. Pass file paths in `context` or `task`; the worker can `read` them.
 
 Example:
 
@@ -51,7 +51,7 @@ const dir = "extensions";
 const listing = await pi.ls({ path: dir });
 const files = listing.split("\n").filter((name) => name.endsWith(".ts"));
 return parallel(files, async (name) => {
-  const result = await agents.run({
+  const result = await agent.run({
     task: "Name the riskiest export and quote the evidence.",
     name,
     context: { path: `${dir}/${name}` },
@@ -70,7 +70,7 @@ return parallel(files, async (name) => {
 
 ## Guest standard library
 
-`std` is deliberately small. A function belongs here only when it adds material semantics beyond JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agents.run`, `parallel`, or `pipeline`. The live `code` parameter documents complete input/output types.
+`std` is deliberately small. A function belongs here only when it adds material semantics beyond JavaScript, `pi.*`, `pi.bash`, `fetch`, `agent` / `agent.run`, `parallel`, or `pipeline`. The live `code` parameter documents complete input/output types.
 
 | Namespace | Contract |
 | --- | --- |
@@ -89,7 +89,7 @@ const planning = std.context.fit({
   files: std.context.required(files),
   patch: std.context.clippable(change.patch, { maxChars: 12_000, priority: 100 }),
 }, { maxSerializedChars: 16_000, flags: { patchTruncated: "$.patch" } });
-const workers = await parallel(files, (path) => agents.run({
+const workers = await parallel(files, (path) => agent.run({
   task: "Inspect this changed path.",
   context: { path, ...planning.value },
   outputSchema: std.schema({ path: "string", risk: "string" }),
@@ -109,7 +109,7 @@ const candidates = std.context.pack(rows, {
 });
 ```
 
-Marks nested anywhere in an `agent()` or `agents.run()` context are automatically fitted to the default channel budget before attachment. Plain contexts are unchanged. `agents.run()` reports automatic `context.truncated`, `context.dropped`, and `context.serializedChars`; use `std.context.fit` when the program needs explicit control or in-context flags.
+Marks nested anywhere in an `agent()` or `agent.run()` context are automatically fitted to the default channel budget before attachment. Plain contexts are unchanged. `agent.run()` reports automatic `context.truncated`, `context.dropped`, and `context.serializedChars`; use `std.context.fit` when the program needs explicit control or in-context flags.
 
 `std.schema({ id: "int", title: "string", note: "string?", severity: ["high", "low"], findings: ["string"], line: { int: { minimum: 1 } }, paths: { array: { minItems: 1 }, items: ["string"] } })` compiles to strict JSON Schema: fields are required unless suffixed with `?`, objects reject extra fields, two-or-more string arrays are enums, and a one-item array defines items. The constrained forms preserve numeric validation.
 
@@ -121,14 +121,14 @@ Pi Exec derives a default envelope from program shape: host calls, fan-out concu
 
 `fetch` is one of those bridges: requests share the call budget, concurrency limit, deadline, cancellation, live activity, and durable trace. Request and response bodies are buffered and capped at 10 MiB; use `text()`, `json()`, `arrayBuffer()`, or `bytes()` rather than streaming. Request bodies accept strings, `URLSearchParams`, array buffers, and typed-array views. Trace summaries omit header values and request bodies.
 
-`bash`, `edit`, and `write` return `{ ok, output }` for success and failure; read/search tools return text. Every host-call argument and result, program return value, and state snapshot must cross the same strict JSON boundary—non-plain objects, BigInt, sparse arrays, cycles, accessors, and other lossy values fail instead of silently becoming a different value. Optional helper lookups such as an unknown `tools.describe()` name preserve `undefined` inside the guest without weakening that JSON boundary. `agent` returns text, or the structured `outputSchema` value. `agents.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so `search_session`, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
+`bash`, `edit`, and `write` return `{ ok, output }` for success and failure; read/search tools return text. Every host-call argument and result, program return value, and state snapshot must cross the same strict JSON boundary—non-plain objects, BigInt, sparse arrays, cycles, accessors, and other lossy values fail instead of silently becoming a different value. Optional helper lookups such as an unknown `tools.describe()` name preserve `undefined` inside the guest without weakening that JSON boundary. `agent` returns text, or the structured `outputSchema` value. `agent.run` and extension calls return structured envelopes. Nested operations—including each subagent's core-tool calls—are preserved in `pi_exec` trace details, so `search_session`, `mode:touched`, and `#N:path` can recover effects without dumping intermediate output into current context. Subagent usage is aggregated across every model turn and attributed to the outer tool result.
 
 ## TUI and captured tools
 
 In TUI mode, `pi_exec` has a bounded code-preview card, live queued/running/completed call rows, elapsed time, agent activity, expandable results, and a temporary activity widget above the editor. This deliberately replaces Fabric's much larger activity store/dashboard with one execution-local view.
 
-Eligible extension tools are captured at Pi's registered-tool assembly point. The interactive subagent surface is deliberately filtered out: programs use `agent()` / `agents.run()` rather than `Agent`, `get_subagent_result`, `steer_subagent`, or `stop_subagent`. apple-pi's MCP adapter registers its token-efficient `mcp` gateway there, so `pi_exec` can discover and invoke MCP calls with the same loops, branching, pipelines, and fan-out used for core tools. Provider-private capabilities that are not represented as Pi tools remain outside the bridge because Pi 0.84 has no public nested provider-tool execution API.
+Eligible extension tools are captured at Pi's registered-tool assembly point. The interactive subagent surface is deliberately filtered out: programs use `agent()` / `agent.run()` rather than `agent`, `get_subagent_result`, `steer_subagent`, or `stop_subagent`. apple-pi's MCP adapter registers its token-efficient `mcp` gateway there, so `pi_exec` can discover and invoke MCP calls with the same loops, branching, pipelines, and fan-out used for core tools. Provider-private capabilities that are not represented as Pi tools remain outside the bridge because Pi 0.84 has no public nested provider-tool execution API.
 
 Nested operations are not separate top-level Pi tool calls, so policy extensions driven solely by `tool_call` events see the outer `pi_exec` call rather than each nested operation. Captured tool definitions and core overrides still execute their own enforcement behavior; installations requiring an outer per-call gate should gate or disable `pi_exec` as one capability.
 
-See [`docs/mcp.md`](mcp.md) for the gateway and [`docs/subagents.md`](subagents.md) for how `Agent` differs from `agents.run`.
+See [`docs/mcp.md`](mcp.md) for the gateway and [`docs/subagents.md`](subagents.md) for how `agent` differs from `agent.run`.

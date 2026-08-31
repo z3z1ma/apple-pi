@@ -80,11 +80,11 @@ describe("source-addressed serialization budget", () => {
 		expect(result.text).toContain("[Tool result for bash");
 		expect(result.text).toContain("HEAD:");
 		expect(result.text).toContain(":TAIL");
-		expect(result.text).toContain("middle omitted: source exceeds Pair notebook input budget");
+		expect(result.text).toContain("middle omitted: source exceeds pair programmer notebook input budget");
 		expect(result.text).toContain("original source remains in the session ledger");
 		expect(result.text).not.toContain("raw-next");
 
-		// Budgeting changes only the Pair notebook projection. Recall still renders
+		// Budgeting changes only the pair programmer notebook projection. Recall still renders
 		// the original, unmodified ledger entry in full.
 		const recalled = renderRecallSourceEntry(hugeEntry);
 		expect(recalled).toContain(source);

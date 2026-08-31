@@ -9,7 +9,7 @@ import {
 } from "../src/maintenance/coverage.js";
 import { observation, reflection } from "./fixtures/session.js";
 
-describe("Pair notebook coverage helpers", () => {
+describe("pair programmer notebook coverage helpers", () => {
 	it("maps support counts to deterministic coverage tiers", () => {
 		expect(reflectionCoverageTierForCount(0)).toBe("none");
 		expect(reflectionCoverageTierForCount(1)).toBe("partial");

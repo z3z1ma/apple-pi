@@ -123,7 +123,7 @@ describe("consultation context", () => {
 		expect(context.evidenceHandles).toContainEqual(expect.objectContaining({ ref: "src/retry.ts" }));
 	});
 
-	it("labels Pair hypotheses as untrusted and represents unavailable evidence", async () => {
+	it("labels pair programmer hypotheses as untrusted and represents unavailable evidence", async () => {
 		const context = await buildConsultationContext({
 			pi: fakePi({ "rev-parse --is-inside-work-tree": "false\n" }),
 			ctx: ctx([{ type: "message", message: { role: "user", content: "choose the safe queue path" } }]),

@@ -64,8 +64,8 @@ The inference profiles have these intended inference characteristics:
 | `visual-engineering` | Visual-engineering inference intended for a model strong in UI, spatial, and multimodal reasoning with moderate-to-high effort. |
 | `background` | Low-cost asynchronous inference intended for an economical model with low reasoning effort. |
 
-Built-in and custom Markdown teammates may select one of these known names with `profile:`. The interactive `Agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agents.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent pair programming partner always uses `pair`; the episodic Advisor architect uses `deep`.
+Built-in and custom Markdown teammates may select one of these known names with `profile:`. The interactive `agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agent.run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent pair programming partner always uses `pair`; the episodic Advisor architect uses `deep`.
 
-Profiles select only model and thinking. They never grant tools, write access, extensions, skills, Pair use, persistence, or any other capability.
+Profiles select only model and thinking. They never grant tools, write access, extensions, skills, pair programmer use, persistence, or any other capability.
 
 To switch providers, replace or rename the global file. No repository changes or runtime migration layer are involved.

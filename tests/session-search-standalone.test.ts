@@ -16,7 +16,7 @@ describe("standalone search_session extension", () => {
 		delete process.env.PI_CODING_AGENT_DIR;
 	});
 
-	it("registers search_session without Pair notebook or a compact hook", async () => {
+	it("registers search_session without pair programmer notebook or a compact hook", async () => {
 		const root = mkdtempSync(join(tmpdir(), "apple-pi-session-search-standalone-"));
 		directories.push(root);
 		process.env.PI_CODING_AGENT_DIR = root;

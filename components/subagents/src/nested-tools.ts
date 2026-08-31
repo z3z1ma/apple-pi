@@ -33,7 +33,7 @@ export function setMaxSubagentDepth(n: number): void {
 }
 
 export const SUBAGENT_TOOL_NAMES = {
-	AGENT: "Agent",
+	AGENT: "agent",
 	GET_RESULT: "get_subagent_result",
 	STEER: "steer_subagent",
 	STOP: "stop_subagent",
@@ -158,7 +158,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's Pair default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's pair programmer default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 		}),

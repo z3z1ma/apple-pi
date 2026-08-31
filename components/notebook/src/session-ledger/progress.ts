@@ -1,12 +1,12 @@
 import { estimateEntryTokens } from "../tokens.js";
 import {
+	type Entry,
 	isNotebookMaintenanceEntry,
 	NOTEBOOK_MAINTENANCE,
 	NOTEBOOK_OBSERVATIONS_DROPPED,
 	NOTEBOOK_OBSERVATIONS_RECORDED,
 	NOTEBOOK_REFLECTIONS_RECORDED,
 	NOTEBOOK_REFLECTIONS_RETIRED,
-	type Entry,
 	type NotebookCustomType,
 } from "./types.js";
 

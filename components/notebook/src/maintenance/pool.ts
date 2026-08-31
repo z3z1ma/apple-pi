@@ -1,5 +1,5 @@
-import { observationLineTokenCount } from "../tokens.js";
 import type { Observation } from "../session-ledger/index.js";
+import { observationLineTokenCount } from "../tokens.js";
 
 export type ObservationPoolMetrics = {
 	observationTokens: number;

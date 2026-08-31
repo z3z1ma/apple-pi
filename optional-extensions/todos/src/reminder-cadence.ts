@@ -38,13 +38,13 @@ export class ReminderCadence {
 				return rank(left) - rank(right) || left.id - right.id;
 			});
 		if (actionable.length === 0)
-			return "No active execution to-dos are recorded. Use todo_create only when a multi-step checklist would help; do not duplicate backlog or Ledger work.";
+			return "No active execution to-dos are recorded. Use todo_create only when a multi-step checklist would help; do not duplicate backlog or ledger work.";
 		const shown = actionable.slice(0, MAX_REMINDER_TODOS);
 		const rows = shown.map((todo) => {
 			const blocker = todo.blocked ? ` (blocked by #${todo.blockedBy.join(", #")})` : "";
 			return `#${todo.id} [${todo.status}] ${clean(todo.title)}${blocker}`;
 		});
-		let text = `Active execution checklist (not durable Ledger authority):\n${rows.join("\n")}`;
+		let text = `Active execution checklist (not durable ledger authority):\n${rows.join("\n")}`;
 		if (actionable.length > shown.length) text += "\n… additional to-dos omitted.";
 		return text.slice(0, MAX_REMINDER_CHARS);
 	}

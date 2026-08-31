@@ -19,7 +19,7 @@ Authority is split deliberately:
 - `docs/` owns user-facing feature contracts. `docs/boundaries.md` records adopted and deliberately rejected ideas.
 - `docs/development.md` owns coding and module conventions.
 - `docs/ledger.md` owns the durable `.ledger` workflow.
-- `docs/todos.md` owns active-execution checklist semantics, storage, and its boundary with backlog and Ledger.
+- `docs/optional-extensions.md`, `docs/todos.md`, and `docs/backlog.md` own the retained opt-in extension contracts.
 - Tests own executable invariants, but a test can still encode an obsolete contract; compare it with current product documentation and instructions.
 - This file explains how those pieces fit together. Keep it conceptual so ordinary feature additions do not require updating it.
 
@@ -27,11 +27,11 @@ Authority is split deliberately:
 
 `apple-pi` is one installable Pi package that composes Alex's coding-agent environment. It is not an application server and not a monorepo of separately published packages. The root manifest is the only package boundary; directories under `components/` are internal source organization.
 
-At a high level, the package adds five kinds of capability to Pi:
+At a high level, the package adds six kinds of capability to Pi:
 
 1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, plus a structured user-question tool.
-2. **Context continuity** — xAI server-side or Pi default compaction, the Pair Programmer's sourced notebook, and two complementary recall paths.
-3. **Execution tracking** — branch-aware active to-dos, distinct from parked backlog ideas and durable Ledger records.
+2. **Context continuity** — xAI server-side or Pi default compaction, the pair programmer's sourced notebook, and two complementary recall paths.
+3. **Execution continuity** — explicit one-shot self-reminders for the next trajectory and the ledger for durable operational memory.
 4. **Execution and team collaboration** — a bounded JavaScript composition runtime plus an interactive team of specialist agents.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
 6. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
@@ -40,12 +40,12 @@ The design goal is an integrated Pi environment with one implementation of each 
 
 ## Runtime mental model
 
-Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. The composition-heavy exec runtime stays in named `extensions/runtime-*` modules because those modules share one extension lifecycle and worker protocol. Ledger is another deliberate exception: its small add/close/prompt integration lives in `extensions/ledger.ts`, while the shared contract text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
+Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. The composition-heavy exec runtime stays in named `extensions/runtime-*` modules because those modules share one extension lifecycle and worker protocol. ledger is another deliberate exception: its small add/close/prompt integration lives in `extensions/ledger.ts`, while the shared contract text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
 
 There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
-- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, the home search guard, ledger, `search_session`, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the Pair sidecar when `pair: true`; the internal `/btw` child loads only Codex fast mode and the mandatory safety guards. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
+- **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, the home search guard, ledger, `search_session`, and MCP via explicit paths (`--no-extensions` plus `-e`), and may load the pair programmer sidecar when `pair: true`; the internal `/btw` child loads only Codex fast mode and the mandatory safety guards. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
 - **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Nested model workers receive only explicitly granted core tools and bound context. They load Codex fast mode, the proactive overflow guard, the home search guard, ledger, and `search_session` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
@@ -57,18 +57,18 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
 | `components/pair-programmer/` | Gives the main agent a persistent read-only pair programming partner | Uses the user-global `pair` model profile, keeps the shared notebook, shares concise notes, and can ask the deep Advisor teammate for an independent architectural opinion; neither role may implement. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
-| `components/backlog/` | Branch-aware session backlog state, model add/read/take tools, and the human `/backlog` manager | Backlog items are parked observations, not active execution steps or Ledger commitments. The model may remove an item when it begins active work, or after jointly agreed promotion succeeds; editing, arbitrary deletion, and ordering remain human-owned. |
-| `components/todos/` | Branch-aware active-execution checklist, `/todos`, reminder/cleanup lifecycle, and managed subagent execution | To-dos are ephemeral execution state, not Ledger acceptance evidence. Default snapshots follow session branches; trusted shared-project state is explicitly opted in and safely locked. |
-| `components/session-search/` | Transcript history search (`search_session`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the Pair notebook packet. |
+| `components/reminders/` | Queues explicit model-authored follow-up guidance for the next root turn | A reminder is one-shot, in-memory continuation guidance, not persistent task state or new authority. |
+| `optional-extensions/` | Retained backlog and to-do implementations that are packaged and tested but not loaded by default | Keep these extensions self-contained and opt-in; they must not add tools, commands, widgets, or prompt guidance to the default harness. |
+| `components/session-search/` | Transcript history search (`search_session`) | Search only. Compaction is xAI server-side or Pi's default summarizer, plus the pair programmer's notebook packet. |
 | `components/notebook/` | Model-generated observations/reflections and exact source recall | Persists records in Pi's append-only session JSONL and appends the folded packet to the conversation tail after any compaction. |
 | `components/xai-context-compaction/` | xAI server-side Responses compaction | Owns `session_before_compact` for xAI Responses models; injects the newest opaque item on later requests. |
-| `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, TUI views, and the private `/btw` side conversation | Serves the interactive `Agent` surface, managed workers used by `pi_exec`, and one internal read-only BTW session while keeping ownership and depth boundaries explicit. |
+| `components/subagents/` | Agent type discovery, model routing, execution, nesting, persistence, steering, TUI views, and the private `/btw` side conversation | Serves the interactive `agent` surface, managed workers used by `pi_exec`, and one internal read-only BTW session while keeping ownership and depth boundaries explicit. |
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/home-search-guard/` | Blocks agent search roots that resolve to the user's home directory | Covers root, children, workers, and direct Pi Exec core-tool calls while allowing narrower paths below home. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
-| Ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `search_session` and MCP; workers load `search_session`. The Pair does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
-| `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with Ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
+| ledger implementation | Add/close tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, children, and `pi_exec` workers learn the contract by loading the ledger extension. Children also load `search_session` and MCP; workers load `search_session`. The pair programmer does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
+| `skills/` | On-demand procedural guidance loaded by Pi | The software-engineering skills fuse design, research, specification, planning, execution, review, verification, and finishing with ledger state. Review and Ralph author `pi_exec` programs rather than hidden runtime engines. |
 | `prompts/` | Explicitly invoked prompt templates | `/distill` proposes durable lessons for the right existing owner and waits for operator approval before writing. Keep prompt templates stateless; use an extension only when runtime behavior is actually required. |
 | `tests/` | Cross-component and package integration checks | Includes extension loading, runtime behavior, package surface, and end-to-end integration seams. |
 | `docs/` | Feature contracts, maintainer conventions, and adopted/rejected boundaries | Keep durable behavior here; do not use `.ledger` as a second project wiki. |
@@ -85,10 +85,10 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 ### Context and notebook
 
-- There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. Pair notebook does not register a compact hook; it appends its packet to the conversation tail after a compaction entry exists.
-- Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; Pair notebook only appends its packet afterwards.
+- There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. The pair programmer's notebook does not register a compact hook; it appends its packet to the conversation tail after a compaction entry exists.
+- Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; the pair programmer's notebook only appends its packet afterwards.
 - `search_session` and `revisit_note` are intentionally separate: one progressively searches transcript/file-operation history; the other follows a known notebook entry back to its source evidence.
-- Pair notebook is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
+- The pair programmer's notebook is authoritative in Pi's append-only session JSONL. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
 - Reload, switch, fork, and shutdown paths matter. Any asynchronous work holding a Pi extension context must stop or re-prime when that context becomes stale.
 
 ### Exec and subagents
@@ -96,22 +96,21 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - `pi_exec` is a bounded composition bridge, not an unrestricted Node evaluator. Preserve call, concurrency, agent, memory, output, and time limits; preserve cancellation and durable nested-operation traces.
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
-- `Agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
-- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, the home search guard, ledger, `search_session`, and MCP via explicit paths under `--no-extensions`; `pair: true` adds the Pair sidecar, and direct public `Agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory safety guards. Workers load Codex fast mode, both safety guards, ledger, and `search_session` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Pair notebook maintenance stays with the root Pair integration.
+- `agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.
+- Child sessions and `pi_exec` workers do not discover package extensions. Ordinary children load Codex fast mode, the proactive overflow guard, the home search guard, ledger, `search_session`, and MCP via explicit paths under `--no-extensions`; `pair: true` adds the pair programmer sidecar, and direct public `agent` children receive the root-owned `escalate_to_parent` custom tool. The internal `/btw` child loads only Codex fast mode and the mandatory safety guards. Workers load Codex fast mode, both safety guards, ledger, and `search_session` explicitly; managed workers and nested children do not receive root escalation. Recursion is prevented because none load `pi_exec` or the top-level subagent manager. Notebook maintenance stays with the root pair programmer integration.
 - Child sessions must not bypass manager ownership, nesting depth, tool policy, or root-only capabilities. Avoid global registries unless they are explicitly process-scoped integration points with lifecycle cleanup.
 - Nested `pi_exec` operations are not separate top-level Pi tool calls. Policy extensions that gate only top-level `tool_call` events see the outer `pi_exec`, not every bridged operation; deployments needing an outer per-call gate must treat `pi_exec` itself as the capability boundary.
 - Persisted child sessions are Pi sessions. Do not add a second transcript or memory store merely for the subagent feature.
 
-### Ledger, review, and Ralph
+### The ledger, review, and Ralph
 
-- Ledger is the shared authority, cold-start memory, execution record, and learning loop beneath the packaged lifecycle skills. It distinguishes shaping, orchestration, and execution even when one session performs them sequentially.
-- Execution-changing assumptions are record-backed, user-ratified, or blocking. Worker reports are claims; observations carry limits; review independently tries to falsify completion; closure reconciles acceptance evidence, dependencies, blocking records, active-plan state, review dispositions, and the retrospective.
-- `.ledger` is a plain-Markdown task graph for work that benefits from a cold-start contract. The method scales down to disciplined minimalism for exact trivial changes rather than requiring ceremony.
-- `ledger_add` creates new structure only. `ledger_close` archives a live task as `done` or `cancelled` into `.ledger/history/` without judging completeness. Existing tasks are otherwise inspected and edited with ordinary repository tools.
-- Task intent, acceptance, and status live in `task.md`; execution progress lives in plans, validation and review observations live under `evidence/`, and learning/improvement lives in `retrospective.md`. `.ledger/INDEX.md` is live navigation with title and description, and `.ledger/history/INDEX.md` records terminal status plus that same search text.
+- The ledger is searchable project-local operational memory for executing changes. Its task directories keep the plans, specifications, notes, decisions, evidence, assets, progress, outcomes, and retrospectives needed to understand, resume, or audit long-horizon work.
+- `.ledger/INDEX.md` maps live tasks; closed bundles move unchanged under `.ledger/history/`. Continue an existing task when it already owns the undertaking.
+- A new task contains only `task.md` and `retrospective.md`. Add other files or directories only when they help continuity. Existing task bundles remain valid.
+- `retrospective.md` distills what mattered and lessons worth retrieving without replaying the operational record. Promote durable lessons to their real owner when appropriate.
+- `ledger_add` creates a task and index entry. `ledger_close` archives it as `done` or `cancelled` without judging completeness. Read and edit existing task files with ordinary repository tools.
+- Repository documentation and tests retain durable product authority; task-specific execution context stays in the ledger.
 - Review and Ralph are packaged skills over `pi_exec`. Do not recreate obsolete review/Ralph commands, engines, or parallel state stores.
-- Ralph iterations are fresh-context implementation workers. The calling session bounds iterations and owns subsequent review and integration; prepared Ledger tasks are one supported state owner, not a requirement for the general loop.
-- Durable lessons leave the task bundle for their real owner: normal docs, tests, an ADR convention, a runbook, or a reusable skill.
 
 ### External integrations
 
@@ -131,10 +130,10 @@ Use the narrowest production owner:
 - Terminal rendering for a component: that component's `ui/` modules.
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
-- Session backlog behavior and UI: `components/backlog/`; keep its state in Pi session entries rather than repository files.
-- Active to-do behavior, persistence, UI, and execution: `components/todos/`; preserve its explicit session/project storage and managed-subagent boundaries.
+- Default next-turn continuity: `components/reminders/`; keep reminders root-only, one-shot, and in memory.
+- Optional backlog and to-do behavior: `optional-extensions/`; preserve loadability and tests without adding them to the default package surface.
 - Stable maintainer conventions or architecture rationale: `docs/`.
-- Ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
+- ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.
 - Repeatable agent procedure: `skills/<name>/SKILL.md` and, when needed, its local `references/`.
 - Explicit user-invoked model workflow that needs no runtime state: `prompts/<command>.md`.
 - Task-specific investigation, decisions, or evidence: the governing `.ledger` bundle, not production code.
@@ -208,7 +207,7 @@ Preserve these categories:
 
 - **Package configuration** — tracked manifest and docs in this repository.
 - **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional pair guidance resolved at runtime with their documented trust boundaries.
-- **Session state** — Pi session JSONL, including context and Pair notebook entries.
+- **Session state** — Pi session JSONL, including context and pair programmer notebook entries.
 - **Task workbench state** — `.ledger`, governed by repository-owner storage policy.
 - **Temporary worker state** — bounded files/processes that must be cleaned up on success, failure, cancellation, and shutdown.
 
@@ -227,7 +226,7 @@ Never move credentials, private transcript content, or notebook records into rep
 
 ### Changing compaction or recall
 
-1. Trace both `search_session` and Pair notebook consumers before editing.
+1. Trace both `search_session` and the pair programmer's notebook consumers before editing.
 2. Preserve the single-cut/single-hook model and shared metadata recognition.
 3. Test cut selection, projection/folding, continuation behavior, and both recall paths as applicable.
 4. Include reload/compaction lifecycle cases when asynchronous state changes.
@@ -262,7 +261,7 @@ When behavior changes, update the closest authority:
 - Exact user workflow or feature contract: the relevant `docs/` page.
 - Human catalog and install path: `README.md`.
 - Maintainer/module convention: `docs/development.md`.
-- Ledger semantics: `docs/ledger.md` and the injected ledger prompt source together.
+- ledger semantics: `docs/ledger.md` and the injected ledger prompt source together.
 - Machine-discovered surface: manifest and executable loader tests.
 - Third-party ownership/provenance: `THIRD_PARTY_NOTICES.md`.
 
