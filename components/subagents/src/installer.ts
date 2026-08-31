@@ -89,8 +89,8 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
-	// Child sessions load fast mode, the overflow guard, ledger, search_session, and MCP via explicit `-e` and never create
-	// a second manager. Nested tools are injected explicitly.
+	// Child sessions load fast mode, both safety guards, ledger, search_session, and MCP via explicit `-e` and never
+	// create a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 
 	let strictAgentFiles = false;

@@ -26,6 +26,7 @@ try {
 			"extensions/context.ts",
 			"extensions/auto-compact.ts",
 			"extensions/codex-fast.ts",
+			"extensions/home-search-guard.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
 			"extensions/subagents.ts",
@@ -43,7 +44,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 17);
+	assert.equal(result.extensions.length, 18);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -63,6 +64,13 @@ try {
 				extension.path.endsWith("auto-compact.ts") && (extension.handlers.get("turn_end")?.length ?? 0) > 0,
 		),
 		"missing proactive auto-compaction guard",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("home-search-guard.ts") && (extension.handlers.get("tool_call")?.length ?? 0) > 0,
+		),
+		"missing home search guard",
 	);
 	assert(
 		result.extensions.some(
@@ -176,8 +184,16 @@ try {
 	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
 	assert(manifest.pi.extensions.includes("./extensions/workflow.ts"), "package manifest omits root workflow extension");
 	assert(manifest.pi.extensions.includes("./extensions/codex-fast.ts"), "package manifest omits Codex fast mode");
+	assert(
+		manifest.pi.extensions.includes("./extensions/home-search-guard.ts"),
+		"package manifest omits home search guard",
+	);
 	assert(manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest omits todos extension");
 	assert(manifest.files.includes("components/codex-fast/src/"), "package manifest omits Codex fast-mode source");
+	assert(
+		manifest.files.includes("components/home-search-guard/src/"),
+		"package manifest omits home search guard source",
+	);
 	assert(manifest.files.includes("components/todos/src/"), "package manifest omits todos source");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");

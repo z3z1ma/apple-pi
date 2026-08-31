@@ -7,6 +7,7 @@ export default defineConfig({
 			"components/pair-programmer/tests/**/*.test.ts",
 			"components/backlog/tests/**/*.test.ts",
 			"components/codex-fast/tests/**/*.test.ts",
+			"components/home-search-guard/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/shared/tests/**/*.test.ts",
 			"components/notebook/tests/**/*.test.ts",

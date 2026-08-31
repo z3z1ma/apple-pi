@@ -18,6 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
 import { CODEX_FAST_EXTENSION_PATH } from "../../../extensions/codex-fast.js";
+import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
@@ -75,7 +76,11 @@ export function childSessionExtensions(
 	noExtensions: true;
 	additionalExtensionPaths: string[];
 } {
-	const additionalExtensionPaths = [AUTO_COMPACT_EXTENSION_PATH, CODEX_FAST_EXTENSION_PATH];
+	const additionalExtensionPaths = [
+		AUTO_COMPACT_EXTENSION_PATH,
+		CODEX_FAST_EXTENSION_PATH,
+		HOME_SEARCH_GUARD_EXTENSION_PATH,
+	];
 	if (standard) {
 		additionalExtensionPaths.push(LEDGER_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH, MCP_EXTENSION_PATH);
 		if (pair) additionalExtensionPaths.push(PAIR_EXTENSION_PATH);
@@ -167,7 +172,7 @@ export interface RunOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Disable ledger, session-search, MCP, and optional Pair; fast mode and the overflow guard remain mandatory. */
+	/** Disable ledger, session-search, MCP, and optional Pair; fast mode and both safety guards remain mandatory. */
 	loadStandardChildExtensions?: boolean;
 	signal?: AbortSignal;
 	isolated?: boolean;
@@ -394,8 +399,9 @@ export async function runAgent(
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
 	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
-	// Ordinary children load fast mode, the overflow guard, ledger, session search, MCP, and optional Pair;
-	// narrowly owned internal sessions may opt out of everything except fast mode and the guard. Suppress
+	// Ordinary children load fast mode, the overflow guard, the home-search guard, ledger, session search,
+	// MCP, and optional Pair; narrowly owned internal sessions may opt out of everything except fast mode
+	// and the safety guards. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to

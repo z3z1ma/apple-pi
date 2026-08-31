@@ -15,6 +15,7 @@ import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { CODEX_FAST_EXTENSION_PATH } from "../extensions/codex-fast.js";
+import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
@@ -102,6 +103,7 @@ describe("ledger system prompt distribution", () => {
 		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
 			AUTO_COMPACT_EXTENSION_PATH,
 			CODEX_FAST_EXTENSION_PATH,
+			HOME_SEARCH_GUARD_EXTENSION_PATH,
 			LEDGER_EXTENSION_PATH,
 			SESSION_SEARCH_EXTENSION_PATH,
 		]);
@@ -111,12 +113,13 @@ describe("ledger system prompt distribution", () => {
 		expect(loadPairSystemPrompt(process.cwd(), false)).not.toContain(marker);
 	});
 
-	it("loads children with fast mode, the overflow guard, ledger, search_session, and MCP", () => {
+	it("loads children with fast mode, safety guards, ledger, search_session, and MCP", () => {
 		expect(childSessionExtensions()).toEqual({
 			noExtensions: true,
 			additionalExtensionPaths: [
 				AUTO_COMPACT_EXTENSION_PATH,
 				CODEX_FAST_EXTENSION_PATH,
+				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				MCP_EXTENSION_PATH,
@@ -124,10 +127,14 @@ describe("ledger system prompt distribution", () => {
 		});
 	});
 
-	it("keeps fast mode and the overflow guard when internal children suppress standard extensions", () => {
+	it("keeps fast mode and safety guards when internal children suppress standard extensions", () => {
 		expect(childSessionExtensions(false, false)).toEqual({
 			noExtensions: true,
-			additionalExtensionPaths: [AUTO_COMPACT_EXTENSION_PATH, CODEX_FAST_EXTENSION_PATH],
+			additionalExtensionPaths: [
+				AUTO_COMPACT_EXTENSION_PATH,
+				CODEX_FAST_EXTENSION_PATH,
+				HOME_SEARCH_GUARD_EXTENSION_PATH,
+			],
 		});
 	});
 
@@ -137,6 +144,7 @@ describe("ledger system prompt distribution", () => {
 			additionalExtensionPaths: [
 				AUTO_COMPACT_EXTENSION_PATH,
 				CODEX_FAST_EXTENSION_PATH,
+				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				MCP_EXTENSION_PATH,

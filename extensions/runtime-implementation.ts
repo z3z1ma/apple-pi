@@ -18,6 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { homeSearchBlockReason } from "../components/home-search-guard/src/index.js";
 import {
 	PROGRAM_ENVELOPE_MAXIMA,
 	type ProgramEnvelope,
@@ -812,6 +813,8 @@ export default function runtime(pi: ExtensionAPI): void {
 						if (!name || !CORE_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
 						const definition = capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!;
 						try {
+							const blocked = homeSearchBlockReason(name, rawArgs, ctx.cwd);
+							if (blocked) throw new Error(blocked);
 							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
 							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
 							value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;

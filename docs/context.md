@@ -37,7 +37,7 @@ Commands and tools:
 
 Pair operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. Pair model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable proactive compaction and Pair notebook maintenance while preserving reads. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-Pair and episodic Advisor sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a Pair notebook. The internal BTW child loads only Codex fast mode and the overflow guard.
+Pair and episodic Advisor sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a Pair notebook. The internal BTW child loads only Codex fast mode, the overflow guard, and the home search guard.
 
 ## Where the notebook persists
 

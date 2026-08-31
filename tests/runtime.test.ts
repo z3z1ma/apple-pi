@@ -9,7 +9,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -30,6 +30,7 @@ import {
 	agentOperationArgs,
 	CODEX_FAST_EXTENSION_PATH,
 	CONTEXT_GUIDANCE,
+	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
 	OUTPUT_SCHEMA_GUIDANCE,
 	PI_EXEC_OUTPUT_SCHEMA_ENV,
@@ -1006,6 +1007,7 @@ describe("pi_exec agent binding", () => {
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				AUTO_COMPACT_EXTENSION_PATH,
 				CODEX_FAST_EXTENSION_PATH,
+				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				PAIR_EXTENSION_PATH,
@@ -1281,6 +1283,35 @@ describe("pi_exec tool", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("applies the home search guard to direct guest tools", async () => {
+		const { tool } = register();
+		const ctx = {
+			cwd: homedir(),
+			sessionManager: { getSessionId: () => "home-search", getSessionFile: () => undefined },
+		};
+		await expect(
+			tool.execute(
+				"home-find",
+				{ code: `return pi.find({ pattern: "*.ts", path: ${JSON.stringify(homedir())} });` },
+				undefined,
+				undefined,
+				ctx,
+			),
+		).rejects.toThrow(/refusing to search from home directory/);
+
+		const bash = await tool.execute(
+			"home-rg",
+			{ code: `return pi.bash({ command: "rg needle ~" });` },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(JSON.parse(bash.content[0].text)).toEqual({
+			ok: false,
+			output: expect.stringContaining("refusing to search from home directory"),
+		});
 	});
 
 	it("returns bash nonzero exits as documented structured results", async () => {
