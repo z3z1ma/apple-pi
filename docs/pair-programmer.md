@@ -75,17 +75,17 @@ One conservative repeated-failure gate may also ask Advisor for help: the exact 
 
 ## Review timing and retries
 
-Non-terminal main-agent turns enqueue Pair work and return without awaiting Pair construction, model work, retry delay, Advisor work, or delivery preparation. A terminal turn gives the entire Pair boundary one absolute 10-second catch-up opportunity. Healthy review may continue after that gate expires, but unconfirmed findings remain queued until a later successful current review.
+Pair is an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any Pair construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting Pair construction, model work, tool calls, retry delay, Advisor work, or delivery preparation.
 
-Pair uses these runtime limits:
+Pair uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
 
-- 30-second HTTP stream idle timeout;
-- 75-second logical review deadline;
+Pair also uses:
+
 - zero provider transport retries;
 - one automatic AgentSession retry;
 - no whole-review PairRuntime retry.
 
-A logical deadline aborts and invalidates the private Pair session. The next review constructs a fresh private session from authoritative main-session context. Construction failure remains visible and retryable; Pair does not fall back to a weaker raw-agent path.
+Construction failure remains visible and retryable; Pair does not fall back to a weaker raw-agent path.
 
 ## Advisor consultation
 
@@ -118,9 +118,9 @@ Only typed `confirm` and `refine` findings are eligible for delivery. Refutation
 
 Only one Advisor consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Advisor starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
 
-Direct Pair findings do not wait for Advisor consultation, working-state recapture, or Advisor validation. Before an Advisor finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. An already validated Advisor finding may share the direct finding's safe-boundary steer; otherwise it arrives later. Equivalent direct and Advisor findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
+Input review and output delivery are separate. Pair continues consuming every trajectory delta, including an advisory-triggered correction run. Pi's `agent_start` and `agent_settled` lifecycle events mark the primary busy or idle; only the exact settled event releases outbound findings. Direct Pair findings do not wait for Advisor consultation, working-state recapture, or Advisor validation. Before an Advisor finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and Advisor findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings queued.
 
-A terminal note closes the current pairing episode. The partner does not review the main agent's resulting correction run; the next user message opens a new episode. This prevents one note from creating its own review loop.
+An advisory-triggered correction episode suppresses further outbound advice to avoid recursive steering, but it never suppresses Pair input consumption. The next user message reopens outbound delivery.
 
 Asking Advisor is a request to investigate, not a finding. If Advisor fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and Pair disablement cancel late delivery.
 
@@ -134,7 +134,7 @@ Each delivered `concern` or `blocker` receives a stable host-generated id. Nits 
 - `decline`: current evidence shows the finding does not apply;
 - `defer`: the finding is valid but outside the current authorized action.
 
-Acknowledgment does not claim implementation or validation. The first subsequent assistant run is the normal acknowledgment opportunity. At its terminal boundary, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and terminal unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
+Acknowledgment does not claim implementation or validation. The first subsequent assistant run is the normal acknowledgment opportunity. Once Pi reports the primary session settled, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
 
 ## Direct Advisor use
 

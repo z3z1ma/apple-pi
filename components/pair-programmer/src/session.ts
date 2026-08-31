@@ -19,7 +19,6 @@ import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
 
-export const PAIR_HTTP_IDLE_TIMEOUT_MS = 30_000;
 export const PAIR_AGENT_RETRIES = 1;
 
 export type PairSeedSource = {
@@ -61,8 +60,34 @@ export async function pairCompactResult(
 	};
 }
 
+export function createPairSettingsManager(
+	cwd: string,
+	agentDir = getAgentDir(),
+	projectTrusted = false,
+): SettingsManager {
+	const inherited = SettingsManager.create(cwd, agentDir, { projectTrusted });
+	const providerTimeoutMs = inherited.getProviderRetrySettings().timeoutMs;
+	const websocketConnectTimeoutMs = inherited.getWebSocketConnectTimeoutMs();
+	return SettingsManager.inMemory({
+		compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 },
+		httpIdleTimeoutMs: inherited.getHttpIdleTimeoutMs(),
+		...(websocketConnectTimeoutMs !== undefined ? { websocketConnectTimeoutMs } : {}),
+		retry: {
+			enabled: true,
+			maxRetries: PAIR_AGENT_RETRIES,
+			baseDelayMs: 1_000,
+			provider: {
+				...(providerTimeoutMs !== undefined ? { timeoutMs: providerTimeoutMs } : {}),
+				maxRetries: 0,
+				maxRetryDelayMs: 1_000,
+			},
+		},
+	});
+}
+
 export async function createPairSession(opts: {
 	cwd: string;
+	projectTrusted?: boolean;
 	model: Model<any>;
 	thinkingLevel?: string;
 	systemPrompt: string;
@@ -74,16 +99,7 @@ export async function createPairSession(opts: {
 	modelRuntime?: unknown;
 }): Promise<AgentSession> {
 	const agentDir = getAgentDir();
-	const settingsManager = SettingsManager.inMemory({
-		compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 },
-		httpIdleTimeoutMs: PAIR_HTTP_IDLE_TIMEOUT_MS,
-		retry: {
-			enabled: true,
-			maxRetries: PAIR_AGENT_RETRIES,
-			baseDelayMs: 1_000,
-			provider: { maxRetries: 0, maxRetryDelayMs: 1_000 },
-		},
-	});
+	const settingsManager = createPairSettingsManager(opts.cwd, agentDir, opts.projectTrusted);
 	const loader = new DefaultResourceLoader({
 		cwd: opts.cwd,
 		agentDir,

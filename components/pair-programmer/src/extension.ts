@@ -3,26 +3,12 @@
  * Pair is the sole persistent watcher and can submit typed hypotheses to a
  * host-controlled, non-recursive Advisor consultation.
  *
- * Delivery model. Every advise() call enters one shared queue; only primary turn
- * boundaries or pair-review completion flush it. Nothing is a hard interrupt:
- * upstream pi's extension surface delivers via `steer` (the message folds in at
- * the agent's next-step boundary; `triggerTurn` additionally wakes an idle agent). We never call
- * `abort()`. So:
- *
- *   nit      → tagged as raised about an earlier step. If observed while an
- *              assistant turn is running, delivery waits for turn_end because
- *              Pi would not insert its steer before then anyway: non-terminal
- *              turns flush it before the next step, while terminal turns route
- *              it through final-review reconfirmation. Thus obsolete lagging
- *              nits are dropped and survivors delivered after a final answer
- *              carry the self-contained-restatement directive. Deferral can
- *              place intervening user/extension steers before the advisory;
- *              correctness of terminal classification takes precedence over
- *              preserving callback-time queue order.
- *              The terminal best-effort path ships only concerns/blockers (an
- *              unconfirmed nit is what holding was meant to keep away).
- *   concern  → ALWAYS held, never steered on first emission.
- *   blocker  → ALWAYS held, never steered on first emission.
+ * Delivery model. Every advise() call enters one shared output queue. Pair
+ * review and primary execution remain independent; only Pi's exact
+ * `agent_settled` boundary releases queued output through `steer`. Nothing is a
+ * hard interrupt and we never call `abort()` on the primary agent. Findings
+ * emitted while the primary is active remain queued, and an advisory-triggered
+ * correction run is still consumed while recursive output stays suppressed.
  *
  * Why always-hold for high severity: the pair reviews turn N asynchronously
  * (seconds), so by the time any advice could land the primary has almost always
@@ -30,11 +16,10 @@
  * review reconfirm it (held notes ride a reconfirm preamble; the pair re-
  * raises survivors, stays silent on the resolved ones).
  *
- * Catch-up gate: non-terminal turns never await Pair. A terminal turn gives
- * construction and review one absolute 10-second opportunity to settle, then
- * returns control while healthy review continues in the background. Timeout,
- * failure, or abort does not promote unconfirmed findings. The persistent
- * footer reports review activity without a blocking toast.
+ * Pair review is fully asynchronous: each completed primary turn appends an
+ * immutable spool delta, no primary turn waits for Pair work, and the reader
+ * advances its committed frontier only after a successful transactional review.
+ * The persistent footer reports review activity without a blocking toast.
  *
  * An optional PAIR.md in a trusted cwd is appended to the pair's system
  * prompt (pair-only guidance: review priorities, project traps).
@@ -115,10 +100,7 @@ export {
 } from "./acknowledgments.js";
 export type { PairNote, PairSeverity } from "./types.js";
 
-import type { PrimaryTurnState } from "../../shared/src/types.js";
 import type { PairEscalation, PairEscalationState, PairNote, PairSeverity } from "./types.js";
-
-export type { PrimaryTurnState } from "../../shared/src/types.js";
 
 const ADVISORY_TYPE = "advisory";
 
@@ -198,27 +180,6 @@ const pairNoteKey = (note: Pick<PairNote, "id" | "note">): string => note.id ?? 
 /** High severity (concern/blocker) is always held + reconfirmed; nits deliver now. */
 export const isHighSeverity = (s: PairSeverity | undefined): boolean => s === "concern" || s === "blocker";
 
-/**
- * A turn is terminal (the agent is about to go idle) when its assistant message
- * issued no tool calls — the agent-loop's inner loop exits unless something is
- * steered in. We block-until-settled on terminal turns so a blocker the pair
- * raises about the final turn is caught before control returns to the user.
- *
- * Approximation: a turn WITH tool calls can still end the run if a tool returns
- * `terminate` or a stop hook fires; we'd classify that non-terminal. The cost is
- * only a *delay*, not a loss — a held note still rides the next turn's catch-up
- * block; the sole gap is a brand-new blocker raised about such a turn (nothing
- * previously held), which then lands on the next user turn instead of before idle.
- */
-export function isTerminalTurn(message: { content?: ReadonlyArray<{ type: string }> } | undefined): boolean {
-	return !(message?.content ?? []).some((c) => c.type === "toolCall");
-}
-
-/** Drain after this many still-pending deltas, even if every one is low-signal. */
-export const PAIR_DRAIN_BACKLOG = 8;
-/** Deferral timer from the first still-pending low-signal delta. */
-export const PAIR_DEFER_MS = 15_000;
-
 const BASH_APPEND_WATCHED = Symbol("pair.bashAppendWatched");
 
 /** Observe persisted `!bash` pages. Pi records them via appendMessage, not message_end. */
@@ -258,79 +219,6 @@ export function bindBashAppendHook(
 	};
 }
 
-/**
- * A turn is low-signal when it has no user text, no error, no mutation, and no
- * command execution. Judge the raw event, not the formatted delta. High-severity
- * holds are a drain trigger, not part of this classification.
- */
-export function isLowSignalTurn(opts: {
-	hasUserText?: boolean;
-	toolResults?: ReadonlyArray<{
-		toolName?: string;
-		isError?: boolean;
-		details?: { diff?: unknown; exitCode?: unknown; exit_code?: unknown };
-	}>;
-}): boolean {
-	if (opts.hasUserText) return false;
-	for (const result of opts.toolResults ?? []) {
-		if (result.isError) return false;
-		const name = (result.toolName ?? "").toLowerCase();
-		if (name === "edit" || name === "write" || name === "bash") return false;
-		const diff = result.details?.diff;
-		if (typeof diff === "string" && diff.trim()) return false;
-		const code = result.details?.exitCode ?? result.details?.exit_code;
-		if (typeof code === "number") return false;
-	}
-	return true;
-}
-
-/** Structural slice of PairRuntime the catch-up block needs (so it's testable). */
-export interface TurnBlockRuntime {
-	readonly hasHighPriority: boolean;
-	startDrain(): void;
-	takeAllAdvice(): PairNote[];
-	requeueAdvice(note: string, severity?: PairSeverity, findingId?: string): void;
-	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed">;
-}
-
-/**
- * Give a terminal primary turn one brief opportunity to catch up with Pair.
- * Non-terminal turns never wait. Timeout, failure, and user abort leave advice
- * queued for a later successful/current review rather than promoting an
- * unconfirmed finding merely because the latency budget expired.
- */
-export type TurnBlockOutcome = "skipped" | "settled" | "timeout" | "aborted" | "failed";
-
-export function terminalReviewCoversBoundary(args: {
-	outcome: TurnBlockOutcome;
-	reviewedThrough: number;
-	boundarySequence: number;
-	currentSequence: number;
-	turnState: PrimaryTurnState;
-	generation: number;
-	currentGeneration: number;
-}): boolean {
-	return (
-		args.outcome === "settled" &&
-		args.reviewedThrough >= args.boundarySequence &&
-		args.boundarySequence === args.currentSequence &&
-		args.turnState === "ended-terminal" &&
-		args.generation === args.currentGeneration
-	);
-}
-
-export async function runTurnBlock(opts: {
-	terminal: boolean;
-	runtime: TurnBlockRuntime;
-	capMs?: number;
-	signal?: AbortSignal;
-}): Promise<TurnBlockOutcome> {
-	const { terminal, runtime } = opts;
-	if (!terminal) return "skipped";
-	runtime.startDrain();
-	return runtime.waitUntilSettled(opts.capMs ?? 10_000, opts.signal);
-}
-
 /** Parse the hidden `/pair test <nit|concern|blocker> <note>` test hook args. */
 export function parsePairTestArgs(args: string): { severity: PairSeverity; note: string } | null {
 	const m = args.trim().match(/^test\s+(nit|concern|blocker)\s+([\s\S]+)$/i);
@@ -362,7 +250,7 @@ export class AdviseTool {
 
 	/**
 	 * Record a note as delivered so a later same-or-lower-severity repeat is
-	 * deduped. Called by the catch-up block when it steers a held note in (held
+	 * deduped. Called by boundary delivery when it steers a held note in (held
 	 * notes go through `onAdvice`→false, which intentionally does NOT record, so
 	 * the actual delivery point must).
 	 */
@@ -442,15 +330,79 @@ export { PAIR_SESSION_TOOLS, pairCompactResult } from "./session.js";
  * Feeds the persistent pair conversation one delta per primary turn.
  * Identity change uses `reset()`. Overflow uses the pair session compact hook.
  */
-type PendingDelta = { text: string; lowSignal: boolean; boundary?: number; notebookBatch?: PairNotebookBatch };
+type PendingDelta = Readonly<{
+	sequence: number;
+	text: string;
+	boundary?: number;
+	notebookBatch?: PairNotebookBatch;
+}>;
 type AttemptEffects = { advice: PairNote[]; escalations: PairEscalation[] };
 
-export class PairRuntime {
+/** Ordered input ownership shared across Pair runtime construction and replacement. */
+export class PairSpool {
 	#pending: PendingDelta[] = [];
+	#claimedCount = 0;
+	#writerFrontier = 0;
+	#committedFrontier = 0;
+	#committedBoundary = 0;
+
+	append(text: string, opts?: { boundary?: number; notebookBatch?: PairNotebookBatch }): number | undefined {
+		if (!text.trim()) return undefined;
+		const sequence = ++this.#writerFrontier;
+		this.#pending.push(
+			Object.freeze({
+				sequence,
+				text,
+				...(opts?.boundary === undefined ? {} : { boundary: opts.boundary }),
+				...(opts?.notebookBatch ? { notebookBatch: opts.notebookBatch } : {}),
+			}),
+		);
+		return sequence;
+	}
+
+	claim(): readonly PendingDelta[] {
+		if (this.#claimedCount === 0) this.#claimedCount = this.#pending.length;
+		return this.#pending.slice(0, this.#claimedCount);
+	}
+
+	commit(claim: readonly PendingDelta[]): void {
+		if (!claim.length) return;
+		for (let index = 0; index < claim.length; index++) {
+			if (this.#pending[index]?.sequence !== claim[index]?.sequence) {
+				throw new Error("Pair spool commit does not match its contiguous pending prefix");
+			}
+		}
+		this.#pending.splice(0, claim.length);
+		this.#claimedCount = 0;
+		this.#committedFrontier = claim.at(-1)!.sequence;
+		for (const item of claim) {
+			if (item.boundary !== undefined) this.#committedBoundary = item.boundary;
+		}
+	}
+
+	reset(): void {
+		this.#pending = [];
+		this.#claimedCount = 0;
+		this.#writerFrontier = 0;
+		this.#committedFrontier = 0;
+		this.#committedBoundary = 0;
+	}
+
+	get backlog(): number {
+		return this.#writerFrontier - this.#committedFrontier;
+	}
+
+	get committedBoundary(): number {
+		return this.#committedBoundary;
+	}
+
+	get hasPending(): boolean {
+		return this.#pending.length > 0;
+	}
+}
+
+export class PairRuntime {
 	#primedContext: string | undefined;
-	#deferTimer: ReturnType<typeof setTimeout> | undefined;
-	#forceDrain = false;
-	deferMs = PAIR_DEFER_MS;
 	#rolling: SettledAdvice[] = [];
 	#needsSeed = true;
 	// The ONE pending-advice queue. Nits, concerns, and blockers all enter here;
@@ -459,9 +411,8 @@ export class PairRuntime {
 	// Keys re-raised during the in-flight review; drives the post-review prune.
 	#reraised: Set<string> | undefined;
 	#offeredFindingIds: Set<string> | undefined;
-	// Outcome of the most recently completed drain batch. Lets waitUntilSettled
-	// distinguish a genuine settle from a failed review so queued advice is never
-	// delivered as confirmed.
+	// Outcome of the most recently completed drain batch. Lets deterministic
+	// settlement observers distinguish a genuine settle from a failed review.
 	#lastOutcome: "ok" | "failed" | undefined;
 	// Epoch of the in-flight review; advice callbacks are honored only while it still
 	// matches #epoch. A reset/dispose bumps #epoch, orphaning a stale review whose
@@ -470,9 +421,7 @@ export class PairRuntime {
 	#attemptEffects: AttemptEffects | undefined;
 	#settleWaiters: Array<{ settle: () => void; cancel: () => void }> = [];
 	#busy = false;
-	#backlog = 0;
 	#epoch = 0;
-	#unhealthy = false;
 	#agentResetPending = false;
 	// Lifetime input/output/cost from pair turns already discarded by compact.
 	// The agent's message list only holds the CURRENT context, so without folding
@@ -482,12 +431,10 @@ export class PairRuntime {
 	#cumOutput = 0;
 	#cumCost = 0;
 	#reviewCount = 0;
-	#reviewedThrough = 0;
 	// Production turn_end binds this so #drain can emit after the hook returns.
 	// Tests that construct PairRuntime directly leave it unset and write nothing.
 	#usageSession?: { sessionId?: string };
 	disposed = false;
-	reviewDeadlineMs = 75_000;
 
 	constructor(
 		private readonly agent: Agent,
@@ -504,6 +451,7 @@ export class PairRuntime {
 		private readonly notebookTool?: UpdateNotebookTool,
 		private readonly onNotebookUpdate?: (update: PairNotebookUpdate) => void,
 		private readonly onEscalation?: (request: PairEscalation) => EscalationAcceptance,
+		private readonly spool = new PairSpool(),
 	) {}
 
 	/** Enable durable per-prompt usage records for this runtime. */
@@ -552,25 +500,10 @@ export class PairRuntime {
 							]
 						: messages) as never,
 				);
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		const deadline = new Promise<never>((_resolve, reject) => {
-			timer = setTimeout(() => {
-				this.#unhealthy = true;
-				try {
-					this.agent.abort();
-				} catch {}
-				try {
-					void this.session?.abort?.();
-				} catch {}
-				reject(new Error(`Pair review exceeded its ${this.reviewDeadlineMs}ms deadline`));
-			}, this.reviewDeadlineMs);
-		});
 		try {
-			await Promise.race([prompt, deadline]);
+			await prompt;
 			this.#needsSeed = false;
 		} finally {
-			if (timer) clearTimeout(timer);
-			void prompt.catch(() => {});
 			this.#foldDiscardedUsage(prior);
 			this.#recordPromptUsage(before, Date.now() - started, trigger, model);
 		}
@@ -614,7 +547,7 @@ export class PairRuntime {
 	}
 
 	get backlog(): number {
-		return this.#backlog;
+		return this.spool.backlog;
 	}
 
 	get reviewCount(): number {
@@ -622,16 +555,12 @@ export class PairRuntime {
 	}
 
 	get reviewedThrough(): number {
-		return this.#reviewedThrough;
-	}
-
-	get unhealthy(): boolean {
-		return this.#unhealthy;
+		return this.spool.committedBoundary;
 	}
 
 	/** True when no batch is in flight and nothing is queued. */
 	get idle(): boolean {
-		return !this.#busy && this.#pending.length === 0;
+		return !this.#busy && !this.spool.hasPending;
 	}
 
 	/** True while a review prompt is in flight. Deferred pending is not reviewing. */
@@ -639,9 +568,9 @@ export class PairRuntime {
 		return this.#busy;
 	}
 
-	/** Caught up for wait purposes: idle, or intentionally deferred. */
+	/** Caught up only once every claimed input chunk has committed. */
 	get #caughtUp(): boolean {
-		return !this.#busy && !this.#shouldDrain();
+		return !this.#busy && !this.spool.hasPending;
 	}
 
 	/** Whether the shared queue contains anything worth blocking a mid-run turn for. */
@@ -750,8 +679,8 @@ export class PairRuntime {
 
 	/**
 	 * Resolve once the pair has caught up (`idle`), or `timeoutMs` elapses, or
-	 * `signal` aborts. Drives the per-turn catch-up block. Resolves "settled"
-	 * immediately if already idle/disposed.
+	 * `signal` aborts. Used by deterministic runtime tests and diagnostics; primary
+	 * turns never await it. Resolves "settled" immediately if already idle/disposed.
 	 */
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed"> {
 		if (this.disposed) return Promise.resolve("aborted");
@@ -771,10 +700,11 @@ export class PairRuntime {
 			};
 			const onAbort = () => finish("aborted");
 			waiter = {
-				// Fired when the drain reaches a catch-up boundary (reviewed or deferred).
+				// Fired when the drain reaches a settlement boundary (reviewed or deferred).
 				settle: () => {
 					if (this.disposed) finish("aborted");
-					else if (this.#caughtUp) finish(this.#lastOutcome === "failed" ? "failed" : "settled");
+					else if (this.#lastOutcome === "failed") finish("failed");
+					else if (this.#caughtUp) finish("settled");
 				},
 				// Fired by reset()/dispose(): resolve immediately rather than waiting for
 				// the in-flight prompt to unwind (which could take up to the timeout).
@@ -818,62 +748,20 @@ export class PairRuntime {
 		return { input, output, cost, contextTokens, contextPercent };
 	}
 
-	/** Queue a rendered primary-turn delta. Drain starts only when required. */
-	push(
-		deltaText: string,
-		opts?: { lowSignal?: boolean; terminal?: boolean; boundary?: number; notebookBatch?: PairNotebookBatch },
-	): void {
-		if (this.disposed || !deltaText.trim()) return;
-		this.#pending.push({
-			text: deltaText,
-			lowSignal: opts?.lowSignal === true,
-			...(opts?.boundary === undefined ? {} : { boundary: opts.boundary }),
-			...(opts?.notebookBatch ? { notebookBatch: opts.notebookBatch } : {}),
-		});
-		this.#backlog++;
-		if (opts?.terminal) this.#forceDrain = true;
-		this.#scheduleDrain();
+	/** Append an immutable input chunk. An idle reader immediately claims it. */
+	push(deltaText: string, opts?: { boundary?: number; notebookBatch?: PairNotebookBatch }): void {
+		if (this.disposed || this.spool.append(deltaText, opts) === undefined) return;
+		this.wake();
 	}
 
-	/** Force-start drain when catch-up must wait on pending work. */
+	/** Wake the reader after the extension appends or preserves work in its spool. */
+	wake(): void {
+		if (!this.disposed && !this.#busy && this.spool.hasPending) void this.#drain();
+	}
+
+	/** Compatibility alias for deterministic callers. */
 	startDrain(): void {
-		if (this.disposed || !this.#pending.length) return;
-		this.#forceDrain = true;
-		this.#scheduleDrain();
-	}
-
-	#shouldDrain(): boolean {
-		if (!this.#pending.length) return false;
-		if (this.#forceDrain) return true;
-		if (this.hasHighPriority) return true;
-		if (this.#pending.some((item) => !item.lowSignal)) return true;
-		return this.#pending.length > PAIR_DRAIN_BACKLOG;
-	}
-
-	#scheduleDrain(): void {
-		if (this.disposed || this.#busy) return;
-		if (this.#shouldDrain()) {
-			this.#clearDeferTimer();
-			void this.#drain();
-			return;
-		}
-		this.#armDeferTimer();
-	}
-
-	#armDeferTimer(): void {
-		if (this.#deferTimer || !this.#pending.length) return;
-		this.#deferTimer = setTimeout(() => {
-			this.#deferTimer = undefined;
-			if (this.disposed || this.#busy || !this.#pending.length) return;
-			this.#forceDrain = true;
-			void this.#drain();
-		}, this.deferMs);
-	}
-
-	#clearDeferTimer(): void {
-		if (!this.#deferTimer) return;
-		clearTimeout(this.#deferTimer);
-		this.#deferTimer = undefined;
+		this.wake();
 	}
 
 	/** Re-prime after a history rewrite (compaction / session switch / fork). */
@@ -895,9 +783,7 @@ export class PairRuntime {
 
 	reset(): void {
 		this.#epoch++;
-		this.#pending = [];
-		this.#forceDrain = false;
-		this.#clearDeferTimer();
+		this.spool.reset();
 		this.#primedContext = undefined;
 		this.#advice = [];
 		this.#rolling = [];
@@ -907,11 +793,8 @@ export class PairRuntime {
 		this.#attemptEffects = undefined;
 		this.#reviewEpoch = -1;
 		this.#lastOutcome = undefined;
-		this.#backlog = 0;
-		this.#unhealthy = false;
 		this.#cumInput = this.#cumOutput = this.#cumCost = 0;
 		this.#reviewCount = 0;
-		this.#reviewedThrough = 0;
 		this.adviseTool.resetDelivered();
 		try {
 			this.agent.abort();
@@ -923,9 +806,6 @@ export class PairRuntime {
 	dispose(): void {
 		this.disposed = true;
 		this.#epoch++;
-		this.#pending = [];
-		this.#forceDrain = false;
-		this.#clearDeferTimer();
 		this.#primedContext = undefined;
 		this.#advice = [];
 		this.#rolling = [];
@@ -934,8 +814,6 @@ export class PairRuntime {
 		this.#attemptEffects = undefined;
 		this.#reviewEpoch = -1;
 		this.#lastOutcome = undefined;
-		this.#backlog = 0;
-		this.#reviewedThrough = 0;
 		try {
 			this.agent.abort();
 		} catch {}
@@ -945,7 +823,7 @@ export class PairRuntime {
 		this.#cancelWaiters();
 	}
 
-	async #reviewBatch(batch: PendingDelta[]): Promise<"ok" | "failed" | "stale"> {
+	async #reviewBatch(batch: readonly PendingDelta[]): Promise<"ok" | "failed" | "stale"> {
 		const notebookBatch = [...batch].reverse().find((item) => item.notebookBatch)?.notebookBatch;
 		const texts = batch.map((item) => item.text);
 		if (notebookBatch?.prompt) texts.push(notebookBatch.prompt);
@@ -1026,9 +904,6 @@ export class PairRuntime {
 			}
 			this.#rememberSettled(dropped, "dropped");
 			if (this.#primedContext === primedContext) this.#primedContext = undefined;
-			for (const item of batch) {
-				if (item.boundary !== undefined) this.#reviewedThrough = Math.max(this.#reviewedThrough, item.boundary);
-			}
 			finishAttempt();
 			this.#lastOutcome = "ok";
 			this.#reraised = undefined;
@@ -1048,41 +923,35 @@ export class PairRuntime {
 	async #drain(): Promise<void> {
 		if (this.#busy) return;
 		this.#busy = true;
-		this.#clearDeferTimer();
 		let reviewed = false;
 		try {
-			while (!this.disposed && this.#pending.length) {
-				if (!this.#shouldDrain()) break;
-				this.#forceDrain = false;
+			while (!this.disposed && this.spool.hasPending) {
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
 				if (this.#agentResetPending) {
-					this.onDebug?.("pair private context still busy after history rewrite; dropping queued review");
-					this.#pending = [];
-					this.#backlog = 0;
 					this.#lastOutcome = "failed";
 					break;
 				}
-				const batch = this.#pending.splice(0);
-				const turns = batch.length;
+				// Claim a contiguous prefix without removing it. It remains the exact
+				// retry unit until its transactional response commits.
+				const batch = this.spool.claim();
 				reviewed = true;
-				// Rough gauge of how many turns are still unreviewed (status display only).
-				this.#backlog = Math.max(0, this.#backlog - turns);
 				const result = await this.#reviewBatch(batch);
-				if (result === "failed") this.#lastOutcome = "failed";
+				if (result !== "ok") {
+					if (result === "failed") this.#lastOutcome = "failed";
+					break;
+				}
+				this.spool.commit(batch);
 			}
 		} finally {
 			this.#busy = false;
-			const restart = !this.disposed && this.#shouldDrain();
-			if (!restart && this.#pending.length) this.#armDeferTimer();
-			if (!restart && this.#caughtUp) this.#notifySettled();
+			if (this.#caughtUp || this.#lastOutcome === "failed") this.#notifySettled();
 			if (reviewed) {
 				try {
-					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok", this.#reviewedThrough);
+					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok", this.spool.committedBoundary);
 				} catch (e) {
 					this.onDebug?.("pair onSettled callback threw", String(e));
 				}
 			}
-			if (restart) void this.#drain();
 		}
 	}
 }
@@ -1126,8 +995,6 @@ const DEBUG = !!process.env.PAIR_DEBUG;
 const dbg = (...a: unknown[]) => {
 	if (DEBUG) console.error("[pair]", ...a);
 };
-const TERMINAL_GATE_MS = 10_000;
-
 // Set by the handoff extension (pi-amplike) via the same Symbol.for key while a
 // handoff is in flight — from the moment it becomes pending until the new
 // session's prompt has been dispatched. During that window the primary session
@@ -1231,21 +1098,22 @@ export default function (pi: ExtensionAPI) {
 	const repeatedFailures = new RepeatedFailureDetector();
 	const acknowledgments = new PairAcknowledgmentTracker();
 
-	// The advise tool bound to the live runtime (held so the catch-up block can
-	// mark held notes delivered at the actual delivery point).
+	// The advise tool bound to the live runtime so boundary delivery can mark held
+	// notes delivered at the actual send point.
 	let adviseTool: AdviseTool | undefined;
 
-	// Set when the user aborts (Escape) around a catch-up block: while true, late
-	// pair advice is delivered WITHOUT triggerTurn so it can't auto-resume the run
-	// the user just stopped. Cleared when the user drives the next turn.
+	// Set when the user aborts (Escape): while true, late Pair advice is delivered
+	// WITHOUT triggerTurn so it cannot auto-resume the run the user just stopped.
+	// Cleared when the user drives the next turn.
 	let autoResumeSuppressed = false;
 
 	// A terminal advisory closes the supervision episode. The resulting correction
 	// run belongs to the main agent and is not reviewed again until the user speaks.
 	let awaitingUserAfterAdvisory = false;
 
-	// One source of truth for which primary boundary a queue flush belongs to.
-	let turnState: PrimaryTurnState = "ended-nonterminal";
+	// Pi lifecycle owns primary busy/idle; output delivery is independent of turn shape.
+	let primaryBusy = false;
+	const inputSpool = new PairSpool();
 	let stagedBoundaryNotes: PairNote[] = [];
 	let advisorFlush: Promise<void> | undefined;
 	const deliveredFindingKeys = new Set<string>();
@@ -1443,13 +1311,6 @@ export default function (pi: ExtensionAPI) {
 		if ((close.length || remind.length) && latestCtx) updateStatus(latestCtx);
 	}
 
-	// The only immediate boundary flush: non-terminal turns drain queued nits in one
-	// steer. Concerns/blockers stay in the shared queue for review reconfirmation.
-	function stageNits(rt: PairRuntime | undefined): void {
-		if (!rt || handoffInProgress()) return;
-		stagedBoundaryNotes.push(...rt.takeNits());
-	}
-
 	// Pair callbacks only enqueue. Delivery policy lives at primary boundaries,
 	// where terminality and reconfirmation state are actually known.
 	function deliverAdvice(
@@ -1458,7 +1319,7 @@ export default function (pi: ExtensionAPI) {
 		sourceRuntime?: PairRuntime,
 		findingId?: string,
 	): boolean {
-		if (!enabled || awaitingUserAfterAdvisory) return false;
+		if (!enabled) return false;
 		// Stand down entirely while a handoff is being performed (see comment on
 		// HANDOFF_IN_PROGRESS_KEY).
 		if (handoffInProgress()) {
@@ -1472,10 +1333,10 @@ export default function (pi: ExtensionAPI) {
 		const targetRuntime = sourceRuntime ?? runtime;
 		// The hidden command test hook is the only caller without a source runtime.
 		// Keep it deterministic even when background warm-up built an idle runtime.
-		if (!sourceRuntime && !isHighSeverity(severity) && turnState !== "running") {
+		if (!sourceRuntime && !isHighSeverity(severity) && !primaryBusy) {
 			sendNotes([{ note, severity, source: "pair", ...(findingId ? { id: findingId } : {}) }], {
 				stale: true,
-				finalAnswer: turnState === "ended-terminal",
+				finalAnswer: true,
 			});
 			return true;
 		}
@@ -1495,32 +1356,19 @@ export default function (pi: ExtensionAPI) {
 		return false;
 	}
 
-	function stageHeld(notes: PairNote[]): void {
-		if (handoffInProgress() || !notes.length) return;
-		stagedBoundaryNotes.push(...notes);
-	}
-
-	// Reviews can finish after a primary turn_end timeout. Deliver only when that
+	// Reviews finish asynchronously after primary turn_end. Deliver only when a
 	// successful review covers the latest ended primary boundary.
-	function flushSettledAdvice(outcome: "ok" | "failed", reviewedThrough: number, sourceRuntime: PairRuntime): void {
-		if (
-			outcome !== "ok" ||
-			sourceRuntime !== runtime ||
-			turnState === "running" ||
-			reviewedThrough < primaryTurnSequence
-		)
-			return;
+	function flushSettledAdvice(outcome: "ok" | "failed", _reviewedThrough: number, sourceRuntime: PairRuntime): void {
+		if (outcome !== "ok" || sourceRuntime !== runtime || primaryBusy) return;
 		flushBoundaryFindings();
 	}
 
 	function flushDirectFindings(): void {
-		if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
+		if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		const activeRuntime = runtime;
 		const activeAdviseTool = adviseTool;
 		if (activeRuntime) {
-			stagedBoundaryNotes.push(
-				...(turnState === "ended-terminal" ? activeRuntime.takeAllAdvice() : activeRuntime.takeNits()),
-			);
+			stagedBoundaryNotes.push(...activeRuntime.takeAllAdvice());
 		}
 		const direct = stagedBoundaryNotes.splice(0);
 		if (!direct.length) return;
@@ -1529,7 +1377,7 @@ export default function (pi: ExtensionAPI) {
 				direct,
 				send: (notes) =>
 					sendNotes(notes, {
-						finalAnswer: turnState === "ended-terminal",
+						finalAnswer: true,
 						stale: notes.every((note) => !isHighSeverity(note.severity)),
 					}),
 				onDirectDelivered: (note) => {
@@ -1552,10 +1400,10 @@ export default function (pi: ExtensionAPI) {
 		const controller = escalationController;
 		if (!controller) return Promise.resolve();
 		const flush = (async () => {
-			if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
+			if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
 			const prepared = await controller.prepareDelivery();
 			if (!prepared || generation !== constructionEpoch || controller !== escalationController) return;
-			if ((turnState as PrimaryTurnState) === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
+			if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
 			try {
 				const delivered = deliverBoundaryBatch({
 					direct: [],
@@ -1563,7 +1411,7 @@ export default function (pi: ExtensionAPI) {
 					knownKeys: deliveredFindingKeys,
 					send: (notes) =>
 						sendNotes(notes, {
-							finalAnswer: turnState === "ended-terminal",
+							finalAnswer: true,
 							stale: false,
 						}),
 					onDirectDelivered: () => {},
@@ -1587,7 +1435,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function flushBoundaryFindings(): void {
-		if (turnState === "running" || awaitingUserAfterAdvisory || handoffInProgress()) return;
+		if (primaryBusy || awaitingUserAfterAdvisory || handoffInProgress()) return;
 		flushDirectFindings();
 		void flushAdvisorFinding();
 	}
@@ -1599,7 +1447,7 @@ export default function (pi: ExtensionAPI) {
 			getContext: () => latestCtx,
 			getService: () => getManagedSubagentService(pi.events, { processFallback: false }),
 			onDeliveryReady: () => {
-				if (turnState !== "running") void flushBoundaryFindings();
+				if (!primaryBusy) void flushBoundaryFindings();
 			},
 			onOutcome: (outcome) => {
 				try {
@@ -1627,12 +1475,13 @@ export default function (pi: ExtensionAPI) {
 		builtForCwd = undefined;
 		builtForTrusted = undefined;
 		pendingUserTexts = [];
+		inputSpool.reset();
 		autoResumeSuppressed = false;
 		awaitingUserAfterAdvisory = false;
 		stagedBoundaryNotes = [];
 		advisorFlush = undefined;
 		deliveredFindingKeys.clear();
-		turnState = "ended-nonterminal";
+		primaryBusy = false;
 		primaryTurnSequence = 0;
 		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
 		repeatedFailures.reset();
@@ -1730,11 +1579,8 @@ export default function (pi: ExtensionAPI) {
 				if (!enabled || process.env.PAIR_NO_REVIEW) return;
 				const delta = formatUserBash(message);
 				if (!delta) return;
-				void ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0]).then((rt) => {
-					if (!rt) return;
-					rt.setUsageSession(sessionIdFromCtx(latestCtx ?? ctx));
-					rt.push(delta, { lowSignal: false });
-				});
+				appendSpool(delta);
+				pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
 			},
 		);
 	}
@@ -1805,6 +1651,7 @@ export default function (pi: ExtensionAPI) {
 		try {
 			session = await createPairSession({
 				cwd: ctx.cwd,
+				projectTrusted,
 				model,
 				thinkingLevel,
 				systemPrompt,
@@ -1833,20 +1680,6 @@ export default function (pi: ExtensionAPI) {
 		const agent = session.agent;
 		const onSettled = (outcome: "ok" | "failed", reviewedThrough: number) => {
 			if (runtime !== builtRuntime) return;
-			if (builtRuntime.unhealthy) {
-				builtRuntime.dispose();
-				runtime = undefined;
-				adviseTool = undefined;
-				activeModelLabel = undefined;
-				activePairContextWindow = undefined;
-				builtForCwd = undefined;
-				builtForTrusted = undefined;
-				if (latestCtx) {
-					updateStatus(latestCtx);
-					void ensureRuntime(latestCtx as Parameters<typeof ensureRuntime>[0], false);
-				}
-				return;
-			}
 			flushSettledAdvice(outcome, reviewedThrough, builtRuntime);
 			if (latestCtx) updateStatus(latestCtx);
 		};
@@ -1869,6 +1702,7 @@ export default function (pi: ExtensionAPI) {
 				if (runtime !== builtRuntime) return "unavailable";
 				return ensureEscalationController().submit("pair", request, primaryTurnSequence);
 			},
+			inputSpool,
 		);
 		if (constructionEpoch !== epoch) {
 			builtRuntime.dispose();
@@ -1908,6 +1742,23 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	/** Extension-owned spool: construction failures leave immutable input here. */
+	function appendSpool(text: string, boundary = primaryTurnSequence, notebookBatch?: PairNotebookBatch): void {
+		inputSpool.append(text, { boundary, ...(notebookBatch ? { notebookBatch } : {}) });
+	}
+
+	function pumpSpool(ctx: Parameters<typeof ensureRuntime>[0]): void {
+		if (!inputSpool.hasPending || !enabled || process.env.PAIR_NO_REVIEW) return;
+		void ensureRuntime(ctx)
+			.then((rt) => {
+				if (!rt || !enabled || rt !== runtime) return;
+				rt.setUsageSession(sessionIdFromCtx(ctx));
+				rt.wake();
+				updateStatus(ctx);
+			})
+			.catch((error) => dbg("pair spool pump failed", String(error)));
+	}
+
 	// ---- event wiring ----
 
 	// User preflight happens before Pi starts streaming, so mark the turn running
@@ -1917,7 +1768,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
-		turnState = "running";
+		primaryBusy = true;
 		return { systemPrompt: appendPrimaryPairPrompt(event.systemPrompt ?? "") };
 	});
 
@@ -1941,37 +1792,46 @@ export default function (pi: ExtensionAPI) {
 
 	// Fires for every assistant turn, including advisory-triggered runs and same-run
 	// continuations. Every real turn_start is paired with turn_end (also on failure).
-	pi.on("turn_start", () => {
+	pi.on("agent_start", () => {
+		if (enabled) primaryBusy = true;
+	});
+	pi.on("agent_settled", (_event, ctx) => {
 		if (!enabled) return;
-		turnState = "running";
+		latestCtx = ctx;
+		primaryBusy = false;
+		handleTerminalAcknowledgments();
+		flushBoundaryFindings();
+		if (inputSpool.hasPending) pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
+		updateStatus(ctx);
 	});
 
-	// One source-addressed delta per primary turn. Non-terminal turns only enqueue
-	// background work. Terminal turns give the whole boundary one brief absolute
-	// catch-up budget; construction, review, and Advisor work may continue later
-	// without holding the primary session.
-	pi.on("turn_end", async (event, ctx) => {
-		const terminal = isTerminalTurn(event.message as any);
-		turnState = terminal ? "ended-terminal" : "ended-nonterminal";
+	pi.on("turn_start", () => {
+		if (!enabled) return;
+		primaryBusy = true;
+	});
+
+	// One source-addressed delta per primary turn. Every turn enqueues background
+	// work and returns without awaiting construction, review, tools, retries,
+	// Advisor work, or delivery preparation.
+	pi.on("turn_end", (event, ctx) => {
+		// This is only a writer commit point, not an output/scheduling boundary.
 		if (!enabled) return;
 		latestCtx = ctx;
 		acknowledgments.advanceTurn();
-		if (terminal) handleTerminalAcknowledgments();
-		if (awaitingUserAfterAdvisory) {
-			pendingUserTexts = [];
-			updateStatus(ctx);
-			return;
-		}
 		primaryTurnSequence++;
 		const boundarySequence = primaryTurnSequence;
 		escalationController?.advanceTurn(boundarySequence);
 		if (process.env.PAIR_NO_REVIEW) return;
 
-		// An existing runtime can release already-confirmed nits synchronously. A
-		// runtime still being constructed has no advice to release.
-		if (!terminal) stageNits(runtime);
-
 		const generation = constructionEpoch;
+		const signal = (ctx as { signal?: AbortSignal }).signal;
+		const suppressAutoResume = () => {
+			if (generation === constructionEpoch && boundarySequence === primaryTurnSequence && !primaryBusy) {
+				autoResumeSuppressed = true;
+			}
+		};
+		if (signal?.aborted) suppressAutoResume();
+		else signal?.addEventListener("abort", suppressAutoResume, { once: true });
 		const userPrompt = pendingUserTexts.join("\n\n");
 		pendingUserTexts = [];
 		const toolResults = event.toolResults as ToolResultMessage[];
@@ -1993,65 +1853,10 @@ export default function (pi: ExtensionAPI) {
 			sourceEntryIds,
 		);
 		const notebookBatch = prepareNotebookBatch(ctx);
-		const lowSignal = isLowSignalTurn({ hasUserText: Boolean(userPrompt), toolResults });
 
-		const boundaryWork = (async () => {
-			const rt = await ensureRuntime(ctx as Parameters<typeof ensureRuntime>[0]);
-			if (!rt || !enabled || generation !== constructionEpoch) return;
-			dbg("turn_end", "terminal=", terminal, "runtime=", true, "model=", activeModelLabel);
-			rt.setUsageSession(sessionIdFromCtx(ctx));
-			rt.push(delta, {
-				lowSignal,
-				terminal,
-				boundary: boundarySequence,
-				...(notebookBatch ? { notebookBatch } : {}),
-			});
-			if (handoffInProgress()) return;
-			updateStatus(ctx);
-			if (terminal) {
-				const outcome = await runTurnBlock({
-					terminal: true,
-					runtime: rt,
-					capMs: TERMINAL_GATE_MS,
-					signal: (ctx as any).signal,
-				});
-				const current = terminalReviewCoversBoundary({
-					outcome,
-					reviewedThrough: rt.reviewedThrough,
-					boundarySequence,
-					currentSequence: primaryTurnSequence,
-					turnState,
-					generation,
-					currentGeneration: constructionEpoch,
-				});
-				if (!current) {
-					void flushAdvisorFinding();
-					updateStatus(ctx);
-					return;
-				}
-				stageHeld(rt.takeAllAdvice());
-			}
-			if ((ctx as any).signal?.aborted) autoResumeSuppressed = true;
-			flushBoundaryFindings();
-			updateStatus(ctx);
-		})().catch((error) => dbg("pair boundary work failed", String(error)));
-
-		if (!terminal) {
-			void boundaryWork;
-			return;
-		}
-		let gate: ReturnType<typeof setTimeout> | undefined;
-		try {
-			await Promise.race([
-				boundaryWork,
-				new Promise<void>((resolve) => {
-					gate = setTimeout(resolve, TERMINAL_GATE_MS);
-				}),
-			]);
-		} finally {
-			if (gate) clearTimeout(gate);
-			updateStatus(ctx);
-		}
+		appendSpool(delta, boundarySequence, notebookBatch);
+		void pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
+		updateStatus(ctx);
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
