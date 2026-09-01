@@ -36,6 +36,7 @@ These are the pieces I interact with directly while a session is running.
 - [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
 - [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
 - [`Distill`](docs/distill.md) — proposal-first extraction of durable lessons via `/distill [focus]`
+- [`Interrogate`](prompts/interrogate.md) — dependency-ordered questioning via `/interrogate [subject]`
 - [Custom Footer](docs/status-footer.md) — responsive model, context, cost, Git, and live extension status
 
 ### Keeping context and work straight
@@ -72,6 +73,12 @@ The Pi package manifest in [`package.json`](package.json) exports [`extensions`]
 ## Skills
 
 Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs. They are procedures the agent can load when the situation calls for them, not a pipeline every request has to follow.
+
+### Guided workflows
+
+These remain human-invoked so the model does not start them implicitly.
+
+- [`/skill:interrogate-to-design`](skills/interrogate-to-design) — interrogate dependent design decisions while curating reusable wiki knowledge and approved ADRs
 
 ### Engineering disciplines
 

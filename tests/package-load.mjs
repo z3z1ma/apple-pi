@@ -259,16 +259,26 @@ try {
 	});
 	assert.deepEqual(
 		promptTemplates.map((template) => template.name),
-		["distill"],
+		["distill", "interrogate"],
 	);
-	const distillTemplate = promptTemplates[0];
+	const distillTemplate = promptTemplates.find((template) => template.name === "distill");
+	assert(distillTemplate);
 	assert.equal(distillTemplate.argumentHint, "[focus]");
 	assert.match(distillTemplate.description, /durable knowledge and reusable harness artifacts/);
 	assert.match(expandPromptTemplate("/distill", promptTemplates), /the most recent meaningful body of work/);
 	assert.match(expandPromptTemplate("/distill debugging workflow", promptTemplates), /focused on: debugging workflow/);
 	assert.match(distillTemplate.content, /AGENTS\.md/);
 	assert.match(distillTemplate.content, /do not create or modify artifacts/i);
-	const explicitWorkflowSkills = [];
+	const interrogateTemplate = promptTemplates.find((template) => template.name === "interrogate");
+	assert(interrogateTemplate);
+	assert.equal(interrogateTemplate.argumentHint, "[subject]");
+	assert.match(interrogateTemplate.description, /plan, decision, or idea/);
+	assert.match(expandPromptTemplate("/interrogate", promptTemplates), /current conversation/);
+	assert.match(expandPromptTemplate("/interrogate cache invalidation", promptTemplates), /cache invalidation/);
+	assert.match(interrogateTemplate.content, /design tree/);
+	assert.match(interrogateTemplate.content, /in-scope frontier is empty/);
+	assert.match(interrogateTemplate.content, /do not create or modify files/i);
+	const explicitWorkflowSkills = ["interrogate-to-design"];
 	const engineeringSkills = [
 		"prototype",
 		"diagnosing-bugs",
