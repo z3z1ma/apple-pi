@@ -1,4 +1,9 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+	copyToClipboard,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { AgentManager } from "./agent-manager.js";
 import { extractText } from "./context.js";
 import type { AgentConfig, AgentRecord } from "./types.js";
@@ -159,6 +164,16 @@ function injectLatestAnswer(pi: ExtensionAPI, ctx: ExtensionContext, record: Age
 	ctx.ui.notify("Injected the latest BTW answer.", "info");
 }
 
+async function copyLatestAnswer(ctx: ExtensionContext, answer: string): Promise<void> {
+	try {
+		await copyToClipboard(answer);
+		ctx.ui.notify("Copied the latest BTW answer to the clipboard.", "info");
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		ctx.ui.notify(`Could not copy the BTW answer: ${reason}`, "error");
+	}
+}
+
 async function openConversation(
 	pi: ExtensionAPI,
 	ctx: ExtensionCommandContext,
@@ -203,6 +218,7 @@ async function openConversation(
 						}
 					});
 				},
+				onCopyLatestAnswer: (answer) => void copyLatestAnswer(ctx, answer),
 				onInjectLatestAnswer: () => injectLatestAnswer(pi, ctx, record),
 				onClearConversation: onClear,
 				onStop: () => manager.abort(record.id),

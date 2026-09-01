@@ -12,6 +12,7 @@
 - `/btw <question>` starts the side conversation or opens it with a new question.
 - `/btw` reopens the conversation. On first use it prompts for the opening question.
 - Press `Enter` inside the overlay to ask follow-up questions.
+- Press `Ctrl+X` to copy the latest completed answer to the clipboard. BTW follows Pi's configurable `app.message.copy` binding.
 - Press `i` or `Option-I` (`Alt+I`) to inject the latest completed answer into the main conversation.
 - Press `Option-X` (`Alt+X`) to clear the side conversation, or `x` twice to stop only the active response.
 - Press `Esc` or `q` to close the overlay. The side agent keeps working.

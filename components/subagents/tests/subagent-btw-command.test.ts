@@ -1,6 +1,12 @@
+import { copyToClipboard } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { registerBtwCommand } from "../src/btw.js";
 import type { AgentRecord } from "../src/types.js";
+
+vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@earendil-works/pi-coding-agent")>()),
+	copyToClipboard: vi.fn(),
+}));
 
 function theme() {
 	return {
@@ -167,5 +173,9 @@ describe("BTW command", () => {
 		expect(sendUserMessage).toHaveBeenCalledWith(expect.stringContaining("The parser is recursive."), {
 			deliverAs: "followUp",
 		});
+
+		viewer.handleInput("\x18");
+		await vi.waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith("The parser is recursive."));
+		expect(ctx.ui.notify).toHaveBeenCalledWith("Copied the latest BTW answer to the clipboard.", "info");
 	});
 });

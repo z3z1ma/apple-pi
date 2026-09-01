@@ -41,6 +41,8 @@ export const BTW_VIEWPORT_HEIGHT_PCT = 70;
 export interface BtwViewerActions {
 	/** Submit a new question or follow-up to BTW. */
 	onSubmitQuestion?: (question: string) => void;
+	/** Copy the latest completed assistant answer to the clipboard. */
+	onCopyLatestAnswer?: (answer: string) => void;
 	/** Inject the latest completed assistant answer back to the main conversation. */
 	onInjectLatestAnswer?: (answer: string) => void;
 	/** Clear the current BTW conversation session, then close overlay. */
@@ -115,6 +117,17 @@ export class BtwViewer implements Component {
 			this.actions.onClearConversation?.();
 			this.closed = true;
 			this.done(undefined);
+			return;
+		}
+
+		// Use pi's configured message-copy binding (Ctrl+X by default).
+		if (this.keys.copyMessage(data)) {
+			this.stopArmed = false;
+			const latestAnswer = this.getLatestCompletedAnswer();
+			if (latestAnswer) {
+				this.actions.onCopyLatestAnswer?.(latestAnswer);
+			}
+			this.tui.requestRender();
 			return;
 		}
 
@@ -259,6 +272,10 @@ export class BtwViewer implements Component {
 			if (this.canAsk()) actions.push(th.fg("dim", "Enter ask"));
 
 			const hasAnswer = Boolean(this.getLatestCompletedAnswer());
+			if (this.actions.onCopyLatestAnswer && hasAnswer && this.keys.copyKey) {
+				actions.push(th.fg("accent", `${this.keys.copyKey} copy`));
+			}
+
 			if (this.actions.onInjectLatestAnswer && hasAnswer) {
 				actions.push(th.fg("accent", "i/⌥I inject"));
 			}

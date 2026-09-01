@@ -158,6 +158,52 @@ describe("BtwViewer", () => {
 	});
 
 	describe("keyboard interactions & actions", () => {
+		it("copies the latest completed answer with pi's message-copy binding", () => {
+			const onCopyLatestAnswer = vi.fn();
+			const messages = [
+				{ role: "assistant", content: [{ type: "text", text: "First answer" }], stopReason: "stop" },
+				{ role: "assistant", content: [{ type: "text", text: "Final target answer" }], stopReason: "stop" },
+			];
+			const viewer = new BtwViewer(
+				mockTui(30, 80),
+				mockSession(messages),
+				mockRecord(),
+				ansiTheme(),
+				vi.fn(),
+				undefined,
+				{ onCopyLatestAnswer },
+			);
+
+			expect(viewer.render(80).join("\n")).toContain("ctrl+x copy");
+			viewer.handleInput("\x18");
+
+			expect(onCopyLatestAnswer).toHaveBeenCalledOnce();
+			expect(onCopyLatestAnswer).toHaveBeenCalledWith("Final target answer");
+		});
+
+		it("honors a custom message-copy binding", () => {
+			const onCopyLatestAnswer = vi.fn();
+			const keybindings = {
+				matches: (data: string, keybinding: string) => keybinding === "app.message.copy" && data === "\x1bc",
+				getKeys: (keybinding: string) => (keybinding === "app.message.copy" ? ["alt+c"] : []),
+			};
+			const viewer = new BtwViewer(
+				mockTui(30, 80),
+				mockSession([{ role: "assistant", content: [{ type: "text", text: "Answer" }], stopReason: "stop" }]),
+				mockRecord(),
+				ansiTheme(),
+				vi.fn(),
+				keybindings as any,
+				{ onCopyLatestAnswer },
+			);
+
+			expect(viewer.render(80).join("\n")).toContain("alt+c copy");
+			viewer.handleInput("\x18");
+			expect(onCopyLatestAnswer).not.toHaveBeenCalled();
+			viewer.handleInput("\x1bc");
+			expect(onCopyLatestAnswer).toHaveBeenCalledWith("Answer");
+		});
+
 		it("injects latest completed answer on 'i' and 'alt+i'", () => {
 			const onInjectLatestAnswer = vi.fn();
 			const messages = [
