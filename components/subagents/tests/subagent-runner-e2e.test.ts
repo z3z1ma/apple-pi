@@ -320,12 +320,10 @@ Answer the task.
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-tool", contextWindow: 200_000 }] });
 		fauxProviders.push(faux);
 		let initialSystemPrompt = "";
-		let initialToolNames: string[] = [];
 		let resumedContext = "";
 		faux.setResponses([
 			(context) => {
 				initialSystemPrompt = context.systemPrompt ?? "";
-				initialToolNames = context.tools?.map((candidate) => candidate.name) ?? [];
 				return fauxAssistantMessage([fauxText("AGENT-TOOL-OK")]);
 			},
 			(context) => {
@@ -407,7 +405,6 @@ Answer the task.
 			expect(agentId).toBeTruthy();
 			expect(result.details).toMatchObject({ agentId, subagentType: "tool-test", status: "completed" });
 			expect(initialSystemPrompt).toContain("Answer the task.");
-			expect(initialToolNames).toContain("escalate_to_parent");
 			expect(initialSystemPrompt).toContain("<invocation_instructions>");
 			expect(initialSystemPrompt).toContain("Use the invocation-specific answer format.");
 			expect(initialSystemPrompt.indexOf("Use the invocation-specific answer format.")).toBeGreaterThan(
@@ -745,13 +742,7 @@ RELOADED ROLE MUST NOT RUN.
 		temporaryDirectories.push(cwd);
 		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-managed", contextWindow: 200_000 }] });
 		fauxProviders.push(faux);
-		let managedToolNames: string[] = [];
-		faux.setResponses([
-			(context) => {
-				managedToolNames = context.tools?.map((candidate) => candidate.name) ?? [];
-				return fauxAssistantMessage([fauxText("MANAGED-OK")]);
-			},
-		]);
+		faux.setResponses([() => fauxAssistantMessage([fauxText("MANAGED-OK")])]);
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
 		const tools = new Map<string, any>();
@@ -797,7 +788,6 @@ RELOADED ROLE MUST NOT RUN.
 				},
 			);
 			expect(record.result).toBe("MANAGED-OK");
-			expect(managedToolNames).not.toContain("escalate_to_parent");
 			expect(record.internalOwner).toBe("managed:managed-test");
 			expect(record.session).toBeUndefined();
 			const resume = await tools.get("agent").execute(

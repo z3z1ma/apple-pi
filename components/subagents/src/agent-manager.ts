@@ -13,7 +13,6 @@ import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
-import { createParentEscalationTool, type ParentEscalationHandler } from "./escalation.js";
 import { persistAgentOutput } from "./output-file.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import type {
@@ -114,8 +113,6 @@ export interface SpawnOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
-	/** Direct agent children only: asynchronously alert the owning root session. */
-	onParentEscalation?: ParentEscalationHandler;
 	/** Disable standard child extensions for a narrowly owned internal session. */
 	loadStandardChildExtensions?: boolean;
 	/** Capability owner; internal records cannot be resumed or steered through public tools. */
@@ -374,9 +371,6 @@ export class AgentManager {
 		};
 		record.detachCallerSignal = detach;
 
-		const parentEscalationTools = options.onParentEscalation
-			? [createParentEscalationTool(id, options.onParentEscalation)]
-			: [];
 		const promise = runAgent(ctx, type, prompt, {
 			pi,
 			agentId: id,
@@ -388,7 +382,7 @@ export class AgentManager {
 			agentConfig: options.agentConfig,
 			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
-			customTools: [...parentEscalationTools, ...(options.customTools ?? [])],
+			customTools: options.customTools,
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
@@ -460,7 +454,7 @@ export class AgentManager {
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
-				if (!options.isBackground && record.isBackground !== true) {
+				if (!options.isBackground) {
 					record.resultConsumed = true;
 					this.notifyComplete(record);
 				} else {
@@ -486,7 +480,7 @@ export class AgentManager {
 
 				// Fire onComplete for foreground agents too — lifecycle symmetry.
 				// Mark resultConsumed so the callback skips notifications (result returned inline).
-				if (!options.isBackground && record.isBackground !== true) {
+				if (!options.isBackground) {
 					record.resultConsumed = true;
 					this.notifyComplete(record);
 				} else {
@@ -626,9 +620,7 @@ export class AgentManager {
 			return record;
 		}
 
-		// Foreground resume normally returns inline, but may be detached if the
-		// child escalates while the caller is waiting. Its settle path therefore
-		// consults the live record shape rather than assuming it stayed foreground.
+		// Foreground resume returns the completed result inline.
 		record.isBackground = false;
 		record.resultConsumed = false;
 		record.outputPath = options?.outputPath;
@@ -662,14 +654,8 @@ export class AgentManager {
 			detach();
 			this.abortOwnedChildren(id);
 			this.endInvocation(record, invocation);
-			if (record.isBackground !== true) {
-				record.resultConsumed = true;
-				this.notifyComplete(record);
-				return;
-			}
-			this.releaseCapacity(record);
+			record.resultConsumed = true;
 			this.notifyComplete(record);
-			this.drainQueue();
 		};
 		const promise = resumeAgent(record.session, prompt, {
 			maxTurns: record.maxTurns,
@@ -841,21 +827,6 @@ export class AgentManager {
 			if (!record.pendingSteers) record.pendingSteers = [];
 			record.pendingSteers.push(message);
 		}
-		return true;
-	}
-
-	/** Detach an in-flight foreground agent call after it escalates so its run can continue in the background. */
-	detachForeground(id: string): boolean {
-		const record = this.agents.get(id);
-		if (record?.status !== "running" || record.isBackground !== false) return false;
-		// A live foreground run cannot be queued after detachment. Refuse the
-		// transition when no background capacity is available.
-		if (this.runningBackground >= this.maxConcurrent) return false;
-		record.detachCallerSignal?.();
-		record.isBackground = true;
-		// Detached foreground work now owns capacity until this invocation settles.
-		this.acquireCapacity(record);
-		record.resultConsumed = false;
 		return true;
 	}
 

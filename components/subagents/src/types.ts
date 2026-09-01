@@ -86,7 +86,7 @@ export interface AgentRecord {
 	retainUntilSessionEnd?: boolean;
 	/** Controller-owned termination attribution; absent for ordinary successful agents. */
 	terminationCause?: AgentTerminationCause;
-	/** Internal cleanup for a foreground caller signal when the run settles or becomes detached. */
+	/** Internal cleanup for a foreground caller signal when the run settles. */
 	detachCallerSignal?: () => void;
 	/** Immutable identity for the currently active invocation; retained through abort until it settles. */
 	activeInvocation?: symbol;

@@ -52,7 +52,7 @@ These handle continuity at different timescales without turning everything into 
 These give the agent more leverage when a task actually benefits from composition or another context.
 
 - [Pi Exec](docs/exec.md) — bounded JavaScript guest for programmatic tool composition, live-session state snapshots, and reusable `.pi/programs`
-- [Subagents](docs/subagents.md) — typed specialist lanes, background runs, urgent child-to-root escalation, `/agents`, and FleetView
+- [Subagents](docs/subagents.md) — typed specialist lanes, foreground and background runs, `/agents`, and FleetView
 - [MCP](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
 
 ### Terminal and provider edges
