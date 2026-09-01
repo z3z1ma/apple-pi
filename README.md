@@ -62,7 +62,7 @@ These are the smaller integrations that make the whole setup feel like one harne
 - [Notify](docs/notify.md) — native macOS completion notifications (`/notify-setup`, `/notify-test`) with Ghostty/tmux click-to-focus
 - [Tmux sessions](docs/tmux-sessions.md) — publishes per-session `busy`/`idle`/`waiting` status to disk (`/pi-sessions`) for the bundled picker, launcher, and bell forwarding
 - [Codex fast mode](docs/codex-fast.md) — `/fast` toggles priority service tier mid-run across root, subagent, and `pi_exec` model calls
-- [Home search guard](docs/home-search-guard.md) — blocks agent grep, find, glob, and shell search commands rooted at `$HOME`
+- [Search root guard](docs/home-search-guard.md) — forces agent searches below protected filesystem, home, and workspace collection roots
 - [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
 - [xAI context compaction](docs/context.md) — server-side `/responses/compact` plus opaque-item injection on later Grok Responses requests
 

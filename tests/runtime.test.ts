@@ -1299,24 +1299,26 @@ describe("pi_exec tool", () => {
 		}
 	});
 
-	it("applies the home search guard to direct guest tools", async () => {
+	it("applies the search root guard to direct guest tools", async () => {
 		const { tool } = register();
 		const ctx = {
 			cwd: homedir(),
-			sessionManager: { getSessionId: () => "home-search", getSessionFile: () => undefined },
+			sessionManager: { getSessionId: () => "protected-search", getSessionFile: () => undefined },
 		};
-		await expect(
-			tool.execute(
-				"home-find",
-				{ code: `return pi.find({ pattern: "*.ts", path: ${JSON.stringify(homedir())} });` },
-				undefined,
-				undefined,
-				ctx,
-			),
-		).rejects.toThrow(/refusing to search from home directory/);
+		for (const path of [homedir(), "/"]) {
+			await expect(
+				tool.execute(
+					"protected-find",
+					{ code: `return pi.find({ pattern: "*.ts", path: ${JSON.stringify(path)} });` },
+					undefined,
+					undefined,
+					ctx,
+				),
+			).rejects.toThrow(/refusing to search from protected root/);
+		}
 
 		const bash = await tool.execute(
-			"home-rg",
+			"protected-rg",
 			{ code: `return pi.bash({ command: "rg needle ~" });` },
 			undefined,
 			undefined,
@@ -1324,7 +1326,7 @@ describe("pi_exec tool", () => {
 		);
 		expect(JSON.parse(bash.content[0].text)).toEqual({
 			ok: false,
-			output: expect.stringContaining("refusing to search from home directory"),
+			output: expect.stringContaining("refusing to search from protected root"),
 		});
 	});
 

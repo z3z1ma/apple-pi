@@ -14,12 +14,14 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
+import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
 import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
 
 export const PAIR_AGENT_RETRIES = 1;
+export const PAIR_SESSION_EXTENSION_PATHS = [HOME_SEARCH_GUARD_EXTENSION_PATH] as const;
 
 export type PairSeedSource = {
 	entries(): readonly unknown[];
@@ -105,6 +107,7 @@ export async function createPairSession(opts: {
 		agentDir,
 		settingsManager,
 		noExtensions: true,
+		additionalExtensionPaths: [...PAIR_SESSION_EXTENSION_PATHS],
 		noSkills: true,
 		noPromptTemplates: true,
 		noThemes: true,
