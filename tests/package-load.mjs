@@ -267,7 +267,15 @@ try {
 	assert.match(distillTemplate.content, /AGENTS\.md/);
 	assert.match(distillTemplate.content, /do not create or modify artifacts/i);
 	const explicitWorkflowSkills = [];
-	const engineeringSkills = ["prototype", "diagnosing-bugs", "research", "tdd", "domain-modeling", "codebase-design"];
+	const engineeringSkills = [
+		"prototype",
+		"diagnosing-bugs",
+		"research",
+		"tdd",
+		"resolving-merge-conflicts",
+		"domain-modeling",
+		"codebase-design",
+	];
 	const fundamentalSkills = ["code-review", "ralph", "pi-exec", "skill-authoring", "llm-wiki"];
 	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills];
 	const loadedSkills = loadSkills({

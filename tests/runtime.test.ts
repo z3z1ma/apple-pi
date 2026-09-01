@@ -780,6 +780,7 @@ describe("pi_exec skills", () => {
 			expect(names).toContain("code-review");
 			expect(names).not.toContain("review");
 			expect(names).toContain("tdd");
+			expect(names).toContain("resolving-merge-conflicts");
 			expect(names).toContain("ralph");
 			expect(names).not.toContain("implement");
 			expect(() => readSkillBody("implement", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
@@ -788,6 +789,8 @@ describe("pi_exec skills", () => {
 			expect(body).not.toMatch(/^---/);
 			const tddBody = readSkillBody("tdd", { cwd: dir, includeDefaults: false });
 			expect(tddBody.startsWith("# Test-Driven Development")).toBe(true);
+			const conflictBody = readSkillBody("resolving-merge-conflicts", { cwd: dir, includeDefaults: false });
+			expect(conflictBody.startsWith("# Resolving Merge Conflicts")).toBe(true);
 			expect(() => readSkillBody("", { cwd: dir, includeDefaults: false })).toThrow(/requires a skill name/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
