@@ -81,6 +81,7 @@ These remain human-invoked so the model does not start them implicitly.
 - [`/skill:interrogate-to-design`](skills/interrogate-to-design) — interrogate dependent design decisions while curating reusable wiki knowledge and approved ADRs
 - [`/skill:to-spec`](skills/to-spec) — synthesize settled multi-session work into a task-local specification after confirming test seams
 - [`/skill:to-tickets`](skills/to-tickets) — decompose approved work into task-local tracer-bullet tickets with explicit blocking edges
+- [`/skill:implement`](skills/implement) — build settled tickets or small specifications through TDD, feedback, review, and an authorized commit
 
 ### Engineering disciplines
 

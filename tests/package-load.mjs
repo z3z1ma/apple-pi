@@ -278,7 +278,7 @@ try {
 	assert.match(interrogateTemplate.content, /design tree/);
 	assert.match(interrogateTemplate.content, /in-scope frontier is empty/);
 	assert.match(interrogateTemplate.content, /do not create or modify files/i);
-	const explicitWorkflowSkills = ["interrogate-to-design", "to-spec", "to-tickets"];
+	const explicitWorkflowSkills = ["implement", "interrogate-to-design", "to-spec", "to-tickets"];
 	const engineeringSkills = [
 		"prototype",
 		"diagnosing-bugs",

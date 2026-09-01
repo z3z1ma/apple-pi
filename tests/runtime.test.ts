@@ -783,9 +783,11 @@ describe("pi_exec skills", () => {
 			expect(names).toContain("resolving-merge-conflicts");
 			expect(names).toContain("ralph");
 			expect(names).not.toContain("implement");
+			expect(names).not.toContain("implement");
 			expect(names).not.toContain("interrogate-to-design");
 			expect(names).not.toContain("to-spec");
 			expect(names).not.toContain("to-tickets");
+			expect(() => readSkillBody("implement", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
 			expect(() => readSkillBody("implement", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
 			expect(() => readSkillBody("interrogate-to-design", { cwd: dir, includeDefaults: false })).toThrow(
 				/Unknown skill/,
