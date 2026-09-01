@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
@@ -10,7 +10,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { COMPACTION_SAFETY_EXTENSION_PATH } from "../extensions/compaction-safety.js";
@@ -23,10 +23,18 @@ type ProviderCall = {
 
 type Scenario = "success" | "failure" | "cancel";
 
+type HarnessOptions = {
+	keepRecentTokens?: number;
+	loadOverflowFallback?: boolean;
+	pauseFailedCompaction?: boolean;
+	sessionId?: string;
+};
+
 let harnessSequence = 0;
 
-async function createHarness(scenario: Scenario, keepRecentTokens = 7_600, loadOverflowFallback = false) {
+async function createHarness(scenario: Scenario, options: HarnessOptions = {}) {
 	const sequence = ++harnessSequence;
+	const keepRecentTokens = options.keepRecentTokens ?? 7_600;
 	const model = {
 		id: `compaction-model-${sequence}`,
 		name: "Compaction model",
@@ -113,11 +121,13 @@ export default function (pi) {
 }
 `,
 	);
+	const failureReadyPath = join(cwd, "compaction-failure-ready");
+	const failureReleasePath = join(cwd, "compaction-failure-release");
 	const scenarioExtension = join(cwd, "scenario.ts");
-	writeFileSync(
-		scenarioExtension,
-		scenario === "success"
-			? `export default function (pi) {
+	let scenarioSource = `export default function () {}
+`;
+	if (scenario === "success") {
+		scenarioSource = `export default function (pi) {
 	pi.on("session_before_compact", (event) => ({
 		compaction: {
 			summary: "locally compacted history",
@@ -126,21 +136,32 @@ export default function (pi) {
 		},
 	}));
 }
-`
-			: scenario === "cancel"
-				? `export default function (pi) {
+`;
+	} else if (scenario === "cancel") {
+		scenarioSource = `export default function (pi) {
 	pi.on("session_before_compact", () => ({ cancel: true }));
 }
-`
-				: `export default function () {}
-`,
-	);
+`;
+	} else if (options.pauseFailedCompaction) {
+		scenarioSource = `import { existsSync, writeFileSync } from "node:fs";
+
+export default function (pi) {
+	pi.on("session_compact_failed", async () => {
+		writeFileSync(${JSON.stringify(failureReadyPath)}, "");
+		while (!existsSync(${JSON.stringify(failureReleasePath)})) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+	});
+}
+`;
+	}
+	writeFileSync(scenarioExtension, scenarioSource);
 
 	const loader = new DefaultResourceLoader({
 		cwd,
 		agentDir: join(cwd, "agent"),
 		additionalExtensionPaths: [
-			loadOverflowFallback ? AUTO_COMPACT_EXTENSION_PATH : COMPACTION_SAFETY_EXTENSION_PATH,
+			options.loadOverflowFallback ? AUTO_COMPACT_EXTENSION_PATH : COMPACTION_SAFETY_EXTENSION_PATH,
 			providerPath,
 			scenarioExtension,
 		],
@@ -184,7 +205,11 @@ export default function (pi) {
 		stream: (...args: Parameters<typeof activeStream>) => activeStream(...args),
 		streamSimple: (...args: Parameters<typeof activeStream>) => activeStream(...args),
 	};
-	const sessionManager = SessionManager.create(cwd, join(cwd, "sessions"));
+	const sessionManager = SessionManager.create(
+		cwd,
+		join(cwd, "sessions"),
+		options.sessionId ? { id: options.sessionId } : undefined,
+	);
 	for (let index = 0; index < 2; index += 1) {
 		sessionManager.appendMessage({
 			role: "user",
@@ -221,6 +246,8 @@ export default function (pi) {
 	const session = await bindSession(sessionManager);
 	return {
 		cwd,
+		failureReadyPath,
+		failureReleasePath,
 		readCalls: () =>
 			readFileSync(callsPath, "utf8")
 				.trim()
@@ -290,6 +317,41 @@ it("aborts the same-run continuation when native threshold compaction fails", as
 	}
 });
 
+it("isolates concurrent compaction failures for session managers with the same explicit id", async () => {
+	const sharedSessionId = "duplicate-session-id";
+	const failed = await createHarness("failure", {
+		pauseFailedCompaction: true,
+		sessionId: sharedSessionId,
+	});
+	const successful = await createHarness("success", { sessionId: sharedSessionId });
+	let failedPrompt: Promise<void> | undefined;
+	try {
+		failedPrompt = failed.session.prompt("Read the manifest and finish.");
+		await vi.waitFor(() => expect(existsSync(failed.failureReadyPath)).toBe(true));
+
+		await successful.session.prompt("Read the manifest and finish.");
+		expect(successful.readCalls()).toEqual([
+			{ source: "custom", kind: "agent", customTypes: [] },
+			{ source: "custom", kind: "agent", customTypes: [] },
+		]);
+		expect(JSON.stringify(successful.session.messages.at(-1))).toContain("completed after compaction");
+
+		writeFileSync(failed.failureReleasePath, "");
+		await failedPrompt;
+		expect(failed.readCalls()).toEqual([
+			{ source: "custom", kind: "agent", customTypes: [] },
+			{ source: "custom", kind: "summary", customTypes: [] },
+		]);
+	} finally {
+		if (existsSync(failed.cwd)) writeFileSync(failed.failureReleasePath, "");
+		await failedPrompt?.catch(() => undefined);
+		failed.session.dispose();
+		successful.session.dispose();
+		rmSync(failed.cwd, { recursive: true, force: true });
+		rmSync(successful.cwd, { recursive: true, force: true });
+	}
+});
+
 it("aborts the same-run continuation when native threshold compaction is cancelled", async () => {
 	const { cwd, readCalls, session } = await createHarness("cancel");
 	const events: unknown[] = [];
@@ -308,7 +370,10 @@ it("aborts the same-run continuation when native threshold compaction is cancell
 });
 
 it("adds a hidden cut point when a tool result exceeds Pi's keep-recent budget", async () => {
-	const { cwd, readCalls, reload, session, sessionManager } = await createHarness("success", 1, true);
+	const { cwd, readCalls, reload, session, sessionManager } = await createHarness("success", {
+		keepRecentTokens: 1,
+		loadOverflowFallback: true,
+	});
 	const events: unknown[] = [];
 	session.subscribe((event) => events.push(JSON.parse(JSON.stringify(event))));
 	let reloaded: Awaited<ReturnType<typeof reload>> | undefined;

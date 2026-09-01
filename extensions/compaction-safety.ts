@@ -6,16 +6,16 @@ export const COMPACTION_SAFETY_EXTENSION_PATH = fileURLToPath(import.meta.url);
 const AUTO_COMPACTION_FAILURE_GATE = Symbol.for("apple-pi.auto-compaction-failure-gate");
 const AUTO_COMPACTION_FAILURE_STATE = Symbol.for("apple-pi.auto-compaction-failure-state");
 
-type FailureState = { sessionIds: Set<string> };
+type FailureState = { sessions: WeakSet<object> };
 
 function failureState(): FailureState {
 	const host = globalThis as typeof globalThis & { [AUTO_COMPACTION_FAILURE_STATE]?: FailureState };
-	if (!host[AUTO_COMPACTION_FAILURE_STATE]) host[AUTO_COMPACTION_FAILURE_STATE] = { sessionIds: new Set() };
+	if (!host[AUTO_COMPACTION_FAILURE_STATE]) host[AUTO_COMPACTION_FAILURE_STATE] = { sessions: new WeakSet() };
 	return host[AUTO_COMPACTION_FAILURE_STATE];
 }
 
 type AgentSessionInternals = {
-	sessionManager: { getSessionId(): string };
+	sessionManager: object;
 	_runAutoCompaction(reason: string, willRetry: boolean): Promise<boolean>;
 };
 
@@ -34,7 +34,7 @@ function installAutomaticFailureGate(): void {
 	const original = descriptor.value;
 	const patched = async function (this: AgentSessionInternals, reason: string, willRetry: boolean): Promise<boolean> {
 		const shouldContinue = await original.call(this, reason, willRetry);
-		if (!failureState().sessionIds.delete(this.sessionManager.getSessionId())) return shouldContinue;
+		if (!failureState().sessions.delete(this.sessionManager)) return shouldContinue;
 
 		const error = new Error("Automatic compaction failed or was cancelled");
 		error.name = "AbortError";
@@ -50,7 +50,7 @@ export default function compactionSafety(pi: ExtensionAPI): void {
 	installAutomaticFailureGate();
 	pi.on("session_compact_failed", (event, ctx) => {
 		if (event.reason === "manual") return;
-		failureState().sessionIds.add(ctx.sessionManager.getSessionId());
+		failureState().sessions.add(ctx.sessionManager);
 		ctx.abort();
 	});
 }

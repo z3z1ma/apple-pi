@@ -49,10 +49,10 @@ Pi 0.84.4 adds a native pre-next-response compaction check. After tool results e
 
 Two edge paths need Apple Pi policy:
 
-- When native compaction fails or is cancelled after it starts, `_compactBeforeNextAssistantResponse()` otherwise continues with unchanged messages. A public `session_compact_failed` handler can abort the active Agent signal before the provider boundary and clear any armed fallback state.
+- When native compaction fails or is cancelled after it starts, `_compactBeforeNextAssistantResponse()` otherwise continues with unchanged messages. A public `session_compact_failed` handler can abort the active Agent signal and mark that session manager for the pre-dispatch compatibility gate.
 - When one tool-result batch reaches `keepRecentTokens`, `findCutPoint()` can leave the first cut point and `prepareCompaction()` returns `undefined`. No compaction or failure event occurs. Apple Pi can append an empty hidden custom message after the result; that durable valid cut point lets native threshold compaction proceed without replacing the selected provider or persisting a synthetic assistant.
 
-Keep `components/notebook/src/hooks/overflow-guard.ts`, but treat it as an exceptional fallback rather than the normal compaction owner. Native success clears its arm through `session_compact`; native failure/cancellation clears the arm and aborts through `session_compact_failed` so it cannot start a second compaction attempt.
+Keep `components/notebook/src/hooks/overflow-guard.ts`, but treat it as an exceptional fallback rather than the normal compaction owner. Its hidden marker gives Pi a valid cut point for the oversized-result case; native compaction remains the only compaction attempt.
 
 Acceptance coverage should prove four paths independently:
 
@@ -67,7 +67,7 @@ Preserve these separate responsibilities:
 - `components/notebook/src/hooks/context-packet.ts` — deterministic notebook restoration after any persisted compaction;
 - `components/xai-context-compaction/` — xAI `/responses/compact`, opaque-item persistence/replay, and bounded text fallback.
 
-Pair passive mode suppresses notebook maintenance and exceptional fallback arming, not Pi's native compaction or automatic-failure safety. Users who want to disable host auto-compaction use Pi's native `compaction.enabled` setting.
+Pair passive mode suppresses notebook maintenance and exceptional hidden cut-point insertion, not Pi's native compaction or automatic-failure safety. Users who want to disable host auto-compaction use Pi's native `compaction.enabled` setting.
 
 ### P1 — Generalize tmux waiting status with UI prompt events
 
