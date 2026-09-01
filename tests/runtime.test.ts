@@ -777,10 +777,13 @@ describe("pi_exec skills", () => {
 		const dir = mkdtempSync(join(tmpdir(), "apple-pi-skills-"));
 		try {
 			const names = listSkills({ cwd: dir, includeDefaults: false }).map((skill) => skill.name);
-			expect(names).toContain("review");
+			expect(names).toContain("code-review");
+			expect(names).not.toContain("review");
 			expect(names).toContain("ralph");
-			const body = readSkillBody("review", { cwd: dir, includeDefaults: false });
-			expect(body.startsWith("# Review")).toBe(true);
+			expect(names).not.toContain("implement");
+			expect(() => readSkillBody("implement", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
+			const body = readSkillBody("code-review", { cwd: dir, includeDefaults: false });
+			expect(body.startsWith("# Code Review")).toBe(true);
 			expect(body).not.toMatch(/^---/);
 			expect(() => readSkillBody("", { cwd: dir, includeDefaults: false })).toThrow(/requires a skill name/);
 		} finally {
@@ -798,9 +801,17 @@ describe("pi_exec skills", () => {
 				"---\nname: demo\ndescription: Demo skill for catalog tests.\n---\n\n# Demo\n\nBody only.\n",
 				"utf8",
 			);
+			const hiddenRoot = join(dir, "skills", "hidden");
+			mkdirSync(hiddenRoot, { recursive: true });
+			writeFileSync(
+				join(hiddenRoot, "SKILL.md"),
+				"---\nname: hidden\ndescription: Human-only fixture.\ndisable-model-invocation: true\n---\n\n# Hidden\n",
+				"utf8",
+			);
 			const options = { cwd: dir, skillPaths: [join(dir, "skills")], includeDefaults: false };
 			expect(listSkills(options)).toEqual([{ name: "demo", description: "Demo skill for catalog tests." }]);
 			expect(readSkillBody("demo", options)).toBe("# Demo\n\nBody only.");
+			expect(() => readSkillBody("hidden", options)).toThrow(/Unknown skill/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -1769,10 +1780,10 @@ describe("pi_exec tool", () => {
 				{
 					code: `
 const listed = await skills.list();
-const body = await skills.body({ name: "review" });
+const body = await skills.body({ name: "code-review" });
 return {
   names: listed.map((skill) => skill.name),
-  starts: body.slice(0, 8),
+  starts: body.slice(0, 13),
 };
 `,
 				},
@@ -1781,8 +1792,9 @@ return {
 				{ cwd: dir },
 			);
 			const value = JSON.parse(result.content[0].text);
-			expect(value.names).toContain("review");
-			expect(value.starts).toBe("# Review");
+			expect(value.names).toContain("code-review");
+			expect(value.names).not.toContain("review");
+			expect(value.starts).toBe("# Code Review");
 			expect(result.details.trace.operations.map((operation: any) => operation.ref)).toEqual([
 				"skills.list",
 				"skills.body",

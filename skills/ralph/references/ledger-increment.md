@@ -30,4 +30,4 @@ The durable output of an increment is the repository and honest ledger updates. 
 
 ## Boundaries
 
-You may read and write the repository through the tools granted by the Ralph program. Leave implementation changes uncommitted. Do not commit, push, reset, hide changes, or claim that a review was performed. Review remains a caller-owned `/skill:review` step for the default loop.
+You may read and write the repository through the tools granted by the Ralph program. Leave implementation changes uncommitted. Do not commit, push, reset, hide changes, or claim that a review was performed. Code review remains a caller-owned `/skill:code-review` step after the default loop.

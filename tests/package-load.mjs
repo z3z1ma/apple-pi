@@ -266,23 +266,10 @@ try {
 	assert.match(expandPromptTemplate("/distill debugging workflow", promptTemplates), /focused on: debugging workflow/);
 	assert.match(distillTemplate.content, /AGENTS\.md/);
 	assert.match(distillTemplate.content, /do not create or modify artifacts/i);
-	const ledgerLifecycleSkills = [
-		"task-shaping",
-		"implementation-planning",
-		"plan-execution",
-		"work-item-orchestration",
-		"parallel-orchestration",
-		"root-cause-debugging",
-		"test-first-development",
-		"review-commissioning",
-		"review-reconciliation",
-		"completion-verification",
-		"workspace-isolation",
-		"task-closure",
-		"skill-authoring",
-	];
-	const piUtilitySkills = ["pi-exec", "review", "ralph", "llm-wiki"];
-	const packagedSkills = [...ledgerLifecycleSkills, ...piUtilitySkills];
+	const explicitWorkflowSkills = [];
+	const engineeringSkills = ["prototype", "diagnosing-bugs", "research", "domain-modeling", "codebase-design"];
+	const fundamentalSkills = ["code-review", "ralph", "pi-exec", "skill-authoring", "llm-wiki"];
+	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
 		skillPaths: manifest.pi.skills,
@@ -291,21 +278,17 @@ try {
 	});
 	assert.deepEqual(loadedSkills.diagnostics, []);
 	assert.deepEqual(loadedSkills.skills.map((skill) => skill.name).sort(), packagedSkills.toSorted());
+	assert(!loadedSkills.skills.some((skill) => skill.name === "review"), "legacy review skill must be absent");
 	for (const skill of loadedSkills.skills) {
 		assert.equal(skill.filePath.split("/").at(-2), skill.name, `skill directory/name mismatch: ${skill.filePath}`);
+		assert.equal(
+			skill.disableModelInvocation,
+			explicitWorkflowSkills.includes(skill.name),
+			`incorrect model-invocation policy: ${skill.name}`,
+		);
 	}
 	for (const skill of packagedSkills) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
-	}
-	for (const visualPath of [
-		"skills/task-shaping/visual-companion.md",
-		"skills/task-shaping/scripts/frame-template.html",
-		"skills/task-shaping/scripts/helper.js",
-		"skills/task-shaping/scripts/server.cjs",
-		"skills/task-shaping/scripts/start-server.sh",
-		"skills/task-shaping/scripts/stop-server.sh",
-	]) {
-		assert(existsSync(visualPath), `missing ledger brainstorming support: ${visualPath}`);
 	}
 	const askUserTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
@@ -353,20 +336,24 @@ try {
 	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
 	assert.match(resultTool.definition.description, /use a very large value/);
 	assert.match(resultTool.definition.description, /leaves them working in the background/);
-	assert(existsSync("skills/review/references/plan-review-verify.js"), "missing review plan-review-verify reference");
-	assert(existsSync("skills/review/references/targeted-review.js"), "missing review targeted-review reference");
-	assert(existsSync("skills/review/references/multi-lens-review.js"), "missing review multi-lens reference");
+	assert(existsSync("skills/code-review/references/plan-review-verify.js"), "missing code-review planned reference");
+	assert(existsSync("skills/code-review/references/multi-lens-review.js"), "missing code-review multi-lens reference");
+	assert(existsSync("skills/code-review/references/residual-review-loop.js"), "missing code-review residual reference");
+	assert(existsSync("skills/code-review/references/planner.md"), "missing code-review planner reference");
+	assert(existsSync("skills/code-review/references/reviewer.md"), "missing code-review reviewer reference");
+	assert(existsSync("skills/code-review/references/verifier.md"), "missing code-review verifier reference");
+	assert(!existsSync("skills/review"), "legacy review skill directory must be absent");
+	assert(!existsSync("skills/code-review/references/targeted-review.js"), "targeted review graph should be removed");
 	assert(
-		existsSync("skills/review/references/security-baseline-review.js"),
-		"missing review security-baseline reference",
+		!existsSync("skills/code-review/references/security-baseline-review.js"),
+		"security review should use the fixed multi-lens graph",
 	);
-	assert(existsSync("skills/review/references/residual-review-loop.js"), "missing review residual-loop reference");
-	assert(existsSync("skills/review/references/planner.md"), "missing review planner reference");
-	assert(existsSync("skills/review/references/reviewer.md"), "missing review reviewer reference");
-	assert(existsSync("skills/review/references/verifier.md"), "missing review verifier reference");
 	assert(existsSync("skills/ralph/references/ralph-simple.js"), "missing general Ralph reference");
 	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing ledger Ralph reference");
-	assert(existsSync("skills/ralph/references/ralph-ledger-review.js"), "missing reviewed ledger Ralph reference");
+	assert(
+		!existsSync("skills/ralph/references/ralph-ledger-review.js"),
+		"duplicated reviewed Ralph graph must be absent",
+	);
 	for (const procedure of ["initialize", "ingest", "query", "maintain"]) {
 		assert(existsSync(`skills/llm-wiki/references/${procedure}.md`), `missing llm-wiki ${procedure} procedure`);
 	}

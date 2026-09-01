@@ -13,9 +13,8 @@ Ralph can operate with or without ledger. Use the smallest program matching the 
 
 - [`references/ralph-simple.js`](references/ralph-simple.js) runs bounded fresh increments over any caller-owned goal. It has no ledger dependency.
 - [`references/ralph-ledger.js`](references/ralph-ledger.js) runs bounded increments over a prepared ledger task and stops when that task becomes `done` or `blocked`.
-- [`references/ralph-ledger-review.js`](references/ralph-ledger-review.js) is an advanced, explicitly opt-in ledger composition that couples each increment to an inlined Review spine.
 
-Adapt [`references/simple-increment.md`](references/simple-increment.md) for the general program or [`references/ledger-increment.md`](references/ledger-increment.md) for either ledger program. Inline the adapted prompt in the chosen JavaScript body before calling `pi_exec`; do not dynamically load these prompts with `skills.body`.
+Adapt [`references/simple-increment.md`](references/simple-increment.md) for the general program or [`references/ledger-increment.md`](references/ledger-increment.md) for the ledger program. Inline the adapted prompt in the chosen JavaScript body before calling `pi_exec`; do not dynamically load these prompts with `skills.body`.
 
 ## Shared inputs and outputs
 
@@ -53,7 +52,7 @@ Each iteration starts only after the previous one settles:
 - **Role:** an untyped fresh worker using the adapted `RALPH` system prompt; do not select a catalog agent type.
 - **Profile:** `coding`.
 - **Tools:** `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`.
-- **Context:** only the caller-supplied stack and, for reviewed runs, bounded review feedback.
+- **Context:** only the caller-supplied stack.
 
 Workers inspect current repository state, choose one coherent increment, implement it, run relevant checks, and stop. They never commit, push, merge, deploy, publish, reset, or decide final integration.
 
@@ -104,6 +103,6 @@ Adapt `ledger-increment.md` with the task terminology, acceptance criteria, rele
 
 Default Ralph supplies bounded fresh-context implementation increments. After a batch, the caller inspects the repository state, runs the relevant checks, handles ordinary fixes in the root session, and decides whether another batch is useful. ledger progress or evidence is persisted only when it has continuity value for a later session.
 
-Caller validation is the default. An active plan may explicitly add `Review: one-pass — <risk>` for one complete review after the coherent change or `Review: staged — <risk>` for a named high-cost risk. Nits conclude in the root session.
+Caller validation is the default. Run the separate `code-review` skill after a coherent batch when the operator requests independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing workers. Nits conclude in the root session.
 
-`ralph-ledger-review.js` remains an explicitly opt-in advanced composition for an operator who specifically requests increment-then-review coupling. Ordinary Ralph and ledger execution use `implementation-planning`, `plan-execution`, and `task-closure` only when those phases are actually needed. `ledger_add` creates tasks and `ledger_close` archives them.
+Ordinary Ralph uses the prepared goal or task artifacts directly. `ledger_add` creates task bundles and `ledger_close` archives them when the operator authorizes closure.

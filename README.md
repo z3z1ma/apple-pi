@@ -72,28 +72,21 @@ The Pi package manifest in [`package.json`](package.json) exports [`extensions`]
 
 Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs. They are procedures the agent can load when the situation calls for them, not a pipeline every request has to follow.
 
-### Workflow skills
+### Engineering disciplines
 
-These cover the path from figuring out what the work means through implementation, verification, and integration.
+These are reusable techniques the model can load when the situation calls for them.
 
-- [`/skill:task-shaping`](skills/task-shaping) — collaborate on genuinely unresolved product or architecture choices
-- [`/skill:implementation-planning`](skills/implementation-planning) — plan settled multi-step work when sequencing or ownership adds value
-- [`/skill:plan-execution`](skills/plan-execution) — execute an authorized plan directly in the root session
-- [`/skill:work-item-orchestration`](skills/work-item-orchestration) — delegate substantial independent Work Items when the cost is justified
-- [`/skill:parallel-orchestration`](skills/parallel-orchestration) — parallelize substantial non-overlapping domains
-- [`/skill:root-cause-debugging`](skills/root-cause-debugging) — find and fix a failure from the cheapest discriminating evidence
-- [`/skill:test-first-development`](skills/test-first-development) — use focused test-first checks where they improve feedback
-- [`/skill:review-commissioning`](skills/review-commissioning) — add one risk-justified independent reviewer during ongoing work
-- [`/skill:review-reconciliation`](skills/review-reconciliation) — validate feedback once and handle fixes in the root
-- [`/skill:completion-verification`](skills/completion-verification) — match fresh verification breadth to the claim
-- [`/skill:workspace-isolation`](skills/workspace-isolation) — isolate work when overlap or destructive experimentation warrants it
-- [`/skill:task-closure`](skills/task-closure) — verify, archive, and follow the operator's integration direction
+- [`/skill:prototype`](skills/prototype) — build a throwaway experiment that answers one design question
+- [`/skill:diagnosing-bugs`](skills/diagnosing-bugs) — tighten the feedback loop for hard bugs and performance regressions
+- [`/skill:research`](skills/research) — investigate externally verifiable questions through high-trust primary sources
+- [`/skill:domain-modeling`](skills/domain-modeling) — sharpen domain language, relationships, invariants, and durable context
+- [`/skill:codebase-design`](skills/codebase-design) — design deep modules, deliberate seams, and high-leverage interfaces
 
-### Review and iteration
+### Review, verification, and execution fundamentals
 
-These provide bounded ways to inspect a change or make progress through fresh-context iterations.
+These Apple Pi procedures preserve evidence, safe integration, and bounded execution without imposing a mandatory lifecycle.
 
-- [`/skill:review`](skills/review) — inspect directly or use the smallest justified independent topology
+- [`/skill:code-review`](skills/code-review) — review repository standards and originating intent in independent evidence-backed axes, with optional Pi Exec fan-out and reduction
 - [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared ledger tasks
 
 ### Harness authoring

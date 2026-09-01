@@ -101,25 +101,36 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Original notice: `Copyright (c) 2026 Takuya Matsuyama` (reproduced verbatim in `components/tmux-sessions/LICENSE`)
 - The bash picker, launcher, popup-in-popup handling, and bell forwarding are adapted from upstream and retargeted from Claude Code to Pi. Pi has no `claude agents --json` equivalent, so status comes from JSON records the apple-pi extension writes to disk (`agents.sh` reads those records and joins them to tmux panes) rather than from an external agent command. Session prefix, tmux options, and command default were renamed to the `pi`/`@pi_*` namespace.
 
-## obra/superpowers → apple-pi workflow and engineering skills
+## mattpocock/skills → engineering workflows and disciplines
+
+- Source: <https://github.com/mattpocock/skills>
+- Imported commit: `6654f6b60cd9d5be8b54c6fafe44346dabeb3b76`
+- Author named by the source package: Matt Pocock
+- Local paths: `skills/prototype/`, `skills/diagnosing-bugs/`, `skills/research/`, `skills/domain-modeling/`, `skills/codebase-design/`, `skills/code-review/SKILL.md`, `skills/code-review/references/smell-baseline.md`
+- License: MIT
+- Original notice: `Copyright (c) 2026 Matt Pocock`
+- apple-pi retains the implemented engineering methods while adapting task artifacts, reusable context, agents, review reconciliation, and Git authority to its own harness. Task artifacts live freely inside the active ledger bundle; reusable LLM-derived documentation lives under `.wiki/`.
+- Source-path accounting: upstream `code-review` is consolidated into Apple Pi's `code-review`; `ask-matt` maps to the person-neutral built-in consultant rather than a skill; `setup-matt-pocock-skills` maps to package installation and loader validation; issue-tracker-oriented `triage` is outside Apple Pi's tracker-free task-bundle model; and `wizard` maps to native skill discovery plus explicit `/skill:` invocation.
+
+## obra/superpowers → retained apple-pi fundamentals
 
 - Source: <https://github.com/obra/superpowers>
 - Imported commit: `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`
 - Author named by the source package: Jesse Vincent
-- Local paths: `skills/task-shaping/`, `skills/implementation-planning/`, `skills/plan-execution/`, `skills/work-item-orchestration/`, `skills/parallel-orchestration/`, `skills/root-cause-debugging/`, `skills/test-first-development/`, `skills/review-commissioning/`, `skills/review-reconciliation/`, `skills/completion-verification/`, `skills/workspace-isolation/`, `skills/task-closure/`, `skills/skill-authoring/`
+- Local paths: `skills/completion-verification/`, `skills/workspace-isolation/`, `skills/task-closure/`, `skills/skill-authoring/`
 - License: MIT
 - Original notice: `Copyright (c) 2025 Jesse Vincent`
-- The listed engineering skills retain the upstream process while translating storage, skill references, operator authority, ledger ownership, and worktree integration to apple-pi. apple-pi retains maintenance responsibility for these adapted paths.
+- These retained skills express Apple Pi's verification, isolation, integration-authority, and skill-authoring fundamentals. apple-pi retains maintenance responsibility for the adapted paths.
 
 ## z3z1ma/10x → ledger foundation
 
 - Source: <https://github.com/z3z1ma/10x>
 - Reviewed and adapted commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
 - Author and copyright holder named by the source: Alexander M. Butler
-- Local paths: `components/shared/src/ledger-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, the lifecycle `skills/*/SKILL.md` files listed in the package catalog, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
+- Local paths: `components/shared/src/ledger-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, `skills/completion-verification/`, `skills/task-closure/`, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Alexander M. Butler`
-- apple-pi adapts 10x's durable-judgment concepts—authority and provenance, shaping/orchestration/execution separation, evidence limits, adversarial review, proportional records, retrospective compounding, and instruction evaluation—into the existing single-task ledger bundle and descriptively named lifecycle skills. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.
+- apple-pi adapts 10x's durable-judgment concepts—authority and provenance, evidence limits, adversarial review, proportional task records, retrospective compounding, and instruction evaluation—into its open-ended task bundles, verification, and closure procedures. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.
 
 ## MIT license applying to the imported works
 
