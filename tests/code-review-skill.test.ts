@@ -69,9 +69,18 @@ describe("code-review skill", () => {
 			"finding as a hypothesis",
 			"attacker and defender",
 			"must not invoke `code-review`",
-			"shared-cause reconciliation",
+			"stable shared-cause reference",
+			"unranked shared-cause index",
+			"without deduplicating, merging, or reranking",
 		]) {
 			expect(source.toLowerCase()).toContain(phrase.toLowerCase());
+		}
+		for (const forbidden of [
+			"shared causes / remediation order",
+			"rank shared remediation groups",
+			"shared remediation group",
+		]) {
+			expect(source.toLowerCase()).not.toContain(forbidden);
 		}
 	});
 

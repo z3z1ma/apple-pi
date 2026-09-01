@@ -128,7 +128,7 @@ Style preferences, speculative defenses, unrelated cleanup, and unsupported smel
 
 Reviewer and reducer output is a set of hypotheses, not proof. The root independently checks every candidate against current source and governing evidence, rejects false positives, and records unresolved material uncertainty honestly.
 
-Run one root-level shared-cause reconciliation across all candidates. When one cause violates both axes, retain both axis-labelled decisions and citations under one shared remediation group so neither judgment disappears. Rank shared remediation groups by severity, then rank findings within each axis; still report the worst issue per axis and never let one passing axis hide the other or replace both with one blended verdict.
+Recognize shared causes across axes without deduplicating, merging, or reranking the findings themselves. A Standards violation and an Intent / Spec violation remain separate decisions, each ranked only inside its axis. Attach the same stable shared-cause reference to affected findings and retain every axis-specific citation. An optional unranked shared-cause index may list linked finding IDs and one non-authoritative correction direction; implementation prioritization is a separate follow-on artifact, not part of the review verdict.
 
 A deep verifier worker improves evidence quality but is not final authority. The root owns the final report, any checks it runs, and all mutation. A review request is report-only unless the operator also requested fixes or authorizes them afterward.
 
@@ -137,10 +137,6 @@ A deep verifier worker improves evidence quality but is not final authority. The
 Use this shape:
 
 ```markdown
-## Shared causes / remediation order
-
-[Cross-axis shared-cause groups, ordered by severity, with every axis label and citation retained. Omit when none exist.]
-
 ## Standards
 
 [Confirmed findings ordered by severity within this axis.]
@@ -162,6 +158,10 @@ Intent source: <issue, path, task, request, conversation, or unavailable>
 
 ### Coverage limits
 ...
+
+## Shared-cause index (unranked, optional)
+
+[Stable shared-cause references with linked Standards and Intent / Spec finding IDs and citations. Do not prioritize or merge the findings here.]
 
 Summary: Standards — N confirmed, worst: ...; Intent / Spec — M confirmed, worst: ...
 ```
