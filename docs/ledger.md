@@ -1,14 +1,16 @@
 # The ledger
 
-The ledger is `.ledger/`: searchable project-local operational memory for executing changes. Where the [LLM wiki](../skills/llm-wiki/) accumulates reusable knowledge, the ledger accumulates the plans, specifications, notes, decisions, evidence, assets, progress, outcomes, and retrospectives needed to understand, resume, or audit an undertaking over time.
+The ledger is a simple project-local convention: `.ledger/` contains one directory per undertaking. It gives task-specific work a stable, searchable home without prescribing a database or artifact schema. The repository owner decides whether that directory is ignored, committed, or shared.
 
-`.ledger/INDEX.md` maps live tasks for direct reading or search. Closed task bundles move unchanged to `.ledger/history/`, whose index records their terminal status. Repository documentation and tests remain the durable authority for product behavior; the ledger preserves task-specific execution context.
+Each task directory is an open-ended bundle. Its root `task.md` identifies and describes the undertaking; skills and operators may add specifications, tickets, plans, decision maps, research, prototypes, evidence, assets, or any other useful files in whatever local shape serves the work. The skill or workflow that creates an artifact owns its format—the ledger does not interpret it.
+
+`.ledger/INDEX.md` maps live tasks for direct reading or search. Closed task bundles move unchanged to `.ledger/history/`, whose index records their terminal status. Repository documentation and tests remain the durable authority for product behavior. The [project wiki](wiki.md) accumulates reusable LLM-derived knowledge and context across tasks; the ledger keeps the operational material for one undertaking.
 
 ## Use
 
 Check the index before creating a task and continue an existing task when it already owns the undertaking. Use the ledger when work needs to be written down, resumed, handed off, or understood later. Small coherent work need not create a task.
 
-A task directory has only the artifacts that help its continuity. `task.md` holds identity, status, intent, current state, and outcome. Create a plan, specification, note, decision, evidence record, or asset at any useful path inside the task directory when it helps the work; no supporting taxonomy is required and existing bundles remain valid.
+A task directory has only the artifacts that help its work or continuity. `task.md` holds identity, status, intent, current state, and outcome. Create any supporting file at any useful path inside the bundle; no supporting taxonomy is required. A workflow may define structure for its own artifacts without turning that structure into a ledger-wide contract. Existing bundles remain valid.
 
 Every new task has `retrospective.md`. Keep it concise: it distills what mattered, lessons worth retrieving, and durable improvements without requiring a future reader to replay all operational context. Complete it when the undertaking produces useful learning; do not invent lessons merely to fill it.
 
@@ -36,4 +38,4 @@ It does not judge whether work is complete. Read and edit existing ledger files 
 
 ## Boundaries
 
-The ledger is not a task database, active-execution checklist, issue tracker mirror, or authority to commit, merge, publish, deploy, or delete work. Do not migrate old bundles merely to match the current scaffold.
+The ledger does not impose task-database, checklist, issue-tracker, plan, ticket, or dependency-graph semantics. A skill may represent any of those ideas with ordinary files inside its task bundle and remains responsible for their meaning. The ledger is not authority to commit, merge, publish, deploy, or delete work. Do not migrate old bundles merely to match the current scaffold.

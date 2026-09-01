@@ -40,7 +40,8 @@ describe("ledger system prompt distribution", () => {
 		expect(once).toBe(`Root system prompt\n\n${LEDGER_SYSTEM_PROMPT}`);
 		expect(twice).toBe(once);
 		expect(occurrences(twice, marker)).toBe(1);
-		expect(LEDGER_SYSTEM_PROMPT).toContain("searchable project-local operational memory");
+		expect(LEDGER_SYSTEM_PROMPT).toContain("simple project-local convention");
+		expect(LEDGER_SYSTEM_PROMPT).toContain("workflow that creates an artifact owns its format");
 		expect(LEDGER_SYSTEM_PROMPT).toContain("retrospective.md");
 		expect(LEDGER_SYSTEM_PROMPT).not.toContain("Skill routing");
 	});
