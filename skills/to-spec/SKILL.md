@@ -14,7 +14,7 @@ If a substantive product or architecture decision is still open, stop and return
 
 ### 1. Resolve the destination and context
 
-Use a destination explicitly supplied by the user. Otherwise locate the governing `.ledger/<task>/` bundle and use its `spec.md`. If task ownership is ambiguous, stop and ask the user to select it. If no task exists, ask before using `ledger_add`; do not create a detached specification.
+Use a destination explicitly supplied by the user. Otherwise inspect `.ledger/INDEX.md` and the candidate live `task.md` files. Use `spec.md` only in a bundle whose intent and current state clearly govern this undertaking; one live ledger row alone does not establish ownership. If no bundle governs the work or ownership is ambiguous, ask the user to select or create a task, supply another destination, or stop. When possible, combine that destination choice with the test-seam checkpoint below. Call `ledger_add` only after explicit approval, and never invent a detached specification path.
 
 This invocation authorizes the bounded local specification write after seam confirmation. It does not authorize remote issue creation, triage labels, commits, ticket generation, implementation, publication, or other external effects. A documented issue-tracker convention does not silently redirect the artifact; an external destination requires explicit authority.
 
@@ -104,6 +104,6 @@ Do not start ticketing or implementation automatically.
 
 ## Material redesign
 
-The specification is a current task snapshot, not a document kept continuously synchronized with implementation. If a material design pivot occurs, return to `/skill:interrogate-to-design`, resolve the new design completely, then regenerate or amend the same task-local `spec.md` in place. Treat affected existing tickets as stale and regenerate them through `to-tickets` before implementation resumes. Keep the active task pointed in one coherent direction rather than retaining superseded specifications or an internal version chain.
+The specification is a current task snapshot, not a document kept continuously synchronized with implementation. If a material design pivot occurs, return to `/skill:interrogate-to-design`, resolve the new design completely, then regenerate or amend the same task-local `spec.md` in place. Treat affected existing tickets as stale and regenerate them through `to-tickets` before implementation resumes. Keep the task bundle pointed in one coherent direction rather than retaining superseded specifications or an internal version chain.
 
 Once the task is complete, the user may choose to promote the settled specification into an authoritative repository location and commit it. Promotion and commit remain separately authorized; Git then owns durable version history.
