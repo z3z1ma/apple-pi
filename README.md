@@ -79,6 +79,7 @@ These are reusable techniques the model can load when the situation calls for th
 - [`/skill:prototype`](skills/prototype) — build a throwaway experiment that answers one design question
 - [`/skill:diagnosing-bugs`](skills/diagnosing-bugs) — tighten the feedback loop for hard bugs and performance regressions
 - [`/skill:research`](skills/research) — investigate externally verifiable questions through high-trust primary sources
+- [`/skill:tdd`](skills/tdd) — build concrete behavior through confirmed-seam, vertical red → green slices
 - [`/skill:domain-modeling`](skills/domain-modeling) — sharpen domain language, relationships, invariants, and durable context
 - [`/skill:codebase-design`](skills/codebase-design) — design deep modules, deliberate seams, and high-leverage interfaces
 
