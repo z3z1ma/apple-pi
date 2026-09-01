@@ -48,7 +48,7 @@ const matches = await pi.grep({ pattern: "pi\\.read", glob: "*.ts" });
 The live `code` parameter lists every host signature, including web methods and captured `extensions.*` tools.
 
 - `await fetch(input: string | URL | Request, init?: RequestInit)` → `Response` (10 MiB body cap)
-- `await skills.list()` → `[{ name, description }]` — session skills (package, project, user). `await skills.body({ name })` → SKILL.md body with frontmatter stripped. Throws if the skill is missing.
+- `await skills.list()` → `[{ name, description }]` — model-invocable session skills (package, project, user). Human-only skills stay hidden. `await skills.body({ name })` → model-invocable SKILL.md body with frontmatter stripped. Throws if the skill is missing or human-only.
 - `await tools.list()` / `tools.search(query)` / `tools.describe(name)` / `tools.call(name, args)` or `tools.call({ name, args })` — eligible captured extension tools only, not `pi.*` or the interactive `agent`, result, steer, and stop tools
 - `await extensions.<name>(args)` → `{ text, content, details, usage? }`
 - `type AgentRequest = string | { task: string, type?, name?, profile?, tools?, pair?, systemPrompt?, context?, outputSchema? }`

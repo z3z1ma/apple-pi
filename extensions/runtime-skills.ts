@@ -43,8 +43,12 @@ function catalog(options: SkillCatalogOptions) {
 	}).skills;
 }
 
+function modelInvocableCatalog(options: SkillCatalogOptions) {
+	return catalog(options).filter((skill) => !skill.disableModelInvocation);
+}
+
 export function listSkills(options: SkillCatalogOptions): SkillListItem[] {
-	return catalog(options)
+	return modelInvocableCatalog(options)
 		.map((skill) => ({ name: skill.name, description: skill.description }))
 		.sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -52,7 +56,7 @@ export function listSkills(options: SkillCatalogOptions): SkillListItem[] {
 export function readSkillBody(name: string, options: SkillCatalogOptions): string {
 	const trimmed = typeof name === "string" ? name.trim() : "";
 	if (!trimmed) throw new Error("skills.body requires a skill name");
-	const skill = catalog(options).find((entry) => entry.name === trimmed);
+	const skill = modelInvocableCatalog(options).find((entry) => entry.name === trimmed);
 	if (!skill) throw new Error(`Unknown skill: ${trimmed}`);
 	return stripFrontmatter(readFileSync(skill.filePath, "utf8")).trim();
 }

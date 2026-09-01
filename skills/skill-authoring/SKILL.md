@@ -47,7 +47,7 @@ Assume strong judgment. Provide:
 - one excellent example only when prose would remain ambiguous;
 - references or tools only when the skill actually consumes them.
 
-Prefer positive recipes centered on the durable objective, concrete conditions, and common operating path. Keep hypothetical edge cases, duplicated guidance, and session narrative out of the skill.
+Prefer positive recipes centered on the durable objective, concrete conditions, and common operating path. A skill is read by a fresh mind in the current system: keep migration history, donor terminology, compatibility commentary, and source attribution out of its body. Record imported-source provenance in the repository's notice file. State a negative boundary only when it prevents a plausible harmful action in the skill's actual context.
 
 ## Progressive validation
 
