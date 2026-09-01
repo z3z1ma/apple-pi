@@ -13,6 +13,7 @@ afterAll(() => rmSync(stateDir, { recursive: true, force: true }));
 const { STATE_DIR, STATE_SCHEMA, safeSessionId, writeState, readAllStates, removeState } = await import(
 	"../src/state.js"
 );
+const { default: registerTmuxSessions } = await import("../src/index.js");
 
 function makeRecord(sessionId: string, overrides: Record<string, unknown> = {}) {
 	const ts = 1_700_000_000;
@@ -77,4 +78,69 @@ test("removeState deletes only the target record and tolerates a missing file", 
 	const ids = (await readAllStates()).map((entry) => entry.sessionId);
 	expect(ids).toContain("session-keep");
 	expect(ids).not.toContain("session-drop");
+});
+
+async function flushUntil(predicate: () => boolean | Promise<boolean>, tries = 50): Promise<void> {
+	for (let attempt = 0; attempt < tries; attempt += 1) {
+		if (await predicate()) return;
+		await new Promise((resolve) => setImmediate(resolve));
+	}
+}
+
+test("uses generic UI prompt lifecycle events for waiting status", async () => {
+	const previousPane = process.env.TMUX_PANE;
+	const previousBell = process.env.PI_TMUX_SESSION_BELL;
+	process.env.TMUX_PANE = "%77";
+	process.env.PI_TMUX_SESSION_BELL = "off";
+	const handlers = new Map<string, (...args: unknown[]) => unknown>();
+	const pi = {
+		on(name: string, handler: (...args: unknown[]) => unknown) {
+			handlers.set(name, handler);
+		},
+		registerCommand() {},
+		getSessionName() {
+			return "prompt lifecycle";
+		},
+		async exec(_command: string, args: string[]) {
+			if (args[0] === "-c") return { code: 0, stdout: "/opt/homebrew/bin/tmux\n", stderr: "" };
+			return { code: 0, stdout: "%77\t@3\t/dev/null\n", stderr: "" };
+		},
+	};
+	let idle = false;
+	const ctx = {
+		mode: "tui",
+		cwd: "/tmp/project",
+		isIdle: () => idle,
+		sessionManager: { getSessionId: () => "session-ui-prompt" },
+	};
+
+	registerTmuxSessions(pi as never);
+	expect([...handlers.keys()]).toContain("ui_prompt_start");
+	expect([...handlers.keys()]).toContain("ui_prompt_end");
+	expect(handlers.has("tool_execution_start")).toBe(false);
+
+	handlers.get("session_start")?.({ reason: "startup" }, ctx);
+	await flushUntil(async () => (await readAllStates()).some((record) => record.sessionId === "session-ui-prompt"));
+	handlers.get("ui_prompt_start")?.({ type: "ui_prompt_start", reason: "ui_prompt", kind: "custom" }, ctx);
+	await flushUntil(
+		async () =>
+			(await readAllStates()).find((record) => record.sessionId === "session-ui-prompt")?.status === "waiting",
+	);
+
+	idle = false;
+	handlers.get("ui_prompt_end")?.({ type: "ui_prompt_end", reason: "ui_prompt", kind: "custom" }, ctx);
+	await flushUntil(
+		async () => (await readAllStates()).find((record) => record.sessionId === "session-ui-prompt")?.status === "busy",
+	);
+
+	idle = true;
+	handlers.get("ui_prompt_end")?.({ type: "ui_prompt_end", reason: "ui_prompt", kind: "custom" }, ctx);
+	await flushUntil(
+		async () => (await readAllStates()).find((record) => record.sessionId === "session-ui-prompt")?.status === "idle",
+	);
+
+	if (previousPane === undefined) delete process.env.TMUX_PANE;
+	else process.env.TMUX_PANE = previousPane;
+	if (previousBell === undefined) delete process.env.PI_TMUX_SESSION_BELL;
+	else process.env.PI_TMUX_SESSION_BELL = previousBell;
 });

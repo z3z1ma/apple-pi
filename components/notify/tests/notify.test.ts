@@ -187,6 +187,7 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 		"input",
 		"before_agent_start",
 		"message_end",
+		"session_compact_failed",
 		"tool_execution_start",
 		"agent_settled",
 	]);
@@ -302,6 +303,81 @@ test("reports an aborted task instead of completion", async () => {
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
 	expect(call.args.slice(2, 6)).toEqual(["-subtitle", "stop the current task", "-message", "Task cancelled."]);
+});
+
+test("reports a failed compaction instead of a stale successful assistant response", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness();
+	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
+	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("message_end")?.({
+		message: { role: "assistant", content: [{ type: "text", text: "Stale success." }], stopReason: "stop" },
+	});
+	handlers.get("session_compact_failed")?.({
+		type: "session_compact_failed",
+		reason: "overflow",
+		errorMessage: "Context compaction failed",
+		aborted: false,
+		willRetry: true,
+		fromExtension: false,
+	});
+
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
+
+	const call = notifierCall(calls);
+	assert.ok(call, "failed compaction should trigger a failure notification");
+	expect(call.args.slice(4, 6)).toEqual(["-message", "Task failed: Context compaction failed"]);
+});
+
+test("reports cancelled compaction instead of a stale successful assistant response", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness();
+	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
+	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("message_end")?.({
+		message: { role: "assistant", content: [{ type: "text", text: "Stale success." }], stopReason: "stop" },
+	});
+	handlers.get("session_compact_failed")?.({
+		type: "session_compact_failed",
+		reason: "manual",
+		aborted: true,
+		willRetry: false,
+		fromExtension: false,
+	});
+
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
+
+	const call = notifierCall(calls);
+	assert.ok(call, "cancelled compaction should trigger a cancellation notification");
+	expect(call.args.slice(4, 6)).toEqual(["-message", "Task cancelled."]);
+});
+
+test("clears a provisional compaction failure when a later assistant response succeeds", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness();
+	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
+	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("session_compact_failed")?.({
+		type: "session_compact_failed",
+		reason: "overflow",
+		errorMessage: "temporary compaction failure",
+		aborted: false,
+		willRetry: true,
+		fromExtension: false,
+	});
+	handlers.get("message_end")?.({
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: "Task completed after compaction recovery." }],
+			stopReason: "stop",
+		},
+	});
+
+	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
+
+	const call = notifierCall(calls);
+	assert.ok(call, "recovered compaction should trigger a completion notification");
+	expect(call.args.slice(4, 6)).toEqual(["-message", "Task completed after compaction recovery."]);
 });
 
 test("clears a transient error when an automatic retry succeeds", async () => {

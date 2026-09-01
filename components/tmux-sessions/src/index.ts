@@ -7,7 +7,8 @@
  * `busy` / `idle` / `waiting` status derived from agent lifecycle events:
  *
  * - `agent_start`                     -> busy
- * - `ask_user_question` executing     -> waiting (needs the user)
+ * - `ui_prompt_start`                 -> waiting (needs the user)
+ * - `ui_prompt_end`                   -> idle or busy (prompt resolved)
  * - `agent_settled`                   -> idle (settled, the user's turn)
  * - `session_shutdown`                -> record removed
  *
@@ -25,8 +26,9 @@
  * - `PI_TMUX_SESSION_BELL=off` do not ring the pane bell on settle.
  * - `PI_TMUX_STATE_DIR=/path` override the record directory.
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
 import { appendFile } from "node:fs/promises";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import {
@@ -38,8 +40,6 @@ import {
 	STATE_SCHEMA,
 	writeState,
 } from "./state.js";
-
-const ASK_TOOL = "ask_user_question";
 
 function isDisabled(): boolean {
 	return /^(?:1|true|yes|on)$/iu.test(process.env.PI_TMUX_DISABLED || "");
@@ -180,13 +180,12 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 
 	pi.on("agent_start", () => setStatus("busy"));
 
-	pi.on("tool_execution_start", (event) => {
-		if (event.toolName === ASK_TOOL) setStatus("waiting");
-	});
+	// Covers every blocking extension prompt, including ask_user_question's
+	// custom questionnaire UI.
+	pi.on("ui_prompt_start", () => setStatus("waiting"));
 
-	pi.on("tool_execution_end", (event) => {
-		// The question was answered; the agent resumes working.
-		if (event.toolName === ASK_TOOL) setStatus("busy");
+	pi.on("ui_prompt_end", (_event, ctx) => {
+		setStatus(ctx.isIdle() ? "idle" : "busy");
 	});
 
 	pi.on("agent_settled", (_event, ctx) => {

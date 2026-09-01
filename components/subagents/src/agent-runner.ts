@@ -419,7 +419,7 @@ export async function runAgent(
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
 	// Same `--no-extensions` plus explicit `-e` contract as pi_exec workers.
-	// Ordinary children load fast mode, the overflow guard, the home-search guard, ledger, session search,
+	// Ordinary children load fast mode, compaction safety/fallback, the home-search guard, ledger, session search,
 	// MCP, and optional pair programmer; narrowly owned internal sessions may opt out of everything except fast mode
 	// and the safety guards. Suppress
 	// AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md — upstream's buildSystemPrompt()

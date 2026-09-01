@@ -2,6 +2,8 @@
  * Native macOS completion notifications for Pi.
  *
  * - Fires on agent_settled, after retries, compaction, and queued follow-ups.
+ * - Treats failed or cancelled compaction as a provisional task failure until a
+ *   later successful assistant message proves the continuation recovered.
  * - Fires when ask_user_question starts, so an away operator learns Pi is
  *   waiting on their input rather than still working.
  * - Shows tmux coordinates, the latest user prompt, and the final outcome.
@@ -13,12 +15,13 @@
  * PI_NOTIFY_DISABLED=1, PI_NOTIFY_SOUND, PI_NOTIFY_APP,
  * PI_NOTIFY_FOCUS_SCRIPT, PI_NOTIFY_LOG_PATH, PI_NOTIFY_DISABLE_LOG=1.
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
 import { constants } from "node:fs";
 import { access, appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const HOME = homedir();
 const PI_HOME = process.env.PI_CODING_AGENT_DIR || join(HOME, ".pi", "agent");
@@ -562,6 +565,14 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		latestAborted = false;
 		const text = extractMessageText(event.message);
 		if (text) latestAssistant = text;
+	});
+
+	pi.on("session_compact_failed", (event) => {
+		// A failed compaction can settle with an older successful assistant message
+		// still in memory. Preserve this provisional outcome until a later assistant
+		// response succeeds (message_end clears it below).
+		latestError = event.aborted ? undefined : compactText(event.errorMessage) || "Context compaction failed";
+		latestAborted = event.aborted;
 	});
 
 	pi.on("tool_execution_start", (event, ctx) => {

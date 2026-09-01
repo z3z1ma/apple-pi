@@ -1,5 +1,7 @@
-import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai/compat";
-import type { ExtensionAPI, ExtensionContext, ProviderConfig } from "@earendil-works/pi-coding-agent";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
 import { registerOverflowGuard } from "../src/hooks/overflow-guard.js";
@@ -8,151 +10,93 @@ type Handler = (event: any, ctx: ExtensionContext) => unknown;
 
 function captureExtension() {
 	const handlers = new Map<string, Handler[]>();
-	const providerRegistrations: Array<{ name: string; config: ProviderConfig }> = [];
+	const messages: Array<{ message: unknown; options: unknown }> = [];
 	const pi = {
 		on(event: string, handler: Handler) {
 			const registered = handlers.get(event) ?? [];
 			registered.push(handler);
 			handlers.set(event, registered);
 		},
-		registerProvider(name: string, config: ProviderConfig) {
-			providerRegistrations.push({ name, config });
+		sendMessage(message: unknown, options: unknown) {
+			messages.push({ message, options });
 		},
 	} as unknown as ExtensionAPI;
-	return { pi, handlers, providerRegistrations };
+	return { pi, handlers, messages };
 }
 
-describe("proactive overflow guard", () => {
-	it("intercepts the next provider request after an oversized tool turn without calling upstream", async () => {
-		const faux = registerFauxProvider({
-			provider: "guard-test",
-			models: [{ id: "guard-model", contextWindow: 272_000 }],
-		});
-		faux.setResponses([fauxAssistantMessage("this request must not be sent")]);
+function runtime(passive = false) {
+	return {
+		ensureConfig() {},
+		config: {
+			compactAfterTokens: 10,
+			compactAfterTokensMode: "calibrated",
+			compactAfterTokensRatio: 0.68,
+			passive,
+		},
+	};
+}
 
-		try {
-			const { pi, handlers, providerRegistrations } = captureExtension();
-			const runtime = {
-				ensureConfig() {},
-				config: {
-					compactAfterTokens: 10,
-					compactAfterTokensMode: "calibrated",
-					compactAfterTokensRatio: 0.68,
-					passive: false,
-				},
-			};
-			registerOverflowGuard(pi, runtime as never);
+function testContext(cwd: string, tokens: number | null, branch: unknown[] = []) {
+	return {
+		cwd,
+		model: { id: "guard-model", provider: "guard-test", contextWindow: 1_000 },
+		isProjectTrusted: () => true,
+		getContextUsage: () => ({ tokens, contextWindow: 1_000, percent: tokens === null ? null : tokens / 10 }),
+		sessionManager: { getBranch: () => branch },
+	} as unknown as ExtensionContext;
+}
 
-			const model = faux.getModel();
-			let contextTokens = 92_630;
-			const ctx = {
-				cwd: "/tmp/project",
-				model,
-				isProjectTrusted: () => false,
-				getContextUsage: () => ({ tokens: contextTokens, contextWindow: model.contextWindow, percent: 34 }),
-				ui: { notify() {} },
-			} as unknown as ExtensionContext;
-			const turnEnd = handlers.get("turn_end")?.[0];
-			await turnEnd?.(
+function oversizedTurn() {
+	return {
+		type: "turn_end",
+		toolResults: [{ toolCallId: "tool-1", content: [{ type: "text", text: "x".repeat(1_000) }] }],
+	};
+}
+
+function withSettings(run: (cwd: string) => Promise<void> | void) {
+	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-overflow-guard-"));
+	mkdirSync(join(cwd, ".pi"));
+	writeFileSync(
+		join(cwd, ".pi", "settings.json"),
+		JSON.stringify({ compaction: { enabled: true, reserveTokens: 100, keepRecentTokens: 10 } }),
+	);
+	return Promise.resolve(run(cwd)).finally(() => rmSync(cwd, { recursive: true, force: true }));
+}
+
+describe("oversized-result compaction cut point", () => {
+	it("queues a hidden cut point after an over-budget tool turn", () =>
+		withSettings(async (cwd) => {
+			const { handlers, messages, pi } = captureExtension();
+			registerOverflowGuard(pi, runtime() as never);
+
+			await handlers.get("turn_end")?.[0]?.(oversizedTurn(), testContext(cwd, 950));
+
+			expect(messages).toEqual([
 				{
-					type: "turn_end",
-					message: fauxAssistantMessage("tool call"),
-					toolResults: [{ toolCallId: "tool-1" }],
+					message: { customType: "apple-pi.compaction-cut-point", content: [], display: false },
+					options: { deliverAs: "steer", triggerTurn: false },
 				},
-				ctx,
-			);
-			expect(providerRegistrations).toHaveLength(0);
+			]);
+		}));
 
-			contextTokens = 260_000;
-			await turnEnd?.(
-				{
-					type: "turn_end",
-					message: fauxAssistantMessage("tool call"),
-					toolResults: [{ toolCallId: "tool-1" }],
-				},
-				ctx,
-			);
+	it("uses a conservative branch estimate when Pi reports unknown post-compaction usage", () =>
+		withSettings(async (cwd) => {
+			const { handlers, messages, pi } = captureExtension();
+			registerOverflowGuard(pi, runtime() as never);
+			const branch = [{ type: "custom", data: "x".repeat(5_000) }];
 
-			const streamSimple = providerRegistrations[0]?.config.streamSimple;
-			expect(streamSimple).toBeDefined();
-			const result = await streamSimple!(
-				model,
-				{
-					systemPrompt: "",
-					messages: [
-						{
-							role: "toolResult",
-							toolCallId: "tool-1",
-							toolName: "read",
-							content: [{ type: "text", text: "large result" }],
-							isError: false,
-							timestamp: Date.now(),
-						},
-					],
-					tools: [],
-				},
-				{},
-			);
+			await handlers.get("turn_end")?.[0]?.(oversizedTurn(), testContext(cwd, null, branch));
 
-			const overflow = await result.result();
-			expect(overflow).toMatchObject({ stopReason: "stop", content: [] });
-			expect(overflow.errorMessage).toBeUndefined();
-			expect(faux.state.callCount).toBe(0);
-		} finally {
-			faux.unregister();
-		}
-	});
+			expect(messages).toHaveLength(1);
+		}));
 
-	it("keeps simultaneous sessions armed in process-owned state without replacing the provider wrapper", async () => {
-		const faux = registerFauxProvider({
-			provider: "guard-process-owned",
-			models: [{ id: "guard-model", contextWindow: 1000 }],
-		});
-		try {
-			const first = captureExtension();
-			const second = captureExtension();
-			const runtime = {
-				ensureConfig() {},
-				config: {
-					compactAfterTokens: 10,
-					compactAfterTokensMode: "calibrated",
-					compactAfterTokensRatio: 0.68,
-					passive: false,
-				},
-			};
-			registerOverflowGuard(first.pi, runtime as never);
-			registerOverflowGuard(second.pi, runtime as never);
-			const model = faux.getModel();
-			const context = (id: string) =>
-				({
-					cwd: `/tmp/${id}`,
-					model,
-					isProjectTrusted: () => false,
-					sessionManager: { getSessionId: () => id },
-					getContextUsage: () => ({ tokens: 999, contextWindow: 1000, percent: 99 }),
-					ui: { notify() {} },
-				}) as unknown as ExtensionContext;
-			await first.handlers.get("turn_end")?.[0]?.({ toolResults: [{ toolCallId: "one" }] }, context("one"));
-			await second.handlers.get("turn_end")?.[0]?.({ toolResults: [{ toolCallId: "two" }] }, context("two"));
-			expect(first.providerRegistrations).toHaveLength(1);
-			expect(second.providerRegistrations).toHaveLength(1);
-			const streamSimple = first.providerRegistrations[0]!.config.streamSimple!;
-			for (const toolCallId of ["one", "two"]) {
-				const stream = await streamSimple(
-					model,
-					{
-						systemPrompt: "",
-						messages: [
-							{ role: "toolResult", toolCallId, toolName: "read", content: [], isError: false, timestamp: Date.now() },
-						],
-						tools: [],
-					},
-					{},
-				);
-				expect(await stream.result()).toMatchObject({ stopReason: "stop", content: [] });
-			}
-		} finally {
-			faux.unregister();
-		}
+	it("filters the durable marker from provider context after reload", async () => {
+		const { handlers, pi } = captureExtension();
+		registerOverflowGuard(pi, runtime() as never);
+		const context = handlers.get("context")?.[0];
+		const ordinary = { role: "user", content: "continue" };
+		const marker = { role: "custom", customType: "apple-pi.compaction-cut-point", content: [] };
+
+		expect(context?.({ messages: [ordinary, marker] }, {} as ExtensionContext)).toEqual({ messages: [ordinary] });
 	});
 });

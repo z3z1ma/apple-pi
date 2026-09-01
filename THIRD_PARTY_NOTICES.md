@@ -29,7 +29,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Local path: `components/session-search/` (recall only); integration in `extensions/session-search.ts` and `extensions/context.ts`
 - License: MIT, as declared by the source README. The imported commit did not contain a standalone license file or separate copyright notice.
 
-## pi-auto-compact → Proactive overflow guard
+## pi-auto-compact → Oversized-result compaction fallback
 
 - Source: <https://github.com/tmustier/pi-auto-compact>
 - Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
@@ -38,7 +38,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Local paths: `components/notebook/src/hooks/overflow-guard.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Thomas Mustier`
-- apple-pi adapts the one-shot provider stream interception that turns an oversized post-tool continuation into a local synthetic context overflow, allowing Pi to compact and retry the same run without sending the intercepted request upstream. It uses Pi's model-specific native compaction boundary and omits upstream's separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
+- apple-pi retains the upstream fail-closed goal, but no longer replaces provider streams or produces a synthetic assistant response. When an over-budget tool-result batch leaves Pi 0.84.4 without a valid cut point, Apple Pi appends a hidden custom-message marker and lets native threshold compaction proceed; failed automatic compaction is gated before provider dispatch. The implementation omits upstream's provider interception, separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
 
 ## pi-observational-memory
 

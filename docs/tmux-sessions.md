@@ -44,12 +44,15 @@ Status is derived from agent lifecycle events:
 | Event | Status |
 | --- | --- |
 | `agent_start` | `busy` |
-| `ask_user_question` executing | `waiting` (needs you) |
+| `ui_prompt_start` | `waiting` (a blocking extension prompt needs you) |
+| `ui_prompt_end` | `idle` when the session is idle; otherwise `busy` |
 | `agent_settled` (idle) | `idle` (your turn) |
 | `session_shutdown` | record removed |
 
-`agent_settled` fires on interrupt and error too, so the `busy → idle`
-transition is unconditional rather than tied to a successful turn. Writes are
+`ui_prompt_start` and `ui_prompt_end` cover every blocking extension UI,
+including `ask_user_question`'s questionnaire. `agent_settled` fires on
+interrupt and error too, so the `busy → idle` transition is unconditional
+rather than tied to a successful turn. Writes are
 atomic (temp file + `rename`) so the picker never parses a half-written record.
 Only root interactive (`tui`) sessions publish; subagents and `pi_exec` workers
 are excluded so the picker lists jump targets, not internal workers. A same-pane

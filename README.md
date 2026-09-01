@@ -14,14 +14,15 @@ Long-horizon context took longer to work out. The persistent [pair programmer](d
 
 ## Install
 
-From a checkout:
+apple-pi targets Pi 0.84.4 or newer. Update the Pi host first (`pi update` updates Pi itself; `pi update self` is the explicit equivalent), then install the checkout:
 
 ```bash
+pi update
 npm install
 pi install /absolute/path/to/apple-pi
 ```
 
-Add `-l` for project-local activation. Pi loads every extension from this one package.
+Add `-l` for project-local activation. Pi loads every extension from this one package. The exact Pi development dependencies in this repository validate the package against the minimum host contract; Pi itself remains owned and updated by the Pi installer.
 
 ## What's in the harness
 
@@ -41,7 +42,7 @@ These are the pieces I interact with directly while a session is running.
 
 These handle continuity at different timescales without turning everything into one task system.
 
-- [Notebook](docs/context.md) — Pre-provider auto-compaction, the pair programmer's sourced observations and reflections, `search_session`, and `revisit_note`
+- [Notebook](docs/context.md) — Native compaction safety, an exceptional oversized-result fallback, the pair programmer's sourced observations and reflections, `search_session`, and `revisit_note`
 - [Self-reminders](docs/reminders.md) — explicit, one-shot model follow-up after the current run
 - [The ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory
 - [Project wiki](docs/wiki.md) — compact `.wiki/` guidance, `wiki_lint`, `wiki_references`, and on-demand knowledge procedures

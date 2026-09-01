@@ -59,3 +59,7 @@
 - `.ledger/history/202608301046-refine-pair-review-responsiveness/task.md` — done — Refine Pair review responsiveness — Eliminate review stalls, advice bursts, supervisory thrash, and inconsistent primary-agent response while preserving a sparse, high-value Pair workflow.
 
 - `.ledger/history/202608301913-simplify-harness-surface/task.md` — done — Simplify the model-facing harness surface — Replace default to-do and backlog machinery with self-reminders, remove pi_exec contract duplication, and simplify the operational ledger instructions and structure without weakening long-horizon continuity.
+
+- `.ledger/history/202608312305-assess-pi-0-84-4/task.md` — done — Assess Pi 0.84.4 opportunities for Apple Pi — Research Pi 0.84.3–0.84.4 primary sources and map changes to Apple Pi's current extension surface, upgrade risks, simplifications, and concrete recommendations.
+
+- `.ledger/history/202609010018-adopt-pi-0-84-4-safely/task.md` — done — Adopt Pi 0.84.4 safely — Upgrade Apple Pi's development package family and implement tested compaction safety/fallback, xAI summarization boundary proof, prompt status, notification failure state, and pair ordering coverage.
