@@ -36,6 +36,7 @@ import {
 	SUBAGENT_TOOL_NAMES,
 } from "./nested-tools.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
+import { assistantMessageMarker } from "./response-marker.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
@@ -238,6 +239,8 @@ export interface RunOptions {
 
 export interface RunResult {
 	responseText: string;
+	/** Stable marker for the session assistant message that supplied responseText. */
+	responseMessageMarker?: string;
 	session: AgentSession;
 	/** True if the agent was hard-aborted (max_turns + grace exceeded). */
 	aborted: boolean;
@@ -282,14 +285,20 @@ function collectResponseText(session: AgentSession) {
  * this returns "" instead of the prior turn's answer (#144). Defaults to 0 (a
  * fresh spawn, where the whole history belongs to this run).
  */
-function getLastAssistantText(session: AgentSession, startIndex = 0): string {
+function getAssistantResponse(
+	session: AgentSession,
+	startIndex = 0,
+	streamedText = "",
+): { text: string; messageMarker?: string } {
 	for (let i = session.messages.length - 1; i >= startIndex; i--) {
 		const msg = session.messages[i];
 		if (msg.role !== "assistant") continue;
 		const text = extractText(msg.content).trim();
-		if (text) return text;
+		if (text) {
+			return { text: streamedText || text, messageMarker: assistantMessageMarker(msg) };
+		}
 	}
-	return "";
+	return { text: streamedText };
 }
 
 /**
@@ -684,8 +693,15 @@ export async function runAgent(
 		cleanupAbort();
 	}
 
-	const responseText = collector.getText().trim() || getLastAssistantText(session, startLen);
-	return { responseText, session, aborted, steered: softLimitReached, failure: finalTurnError(session, startLen) };
+	const response = getAssistantResponse(session, startLen, collector.getText().trim());
+	return {
+		responseText: response.text,
+		responseMessageMarker: response.messageMarker,
+		session,
+		aborted,
+		steered: softLimitReached,
+		failure: finalTurnError(session, startLen),
+	};
 }
 
 /**
@@ -704,7 +720,7 @@ export async function resumeAgent(
 		hardTurnLimit?: boolean;
 		signal?: AbortSignal;
 	} = {},
-): Promise<{ text: string; failure?: string; aborted: boolean; steered: boolean }> {
+): Promise<{ text: string; responseMessageMarker?: string; failure?: string; aborted: boolean; steered: boolean }> {
 	// Boundary for the history fallback: the session already holds prior turns,
 	// so only assistant text produced by THIS resume prompt counts as its output
 	// — a failed resume must not surface the previous turn's answer (#144).
@@ -783,8 +799,10 @@ export async function resumeAgent(
 		cleanupAbort();
 	}
 
+	const response = getAssistantResponse(session, startLen, collector.getText().trim());
 	return {
-		text: collector.getText().trim() || getLastAssistantText(session, startLen),
+		text: response.text,
+		responseMessageMarker: response.messageMarker,
 		failure: finalTurnError(session, startLen),
 		aborted,
 		steered: softLimitReached,

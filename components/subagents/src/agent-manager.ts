@@ -14,6 +14,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createParentEscalationTool, type ParentEscalationHandler } from "./escalation.js";
+import { persistAgentOutput } from "./output-file.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import type {
 	AgentConfig,
@@ -135,6 +136,8 @@ export interface SpawnOptions {
 	cwd?: string;
 	/** Resolved invocation snapshot captured for UI display. */
 	invocation?: AgentInvocation;
+	/** Host-owned destination for this invocation's final response. */
+	outputPath?: string;
 	/** Parent abort signal — when aborted, the subagent is also stopped. */
 	signal?: AbortSignal;
 	/** Called on tool start/end with activity info (for streaming progress to UI). */
@@ -176,6 +179,8 @@ interface ResumeOptions {
 	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 	/** Called on streaming text deltas from the resumed assistant response. */
 	onTextDelta?: (delta: string, fullText: string) => void;
+	/** Host-owned destination for this resumed invocation's final response. */
+	outputPath?: string;
 	/** Called at the end of each resumed agentic turn. */
 	onTurnEnd?: (turnCount: number) => void;
 	/** Called when the session successfully compacts. */
@@ -316,6 +321,7 @@ export class AgentManager {
 			retainUntilSessionEnd: options.retainUntilSessionEnd,
 			maxTurns: options.maxTurns ?? options.agentConfig?.maxTurns,
 			hardTurnLimit: options.hardTurnLimit,
+			outputPath: options.outputPath,
 		};
 		this.agents.set(id, record);
 
@@ -426,7 +432,7 @@ export class AgentManager {
 				options.onSessionCreated?.(session);
 			},
 		})
-			.then(({ responseText, session, aborted, steered, failure }) => {
+			.then(({ responseText, responseMessageMarker, session, aborted, steered, failure }) => {
 				// Don't overwrite status if externally stopped via abort()
 				if (record.status !== "stopped") {
 					// Precedence: a hard abort keeps "aborted"; then a failed final turn
@@ -446,6 +452,7 @@ export class AgentManager {
 				record.result = responseText;
 				record.session = session;
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record, responseMessageMarker);
 
 				detach();
 				this.abortOwnedChildren(id);
@@ -471,6 +478,7 @@ export class AgentManager {
 				}
 				record.error = err instanceof Error ? err.message : String(err);
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record);
 
 				detach();
 				this.abortOwnedChildren(id);
@@ -596,6 +604,9 @@ export class AgentManager {
 		if (options?.isBackground) {
 			record.isBackground = true;
 			record.resultConsumed = false;
+			record.outputPath = options.outputPath;
+			record.outputWritten = undefined;
+			record.outputWriteError = undefined;
 			record.result = undefined;
 			record.error = undefined;
 			record.terminationCause = undefined;
@@ -620,6 +631,9 @@ export class AgentManager {
 		// consults the live record shape rather than assuming it stayed foreground.
 		record.isBackground = false;
 		record.resultConsumed = false;
+		record.outputPath = options?.outputPath;
+		record.outputWritten = undefined;
+		record.outputWriteError = undefined;
 		record.status = "running";
 		record.startedAt = Date.now();
 		const invocation = this.beginInvocation(record);
@@ -629,6 +643,7 @@ export class AgentManager {
 		record.terminationCause = undefined;
 		const abortController = new AbortController();
 		record.abortController = abortController;
+		this.notifyStart(record);
 		let detachParentSignal: (() => void) | undefined;
 		if (signal) {
 			const onParentAbort = () => abortController.abort(signal.reason);
@@ -649,6 +664,7 @@ export class AgentManager {
 			this.endInvocation(record, invocation);
 			if (record.isBackground !== true) {
 				record.resultConsumed = true;
+				this.notifyComplete(record);
 				return;
 			}
 			this.releaseCapacity(record);
@@ -675,7 +691,7 @@ export class AgentManager {
 			onTurnEnd: options?.onTurnEnd,
 			signal: abortController.signal,
 		})
-			.then(({ text, failure, aborted, steered }) => {
+			.then(({ text, responseMessageMarker, failure, aborted, steered }) => {
 				if (record.status !== "stopped") {
 					record.status = aborted ? "aborted" : failure ? "error" : steered ? "steered" : "completed";
 					if (aborted) record.terminationCause ??= "turn_ceiling";
@@ -683,6 +699,7 @@ export class AgentManager {
 				}
 				record.result = text;
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record, responseMessageMarker);
 				settle();
 				return text;
 			})
@@ -692,6 +709,7 @@ export class AgentManager {
 					record.error = err instanceof Error ? err.message : String(err);
 				}
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record);
 				settle();
 				return "";
 			});
@@ -776,7 +794,7 @@ export class AgentManager {
 			onTurnEnd: options.onTurnEnd,
 			signal: abortController.signal,
 		})
-			.then(({ text, failure, aborted, steered }) => {
+			.then(({ text, responseMessageMarker, failure, aborted, steered }) => {
 				// Don't overwrite status if externally stopped via abort().
 				if (record.status !== "stopped") {
 					// Same contract as the spawn path (#144): a failed final turn is an
@@ -787,6 +805,7 @@ export class AgentManager {
 				}
 				record.result = text;
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record, responseMessageMarker);
 				settle();
 				return text;
 			})
@@ -796,6 +815,7 @@ export class AgentManager {
 					record.error = err instanceof Error ? err.message : String(err);
 				}
 				record.completedAt ??= Date.now();
+				persistAgentOutput(record);
 				settle();
 				return "";
 			});

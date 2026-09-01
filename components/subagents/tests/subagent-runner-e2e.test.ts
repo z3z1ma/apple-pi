@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
@@ -338,13 +338,17 @@ Answer the task.
 		const tools = new Map<string, any>();
 		const lifecycle = new Map<string, (...args: any[]) => any>();
 		const sentMessages: any[] = [];
+		const emittedEvents: Array<{ name: string; payload: any }> = [];
 		const pi = {
 			registerMessageRenderer: () => {},
 			registerTool: (tool: any) => tools.set(tool.name, tool),
 			registerCommand: () => {},
 			registerShortcut: () => {},
 			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
-			events: { emit: () => {}, on: () => () => {} },
+			events: {
+				emit: (name: string, payload: any) => emittedEvents.push({ name, payload }),
+				on: () => () => {},
+			},
 			sendMessage: (message: any) => {
 				sentMessages.push(message);
 			},
@@ -356,6 +360,8 @@ Answer the task.
 			installSubagents(pi);
 			const tool = tools.get("agent");
 			expect(tool).toBeDefined();
+			expect(tool.parameters.properties.output_path.description).toContain("final response verbatim");
+			expect(tool.parameters.required).not.toContain("output_path");
 			const extensionCtx = {
 				cwd,
 				model,
@@ -379,6 +385,7 @@ Answer the task.
 			expect(invalid.isError).toBe(true);
 			expect(invalid.content[0].text).toContain("Unknown or disabled agent type");
 
+			const foregroundOutputPath = join(cwd, "artifacts", "foreground.md");
 			const result = await tool.execute(
 				"public-agent",
 				{
@@ -386,13 +393,16 @@ Answer the task.
 					description: "Answer test",
 					subagent_type: "tool-test",
 					system_prompt: "Use the invocation-specific answer format.",
+					output_path: "artifacts/foreground.md",
 				},
 				undefined,
 				undefined,
 				extensionCtx,
 			);
 			const firstText = result.content[0].text as string;
-			expect(firstText).toContain("AGENT-TOOL-OK");
+			expect(firstText).toContain(`Agent output written to ${foregroundOutputPath}.`);
+			expect(firstText).not.toContain("AGENT-TOOL-OK");
+			expect(readFileSync(foregroundOutputPath, "utf8")).toBe("AGENT-TOOL-OK");
 			const agentId = firstText.match(/Agent ID: ([^\s]+)/)?.[1];
 			expect(agentId).toBeTruthy();
 			expect(result.details).toMatchObject({ agentId, subagentType: "tool-test", status: "completed" });
@@ -438,6 +448,9 @@ Answer the task.
 			expect(resumed.content[0].text).toContain("AGENT-RESUME-OK");
 			expect(resumed.content[0].text).toContain(`Agent ID: ${agentId}`);
 			expect(resumed.details).toMatchObject({ agentId, status: "completed" });
+			expect(
+				emittedEvents.filter((event) => event.name === "subagents:completed" && event.payload.id === agentId),
+			).toHaveLength(2);
 			expect(resumedContext).toContain("answer now");
 			expect(resumedContext).toContain("AGENT-TOOL-OK");
 			expect(resumedContext).toContain("follow up using existing context");
@@ -480,6 +493,7 @@ Answer the task.
 					return fauxAssistantMessage([fauxText("LIVE-AGENT-DONE")]);
 				},
 			]);
+			const backgroundOutputPath = join(cwd, "artifacts", "background.md");
 			const liveLaunch = await tool.execute(
 				"public-agent-live",
 				{
@@ -487,6 +501,7 @@ Answer the task.
 					description: "Live coordination test",
 					subagent_type: "tool-test",
 					run_in_background: true,
+					output_path: backgroundOutputPath,
 				},
 				undefined,
 				undefined,
@@ -576,18 +591,21 @@ RELOADED ROLE MUST NOT RUN.
 					undefined,
 				);
 				completedSnapshotText = completedSnapshot.content[0].text as string;
-				if (completedSnapshotText.includes(`Agent ${liveAgentId} is completed.`)) break;
+				if (completedSnapshotText.includes(`Agent output written to ${backgroundOutputPath}.`)) break;
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
-			expect(completedSnapshotText).toContain(`Agent ${liveAgentId} is completed.`);
+			expect(completedSnapshotText).toContain(`Agent output written to ${backgroundOutputPath}.`);
+			expect(completedSnapshotText).not.toContain("LIVE-AGENT-DONE");
 			for (
 				let attempt = 0;
-				attempt < 100 && !sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"));
+				attempt < 100 && !sentMessages.some((message) => String(message.content).includes(backgroundOutputPath));
 				attempt++
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
-			expect(sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"))).toBe(true);
+			expect(sentMessages.some((message) => String(message.content).includes(backgroundOutputPath))).toBe(true);
+			expect(sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"))).toBe(false);
+			expect(readFileSync(backgroundOutputPath, "utf8")).toBe("LIVE-AGENT-DONE");
 			const queuedResult = await checkResult.execute(
 				"public-agent-queued-result",
 				{ agent_id: queuedAgentId, yield_seconds: 5 },
@@ -599,7 +617,8 @@ RELOADED ROLE MUST NOT RUN.
 			expect(queuedToolNames).toContain("read");
 			expect(queuedToolNames).not.toContain("edit");
 			const liveResult = await checkResult.execute("public-agent-live-result", { agent_id: liveAgentId }, undefined);
-			expect(liveResult.content[0].text).toContain("LIVE-AGENT-DONE");
+			expect(liveResult.content[0].text).toContain(`Agent output written to ${backgroundOutputPath}.`);
+			expect(liveResult.content[0].text).not.toContain("LIVE-AGENT-DONE");
 
 			let releaseAwaitedResponse: (() => void) | undefined;
 			const awaitedResponseGate = new Promise<void>((resolve) => {

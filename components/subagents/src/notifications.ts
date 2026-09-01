@@ -1,4 +1,5 @@
-import { getStatusNote } from "./status-note.js";
+import { formatAgentOutput } from "./output-file.js";
+import { getStatusNote, partialOutputSuffix } from "./status-note.js";
 import type { AgentRecord, NotificationDetails } from "./types.js";
 import {
 	type AgentActivity,
@@ -9,7 +10,21 @@ import {
 } from "./ui/agent-widget.js";
 import { getLifetimeTotal } from "./usage.js";
 
-export function statusLabel(record: Pick<AgentRecord, "status" | "error" | "terminationCause">): string {
+export function completionError(
+	record: Pick<AgentRecord, "status" | "error" | "outputWriteError">,
+): string | undefined {
+	const failures = [
+		record.status === "error" ? `Agent failed: ${record.error ?? "unknown error"}` : undefined,
+		record.outputWriteError ? `Output write failed: ${record.outputWriteError}` : undefined,
+	].filter((failure): failure is string => failure !== undefined);
+	return failures.length > 0 ? failures.join("; ") : undefined;
+}
+
+export function statusLabel(
+	record: Pick<AgentRecord, "status" | "error" | "terminationCause" | "outputWriteError">,
+): string {
+	const failure = completionError(record);
+	if (failure) return failure;
 	const cause = record.terminationCause;
 	if (cause === "token_ceiling") return "Stopped (token ceiling)";
 	if (cause === "turn_ceiling")
@@ -37,7 +52,11 @@ function escapeXml(text: string): string {
 }
 
 export function formatNotification(record: AgentRecord, maxLength: number): string {
-	const output = record.result || record.error || "No output.";
+	const inlineOutput =
+		record.status === "error"
+			? `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`
+			: record.result || record.error || "No output.";
+	const output = formatAgentOutput(record, inlineOutput);
 	const preview =
 		output.length > maxLength
 			? `${output.slice(0, maxLength)}\n...(truncated; use get_subagent_result for full output)`
@@ -48,7 +67,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		record.toolCallId ? `<tool-use-id>${escapeXml(record.toolCallId)}</tool-use-id>` : undefined,
 		record.sessionFile ? `<session-file>${escapeXml(record.sessionFile)}</session-file>` : undefined,
 		`<status>${escapeXml(statusLabel(record))}</status>`,
-		`<summary>agent "${escapeXml(record.description)}" ${record.status}${getStatusNote(record.status)}</summary>`,
+		`<summary>agent "${escapeXml(record.description)}" ${record.outputWriteError ? "failed to persist its output" : `${record.status}${getStatusNote(record.status)}`}</summary>`,
 		`<result>${escapeXml(preview)}</result>`,
 		`<usage><total_tokens>${getLifetimeTotal(record.lifetimeUsage)}</total_tokens><tool_uses>${record.toolUses}</tool_uses><compactions>${record.compactionCount}</compactions></usage>`,
 		"</task-notification>",
@@ -62,17 +81,21 @@ export function notificationDetails(
 	maxLength: number,
 	activity?: AgentActivity,
 ): NotificationDetails {
-	const output = record.result || record.error || "No output.";
+	const inlineOutput =
+		record.status === "error"
+			? `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`
+			: record.result || record.error || "No output.";
+	const output = formatAgentOutput(record, inlineOutput);
 	return {
 		id: record.id,
 		description: record.description,
-		status: record.status,
+		status: record.outputWriteError ? "error" : record.status,
 		toolUses: record.toolUses,
 		turnCount: activity?.turnCount ?? 0,
 		maxTurns: activity?.maxTurns,
 		totalTokens: getLifetimeTotal(record.lifetimeUsage),
 		durationMs: (record.completedAt ?? Date.now()) - record.startedAt,
-		error: record.error,
+		error: completionError(record),
 		resultPreview: output.length > maxLength ? `${output.slice(0, maxLength)}…` : output,
 	};
 }
@@ -90,14 +113,14 @@ export function detailsFor(
 		toolUses: record.toolUses,
 		tokens: formatTokens(getLifetimeTotal(record.lifetimeUsage)),
 		durationMs: (record.completedAt ?? Date.now()) - record.startedAt,
-		status: record.status,
+		status: record.outputWriteError ? "error" : record.status,
 		modelName: tags.modelName,
 		tags: tags.tags,
 		turnCount: activity?.turnCount,
 		maxTurns: activity?.maxTurns,
 		agentId: record.id,
 		sessionFile: record.sessionFile,
-		error: record.error,
+		error: completionError(record),
 		...overrides,
 	};
 }

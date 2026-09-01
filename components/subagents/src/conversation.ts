@@ -1,5 +1,6 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { extractText } from "./context.js";
+import { assistantMessageMarker } from "./response-marker.js";
 
 /** Hard cap for a model-facing recent-transcript check-in. */
 export const TRANSCRIPT_TAIL_MAX_CHARS = 12_000;
@@ -13,7 +14,11 @@ function isConversationMessage(message: { role: string }): boolean {
  * A tail includes the currently streaming assistant message and is character-
  * bounded so one large message cannot consume the orchestrator's context.
  */
-export function getAgentConversation(session: AgentSession, tailMessages?: number): string {
+export function getAgentConversation(
+	session: AgentSession,
+	tailMessages?: number,
+	omitAssistantMessageMarkers: ReadonlySet<string> = new Set(),
+): string {
 	const parts: string[] = [];
 	const transcript = session.messages.filter(isConversationMessage);
 	const streaming = session.state?.streamingMessage;
@@ -27,8 +32,9 @@ export function getAgentConversation(session: AgentSession, tailMessages?: numbe
 		} else if (msg.role === "assistant") {
 			const textParts: string[] = [];
 			const toolCalls: string[] = [];
+			const omitText = omitAssistantMessageMarkers.has(assistantMessageMarker(msg));
 			for (const c of msg.content) {
-				if (c.type === "text" && c.text) textParts.push(c.text);
+				if (c.type === "text" && c.text && !omitText) textParts.push(c.text);
 				else if (c.type === "toolCall")
 					toolCalls.push(`  Tool: ${(c as any).name ?? (c as any).toolName ?? "unknown"}`);
 			}

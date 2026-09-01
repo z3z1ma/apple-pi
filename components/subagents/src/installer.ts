@@ -49,10 +49,11 @@ import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
-import { detailsFor, formatNotification, notificationDetails } from "./notifications.js";
+import { completionError, detailsFor, formatNotification, notificationDetails } from "./notifications.js";
+import { formatAgentOutput, resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
-import { continuationSuffix, getForegroundOutcomeNote, partialOutputSuffix } from "./status-note.js";
+import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
 import {
 	appendTeamSystemPrompt,
 	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
@@ -86,6 +87,31 @@ import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
+}
+
+function inlineAgentOutput(record: AgentRecord, foreground: boolean): string {
+	if (record.status === "error") {
+		return `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`;
+	}
+	const note = foreground ? getForegroundOutcomeNote(record.status) : getStatusNote(record.status);
+	return `${record.result || record.error || "No output."}${note}`;
+}
+
+function appendRequestedConversation(
+	output: string,
+	record: AgentRecord,
+	verbose: boolean,
+	transcriptTail: number | undefined,
+): string {
+	if ((!verbose && transcriptTail === undefined) || !record.session) return output;
+	if (record.outputWriteError) {
+		return `${output}\n\nConversation omitted because the response is already included above after output persistence failed.`;
+	}
+	const tail = transcriptTail === undefined ? undefined : Math.min(20, Math.max(1, Math.floor(transcriptTail)));
+	const omittedMessages = new Set(record.persistedAssistantMessageMarkers);
+	const transcript = getAgentConversation(record.session, tail, omittedMessages) || "(no conversation messages yet)";
+	const heading = tail === undefined ? "Conversation" : `Recent conversation (last ${tail} messages)`;
+	return `${output}\n\n--- ${heading} ---\n${transcript}`;
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
@@ -226,14 +252,14 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				finishUi(record);
 				return;
 			}
-			const failed = ["error", "stopped", "aborted"].includes(record.status);
+			const failed = record.outputWriteError !== undefined || ["error", "stopped", "aborted"].includes(record.status);
 			pi.events.emit(failed ? "subagents:failed" : "subagents:completed", {
 				id: record.id,
 				type: record.type,
 				description: record.description,
-				status: record.status,
+				status: record.outputWriteError ? "error" : record.status,
 				result: record.result,
-				error: record.error,
+				error: completionError(record),
 				sessionFile: record.sessionFile,
 			});
 			finishUi(record);
@@ -730,6 +756,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		description: [
 			"Bring a teammate into an isolated Pi session to own a well-defined piece of work.",
 			"Use background mode when their work can proceed alongside yours, then get_subagent_result; use resume to continue with the same teammate and context.",
+			"Set output_path to have the host write the teammate's final response directly to a file instead of returning it inline.",
 			"Custom teammates are defined by Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
 			"A teammate may bring in another teammate only when their definition explicitly allows it.",
 			`The live <${TEAM_SYSTEM_PROMPT_TAG}> block lists everyone available, including each teammate's configured inference profile and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block describes the inference profiles. Choose the teammate with subagent_type, optionally choose a profile, and use system_prompt only for invocation-specific guidance that does not change their capabilities.`,
@@ -771,11 +798,24 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						"Override the agent definition's pair programmer default. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
+			output_path: Type.Optional(
+				Type.String({
+					minLength: 1,
+					description:
+						"Write the teammate's final response verbatim to this file. Relative paths resolve from the root session's working directory. The written response is replaced by the file path in the tool result.",
+				}),
+			),
 			cwd: Type.Optional(Type.String({ description: "Absolute working directory override." })),
 		}),
 		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Public agent spawn, resume, detachment, and escalation share one lifecycle boundary.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			bindSessionContext(ctx);
+			let outputPath: string | undefined;
+			try {
+				outputPath = resolveAgentOutputPath(params.output_path, ctx.cwd);
+			} catch (error) {
+				return textResult(error instanceof Error ? error.message : String(error), undefined, true);
+			}
 
 			if (params.resume) {
 				const existing = manager.getRecord(params.resume);
@@ -808,6 +848,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const escalationWait = background ? undefined : escalationHub.registerWait(existing.id);
 				const resumeRun = manager.resume(existing.id, params.prompt, background ? undefined : signal, {
 					isBackground: background,
+					outputPath,
 					onToolActivity: activity.callbacks.onToolActivity,
 					onTextDelta: activity.callbacks.onTextDelta,
 					onTurnEnd: activity.callbacks.onTurnEnd,
@@ -838,9 +879,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						detailsFor(resumed, activity.state, { status: "background" }),
 					);
 				return textResult(
-					`${resumed.result || resumed.error || "No output."}${continuationSuffix(resumed)}`,
+					`${formatAgentOutput(resumed, inlineAgentOutput(resumed, true))}${continuationSuffix(resumed)}`,
 					detailsFor(resumed, activity.state),
-					resumed.status === "error",
+					resumed.status === "error" || resumed.outputWriteError !== undefined,
 				);
 			}
 
@@ -906,6 +947,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				pair: invocation.pair,
 				thinkingLevel: resolvedAgentProfile.thinkingLevel,
 				cwd: params.cwd,
+				outputPath,
 				invocation: invocationDetails,
 				onToolActivity: tracker.callbacks.onToolActivity,
 				onTextDelta: tracker.callbacks.onTextDelta,
@@ -958,12 +1000,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				}
 				const result = foregroundOutcome.kind === "settled" ? foregroundOutcome.result : await foregroundRun;
 				const record = result.record;
-				const output =
-					(record.status === "error"
-						? `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`
-						: `${record.result || "No output."}${getForegroundOutcomeNote(record.status)}`) +
-					continuationSuffix(record);
-				return textResult(output, detailsFor(record, tracker.state), record.status === "error");
+				const output = `${formatAgentOutput(record, inlineAgentOutput(record, true))}${continuationSuffix(record)}`;
+				return textResult(
+					output,
+					detailsFor(record, tracker.state),
+					record.status === "error" || record.outputWriteError !== undefined,
+				);
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), undefined, true);
 			}
@@ -1084,22 +1126,18 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					cancelNotification(record.id);
 				}
 				let output =
-					!settled || params.transcript_tail !== undefined
+					!settled || (params.transcript_tail !== undefined && !record.outputPath)
 						? `Agent ${record.id} is ${record.status}.`
-						: record.result || record.error || "No output.";
+						: formatAgentOutput(record, inlineAgentOutput(record, false));
 				if (yieldedSeconds !== undefined && !settled) {
 					output += ` Yield interval (${yieldedSeconds}s) reached; the agent is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.`;
 				}
-				if ((params.verbose || params.transcript_tail !== undefined) && record.session) {
-					const tail =
-						params.transcript_tail === undefined
-							? undefined
-							: Math.min(20, Math.max(1, Math.floor(params.transcript_tail)));
-					const transcript = getAgentConversation(record.session, tail) || "(no conversation messages yet)";
-					const heading = tail === undefined ? "Conversation" : `Recent conversation (last ${tail} messages)`;
-					output += `\n\n--- ${heading} ---\n${transcript}`;
-				}
-				return textResult(output, detailsFor(record, activityById.get(record.id)), record.status === "error");
+				output = appendRequestedConversation(output, record, params.verbose, params.transcript_tail);
+				return textResult(
+					output,
+					detailsFor(record, activityById.get(record.id)),
+					record.status === "error" || record.outputWriteError !== undefined,
+				);
 			},
 		}),
 	);

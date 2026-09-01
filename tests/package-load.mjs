@@ -325,6 +325,10 @@ try {
 		/appended after the selected definition and preloaded skills/,
 	);
 	assert.match(agentProperties.system_prompt.description, /cannot change capabilities/);
+	assert("output_path" in agentProperties, "Agent schema omits host-written output files");
+	assert.match(agentProperties.output_path.description, /final response verbatim/);
+	assert.match(agentProperties.output_path.description, /root session's working directory/);
+	assert(!agentTool.definition.parameters.required.includes("output_path"), "output_path must remain optional");
 	assert(!agentTool.definition.parameters.required.includes("pair"), "pair must remain optional for config defaults");
 	const resultTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])

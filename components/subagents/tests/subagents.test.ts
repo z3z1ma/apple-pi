@@ -22,7 +22,9 @@ import { createParentEscalationTool, ParentEscalationHub } from "../src/escalati
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
-import { formatNotification } from "../src/notifications.js";
+import { formatNotification, statusLabel } from "../src/notifications.js";
+import { formatAgentOutput, persistAgentOutput } from "../src/output-file.js";
+import { assistantMessageMarker } from "../src/response-marker.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
 import type { AgentConfig } from "../src/types.js";
 import { DEFAULT_AGENT_NAMES } from "../src/types.js";
@@ -804,6 +806,52 @@ describe("owned subagent surface", () => {
 		expect(output).toContain("[Assistant]: …");
 		expect(output).toContain("-NEWEST");
 		expect(output).not.toContain("OLDEST-");
+	});
+
+	it("redacts only persisted assistant responses from transcript snapshots", () => {
+		const persistedMessage = {
+			role: "assistant",
+			content: [{ type: "text", text: "PERSISTED-REPORT" }],
+			timestamp: 1,
+			provider: "test",
+			model: "test",
+		};
+		const output = getAgentConversation(
+			{
+				messages: [
+					{ role: "user", content: [{ type: "text", text: "first prompt" }] },
+					{ ...persistedMessage, content: [...persistedMessage.content] },
+					{ role: "user", content: [{ type: "text", text: "follow up" }] },
+					{ role: "assistant", content: [{ type: "text", text: "INLINE-RESPONSE" }] },
+				],
+				state: {},
+			} as any,
+			undefined,
+			new Set([assistantMessageMarker(persistedMessage)]),
+		);
+		expect(output).toContain("first prompt");
+		expect(output).not.toContain("PERSISTED-REPORT");
+		expect(output).toContain("follow up");
+		expect(output).toContain("INLINE-RESPONSE");
+	});
+
+	it("keeps final output recoverable when host persistence fails", () => {
+		const root = temporaryRoot();
+		const record = {
+			status: "completed",
+			result: "RECOVERABLE-FINAL-REPORT",
+			outputPath: root,
+		} as any;
+		persistAgentOutput(record);
+		expect(record.outputWritten).toBe(false);
+		expect(record.outputWriteError).toBeTruthy();
+		expect(statusLabel(record)).toContain("Output write failed");
+		expect(
+			statusLabel({ status: "error", error: "provider unavailable", outputWriteError: "disk unavailable" }),
+		).toContain("Agent failed: provider unavailable; Output write failed: disk unavailable");
+		const output = formatAgentOutput(record, record.result);
+		expect(output).toContain(`Failed to write agent output to ${root}`);
+		expect(output).toContain("RECOVERABLE-FINAL-REPORT");
 	});
 
 	it("passes the exact scoped config authorized by nested dispatch into the spawn", async () => {

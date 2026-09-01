@@ -52,6 +52,14 @@ export interface AgentRecord {
 	status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
 	result?: string;
 	error?: string;
+	/** Absolute host-owned destination for the current invocation's final response. */
+	outputPath?: string;
+	/** Whether the current invocation's response reached outputPath. */
+	outputWritten?: boolean;
+	/** Stable assistant-message markers whose text must stay out of parent transcript snapshots. */
+	persistedAssistantMessageMarkers?: string[];
+	/** File-system failure from persisting the current invocation's final response. */
+	outputWriteError?: string;
 	toolUses: number;
 	startedAt: number;
 	completedAt?: number;
