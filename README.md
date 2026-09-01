@@ -79,6 +79,7 @@ Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it 
 These remain human-invoked so the model does not start them implicitly.
 
 - [`/skill:interrogate-to-design`](skills/interrogate-to-design) — interrogate dependent design decisions while curating reusable wiki knowledge and approved ADRs
+- [`/skill:to-spec`](skills/to-spec) — synthesize settled multi-session work into a task-local specification after confirming test seams
 
 ### Engineering disciplines
 
