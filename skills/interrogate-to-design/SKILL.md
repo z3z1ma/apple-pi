@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Interrogate the user about the plan, decision, or idea they supplied while turning settled knowledge into durable project context.
 
-Map the subject as a **design tree**: every decision branches into the decisions that depend on it. Establish the scope, then work the tree in rounds. The **frontier** is every in-scope decision whose prerequisites are settled now. Ask the whole frontier in one numbered round and give your recommended answer for every question. Put questions with unresolved prerequisites in a later round.
+Map the subject as a **design tree**: every decision branches into the decisions that depend on it. Establish the scope, then work the tree in rounds. The **frontier** is every in-scope decision whose prerequisites are settled now. Ask the whole frontier in one numbered round and give your recommended answer for every question. Put questions with unresolved prerequisites in a later round. Then stop and wait for the user's answers before starting the next round.
 
 Facts are your job: use available tools or suitable read-only agents instead of asking the user for information you can establish yourself. If fact-finding or a prototype is still running, leave only its dependent branch unsettled and continue with the rest of the frontier. Decisions are the user's job: never answer their side of the interview.
 
