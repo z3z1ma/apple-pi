@@ -82,6 +82,7 @@ These remain human-invoked so the model does not start them implicitly.
 - [`/skill:to-spec`](skills/to-spec) — synthesize settled multi-session work into a task-local specification after confirming test seams
 - [`/skill:to-tickets`](skills/to-tickets) — decompose approved work into task-local tracer-bullet tickets with explicit blocking edges
 - [`/skill:implement`](skills/implement) — build settled tickets or small specifications through TDD, feedback, review, and an authorized commit
+- [`/skill:improve-codebase-architecture`](skills/improve-codebase-architecture) — survey changing code for deepening opportunities, then interrogate one selected candidate
 
 ### Engineering disciplines
 
