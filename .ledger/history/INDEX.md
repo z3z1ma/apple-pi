@@ -63,3 +63,5 @@
 - `.ledger/history/202608312305-assess-pi-0-84-4/task.md` — done — Assess Pi 0.84.4 opportunities for Apple Pi — Research Pi 0.84.3–0.84.4 primary sources and map changes to Apple Pi's current extension surface, upgrade risks, simplifications, and concrete recommendations.
 
 - `.ledger/history/202609010018-adopt-pi-0-84-4-safely/task.md` — done — Adopt Pi 0.84.4 safely — Upgrade Apple Pi's development package family and implement tested compaction safety/fallback, xAI summarization boundary proof, prompt status, notification failure state, and pair ordering coverage.
+
+- `.ledger/history/202608311006-port-matt-pocock-engineering-skills/task.md` — done — Replace workflow skills with Matt Pocock-derived engineering workflows — Rebuild Apple Pi's workflow skill layer around adapted Matt Pocock engineering skills, using ledger task folders for task artifacts and .wiki Markdown for grill-derived context while preserving Apple Pi fundamentals.
