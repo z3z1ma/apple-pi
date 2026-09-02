@@ -83,6 +83,7 @@ These remain human-invoked so the model does not start them implicitly.
 - [`/skill:to-tickets`](skills/to-tickets) — decompose approved work into task-local tracer-bullet tickets with explicit blocking edges
 - [`/skill:implement`](skills/implement) — build settled tickets or small specifications through TDD, feedback, review, and an authorized commit
 - [`/skill:improve-codebase-architecture`](skills/improve-codebase-architecture) — survey changing code for deepening opportunities, then interrogate one selected candidate
+- [`/skill:wayfinder`](skills/wayfinder) — chart a multi-session map of decision tickets, then resolve them one at a time until the way is clear
 
 ### Engineering disciplines
 

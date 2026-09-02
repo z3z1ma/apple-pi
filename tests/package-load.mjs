@@ -284,6 +284,7 @@ try {
 		"interrogate-to-design",
 		"to-spec",
 		"to-tickets",
+		"wayfinder",
 	];
 	const engineeringSkills = [
 		"prototype",
