@@ -80,7 +80,7 @@ The whole map at low resolution, loaded once per session. Unresolved tickets (`o
 Each ticket is one file at `decisions/<NN>-<slug>.md`. The number is identity, not priority. Its body is the question, sized to one agent session:
 
 ```markdown
-Type: grilling
+Type: interrogation
 Status: open
 Blocked by:
 
@@ -89,7 +89,7 @@ Blocked by:
 <the decision or investigation this ticket resolves>
 ```
 
-`Type:` is one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)). `Status:` is `open`, `claimed`, `resolved`, or `out-of-scope`. `Blocked by:` lists blocker numbers such as `01, 02`, or is empty.
+`Type:` is one of `research`, `prototype`, `interrogation`, `task` (see [Ticket Types](#ticket-types)). `Status:` is `open`, `claimed`, `resolved`, or `out-of-scope`. `Blocked by:` lists blocker numbers such as `01, 02`, or is empty.
 
 A session **claims** a ticket by setting `Status: claimed` **first**, before any work. This file claim is advisory, not an atomic lock. Only one session may select a frontier ticket automatically at a time. For parallel work, the user or coordinating root assigns distinct named tickets before the sessions start; each session verifies its ticket is still open and unblocked before claiming it. A claiming session may return an untouched ticket to `open` on a clean abort; never steal or clear another session's claim without operator confirmation.
 
@@ -99,7 +99,7 @@ The answer isn't part of the original body; it's recorded on resolution (see [Wo
 
 ## Ticket Types
 
-Every ticket is either **HITL** (human in the loop, worked _with_ a human who speaks for themselves) or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange; the agent never stands in for the human's side of it (a grilling session that answers its own questions has broken this).
+Every ticket is either **HITL** (human in the loop, worked _with_ a human who speaks for themselves) or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange; the agent never stands in for the human's side of it (an interrogation session that answers its own questions has broken this).
 
 - **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases to surface a fact a decision waits on. Read and follow the installed [`research`](../research/SKILL.md) skill. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Do not create throwaway Git branches. Use when knowledge outside the current working directory is required.
 - **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to (an outline, a rough take, a stub, or UI/logic code) by reading and following the installed [`prototype`](../prototype/SKILL.md) skill. Link the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
