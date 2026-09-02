@@ -75,6 +75,12 @@ Validation stays cheaper than the guidance it supports. When the harness becomes
 
 The root model authors and inspects normal skills directly. When independent evaluation is genuinely valuable, commission one complete evaluation with all relevant scenarios, then validate the response and make ordinary edits yourself.
 
+## Compose packaged skills
+
+When the current procedure depends on another packaged skill, link its `SKILL.md` with a relative Markdown path and tell the model to read and follow it. This works for both model-visible and human-only dependencies and anchors the compatible packaged procedure. Link a specific supporting file instead when only that sub-procedure is needed.
+
+For a future workflow that requires a separate operator invocation, report `/skill:<name>` rather than treating it as active composition. A loose routing mention may use the installed name when the target is model-visible. The parent invocation supplies authority for the current workflow; a referenced skill supplies method, not extra authority.
+
 ## Supporting files
 
 Add a supporting file only when:

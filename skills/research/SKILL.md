@@ -16,7 +16,7 @@ Its job:
 The root agent's job:
 
 1. Write the returned findings to a single Markdown file.
-2. Save it where the repo already keeps such notes and match the existing convention. Otherwise use the active ledger task for bounded undertaking-specific research or load the `llm-wiki` skill for reusable supporting knowledge. If neither fits, put it somewhere sensible and say where.
+2. Save it where the repo already keeps such notes and match the existing convention. Otherwise use the active ledger task for bounded undertaking-specific research or read and follow [`llm-wiki`](../llm-wiki/SKILL.md) for reusable supporting knowledge. If neither fits, put it somewhere sensible and say where.
 
 When a question splits into genuinely independent research areas, it is acceptable to start multiple `researcher` sessions in parallel. Give each one a distinct scope and readable source material, start every background session before waiting for results, and reconcile their findings into the same single Markdown artifact. Do not split one search merely to create parallel work.
 

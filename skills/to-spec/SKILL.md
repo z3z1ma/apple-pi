@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # To Spec
 
-Turn the current conversation context and codebase understanding into a specification. Do **not** interview the user; synthesize only what is already settled. This step is for decided work that must survive several sessions or fresh-context hand-offs. Work that fits one context can move directly to implementation.
+Turn the current conversation context and codebase understanding into a specification. Do **not** interview the user; synthesize only what is already settled. This step is for decided work that must survive several sessions or fresh-context hand-offs. Work that fits one context can move directly to `/skill:implement`.
 
 If a substantive product or architecture decision is still open, stop and return to `/skill:interrogate-to-design`. Repository exploration can establish facts, but it cannot settle missing decisions or resolve contradictions between the conversation and governing project authority.
 
@@ -104,6 +104,6 @@ Do not start ticketing or implementation automatically.
 
 ## Material redesign
 
-The specification is a current task snapshot, not a document kept continuously synchronized with implementation. If a material design pivot occurs, return to `/skill:interrogate-to-design`, resolve the new design completely, then regenerate or amend the same task-local `spec.md` in place. Treat affected existing tickets as stale and regenerate them through `to-tickets` before implementation resumes. Keep the task bundle pointed in one coherent direction rather than retaining superseded specifications or an internal version chain.
+The specification is a current task snapshot, not a document kept continuously synchronized with implementation. If a material design pivot occurs, return to `/skill:interrogate-to-design`, resolve the new design completely, then regenerate or amend the same task-local `spec.md` in place. Treat affected existing tickets as stale and regenerate them through `/skill:to-tickets` before implementation resumes. Keep the task bundle pointed in one coherent direction rather than retaining superseded specifications or an internal version chain.
 
 Once the task is complete, the user may choose to promote the settled specification into an authoritative repository location and commit it. Promotion and commit remain separately authorized; Git then owns durable version history.

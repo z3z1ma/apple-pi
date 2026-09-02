@@ -93,7 +93,7 @@ Use direct `agent` sessions because neither lane determines the other and the ro
 
 ### Pi Exec review graphs
 
-Load `pi-exec` before authoring or adapting a review program. Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
+Read and follow [`pi-exec`](../pi-exec/SKILL.md) before authoring or adapting a review program. Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
 
 - [Fixed multi-lens review](references/multi-lens-review.js): known independent risk questions need typed fan-in and independent candidate verification. Security-sensitive changes may use paired attacker and defender lenses over the same boundary rather than a separate security graph.
 - [Planned review](references/plan-review-verify.js): the change is broad or structurally uncertain, so a planner must create cohesive partitions and focused investigations before fan-out.

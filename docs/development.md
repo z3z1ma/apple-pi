@@ -13,6 +13,19 @@
 
 `PairRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, and `agent-manager.ts` remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
 
+## Skill composition
+
+Pi loads every skill into its resource catalog, but removes `disable-model-invocation: true` skills from the model's automatic system-prompt catalog. A user's `/skill:<name>` command still resolves against the full catalog and expands the chosen body with its absolute location and base directory.
+
+Choose the composition path by intent:
+
+- When one packaged skill needs another procedure during the current run, use an explicit relative Markdown link such as `../interrogate-to-design/SKILL.md` and tell the model to read and follow it. This anchors the compatible packaged procedure and works whether the target is model-visible or human-only. The parent invocation owns the authorized workflow scope; the referenced skill supplies procedure.
+- When prose only routes a future request toward a model-visible skill, its installed name is enough because Pi's system-prompt catalog supplies the trigger and absolute path.
+- When the next workflow requires a separate human invocation, report `/skill:<name>`. This lets Pi expand model-visible or human-only targets through the full resource catalog without implying that the current skill invoked them.
+- When only one supporting procedure is needed, link that exact reference file rather than loading its complete parent skill.
+
+Pi Exec's `skills.list()` and `skills.body()` remain introspection APIs for model-visible skills only. Direct skill-to-skill references need no runtime invocation bridge.
+
 ## Quality commands
 
 ```bash

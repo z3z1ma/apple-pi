@@ -249,6 +249,7 @@ try {
 		"package manifest omits optional backlog entrypoint",
 	);
 	assert(manifest.files.includes("optional-extensions/backlog/src/"), "package manifest omits optional backlog source");
+	assert(manifest.files.includes("skills/"), "package manifest omits skills");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
 	const promptTemplates = loadPromptTemplates({

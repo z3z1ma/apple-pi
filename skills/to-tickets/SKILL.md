@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Break a plan, specification, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-Use this workflow for decided work that spans several fresh contexts. If the whole change fits in one context window, skip the tickets and move directly to implementation. If the input is a cleared decision map rather than one collapsed build specification, use `/skill:to-spec` first; do not ticket scattered map decisions directly.
+Use this workflow for decided work that spans several fresh contexts. If the whole change fits in one context window, skip the tickets and report that the next step is `/skill:implement`. If the input is a cleared decision map rather than one collapsed build specification, use `/skill:to-spec` first; do not ticket scattered map decisions directly.
 
 ## Process
 
@@ -145,6 +145,6 @@ Report:
 - the approved blocker graph;
 - the initial frontier;
 - any prefactor or expand–contract sequence; and
-- whether the tickets are ready for separately invoked implementation.
+- whether the tickets are ready for separately invoked `/skill:implement`.
 
 This skill produces the artifact. Do not dispatch agents, implement tickets, commit work, close parent work, or create an integration branch.

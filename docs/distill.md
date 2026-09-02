@@ -2,12 +2,13 @@
 
 `/distill [focus]` is an explicitly invoked prompt template for turning recent work into proposed durable knowledge and reusable harness artifacts. It runs as a normal model turn with the current conversation and available tools; there is no distillation extension, background service, or separate state store.
 
-Distillation is broader than summarization. The model reviews the most recent meaningful work, uses the pair programmer's notebook and transcript recall when needed, and looks for lessons worth carrying into future sessions. ledger records, repository state, diffs, documentation, and existing artifacts are optional evidence rather than required inputs.
+Distillation is broader than summarization. The model reviews the most recent meaningful work, uses the pair programmer's notebook and transcript recall when needed, and looks for lessons worth carrying into future sessions. ledger records, repository state, diffs, documentation, and existing artifacts are optional evidence rather than required inputs. Credentials, private transcript text, and notebook records remain in session storage; durable artifacts receive only non-sensitive synthesis. When sensitive details cannot be removed without invalidating a lesson, the model proposes no artifact.
 
 A pass can propose multiple destinations:
 
 - `AGENTS.md` for strongly evidenced, broadly applicable instructions or boundaries that must remain in every agent context;
 - `.wiki/` for durable project-local knowledge and sourced synthesis;
+- the clearly governing ledger task's `retrospective.md` for bounded undertaking-specific learning;
 - a skill for a recurring model procedure;
 - `.pi/programs/` for a demonstrated reusable `pi_exec` composition;
 - authoritative documentation, tests, runbooks, code, or decisions when they are the real owner; or

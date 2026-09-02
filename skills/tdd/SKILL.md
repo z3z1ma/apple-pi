@@ -13,7 +13,7 @@ When exploring the codebase, read relevant domain-language pages in `.wiki/` (if
 
 Use TDD for concrete behavior with an input, an observable output, and an expected result that comes from an independent source of truth. Pure wiring, configuration, type-only work, generated glue, or straight delegation does not benefit from a ritual test that merely restates the implementation. Explain that limit and follow any repository testing requirement that still governs the change.
 
-For a hard or unexplained bug, use `diagnosing-bugs` to establish the exact behavior, cause, and correct regression seam first. Once the behavior and seam are known, this red → green loop can drive the regression test and authorized fix.
+For a hard or unexplained bug, read and follow [`diagnosing-bugs`](../diagnosing-bugs/SKILL.md) to establish the exact behavior, cause, and correct regression seam first. Once the behavior and seam are known, this red → green loop can drive the regression test and authorized fix.
 
 TDD is a sequential reference, not an implementation driver. It does not need team fan-out or Pi Exec composition. Follow the repository's test layout. Durable tests and fixtures belong in the normal repository test tree; this skill creates no mandatory ledger artifact. Commits, dependency installation, publication, deployment, destructive actions, shared-system access, and other external effects require their own authority.
 
@@ -31,7 +31,7 @@ A **seam** is the public boundary you test at: the interface where you observe b
 
 Ask: "What's the public interface, and which seams should we test?"
 
-When the shape of that interface is itself in question—how deep the module is, where the seam belongs, or what the interface should expose—load `codebase-design` for the shared module, interface, depth, seam, adapter, leverage, and locality vocabulary. Use it as a design reference before proposing seams.
+When the shape of that interface is itself in question—how deep the module is, where the seam belongs, or what the interface should expose—read and follow [`codebase-design`](../codebase-design/SKILL.md) for the shared module, interface, depth, seam, adapter, leverage, and locality vocabulary. Use it as a design reference before proposing seams.
 
 ## Anti-patterns
 

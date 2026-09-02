@@ -18,7 +18,7 @@ Read the complete ticket or specification. For a ticket, check its blocking edge
 
 Before mutation, inspect the working tree and retain the initial staged, unstaged, and untracked state as the ownership baseline. Preserve every pre-existing change. If the selected work must overlap a dirty path and the new edits cannot be distinguished safely, ask the user before continuing. Never revert, stage, or commit unrelated pre-existing work.
 
-One normal run implements one ticket or one small specification. If a specification spans fresh contexts, use `to-tickets` first.
+One normal run implements one ticket or one small specification. If a specification spans fresh contexts, stop and ask the user to invoke `/skill:to-tickets` first.
 
 ## Choose the execution shape
 
@@ -35,7 +35,7 @@ Use direct `agent` fan-out for these independent lanes, not Pi Exec. This is exp
 
 ## Build with feedback
 
-Use TDD where possible, at confirmed seams. Read and apply the installed `tdd` skill when the work has concrete behavior, observable input and output, and an independent expected result.
+Use TDD where possible, at confirmed seams. Read and apply [`tdd`](../tdd/SKILL.md) when the work has concrete behavior, observable input and output, and an independent expected result.
 
 Before writing or editing any test, list the exact public seams, what each seam catches, what it misses, and its feedback cost. Stop and wait for fresh operator confirmation. A specification, ticket, existing test, or previous agreement informs the proposal but does not replace this checkpoint. For a parallel batch, the root may present every selected ticket's seam proposal in one checkpoint before dispatch; every seam must still be explicit.
 
@@ -45,7 +45,7 @@ Run typechecking regularly when the repository provides it, run focused single t
 
 ## Review the working tree
 
-Once done, read and apply `code-review` to review the work before committing. Use `HEAD` as the explicit working-tree fixed point and scope the review to the selected implementation paths and intent sources. Include staged, unstaged, and in-scope untracked changes. An unexpectedly empty boundary is not a successful review.
+Once done, read and apply [`code-review`](../code-review/SKILL.md) to review the work before committing. Use `HEAD` as the explicit working-tree fixed point and scope the review to the selected implementation paths and intent sources. Include staged, unstaged, and in-scope untracked changes. An unexpectedly empty boundary is not a successful review.
 
 Reconcile the findings in the root. The user's invocation of `implement` authorizes correction of confirmed findings required to satisfy the selected ticket or specification. Fix those in-scope defects and rerun the affected checks. Keep unrelated findings report-only. Follow code-review's bounded policy rather than rerunning reviews until they become clean.
 

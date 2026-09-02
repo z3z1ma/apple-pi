@@ -103,6 +103,6 @@ Adapt `ledger-increment.md` with the task terminology, acceptance criteria, rele
 
 Default Ralph supplies bounded fresh-context implementation increments. After a batch, the caller inspects the repository state, runs the relevant checks, handles ordinary fixes in the root session, and decides whether another batch is useful. ledger progress or evidence is persisted only when it has continuity value for a later session.
 
-Caller validation is the default. Run the separate `code-review` skill after a coherent batch when the operator requests independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing workers. Nits conclude in the root session.
+Caller validation is the default. Ask the operator to invoke `/skill:code-review` after a coherent batch when they request independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing workers. Nits conclude in the root session.
 
 Ordinary Ralph uses the prepared goal or task artifacts directly. `ledger_add` creates task bundles and `ledger_close` archives them when the operator authorizes closure.

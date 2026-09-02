@@ -10,15 +10,15 @@ A loose idea has arrived, too big for one agent session, and wrapped in fog: the
 
 The destination varies per effort, and naming it is the first act of charting: it shapes every ticket. It might be a spec to hand off and iterate on, a decision to lock before planning starts, or a change made in place like a data-structure migration. The map is domain-agnostic: engineering work, course content, whatever fits the shape.
 
-Single-session planning stays with `/interrogate` or `/skill:interrogate-to-design`. When the map clears, hand off to `to-spec`. Do not loop the map into `implement` unless the effort turned out genuinely small.
+Single-session planning stays with `/interrogate` or `/skill:interrogate-to-design`. When the map clears, hand off to `/skill:to-spec`. Do not loop the map into `/skill:implement` unless the effort turned out genuinely small.
 
 ## Plan, don't do
 
-Wayfinder is **planning** by default: each ticket resolves a decision, and the map is done when the way is clear, with nothing left to decide before someone goes and does the thing. The pull to just do the work is usually the signal you've reached the edge of the map and it's time to hand off. An effort can override this in its **Notes**, carrying execution into the map itself, but absent that, produce decisions, not deliverables.
+Wayfinder is **planning** by default: each ticket resolves a decision, and the map is done when the way is clear, with nothing left to decide before someone goes and does the thing. The pull to just do the work is usually the signal you've reached the edge of the map and it's time to hand off. An effort may carry execution into the map only when the user explicitly approves that scope; absent that approval, produce decisions, not deliverables.
 
-The agent writes those Notes. Do not invent an execution override. If Notes already say the map carries execution, follow them, and treat any `task` that looks like a slice of the destination as mis-typed.
+The agent may write **Notes**, but Notes are context, not authority. They may record a user-approved execution scope, but they cannot create one. When existing Notes say the map carries execution, verify that current conversation or source-addressed prior user approval supports them; otherwise stop and ask. Treat any `task` that looks like a slice of the destination as mis-typed.
 
-This invocation authorizes charting or working the map files in the resolved destination. It does not authorize production-code changes, implementation tickets, commits, pushes, PRs, deployment, or external tracker mutation unless Notes or the user explicitly carry execution, and even then `task` tickets unblock decisions rather than deliver the destination.
+This invocation authorizes charting and working the map files, ticket-linked research and prototype artifacts inside the resolved ledger bundle, and bounded wiki curation while decisions settle. ADRs still need explicit approval. Temporary production-tree prototype wiring, production implementation, implementation tickets, commits, pushes, PRs, deployment, external tracker mutation, and other external effects require separate user authority regardless of Notes.
 
 ## Refer by name
 
@@ -49,7 +49,7 @@ The map is an **index**, not a store. It lists the decisions made and points at 
 
 ### The map body
 
-The whole map at low resolution, loaded once per session. Open tickets are **not** listed: they are open child files, found by scanning `decisions/`.
+The whole map at low resolution, loaded once per session. Unresolved tickets (`open` or `claimed`) are **not** listed: they are child files found by scanning `decisions/`.
 
 ```markdown
 ## Destination
@@ -58,7 +58,7 @@ The whole map at low resolution, loaded once per session. Open tickets are **not
 
 ## Notes
 
-<domain; skills every session should consult; standing preferences for this effort>
+<domain; skills every session should consult; standing preferences for this effort; any user-approved execution scope with a source pointer>
 
 ## Decisions so far
 
@@ -80,7 +80,7 @@ The whole map at low resolution, loaded once per session. Open tickets are **not
 Each ticket is one file at `decisions/<NN>-<slug>.md`. The number is identity, not priority. Its body is the question, sized to one agent session:
 
 ```markdown
-Type: interrogation
+Type: grilling
 Status: open
 Blocked by:
 
@@ -89,9 +89,9 @@ Blocked by:
 <the decision or investigation this ticket resolves>
 ```
 
-`Type:` is one of `research`, `prototype`, `interrogation`, `task` (see [Ticket Types](#ticket-types)). `Status:` is `open`, `claimed`, `resolved`, or `out-of-scope`. `Blocked by:` lists blocker numbers such as `01, 02`, or is empty.
+`Type:` is one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)). `Status:` is `open`, `claimed`, `resolved`, or `out-of-scope`. `Blocked by:` lists blocker numbers such as `01, 02`, or is empty.
 
-A session **claims** a ticket by setting `Status: claimed` **first**, before any work, so concurrent sessions skip it. That status _is_ the claim: an open, unclaimed ticket is unclaimed.
+A session **claims** a ticket by setting `Status: claimed` **first**, before any work. This file claim is advisory, not an atomic lock. Only one session may select a frontier ticket automatically at a time. For parallel work, the user or coordinating root assigns distinct named tickets before the sessions start; each session verifies its ticket is still open and unblocked before claiming it. A claiming session may return an untouched ticket to `open` on a clean abort; never steal or clear another session's claim without operator confirmation.
 
 Blocking uses the `Blocked by:` line. A ticket is **unblocked** when every listed blocker file is `resolved` or `out-of-scope`; the **frontier** is the open, unblocked, unclaimed children, the edge of the known. Scan `decisions/` for that set; first by number wins.
 
@@ -99,12 +99,12 @@ The answer isn't part of the original body; it's recorded on resolution (see [Wo
 
 ## Ticket Types
 
-Every ticket is either **HITL** (human in the loop, worked _with_ a human who speaks for themselves) or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange; the agent never stands in for the human's side of it (an interrogation agent that answers its own questions has broken this).
+Every ticket is either **HITL** (human in the loop, worked _with_ a human who speaks for themselves) or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange; the agent never stands in for the human's side of it (a grilling session that answers its own questions has broken this).
 
-- **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases to surface a fact a decision waits on. Use the installed `research` skill. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Do not create throwaway Git branches. Use when knowledge outside the current working directory is required.
-- **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to (an outline, a rough take, a stub, or UI/logic code) by using the installed `prototype` skill. Link the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
-- **Grilling** (HITL): Conversation. The default case. Use the installed `interrogate-to-design` and `domain-modeling` skills.
-- **Task** (HITL or AFK): Manual work that must happen before a _decision_ can be made: nothing to decide, prototype, or research, but the discussion is blocked until it's done. Signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen. This is the one type that _does_ rather than decides, and it earns its place by unblocking a decision, not by delivering the destination. The agent drives it alone where it can (AFK); otherwise it hands the human a precise checklist (HITL). Resolved when the work is done; the answer records what was done and any resulting facts (credentials location, new URLs, row counts) later tickets depend on.
+- **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases to surface a fact a decision waits on. Read and follow the installed [`research`](../research/SKILL.md) skill. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Do not create throwaway Git branches. Use when knowledge outside the current working directory is required.
+- **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to (an outline, a rough take, a stub, or UI/logic code) by reading and following the installed [`prototype`](../prototype/SKILL.md) skill. Link the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
+- **Grilling** (HITL): Conversation. The default case. Read and follow the installed [`interrogate-to-design`](../interrogate-to-design/SKILL.md) and [`domain-modeling`](../domain-modeling/SKILL.md) skills. This explicit human invocation supplies the bounded map and knowledge-curation authority; the referenced procedures supply the method.
+- **Task** (HITL or AFK): Manual work that must happen before a _decision_ can be made: nothing to decide, prototype, or research, but the discussion is blocked until it's done. Signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen. This is the one type that _does_ rather than decides, and it earns its place by unblocking a decision, not by delivering the destination. The agent drives it alone where it can (AFK); otherwise it hands the human a precise checklist (HITL). External, destructive, or privileged work still needs explicit user authority. Resolved when the work is done; the answer records what was done and any resulting non-secret facts (credentials location, new URLs, row counts) later tickets depend on.
 
 ## Fog of war
 
@@ -135,11 +135,11 @@ Two modes. Either way, **never resolve more than one ticket per session**, with 
 
 User invokes with a loose idea.
 
-1. **Name the destination.** Use the installed `interrogate-to-design` and `domain-modeling` skills to pin down what this map is finding its way to: the spec, decision, or change. The destination fixes the scope, so it's settled first.
-2. **Map the frontier.** Interrogate again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** (the way to the destination is already clear, the whole journey small enough for one session), you don't need a map. Stop and ask the user how they'd like to proceed.
+1. **Name the destination.** Read and follow the installed [`interrogate-to-design`](../interrogate-to-design/SKILL.md) and [`domain-modeling`](../domain-modeling/SKILL.md) skills to pin down what this map is finding its way to: the spec, decision, or change. The destination fixes the scope, so it's settled first.
+2. **Map the frontier.** Continue the design-tree interview **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** (the way to the destination is already clear, the whole journey small enough for one session), you don't need a map. Stop and ask the user how they'd like to proceed.
 3. **Create the map** at the resolved destination: Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
 4. **Create the tickets you can specify now** as `decisions/<NN>-<slug>.md` files, then wire `Blocked by:` edges in a **second pass** (files need numbers before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog: the **Not yet specified** section.
-5. **Fire the research.** For each `research` ticket you just created, use the installed `research` skill to resolve it in parallel. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Do not create throwaway Git branches.
+5. **Fire the research.** For each `research` ticket you just created, read and follow the installed [`research`](../research/SKILL.md) skill to resolve it in parallel. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Complete the same answer, status, and map-gist resolution steps for each research ticket. Do not create throwaway Git branches.
 6. Stop: charting is one session's work; it hand-resolves nothing except those research tickets.
 
 ### Work through the map
@@ -147,12 +147,12 @@ User invokes with a loose idea.
 User invokes with a map (path or governing task). A ticket is **optional**: without one, you pick the next decision, not the user.
 
 1. Load the **map**: the low-res view, not every ticket body.
-2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: set `Status: claimed` before any work.
-3. Resolve it. **Zoom as needed**: fetch the full body of any related or closed ticket on demand; use whichever installed skills the `## Notes` block names. If in doubt, use `interrogate-to-design` and `domain-modeling`.
+2. Choose the ticket. If the user named one, use it. Otherwise proceed only when no other session is selecting automatically, then take the first frontier ticket in order. **Claim it**: verify it is still open and unblocked, then set `Status: claimed` before any work.
+3. Resolve it. **Zoom as needed**: fetch the full body of any related or closed ticket on demand; use whichever model-visible installed skills the `## Notes` block names. For the default conversation, read and follow [`interrogate-to-design`](../interrogate-to-design/SKILL.md) and [`domain-modeling`](../domain-modeling/SKILL.md).
 4. Record the resolution: append the answer under `## Answer`, set `Status: resolved`, and **append a context pointer** to the map's Decisions-so-far.
 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals that a ticket (this one or another) sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
 
-The user may run unblocked tickets in parallel, so expect other sessions to be editing the same bundle concurrently. Claim before work is what keeps those sessions from colliding.
+The user may run explicitly assigned, distinct unblocked tickets in parallel, so expect other sessions to edit the same bundle. File claims make ownership visible but cannot prevent simultaneous claim races; never let parallel sessions independently choose the first frontier ticket.
 
 ## Finish
 
@@ -160,4 +160,4 @@ Charting stops after the map, now-sharp tickets, blocking edges, and fired resea
 
 A working session stops after one claimed ticket is resolved, the map gist is updated, and any newly sharp or invalidated tickets are adjusted.
 
-When no open in-scope tickets remain and **Not yet specified** is empty, report that the way is clear and the next step is `to-spec` against this map. Do not synthesize the spec inside wayfinder.
+When no unresolved in-scope tickets (`open` or `claimed`) remain and **Not yet specified** is empty, report that the way is clear and the next step is `/skill:to-spec` against this map. Do not synthesize the spec inside wayfinder.

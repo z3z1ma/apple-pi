@@ -61,15 +61,15 @@ Pick the pattern that fits each candidate and vary them across the report.
 
 ### Mermaid graph
 
-Use a Mermaid `flowchart` or `graph` when the point is “X calls Y calls Z.” Wrap it in a Tailwind-styled card. Use `classDef` to color leakage edges red and the deep module dark. Sequence diagrams work well for “before: six round trips; after: one.”
+Use a Mermaid `flowchart` or `graph` when the point is “X calls Y calls Z.” Wrap it in a Tailwind-styled card. Use generated node IDs and short author-controlled neutral labels in Mermaid source; never interpolate arbitrary repository text into Mermaid grammar. Show exact HTML-escaped filenames and symbols next to the diagram, or use hand-built HTML/SVG when exact labels must appear inside it. Use `classDef` to color leakage edges red and the deep module dark. Sequence diagrams work well for “before: six round trips; after: one.”
 
 ```html
 <div class="rounded-lg border border-slate-200 bg-white p-4">
   <pre class="mermaid">
     flowchart LR
-      A[OrderHandler] --> B[OrderValidator]
-      B --> C[OrderRepo]
-      C -.leak.-> D[PricingClient]
+      A["Input"] --> B["Validate"]
+      B --> C["Persist"]
+      C -.leak.-> D["Dependency"]
       classDef leak stroke:#dc2626,stroke-width:2px;
       class C,D leak
   </pre>
@@ -100,7 +100,7 @@ Before: a tree of calls rendered as nested boxes. After: the tree collapsed into
 - Use `text-xs uppercase tracking-wider` for module labels so they read as a schematic rather than UI.
 - The only scripts are the Tailwind CDN and Mermaid ESM import. The report otherwise remains static: no app code, no interactivity beyond Mermaid's own rendering.
 - Keep secrets, source bodies, transcript content, and other private bytes out. Include only the summarized architecture evidence the cards need.
-- HTML-escape every repository-derived value before interpolation. Use quoted plain-text Mermaid labels, never raw source-derived syntax.
+- HTML-escape every repository-derived value used in ordinary HTML. Mermaid uses generated node IDs and author-controlled neutral labels, never arbitrary repository-derived text. Put exact escaped names in adjacent HTML or hand-built HTML/SVG.
 - Opening the report executes third-party CDN scripts that can inspect the report DOM. That is the chosen rendering, not a hidden side effect.
 
 ## Top recommendation

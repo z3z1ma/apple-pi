@@ -28,7 +28,7 @@ As decisions settle:
 - Keep task-specific implementation context, specifications, tickets, and plans in their established repository or ledger owners rather than the wiki.
 - Offer an ADR only when the decision is hard to reverse, surprising without context, and the result of a real trade-off. Explain why it qualifies and get approval before creating or editing it; follow the repository convention or the [ADR format](../domain-modeling/references/ADR-FORMAT.md).
 
-For each coherent wiki mutation, update knowledge first and navigation only when navigation changed. Run `wiki_lint`, repair only findings introduced by the mutation, and append `.wiki/LOG.md` only after the intended state is coherent. Follow the relevant `llm-wiki` procedure for initialization, ingestion, or broader maintenance.
+For each coherent wiki mutation, update knowledge first and navigation only when navigation changed. Run `wiki_lint`, repair only findings introduced by the mutation, and append `.wiki/LOG.md` only after the intended state is coherent. Read and follow the relevant [`llm-wiki`](../llm-wiki/SKILL.md) procedure for initialization, ingestion, or broader maintenance.
 
 Do not turn the wiki into a transcript, implementation specification, or competing source of truth. Invocation does not authorize commits, publication, deployment, external effects, or implementation of the resulting design.
 
