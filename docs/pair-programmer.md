@@ -61,19 +61,21 @@ The pair programming partner shares the main agent's screen rather than operatin
 
 The partner has a deliberately narrow typed toolset:
 
-- `share_note` stages one current, actionable `nit`, `concern`, or `blocker` for frontier confirmation before delivery to the main agent;
+- `share_note` stages one useful intervention for frontier confirmation: either a current, actionable `nit`, `concern`, or `blocker`, or a precise `question` that asks the driver to explain something or expose specific missing evidence;
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
 - `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence.
 
-A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, write payload, or user-bash output—not current checkout state. Large payloads return stable opaque continuation handles under Pi's normal output limits. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
+A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, write payload, user-bash output, or user-supplied image—not current checkout state. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
+
+Visual inspection requires the model selected by the `pair` profile to declare image input support. Pi replaces image blocks with its normal unsupported-image placeholder for a text-only model.
 
 A review attempt commits its staged notes, consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
 The partner cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
-Free-form prose does not start a consultant consultation. Generic uncertainty, style preference, known errors, and the mere possibility of a problem are not reasons to ask.
+Free-form prose does not start a consultant consultation. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A question is appropriate only when the absent evidence could materially change that judgment; ordinary uncertainty, progress narration, praise, and an all-clear remain silent.
 
 One conservative repeated-failure gate may also ask the consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
 
@@ -81,7 +83,7 @@ One conservative repeated-failure gate may also ask the consultant for help: the
 
 The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any pair programmer construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting pair programmer construction, model work, tool calls, retry delay, consultant work, or delivery preparation.
 
-Every direct finding, including a nit, is initially held with a stable host id. The next successful frontier review sees it alongside the newer trajectory. Repeating it with that id confirms it for nonterminal delivery; silence withdraws it. A confirmed finding steers at the next safe assistant boundary, so stale protection does not defer material advice until settlement. Findings first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
+Every direct finding or question is initially held with a stable host id. The next successful frontier review sees it alongside the newer trajectory. Repeating it with that id confirms it for nonterminal delivery; silence withdraws it. A confirmed intervention steers at the next safe assistant boundary, so stale protection does not defer useful input until settlement. Interventions first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
 
 The pair programmer uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
 
@@ -134,7 +136,7 @@ A delivered note remains a colleague's judgment. The main agent gives it serious
 
 ## Material-finding acknowledgment
 
-Every direct finding receives a stable host-generated id for frontier confirmation. Delivered nits do not require acknowledgment. For each delivered `concern` or `blocker`, the main agent records consideration with the primary-only `acknowledge_pair_findings` tool using one disposition and a concise reason:
+Every direct finding or question receives a stable host-generated id for frontier confirmation. Questions and delivered nits do not require acknowledgment. For each delivered `concern` or `blocker`, the main agent records consideration with the primary-only `acknowledge_pair_findings` tool using one disposition and a concise reason:
 
 - `address`: the finding applies and the main agent is acting on it;
 - `decline`: current evidence shows the finding does not apply;

@@ -129,12 +129,17 @@ test("formatReconfirmPreamble: empty when nothing held, else lists held notes", 
 		{ id: "pair-abcdef123456", note: "missing await", severity: "nit" },
 	]);
 	assert.match(p, /Things you flagged earlier/);
-	assert.match(p, /call `share_note` again/);
+	assert.match(p, /Call `share_note` again/);
 	assert.match(p, /finding_id/);
-	assert.match(p, /never merge distinct material issues/);
+	assert.match(p, /Keep distinct issues distinct/);
 	assert.match(p, /- \[BLOCKER id=pair-123456789abc\] races on shared map/);
 	assert.match(p, /- \[NIT id=pair-abcdef123456\] missing await/);
 	assert.match(p, /\n---\n/); // separates preamble from the session update below
+	const q = A.formatReconfirmPreamble([
+		{ id: "pair-aaaaaaaaaaaa", note: "Can you open the failing screenshot?", kind: "question" },
+	]);
+	assert.match(q, /- \[QUESTION id=pair-aaaaaaaaaaaa\] Can you open the failing screenshot\?/);
+	assert.match(q, /Preserve `kind="question"` for questions/);
 });
 
 test("parsePairTestArgs: valid severities + multiword note", () => {
@@ -180,6 +185,16 @@ test("material pair programmer findings receive opaque ids that remain stable wh
 	assert.notEqual(first[0].id, second[0].id);
 	assert.equal(carried[0].id, first[0].id);
 	assert.equal(first[1].id, undefined);
+	const question = A.identifyMaterialPairNotes([
+		{ note: "Please open the diagram?", kind: "question", severity: "blocker" },
+	]);
+	assert.equal(question[0].kind, "question");
+	assert.equal(question[0].id, undefined);
+	const tracker = new A.PairAcknowledgmentTracker();
+	tracker.recordDelivered([
+		{ id: "pair-cccccccccccc", note: "Please open the diagram?", kind: "question", severity: "blocker" },
+	]);
+	assert.equal(tracker.pendingCount, 0);
 });
 
 test("PairAcknowledgmentTracker allows one reminder then closes an unacknowledged finding", () => {
@@ -224,6 +239,24 @@ test("formatAdvisoryContent: omits severity attr when absent (plain nit)", () =>
 	const c = A.formatAdvisoryContent([{ note: "tidy up" }]);
 	assert.doesNotMatch(c, /severity=/);
 	assert.match(c, /<pair-note guidance=/);
+});
+
+test("formatAdvisoryContent: questions are kind=question, carry no severity, and ask the driver for evidence", () => {
+	const c = A.formatAdvisoryContent([
+		{
+			id: "pair-bbbbbbbbbbbb",
+			note: "Which screenshot is the source of truth?",
+			kind: "question",
+			severity: "blocker",
+		},
+	]);
+	assert.match(c, /<pair-note id="pair-bbbbbbbbbbbb" kind="question" guidance=/);
+	assert.doesNotMatch(c, /severity=/);
+	assert.match(c, /Which screenshot is the source of truth\?/);
+	assert.match(c, /kind="question"/);
+	assert.match(c, /expose the missing evidence in your reasoning or tool actions/);
+	assert.match(c, /rather than writing user-facing prose to the pair/);
+	assert.doesNotMatch(A.formatAdvisoryContent([{ note: "tidy up" }]), /kind="question"/);
 });
 
 test("formatAdvisoryContent: stale option tags advice as about an earlier step", () => {
@@ -276,6 +309,54 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
 	assert.match(md, /#### Tool result: `write`\n\nwrote a\.js/);
 	assert.doesNotMatch(md, /call: 1/);
+});
+
+test("formatTurnDelta: live user messages use receipts and keep image-only requests", () => {
+	const secret = "LIVE_USER_IMAGE_BYTES";
+	const mixed = [
+		{ type: "text", text: "see this" },
+		{ type: "image", data: secret, mimeType: "image/png" },
+	];
+	const imageOnly = [{ type: "image", data: secret, mimeType: "image/webp" }];
+	const issued = [];
+	const md = A.formatTurnDelta({
+		userMessages: [
+			{ content: mixed, sourceEntryId: "u-mixed" },
+			{ content: imageOnly, sourceEntryId: "u-image" },
+		],
+		issueReceipt(request) {
+			issued.push(request);
+			return request.sourceEntryId === "u-mixed"
+				? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+				: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+		},
+	});
+	assert.match(md, /#### What the user told your partner\n\nsee this\n\[image]\nreceipt: a{32}/);
+	assert.match(md, /#### What the user told your partner\n\n\[image]\nreceipt: b{32}/);
+	assert.ok(!md.includes(secret), "live user images must not inline base64");
+	assert.equal(issued.length, 2);
+	assert.equal(issued[0].kind, "user");
+	assert.equal(issued[0].sourceEntryId, "u-mixed");
+	assert.deepEqual(
+		issued[0].snapshot.images.map((image) => image.mimeType),
+		["image/png"],
+	);
+	assert.equal(issued[1].sourceEntryId, "u-image");
+});
+
+test("livePairUserMessages: keeps image-only users and excludes slash commands", () => {
+	const imageOnly = [{ type: "image", data: "IMG", mimeType: "image/png" }];
+	const collected = A.livePairUserMessages([
+		{ id: "slash", message: { role: "user", content: "/pair status" } },
+		{ id: "slash-parts", message: { role: "user", content: [{ type: "text", text: "/help" }] } },
+		{ id: "u-image", message: { role: "user", content: imageOnly } },
+		{ id: "u-text", message: { role: "user", content: "do the thing" } },
+		{ id: "assistant", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+	]);
+	assert.deepEqual(collected, [
+		{ content: imageOnly, sourceEntryId: "u-image" },
+		{ content: "do the thing", sourceEntryId: "u-text" },
+	]);
 });
 
 test("formatTurnDelta: presents material-finding acknowledgments as feedback to the pair programmer", () => {
@@ -848,11 +929,14 @@ test("seed: recent users are current plus two completed requests, labeled as imp
 		{ type: "message", message: { role: "user", content: "steer" } },
 	]);
 	assert.deepEqual(
-		requests.map((r) => ({ texts: r.texts, prior: r.prior })),
+		requests.map((request) => ({
+			contents: request.messages.map((message) => message.content),
+			prior: request.prior,
+		})),
 		[
-			{ texts: ["first"], prior: true },
-			{ texts: ["second"], prior: true },
-			{ texts: ["third", "steer"], prior: false },
+			{ contents: ["first"], prior: true },
+			{ contents: ["second"], prior: true },
+			{ contents: ["third", "steer"], prior: false },
 		],
 	);
 	const built = A.buildPairSeed({
@@ -862,6 +946,10 @@ test("seed: recent users are current plus two completed requests, labeled as imp
 	assert.match(built, /What the user told your partner/);
 	assert.match(built, /do it/);
 	assert.match(built, /\[CONCERN\] \[shared\] watch the lock/);
+	const questioned = A.buildPairSeed({
+		rollingAdvice: [{ note: "Which fixture is canonical?", kind: "question", disposition: "delivered" }],
+	});
+	assert.match(questioned, /\[QUESTION\] \[shared\] Which fixture is canonical\?/);
 	assert.match(built, /addressed to your partner, not to you/);
 });
 
@@ -1135,23 +1223,24 @@ test("pair programmer uses one fixed inference profile", () => {
 	assert.equal(A.PAIR_MODEL_PROFILE, "pair");
 });
 
-test("default pair prompt describes the shared-screen receipt boundary", () => {
+test("default pair prompt gives frontier intelligence a restrained shared-screen navigator framing", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pair-prompt-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const prompt = A.loadSystemPrompt(agentDir, false);
+		assert.match(prompt, /navigator in a pair-programming partnership/);
+		assert.match(prompt, /full intelligence and an independent line of thought/);
+		assert.match(prompt, /trajectory is your shared screen/);
+		assert.match(prompt, /calibrate your certainty/);
+		assert.match(prompt, /restraint proportional to your certainty/);
+		assert.match(prompt, /kind="question"/);
+		assert.match(prompt, /missing evidence could materially change your judgment/);
+		assert.match(prompt, /user images/);
 		assert.match(prompt, /revisit_note/);
 		assert.match(prompt, /expand_receipt/);
-		assert.match(prompt, /share your partner's screen/);
 		assert.doesNotMatch(prompt, /search_session/);
 		assert.doesNotMatch(prompt, /call:<id>/);
-		assert.match(prompt, /You are pair programming with another capable coding agent/);
-		assert.match(prompt, /Call `ask_consultant` instead/);
-		assert.match(prompt, /Consolidate symptoms and consequences that share one root cause/);
-		assert.match(prompt, /Never call both tools for the same issue/);
-		assert.match(prompt, /there is no finding quota/);
-		assert.match(prompt, /Generic uncertainty.*keep them to yourself/);
 	} finally {
 		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previous;
@@ -1167,7 +1256,13 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 				type: "message",
 				id: "raw-1",
 				timestamp: "2026-08-18T00:00:00.000Z",
-				message: { role: "user", content: "exact primary lock wording" },
+				message: {
+					role: "user",
+					content: [
+						{ type: "text", text: "exact primary lock wording" },
+						{ type: "image", data: "NOTEBOOK_IMAGE", mimeType: "image/png" },
+					],
+				},
 			},
 			{
 				type: "custom",
@@ -1194,6 +1289,7 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 	const notebook = tools.find((t) => t.name === "revisit_note");
 	assert.ok(notebook);
 	assert.match(notebook.description, /your partner's session/);
+	assert.doesNotMatch(notebook.promptGuidelines.join("\n"), /search_session/);
 	assert.deepEqual(
 		tools.map((tool) => tool.name),
 		["revisit_note"],
@@ -1204,6 +1300,7 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 		sessionManager: { getBranch: () => [] },
 	});
 	assert.match(hit.content[0].text, /exact primary lock wording/);
+	assert.ok(hit.content.some((part) => part.type === "image" && part.data === "NOTEBOOK_IMAGE"));
 	const miss = await notebook.execute("c2", { id: "ffffffffffff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
 	});
@@ -1527,6 +1624,46 @@ test("AdviseTool: rejects model-invented finding ids before deduplication", asyn
 	});
 	assert.deepEqual(calls, [{ note: "distinct new issue", severity: "concern", findingId: undefined }]);
 	assert.equal(result.details.finding_id, undefined);
+});
+
+test("AdviseTool: questions never carry severity and do not dedupe against findings", async () => {
+	const calls = [];
+	const tool = new A.AdviseTool((note, severity, findingId, kind) => {
+		calls.push({ note, severity, findingId, kind });
+		return true;
+	});
+	const question = await tool.execute("q1", {
+		note: "Can you open the failing screenshot?",
+		kind: "question",
+		severity: "blocker",
+	});
+	assert.match(question.content[0].text, /note was shared/);
+	assert.equal(question.details.kind, "question");
+	assert.equal(question.details.severity, undefined);
+	assert.deepEqual(calls, [
+		{
+			note: "Can you open the failing screenshot?",
+			severity: undefined,
+			findingId: undefined,
+			kind: "question",
+		},
+	]);
+
+	const finding = await tool.execute("f1", {
+		note: "Can you open the failing screenshot?",
+		severity: "nit",
+	});
+	assert.match(finding.content[0].text, /note was shared/);
+	assert.equal(calls.length, 2);
+	assert.equal(calls[1].kind, undefined);
+	assert.equal(calls[1].severity, "nit");
+
+	const repeat = await tool.execute("q2", {
+		note: "Can you open the failing screenshot?",
+		kind: "question",
+	});
+	assert.match(repeat.content[0].text, /equivalent note/);
+	assert.equal(calls.length, 2);
 });
 
 test("AdviseTool: markDelivered records dedup at the real delivery point", async () => {
@@ -2788,6 +2925,27 @@ test("runtime queue: re-raising advice at higher severity escalates it", () => {
 	assert.equal(rt.takeAllAdvice()[0].severity, "blocker");
 });
 
+test("runtime queue: questions stay separate from findings and never carry severity", () => {
+	const rt = new A.PairRuntime(
+		{ state: { messages: [], model: {} }, async prompt() {}, abort() {}, reset() {} },
+		new A.AdviseTool(() => false),
+		0,
+	);
+	rt.enqueueAdvice("Can you open src/auth.ts?", "blocker", undefined, "question");
+	rt.enqueueAdvice("Can you open src/auth.ts?", "nit");
+	const held = rt.takeAllAdvice();
+	assert.equal(held.length, 2);
+	const question = held.find((note) => note.kind === "question");
+	const finding = held.find((note) => note.kind !== "question");
+	assert.equal(question.severity, undefined);
+	assert.equal(question.kind, "question");
+	assert.match(question.id, /^pair-[a-f0-9]{12}$/);
+	assert.equal(finding.severity, "nit");
+	rt.enqueueAdvice(question.note, undefined, question.id, "question");
+	assert.equal(rt.canonicalFindingId(question.id, "finding"), undefined);
+	assert.equal(rt.canonicalFindingId(question.id, "question"), question.id);
+});
+
 test("boundary: a send failure requeues direct findings and retains consultant delivery", () => {
 	const delivered = [];
 	const failed = [];
@@ -2862,6 +3020,33 @@ test("boundary: direct pair programmer and ready consultant findings share one o
 		["pair", "consultant"],
 	);
 	assert.deepEqual(delivered, ["pair programmer finding"]);
+	assert.deepEqual(commits, [true]);
+});
+
+test("boundary: a question does not collapse a consultant finding", () => {
+	const sent = [];
+	const commits = [];
+	const direct = [{ note: "Shared queue ownership", kind: "question", source: "pair" }];
+	const advisor = {
+		note: { note: "consultant restatement", severity: "concern", source: "consultant" },
+		dedupeKeys: ["shared queue ownership"],
+		commit: (value) => commits.push(value),
+	};
+	assert.equal(
+		A.deliverBoundaryBatch({
+			direct,
+			advisor,
+			send: (notes) => sent.push(notes),
+			onDirectDelivered: () => {},
+			onDirectFailed: () => {},
+		}),
+		true,
+	);
+	assert.equal(sent.length, 1);
+	assert.deepEqual(
+		sent[0].map((note) => note.source),
+		["pair", "consultant"],
+	);
 	assert.deepEqual(commits, [true]);
 });
 
@@ -3229,6 +3414,13 @@ test("render: plain nit shows NIT tag", async () => {
 	const text = await renderAdvisory([{ note: "tidy this up" }]);
 	assert.match(text, /NIT/);
 	assert.match(text, /tidy this up/);
+});
+
+test("render: questions show QUESTION rather than a severity tag", async () => {
+	const text = await renderAdvisory([{ note: "Which screenshot is canonical?", kind: "question" }]);
+	assert.match(text, /QUESTION/);
+	assert.match(text, /Which screenshot is canonical\?/);
+	assert.doesNotMatch(text, /\bNIT\b/);
 });
 
 test("render: advisory card has a left border on both the heading and body lines", async () => {

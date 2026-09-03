@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { PairNote, PairSeverity } from "./types.js";
+import { isPairQuestion, type PairNote, type PairSeverity } from "./types.js";
 
 export const PAIR_FINDING_ACKNOWLEDGED = "pair.finding.acknowledged";
 export const PAIR_FINDING_UNACKNOWLEDGED = "pair.finding.unacknowledged";
@@ -29,7 +29,7 @@ export function pairFindingId(): string {
 
 export function identifyMaterialPairNotes(notes: readonly PairNote[]): PairNote[] {
 	return notes.map((note) =>
-		note.severity === "concern" || note.severity === "blocker"
+		!isPairQuestion(note) && (note.severity === "concern" || note.severity === "blocker")
 			? { ...note, id: note.id ?? pairFindingId() }
 			: { ...note },
 	);
@@ -62,7 +62,7 @@ export class PairAcknowledgmentTracker {
 
 	recordDelivered(notes: readonly PairNote[]): void {
 		for (const note of notes) {
-			if (!note.id || (note.severity !== "concern" && note.severity !== "blocker")) continue;
+			if (isPairQuestion(note) || !note.id || (note.severity !== "concern" && note.severity !== "blocker")) continue;
 			const current = this.#pending.get(note.id);
 			this.#pending.set(note.id, {
 				id: note.id,

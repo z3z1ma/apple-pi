@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
+import { formatActiveSessionContext, formatUserMessage } from "../src/formatting.js";
 import {
 	createExpandReceiptTool,
 	createPairReceiptIssuer,
@@ -9,7 +11,7 @@ import {
 	PairReceiptStore,
 	RECEIPT_UNAVAILABLE_TEXT,
 } from "../src/receipt-expansion.js";
-import { formatSourceAddressedTrajectory } from "../src/seed.js";
+import { buildPairSeed, collectRecentUserRequests, formatSourceAddressedTrajectory } from "../src/seed.js";
 
 function storeWith(active: ReadonlySet<string> | ((id: string) => boolean)): PairReceiptStore {
 	const predicate = typeof active === "function" ? active : (id: string) => active.has(id);
@@ -320,5 +322,123 @@ describe("pair receipt expansion", () => {
 
 		const rest = pageBody(await expand(store, page.continuationId!), ["e1"]);
 		expect(page.body + rest.body).toBe(original);
+	});
+
+	it("issues one user-message receipt bound to the exact active primary user entry", async () => {
+		const png = { type: "image" as const, data: "USER_IMG_A", mimeType: "image/png" };
+		const jpeg = { type: "image" as const, data: "USER_IMG_B", mimeType: "image/jpeg" };
+		const userContent = [
+			{ type: "text" as const, text: "see these" },
+			png,
+			{ type: "text" as const, text: "and this" },
+			jpeg,
+		];
+		const entries = [
+			{
+				type: "message",
+				id: "user-entry",
+				message: { role: "user", content: userContent, timestamp: 1 },
+			},
+			{
+				type: "message",
+				id: "other-user",
+				message: { role: "user", content: [{ type: "image", data: "OTHER", mimeType: "image/png" }], timestamp: 2 },
+			},
+		];
+		const store = storeWith(new Set(["user-entry", "other-user"]));
+		const issuer = createPairReceiptIssuer(store, entries);
+
+		const first = issuer({
+			kind: "user",
+			sourceEntryId: "user-entry",
+			snapshot: {
+				text: "User message\n\nsee these\n\nand this\n\n2 images follow in original order.",
+				images: [png, jpeg],
+			},
+		});
+		const again = issuer({
+			kind: "user",
+			sourceEntryId: "user-entry",
+			snapshot: { text: "ignored", images: [jpeg] },
+		});
+		expect(first).toMatch(/^[0-9a-f]{32}$/);
+		expect(again).toBe(first);
+		expect(issuer({ kind: "user", sourceEntryId: "missing-user", snapshot: { text: "no" } })).toBeUndefined();
+
+		const before = await expand(store, first!);
+		expect(textOf(before)).toBe(RECEIPT_UNAVAILABLE_TEXT);
+		present(store, first!);
+		const result = await expand(store, first!);
+		const page = pageBody(result, ["user-entry"]);
+		expect(page.body).toContain("User message");
+		expect(page.body).toContain("see these");
+		expect(page.body).toContain("2 images follow in original order.");
+		expect(result.content.filter((part) => part.type === "image").map((part) => part.data)).toEqual([
+			"USER_IMG_A",
+			"USER_IMG_B",
+		]);
+		expect(result.content[1]).toMatchObject({ type: "image", mimeType: "image/png" });
+		expect(result.content[2]).toMatchObject({ type: "image", mimeType: "image/jpeg" });
+	});
+
+	it("projects user images as placeholders and a standalone receipt, never base64", async () => {
+		const secret = "BASE64_SHOULD_NOT_APPEAR_IN_TRAJECTORY";
+		const content = [
+			{ type: "text" as const, text: "look" },
+			{ type: "image" as const, data: secret, mimeType: "image/png" },
+		];
+		const imageOnly = [{ type: "image" as const, data: secret, mimeType: "image/webp" }];
+		const entries = [
+			{
+				type: "message" as const,
+				id: "u-mixed",
+				parentId: "root",
+				timestamp: "2026-01-01T00:00:00.000Z",
+				message: { role: "user" as const, content, timestamp: 1 },
+			},
+			{
+				type: "message" as const,
+				id: "u-image",
+				parentId: "u-mixed",
+				timestamp: "2026-01-01T00:00:01.000Z",
+				message: { role: "user" as const, content: imageOnly, timestamp: 2 },
+			},
+		];
+		const store = storeWith(new Set(["u-mixed", "u-image"]));
+		const issuer = createPairReceiptIssuer(store, entries);
+
+		const mixed = formatUserMessage(content, { issueReceipt: issuer, sourceEntryId: "u-mixed" });
+		const only = formatUserMessage(imageOnly, { issueReceipt: issuer, sourceEntryId: "u-image" });
+		expect(mixed).toBe(`look\n[image]\nreceipt: ${mixed.match(/receipt: ([0-9a-f]{32})/)?.[1]}`);
+		expect(only).toMatch(/^\[image]\nreceipt: [0-9a-f]{32}$/);
+		expect(mixed).not.toContain(secret);
+		expect(only).not.toContain(secret);
+		expect(formatUserMessage("just text", { issueReceipt: issuer, sourceEntryId: "u-mixed" })).toBe("just text");
+
+		const active = formatActiveSessionContext(entries as SessionEntry[], issuer);
+		const sourced = formatSourceAddressedTrajectory(entries, ["u-mixed", "u-image"], issuer);
+		const seeded = buildPairSeed({ entries, issueReceipt: issuer });
+		for (const rendered of [active, sourced, seeded]) {
+			expect(rendered).toContain("look\n[image]");
+			expect(rendered).toMatch(/\[image]\nreceipt: [0-9a-f]{32}/);
+			expect(rendered).not.toContain(secret);
+			expect(rendered).toMatch(/receipt: [0-9a-f]{32}/);
+		}
+
+		const requests = collectRecentUserRequests(entries);
+		expect(requests).toHaveLength(1);
+		expect(requests[0]?.prior).toBe(false);
+		expect(requests[0]?.messages.map((message) => message.sourceEntryId)).toEqual(["u-mixed", "u-image"]);
+		expect(requests[0]?.messages.map((message) => message.content)).toEqual([content, imageOnly]);
+
+		store.activatePresented(active);
+		const mixedHandle = mixed.match(/receipt: ([0-9a-f]{32})/)?.[1];
+		const onlyHandle = only.match(/receipt: ([0-9a-f]{32})/)?.[1];
+		expect(pageBody(await expand(store, mixedHandle!), ["u-mixed"]).body).toContain(
+			"1 image follows in original order.",
+		);
+		const onlyResult = await expand(store, onlyHandle!);
+		expect(onlyResult.content.some((part) => part.type === "image" && part.data === secret)).toBe(true);
+		expect(pageBody(onlyResult, ["u-image"]).body).toContain("User message");
 	});
 });

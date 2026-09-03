@@ -7,13 +7,19 @@ import type {
 } from "../../subagents/src/consultation.js";
 
 export type PairSeverity = "nit" | "concern" | "blocker";
+export type PairNoteKind = "finding" | "question";
 
 export interface PairNote {
 	id?: string;
 	note: string;
+	kind?: PairNoteKind;
 	severity?: PairSeverity;
 	source?: "pair" | "consultant" | "advisor";
 	adjudication?: ConsultantDisposition;
+}
+
+export function isPairQuestion(note: Pick<PairNote, "kind"> | undefined): boolean {
+	return note?.kind === "question";
 }
 
 export type PairEscalation = ConsultationHypothesis;

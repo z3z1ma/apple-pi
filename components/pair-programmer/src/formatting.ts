@@ -10,7 +10,7 @@ import {
 	truncateResultBody,
 	utf8Bytes,
 } from "./receipts.js";
-import type { PairNote } from "./types.js";
+import { isPairQuestion, type PairNote } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
 
@@ -20,14 +20,15 @@ export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 	const items = held
 		.map((note) => {
 			const id = note.id ? ` id=${note.id}` : "";
-			return `- [${(note.severity ?? "nit").toUpperCase()}${id}] ${note.note}`;
+			const label = isPairQuestion(note) ? "QUESTION" : (note.severity ?? "nit").toUpperCase();
+			return `- [${label}${id}] ${note.note}`;
 		})
 		.join("\n");
 	return [
 		"### Things you flagged earlier",
 		"",
-		"Take another look at these against your partner's latest work; they may already have addressed them.",
-		"For every item that still applies, call `share_note` again and pass its exact `id` as `finding_id`, even if you refine the concise wording; keep the same severity or raise it only when the risk grew. This applies equally to nits, concerns, and blockers. Consolidate shared-root symptoms, but never merge distinct material issues. Say nothing about the rest; silence withdraws them. Do not send implementation management, resolution notices, or an all-clear.",
+		"Reconsider these against your partner's latest work.",
+		'Call `share_note` again only for items that still matter, passing the exact `id` as `finding_id`. Preserve `kind="question"` for questions; preserve or raise a finding severity as the evidence warrants. Silence withdraws the rest. Keep distinct issues distinct.',
 		"",
 		items,
 		"",
@@ -58,14 +59,19 @@ export function formatAdvisoryContent(
 	const body = notes
 		.map((n) => {
 			const id = n.id ? ` id="${escapeXml(n.id)}"` : "";
-			const sev = n.severity ? ` severity="${n.severity}"` : "";
+			const kind = isPairQuestion(n) ? ` kind="question"` : "";
+			const sev = !isPairQuestion(n) && n.severity ? ` severity="${n.severity}"` : "";
 			const source = n.source ? ` source="${n.source}"` : "";
 			const disposition = n.adjudication ? ` disposition="${n.adjudication}"` : "";
-			return `<pair-note${id}${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</pair-note>`;
+			return `<pair-note${id}${kind}${sev}${source}${disposition}${context} guidance="${PAIR_GUIDANCE}">\n${escapeXml(n.note)}\n</pair-note>`;
 		})
 		.join("\n");
-	if (!opts?.finalAnswer) return body;
-	return `${body}\n\nYou had already returned a final answer to the user this turn. If this note changes what you do, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
+	const questionGuidance = notes.some(isPairQuestion)
+		? `\n\nIf a pair-note has kind="question", expose the missing evidence in your reasoning or tool actions rather than writing user-facing prose to the pair.`
+		: "";
+	const rendered = `${body}${questionGuidance}`;
+	if (!opts?.finalAnswer) return rendered;
+	return `${rendered}\n\nYou had already returned a final answer to the user this turn. If this note changes what you do, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
 }
 
 // ---- transcript delta formatting (primary turn → markdown for the pair) ----
@@ -331,13 +337,23 @@ function formatProjectedResults(
 // how a provider concatenates content parts — see buildReviewMessages.
 export function formatTurnDelta(opts: {
 	userPrompt?: string;
+	userMessages?: ReadonlyArray<{ content: unknown; sourceEntryId?: string }>;
 	assistant?: AssistantMessage;
 	toolResults?: ToolResultMessage[];
 	issueReceipt?: PairReceiptIssuer;
 }): string {
 	const parts: string[] = [];
-	if (opts.userPrompt?.trim()) {
-		parts.push(`#### What the user told your partner\n\n${opts.userPrompt.trim()}`);
+	if (opts.userMessages?.length) {
+		for (const message of opts.userMessages) {
+			const text = formatUserMessage(message.content, {
+				issueReceipt: opts.issueReceipt,
+				sourceEntryId: message.sourceEntryId,
+			});
+			if (text) parts.push(`#### What the user told your partner\n\n${text}`);
+		}
+	} else if (opts.userPrompt?.trim()) {
+		const text = formatUserMessage(opts.userPrompt);
+		if (text) parts.push(`#### What the user told your partner\n\n${text}`);
 	}
 
 	const results = opts.toolResults ?? [];
@@ -391,6 +407,75 @@ export function formatUserBash(
 		.trimEnd();
 }
 
+const USER_IMAGE_PLACEHOLDER = "[image]";
+
+function userMessageText(content: unknown): string {
+	if (typeof content === "string") return content.trim();
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((part) =>
+			part &&
+			typeof part === "object" &&
+			(part as { type?: unknown }).type === "text" &&
+			typeof (part as { text?: unknown }).text === "string"
+				? (part as { text: string }).text
+				: "",
+		)
+		.filter((part) => part.length > 0)
+		.join("\n")
+		.trim();
+}
+
+function userMessageReceiptSnapshot(content: unknown, images: readonly PairReceiptImage[]): PairReceiptSnapshot {
+	const text = userMessageText(content);
+	const follow =
+		images.length === 1 ? "1 image follows in original order." : `${images.length} images follow in original order.`;
+	return {
+		text: ["User message", text || undefined, follow].filter((part): part is string => Boolean(part)).join("\n\n"),
+		images,
+	};
+}
+
+/** Project a user message onto the shared screen: text, compact image placeholders, optional receipt. */
+export function formatUserMessage(
+	content: unknown,
+	opts?: { issueReceipt?: PairReceiptIssuer; sourceEntryId?: string },
+): string {
+	const images = receiptImages(content);
+	const body =
+		typeof content === "string"
+			? content.trim()
+			: Array.isArray(content)
+				? content
+						.map((part) => {
+							if (!part || typeof part !== "object") return "";
+							const type = (part as { type?: unknown }).type;
+							if (type === "text" && typeof (part as { text?: unknown }).text === "string") {
+								return (part as { text: string }).text;
+							}
+							if (
+								type === "image" &&
+								typeof (part as { data?: unknown }).data === "string" &&
+								typeof (part as { mimeType?: unknown }).mimeType === "string"
+							) {
+								return USER_IMAGE_PLACEHOLDER;
+							}
+							return "";
+						})
+						.filter((part) => part.length > 0)
+						.join("\n")
+						.trim()
+				: "";
+	if (!body) return "";
+	if (images.length === 0 || !opts?.issueReceipt || !opts.sourceEntryId) return body;
+	const receipt = opts.issueReceipt({
+		kind: "user",
+		sourceEntryId: opts.sourceEntryId,
+		snapshot: userMessageReceiptSnapshot(content, images),
+	});
+	return receipt ? `${body}\nreceipt: ${receipt}` : body;
+}
+
 function contextText(content: string | Array<{ type: string; text?: string }>): string {
 	if (typeof content === "string") return content;
 	return content
@@ -418,7 +503,10 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[], iss
 		if (!message || !item) continue;
 		switch (message.role) {
 			case "user": {
-				const text = contextText(message.content).trim();
+				const text = formatUserMessage(message.content, {
+					issueReceipt,
+					sourceEntryId: item.sourceEntryId,
+				});
 				if (text) parts.push(`#### What the user told your partner\n\n${text}`);
 				break;
 			}

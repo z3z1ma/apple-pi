@@ -4,9 +4,9 @@ import { foldLedger } from "../../notebook/src/session-ledger/fold.js";
 import { observationToSummaryLine, reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
-import { formatTurnDelta, formatUserBash } from "./formatting.js";
+import { formatTurnDelta, formatUserBash, formatUserMessage } from "./formatting.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
-import type { PairNote } from "./types.js";
+import { isPairQuestion, type PairNote } from "./types.js";
 
 function isTerminalAssistant(message: { content?: unknown } | undefined): boolean {
 	if (!message || !Array.isArray(message.content)) return true;
@@ -19,26 +19,19 @@ export const PAIR_RESEED_ENTRY_ID = "pair-reseed";
 /** Last implementing-agent turns kept in the compact seed. */
 export const RECENT_TRAJECTORY_TURNS = 8;
 
+export type SeedUserMessage = {
+	content: unknown;
+	sourceEntryId?: string;
+};
+
 export type SeedUserRequest = {
-	texts: string[];
 	prior: boolean;
+	messages: SeedUserMessage[];
 };
 
 export type SettledAdvice = PairNote & {
 	disposition: "delivered" | "dropped";
 };
-
-function contextText(content: unknown): string {
-	if (typeof content === "string") return content.trim();
-	if (!Array.isArray(content)) return "";
-	return content
-		.map((part) =>
-			part && typeof part === "object" && "type" in part && part.type === "text" ? String(part.text ?? "") : "",
-		)
-		.filter(Boolean)
-		.join("\n")
-		.trim();
-}
 
 function isCustom(entry: { type?: string; message?: { role?: string } }): boolean {
 	return entry.type === "custom" || entry.type === "custom_message" || entry.message?.role === "custom";
@@ -51,26 +44,29 @@ function entryMessage(entry: { message?: unknown; type?: string }): { role?: str
 
 /** Current request plus the two most recently completed ones. */
 export function collectRecentUserRequests(entries: readonly unknown[]): SeedUserRequest[] {
-	const requests: string[][] = [];
-	let current: string[] = [];
+	const requests: SeedUserMessage[][] = [];
+	let current: SeedUserMessage[] = [];
 	let lastRole: string | undefined;
 	let lastAssistantTerminal = true;
 
 	for (const raw of entries) {
 		if (!raw || typeof raw !== "object") continue;
-		const entry = raw as { type?: string; message?: { role?: string; content?: unknown } };
+		const entry = raw as { id?: string; type?: string; message?: { role?: string; content?: unknown } };
 		if (isCustom(entry)) continue;
 		const message = entryMessage(entry);
 		const role = message?.role ?? (entry.type === "message" ? undefined : entry.type);
 		if (role === "user") {
-			const text = contextText(message?.content);
-			if (!text) continue;
+			const content = message?.content;
+			if (!formatUserMessage(content)) continue;
+			const item: SeedUserMessage = {
+				content,
+				...(typeof entry.id === "string" && entry.id ? { sourceEntryId: entry.id } : {}),
+			};
 			if (current.length === 0 || lastRole === "user" || !lastAssistantTerminal) {
-				if (current.length === 0) current = [text];
-				else current.push(text);
+				current.push(item);
 			} else {
 				if (current.length) requests.push(current);
-				current = [text];
+				current = [item];
 			}
 			lastRole = "user";
 			continue;
@@ -88,7 +84,10 @@ export function collectRecentUserRequests(entries: readonly unknown[]): SeedUser
 	if (current.length) requests.push(current);
 
 	const kept = requests.slice(-3);
-	return kept.map((texts, i) => ({ texts, prior: i < kept.length - 1 }));
+	return kept.map((messages, i) => ({
+		prior: i < kept.length - 1,
+		messages,
+	}));
 }
 
 export function formatNotebookFold(entries: readonly unknown[]): string {
@@ -109,11 +108,20 @@ export function formatNotebookFold(entries: readonly unknown[]): string {
 	}
 }
 
-export function formatRecentUserMessages(requests: readonly SeedUserRequest[]): string {
+export function formatRecentUserMessages(
+	requests: readonly SeedUserRequest[],
+	issueReceipt?: PairReceiptIssuer,
+): string {
 	if (!requests.length) return "";
 	const blocks = requests.map((request) => {
 		const label = request.prior ? "What the user previously told your partner" : "What the user told your partner";
-		return request.texts.map((text) => `#### ${label}\n\n${text}`).join("\n\n");
+		const bodies = request.messages.map((message) =>
+			formatUserMessage(message.content, { issueReceipt, sourceEntryId: message.sourceEntryId }),
+		);
+		return bodies
+			.filter(Boolean)
+			.map((text) => `#### ${label}\n\n${text}`)
+			.join("\n\n");
 	});
 	return blocks.join("\n\n");
 }
@@ -121,9 +129,9 @@ export function formatRecentUserMessages(requests: readonly SeedUserRequest[]): 
 export function formatRollingAdvice(notes: readonly SettledAdvice[]): string {
 	if (!notes.length) return "";
 	const items = notes.map((note) => {
-		const severity = (note.severity ?? "nit").toUpperCase();
+		const label = isPairQuestion(note) ? "QUESTION" : (note.severity ?? "nit").toUpperCase();
 		const outcome = note.disposition === "delivered" ? "shared" : "withdrawn";
-		return `- [${severity}] [${outcome}] ${note.note}`;
+		return `- [${label}] [${outcome}] ${note.note}`;
 	});
 	return `## Earlier notes\n${items.join("\n")}`;
 }
@@ -235,7 +243,7 @@ export function formatSourceAddressedTrajectory(
 		const role = message?.role ?? (entry.type === "message" ? undefined : entry.type);
 		if (role === "user") {
 			flush();
-			const text = contextText(message?.content);
+			const text = formatUserMessage(message?.content, { issueReceipt, sourceEntryId: entry.id });
 			if (text) parts.push(`${labels([entry.id])}\n#### What the user told your partner\n\n${text}`);
 			continue;
 		}
@@ -297,7 +305,9 @@ export function buildPairSeed(opts: {
 	const includeFold = opts.includeFold !== false;
 	return formatPairSeed({
 		fold: includeFold && opts.entries ? formatNotebookFold(opts.entries) : "",
-		userMessages: opts.entries ? formatRecentUserMessages(collectRecentUserRequests(opts.entries)) : "",
+		userMessages: opts.entries
+			? formatRecentUserMessages(collectRecentUserRequests(opts.entries), opts.issueReceipt)
+			: "",
 		trajectory: opts.entries ? formatRecentTrajectory(opts.entries, opts.issueReceipt) : "",
 		unresolvedNotebook: opts.unresolvedNotebook,
 		rollingAdvice: formatRollingAdvice(opts.rollingAdvice ?? []),

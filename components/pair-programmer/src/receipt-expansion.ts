@@ -51,7 +51,8 @@ export type PairReceiptRequest =
 			readonly sources: "call" | "result" | "interaction";
 			readonly snapshot: PairReceiptSnapshot;
 	  }
-	| { readonly kind: "bash"; readonly sourceEntryId: string; readonly snapshot: PairReceiptSnapshot };
+	| { readonly kind: "bash"; readonly sourceEntryId: string; readonly snapshot: PairReceiptSnapshot }
+	| { readonly kind: "user"; readonly sourceEntryId: string; readonly snapshot: PairReceiptSnapshot };
 
 export type PairReceiptIssuer = (request: PairReceiptRequest) => string | undefined;
 
@@ -303,6 +304,7 @@ export function createPairReceiptIssuer(
 	const callSourceIds = new Map<string, string[]>();
 	const resultSourceIds = new Map<string, string[]>();
 	const visibleBashIds = new Set<string>();
+	const visibleUserIds = new Set<string>();
 	for (const entry of entries) {
 		if (entry.type !== "message" || !entry.message || typeof entry.message !== "object") continue;
 		const message = entry.message as { role?: string; excludeFromContext?: boolean };
@@ -321,6 +323,8 @@ export function createPairReceiptIssuer(
 			}
 		} else if (message.role === "bashExecution" && !message.excludeFromContext) {
 			visibleBashIds.add(entry.id);
+		} else if (message.role === "user") {
+			visibleUserIds.add(entry.id);
 		}
 	}
 
@@ -328,6 +332,10 @@ export function createPairReceiptIssuer(
 		if (request.kind === "bash") {
 			if (!visibleBashIds.has(request.sourceEntryId)) return undefined;
 			return store.issue(request.snapshot, `bash:${request.sourceEntryId}`, [request.sourceEntryId]);
+		}
+		if (request.kind === "user") {
+			if (!visibleUserIds.has(request.sourceEntryId)) return undefined;
+			return store.issue(request.snapshot, `user:${request.sourceEntryId}`, [request.sourceEntryId]);
 		}
 		const callIds = callSourceIds.get(request.callId) ?? [];
 		const resultIds = resultSourceIds.get(request.callId) ?? [];

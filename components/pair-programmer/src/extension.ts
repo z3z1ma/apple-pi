@@ -106,9 +106,18 @@ export {
 	PairAcknowledgmentTracker,
 	pairFindingId,
 } from "./acknowledgments.js";
-export type { PairNote, PairSeverity } from "./types.js";
+export type { PairNote, PairNoteKind, PairSeverity } from "./types.js";
+export { isPairQuestion } from "./types.js";
 
-import type { PairEscalation, PairEscalationState, PairNote, PairSeverity, PrimaryTurnState } from "./types.js";
+import type {
+	PairEscalation,
+	PairEscalationState,
+	PairNote,
+	PairNoteKind,
+	PairSeverity,
+	PrimaryTurnState,
+} from "./types.js";
+import { isPairQuestion } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
 
@@ -129,7 +138,9 @@ export function deliverBoundaryBatch(args: {
 	onDirectDelivered(note: PairNote): void;
 	onDirectFailed(note: PairNote): void;
 }): boolean {
-	const directKeys = new Set(args.direct.map((note) => findingIdentity(note.note)));
+	const directKeys = new Set(
+		args.direct.filter((note) => !isPairQuestion(note)).map((note) => findingIdentity(note.note)),
+	);
 	const advisorDuplicate = args.advisor?.dedupeKeys?.some(
 		(key) => directKeys.has(findingIdentity(key)) || args.knownKeys?.has(findingIdentity(key)),
 	);
@@ -154,17 +165,24 @@ export function deliverBoundaryBatch(args: {
 
 const adviseSchema = Type.Object({
 	note: Type.String({
-		description: "One concrete piece of advice for the agent you are watching. Terse, specific, actionable.",
+		description:
+			"One concrete finding, or one precise probing question or view request, for the agent you are watching. Terse, specific, actionable.",
 	}),
+	kind: Type.Optional(
+		Type.Union([Type.Literal("finding"), Type.Literal("question")], {
+			description:
+				"finding (default) is a concrete issue. question is one precise probing question or view request when missing evidence could materially change judgment. Pass this explicitly; do not infer it from punctuation.",
+		}),
+	),
 	severity: Type.Optional(
 		Type.Union([Type.Literal("nit"), Type.Literal("concern"), Type.Literal("blocker")], {
-			description: "How strongly to weigh this. Omit for a plain nit.",
+			description: "How strongly to weigh a finding. Omit for a plain nit. Must be omitted for questions.",
 		}),
 	),
 	finding_id: Type.Optional(
 		Type.String({
 			description:
-				"The host-provided id of an earlier nit, concern, or blocker that still applies. Use only an id shown in the reconfirmation list.",
+				"The host-provided id of an earlier finding or question that still applies. Use only an id shown in the reconfirmation list.",
 			pattern: "^pair-[a-f0-9]{12}$",
 		}),
 	),
@@ -184,7 +202,10 @@ const pairAcknowledgmentSchema = Type.Object({
 const SEVERITY_RANK: Record<PairSeverity, number> = { nit: 1, concern: 2, blocker: 3 };
 const rankOf = (s: PairSeverity | undefined): number => SEVERITY_RANK[s ?? "nit"];
 const dedupeKey = (note: string): string => note.trim().replace(/\s+/g, " ");
-const pairNoteKey = (note: Pick<PairNote, "id" | "note">): string => note.id ?? dedupeKey(note.note);
+const pairNoteKind = (note: Pick<PairNote, "kind"> | undefined): PairNoteKind =>
+	isPairQuestion(note) ? "question" : "finding";
+const pairNoteKey = (note: Pick<PairNote, "id" | "note" | "kind">): string =>
+	`${pairNoteKind(note)}:${note.id ?? dedupeKey(note.note)}`;
 /** Concerns and blockers retain priority metadata, but all severities share delivery policy. */
 export const isHighSeverity = (s: PairSeverity | undefined): boolean => s === "concern" || s === "blocker";
 
@@ -255,18 +276,29 @@ export class AdviseTool {
 	readonly name = "share_note";
 	readonly label = "Advise";
 	readonly description =
-		"Share one concise, actionable finding with your pair programming partner when you see something that could materially improve or protect the work. Consolidate symptoms that share one root cause, but keep distinct material issues separate. Do not manage implementation, narrate status, acknowledge progress, praise, summarize, or say that everything looks good or an earlier issue is resolved. Use ask_consultant instead of also sharing the same issue when it needs deep independent judgment.";
+		'Share one useful intervention with your pair programming partner. The default kind is a concrete finding. Use kind="question" for one precise probe or view request only when missing evidence could materially change your judgment; questions omit severity. Use ask_consultant when consequential uncertainty needs independent investigation.';
 	readonly parameters = adviseSchema as any;
 	#delivered = new Map<string, number>();
+	#deliveredQuestions = new Set<string>();
 
 	// onAdvice returns true if delivered, false if queued or dropped.
 	constructor(
-		private readonly onAdvice: (note: string, severity?: PairSeverity, findingId?: string) => boolean,
-		private readonly canonicalizeFindingId?: (note: string, findingId?: string) => string | undefined,
+		private readonly onAdvice: (
+			note: string,
+			severity?: PairSeverity,
+			findingId?: string,
+			kind?: PairNoteKind,
+		) => boolean,
+		private readonly canonicalizeFindingId?: (
+			note: string,
+			findingId?: string,
+			kind?: PairNoteKind,
+		) => string | undefined,
 	) {}
 
 	resetDelivered(): void {
 		this.#delivered.clear();
+		this.#deliveredQuestions.clear();
 	}
 
 	/**
@@ -275,7 +307,12 @@ export class AdviseTool {
 	 * notes go through `onAdvice`→false, which intentionally does NOT record, so
 	 * the actual delivery point must).
 	 */
-	markDelivered(note: string, severity?: PairSeverity, findingId?: string): void {
+	markDelivered(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
+		if (kind === "question") {
+			this.#deliveredQuestions.add(dedupeKey(note));
+			if (findingId) this.#deliveredQuestions.add(findingId);
+			return;
+		}
 		const rank = rankOf(severity);
 		this.#delivered.set(dedupeKey(note), rank);
 		if (findingId) this.#delivered.set(findingId, rank);
@@ -283,22 +320,33 @@ export class AdviseTool {
 
 	async execute(
 		_id: string,
-		args: { note: string; severity?: PairSeverity; finding_id?: string },
+		args: { note: string; severity?: PairSeverity; finding_id?: string; kind?: PairNoteKind },
 	): Promise<AgentToolResult<unknown>> {
+		const kind = args.kind === "question" ? "question" : undefined;
+		const severity = kind === "question" ? undefined : args.severity;
 		const findingId = this.canonicalizeFindingId
-			? this.canonicalizeFindingId(args.note, args.finding_id)
+			? this.canonicalizeFindingId(args.note, args.finding_id, kind)
 			: args.finding_id;
-		const canonicalArgs = { ...args, finding_id: findingId };
+		const canonicalArgs = { ...args, finding_id: findingId, ...(kind ? { kind } : {}), severity };
 		const key = findingId ?? dedupeKey(args.note);
-		const rank = rankOf(args.severity);
-		const prev = Math.max(this.#delivered.get(key) ?? 0, this.#delivered.get(dedupeKey(args.note)) ?? 0);
-		if (rank <= prev) {
-			return {
-				content: [{ type: "text", text: "You already shared an equivalent note." }],
-				details: { ...canonicalArgs, dropped: true },
-			};
+		if (kind === "question") {
+			if (this.#deliveredQuestions.has(key) || this.#deliveredQuestions.has(dedupeKey(args.note))) {
+				return {
+					content: [{ type: "text", text: "You already shared an equivalent note." }],
+					details: { ...canonicalArgs, dropped: true },
+				};
+			}
+		} else {
+			const rank = rankOf(severity);
+			const prev = Math.max(this.#delivered.get(key) ?? 0, this.#delivered.get(dedupeKey(args.note)) ?? 0);
+			if (rank <= prev) {
+				return {
+					content: [{ type: "text", text: "You already shared an equivalent note." }],
+					details: { ...canonicalArgs, dropped: true },
+				};
+			}
 		}
-		const delivered = this.onAdvice(args.note, args.severity, findingId);
+		const delivered = this.onAdvice(args.note, severity, findingId, kind);
 		if (!delivered) {
 			// Not recorded: it is queued for a boundary or dropped as stale.
 			return {
@@ -306,8 +354,7 @@ export class AdviseTool {
 				details: { ...canonicalArgs, held: true },
 			};
 		}
-		this.#delivered.set(key, rank);
-		this.#delivered.set(dedupeKey(args.note), rank);
+		this.markDelivered(args.note, severity, findingId, kind);
 		return { content: [{ type: "text", text: "Your note was shared." }], details: canonicalArgs };
 	}
 }
@@ -621,48 +668,74 @@ export class PairRuntime {
 		severity?: PairSeverity,
 		findingId?: string,
 		assignFindingId = false,
+		kind?: PairNoteKind,
 	): void {
 		if (this.disposed) return;
 		const key = dedupeKey(note);
-		const existing = target.find((item) => (findingId ? item.id === findingId : dedupeKey(item.note) === key));
+		const expectedKind = pairNoteKind({ kind });
+		const existing = target.find((item) => {
+			if (pairNoteKind(item) !== expectedKind) return false;
+			return findingId ? item.id === findingId : dedupeKey(item.note) === key;
+		});
 		if (!existing) {
 			const id = findingId ?? (assignFindingId ? pairFindingId() : undefined);
-			target.push({ note, severity, ...(id ? { id } : {}) });
+			target.push({
+				note,
+				...(expectedKind === "question" ? { kind: "question" as const } : { severity }),
+				...(id ? { id } : {}),
+			});
 			return;
 		}
 		if (findingId && existing.id === findingId) existing.note = note;
 		if (!existing.id && (findingId || assignFindingId)) {
 			existing.id = findingId ?? pairFindingId();
 		}
+		if (expectedKind === "question") {
+			existing.kind = "question";
+			delete existing.severity;
+			return;
+		}
 		if (rankOf(severity) > rankOf(existing.severity)) existing.severity = severity;
 	}
 
-	#upsertAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#upsertAdviceIn(this.#advice, note, severity, findingId, true);
+	#upsertAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
+		this.#upsertAdviceIn(this.#advice, note, severity, findingId, true, kind);
 	}
 
-	#upsertReadyAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#upsertAdviceIn(this.#readyAdvice, note, severity, findingId, true);
+	#upsertReadyAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
+		this.#upsertAdviceIn(this.#readyAdvice, note, severity, findingId, true, kind);
 	}
 
 	/** Accept only identities currently owned by the host's pending or ready queues. */
-	canonicalFindingId(findingId?: string): string | undefined {
+	canonicalFindingId(findingId?: string, kind?: PairNoteKind): string | undefined {
 		if (!findingId) return undefined;
-		return [...this.#advice, ...this.#readyAdvice].some((note) => note.id === findingId) ? findingId : undefined;
+		const expectedKind = pairNoteKind({ kind });
+		return [...this.#advice, ...this.#readyAdvice].some(
+			(note) => note.id === findingId && pairNoteKind(note) === expectedKind,
+		)
+			? findingId
+			: undefined;
 	}
 
 	/** Stage pair programmer advice inside the active review; out-of-review callers seed the live queue. */
-	enqueueAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
+	enqueueAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
 		if (this.disposed) return;
 		if (this.#attemptEffects && this.#reviewEpoch === this.#epoch) {
 			const offeredId = findingId && this.#offeredFindingIds?.has(findingId) ? findingId : undefined;
 			const inferredId = [...this.#advice, ...this.#readyAdvice].find(
-				(item) => dedupeKey(item.note) === dedupeKey(note),
+				(item) => pairNoteKind(item) === pairNoteKind({ kind }) && dedupeKey(item.note) === dedupeKey(note),
 			)?.id;
-			this.#upsertAdviceIn(this.#attemptEffects.advice, note, severity, offeredId ?? findingId ?? inferredId, true);
+			this.#upsertAdviceIn(
+				this.#attemptEffects.advice,
+				note,
+				severity,
+				offeredId ?? findingId ?? inferredId,
+				true,
+				kind,
+			);
 			return;
 		}
-		this.#upsertAdvice(note, severity, findingId);
+		this.#upsertAdvice(note, severity, findingId, kind);
 	}
 
 	/** Stage a consultant request so failed or stale pair programmer attempts cannot launch work. */
@@ -690,8 +763,8 @@ export class PairRuntime {
 	}
 
 	/** Delivery retry bookkeeping: keep an already-confirmed finding ready. */
-	requeueReadyAdvice(note: string, severity?: PairSeverity, findingId?: string): void {
-		this.#upsertReadyAdvice(note, severity, findingId);
+	requeueReadyAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
+		this.#upsertReadyAdvice(note, severity, findingId, kind);
 	}
 
 	/** Drain findings reconfirmed by a newer successful frontier review. */
@@ -941,20 +1014,24 @@ export class PairRuntime {
 			}
 			for (const note of attempt.advice) {
 				const key = pairNoteKey(note);
-				if (delegated.has(dedupeKey(note.note))) continue;
+				if (!isPairQuestion(note) && delegated.has(dedupeKey(note.note))) continue;
 				if (offeredKeys.has(key)) {
 					this.#reraised?.add(key);
 					const offeredNote = offeredByKey.get(key);
-					if (offeredNote) this.#upsertReadyAdvice(offeredNote.note, offeredNote.severity, offeredNote.id);
-					this.#upsertReadyAdvice(note.note, note.severity, note.id);
+					if (offeredNote)
+						this.#upsertReadyAdvice(offeredNote.note, offeredNote.severity, offeredNote.id, offeredNote.kind);
+					this.#upsertReadyAdvice(note.note, note.severity, note.id, note.kind);
 				} else if (readyByKey.has(key)) {
 					const currentReady = this.#readyAdvice.find((item) => pairNoteKey(item) === key);
 					const snapshotReady = readyByKey.get(key);
-					if (currentReady || (snapshotReady && rankOf(note.severity) > rankOf(snapshotReady.severity))) {
-						this.#upsertReadyAdvice(note.note, note.severity, note.id);
+					if (
+						currentReady ||
+						(snapshotReady && (isPairQuestion(note) || rankOf(note.severity) > rankOf(snapshotReady.severity)))
+					) {
+						this.#upsertReadyAdvice(note.note, note.severity, note.id, note.kind);
 					}
 				} else {
-					this.#upsertAdvice(note.note, note.severity, note.id);
+					this.#upsertAdvice(note.note, note.severity, note.id, note.kind);
 				}
 			}
 			const dropped: PairNote[] = [];
@@ -1082,6 +1159,20 @@ function userMessageText(message: { content?: unknown } | undefined): string {
 		.trim();
 }
 
+/** Fresh primary user entries for a turn delta: exact content + source ids, no slash commands. */
+export function livePairUserMessages(
+	entries: readonly { id?: string; message?: unknown }[],
+): Array<{ content: unknown; sourceEntryId: string }> {
+	return entries.flatMap((entry) => {
+		if (!entry.id || !entry.message || typeof entry.message !== "object") return [];
+		const message = entry.message as { role?: string; content?: unknown };
+		if (message.role !== "user") return [];
+		const text = userMessageText(message);
+		if (text.startsWith("/")) return [];
+		return [{ content: message.content, sourceEntryId: entry.id }];
+	});
+}
+
 function sessionIdFromCtx(ctx: unknown): string | undefined {
 	try {
 		const sessionManager = (
@@ -1150,7 +1241,6 @@ export default function (pi: ExtensionAPI) {
 	let builtForTrusted: boolean | undefined;
 	let runtimeBuild: { key: string; epoch: number; promise: Promise<PairRuntime | undefined> } | undefined;
 	let constructionEpoch = 0;
-	let pendingUserTexts: string[] = [];
 	let unwatchBash: (() => void) | undefined;
 	let escalationController: PairEscalationController | undefined;
 	let primaryTurnSequence = 0;
@@ -1304,7 +1394,7 @@ export default function (pi: ExtensionAPI) {
 		);
 		acknowledgments.recordDelivered(delivered);
 		for (const note of delivered) {
-			if (note.source === "pair") directFindings[note.severity ?? "nit"]++;
+			if (note.source === "pair" && !isPairQuestion(note)) directFindings[note.severity ?? "nit"]++;
 		}
 		if (opts.finalAnswer && triggerTurn) awaitingUserAfterAdvisory = true;
 	}
@@ -1383,6 +1473,7 @@ export default function (pi: ExtensionAPI) {
 		severity?: PairSeverity,
 		sourceRuntime?: PairRuntime,
 		findingId?: string,
+		kind?: PairNoteKind,
 	): boolean {
 		if (!enabled) return false;
 		// Stand down entirely while a handoff is being performed (see comment on
@@ -1400,7 +1491,12 @@ export default function (pi: ExtensionAPI) {
 		// It injects a synthetic ready finding so every severity exercises the same
 		// boundary-delivery path without pretending a model review occurred.
 		if (!sourceRuntime) {
-			const staged = { note, severity, source: "pair" as const, id: findingId ?? pairFindingId() };
+			const staged: PairNote = {
+				note,
+				source: "pair",
+				id: findingId ?? pairFindingId(),
+				...(kind === "question" ? { kind: "question" as const } : { severity }),
+			};
 			if (turnState === "running") {
 				stagedBoundaryNotes.push(staged);
 				return false;
@@ -1419,7 +1515,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		if (targetRuntime) {
-			targetRuntime.enqueueAdvice(note, severity, findingId);
+			targetRuntime.enqueueAdvice(note, severity, findingId, kind);
 			dbg("queued advice", severity, JSON.stringify(note).slice(0, 120));
 			return false; // AdviseTool records only at the real boundary delivery.
 		}
@@ -1461,11 +1557,11 @@ export default function (pi: ExtensionAPI) {
 						stale: turnState !== "ended-terminal",
 					}),
 				onDirectDelivered: (note) => {
-					activeAdviseTool?.markDelivered(note.note, note.severity, note.id);
+					activeAdviseTool?.markDelivered(note.note, note.severity, note.id, note.kind);
 					activeRuntime?.markAdviceDelivered([note]);
-					deliveredFindingKeys.add(findingIdentity(note.note));
+					if (!isPairQuestion(note)) deliveredFindingKeys.add(findingIdentity(note.note));
 				},
-				onDirectFailed: (note) => activeRuntime?.requeueReadyAdvice(note.note, note.severity, note.id),
+				onDirectFailed: (note) => activeRuntime?.requeueReadyAdvice(note.note, note.severity, note.id, note.kind),
 			});
 		} catch (error) {
 			dbg("direct pair programmer delivery failed", String(error));
@@ -1556,7 +1652,6 @@ export default function (pi: ExtensionAPI) {
 		activePairContextWindow = undefined;
 		builtForCwd = undefined;
 		builtForTrusted = undefined;
-		pendingUserTexts = [];
 		inputSpool.reset();
 		autoResumeSuppressed = false;
 		awaitingUserAfterAdvisory = false;
@@ -1605,12 +1700,12 @@ export default function (pi: ExtensionAPI) {
 		projectedThroughSourceId = pairSourceEntries(entries).at(-1)?.id;
 	}
 
-	function takeNewSourceEntryIds(entries: Entry[]): string[] {
+	function takeNewSourceEntries(entries: Entry[]): Entry[] {
 		const start = entryIndexForId(entries, projectedThroughSourceId);
 		const fresh = pairSourceEntries(entries.slice(start + 1));
 		const latest = fresh.at(-1)?.id;
 		if (latest) projectedThroughSourceId = latest;
-		return fresh.map((entry) => entry.id);
+		return fresh;
 	}
 
 	function sourceAddressDelta(delta: string, sourceEntryIds: readonly string[]): string {
@@ -1730,11 +1825,12 @@ export default function (pi: ExtensionAPI) {
 
 		let builtRuntime!: PairRuntime;
 		const builtAdviseTool = new AdviseTool(
-			(note, severity, findingId) => deliverAdvice(note, severity, builtRuntime, findingId),
-			(_note, findingId) => builtRuntime.canonicalFindingId(findingId),
+			(note, severity, findingId, kind) => deliverAdvice(note, severity, builtRuntime, findingId, kind),
+			(_note, findingId, kind) => builtRuntime.canonicalFindingId(findingId, kind),
 		);
 		const builtEscalateTool = new EscalateTool((request) => {
 			if (runtime !== builtRuntime || !builtRuntime.acceptingAdvice) return "unavailable";
+			if (!getManagedSubagentService(pi.events, { processFallback: false })) return "unavailable";
 			return builtRuntime.stageEscalation(request);
 		});
 		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
@@ -1894,9 +1990,6 @@ export default function (pi: ExtensionAPI) {
 		if (!enabled) return;
 		if (event.message?.role !== "user") return;
 		awaitingUserAfterAdvisory = false;
-		const text = userMessageText(event.message);
-		if (!text || text.startsWith("/")) return;
-		pendingUserTexts.push(text);
 	});
 
 	// `!bash` is recorded by SessionManager.appendMessage, not message_end.
@@ -1955,8 +2048,6 @@ export default function (pi: ExtensionAPI) {
 
 		if (!terminal) flushBoundaryFindings();
 		if (process.env.PAIR_NO_REVIEW) return;
-		const userPrompt = pendingUserTexts.join("\n\n");
-		pendingUserTexts = [];
 		const toolResults = event.toolResults as ToolResultMessage[];
 		const repeatedFailure = repeatedFailures.observe(event.message as never, toolResults, boundarySequence);
 		if (repeatedFailure) {
@@ -1966,10 +2057,11 @@ export default function (pi: ExtensionAPI) {
 			});
 		}
 		const entries = ctx.sessionManager.getBranch() as Entry[];
-		const sourceEntryIds = takeNewSourceEntryIds(entries);
+		const fresh = takeNewSourceEntries(entries);
+		const sourceEntryIds = fresh.map((entry) => entry.id);
 		const delta = sourceAddressDelta(
 			formatTurnDelta({
-				userPrompt: userPrompt || undefined,
+				userMessages: livePairUserMessages(fresh),
 				assistant: event.message as AssistantMessage,
 				toolResults,
 				issueReceipt: receiptIssuer(ctx.sessionManager, entries),
@@ -2039,8 +2131,14 @@ export default function (pi: ExtensionAPI) {
 		const container = new Container();
 		for (const [index, n] of notes.entries()) {
 			if (index > 0) container.addChild(new Spacer(1));
-			const color = n.severity === "blocker" ? "error" : n.severity === "concern" ? "warning" : "accent";
-			const tag = (n.severity ?? "nit").toUpperCase();
+			const color = isPairQuestion(n)
+				? "accent"
+				: n.severity === "blocker"
+					? "error"
+					: n.severity === "concern"
+						? "warning"
+						: "accent";
+			const tag = isPairQuestion(n) ? "QUESTION" : (n.severity ?? "nit").toUpperCase();
 			const role = n.source === "consultant" || n.source === "advisor" ? "consultant" : "pair programmer";
 			const card = new Container();
 			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));

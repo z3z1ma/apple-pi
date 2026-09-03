@@ -67,3 +67,5 @@
 - `.ledger/history/202608311006-port-matt-pocock-engineering-skills/task.md` — done — Replace workflow skills with Matt Pocock-derived engineering workflows — Rebuild Apple Pi's workflow skill layer around adapted Matt Pocock engineering skills, using ledger task folders for task artifacts and .wiki Markdown for grill-derived context while preserving Apple Pi fundamentals.
 
 - `.ledger/history/202609021914-pair-receipt-expansion/task.md` — done — Constrain pair programmer to trajectory receipts — Remove repository and general session-search tools from the persistent pair and add handle-bound expansion for omitted primary trajectory content.
+
+- `.ledger/history/202609022314-deepen-pair-collaboration/task.md` — done — Deepen pair collaboration and image visibility — Let the pair use restrained probing/view requests through share_note, simplify behavioral framing around frontier judgment, and add source-bound on-demand receipts for user images.

@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { formatResultReceipt } from "../../pair-programmer/src/receipts.js";
+import { formatUserMessage } from "../../pair-programmer/src/formatting.js";
 import { collectRecentUserRequests, formatRecentTrajectory } from "../../pair-programmer/src/seed.js";
 
 export const CONSULTATION_CONTEXT_VERSION = 1;
@@ -300,10 +301,16 @@ export async function buildConsultationContext(opts: {
 }): Promise<ConsultationContext> {
 	const entries = opts.ctx.sessionManager.getBranch?.() ?? opts.ctx.sessionManager.getEntries?.() ?? [];
 	const requests = collectRecentUserRequests(entries);
+	const renderRequest = (request: (typeof requests)[number]): string =>
+		request.messages
+			.map((message) => formatUserMessage(message.content))
+			.filter(Boolean)
+			.join("\n\n");
 	const current = requests.at(-1);
 	const currentRequest =
-		current?.texts.join("\n\n") || "[unavailable: no current user request was found in the active primary branch]";
-	const prior = requests.slice(0, -1).map((request) => request.texts.join("\n\n"));
+		(current ? renderRequest(current) : "") ||
+		"[unavailable: no current user request was found in the active primary branch]";
+	const prior = requests.slice(0, -1).map(renderRequest);
 	const implicatedPaths = opts.hypothesis?.evidence.flatMap((item) => (item.path ? [item.path] : [])) ?? [];
 	const workingState = await captureConsultationWorkingState(opts.pi, opts.ctx.cwd, implicatedPaths);
 	const execution = collectExecutionEvidence(entries);
