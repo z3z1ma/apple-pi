@@ -49,25 +49,29 @@ Disabling the pair programmer cancels queued and active consultant consultations
 
 ## Behavior
 
-The pair programming partner receives a stable pairing policy followed by:
+The pair programming partner shares the main agent's screen rather than operating a second IDE. It receives a stable pairing policy followed by:
 
 - recent user requests from the main session;
-- compact work receipts rather than successful tool bodies;
+- the main agent's reasoning, text, tool calls, edit diffs, failures, and compact work receipts;
 - active task and assumption context;
 - a read-only projection of the shared notebook after compaction;
 - optional global or trusted-project `PAIR.md` guidance.
 
 `PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask the consultant.
 
-The partner has three private typed tools:
+The partner has a deliberately narrow typed toolset:
 
 - `share_note` stages one current, actionable `nit`, `concern`, or `blocker` for frontier confirmation before delivery to the main agent;
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
-- `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation.
+- `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation;
+- `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
+- `revisit_note` follows a known notebook ID to its primary-session source evidence.
+
+A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, write payload, or user-bash output—not current checkout state. Large payloads return stable opaque continuation handles under Pi's normal output limits. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
 
 A review attempt commits its staged notes, consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
-The partner cannot invoke arbitrary agents, shell commands, MCP, `pi_exec`, mutation tools, or arbitrary extension tools. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
+The partner cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
 Free-form prose does not start a consultant consultation. Generic uncertainty, style preference, known errors, and the mere possibility of a problem are not reasons to ask.
 

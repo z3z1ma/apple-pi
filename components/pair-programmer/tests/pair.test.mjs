@@ -274,7 +274,8 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 	assert.match(md, /#### Your partner/);
 	assert.match(md, /here is my plan/);
 	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
-	assert.match(md, /#### Tool result: `write`\n\ncall: 1\nwrote a\.js/);
+	assert.match(md, /#### Tool result: `write`\n\nwrote a\.js/);
+	assert.doesNotMatch(md, /call: 1/);
 });
 
 test("formatTurnDelta: presents material-finding acknowledgments as feedback to the pair programmer", () => {
@@ -317,8 +318,9 @@ test("formatTurnDelta: presents material-finding acknowledgments as feedback to 
 	assert.match(rendered, /already preserves the turn boundary/);
 });
 
-test("formatTurnDelta: successful write omits content and addresses the result", () => {
+test("formatTurnDelta: successful write omits content and exposes one receipt handle", () => {
 	const body = "export function refresh() {\n  return rotate();\n}\n";
+	let receiptRequest;
 	const md = renderDelta({
 		assistant: {
 			role: "assistant",
@@ -337,15 +339,48 @@ test("formatTurnDelta: successful write omits content and addresses the result",
 				timestamp: 2,
 			},
 		],
+		issueReceipt(request) {
+			receiptRequest = request;
+			return "0123456789abcdef0123456789abcdef";
+		},
 	});
 	assert.match(md, /→ tool `write`\(src\/auth\.ts\) — 3 lines/);
 	assert.match(md, /content omitted/);
-	assert.match(md, /call: w1/);
+	assert.match(md, /receipt: 0123456789abcdef0123456789abcdef/);
+	assert.doesNotMatch(md, /call: w1/);
 	assert.ok(!md.includes("export function refresh"), "write content must not appear in the delta");
+	assert.equal(receiptRequest.kind, "tool");
+	assert.equal(receiptRequest.callId, "w1");
+	assert.equal(receiptRequest.sources, "interaction");
+	assert.match(receiptRequest.snapshot.text, /content:\nexport function refresh/);
+	assert.match(receiptRequest.snapshot.text, /Successfully wrote 48 bytes/);
 });
 
-test("formatTurnDelta: failed write keeps a truncated attempted body", () => {
+test("formatTurnDelta: an assistant-only write keeps its omitted payload behind a call receipt", () => {
+	const body = "assistant-only body\n";
+	let receiptRequest;
+	const md = renderDelta({
+		assistant: {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "w-split", name: "write", arguments: { path: "split.ts", content: body } }],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		issueReceipt(request) {
+			receiptRequest = request;
+			return "11111111111111111111111111111111";
+		},
+	});
+
+	assert.match(md, /content omitted\nreceipt: 11111111111111111111111111111111/);
+	assert.equal(receiptRequest.sources, "call");
+	assert.match(receiptRequest.snapshot.text, /assistant-only body/);
+});
+
+test("formatTurnDelta: failed write keeps a truncated attempted body and a receipt for the full attempt", () => {
 	const body = `${"line\n".repeat(80)}secret-needle`;
+	let receiptRequest;
 	const md = renderDelta({
 		assistant: {
 			role: "assistant",
@@ -364,24 +399,45 @@ test("formatTurnDelta: failed write keeps a truncated attempted body", () => {
 				timestamp: 2,
 			},
 		],
+		issueReceipt(request) {
+			receiptRequest = request;
+			return "22222222222222222222222222222222";
+		},
 	});
 	assert.match(md, /→ tool `write`:/);
 	assert.match(md, /path: huge\.ts/);
 	assert.match(md, /truncated/);
 	assert.match(md, /`write` \(error\)/);
+	assert.match(md, /receipt: 22222222222222222222222222222222/);
 	assert.ok(!md.includes("secret-needle"), "failed write content is capped");
+	assert.equal(receiptRequest.sources, "interaction");
+	assert.match(receiptRequest.snapshot.text, /secret-needle/);
 });
 
-test("formatUserBash: receipt without body, omitted when excluded", () => {
-	const ok = A.formatUserBash({ command: "pnpm test auth", output: "ok\n".repeat(50), exitCode: 0 });
+test("formatUserBash: successful output has a receipt and excluded output stays hidden", () => {
+	let receiptRequest;
+	const ok = A.formatUserBash(
+		{ command: "pnpm test auth", output: "ok\n".repeat(50), exitCode: 0 },
+		{
+			sourceEntryId: "bash-entry",
+			issueReceipt(request) {
+				receiptRequest = request;
+				return "abcdef0123456789abcdef0123456789";
+			},
+		},
+	);
 	assert.match(ok, /#### User bash/);
 	assert.match(ok, /\$ pnpm test auth/);
+	assert.match(ok, /receipt: abcdef0123456789abcdef0123456789/);
 	assert.match(ok, /50 lines/);
 	assert.ok(!ok.includes("ok\nok"), "successful user bash omits the body");
+	assert.equal(receiptRequest.kind, "bash");
+	assert.equal(receiptRequest.sourceEntryId, "bash-entry");
+	assert.match(receiptRequest.snapshot.text, /ok\nok/);
 	assert.equal(A.formatUserBash({ command: "secret", output: "nope", exitCode: 0, excludeFromContext: true }), "");
 });
 
-test("bindBashAppendHook: pushes persisted bashExecution, not user messages", () => {
+test("bindBashAppendHook: pushes persisted bashExecution with its source id, not user messages", () => {
 	const seen = [];
 	const sm = {
 		appendMessage(message) {
@@ -389,7 +445,7 @@ test("bindBashAppendHook: pushes persisted bashExecution, not user messages", ()
 			return "id-1";
 		},
 	};
-	const stop = A.bindBashAppendHook(sm, (message) => seen.push(message.command));
+	const stop = A.bindBashAppendHook(sm, (message, sourceEntryId) => seen.push([message.command, sourceEntryId]));
 	assert.equal(sm.appendMessage({ role: "user", content: "hi" }), "id-1");
 	assert.equal(sm.appendMessage({ role: "bashExecution", command: "pnpm test", output: "ok", exitCode: 0 }), "id-1");
 	assert.equal(
@@ -402,10 +458,10 @@ test("bindBashAppendHook: pushes persisted bashExecution, not user messages", ()
 		}),
 		"id-1",
 	);
-	assert.deepEqual(seen, ["pnpm test"]);
+	assert.deepEqual(seen, [["pnpm test", "id-1"]]);
 	stop();
 	sm.appendMessage({ role: "bashExecution", command: "after", output: "", exitCode: 0 });
-	assert.deepEqual(seen, ["pnpm test"]);
+	assert.deepEqual(seen, [["pnpm test", "id-1"]]);
 });
 
 test("formatTurnDelta: a multi-line bash command rides verbatim (no \\n escaping)", () => {
@@ -856,7 +912,7 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.match(trajectory, /## What your partner has been doing/);
 	assert.match(trajectory, /check refresh/);
 	assert.match(trajectory, /→ tool `edit`\(src\/auth\.ts\)/);
-	assert.match(trajectory, /call: e1/);
+	assert.doesNotMatch(trajectory, /call: e1/);
 	assert.match(trajectory, /#### User bash/);
 	assert.ok(!trajectory.includes("stale think 0"), "older turns outside the tail are dropped");
 	assert.ok(!trajectory.includes("old request"), "user text stays in the user-request section");
@@ -865,17 +921,22 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.match(seeded, /What the user told your partner/);
 });
 
-test("compact hook reseeds and keeps no prior pair deltas", async () => {
+test("compact hook reseeds, presents its handles, and keeps no prior pair deltas", async () => {
+	let presented;
 	const result = await A.pairCompactResult(
 		{ preparation: { tokensBefore: 12000 } },
 		{
 			entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
 			rollingAdvice: () => [],
+			presentReceipts: (text) => {
+				presented = text;
+			},
 		},
 	);
 	assert.equal(result.compaction.firstKeptEntryId, A.PAIR_RESEED_ENTRY_ID);
 	assert.equal(result.compaction.tokensBefore, 12000);
 	assert.match(result.compaction.summary, /ship it/);
+	assert.equal(presented, result.compaction.summary);
 });
 
 test("compact hook includes recent trajectory in the reseed", async () => {
@@ -992,6 +1053,8 @@ test("parent notebook packet sits after the compaction summary and is idempotent
 	assert.ok(packet);
 	assert.match(packet.content[0].text, /Do not reimplement auth/);
 	assert.match(packet.content[0].text, /revisit_note/);
+	assert.match(packet.content[0].text, /expand_receipt/);
+	assert.doesNotMatch(packet.content[0].text, /search_session/);
 	assert.match(packet.content[0].text, /not a notebook for this side conversation/);
 	assert.match(packet.content[0].text, /notebook you keep for your partner's session/);
 
@@ -1021,8 +1084,9 @@ test("pair parent-notebook hook does not register the notebook pipeline", () => 
 	assert.deepEqual(events, ["context"]);
 });
 
-test("runtime: a failed prompt keeps the seed for the next review", async () => {
+test("runtime: a failed prompt keeps the seed and marks each submitted receipt-bearing prompt as presented", async () => {
 	const prompts = [];
+	const presented = [];
 	let fail = true;
 	const agent = {
 		state: { messages: [] },
@@ -1045,12 +1109,22 @@ test("runtime: a failed prompt keeps the seed for the next review", async () => 
 		undefined,
 		undefined,
 		() => "ORIENTATION-SEED",
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		(text) => presented.push(text),
 	);
 	rt.push("delta one", { terminal: true });
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
 	rt.push("delta two", { terminal: true });
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(prompts.length, 3, "the later wake retries the retained claim before processing new input");
+	assert.equal(presented.length, 3);
+	assert.match(presented[0], /ORIENTATION-SEED/);
+	assert.match(presented[0], /delta one/);
+	assert.match(presented[1], /ORIENTATION-SEED/);
+	assert.match(presented[2], /delta two/);
 	assert.match(JSON.stringify(prompts[0]), /ORIENTATION-SEED/);
 	assert.match(JSON.stringify(prompts[1]), /ORIENTATION-SEED/);
 	assert.doesNotMatch(JSON.stringify(prompts[2]), /ORIENTATION-SEED/);
@@ -1061,16 +1135,17 @@ test("pair programmer uses one fixed inference profile", () => {
 	assert.equal(A.PAIR_MODEL_PROFILE, "pair");
 });
 
-test("default pair prompt names primary-bound recall tools", () => {
+test("default pair prompt describes the shared-screen receipt boundary", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pair-prompt-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const prompt = A.loadSystemPrompt(agentDir, false);
 		assert.match(prompt, /revisit_note/);
-		assert.match(prompt, /search_session/);
-		assert.match(prompt, /your partner's transcript/);
-		assert.match(prompt, /call:<id>/);
+		assert.match(prompt, /expand_receipt/);
+		assert.match(prompt, /share your partner's screen/);
+		assert.doesNotMatch(prompt, /search_session/);
+		assert.doesNotMatch(prompt, /call:<id>/);
 		assert.match(prompt, /You are pair programming with another capable coding agent/);
 		assert.match(prompt, /Call `ask_consultant` instead/);
 		assert.match(prompt, /Consolidate symptoms and consequences that share one root cause/);
@@ -1084,8 +1159,8 @@ test("default pair prompt names primary-bound recall tools", () => {
 	}
 });
 
-test("primary-bound revisit_note resolves the primary branch, not the caller ctx", async () => {
-	const tools = A.bindPrimaryRecallTools({
+test("pair-bound revisit_note resolves the primary branch without general session search", async () => {
+	const tools = A.bindPairRecallTools({
 		getSessionFile: () => undefined,
 		getBranch: () => [
 			{
@@ -1119,9 +1194,12 @@ test("primary-bound revisit_note resolves the primary branch, not the caller ctx
 	const notebook = tools.find((t) => t.name === "revisit_note");
 	assert.ok(notebook);
 	assert.match(notebook.description, /your partner's session/);
-	for (const name of tools.map((t) => t.name)) {
-		assert.ok(A.PAIR_SESSION_TOOLS.includes(name), `${name} must be on the session tool allowlist`);
-	}
+	assert.deepEqual(
+		tools.map((tool) => tool.name),
+		["revisit_note"],
+	);
+	assert.ok(A.PAIR_SESSION_TOOLS.includes("revisit_note"));
+	assert.ok(!A.PAIR_SESSION_TOOLS.includes("search_session"));
 	const hit = await notebook.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
 	});

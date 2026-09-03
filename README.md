@@ -32,7 +32,7 @@ I think about the package in four groups. They are all installed together, but e
 
 These are the pieces I interact with directly while a session is running.
 
-- [`pair programmer`](docs/pair-programmer.md) — a persistent pair programming partner with episodic guidance from a deep software architect
+- [`pair programmer`](docs/pair-programmer.md) — a persistent shared-screen navigator with receipt-bound expansion and episodic guidance from a deep software architect
 - [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
 - [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
 - [`Distill`](docs/distill.md) — proposal-first extraction of durable lessons via `/distill [focus]`

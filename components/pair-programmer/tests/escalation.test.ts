@@ -89,9 +89,20 @@ const request = {
 const usage = { input: 100, cacheRead: 50, cacheWrite: 0, output: 20, cost: 0.2, durationMs: 10, toolCalls: 3 };
 
 describe("pair programmer escalation machinery", () => {
-	it("keeps architectural consultation private and excludes delegation or mutation capabilities", () => {
-		expect(PAIR_SESSION_TOOLS).toContain("ask_consultant");
-		for (const forbidden of ["Agent", "pi_exec", "bash", "edit", "write", "mcp"]) {
+	it("keeps the pair on the shared trajectory while consultation remains private", () => {
+		expect(PAIR_SESSION_TOOLS).toEqual(["share_note", "ask_consultant", "expand_receipt", "revisit_note"]);
+		for (const forbidden of [
+			"Agent",
+			"pi_exec",
+			"bash",
+			"edit",
+			"write",
+			"read",
+			"grep",
+			"find",
+			"search_session",
+			"mcp",
+		]) {
 			expect(PAIR_SESSION_TOOLS).not.toContain(forbidden);
 		}
 	});

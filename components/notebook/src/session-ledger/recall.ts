@@ -1,3 +1,4 @@
+import { isSourceEntry } from "./progress.js";
 import {
 	type Entry,
 	isNotebookMaintenanceEntry,
@@ -8,8 +9,6 @@ import {
 	type Observation,
 	type Reflection,
 } from "./types.js";
-
-const SOURCE_TYPES = new Set(["message", "custom_message", "branch_summary"]);
 
 export type { Entry, Observation, Reflection };
 
@@ -73,10 +72,6 @@ export type RecallResult =
 
 type IndexedObservation = ObservationLedgerLocation & { observation: Observation };
 type IndexedReflection = ReflectionLedgerLocation & { reflection: Reflection };
-
-function isSourceEntry(entry: Entry): boolean {
-	return SOURCE_TYPES.has(entry.type);
-}
 
 function uniqueById(entries: Entry[]): Entry[] {
 	const seen = new Set<string>();

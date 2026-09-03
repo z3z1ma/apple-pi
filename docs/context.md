@@ -24,7 +24,7 @@ Completions-routed Grok is left to Pi default compaction.
 
 ## Pair programmer notebook
 
-The pair programming partner is the only persistent model actor. It follows the main session as it unfolds, keeps a second line of thought while the main agent works, and periodically maintains sourced observations and reflections about the pair's current shared understanding through its private `update_notebook` tool. The tool proposes a typed update; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending the complete maintenance result as one atomic session entry.
+The pair programming partner is the only persistent model actor. It follows the main session as a shared-screen navigator, keeps a second line of thought while the main agent works, and periodically maintains sourced observations and reflections about the pair's current shared understanding through its private `update_notebook` tool. The tool proposes a typed update; deterministic root code validates source IDs, supporting observation IDs, supersession, coverage advancement, and drop guardrails before appending the complete maintenance result as one atomic session entry. It has no repository or general transcript-search tools; `expand_receipt` can reveal only historical content folded behind a handle already present in its trajectory.
 
 Full maintenance becomes due when uncovered source tokens reach `notebookAfterTokens` (default 20,000). Explicit pivots can be recorded earlier during normal pair programmer review. Empty full-maintenance results use a bounded retry backoff. If the pair programmer is disabled or unavailable, note-taking pauses; existing observations, reflections, compaction packets, `search_session`, and `revisit_note` remain readable. No hidden notebook actor starts.
 
@@ -39,7 +39,7 @@ Commands and tools:
 
 The pair programmer's operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. The pair programmer's model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable the exceptional overflow fallback and pair programmer notebook maintenance while preserving reads; it does not disable Pi's native compaction or automatic-compaction failure safety. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-The pair programmer and episodic consultant sessions bind `search_session` and `revisit_note` to the primary session. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only Codex fast mode, compaction safety/fallback, and the search root guard.
+The pair programmer binds `revisit_note` to the primary session and uses handle-bound `expand_receipt` for folded trajectory content. It does not receive `search_session`. The episodic consultant retains primary-bound `search_session`, `revisit_note`, and read-only repository tools for independent investigation. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only Codex fast mode, compaction safety/fallback, and the search root guard.
 
 ## Where the notebook persists
 

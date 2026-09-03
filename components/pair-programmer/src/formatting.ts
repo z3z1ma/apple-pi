@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import { type SessionEntry, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
-
+import type { PairReceiptImage, PairReceiptIssuer, PairReceiptSnapshot } from "./receipt-expansion.js";
 import {
 	formatBashReceipt,
 	formatBytes,
@@ -108,6 +108,60 @@ function renderToolArgs(args: Record<string, unknown> | undefined): string {
 	return entries.map(([k, v]) => `${k}:${renderArgValue(v, "  ", 0)}`).join("\n");
 }
 
+function receiptImages(content: unknown): PairReceiptImage[] {
+	if (!Array.isArray(content)) return [];
+	return content.flatMap((part) => {
+		if (
+			!part ||
+			typeof part !== "object" ||
+			(part as { type?: unknown }).type !== "image" ||
+			typeof (part as { data?: unknown }).data !== "string" ||
+			typeof (part as { mimeType?: unknown }).mimeType !== "string"
+		) {
+			return [];
+		}
+		return [
+			{
+				type: "image" as const,
+				data: (part as { data: string }).data,
+				mimeType: (part as { mimeType: string }).mimeType,
+			},
+		];
+	});
+}
+
+function toolReceiptSnapshot(
+	tr: ToolResultMessage,
+	callId: string,
+	args: Record<string, unknown> | undefined,
+	rawBody: string,
+): PairReceiptSnapshot {
+	const argsText = renderToolArgs(args);
+	const images = receiptImages(tr.content);
+	const text = [
+		`Tool call: ${tr.toolName}`,
+		`call: ${callId}`,
+		argsText ? `Arguments:\n${argsText}` : undefined,
+		`Result${tr.isError ? " (error)" : ""}:\n${rawBody || (images.length ? "[image content follows]" : "(no text output)")}`,
+	]
+		.filter((part): part is string => Boolean(part))
+		.join("\n\n");
+	return { text, ...(images.length ? { images } : {}) };
+}
+
+function toolCallReceiptSnapshot(
+	toolName: string,
+	callId: string,
+	args: Record<string, unknown> | undefined,
+): PairReceiptSnapshot {
+	const argsText = renderToolArgs(args);
+	return {
+		text: [`Tool call: ${toolName}`, `call: ${callId}`, argsText ? `Arguments:\n${argsText}` : undefined]
+			.filter((part): part is string => Boolean(part))
+			.join("\n\n"),
+	};
+}
+
 function exitSuffix(tr: ToolResultMessage): string {
 	const details = (tr as { details?: { exitCode?: unknown; exit_code?: unknown } }).details;
 	const code = details?.exitCode ?? details?.exit_code;
@@ -124,6 +178,15 @@ function indexSuccessfulDiffs(results: readonly ToolResultMessage[]): Map<string
 	return diffByCallId;
 }
 
+function indexResultCallIds(results: readonly ToolResultMessage[]): Set<string> {
+	return new Set(
+		results.flatMap((result) => {
+			const id = (result as { toolCallId?: unknown }).toolCallId;
+			return typeof id === "string" && id ? [id] : [];
+		}),
+	);
+}
+
 function indexFailedCallIds(results: readonly ToolResultMessage[]): Set<string> {
 	const ids = new Set<string>();
 	for (const tr of results) {
@@ -133,23 +196,46 @@ function indexFailedCallIds(results: readonly ToolResultMessage[]): Set<string> 
 	return ids;
 }
 
-function formatWriteCall(args: Record<string, unknown> | undefined, failed: boolean): string {
+function formatWriteCall(
+	args: Record<string, unknown> | undefined,
+	failed: boolean,
+	callId: string | undefined,
+	hasResult: boolean,
+	issueReceipt?: PairReceiptIssuer,
+): string {
 	const path = typeof args?.path === "string" && args.path ? args.path : "?";
 	const content = typeof args?.content === "string" ? args.content : "";
+	let text: string;
+	let omitted = false;
 	if (!failed) {
-		return `→ tool \`write\`(${path}) — ${lineCount(content)} lines, ${formatBytes(utf8Bytes(content))}; content omitted`;
+		text = `→ tool \`write\`(${path}) — ${lineCount(content)} lines, ${formatBytes(utf8Bytes(content))}; content omitted`;
+		omitted = typeof args?.content === "string";
+	} else {
+		const truncated = { ...(args ?? {}) };
+		if (typeof truncated.content === "string") {
+			truncated.content = truncateResultBody(truncated.content);
+			omitted = truncated.content !== content;
+		}
+		const argsText = renderToolArgs(truncated);
+		text = argsText ? `→ tool \`write\`:\n${argsText}` : "→ tool `write`";
 	}
-	const truncated = { ...(args ?? {}) };
-	if (typeof truncated.content === "string") truncated.content = truncateResultBody(truncated.content);
-	const argsText = renderToolArgs(truncated);
-	return argsText ? `→ tool \`write\`:\n${argsText}` : "→ tool `write`";
+	if (!omitted || !callId || hasResult || !issueReceipt) return text;
+	const receipt = issueReceipt({
+		kind: "tool",
+		callId,
+		sources: "call",
+		snapshot: toolCallReceiptSnapshot("write", callId, args),
+	});
+	return receipt ? `${text}\nreceipt: ${receipt}` : text;
 }
 
 function formatImplementingAgent(
 	assistant: AssistantMessage,
 	diffByCallId: Map<string, string>,
 	failedCallIds: Set<string>,
+	resultCallIds: Set<string>,
 	argsByCallId: Map<string, Record<string, unknown>>,
+	issueReceipt?: PairReceiptIssuer,
 ): string {
 	const sub: string[] = [];
 	for (const c of assistant.content) {
@@ -165,7 +251,7 @@ function formatImplementingAgent(
 			// When this call produced a diff (a successful edit), suppress the raw
 			// {oldText,newText} args and let the result's -/+ diff carry the change: the
 			// args are two unannotated peer blobs and the pair — reviewing AFTER the
-			// edit landed (a fresh read shows the NEW side) — can't tell which is on disk
+			// edit landed (current checkout state shows the NEW side) — can't tell which persisted
 			// ("didn't persist"). With NO diff (failed edit, non-edit tool) show the args
 			// verbatim; for a failed edit they're the only evidence of what was attempted.
 			const args = c.arguments as Record<string, unknown> | undefined;
@@ -175,7 +261,15 @@ function formatImplementingAgent(
 				const p = typeof args?.path === "string" ? args.path : "?";
 				sub.push(`→ tool \`${c.name}\`(${p}) — ${edits.length} block(s); diff in tool result`);
 			} else if (c.name === "write") {
-				sub.push(formatWriteCall(args, Boolean(callId && failedCallIds.has(callId))));
+				sub.push(
+					formatWriteCall(
+						args,
+						Boolean(callId && failedCallIds.has(callId)),
+						callId,
+						Boolean(callId && resultCallIds.has(callId)),
+						issueReceipt,
+					),
+				);
 			} else {
 				const argsText = renderToolArgs(args);
 				if (c.name === "acknowledge_pair_findings") {
@@ -196,25 +290,37 @@ function formatImplementingAgent(
 function formatProjectedResults(
 	results: readonly ToolResultMessage[],
 	argsByCallId: Map<string, Record<string, unknown>>,
+	issueReceipt?: PairReceiptIssuer,
 ): string[] {
 	return results.map((tr) => {
 		// Prefer the canonical line-numbered unified diff (the same view the human /
 		// main model gets, computed by pi's edit-diff) for a SUCCESSFUL result: its -/+
 		// markers unambiguously frame removed-vs-current lines, which the flat
 		// {oldText,newText} echo lacks. It is also a pinned point-in-time snapshot of
-		// THIS turn's change — the pair's own read returns current (possibly later-
-		// edited) disk, so the inline diff is not re-derivable and must ride verbatim.
+		// THIS turn's change. Current checkout state may already contain later edits,
+		// so the inline historical diff is not re-derivable and must ride verbatim.
 		// On an ERROR, show the text body instead: the error is the diagnostic, and a
 		// diff from a failed edit is untrustworthy (did it apply? partially?).
 		const diff = (tr as { details?: { diff?: unknown } }).details?.diff;
 		const successfulDiff = !tr.isError && typeof diff === "string" && diff.trim() ? diff : "";
 		const rawBody = successfulDiff || textOf(tr.content as Array<{ type: string; text?: string }>);
 		const callId = (tr as { toolCallId?: string }).toolCallId;
-		const body = successfulDiff
-			? successfulDiff
-			: formatResultReceipt(tr, rawBody, callId ? argsByCallId.get(callId) : undefined);
-		const pointer = callId ? `call: ${callId}` : "";
-		const text = [pointer, body || "(no text output)"].filter(Boolean).join("\n");
+		const args = callId ? argsByCallId.get(callId) : undefined;
+		const body = successfulDiff ? successfulDiff : formatResultReceipt(tr, rawBody, args);
+		const omittedResult = !successfulDiff && (body !== rawBody || receiptImages(tr.content).length > 0);
+		const writeContent = tr.toolName === "write" && typeof args?.content === "string" ? args.content : undefined;
+		const omittedWrite =
+			writeContent !== undefined && (!tr.isError || truncateResultBody(writeContent) !== writeContent);
+		const receipt =
+			callId && issueReceipt && (omittedResult || omittedWrite)
+				? issueReceipt({
+						kind: "tool",
+						callId,
+						sources: args ? "interaction" : "result",
+						snapshot: toolReceiptSnapshot(tr, callId, args, rawBody),
+					})
+				: undefined;
+		const text = [receipt ? `receipt: ${receipt}` : "", body || "(no text output)"].filter(Boolean).join("\n");
 		return `#### Tool result: \`${tr.toolName}\`${tr.isError ? " (error)" : ""}${exitSuffix(tr)}\n\n${text}`;
 	});
 }
@@ -227,6 +333,7 @@ export function formatTurnDelta(opts: {
 	userPrompt?: string;
 	assistant?: AssistantMessage;
 	toolResults?: ToolResultMessage[];
+	issueReceipt?: PairReceiptIssuer;
 }): string {
 	const parts: string[] = [];
 	if (opts.userPrompt?.trim()) {
@@ -236,27 +343,52 @@ export function formatTurnDelta(opts: {
 	const results = opts.toolResults ?? [];
 	const diffByCallId = indexSuccessfulDiffs(results);
 	const failedCallIds = indexFailedCallIds(results);
+	const resultCallIds = indexResultCallIds(results);
 	const argsByCallId = new Map<string, Record<string, unknown>>();
 	if (opts.assistant) {
-		const agent = formatImplementingAgent(opts.assistant, diffByCallId, failedCallIds, argsByCallId);
+		const agent = formatImplementingAgent(
+			opts.assistant,
+			diffByCallId,
+			failedCallIds,
+			resultCallIds,
+			argsByCallId,
+			opts.issueReceipt,
+		);
 		if (agent) parts.push(agent);
 	}
-	parts.push(...formatProjectedResults(results, argsByCallId));
+	parts.push(...formatProjectedResults(results, argsByCallId, opts.issueReceipt));
 	if (parts.length === 0 && opts.assistant) {
 		return `#### Your partner\n\nAssistant turn ended without visible content (stop reason: ${opts.assistant.stopReason ?? "unknown"}).`;
 	}
 	return parts.join("\n\n");
 }
 
-export function formatUserBash(message: {
-	command?: string;
-	output?: string;
-	exitCode?: number;
-	excludeFromContext?: boolean;
-}): string {
+export function formatUserBash(
+	message: {
+		command?: string;
+		output?: string;
+		exitCode?: number;
+		excludeFromContext?: boolean;
+	},
+	opts?: { issueReceipt?: PairReceiptIssuer; sourceEntryId?: string },
+): string {
 	if (message.excludeFromContext) return "";
 	const failed = message.exitCode !== 0;
-	return `#### User bash\n\n$ ${message.command ?? ""}\n${formatBashReceipt(message.output ?? "", { exitCode: message.exitCode }, failed)}`.trimEnd();
+	const output = message.output ?? "";
+	const projected = formatBashReceipt(output, { exitCode: message.exitCode }, failed);
+	const omitted = output.trim().length > 0 && !projected.endsWith(output.trimEnd());
+	const receipt =
+		omitted && opts?.issueReceipt && opts.sourceEntryId
+			? opts.issueReceipt({
+					kind: "bash",
+					sourceEntryId: opts.sourceEntryId,
+					snapshot: { text: `User bash\n\n$ ${message.command ?? ""}\n${output}`.trimEnd() },
+				})
+			: undefined;
+	return ["#### User bash", "", `$ ${message.command ?? ""}`, receipt ? `receipt: ${receipt}` : "", projected]
+		.filter((part, index) => part || index === 1)
+		.join("\n")
+		.trimEnd();
 }
 
 function contextText(content: string | Array<{ type: string; text?: string }>): string {
@@ -272,15 +404,18 @@ function contextText(content: string | Array<{ type: string; text?: string }>): 
  * compaction or branch navigation. This is prior context for the next review, not
  * a historical review request, so pair messages themselves are excluded.
  */
-export function formatActiveSessionContext(entries: readonly SessionEntry[]): string {
-	const messages: AgentMessage[] = entries
-		.flatMap((entry) => sessionEntryToContextMessages(entry))
-		.filter((message) => message.role !== "custom" || message.customType !== ADVISORY_TYPE);
+export function formatActiveSessionContext(entries: readonly SessionEntry[], issueReceipt?: PairReceiptIssuer): string {
+	const messages: Array<{ message: AgentMessage; sourceEntryId: string }> = entries.flatMap((entry) =>
+		sessionEntryToContextMessages(entry)
+			.filter((message) => message.role !== "custom" || message.customType !== ADVISORY_TYPE)
+			.map((message) => ({ message, sourceEntryId: entry.id })),
+	);
 	const parts: string[] = [];
 
 	for (let index = 0; index < messages.length; index++) {
-		const message = messages[index];
-		if (!message) continue;
+		const item = messages[index];
+		const message = item?.message;
+		if (!message || !item) continue;
 		switch (message.role) {
 			case "user": {
 				const text = contextText(message.content).trim();
@@ -289,15 +424,15 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[]): st
 			}
 			case "assistant": {
 				const toolResults: ToolResultMessage[] = [];
-				while (messages[index + 1]?.role === "toolResult") {
-					toolResults.push(messages[++index] as ToolResultMessage);
+				while (messages[index + 1]?.message.role === "toolResult") {
+					toolResults.push(messages[++index]!.message as ToolResultMessage);
 				}
-				const delta = formatTurnDelta({ assistant: message, toolResults });
+				const delta = formatTurnDelta({ assistant: message, toolResults, issueReceipt });
 				if (delta) parts.push(delta);
 				break;
 			}
 			case "toolResult": {
-				const delta = formatTurnDelta({ toolResults: [message] });
+				const delta = formatTurnDelta({ toolResults: [message], issueReceipt });
 				if (delta) parts.push(delta);
 				break;
 			}
@@ -307,7 +442,7 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[]): st
 				break;
 			}
 			case "bashExecution": {
-				const bash = formatUserBash(message);
+				const bash = formatUserBash(message, { issueReceipt, sourceEntryId: item.sourceEntryId });
 				if (bash) parts.push(bash);
 				break;
 			}

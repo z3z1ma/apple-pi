@@ -23,16 +23,22 @@ function bindPrimarySession(
 	};
 }
 
-export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
+export function bindPairRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
 	const notebook = bindPrimarySession(recallObservationTool, sessionManager);
-	const search = bindPrimarySession(sessionSearchTool, sessionManager);
 	return [
 		{
 			...notebook,
 			description:
 				`${recallObservationTool.description} ` +
-				"This revisits a note from your partner's session, never this side conversation.",
+				"This revisits a known note from your partner's session, never this side conversation.",
 		},
+	];
+}
+
+export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
+	const search = bindPrimarySession(sessionSearchTool, sessionManager);
+	return [
+		...bindPairRecallTools(sessionManager),
 		{
 			...search,
 			description: `${sessionSearchTool.description} This searches your partner's session, never this side conversation.`,

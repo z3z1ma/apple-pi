@@ -73,6 +73,16 @@ export function serializeConversation(messages: Message[]): string {
 	return messages
 		.map((msg): string | null => {
 			const time = formatTimestamp(msg.timestamp);
+			const bash = msg as unknown as {
+				role?: string;
+				command?: string;
+				output?: string;
+				excludeFromContext?: boolean;
+			};
+			if (bash.role === "bashExecution") {
+				if (bash.excludeFromContext) return null;
+				return `[User bash @ ${time}]: $ ${bash.command ?? ""}\n${bash.output ?? ""}`.trimEnd();
+			}
 			if (msg.role === "user") {
 				const text = textOnly(msg.content);
 				return `[User @ ${time}]: ${text}`;
@@ -239,6 +249,16 @@ function renderRecallMessage(entry: RenderableEntry): string | null {
 	if (!entry.message || typeof entry.message !== "object") return null;
 	const msg = entry.message as Message;
 	const time = formatRecallTimestamp(msg.timestamp, entry.timestamp);
+	const bash = msg as unknown as {
+		role?: string;
+		command?: string;
+		output?: string;
+		excludeFromContext?: boolean;
+	};
+	if (bash.role === "bashExecution") {
+		if (bash.excludeFromContext) return null;
+		return `[User bash @ ${time}]: $ ${bash.command ?? ""}\n${bash.output ?? ""}`.trimEnd();
+	}
 	if (msg.role === "user") {
 		return `[User @ ${time}]: ${textAndPlaceholders(msg.content)}`;
 	}

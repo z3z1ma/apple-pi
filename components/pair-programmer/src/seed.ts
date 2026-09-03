@@ -5,6 +5,7 @@ import { observationToSummaryLine, reflectionToSummaryLine } from "../../noteboo
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
 import { formatTurnDelta, formatUserBash } from "./formatting.js";
+import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import type { PairNote } from "./types.js";
 
 function isTerminalAssistant(message: { content?: unknown } | undefined): boolean {
@@ -131,6 +132,7 @@ type TrajectoryItem =
 	| { kind: "turn"; assistant?: AssistantMessage; toolResults: ToolResultMessage[] }
 	| {
 			kind: "bash";
+			sourceEntryId?: string;
 			message: { command?: string; output?: string; exitCode?: number; excludeFromContext?: boolean };
 	  };
 
@@ -147,7 +149,7 @@ function collectTrajectoryItems(entries: readonly unknown[]): TrajectoryItem[] {
 
 	for (const raw of entries) {
 		if (!raw || typeof raw !== "object") continue;
-		const entry = raw as { type?: string; message?: { role?: string } };
+		const entry = raw as { id?: string; type?: string; message?: { role?: string } };
 		if (isCustom(entry)) continue;
 		const message = entryMessage(entry);
 		const role = message?.role ?? (entry.type === "message" ? undefined : entry.type);
@@ -168,7 +170,7 @@ function collectTrajectoryItems(entries: readonly unknown[]): TrajectoryItem[] {
 				exitCode?: number;
 				excludeFromContext?: boolean;
 			};
-			if (!bash.excludeFromContext) items.push({ kind: "bash", message: bash });
+			if (!bash.excludeFromContext) items.push({ kind: "bash", sourceEntryId: entry.id, message: bash });
 			continue;
 		}
 		flush();
@@ -177,7 +179,7 @@ function collectTrajectoryItems(entries: readonly unknown[]): TrajectoryItem[] {
 	return items;
 }
 
-export function formatRecentTrajectory(entries: readonly unknown[]): string {
+export function formatRecentTrajectory(entries: readonly unknown[], issueReceipt?: PairReceiptIssuer): string {
 	const items = collectTrajectoryItems(entries);
 	const turnIndexes = items.flatMap((item, index) => (item.kind === "turn" ? [index] : []));
 	const cut =
@@ -186,10 +188,10 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 			: (turnIndexes[turnIndexes.length - RECENT_TRAJECTORY_TURNS] ?? 0);
 	const parts = items.slice(cut).flatMap((item) => {
 		if (item.kind === "bash") {
-			const text = formatUserBash(item.message);
+			const text = formatUserBash(item.message, { issueReceipt, sourceEntryId: item.sourceEntryId });
 			return text ? [text] : [];
 		}
-		const text = formatTurnDelta({ assistant: item.assistant, toolResults: item.toolResults });
+		const text = formatTurnDelta({ assistant: item.assistant, toolResults: item.toolResults, issueReceipt });
 		return text ? [text] : [];
 	});
 	return parts.length ? `## What your partner has been doing\n${parts.join("\n\n")}` : "";
@@ -203,6 +205,7 @@ export function formatRecentTrajectory(entries: readonly unknown[]): string {
 export function formatSourceAddressedTrajectory(
 	entries: readonly unknown[],
 	allowedSourceEntryIds: readonly string[],
+	issueReceipt?: PairReceiptIssuer,
 ): string {
 	const allowed = new Set(allowedSourceEntryIds);
 	const parts: string[] = [];
@@ -212,7 +215,7 @@ export function formatSourceAddressedTrajectory(
 	const labels = (ids: readonly string[]) => ids.map((id) => `[Source entry id: ${id}]`).join("\n");
 	const flush = () => {
 		if (!assistant && toolResults.length === 0) return;
-		const text = formatTurnDelta({ assistant, toolResults });
+		const text = formatTurnDelta({ assistant, toolResults, issueReceipt });
 		if (text) parts.push(`${labels(sourceIds)}\n${text}`);
 		assistant = undefined;
 		toolResults = [];
@@ -251,6 +254,7 @@ export function formatSourceAddressedTrajectory(
 			flush();
 			const text = formatUserBash(
 				message as { command?: string; output?: string; exitCode?: number; excludeFromContext?: boolean },
+				{ issueReceipt, sourceEntryId: entry.id },
 			);
 			if (text) parts.push(`${labels([entry.id])}\n${text}`);
 			continue;
@@ -286,6 +290,7 @@ export function buildPairSeed(opts: {
 	entries?: readonly unknown[];
 	rollingAdvice?: readonly SettledAdvice[];
 	unresolvedNotebook?: string;
+	issueReceipt?: PairReceiptIssuer;
 	/** Default true. Compact reseeds omit the fold; the parent packet carries it. */
 	includeFold?: boolean;
 }): string {
@@ -293,7 +298,7 @@ export function buildPairSeed(opts: {
 	return formatPairSeed({
 		fold: includeFold && opts.entries ? formatNotebookFold(opts.entries) : "",
 		userMessages: opts.entries ? formatRecentUserMessages(collectRecentUserRequests(opts.entries)) : "",
-		trajectory: opts.entries ? formatRecentTrajectory(opts.entries) : "",
+		trajectory: opts.entries ? formatRecentTrajectory(opts.entries, opts.issueReceipt) : "",
 		unresolvedNotebook: opts.unresolvedNotebook,
 		rollingAdvice: formatRollingAdvice(opts.rollingAdvice ?? []),
 	});

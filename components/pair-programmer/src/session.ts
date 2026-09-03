@@ -14,31 +14,25 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
-import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
 import { registerPairParentNotebookPacket } from "./parent-notebook.js";
-import { bindPrimaryRecallTools, type PrimarySessionManager } from "./recall.js";
+import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
+import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
 
 export const PAIR_AGENT_RETRIES = 1;
-export const PAIR_SESSION_EXTENSION_PATHS = [HOME_SEARCH_GUARD_EXTENSION_PATH] as const;
+export const PAIR_SESSION_EXTENSION_PATHS: readonly string[] = [];
 
 export type PairSeedSource = {
 	entries(): readonly unknown[];
 	rollingAdvice(): readonly SettledAdvice[];
 	unresolvedNotebook?(): string;
+	receiptIssuer?(): PairReceiptIssuer;
+	presentReceipts?(text: string): void;
 };
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
-export const PAIR_SESSION_TOOLS = [
-	"share_note",
-	"ask_consultant",
-	"read",
-	"grep",
-	"find",
-	"revisit_note",
-	"search_session",
-] as const;
+export const PAIR_SESSION_TOOLS = ["share_note", "ask_consultant", "expand_receipt", "revisit_note"] as const;
 
 export async function pairCompactResult(
 	event: SessionBeforeCompactEvent,
@@ -47,14 +41,17 @@ export async function pairCompactResult(
 ) {
 	const xai = ctx ? await compactWithXai(event, ctx) : undefined;
 	const xaiItem = xai?.compaction?.details?.xaiCompaction;
+	const summary = buildPairSeed({
+		entries: source.entries(),
+		rollingAdvice: source.rollingAdvice(),
+		unresolvedNotebook: source.unresolvedNotebook?.(),
+		issueReceipt: source.receiptIssuer?.(),
+		includeFold: false,
+	});
+	source.presentReceipts?.(summary);
 	return {
 		compaction: {
-			summary: buildPairSeed({
-				entries: source.entries(),
-				rollingAdvice: source.rollingAdvice(),
-				unresolvedNotebook: source.unresolvedNotebook?.(),
-				includeFold: false,
-			}),
+			summary,
 			firstKeptEntryId: PAIR_RESEED_ENTRY_ID,
 			tokensBefore: event.preparation.tokensBefore,
 			...(xaiItem ? { details: { xaiCompaction: xaiItem } } : {}),
@@ -95,6 +92,7 @@ export async function createPairSession(opts: {
 	systemPrompt: string;
 	adviseTool: ToolDefinition;
 	escalateTool: ToolDefinition;
+	receiptTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
 	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
@@ -136,8 +134,9 @@ export async function createPairSession(opts: {
 	const customTools = [
 		opts.adviseTool,
 		opts.escalateTool,
+		opts.receiptTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),
-		...bindPrimaryRecallTools(opts.primarySessionManager),
+		...bindPairRecallTools(opts.primarySessionManager),
 	];
 	const { session } = await createAgentSession({
 		cwd: opts.cwd,

@@ -1,5 +1,5 @@
 /**
- * /pair — persistent read-only supervision of the main agent's work.
+ * /pair — persistent shared-screen supervision of the main agent's work.
  * The pair programmer is the sole persistent watcher and can submit typed hypotheses to a
  * host-controlled, non-recursive consultant consultation.
  *
@@ -78,6 +78,12 @@ import {
 	RepeatedFailureDetector,
 } from "./escalation.js";
 import type { PrimarySessionManager } from "./recall.js";
+import {
+	createExpandReceiptTool,
+	createPairReceiptIssuer,
+	type PairReceiptIssuer,
+	PairReceiptStore,
+} from "./receipt-expansion.js";
 import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } from "./seed.js";
 import { createPairSession } from "./session.js";
 
@@ -85,11 +91,12 @@ import { createPairSession } from "./session.js";
 // Pair programmer core — persistent second model that watches the main agent.
 //
 // Port of oh-my-pi's pair onto upstream pi's public extension surface. The
-// pair is a long-lived `Agent` with its own model, read-only tools
-// (read/grep/find, primary-bound revisit_note/search_session), and private
+// pair is a long-lived `Agent` with its own model and a shared-screen toolset:
+// primary-bound revisit_note, handle-bound receipt expansion, and private
 // advise/escalate/update_notebook capabilities. It is fed the primary transcript one
 // turn-delta at a time and may inject concise advice back. It is NOT an
-// executor: it cannot edit, run commands, or change session state.
+// executor or repository navigator: it cannot inspect current files, run commands,
+// search session history, or change session state.
 // ===========================================================================
 
 export type { PairFindingAcknowledgment, PairFindingDisposition, PendingPairFinding } from "./acknowledgments.js";
@@ -191,13 +198,16 @@ const BASH_APPEND_WATCHED = Symbol("pair.bashAppendWatched");
 /** Observe persisted `!bash` pages. Pi records them via appendMessage, not message_end. */
 export function bindBashAppendHook(
 	sessionManager: { appendMessage?: (message: unknown) => unknown },
-	onBash: (message: {
-		role?: string;
-		command?: string;
-		output?: string;
-		exitCode?: number;
-		excludeFromContext?: boolean;
-	}) => void,
+	onBash: (
+		message: {
+			role?: string;
+			command?: string;
+			output?: string;
+			exitCode?: number;
+			excludeFromContext?: boolean;
+		},
+		sourceEntryId?: string,
+	) => void,
 ): () => void {
 	const append = sessionManager.appendMessage;
 	if (typeof append !== "function") return () => {};
@@ -215,7 +225,9 @@ export function bindBashAppendHook(
 			exitCode?: number;
 			excludeFromContext?: boolean;
 		};
-		if (bash?.role === "bashExecution" && !bash.excludeFromContext) onBash(bash);
+		if (bash?.role === "bashExecution" && !bash.excludeFromContext) {
+			onBash(bash, typeof result === "string" ? result : undefined);
+		}
 		return result;
 	};
 	tracked[BASH_APPEND_WATCHED] = true;
@@ -329,7 +341,12 @@ export {
 	insertParentNotebookAfterCompaction,
 	registerPairParentNotebookPacket,
 } from "./parent-notebook.js";
-export { bindPrimaryRecallTools } from "./recall.js";
+export { bindPairRecallTools, bindPrimaryRecallTools } from "./recall.js";
+export {
+	createExpandReceiptTool,
+	createPairReceiptIssuer,
+	PairReceiptStore,
+} from "./receipt-expansion.js";
 export {
 	buildPairSeed,
 	collectRecentUserRequests,
@@ -469,6 +486,7 @@ export class PairRuntime {
 		private readonly onNotebookUpdate?: (update: PairNotebookUpdate) => void,
 		private readonly onEscalation?: (request: PairEscalation) => EscalationAcceptance,
 		private readonly spool = new PairSpool(),
+		private readonly onPresented?: (text: string) => void,
 	) {}
 
 	/** Enable durable per-prompt usage records for this runtime. */
@@ -503,8 +521,10 @@ export class PairRuntime {
 		const model = this.agent.state.model as { provider?: string; id?: string } | undefined;
 		let seed: string | undefined;
 		if (this.#needsSeed) seed = this.seed?.();
+		const promptText = this.#reviewText(messages, seed);
+		this.onPresented?.(promptText);
 		const prompt = this.session
-			? this.session.prompt(this.#reviewText(messages, seed))
+			? this.session.prompt(promptText)
 			: this.agent.prompt(
 					(seed?.trim() && messages[0]
 						? [
@@ -1136,6 +1156,7 @@ export default function (pi: ExtensionAPI) {
 	let primaryTurnSequence = 0;
 	let activePairContextWindow: number | undefined;
 	let projectedThroughSourceId: string | undefined;
+	let receiptStore: PairReceiptStore | undefined;
 	const directFindings = { nit: 0, concern: 0, blocker: 0 };
 	const repeatedFailures = new RepeatedFailureDetector();
 	const acknowledgments = new PairAcknowledgmentTracker();
@@ -1528,6 +1549,8 @@ export default function (pi: ExtensionAPI) {
 		unwatchBash = undefined;
 		runtime?.dispose();
 		runtime = undefined;
+		receiptStore?.revoke();
+		receiptStore = undefined;
 		adviseTool = undefined;
 		activeModelLabel = undefined;
 		activePairContextWindow = undefined;
@@ -1560,6 +1583,22 @@ export default function (pi: ExtensionAPI) {
 
 	function pairSourceEntries(entries: Entry[]): Entry[] {
 		return entries.filter((entry) => isSourceEntry(entry) && entry.type !== "custom_message");
+	}
+
+	function ensureReceiptStore(sessionManager: PrimarySessionManager): PairReceiptStore {
+		if (receiptStore) return receiptStore;
+		receiptStore = new PairReceiptStore({
+			isActiveSourceEntry: (sourceEntryId) =>
+				pairSourceEntries(sessionManager.getBranch() as Entry[]).some((entry) => entry.id === sourceEntryId),
+		});
+		return receiptStore;
+	}
+
+	function receiptIssuer(
+		sessionManager: PrimarySessionManager,
+		entries: readonly unknown[] = sessionManager.getBranch(),
+	): PairReceiptIssuer {
+		return createPairReceiptIssuer(ensureReceiptStore(sessionManager), entries as Entry[]);
 	}
 
 	function resetProjectedSourceCursor(entries: Entry[]): void {
@@ -1630,13 +1669,17 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function watchPrimaryBash(ctx: { sessionManager?: object }): void {
+	function watchPrimaryBash(ctx: { sessionManager?: PrimarySessionManager }): void {
 		if (unwatchBash || !ctx.sessionManager) return;
+		const sessionManager = ctx.sessionManager;
 		unwatchBash = bindBashAppendHook(
-			ctx.sessionManager as { appendMessage?: (message: unknown) => unknown },
-			(message) => {
+			sessionManager as { appendMessage?: (message: unknown) => unknown },
+			(message, sourceEntryId) => {
 				if (!enabled || process.env.PAIR_NO_REVIEW) return;
-				const delta = formatUserBash(message);
+				const delta = formatUserBash(message, {
+					issueReceipt: receiptIssuer(sessionManager),
+					sourceEntryId,
+				});
 				if (!delta) return;
 				appendSpool(delta);
 				pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
@@ -1695,17 +1738,29 @@ export default function (pi: ExtensionAPI) {
 			return builtRuntime.stageEscalation(request);
 		});
 		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
+		const builtReceiptStore = ensureReceiptStore(ctx.sessionManager);
+		const builtReceiptTool = createExpandReceiptTool(builtReceiptStore);
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
 			const batch = prepareNotebookBatch(latestCtx);
 			if (!batch) return "";
-			return formatSourceAddressedTrajectory(primaryEntries(), batch.allowedSourceEntryIds);
+			const entries = primaryEntries();
+			return formatSourceAddressedTrajectory(
+				entries,
+				batch.allowedSourceEntryIds,
+				receiptIssuer(ctx.sessionManager, entries),
+			);
 		};
 		const seedSource = {
 			entries: primaryEntries,
 			rollingAdvice: () => builtRuntime?.rollingAdvice ?? [],
 			unresolvedNotebook,
+			receiptIssuer: () => {
+				const entries = primaryEntries();
+				return receiptIssuer(ctx.sessionManager, entries);
+			},
+			presentReceipts: (text: string) => builtReceiptStore.activatePresented(text),
 		};
 		let session: Awaited<ReturnType<typeof createPairSession>> | undefined;
 		try {
@@ -1717,6 +1772,7 @@ export default function (pi: ExtensionAPI) {
 				systemPrompt,
 				adviseTool: builtAdviseTool as never,
 				escalateTool: builtEscalateTool as never,
+				receiptTool: builtReceiptTool as never,
 				...(builtNotebookTool ? { notebookTool: builtNotebookTool as never } : {}),
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
@@ -1755,6 +1811,7 @@ export default function (pi: ExtensionAPI) {
 					entries: primaryEntries(),
 					rollingAdvice: builtRuntime.rollingAdvice,
 					unresolvedNotebook: unresolvedNotebook(),
+					issueReceipt: receiptIssuer(ctx.sessionManager),
 				}),
 			builtNotebookTool,
 			commitNotebookUpdate,
@@ -1763,6 +1820,7 @@ export default function (pi: ExtensionAPI) {
 				return ensureEscalationController().submit("pair", request, primaryTurnSequence);
 			},
 			inputSpool,
+			(text) => builtReceiptStore.activatePresented(text),
 		);
 		if (constructionEpoch !== epoch) {
 			builtRuntime.dispose();
@@ -1914,6 +1972,7 @@ export default function (pi: ExtensionAPI) {
 				userPrompt: userPrompt || undefined,
 				assistant: event.message as AssistantMessage,
 				toolResults,
+				issueReceipt: receiptIssuer(ctx.sessionManager, entries),
 			}),
 			sourceEntryIds,
 		);

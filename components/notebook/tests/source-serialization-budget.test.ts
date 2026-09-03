@@ -12,6 +12,22 @@ function customEntry(id: string, content: string) {
 	};
 }
 
+function bashEntry(id: string, excludeFromContext: boolean) {
+	return {
+		type: "message",
+		id,
+		timestamp: "2026-05-02T10:00:00.000Z",
+		message: {
+			role: "bashExecution",
+			command: "printf visible",
+			output: excludeFromContext ? "hidden output" : "visible output",
+			exitCode: 0,
+			excludeFromContext,
+			timestamp: Date.parse("2026-05-02T10:00:00.000Z"),
+		},
+	};
+}
+
 function toolResultEntry(id: string, text: string) {
 	return {
 		type: "message",
@@ -40,6 +56,22 @@ describe("source-addressed serialization budget", () => {
 		expect(result.text).toContain("[Source entry id: raw-1]");
 		expect(result.text).toContain("[Source entry id: raw-2]");
 		expect(result.estimatedTokens).toBe(estimateStringTokens(result.text));
+	});
+
+	it("renders visible user bash and omits excludeFromContext bash entirely", () => {
+		const result = serializeSourceAddressedBranchEntries([
+			bashEntry("bash-visible", false),
+			bashEntry("bash-hidden", true),
+		]);
+
+		expect(result.sourceEntryIds).toEqual(["bash-visible"]);
+		expect(result.text).toContain("[User bash @");
+		expect(result.text).toContain("$ printf visible");
+		expect(result.text).toContain("visible output");
+		expect(result.text).not.toContain("bash-hidden");
+		expect(result.text).not.toContain("hidden output");
+		expect(renderRecallSourceEntry(bashEntry("bash-visible", false))).toContain("visible output");
+		expect(renderRecallSourceEntry(bashEntry("bash-hidden", true))).toBeNull();
 	});
 
 	it("keeps later complete entries for the next run when the budget is full", () => {

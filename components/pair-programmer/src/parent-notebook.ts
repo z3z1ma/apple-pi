@@ -19,7 +19,7 @@ const PARENT_NOTEBOOK_FRAMING = `This is the sourced notebook you keep for your 
 
 Use the current understanding rather than replaying the notebook as a historical stack. When a newer observation conflicts with a reflection, the observation is the latest known state until you revise the reflection.
 
-Use revisit_note with a relevant observation or reflection id when you need its exact source context. Use search_session when you need to search your partner's earlier conversation or recover a file written during the session. Both tools look at your partner's session, never this side conversation.`;
+Use revisit_note with a relevant observation or reflection id when you need its exact source context. Use expand_receipt only with a handle already shown in your shared trajectory when you need a folded payload. Both tools open evidence from your partner's primary session.`;
 
 export function buildParentNotebookPacket(
 	primaryEntries: readonly unknown[],

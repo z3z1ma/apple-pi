@@ -14,6 +14,10 @@ import {
 import {
 	branchSummary,
 	compactionEntry,
+	NOTEBOOK_OBSERVATIONS_DROPPED,
+	NOTEBOOK_OBSERVATIONS_RECORDED,
+	NOTEBOOK_REFLECTIONS_RECORDED,
+	NOTEBOOK_REFLECTIONS_RETIRED,
 	observation,
 	observationsDroppedEntry,
 	observationsRecordedEntry,
@@ -21,16 +25,26 @@ import {
 	reflectionsRecordedEntry,
 	reflectionsRetiredEntry,
 	textCustomMessage,
-	NOTEBOOK_OBSERVATIONS_DROPPED,
-	NOTEBOOK_OBSERVATIONS_RECORDED,
-	NOTEBOOK_REFLECTIONS_RECORDED,
-	NOTEBOOK_REFLECTIONS_RETIRED,
 } from "./fixtures/session.js";
 
 describe("notebook ledger progress helpers", () => {
 	it("detects only raw/source entries as source entries", () => {
 		expect(isSourceEntry(textCustomMessage("raw-1", "abcd"))).toBe(true);
 		expect(isSourceEntry(branchSummary("sum-1", "abcd"))).toBe(true);
+		expect(
+			isSourceEntry({
+				type: "message",
+				id: "bash-visible",
+				message: { role: "bashExecution", command: "npm test", output: "ok", excludeFromContext: false },
+			}),
+		).toBe(true);
+		expect(
+			isSourceEntry({
+				type: "message",
+				id: "bash-hidden",
+				message: { role: "bashExecution", command: "secret", output: "hidden", excludeFromContext: true },
+			}),
+		).toBe(false);
 		expect(
 			isSourceEntry(
 				observationsRecordedEntry("notebook-1", {

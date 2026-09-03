@@ -6,7 +6,7 @@ import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guar
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
 
 describe("search root guard integration", () => {
-	it("loads the guard in every child-agent session", () => {
+	it("loads the guard in every repository-reading child-agent session", () => {
 		for (const extensions of [
 			childSessionExtensions(),
 			childSessionExtensions(false, true, true),
@@ -14,7 +14,10 @@ describe("search root guard integration", () => {
 		]) {
 			expect(extensions.additionalExtensionPaths).toContain(HOME_SEARCH_GUARD_EXTENSION_PATH);
 		}
-		expect(PAIR_SESSION_EXTENSION_PATHS).toContain(HOME_SEARCH_GUARD_EXTENSION_PATH);
+	});
+
+	it("keeps the trajectory-only pair session free of repository extensions", () => {
+		expect(PAIR_SESSION_EXTENSION_PATHS).toEqual([]);
 	});
 
 	it("loads the guard in pi_exec workers", () => {

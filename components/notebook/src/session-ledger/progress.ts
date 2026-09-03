@@ -13,7 +13,9 @@ import {
 const SOURCE_ENTRY_TYPES = new Set(["message", "custom_message", "branch_summary"]);
 
 export function isSourceEntry(entry: Entry): boolean {
-	return SOURCE_ENTRY_TYPES.has(entry.type);
+	if (!SOURCE_ENTRY_TYPES.has(entry.type)) return false;
+	const message = entry.message as { role?: string; excludeFromContext?: boolean } | undefined;
+	return message?.role !== "bashExecution" || !message.excludeFromContext;
 }
 
 export function entryIndexById(entries: Entry[]): Map<string, number> {
