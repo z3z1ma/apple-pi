@@ -52,7 +52,7 @@ Disabling the pair programmer cancels queued and active consultant consultations
 The pair programming partner shares the main agent's screen rather than operating a second IDE. It receives a stable pairing policy followed by:
 
 - recent user requests from the main session;
-- the main agent's reasoning, text, tool calls, edit diffs, failures, and compact work receipts;
+- the main agent's reasoning, text, tool calls, successful write previews, edit diffs, failures, and compact work receipts;
 - active task and assumption context;
 - a read-only projection of the shared notebook after compaction;
 - optional global or trusted-project `PAIR.md` guidance.
@@ -67,7 +67,7 @@ The partner has a deliberately narrow typed toolset:
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence.
 
-A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, write payload, user-bash output, or user-supplied image—not current checkout state. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
+A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, the remainder of a large write payload, user-bash output, or user-supplied image—not current checkout state. Successful writes show their content automatically within the trajectory's existing preview limit; larger writes keep the complete interaction behind a receipt. Write previews are pair-model input like the rest of the shared trajectory, so the `pair` profile should use a provider trusted with session content. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. The pair is guided to expand receipts when folded evidence could materially affect its judgment, not as routine exploration. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
 
 Visual inspection requires the model selected by the `pair` profile to declare image input support. Pi replaces image blocks with its normal unsupported-image placeholder for a text-only model.
 

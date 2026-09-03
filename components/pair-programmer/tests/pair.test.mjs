@@ -306,7 +306,8 @@ test("formatTurnDelta: includes user, thinking, text, tool call + result", () =>
 	assert.match(md, /<thinking>\nlet me think\n<\/thinking>/);
 	assert.match(md, /#### Your partner/);
 	assert.match(md, /here is my plan/);
-	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B; content omitted/);
+	assert.match(md, /→ tool `write`\(a\.js\) — 0 lines, 0 B/);
+	assert.doesNotMatch(md, /content omitted/);
 	assert.match(md, /#### Tool result: `write`\n\nwrote a\.js/);
 	assert.doesNotMatch(md, /call: 1/);
 });
@@ -399,9 +400,9 @@ test("formatTurnDelta: presents material-finding acknowledgments as feedback to 
 	assert.match(rendered, /already preserves the turn boundary/);
 });
 
-test("formatTurnDelta: successful write omits content and exposes one receipt handle", () => {
+test("formatTurnDelta: successful write shows ordinary content inline without an unnecessary receipt", () => {
 	const body = "export function refresh() {\n  return rotate();\n}\n";
-	let receiptRequest;
+	let receiptRequests = 0;
 	const md = renderDelta({
 		assistant: {
 			role: "assistant",
@@ -420,25 +421,19 @@ test("formatTurnDelta: successful write omits content and exposes one receipt ha
 				timestamp: 2,
 			},
 		],
-		issueReceipt(request) {
-			receiptRequest = request;
+		issueReceipt() {
+			receiptRequests += 1;
 			return "0123456789abcdef0123456789abcdef";
 		},
 	});
 	assert.match(md, /→ tool `write`\(src\/auth\.ts\) — 3 lines/);
-	assert.match(md, /content omitted/);
-	assert.match(md, /receipt: 0123456789abcdef0123456789abcdef/);
-	assert.doesNotMatch(md, /call: w1/);
-	assert.ok(!md.includes("export function refresh"), "write content must not appear in the delta");
-	assert.equal(receiptRequest.kind, "tool");
-	assert.equal(receiptRequest.callId, "w1");
-	assert.equal(receiptRequest.sources, "interaction");
-	assert.match(receiptRequest.snapshot.text, /content:\nexport function refresh/);
-	assert.match(receiptRequest.snapshot.text, /Successfully wrote 48 bytes/);
+	assert.match(md, /content:\nexport function refresh\(\)/);
+	assert.doesNotMatch(md, /content omitted|preview truncated|receipt:/);
+	assert.equal(receiptRequests, 0);
 });
 
-test("formatTurnDelta: an assistant-only write keeps its omitted payload behind a call receipt", () => {
-	const body = "assistant-only body\n";
+test("formatTurnDelta: a large assistant-only write shows a preview and keeps the rest behind a call receipt", () => {
+	const body = `${"assistant-only line\n".repeat(80)}assistant-only needle`;
 	let receiptRequest;
 	const md = renderDelta({
 		assistant: {
@@ -454,9 +449,73 @@ test("formatTurnDelta: an assistant-only write keeps its omitted payload behind 
 		},
 	});
 
-	assert.match(md, /content omitted\nreceipt: 11111111111111111111111111111111/);
+	assert.match(md, /content preview truncated/);
+	assert.match(md, /content:\nassistant-only line/);
+	assert.match(md, /receipt: 11111111111111111111111111111111/);
+	assert.ok(!md.includes("assistant-only needle"), "only the bounded write preview is shown inline");
 	assert.equal(receiptRequest.sources, "call");
-	assert.match(receiptRequest.snapshot.text, /assistant-only body/);
+	assert.match(receiptRequest.snapshot.text, /assistant-only needle/);
+});
+
+test("formatTurnDelta: a large single-line write shows a real preview and exposes the complete interaction receipt", () => {
+	const body = `${"x".repeat(2100)}written needle`;
+	let receiptRequest;
+	const md = renderDelta({
+		assistant: {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "w-large", name: "write", arguments: { path: "large.ts", content: body } }],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		toolResults: [
+			{
+				role: "toolResult",
+				toolCallId: "w-large",
+				toolName: "write",
+				content: [{ type: "text", text: "Successfully wrote large.ts" }],
+				isError: false,
+				timestamp: 2,
+			},
+		],
+		issueReceipt(request) {
+			receiptRequest = request;
+			return "33333333333333333333333333333333";
+		},
+	});
+
+	assert.match(md, /content preview truncated/);
+	assert.match(md, /content:\nxxx/);
+	assert.match(md, /… truncated/);
+	assert.match(md, /receipt: 33333333333333333333333333333333/);
+	assert.ok(!md.includes("written needle"), "only the bounded write preview is shown inline");
+	assert.equal(receiptRequest.sources, "interaction");
+	assert.match(receiptRequest.snapshot.text, /written needle/);
+	assert.match(receiptRequest.snapshot.text, /Successfully wrote large\.ts/);
+});
+
+test("formatTurnDelta: a write at the preview boundary stays complete and needs no receipt", () => {
+	const body = "x".repeat(2000);
+	let receiptRequests = 0;
+	const md = renderDelta({
+		assistant: {
+			role: "assistant",
+			content: [
+				{ type: "toolCall", id: "w-boundary", name: "write", arguments: { path: "boundary.ts", content: body } },
+			],
+			usage: {},
+			stopReason: "toolUse",
+			timestamp: 1,
+		},
+		issueReceipt() {
+			receiptRequests += 1;
+			return "44444444444444444444444444444444";
+		},
+	});
+
+	assert.ok(md.includes(`content:\n${body}`));
+	assert.doesNotMatch(md, /preview truncated|… truncated|receipt:/);
+	assert.equal(receiptRequests, 0);
 });
 
 test("formatTurnDelta: failed write keeps a truncated attempted body and a receipt for the full attempt", () => {
@@ -1239,6 +1298,8 @@ test("default pair prompt gives frontier intelligence a restrained shared-screen
 		assert.match(prompt, /user images/);
 		assert.match(prompt, /revisit_note/);
 		assert.match(prompt, /expand_receipt/);
+		assert.match(prompt, /answer a question you would otherwise ask/);
+		assert.match(prompt, /Leave receipts folded when their details do not matter/);
 		assert.doesNotMatch(prompt, /search_session/);
 		assert.doesNotMatch(prompt, /call:<id>/);
 	} finally {

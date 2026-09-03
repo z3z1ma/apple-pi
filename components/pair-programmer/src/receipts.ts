@@ -89,14 +89,12 @@ function flagLines(details: ResultDetails): string[] {
 
 export function truncateResultBody(body: string): string {
 	if (lineCount(body) <= RESULT_LINE_CAP && body.length <= RESULT_CHAR_CAP) return body;
-	const lines = body.split("\n");
-	let out = "";
-	for (const line of lines) {
-		const next = out ? `${out}\n${line}` : line;
-		if (lineCount(next) > RESULT_LINE_CAP || next.length > RESULT_CHAR_CAP) break;
-		out = next;
-	}
-	return `${out}\n… truncated`;
+	const marker = "… truncated";
+	const maxContentLines = RESULT_LINE_CAP - 1;
+	const maxContentChars = RESULT_CHAR_CAP - marker.length - 1;
+	let out = body.split("\n").slice(0, maxContentLines).join("\n").slice(0, maxContentChars);
+	if (/[\uD800-\uDBFF]$/.test(out)) out = out.slice(0, -1);
+	return out ? `${out}\n${marker}` : marker;
 }
 
 function requestedRange(args: ToolArgs): string | undefined {

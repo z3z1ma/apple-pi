@@ -372,6 +372,7 @@ export function createExpandReceiptTool(
 		promptSnippet: "expand_receipt({ id }) opens a collapsed payload already shown on the shared trajectory.",
 		promptGuidelines: [
 			"Use expand_receipt only with an opaque id already shown in the shared trajectory or a previous expansion.",
+			"Expand when the folded payload could materially affect your judgment or answer a question you would otherwise ask your partner; leave irrelevant receipts folded.",
 			"Keep expansion focused on the already-presented trajectory; repository navigation remains with your partner and the consultant.",
 		],
 		parameters: expandReceiptParameters,

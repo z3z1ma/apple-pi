@@ -214,8 +214,12 @@ function formatWriteCall(
 	let text: string;
 	let omitted = false;
 	if (!failed) {
-		text = `→ tool \`write\`(${path}) — ${lineCount(content)} lines, ${formatBytes(utf8Bytes(content))}; content omitted`;
-		omitted = typeof args?.content === "string";
+		const hasContent = typeof args?.content === "string";
+		const preview = truncateResultBody(content);
+		omitted = hasContent && preview !== content;
+		const previewLabel = omitted ? "; content preview truncated" : "";
+		const renderedContent = hasContent ? `\ncontent:\n${preview}` : "";
+		text = `→ tool \`write\`(${path}) — ${lineCount(content)} lines, ${formatBytes(utf8Bytes(content))}${previewLabel}${renderedContent}`;
 	} else {
 		const truncated = { ...(args ?? {}) };
 		if (typeof truncated.content === "string") {
@@ -315,8 +319,7 @@ function formatProjectedResults(
 		const body = successfulDiff ? successfulDiff : formatResultReceipt(tr, rawBody, args);
 		const omittedResult = !successfulDiff && (body !== rawBody || receiptImages(tr.content).length > 0);
 		const writeContent = tr.toolName === "write" && typeof args?.content === "string" ? args.content : undefined;
-		const omittedWrite =
-			writeContent !== undefined && (!tr.isError || truncateResultBody(writeContent) !== writeContent);
+		const omittedWrite = writeContent !== undefined && truncateResultBody(writeContent) !== writeContent;
 		const receipt =
 			callId && issueReceipt && (omittedResult || omittedWrite)
 				? issueReceipt({

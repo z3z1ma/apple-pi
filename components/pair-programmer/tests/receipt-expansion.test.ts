@@ -64,6 +64,9 @@ describe("pair receipt expansion", () => {
 		expect(tool.parameters.properties).not.toHaveProperty("scope");
 		expect(tool.parameters.properties).not.toHaveProperty("offset");
 		expect(tool.parameters.properties).not.toHaveProperty("limit");
+		const guidance = tool.promptGuidelines?.join("\n") ?? "";
+		expect(guidance).toContain("could materially affect your judgment");
+		expect(guidance).toContain("leave irrelevant receipts folded");
 	});
 
 	it("issues opaque handles that do not embed keys, source ids, or payload", () => {
@@ -195,7 +198,8 @@ describe("pair receipt expansion", () => {
 		expect(pageBody(await expand(store, bashHandle!), ["bash-entry"]).body).toBe("bash body");
 	});
 
-	it("keeps an assistant-only source batch expandable without binding the later result", async () => {
+	it("keeps a truncated assistant-only write expandable without binding the later result", async () => {
+		const body = `${"historical write body\n".repeat(80)}historical write needle`;
 		const entries = [
 			{
 				type: "message",
@@ -207,7 +211,7 @@ describe("pair receipt expansion", () => {
 							type: "toolCall",
 							id: "write-call",
 							name: "write",
-							arguments: { path: "src/a.ts", content: "historical write body" },
+							arguments: { path: "src/a.ts", content: body },
 						},
 					],
 					usage: {},
@@ -239,7 +243,7 @@ describe("pair receipt expansion", () => {
 		store.activatePresented(rendered);
 
 		const page = pageBody(await expand(store, handle!), ["assistant-entry"]);
-		expect(page.body).toContain("historical write body");
+		expect(page.body).toContain("historical write needle");
 	});
 
 	it("includes original source entry labels on every page", async () => {
