@@ -70,6 +70,11 @@ describe("sidecar usage records", () => {
 				cost: 0.02,
 				durationMs: 12,
 				threshold: 68,
+				reviewId: "rev-7",
+				batchItems: 4,
+				batchTokens: 1_200,
+				activeWaitMs: 45_000,
+				attention: "routine",
 				...({
 					prompt: "secret transcript",
 					advice: "do not persist this",
@@ -94,6 +99,11 @@ describe("sidecar usage records", () => {
 			cost: 0.02,
 			durationMs: 12,
 			threshold: 68,
+			reviewId: "rev-7",
+			batchItems: 4,
+			batchTokens: 1_200,
+			activeWaitMs: 45_000,
+			attention: "routine",
 		});
 		expect(row).not.toHaveProperty("prompt");
 		expect(row).not.toHaveProperty("advice");

@@ -90,7 +90,13 @@ const usage = { input: 100, cacheRead: 50, cacheWrite: 0, output: 20, cost: 0.2,
 
 describe("pair programmer escalation machinery", () => {
 	it("keeps the pair on the shared trajectory while consultation remains private", () => {
-		expect(PAIR_SESSION_TOOLS).toEqual(["share_note", "ask_consultant", "expand_receipt", "revisit_note"]);
+		expect(PAIR_SESSION_TOOLS).toEqual([
+			"share_note",
+			"ask_consultant",
+			"expand_receipt",
+			"revisit_note",
+			"set_pair_attention",
+		]);
 		for (const forbidden of [
 			"Agent",
 			"pi_exec",

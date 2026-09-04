@@ -18,6 +18,7 @@ import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-cont
 import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
+import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
 
 export const PAIR_AGENT_RETRIES = 1;
@@ -32,7 +33,13 @@ export type PairSeedSource = {
 };
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
-export const PAIR_SESSION_TOOLS = ["share_note", "ask_consultant", "expand_receipt", "revisit_note"] as const;
+export const PAIR_SESSION_TOOLS = [
+	"share_note",
+	"ask_consultant",
+	"expand_receipt",
+	"revisit_note",
+	SET_PAIR_ATTENTION_TOOL_NAME,
+] as const;
 
 export async function pairCompactResult(
 	event: SessionBeforeCompactEvent,
@@ -93,6 +100,7 @@ export async function createPairSession(opts: {
 	adviseTool: ToolDefinition;
 	escalateTool: ToolDefinition;
 	receiptTool: ToolDefinition;
+	attentionTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
 	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
@@ -135,6 +143,7 @@ export async function createPairSession(opts: {
 		opts.adviseTool,
 		opts.escalateTool,
 		opts.receiptTool,
+		opts.attentionTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),
 		...bindPairRecallTools(opts.primarySessionManager),
 	];

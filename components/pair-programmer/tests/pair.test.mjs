@@ -1292,6 +1292,10 @@ test("default pair prompt gives frontier intelligence a restrained shared-screen
 		assert.match(prompt, /full intelligence and an independent line of thought/);
 		assert.match(prompt, /trajectory is your shared screen/);
 		assert.match(prompt, /calibrate your certainty/);
+		assert.match(prompt, /meaningful checkpoints/);
+		assert.match(prompt, /several accumulated updates/);
+		assert.match(prompt, /set_pair_attention/);
+		assert.match(prompt, /mandatory failure, terminal, starvation, and finding-reconfirmation wakes/);
 		assert.match(prompt, /restraint proportional to your certainty/);
 		assert.match(prompt, /kind="question"/);
 		assert.match(prompt, /missing evidence could materially change your judgment/);
@@ -1356,6 +1360,7 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 		["revisit_note"],
 	);
 	assert.ok(A.PAIR_SESSION_TOOLS.includes("revisit_note"));
+	assert.ok(A.PAIR_SESSION_TOOLS.includes("set_pair_attention"));
 	assert.ok(!A.PAIR_SESSION_TOOLS.includes("search_session"));
 	const hit = await notebook.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
@@ -1813,7 +1818,7 @@ function buildIntegration({ onReview } = {}) {
 	};
 	const onSettled = (outcome) => {
 		if (outcome !== "ok") return;
-		if (state.turn === "ended-terminal") deliverHeld(rt.takeAllAdvice());
+		if (state.turn === "ended-terminal" && rt.idle) deliverHeld(rt.takeAllAdvice());
 		else if (state.turn === "ended-nonterminal") flushConfirmed();
 	};
 	rt = new A.PairRuntime(agent, tool, 0, undefined, onSettled);
@@ -2260,6 +2265,81 @@ test("runtime: arrivals while the reader is busy form its next contiguous batch"
 	assert.match(JSON.stringify(reviews[1]), /three/);
 });
 
+test("runtime: explicit permits leave arrivals deferred until the scheduler grants another review", async () => {
+	let release;
+	const reviews = [];
+	const agent = {
+		state: { messages: [], model: {} },
+		prompt(input) {
+			reviews.push(input);
+			return new Promise((resolve) => {
+				release = () => {
+					this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
+					resolve();
+				};
+			});
+		},
+		abort() {},
+		reset() {},
+	};
+	const spool = new A.PairSpool();
+	const rt = new A.PairRuntime(
+		agent,
+		new A.AdviseTool(() => false),
+		0,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		spool,
+	);
+	spool.append("orientation", { boundary: 1 });
+	assert.equal(
+		rt.startReview({
+			reviewId: "rev-1",
+			reason: "orientation",
+			attention: "close",
+			batchItems: 1,
+			batchTokens: 3,
+			activeWaitMs: 0,
+			throughSequence: 1,
+		}),
+		true,
+	);
+	await new Promise((r) => setImmediate(r));
+	spool.append("deferred exploration", { boundary: 2 });
+	release();
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 1);
+	assert.equal(rt.backlog, 1);
+	const firstPromptText = reviews[0]
+		.flatMap((message) => (Array.isArray(message.content) ? message.content : []))
+		.map((part) => part.text ?? "")
+		.join("\n");
+	assert.match(firstPromptText, /review-checkpoint reason="orientation" updates="1"/);
+
+	assert.equal(
+		rt.startReview({
+			reviewId: "rev-2",
+			reason: "starvation_tokens",
+			attention: "routine",
+			batchItems: 1,
+			batchTokens: 5,
+			activeWaitMs: 1_000,
+			throughSequence: 2,
+		}),
+		true,
+	);
+	await new Promise((r) => setImmediate(r));
+	release();
+	assert.equal(await rt.waitUntilSettled(2000), "settled");
+	assert.equal(reviews.length, 2);
+	assert.equal(rt.backlog, 0);
+});
+
 test("runtime: backlog includes in-flight and commits only after every batch", async () => {
 	let release;
 	const settled = [];
@@ -2286,7 +2366,7 @@ test("runtime: backlog includes in-flight and commits only after every batch", a
 	release();
 	assert.equal(await rt.waitUntilSettled(2000), "settled");
 	assert.equal(rt.backlog, 0);
-	assert.deepEqual(settled, ["ok"]);
+	assert.deepEqual(settled, ["ok", "ok"]);
 });
 
 test("runtime: a failed contiguous claim is retained and cannot be skipped", async () => {
@@ -2754,7 +2834,12 @@ test("runtime: bound session records one failed logical prompt without an outer 
 			.split("\n")
 			.map((line) => JSON.parse(line));
 		assert.equal(rows.length, 1);
-		assert.equal(rows[0].trigger, "turn_end");
+		assert.equal(rows[0].trigger, "orientation");
+		assert.equal(rows[0].reviewId, "legacy-1");
+		assert.equal(rows[0].batchItems, 1);
+		assert.equal(rows[0].batchTokens, Math.ceil("secret primary delta".length / 4));
+		assert.equal(rows[0].activeWaitMs, 0);
+		assert.equal(rows[0].attention, "close");
 		assert.equal(rows[0].status, "length");
 		assert.equal(rows[0].provider, "anthropic");
 		assert.equal(rows[0].model, "claude-opus-5");

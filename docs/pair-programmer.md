@@ -65,7 +65,8 @@ The partner has a deliberately narrow typed toolset:
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
 - `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
-- `revisit_note` follows a known notebook ID to its primary-session source evidence.
+- `revisit_note` follows a known notebook ID to its primary-session source evidence;
+- `set_pair_attention` optionally chooses the next useful semantic checkpoint and attention level. It is a terminating, transactionally staged disposition rather than a navigation or execution capability.
 
 A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, the remainder of a large write payload, user-bash output, or user-supplied image—not current checkout state. Successful writes show their content automatically within the trajectory's existing preview limit; larger writes keep the complete interaction behind a receipt. Write previews are pair-model input like the rest of the shared trajectory, so the `pair` profile should use a provider trusted with session content. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. The pair is guided to expand receipts when folded evidence could materially affect its judgment, not as routine exploration. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
 
@@ -81,9 +82,25 @@ One conservative repeated-failure gate may also ask the consultant for help: the
 
 ## Review timing and retries
 
-The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before any pair programmer construction starts. An idle reader claims the contiguous available prefix; arrivals while it is reviewing naturally become its next batch. A claim is retained until its complete transactional response succeeds, then removed and committed in order. Failed, incomplete, stale, or superseded claims remain exact retry work and never advance the committed frontier. Every main-agent turn returns without awaiting pair programmer construction, model work, tool calls, retry delay, consultant work, or delivery preparation.
+The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before pair construction or model work begins. Capturing a delta does not itself invoke the pair model. A review scheduler grants one permit for the complete accumulated prefix at meaningful checkpoints inside the active run:
 
-Every direct finding or question is initially held with a stable host id. The next successful frontier review sees it alongside the newer trajectory. Repeating it with that id confirms it for nonterminal delivery; silence withdraws it. A confirmed intervention steers at the next safe assistant boundary, so stale protection does not defer useful input until settlement. Interventions first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
+- the first completed step after new user direction;
+- entry into mutation or verification work;
+- other meaningful work-phase transitions selected by the current attention lease;
+- a consequential delegated result;
+- any failed tool or assistant step;
+- terminal evidence that remains unseen;
+- an expedited frontier confirmation after the pair raises a finding or question.
+
+Consecutive exploration, execution, mutation, or verification steps accumulate rather than producing one review per tool continuation. Arrivals during an in-flight review remain deferred until another permit is due. A balanced starvation safeguard reviews pending evidence after five active minutes or about 8,000 newly rendered trajectory tokens, whichever comes first. Idle user time does not count. Silent reviews widen this safeguard gradually; new user direction, mutation, verification, failure, or an intervention restores close attention.
+
+The pair can use `set_pair_attention` as its final action to select `close`, `routine`, or `relaxed` attention and choose normal wake conditions such as mutation, verification, delegated result, or another phase transition. The host always retains orientation, failure, terminal, starvation, and frontier-confirmation wakeups. Failed, aborted, truncated, or stale attempts commit no attention change.
+
+A claim remains owned until its complete transactional response succeeds, then commits in order. Failed or incomplete claims remain exact retry work and never advance the committed frontier. Newer evidence or a later starvation checkpoint can retry that claim; the runtime does not spin a whole-review retry loop. Every main-agent turn returns without awaiting pair construction, model work, tool calls, retry delay, consultant work, or delivery preparation.
+
+Every direct finding or question is initially held with a stable host id. A newly raised intervention expedites the next frontier review: queued newer evidence is reviewed immediately, otherwise the next completed primary step bypasses normal pacing. Repeating the finding with its id confirms it for nonterminal delivery; silence withdraws it. A confirmed intervention steers at the next safe assistant boundary. Interventions first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
+
+The private pair conversation continues through Pi's normal model-owned compaction at the selected model's context boundary. Review pacing does not add a second context limit, rolling window, cache reset, or proactive compaction policy.
 
 The pair programmer uses Pi's native provider-stream inactivity timeout rather than a whole-review wall-clock deadline. It inherits the effective `httpIdleTimeoutMs` and provider timeout from the same global or trusted-project settings as normal Pi sessions. The default is five minutes. HTTP header/body activity or each WebSocket message resets the timeout, so total reasoning, streaming, and tool-call duration are not capped. A provider that emits no bytes while reasoning is indistinguishable from a stalled provider, so operators should tune this setting from observed stream-idle behavior.
 
@@ -154,6 +171,6 @@ The partner's `ask_consultant` path uses a separate, hidden host operation. It c
 
 The footer uses `q-pair` and shows pair programmer review plus consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, consultant dispositions, suppressions, stale results, usage, cost, and duration.
 
-Sidecar telemetry records `pair` and `consultant` calls separately. Consultation outcomes are structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes. Private hypothesis and finding text are not persisted there.
+Sidecar telemetry records `pair` and `consultant` calls separately. Every provider request made within one logical pair review carries the same privacy-safe review id, checkpoint reason, accumulated item/token counts, active wait, and attention level. This distinguishes review frequency from pair-side tool continuations without persisting trajectory, command, path, receipt, hypothesis, or finding text. Consultation outcomes remain structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes.
 
 The pair programmer and the consultant use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.

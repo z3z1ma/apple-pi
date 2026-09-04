@@ -69,3 +69,5 @@
 - `.ledger/history/202609021914-pair-receipt-expansion/task.md` — done — Constrain pair programmer to trajectory receipts — Remove repository and general session-search tools from the persistent pair and add handle-bound expansion for omitted primary trajectory content.
 
 - `.ledger/history/202609022314-deepen-pair-collaboration/task.md` — done — Deepen pair collaboration and image visibility — Let the pair use restrained probing/view requests through share_note, simplify behavioral framing around frontier judgment, and add source-bound on-demand receipts for user images.
+
+- `.ledger/history/202609031702-pace-pair-reviews/task.md` — done — Pace pair reviews within active runs — Replace per-turn pair inference with semantic checkpoint scheduling, pair-selected attention leases, starvation safeguards, and expedited finding confirmation while preserving every trajectory delta and normal model compaction.

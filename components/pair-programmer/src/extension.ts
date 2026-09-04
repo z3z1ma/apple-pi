@@ -17,10 +17,11 @@
  * first raised by the review covering the terminal turn are current and can land
  * without another otherwise-impossible review.
  *
- * The pair programmer's review is fully asynchronous: each completed primary turn appends an
- * immutable spool delta, no primary turn waits for pair programmer work, and the reader
- * advances its committed frontier only after a successful transactional review.
- * The persistent footer reports review activity without a blocking toast.
+ * Pair review is fully asynchronous: each completed primary turn appends an immutable
+ * spool delta, while an attention scheduler permits reviews at meaningful intra-run
+ * checkpoints. No primary turn waits for pair work, and the reader advances its
+ * committed frontier only after a successful transactional review. The persistent
+ * footer reports review activity without a blocking toast.
  *
  * An optional PAIR.md in a trusted cwd is appended to the pair's system
  * prompt (pair-only guidance: review priorities, project traps).
@@ -84,6 +85,13 @@ import {
 	type PairReceiptIssuer,
 	PairReceiptStore,
 } from "./receipt-expansion.js";
+import {
+	createPairReviewScheduler,
+	createSetPairAttentionTool,
+	type PairAttentionLease,
+	type PairReviewPermit,
+	type PairReviewSettlement,
+} from "./review-scheduler.js";
 import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } from "./seed.js";
 import { createPairSession } from "./session.js";
 
@@ -407,16 +415,32 @@ export { PAIR_SESSION_TOOLS, pairCompactResult } from "./session.js";
 // ---- PairRuntime — drives the pair agent off primary turn deltas ----
 
 /**
- * Feeds the persistent pair conversation one delta per primary turn.
- * Identity change uses `reset()`. Overflow uses the pair session compact hook.
+ * Reviews scheduler-permitted contiguous delta batches in the persistent pair
+ * conversation. Identity change uses `reset()`. Overflow uses the pair session compact hook.
  */
 type PendingDelta = Readonly<{
 	sequence: number;
 	text: string;
 	boundary?: number;
+	terminal?: boolean;
 	notebookBatch?: PairNotebookBatch;
 }>;
-type AttemptEffects = { advice: PairNote[]; escalations: PairEscalation[] };
+type AttemptEffects = {
+	advice: PairNote[];
+	escalations: PairEscalation[];
+	attentionLease?: PairAttentionLease;
+};
+type PairRuntimeSettlement = PairReviewSettlement & {
+	permit: PairReviewPermit;
+	reviewedThroughSequence: number;
+};
+type PairReviewAttemptOutcome = {
+	outcome: "ok" | "failed" | "stale";
+	newIntervention: boolean;
+	consultantRequested: boolean;
+	lease?: PairAttentionLease;
+	silent: boolean;
+};
 
 /** Ordered input ownership shared across pair programmer runtime construction and replacement. */
 export class PairSpool {
@@ -426,7 +450,10 @@ export class PairSpool {
 	#committedFrontier = 0;
 	#committedBoundary = 0;
 
-	append(text: string, opts?: { boundary?: number; notebookBatch?: PairNotebookBatch }): number | undefined {
+	append(
+		text: string,
+		opts?: { boundary?: number; terminal?: boolean; notebookBatch?: PairNotebookBatch },
+	): number | undefined {
 		if (!text.trim()) return undefined;
 		const sequence = ++this.#writerFrontier;
 		this.#pending.push(
@@ -434,6 +461,7 @@ export class PairSpool {
 				sequence,
 				text,
 				...(opts?.boundary === undefined ? {} : { boundary: opts.boundary }),
+				...(opts?.terminal === undefined ? {} : { terminal: opts.terminal }),
 				...(opts?.notebookBatch ? { notebookBatch: opts.notebookBatch } : {}),
 			}),
 		);
@@ -502,6 +530,8 @@ export class PairRuntime {
 	#attemptEffects: AttemptEffects | undefined;
 	#settleWaiters: Array<{ settle: () => void; cancel: () => void }> = [];
 	#busy = false;
+	#activePermit: PairReviewPermit | undefined;
+	#legacyReviewSequence = 0;
 	#epoch = 0;
 	#agentResetPending = false;
 	// Lifetime input/output/cost from pair turns already discarded by compact.
@@ -522,7 +552,11 @@ export class PairRuntime {
 		private readonly adviseTool: AdviseTool,
 		_retryDelayMs = 1000,
 		private readonly onDebug?: (...a: unknown[]) => void,
-		private readonly onSettled?: (outcome: "ok" | "failed", reviewedThrough: number) => void,
+		private readonly onSettled?: (
+			outcome: "ok" | "failed",
+			reviewedThrough: number,
+			settlement: PairRuntimeSettlement,
+		) => void,
 		private readonly session?: {
 			prompt(text: string): Promise<void>;
 			abort?: () => Promise<void> | void;
@@ -560,7 +594,7 @@ export class PairRuntime {
 		}
 	}
 
-	async #promptAndRecord(messages: UserMessage[], trigger: string): Promise<void> {
+	async #promptAndRecord(messages: UserMessage[], permit: PairReviewPermit): Promise<void> {
 		this.#reviewCount++;
 		const prior = this.agent.state.messages.slice();
 		const before = prior.length;
@@ -589,30 +623,38 @@ export class PairRuntime {
 			this.#needsSeed = false;
 		} finally {
 			this.#foldDiscardedUsage(prior);
-			this.#recordPromptUsage(before, Date.now() - started, trigger, model);
+			this.#recordPromptUsage(before, Date.now() - started, permit, model);
 		}
 	}
 
 	#recordPromptUsage(
 		before: number,
 		durationMs: number,
-		trigger: string,
+		permit: PairReviewPermit,
 		model: { provider?: string; id?: string } | undefined,
 	): void {
 		if (!this.#usageSession) return;
 		withSidecarUsageContext({ sessionId: this.#usageSession.sessionId }, () => {
 			const created = this.agent.state.messages.slice(before);
+			const pacing = {
+				reviewId: permit.reviewId,
+				batchItems: permit.batchItems,
+				batchTokens: permit.batchTokens,
+				activeWaitMs: permit.activeWaitMs,
+				attention: permit.attention,
+			};
 			let recorded = 0;
 			for (const message of created) {
 				if (message.role !== "assistant") continue;
 				const assistant = message as AssistantMessage;
 				recordSidecarUsage({
 					agent: "pair",
-					trigger,
+					trigger: permit.reason,
 					status: String(assistant.stopReason ?? "ok"),
 					provider: model?.provider,
 					model: model?.id,
 					durationMs,
+					...pacing,
 					...usageFieldsFromUnknown(assistant.usage),
 				});
 				recorded++;
@@ -620,11 +662,12 @@ export class PairRuntime {
 			if (recorded === 0) {
 				recordSidecarUsage({
 					agent: "pair",
-					trigger,
+					trigger: permit.reason,
 					status: "error",
 					provider: model?.provider,
 					model: model?.id,
 					durationMs,
+					...pacing,
 				});
 			}
 		});
@@ -650,11 +693,6 @@ export class PairRuntime {
 	/** True while a review prompt is in flight. Deferred pending is not reviewing. */
 	get reviewing(): boolean {
 		return this.#busy;
-	}
-
-	/** Caught up only once every claimed input chunk has committed. */
-	get #caughtUp(): boolean {
-		return !this.#busy && !this.spool.hasPending;
 	}
 
 	/** Whether pending or ready findings include material priority. */
@@ -762,6 +800,17 @@ export class PairRuntime {
 		return "accepted";
 	}
 
+	/** Stage a pair-selected wake lease inside the active transactional review. */
+	stageAttention(lease: PairAttentionLease): boolean {
+		const attempt = this.#attemptEffects;
+		if (!attempt || !this.acceptingAdvice) return false;
+		attempt.attentionLease = {
+			attention: lease.attention,
+			wakeOn: [...lease.wakeOn],
+		};
+		return true;
+	}
+
 	/** Delivery retry bookkeeping: keep an already-confirmed finding ready. */
 	requeueReadyAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
 		this.#upsertReadyAdvice(note, severity, findingId, kind);
@@ -798,13 +847,13 @@ export class PairRuntime {
 	}
 
 	/**
-	 * Resolve once the pair has caught up (`idle`), or `timeoutMs` elapses, or
-	 * `signal` aborts. Used by deterministic runtime tests and diagnostics; primary
-	 * turns never await it. Resolves "settled" immediately if already idle/disposed.
+	 * Resolve once the active review settles, or `timeoutMs` elapses, or `signal`
+	 * aborts. Deferred evidence may remain queued for a later scheduler permit.
+	 * Primary turns never await this helper.
 	 */
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed"> {
 		if (this.disposed) return Promise.resolve("aborted");
-		if (this.#caughtUp) return Promise.resolve(this.#lastOutcome === "failed" ? "failed" : "settled");
+		if (!this.#busy) return Promise.resolve(this.#lastOutcome === "failed" ? "failed" : "settled");
 		return new Promise((resolve) => {
 			let done = false;
 			let waiter: { settle: () => void; cancel: () => void };
@@ -824,7 +873,7 @@ export class PairRuntime {
 				settle: () => {
 					if (this.disposed) finish("aborted");
 					else if (this.#lastOutcome === "failed") finish("failed");
-					else if (this.#caughtUp) finish("settled");
+					else if (!this.#busy) finish("settled");
 				},
 				// Fired by reset()/dispose(): resolve immediately rather than waiting for
 				// the in-flight prompt to unwind (which could take up to the timeout).
@@ -868,15 +917,34 @@ export class PairRuntime {
 		return { input, output, cost, contextTokens, contextPercent };
 	}
 
-	/** Append an immutable input chunk. An idle reader immediately claims it. */
-	push(deltaText: string, opts?: { boundary?: number; notebookBatch?: PairNotebookBatch }): void {
+	/** Append an immutable input chunk. Production scheduling uses the shared spool directly. */
+	push(deltaText: string, opts?: { boundary?: number; terminal?: boolean; notebookBatch?: PairNotebookBatch }): void {
 		if (this.disposed || this.spool.append(deltaText, opts) === undefined) return;
 		this.wake();
 	}
 
-	/** Wake the reader after the extension appends or preserves work in its spool. */
+	/** Start exactly one scheduler-permitted review of the currently claimable prefix. */
+	startReview(permit: PairReviewPermit): boolean {
+		if (this.disposed || this.#busy || !this.spool.hasPending) return false;
+		this.#activePermit = permit;
+		void this.#drain();
+		return true;
+	}
+
+	/** Compatibility helper for deterministic callers outside production scheduling. */
 	wake(): void {
-		if (!this.disposed && !this.#busy && this.spool.hasPending) void this.#drain();
+		if (this.disposed || !this.spool.hasPending) return;
+		if (this.#busy) return;
+		const batch = this.spool.claim();
+		this.startReview({
+			reviewId: `legacy-${++this.#legacyReviewSequence}`,
+			reason: "orientation",
+			attention: "close",
+			batchItems: batch.length,
+			batchTokens: Math.ceil(batch.reduce((sum, item) => sum + item.text.length, 0) / 4),
+			activeWaitMs: 0,
+			throughSequence: batch.at(-1)?.sequence ?? 0,
+		});
 	}
 
 	/** Compatibility alias for deterministic callers. */
@@ -913,6 +981,7 @@ export class PairRuntime {
 		this.#offeredFindingIds = undefined;
 		this.#attemptEffects = undefined;
 		this.#reviewEpoch = -1;
+		this.#activePermit = undefined;
 		this.#lastOutcome = undefined;
 		this.#cumInput = this.#cumOutput = this.#cumCost = 0;
 		this.#reviewCount = 0;
@@ -935,6 +1004,7 @@ export class PairRuntime {
 		this.#offeredFindingIds = undefined;
 		this.#attemptEffects = undefined;
 		this.#reviewEpoch = -1;
+		this.#activePermit = undefined;
 		this.#lastOutcome = undefined;
 		try {
 			this.agent.abort();
@@ -945,9 +1015,10 @@ export class PairRuntime {
 		this.#cancelWaiters();
 	}
 
-	async #reviewBatch(batch: readonly PendingDelta[]): Promise<"ok" | "failed" | "stale"> {
+	async #reviewBatch(batch: readonly PendingDelta[], permit: PairReviewPermit): Promise<PairReviewAttemptOutcome> {
 		const notebookBatch = [...batch].reverse().find((item) => item.notebookBatch)?.notebookBatch;
-		const texts = batch.map((item) => item.text);
+		const checkpoint = `<review-checkpoint reason="${permit.reason}" updates="${batch.length}">Review the complete accumulated batch.</review-checkpoint>`;
+		const texts = [checkpoint, ...batch.map((item) => item.text)];
 		if (notebookBatch?.prompt) texts.push(notebookBatch.prompt);
 		this.notebookTool?.begin(notebookBatch);
 		const epoch = this.#epoch;
@@ -984,13 +1055,18 @@ export class PairRuntime {
 		);
 		try {
 			this.onDebug?.("prompting pair agent, delta chars=", promptChars, "held=", offered.length);
-			await this.#promptAndRecord(messages, "turn_end");
+			await this.#promptAndRecord(messages, permit);
 			if (this.#epoch !== epoch) {
 				this.notebookTool?.clear();
 				finishAttempt();
 				this.#reraised = undefined;
 				if (this.#agentResetPending) this.#resetAgentWhenIdle();
-				return "stale";
+				return {
+					outcome: "stale",
+					newIntervention: false,
+					consultantRequested: false,
+					silent: false,
+				};
 			}
 			const last = this.agent.state.messages[this.agent.state.messages.length - 1] as AssistantMessage;
 			if (last?.stopReason === "error" || last?.stopReason === "aborted" || last?.stopReason === "length") {
@@ -998,7 +1074,12 @@ export class PairRuntime {
 				finishAttempt();
 				this.onDebug?.("pair review incomplete, stop=", last?.stopReason, "err=", last?.errorMessage ?? "-");
 				this.#reraised = undefined;
-				return "failed";
+				return {
+					outcome: "failed",
+					newIntervention: false,
+					consultantRequested: false,
+					silent: false,
+				};
 			}
 			const notebookUpdate = this.notebookTool?.takeStaged();
 			if (notebookUpdate) this.onNotebookUpdate?.(notebookUpdate);
@@ -1012,6 +1093,7 @@ export class PairRuntime {
 				}
 				if (acceptance !== "unavailable") delegated.add(dedupeKey(request.topic || request.claim));
 			}
+			let newIntervention = false;
 			for (const note of attempt.advice) {
 				const key = pairNoteKey(note);
 				if (!isPairQuestion(note) && delegated.has(dedupeKey(note.note))) continue;
@@ -1032,6 +1114,7 @@ export class PairRuntime {
 					}
 				} else {
 					this.#upsertAdvice(note.note, note.severity, note.id, note.kind);
+					newIntervention = true;
 				}
 			}
 			const dropped: PairNote[] = [];
@@ -1047,7 +1130,13 @@ export class PairRuntime {
 			this.#lastOutcome = "ok";
 			this.#reraised = undefined;
 			this.onDebug?.("pair turn done, stop=", last?.stopReason);
-			return "ok";
+			return {
+				outcome: "ok",
+				newIntervention,
+				consultantRequested: delegated.size > 0,
+				...(attempt.attentionLease ? { lease: attempt.attentionLease } : {}),
+				silent: attempt.advice.length === 0 && attempt.escalations.length === 0,
+			};
 		} catch (e) {
 			this.notebookTool?.clear();
 			finishAttempt();
@@ -1055,42 +1144,77 @@ export class PairRuntime {
 			this.onDebug?.("pair prompt threw", String(e));
 			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
 			// Held notes were never removed, so nothing to restore there.
-			return this.#epoch !== epoch ? "stale" : "failed";
+			return {
+				outcome: this.#epoch !== epoch ? "stale" : "failed",
+				newIntervention: false,
+				consultantRequested: false,
+				silent: false,
+			};
 		}
 	}
 
 	async #drain(): Promise<void> {
-		if (this.#busy) return;
+		const requestedPermit = this.#activePermit;
+		if (this.#busy || !requestedPermit) return;
 		this.#busy = true;
-		let reviewed = false;
+		let settlement: PairRuntimeSettlement | undefined;
 		try {
-			while (!this.disposed && this.spool.hasPending) {
-				if (this.#agentResetPending) this.#resetAgentWhenIdle();
-				if (this.#agentResetPending) {
-					this.#lastOutcome = "failed";
-					break;
-				}
-				// Claim a contiguous prefix without removing it. It remains the exact
-				// retry unit until its transactional response commits.
-				const batch = this.spool.claim();
-				reviewed = true;
-				const result = await this.#reviewBatch(batch);
-				if (result !== "ok") {
-					if (result === "failed") this.#lastOutcome = "failed";
-					break;
-				}
-				this.spool.commit(batch);
+			if (this.#agentResetPending) this.#resetAgentWhenIdle();
+			if (this.#agentResetPending) {
+				this.#lastOutcome = "failed";
+				settlement = {
+					outcome: "failed",
+					permit: requestedPermit,
+					reviewedThroughSequence: 0,
+					newIntervention: false,
+					consultantRequested: false,
+					silent: false,
+				};
+				return;
 			}
+			// Claim a contiguous prefix without removing it. A failed claim remains
+			// the exact retry unit even when newer scheduler evidence arrives behind it.
+			const batch = this.spool.claim();
+			const effectivePermit: PairReviewPermit = {
+				...requestedPermit,
+				batchItems: batch.length,
+				batchTokens: batch.reduce((sum, item) => sum + Math.ceil(item.text.length / 4), 0),
+				throughSequence: batch.at(-1)?.sequence ?? requestedPermit.throughSequence,
+			};
+			const attempt = await this.#reviewBatch(batch, effectivePermit);
+			if (attempt.outcome === "stale") return;
+			if (attempt.outcome === "ok") {
+				this.spool.commit(batch);
+				this.#lastOutcome = "ok";
+			} else {
+				this.#lastOutcome = "failed";
+			}
+			const reviewedThroughSequence = attempt.outcome === "ok" ? effectivePermit.throughSequence : 0;
+			settlement = {
+				outcome: attempt.outcome,
+				permit: effectivePermit,
+				reviewedThroughSequence,
+				...(attempt.outcome === "ok" ? { reviewedThrough: reviewedThroughSequence } : {}),
+				newIntervention: attempt.newIntervention,
+				consultantRequested: attempt.consultantRequested,
+				...(attempt.lease ? { lease: attempt.lease } : {}),
+				silent: attempt.silent,
+				terminalCovered: attempt.outcome === "ok" && batch.some((item) => item.terminal),
+			};
 		} finally {
 			this.#busy = false;
-			if (this.#caughtUp || this.#lastOutcome === "failed") this.#notifySettled();
-			if (reviewed) {
+			this.#activePermit = undefined;
+			if (settlement) {
 				try {
-					this.onSettled?.(this.#lastOutcome === "failed" ? "failed" : "ok", this.spool.committedBoundary);
+					this.onSettled?.(settlement.outcome, this.spool.committedBoundary, settlement);
 				} catch (e) {
 					this.onDebug?.("pair onSettled callback threw", String(e));
 				}
 			}
+			const legacyPermit = requestedPermit.reviewId.startsWith("legacy-");
+			const wakeAgain = settlement?.outcome === "ok" && legacyPermit && this.spool.hasPending && !this.disposed;
+			if (wakeAgain) this.wake();
+			this.#notifySettled();
 		}
 	}
 }
@@ -1244,6 +1368,7 @@ export default function (pi: ExtensionAPI) {
 	let unwatchBash: (() => void) | undefined;
 	let escalationController: PairEscalationController | undefined;
 	let primaryTurnSequence = 0;
+	let lastReviewReason: string | undefined;
 	let activePairContextWindow: number | undefined;
 	let projectedThroughSourceId: string | undefined;
 	let receiptStore: PairReceiptStore | undefined;
@@ -1280,6 +1405,18 @@ export default function (pi: ExtensionAPI) {
 	// silent settle was indistinguishable from a stuck pair. A persistent,
 	// self-resolving footer state removes the need for a terminal message at all.
 	let latestCtx: ExtensionContext | undefined;
+	const reviewScheduler = createPairReviewScheduler({
+		now: Date.now,
+		setTimer: (callback, delayMs) => {
+			const timer = setTimeout(callback, delayMs);
+			timer.unref?.();
+			return timer;
+		},
+		clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+		onDue: () => {
+			if (latestCtx) pumpSpool(latestCtx as Parameters<typeof ensureRuntime>[0]);
+		},
+	});
 
 	pi.registerTool({
 		name: "acknowledge_pair_findings",
@@ -1639,6 +1776,7 @@ export default function (pi: ExtensionAPI) {
 
 	function teardown(): void {
 		constructionEpoch++;
+		reviewScheduler.reset();
 		escalationController?.cancel();
 		escalationController = undefined;
 		unwatchBash?.();
@@ -1660,6 +1798,7 @@ export default function (pi: ExtensionAPI) {
 		deliveredFindingKeys.clear();
 		turnState = "ended-nonterminal";
 		primaryTurnSequence = 0;
+		lastReviewReason = undefined;
 		directFindings.nit = directFindings.concern = directFindings.blocker = 0;
 		repeatedFailures.reset();
 	}
@@ -1776,7 +1915,21 @@ export default function (pi: ExtensionAPI) {
 					sourceEntryId,
 				});
 				if (!delta) return;
-				appendSpool(delta);
+				reviewScheduler.noteUserDirection();
+				const sequence = appendSpool(delta);
+				if (sequence === undefined) return;
+				reviewScheduler.observe({
+					sequence,
+					renderedTokens: Math.ceil(delta.length / 4),
+					toolCalls: [{ name: "bash", arguments: { command: message.command } }],
+					toolResults: [
+						{
+							toolName: "bash",
+							exitCode: message.exitCode,
+							isError: typeof message.exitCode === "number" && message.exitCode !== 0,
+						},
+					],
+				});
 				pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
 			},
 		);
@@ -1836,6 +1989,9 @@ export default function (pi: ExtensionAPI) {
 		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
 		const builtReceiptStore = ensureReceiptStore(ctx.sessionManager);
 		const builtReceiptTool = createExpandReceiptTool(builtReceiptStore);
+		const builtAttentionTool = createSetPairAttentionTool({
+			stage: (lease) => builtRuntime?.stageAttention(lease) ?? false,
+		});
 		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
@@ -1869,6 +2025,7 @@ export default function (pi: ExtensionAPI) {
 				adviseTool: builtAdviseTool as never,
 				escalateTool: builtEscalateTool as never,
 				receiptTool: builtReceiptTool as never,
+				attentionTool: builtAttentionTool as never,
 				...(builtNotebookTool ? { notebookTool: builtNotebookTool as never } : {}),
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
@@ -1890,10 +2047,23 @@ export default function (pi: ExtensionAPI) {
 			return undefined;
 		}
 		const agent = session.agent;
-		const onSettled = (outcome: "ok" | "failed", reviewedThrough: number) => {
+		const onSettled = (outcome: "ok" | "failed", reviewedThrough: number, settlement: PairRuntimeSettlement) => {
 			if (runtime !== builtRuntime) return;
+			lastReviewReason = settlement.permit.reason;
+			reviewScheduler.complete({
+				outcome,
+				...(settlement.reviewedThroughSequence > 0 ? { reviewedThrough: settlement.reviewedThroughSequence } : {}),
+				newIntervention: settlement.newIntervention,
+				consultantRequested: settlement.consultantRequested,
+				...(settlement.lease ? { lease: settlement.lease } : {}),
+				silent: settlement.silent,
+				terminalCovered: settlement.terminalCovered,
+			});
 			flushSettledAdvice(outcome, reviewedThrough, builtRuntime);
-			if (latestCtx) updateStatus(latestCtx);
+			if (latestCtx) {
+				pumpSpool(latestCtx as Parameters<typeof ensureRuntime>[0]);
+				updateStatus(latestCtx);
+			}
 		};
 		builtRuntime = new PairRuntime(
 			agent,
@@ -1957,17 +2127,30 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	/** Extension-owned spool: construction failures leave immutable input here. */
-	function appendSpool(text: string, boundary = primaryTurnSequence, notebookBatch?: PairNotebookBatch): void {
-		inputSpool.append(text, { boundary, ...(notebookBatch ? { notebookBatch } : {}) });
+	function appendSpool(
+		text: string,
+		boundary = primaryTurnSequence,
+		notebookBatch?: PairNotebookBatch,
+		terminal = false,
+	): number | undefined {
+		return inputSpool.append(text, {
+			boundary,
+			terminal,
+			...(notebookBatch ? { notebookBatch } : {}),
+		});
 	}
 
 	function pumpSpool(ctx: Parameters<typeof ensureRuntime>[0]): void {
-		if (!inputSpool.hasPending || !enabled || process.env.PAIR_NO_REVIEW) return;
+		if (!inputSpool.hasPending || !reviewScheduler.snapshot().due || !enabled || process.env.PAIR_NO_REVIEW) {
+			return;
+		}
 		void ensureRuntime(ctx)
 			.then((rt) => {
-				if (!rt || !enabled || rt !== runtime) return;
+				if (!rt || !enabled || rt !== runtime || rt.reviewing) return;
+				const permit = reviewScheduler.takePermit();
+				if (!permit) return;
 				rt.setUsageSession(sessionIdFromCtx(ctx));
-				rt.wake();
+				if (!rt.startReview(permit)) reviewScheduler.cancelPermit(permit);
 				updateStatus(ctx);
 			})
 			.catch((error) => dbg("pair spool pump failed", String(error)));
@@ -1983,6 +2166,7 @@ export default function (pi: ExtensionAPI) {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
 		turnState = "running";
+		reviewScheduler.setRunActive(true);
 		return { systemPrompt: appendPrimaryPairPrompt(event.systemPrompt ?? "") };
 	});
 
@@ -1990,6 +2174,7 @@ export default function (pi: ExtensionAPI) {
 		if (!enabled) return;
 		if (event.message?.role !== "user") return;
 		awaitingUserAfterAdvisory = false;
+		if (!userMessageText(event.message).startsWith("/")) reviewScheduler.noteUserDirection();
 	});
 
 	// `!bash` is recorded by SessionManager.appendMessage, not message_end.
@@ -2006,11 +2191,13 @@ export default function (pi: ExtensionAPI) {
 	pi.on("agent_start", () => {
 		if (!enabled) return;
 		turnState = "running";
+		reviewScheduler.setRunActive(true);
 	});
 	pi.on("agent_settled", (_event, ctx) => {
 		if (!enabled) return;
 		latestCtx = ctx;
 		turnState = "ended-terminal";
+		reviewScheduler.setRunActive(false);
 		handleTerminalAcknowledgments();
 		if (!runtime || runtime.reviewedThrough >= primaryTurnSequence) flushBoundaryFindings();
 		else void flushConsultantFinding();
@@ -2070,8 +2257,17 @@ export default function (pi: ExtensionAPI) {
 		);
 		const notebookBatch = prepareNotebookBatch(ctx);
 
-		appendSpool(delta, boundarySequence, notebookBatch);
-		void pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
+		const sequence = appendSpool(delta, boundarySequence, notebookBatch, terminal);
+		if (sequence !== undefined) {
+			reviewScheduler.observe({
+				sequence,
+				renderedTokens: Math.ceil(delta.length / 4),
+				terminal,
+				assistant: event.message as never,
+				toolResults: toolResults as never,
+			});
+			pumpSpool(ctx as Parameters<typeof ensureRuntime>[0]);
+		}
 		updateStatus(ctx);
 	});
 
@@ -2113,6 +2309,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		teardown();
+		reviewScheduler.dispose();
 		acknowledgments.reset();
 		rootNotebook?.dispose();
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
@@ -2188,11 +2385,13 @@ export default function (pi: ExtensionAPI) {
 				const ctxStr =
 					u.contextPercent !== null ? `${u.contextPercent}% (${u.contextTokens} tok)` : `${u.contextTokens} tok`;
 				const advisor = escalationController;
+				const pacing = reviewScheduler.snapshot();
+				const pacingState = rt.reviewing ? "reviewing" : pacing.pendingItems > 0 ? "watching" : "idle";
 				const entries = ctx.sessionManager.getBranch() as Entry[];
 				const notebook = foldLedger(entries);
 				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
-					`Pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${rt.reviewing ? "reviewing" : "idle"}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
+					`Pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${pacingState}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, attention ${pacing.attention}, wake ${pacing.wakeOn.join("/") || "mandatory-only"}, unseen ~${pacing.pendingTokens} tok, last ${lastReviewReason ?? "none"}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Consultant — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",

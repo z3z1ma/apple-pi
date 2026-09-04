@@ -22,6 +22,11 @@ export const SIDECAR_USAGE_RECORD_KEYS = [
 	"cost",
 	"durationMs",
 	"threshold",
+	"reviewId",
+	"batchItems",
+	"batchTokens",
+	"activeWaitMs",
+	"attention",
 ] as const;
 
 export type SidecarAgent = "pair" | "consultant";
@@ -41,6 +46,11 @@ export type SidecarUsageRecord = {
 	cost: number;
 	durationMs: number;
 	threshold?: number;
+	reviewId?: string;
+	batchItems?: number;
+	batchTokens?: number;
+	activeWaitMs?: number;
+	attention?: string;
 };
 
 export type SidecarUsageInput = {
@@ -56,6 +66,11 @@ export type SidecarUsageInput = {
 	cost?: number;
 	durationMs?: number;
 	threshold?: number;
+	reviewId?: string;
+	batchItems?: number;
+	batchTokens?: number;
+	activeWaitMs?: number;
+	attention?: string;
 	sessionId?: string;
 };
 
@@ -63,6 +78,11 @@ export type SidecarUsageContext = {
 	sessionId?: string;
 	threshold?: number;
 	trigger?: string;
+	reviewId?: string;
+	batchItems?: number;
+	batchTokens?: number;
+	activeWaitMs?: number;
+	attention?: string;
 };
 
 const storage = new AsyncLocalStorage<SidecarUsageContext>();
@@ -133,6 +153,16 @@ export function buildSidecarUsageRecord(
 	if (sessionId) record.sessionId = String(sessionId);
 	const threshold = input.threshold ?? context?.threshold;
 	if (threshold !== undefined) record.threshold = numeric(threshold);
+	const reviewId = input.reviewId ?? context?.reviewId;
+	if (reviewId) record.reviewId = String(reviewId);
+	const batchItems = input.batchItems ?? context?.batchItems;
+	if (batchItems !== undefined) record.batchItems = numeric(batchItems);
+	const batchTokens = input.batchTokens ?? context?.batchTokens;
+	if (batchTokens !== undefined) record.batchTokens = numeric(batchTokens);
+	const activeWaitMs = input.activeWaitMs ?? context?.activeWaitMs;
+	if (activeWaitMs !== undefined) record.activeWaitMs = numeric(activeWaitMs);
+	const attention = input.attention ?? context?.attention;
+	if (attention) record.attention = String(attention);
 	return record;
 }
 
