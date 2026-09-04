@@ -28,6 +28,7 @@ const COMPACT_SEPARATOR = " · ";
 const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-pair", "subagents"];
 const FLEET_NAVIGATION_STATUS = "subagents-navigation";
 const FAST_MODE_STATUS = "fast-mode";
+const VROOM_PROVIDERS = new Set(["openai-codex", "xai"]);
 
 interface RenderSegment {
 	text: string;
@@ -286,7 +287,7 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	const model = cleanOneLine(modelName);
 	if (!provider || !model) return undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
-	const fast = snapshot.fastModeEnabled && snapshot.model.provider === "openai-codex" ? " ⚡" : "";
+	const fast = snapshot.fastModeEnabled && VROOM_PROVIDERS.has(snapshot.model.provider) ? " ⚡" : "";
 	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}${fast}`) : ""}`;
 }
 
@@ -516,7 +517,8 @@ export function collectInputCardSnapshot(
 		usage,
 		usingSubscription,
 		autoCompactionEnabled: safeRead(() => session.autoCompactionEnabled),
-		fastModeEnabled: modelProvider === "openai-codex" && statusMap?.has(FAST_MODE_STATUS) === true,
+		fastModeEnabled:
+			modelProvider !== undefined && VROOM_PROVIDERS.has(modelProvider) && statusMap?.has(FAST_MODE_STATUS) === true,
 		availableProviderCount,
 		statuses,
 	};

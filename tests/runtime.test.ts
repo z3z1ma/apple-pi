@@ -28,7 +28,7 @@ import runtime, {
 import {
 	AUTO_COMPACT_EXTENSION_PATH,
 	agentOperationArgs,
-	CODEX_FAST_EXTENSION_PATH,
+	VROOM_EXTENSION_PATH,
 	CONTEXT_GUIDANCE,
 	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
@@ -1051,7 +1051,7 @@ describe("pi_exec agent binding", () => {
 			expect(prepared.args).toContain("--no-approve");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
 				AUTO_COMPACT_EXTENSION_PATH,
-				CODEX_FAST_EXTENSION_PATH,
+				VROOM_EXTENSION_PATH,
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,

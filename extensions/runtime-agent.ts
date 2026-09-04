@@ -21,7 +21,7 @@ import { resolveAgentProfile } from "../components/subagents/src/model-routing.j
 import type { AgentConfig, SubagentConfigScope } from "../components/subagents/src/types.js";
 
 import { AUTO_COMPACT_EXTENSION_PATH } from "./auto-compact.js";
-import { CODEX_FAST_EXTENSION_PATH } from "./codex-vroom.js";
+import { VROOM_EXTENSION_PATH } from "./vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "./home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "./ledger.js";
 import { PAIR_EXTENSION_PATH } from "./pi-pair.js";
@@ -42,7 +42,7 @@ export const OUTPUT_SCHEMA_GUIDANCE = `You must finish by calling ${PI_EXEC_RETU
 export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./runtime-worker-return.ts", import.meta.url));
 export {
 	AUTO_COMPACT_EXTENSION_PATH,
-	CODEX_FAST_EXTENSION_PATH,
+	VROOM_EXTENSION_PATH,
 	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
 	SESSION_SEARCH_EXTENSION_PATH,
@@ -362,7 +362,7 @@ export function buildAgentCliArgs(
 		"--extension",
 		AUTO_COMPACT_EXTENSION_PATH,
 		"--extension",
-		CODEX_FAST_EXTENSION_PATH,
+		VROOM_EXTENSION_PATH,
 		"--extension",
 		HOME_SEARCH_GUARD_EXTENSION_PATH,
 		"--extension",

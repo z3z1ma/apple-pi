@@ -17,7 +17,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
-import { CODEX_FAST_EXTENSION_PATH } from "../../../extensions/codex-vroom.js";
+import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
@@ -85,7 +85,7 @@ export function childSessionExtensions(
 } {
 	const additionalExtensionPaths = [
 		AUTO_COMPACT_EXTENSION_PATH,
-		CODEX_FAST_EXTENSION_PATH,
+		VROOM_EXTENSION_PATH,
 		HOME_SEARCH_GUARD_EXTENSION_PATH,
 	];
 	if (standard) {

@@ -39,7 +39,7 @@ Commands and tools:
 
 The pair programmer's operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. The pair programmer's model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` can disable the exceptional overflow fallback and pair programmer notebook maintenance while preserving reads; it does not disable Pi's native compaction or automatic-compaction failure safety. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-The pair programmer binds `revisit_note` to the primary session and uses handle-bound `expand_receipt` for folded trajectory content. It does not receive `search_session`. The episodic consultant retains primary-bound `search_session`, `revisit_note`, and read-only repository tools for independent investigation. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only Codex fast mode, compaction safety/fallback, and the search root guard.
+The pair programmer binds `revisit_note` to the primary session and uses handle-bound `expand_receipt` for folded trajectory content. It does not receive `search_session`. The episodic consultant retains primary-bound `search_session`, `revisit_note`, and read-only repository tools for independent investigation. Ordinary subagents and `pi_exec` workers load `search_session` but do not keep a pair programmer notebook. The internal BTW child loads only vroom (fast mode), compaction safety/fallback, and the search root guard.
 
 ## Where the notebook persists
 

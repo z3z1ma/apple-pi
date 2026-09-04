@@ -181,6 +181,18 @@ describe("input card rendering", () => {
 		).not.toContain("⚡");
 	});
 
+	it("shows a lightning bolt beside thinking when xAI fast mode is active", () => {
+		const snapshot: FooterSnapshot = {
+			...completeSnapshot,
+			model: { ...completeSnapshot.model!, provider: "xai" },
+			fastModeEnabled: true,
+			statuses: [...completeSnapshot.statuses, { key: "fast-mode", text: "fast" }],
+		};
+		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
+
+		expect(output).toContain("high ⚡");
+	});
+
 	it("right-aligns Fleet navigation opposite model metadata without duplicating it in the strip", () => {
 		const hint = "esc to interrupt · ← for agents · ↓ to manage";
 		const snapshot = {

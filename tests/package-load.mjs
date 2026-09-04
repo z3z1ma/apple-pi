@@ -25,7 +25,7 @@ try {
 			"extensions/context.ts",
 			"extensions/remind-me.ts",
 			"extensions/auto-compact.ts",
-			"extensions/codex-vroom.ts",
+			"extensions/vroom.ts",
 			"extensions/home-search-guard.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
@@ -92,10 +92,9 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.endsWith("codex-vroom.ts") &&
-				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
+				extension.path.endsWith("vroom.ts") && (extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
 		),
-		"missing Codex fast-mode provider hook",
+		"missing vroom (fast mode) provider hook",
 	);
 	assert(
 		result.extensions.some(
@@ -217,7 +216,7 @@ try {
 		!manifest.pi.extensions.includes("./extensions/workflow.ts"),
 		"package manifest must not load workflow extension",
 	);
-	assert(manifest.pi.extensions.includes("./extensions/codex-vroom.ts"), "package manifest omits Codex fast mode");
+	assert(manifest.pi.extensions.includes("./extensions/vroom.ts"), "package manifest omits vroom (fast mode)");
 	assert(
 		manifest.pi.extensions.includes("./extensions/home-search-guard.ts"),
 		"package manifest omits home search guard",
@@ -232,7 +231,7 @@ try {
 		!manifest.pi.extensions.includes("./extensions/backlog.ts"),
 		"package manifest must not load backlog extension",
 	);
-	assert(manifest.files.includes("components/codex-vroom/src/"), "package manifest omits Codex fast-mode source");
+	assert(manifest.files.includes("components/vroom/src/"), "package manifest omits vroom (fast mode) source");
 	assert(
 		manifest.files.includes("components/home-search-guard/src/"),
 		"package manifest omits home search guard source",

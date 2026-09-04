@@ -4,6 +4,11 @@ import { join } from "node:path";
 
 const STATUS_ID = "fast-mode";
 const CODEX_PROVIDER = "openai-codex";
+const XAI_PROVIDER = "xai";
+const PROVIDER_LABELS: Record<string, string> = {
+	[CODEX_PROVIDER]: "OpenAI Codex",
+	[XAI_PROVIDER]: "xAI",
+};
 
 interface FastModeState {
 	enabled: boolean;
@@ -27,19 +32,37 @@ function errorMessage(error: unknown): string {
 }
 
 function configPath(): string {
+	return join(getAgentDir(), "vroom.json");
+}
+
+/** Pre-rename path. Read as a one-time fallback so upgrading does not silently disable an existing toggle. */
+function legacyConfigPath(): string {
 	return join(getAgentDir(), "codex-fast.json");
+}
+
+async function readFastModeState(path: string): Promise<boolean | undefined> {
+	try {
+		const state: unknown = JSON.parse(await readFile(path, "utf8"));
+		if (!isFastModeState(state)) throw new Error("expected an object with a boolean 'enabled' field");
+		return state.enabled;
+	} catch (error) {
+		if (isRecord(error) && error.code === "ENOENT") return undefined;
+		throw error;
+	}
+}
+
+/** The provider display name when the active model supports priority service tier, or undefined otherwise. */
+function activeProviderLabel(ctx: ExtensionContext): string | undefined {
+	const provider = ctx.model?.provider;
+	return typeof provider === "string" ? PROVIDER_LABELS[provider] : undefined;
 }
 
 export const globalFastModeStorage: FastModeStorage = {
 	async load(): Promise<boolean> {
-		try {
-			const state: unknown = JSON.parse(await readFile(configPath(), "utf8"));
-			if (!isFastModeState(state)) throw new Error("expected an object with a boolean 'enabled' field");
-			return state.enabled;
-		} catch (error) {
-			if (isRecord(error) && error.code === "ENOENT") return false;
-			throw error;
-		}
+		const current = await readFastModeState(configPath());
+		if (current !== undefined) return current;
+		const legacy = await readFastModeState(legacyConfigPath());
+		return legacy ?? false;
 	},
 	async save(enabled: boolean): Promise<void> {
 		const path = configPath();
@@ -58,13 +81,9 @@ export const globalFastModeStorage: FastModeStorage = {
 	},
 };
 
-export function registerCodexFast(pi: ExtensionAPI, storage: FastModeStorage = globalFastModeStorage): void {
+export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globalFastModeStorage): void {
 	let enabled = false;
 	let pendingSave: Promise<void> | undefined;
-
-	function isCodexActive(ctx: ExtensionContext): boolean {
-		return ctx.model?.provider === CODEX_PROVIDER;
-	}
 
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!enabled) {
@@ -72,7 +91,7 @@ export function registerCodexFast(pi: ExtensionAPI, storage: FastModeStorage = g
 			return;
 		}
 
-		const text = isCodexActive(ctx)
+		const text = activeProviderLabel(ctx)
 			? ctx.ui.theme.fg("accent", "fast")
 			: ctx.ui.theme.fg("dim", ctx.ui.theme.strikethrough("fast"));
 		ctx.ui.setStatus(STATUS_ID, text);
@@ -80,8 +99,9 @@ export function registerCodexFast(pi: ExtensionAPI, storage: FastModeStorage = g
 
 	function statusMessage(ctx: ExtensionContext): string {
 		if (!enabled) return "Fast mode is off.";
-		if (isCodexActive(ctx)) return "Fast mode is on for OpenAI Codex (service_tier: priority).";
-		return "Fast mode is on but inactive; select an openai-codex model to use it.";
+		const label = activeProviderLabel(ctx);
+		if (label) return `Fast mode is on for ${label} (service_tier: priority).`;
+		return "Fast mode is on but inactive; select an OpenAI Codex or xAI model to use it.";
 	}
 
 	async function setEnabled(nextEnabled: boolean, ctx: ExtensionContext): Promise<void> {
@@ -100,11 +120,11 @@ export function registerCodexFast(pi: ExtensionAPI, storage: FastModeStorage = g
 		} finally {
 			if (pendingSave === save) pendingSave = undefined;
 		}
-		ctx.ui.notify(statusMessage(ctx), enabled && !isCodexActive(ctx) ? "warning" : "info");
+		ctx.ui.notify(statusMessage(ctx), enabled && !activeProviderLabel(ctx) ? "warning" : "info");
 	}
 
 	pi.registerCommand("fast", {
-		description: "Toggle OpenAI Codex Fast mode (priority service tier)",
+		description: "Toggle priority service tier for OpenAI Codex and xAI (fast mode)",
 		handler: async (args, ctx) => {
 			if (args.trim() !== "") {
 				ctx.ui.notify("Usage: /fast", "error");
@@ -144,11 +164,11 @@ export function registerCodexFast(pi: ExtensionAPI, storage: FastModeStorage = g
 				// Keep the last known state when the shared file is temporarily unreadable.
 			}
 		}
-		if (!enabled || !isCodexActive(ctx) || !isRecord(event.payload)) return;
+		if (!enabled || !activeProviderLabel(ctx) || !isRecord(event.payload)) return;
 		return { ...event.payload, service_tier: "priority" };
 	});
 }
 
-export default function installCodexFast(pi: ExtensionAPI): void {
-	registerCodexFast(pi);
+export default function installVroom(pi: ExtensionAPI): void {
+	registerVroom(pi);
 }

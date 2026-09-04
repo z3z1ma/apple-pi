@@ -9,7 +9,7 @@ import { childSessionExtensions } from "../components/subagents/src/agent-runner
 import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
-import { CODEX_FAST_EXTENSION_PATH } from "../extensions/codex-vroom.js";
+import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
@@ -64,7 +64,7 @@ describe("ledger system prompt distribution", () => {
 		expect(args).toContain("--extension");
 		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
 			AUTO_COMPACT_EXTENSION_PATH,
-			CODEX_FAST_EXTENSION_PATH,
+			VROOM_EXTENSION_PATH,
 			HOME_SEARCH_GUARD_EXTENSION_PATH,
 			LEDGER_EXTENSION_PATH,
 			WIKI_EXTENSION_PATH,
@@ -81,7 +81,7 @@ describe("ledger system prompt distribution", () => {
 			noExtensions: true,
 			additionalExtensionPaths: [
 				AUTO_COMPACT_EXTENSION_PATH,
-				CODEX_FAST_EXTENSION_PATH,
+				VROOM_EXTENSION_PATH,
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
@@ -94,11 +94,7 @@ describe("ledger system prompt distribution", () => {
 	it("keeps fast mode and safety guards when internal children suppress standard extensions", () => {
 		expect(childSessionExtensions(false, false)).toEqual({
 			noExtensions: true,
-			additionalExtensionPaths: [
-				AUTO_COMPACT_EXTENSION_PATH,
-				CODEX_FAST_EXTENSION_PATH,
-				HOME_SEARCH_GUARD_EXTENSION_PATH,
-			],
+			additionalExtensionPaths: [AUTO_COMPACT_EXTENSION_PATH, VROOM_EXTENSION_PATH, HOME_SEARCH_GUARD_EXTENSION_PATH],
 		});
 	});
 
@@ -107,7 +103,7 @@ describe("ledger system prompt distribution", () => {
 			noExtensions: true,
 			additionalExtensionPaths: [
 				AUTO_COMPACT_EXTENSION_PATH,
-				CODEX_FAST_EXTENSION_PATH,
+				VROOM_EXTENSION_PATH,
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
