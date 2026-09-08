@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	type Config,
 	DEFAULTS,
 	NOTEBOOK_SOURCE_CONTEXT_RATIO,
 	NOTEBOOK_SOURCE_FALLBACK_MAX_TOKENS,
 	NOTEBOOK_SOURCE_MIN_TOKENS,
 	resolveNotebookSourceMaxTokens,
-	type Config,
 } from "../src/config.js";
 
 function config(overrides: Partial<Config> = {}): Config {

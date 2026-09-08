@@ -5,7 +5,7 @@ import {
 	NOTEBOOK_PACKET_CUSTOM_TYPE,
 	NOTEBOOK_PACKET_HEADER,
 } from "../components/notebook/src/hooks/context-packet.js";
-import type { Entry, Observation } from "../components/notebook/src/session-ledger/types.js";
+import type { Entry, Reflection } from "../components/notebook/src/session-ledger/types.js";
 
 function message(id: string, role: string, content: unknown): Entry {
 	return { id, type: "message", message: { role, content } };
@@ -13,11 +13,10 @@ function message(id: string, role: string, content: unknown): Entry {
 
 describe("pair programmer notebook after normal compaction", () => {
 	it("places the folded packet after a compaction entry for conversation continuity", () => {
-		const observation: Observation = {
+		const reflection: Reflection = {
 			id: "abc123abc123",
-			content: "The project requires deterministic compaction.",
-			timestamp: "2026-08-15T10:00:00.000Z",
-			relevance: "high",
+			content: "Compaction must stay deterministic.",
+			supportingObservationIds: [],
 			sourceEntryIds: ["m1"],
 			tokenCount: 8,
 		};
@@ -27,8 +26,8 @@ describe("pair programmer notebook after normal compaction", () => {
 			{
 				id: "notebook-1",
 				type: "custom",
-				customType: "notebook.observations.recorded",
-				data: { observations: [observation], coversUpToId: "m2" },
+				customType: "notebook.reflections.recorded",
+				data: { reflections: [reflection], coversUpToId: "m2" },
 			},
 			{
 				id: "compact-1",
@@ -39,10 +38,11 @@ describe("pair programmer notebook after normal compaction", () => {
 			message("m3", "user", "Continue"),
 		];
 
-		const packet = buildNotebookContextPacket(entries, 100);
+		const packet = buildNotebookContextPacket(entries);
 		expect(packet?.customType).toBe(NOTEBOOK_PACKET_CUSTOM_TYPE);
 		expect(packet?.content[0]?.text).toContain(NOTEBOOK_PACKET_HEADER);
-		expect(packet?.content[0]?.text).toContain("## Observations");
+		expect(packet?.content[0]?.text).toContain("## Working conclusions");
 		expect(packet?.content[0]?.text).toContain("[abc123abc123]");
+		expect(packet?.content[0]?.text).not.toContain("## Observations");
 	});
 });

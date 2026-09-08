@@ -4,8 +4,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 
 import {
-	type ConsultantConsultationResult,
 	buildConsultationContext,
+	type ConsultantConsultationResult,
 	type ConsultationContext,
 	type ConsultationSource,
 	captureConsultationWorkingState,

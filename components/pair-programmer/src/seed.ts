@@ -1,7 +1,7 @@
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import { foldLedger } from "../../notebook/src/session-ledger/fold.js";
-import { observationToSummaryLine, reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
+import { reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
 import { formatTurnDelta, formatUserBash, formatUserMessage } from "./formatting.js";
@@ -93,16 +93,8 @@ export function collectRecentUserRequests(entries: readonly unknown[]): SeedUser
 export function formatNotebookFold(entries: readonly unknown[]): string {
 	try {
 		const folded = foldLedger(entries as Entry[]);
-		const parts: string[] = [];
-		if (folded.currentReflections.length) {
-			parts.push(
-				`## Current shared understanding\n${folded.currentReflections.map(reflectionToSummaryLine).join("\n")}`,
-			);
-		}
-		if (folded.activeObservations.length) {
-			parts.push(`## Working observations\n${folded.activeObservations.map(observationToSummaryLine).join("\n")}`);
-		}
-		return parts.join("\n\n");
+		if (!folded.currentReflections.length) return "";
+		return `## Working conclusions\n${folded.currentReflections.map(reflectionToSummaryLine).join("\n")}`;
 	} catch {
 		return "";
 	}

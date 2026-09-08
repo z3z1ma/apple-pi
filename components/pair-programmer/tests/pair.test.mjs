@@ -1177,7 +1177,7 @@ test("compact hook omits the parent fold from the reseed summary", async () => {
 	assert.ok(!result.compaction.summary.includes("## Current law"));
 });
 
-test("parent notebook packet sits after the compaction summary and is idempotent", () => {
+test("parent notebook packet refreshes live conclusions independently of compaction", () => {
 	const packet = A.buildParentNotebookPacket([
 		{ id: "m1", type: "message", message: { role: "user", content: "Build it" } },
 		{
@@ -1203,9 +1203,9 @@ test("parent notebook packet sits after the compaction summary and is idempotent
 	assert.match(packet.content[0].text, /expand_receipt/);
 	assert.doesNotMatch(packet.content[0].text, /search_session/);
 	assert.match(packet.content[0].text, /not a notebook for this side conversation/);
-	assert.match(packet.content[0].text, /notebook you keep for your partner's session/);
+	assert.match(packet.content[0].text, /working conclusions you keep for your partner's session/);
 
-	const first = A.insertParentNotebookAfterCompaction(
+	const first = A.refreshParentNotebookPacket(
 		[
 			{ role: "compactionSummary", summary: "reseed" },
 			{ role: "user", content: "next review" },
@@ -1213,11 +1213,12 @@ test("parent notebook packet sits after the compaction summary and is idempotent
 		packet,
 	);
 	assert.equal(first.messages[0].role, "compactionSummary");
-	assert.equal(first.messages[1].customType, "notebook.packet");
-	assert.equal(first.messages[2].role, "user");
+	assert.equal(first.messages[2].customType, "notebook.packet");
+	assert.equal(first.messages[1].role, "user");
 
-	assert.equal(A.insertParentNotebookAfterCompaction(first.messages, packet), undefined);
-	assert.equal(A.insertParentNotebookAfterCompaction([{ role: "user", content: "no compact yet" }], packet), undefined);
+	assert.equal(A.refreshParentNotebookPacket(first.messages, packet).messages.length, 3);
+	assert.equal(A.refreshParentNotebookPacket(first.messages, undefined).messages.length, 2);
+	assert.equal(A.refreshParentNotebookPacket([{ role: "user", content: "no compact yet" }], packet).messages.length, 2);
 });
 
 test("pair parent-notebook hook does not register the notebook pipeline", () => {

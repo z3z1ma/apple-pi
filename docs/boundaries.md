@@ -20,8 +20,9 @@ Additional boundaries:
 
 - **No separate package graph.** Components are internal source directories; the root manifest is the only Pi package. MCP is an ordinary pinned npm dependency, not another installed Pi package or linked repository.
 - **Wiki graph is derived, not stored.** `.wiki/` Markdown pages and their Obsidian `[[slug]]` links are the source of truth. `wiki_lint` and `wiki_references` scan them on demand; there is no wiki database, cache, watcher, registry, embedding index, or synchronization service.
-- **One compaction hook.** The pair programmer's notebook does not register a compact hook. It appends its packet on the `context` event after any compaction entry.
-- **Session ledger is authoritative.** Compaction projects the pair programmer's notebook but does not relocate it.
+- **One compaction hook.** The notebook leaves compaction to Pi or xAI. Its `context` hook refreshes current conclusions independently of compaction timing.
+- **Shared conclusions, archived evidence.** Both programmers curate sourced conclusions that improve later decisions beyond ordinary summaries. Full pair reviews explicitly retain useful conclusions; observations remain recallable history rather than injected guidance. Retention is not driven by pool fullness, fixed lifetimes, or relevance scores.
+- **Session ledger is authoritative.** Notebook edits and retirements append to session JSONL. Live context is derived from the current branch; compaction does not relocate or freeze the notebook.
 - **Optional backlog and to-do systems.** Their complete supported implementations are packaged under `optional-extensions/` and are not default model surfaces. The default harness uses only explicit one-shot self-reminders for next-turn follow-up.
 - **No second subagent runtime.** To-dos launch owned public subagents and use their existing record, queue, lifecycle, FleetView, and stop boundaries; no external RPC, controller worker, duplicate transcript, or process tracker is retained.
 - **Shared to-do persistence is explicit and fail-closed.** Only trusted projects may select it. Mutations re-read under a token-checked file lock and atomically rename; stale claims require confirmed recovery plus positive owner-death evidence under lock.

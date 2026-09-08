@@ -41,10 +41,11 @@ import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
 import { registerNotebookContextPacket } from "../../notebook/src/hooks/context-packet.js";
 import {
-	commitPairNotebookUpdate,
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
+	commitNotebookUpdate as persistNotebookUpdate,
 	preparePairNotebookBatch,
+	registerMainNotebookTool,
 	UpdateNotebookTool,
 } from "../../notebook/src/notebook-maintenance.js";
 import { Runtime as NotebookRuntime } from "../../notebook/src/runtime.js";
@@ -393,7 +394,7 @@ export {
 } from "./formatting.js";
 export {
 	buildParentNotebookPacket,
-	insertParentNotebookAfterCompaction,
+	refreshParentNotebookPacket,
 	registerPairParentNotebookPacket,
 } from "./parent-notebook.js";
 export { bindPairRecallTools, bindPrimaryRecallTools } from "./recall.js";
@@ -1352,6 +1353,7 @@ export default function (pi: ExtensionAPI) {
 		registerCompactionTrigger(pi, rootNotebook);
 		registerNotebookContextPacket(pi, rootNotebook);
 		registerNotebookSourceTool(pi);
+		registerMainNotebookTool(pi, rootNotebook);
 	}
 
 	let enabled = loadEnabled();
@@ -1889,10 +1891,10 @@ export default function (pi: ExtensionAPI) {
 			throw new Error("pair programmer notebook update belongs to a replaced session");
 		}
 		const entries = latestCtx.sessionManager.getBranch() as Entry[];
-		if (!commitPairNotebookUpdate(pi, rootNotebook, entries, update)) {
+		if (!persistNotebookUpdate(pi, rootNotebook, entries, update)) {
 			throw new Error("pair programmer notebook update was rejected");
 		}
-		if (update.observations.length > 0) {
+		if (update.reflections.length > 0) {
 			rootNotebook.notebookEmptyBackoff = undefined;
 		} else if (update.fullMaintenanceDue) {
 			rootNotebook.notebookEmptyBackoff = {
@@ -2392,7 +2394,7 @@ export default function (pi: ExtensionAPI) {
 				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
 				ctx.ui.notify(
 					`Pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${pacingState}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, attention ${pacing.attention}, wake ${pacing.wakeOn.join("/") || "mandatory-only"}, unseen ~${pacing.pendingTokens} tok, last ${lastReviewReason ?? "none"}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
-						`Notebook — ${notebook.activeObservations.length} active observations, ${notebook.currentReflections.length} current reflections, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
+						`Notebook — ${notebook.currentReflections.length} working conclusions, ~${notebookProgress.toLocaleString()} uncovered source tokens\n` +
 						`Consultant — state ${advisor?.state ?? "idle"}, active ${advisor?.activeId ?? "none"}, queued ${advisor?.pendingCount ?? 0}, consultations ${advisor?.stats.consultations ?? 0}, dispositions ${advisor?.stats.confirm ?? 0} confirm/${advisor?.stats.refute ?? 0} refute/${advisor?.stats.refine ?? 0} refine/${advisor?.stats.uncertain ?? 0} uncertain, tokens ${advisor?.stats.input ?? 0}in/${advisor?.stats.output ?? 0}out, cost $${(advisor?.stats.cost ?? 0).toFixed(4)}`,
 					"info",
 				);

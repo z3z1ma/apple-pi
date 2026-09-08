@@ -144,18 +144,22 @@ function indexLedger(entries: Entry[]): {
 	return { observations, reflections, droppedIds, retiredIds };
 }
 
-function resolveObservationSources(
+function resolveSourceIds(
 	entries: Entry[],
-	observation: Observation,
-	location: ObservationLedgerLocation,
-): RecalledObservation {
-	const sourceEntryIds = uniqueStrings(observation.sourceEntryIds);
+	sourceEntryIds: readonly string[],
+): {
+	sourceEntryIds: string[];
+	sourceEntries: Entry[];
+	missingSourceEntryIds: string[];
+	nonSourceEntryIds: string[];
+} {
+	const ids = uniqueStrings([...sourceEntryIds]);
 	const byId = new Map(entries.map((entry) => [entry.id, entry]));
 	const sourceEntries: Entry[] = [];
 	const missingSourceEntryIds: string[] = [];
 	const nonSourceEntryIds: string[] = [];
 
-	for (const sourceEntryId of sourceEntryIds) {
+	for (const sourceEntryId of ids) {
 		const sourceEntry = byId.get(sourceEntryId);
 		if (!sourceEntry) {
 			missingSourceEntryIds.push(sourceEntryId);
@@ -168,15 +172,21 @@ function resolveObservationSources(
 		sourceEntries.push(sourceEntry);
 	}
 
+	return { sourceEntryIds: ids, sourceEntries, missingSourceEntryIds, nonSourceEntryIds };
+}
+
+function resolveObservationSources(
+	entries: Entry[],
+	observation: Observation,
+	location: ObservationLedgerLocation,
+): RecalledObservation {
+	const resolved = resolveSourceIds(entries, observation.sourceEntryIds);
 	return {
 		observation,
 		observationEntryId: location.entryId,
 		observationRecordIndex: location.recordIndex,
 		status: "active",
-		sourceEntryIds,
-		sourceEntries,
-		missingSourceEntryIds,
-		nonSourceEntryIds,
+		...resolved,
 	};
 }
 
@@ -226,7 +236,9 @@ export function recallNotebookSources(entries: Entry[], notebookId: string): Rec
 
 	for (const match of directObservationMatches) addObservation(match);
 
+	const directSourceIds: string[] = [];
 	for (const { reflection } of reflectionMatches) {
+		if (reflection.sourceEntryIds) directSourceIds.push(...reflection.sourceEntryIds);
 		for (const observationId of uniqueStrings(reflection.supportingObservationIds)) {
 			const indexed = observationsById.get(observationId);
 			if (!indexed) {
@@ -244,9 +256,19 @@ export function recallNotebookSources(entries: Entry[], notebookId: string): Rec
 		reflectionRecordIndex: recordIndex,
 		status: retiredIds.has(reflection.id) ? "retired" : "current",
 	}));
-	const sourceEntries = uniqueById(recalledObservations.flatMap((match) => match.sourceEntries));
-	const missingSourceEntryIds = uniqueStrings(recalledObservations.flatMap((match) => match.missingSourceEntryIds));
-	const nonSourceEntryIds = uniqueStrings(recalledObservations.flatMap((match) => match.nonSourceEntryIds));
+	const directSources = resolveSourceIds(entries, directSourceIds);
+	const sourceEntries = uniqueById([
+		...recalledObservations.flatMap((match) => match.sourceEntries),
+		...directSources.sourceEntries,
+	]);
+	const missingSourceEntryIds = uniqueStrings([
+		...recalledObservations.flatMap((match) => match.missingSourceEntryIds),
+		...directSources.missingSourceEntryIds,
+	]);
+	const nonSourceEntryIds = uniqueStrings([
+		...recalledObservations.flatMap((match) => match.nonSourceEntryIds),
+		...directSources.nonSourceEntryIds,
+	]);
 	const uniqueMissingSupportingObservationIds = uniqueStrings(missingSupportingObservationIds);
 	const matchCount = directObservationMatches.length + reflectionMatches.length;
 

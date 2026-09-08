@@ -10,8 +10,6 @@ export interface Config {
 	compactAfterTokens: number;
 	compactAfterTokensMode: CompactAfterTokensMode;
 	compactAfterTokensRatio: number;
-	observationsPoolMaxTokens: number;
-	observationsPoolTargetTokens: number;
 	passive: boolean;
 }
 
@@ -20,8 +18,6 @@ export const DEFAULTS: Config = {
 	compactAfterTokens: 81_000,
 	compactAfterTokensMode: "calibrated",
 	compactAfterTokensRatio: 0.68,
-	observationsPoolMaxTokens: 20_000,
-	observationsPoolTargetTokens: 10_000,
 	passive: false,
 };
 
@@ -55,11 +51,6 @@ function positiveIntegerOrUndefined(value: unknown): number | undefined {
 	return Number.isInteger(value) && typeof value === "number" && value > 0 ? value : undefined;
 }
 
-function validTargetOrUndefined(value: unknown, maxTokens: number): number | undefined {
-	const target = positiveIntegerOrUndefined(value);
-	return target !== undefined && target < maxTokens ? target : undefined;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
@@ -74,13 +65,7 @@ function validRatioOrUndefined(value: unknown): number | undefined {
 
 function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config> {
 	const normalized: Partial<Config> = {};
-	const numberKeys = [
-		"notebookAfterTokens",
-		"notebookSourceMaxTokens",
-		"compactAfterTokens",
-		"observationsPoolMaxTokens",
-		"observationsPoolTargetTokens",
-	] as const;
+	const numberKeys = ["notebookAfterTokens", "notebookSourceMaxTokens", "compactAfterTokens"] as const;
 	for (const key of numberKeys) {
 		const candidate = positiveIntegerOrUndefined(value[key]);
 		if (candidate !== undefined) normalized[key] = candidate;
@@ -127,15 +112,10 @@ export function loadConfig(
 	// Project settings are executable-project authority and must never affect an
 	// untrusted workspace. Global/user settings and explicit environment remain safe.
 	const projectConfig = projectTrusted ? readNamespacedConfig(join(cwd, ".pi", "settings.json")) : {};
-	const merged = {
+	return {
 		...DEFAULTS,
-		observationsPoolTargetTokens: undefined,
 		...globalConfig,
 		...projectConfig,
 		...readEnvConfig(env),
 	};
-	const target =
-		validTargetOrUndefined(merged.observationsPoolTargetTokens, merged.observationsPoolMaxTokens) ??
-		Math.floor(merged.observationsPoolMaxTokens / 2);
-	return { ...merged, observationsPoolTargetTokens: target };
 }

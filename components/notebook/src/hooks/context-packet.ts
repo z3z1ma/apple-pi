@@ -1,41 +1,20 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import type { Runtime } from "../runtime.js";
-import { buildCompactionProjection, type Entry, renderSummary } from "../session-ledger/index.js";
+import { type Entry, foldLedger, renderSummary } from "../session-ledger/index.js";
 
 export const NOTEBOOK_PACKET_CUSTOM_TYPE = "notebook.packet";
 export const NOTEBOOK_PACKET_HEADER = "## Pair programmer notebook";
 
-export function latestCompactionBoundary(entries: Entry[]): string | undefined {
-	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i];
-		if (entry?.type !== "compaction") continue;
-		return entry.firstKeptEntryId || entries.at(-1)?.id;
-	}
-	return undefined;
-}
-
 export function messageHasNotebookPacket(message: unknown): boolean {
 	if (message === null || typeof message !== "object") return false;
-	const record = message as { customType?: unknown; content?: unknown };
-	if (record.customType === NOTEBOOK_PACKET_CUSTOM_TYPE) return true;
-	if (typeof record.content === "string") return record.content.includes(NOTEBOOK_PACKET_HEADER);
-	if (!Array.isArray(record.content)) return false;
-	return record.content.some((part) => {
-		const text = typeof part === "object" && part !== null ? (part as { text?: unknown }).text : undefined;
-		return typeof text === "string" && text.includes(NOTEBOOK_PACKET_HEADER);
-	});
+	return (message as { customType?: unknown }).customType === NOTEBOOK_PACKET_CUSTOM_TYPE;
 }
 
 export function buildNotebookContextPacket(
 	entries: Entry[],
-	observationsPoolMaxTokens: number,
 ): { customType: string; content: Array<{ type: "text"; text: string }> } | undefined {
-	const boundaryId = latestCompactionBoundary(entries);
-	if (!boundaryId) return undefined;
-
-	const projection = buildCompactionProjection(entries, boundaryId, { observationsPoolMaxTokens });
-	const notebookSummary = renderSummary(projection.reflections, projection.observations);
+	const notebookSummary = renderSummary(foldLedger(entries).currentReflections);
 	if (!notebookSummary.trim()) return undefined;
 
 	return {
@@ -44,21 +23,14 @@ export function buildNotebookContextPacket(
 	};
 }
 
-/**
- * After any compaction, append the current pair programmer notebook packet to the
- * live conversation tail. Covers xAI server-side compaction, Pi default
- * summarization, and every compact-hook fallback that still writes a compaction
- * entry.
- */
+/** Rebuild live guidance from the active branch, including corrections made since compaction. */
 export function registerNotebookContextPacket(pi: ExtensionAPI, notebook: Runtime): void {
 	pi.on("context", (event, ctx) => {
 		const branchEntries = (ctx.sessionManager?.getBranch?.() ?? []) as Entry[];
 		notebook.ensureConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
-		const packet = buildNotebookContextPacket(branchEntries, notebook.config.observationsPoolMaxTokens);
-		if (!packet) return undefined;
-
-		const messages = event.messages ?? [];
-		if (messages.some((message) => messageHasNotebookPacket(message))) return undefined;
+		const packet = buildNotebookContextPacket(branchEntries);
+		const messages = (event.messages ?? []).filter((message) => !messageHasNotebookPacket(message));
+		if (!packet) return { messages };
 
 		return {
 			messages: [

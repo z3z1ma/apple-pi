@@ -156,6 +156,7 @@ try {
 	}
 	for (const tool of [
 		"acknowledge_pair_findings",
+		"update_notebook",
 		"ask_user_question",
 		"remind_me",
 		"search_session",

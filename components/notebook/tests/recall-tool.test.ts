@@ -4,8 +4,8 @@ import {
 	formatRecallCallForTui,
 	formatRecallRenderedResultForTui,
 	NOTEBOOK_SOURCE_TOOL_NAME,
-	recallObservationTool,
 	type RecallObservationToolDetails,
+	recallObservationTool,
 	registerRecallTool,
 } from "../src/tools/notebook-source.js";
 import {

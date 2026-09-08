@@ -26,6 +26,7 @@ export type TestReflection = {
 	id: string;
 	content: string;
 	supportingObservationIds: string[];
+	sourceEntryIds?: string[];
 	tokenCount: number;
 };
 

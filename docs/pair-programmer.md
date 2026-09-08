@@ -5,7 +5,7 @@ The pair programmer gives the main agent a persistent, read-only pair programmin
 The responsibilities are distinct:
 
 1. **Main agent** has the keyboard, speaks to the user, implements, decides, and validates.
-2. The **pair programmer** keeps a second line of thought and the shared notebook while following the work.
+2. The **pair programmer** keeps a second line of thought while following the work. Both programmers curate the shared notebook.
 3. The **consultant** is a senior software architect who joins episodically for difficult, consequential questions.
 4. **Review** remains a separate end-to-end activity when requested.
 
@@ -54,7 +54,7 @@ The pair programming partner shares the main agent's screen rather than operatin
 - recent user requests from the main session;
 - the main agent's reasoning, text, tool calls, successful write previews, edit diffs, failures, and compact work receipts;
 - active task and assumption context;
-- a read-only projection of the shared notebook after compaction;
+- the current shared working conclusions, refreshed before each model request;
 - optional global or trusted-project `PAIR.md` guidance.
 
 `PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask the consultant.
@@ -63,18 +63,18 @@ The partner has a deliberately narrow typed toolset:
 
 - `share_note` stages one useful intervention for frontier confirmation: either a current, actionable `nit`, `concern`, or `blocker`, or a precise `question` that asks the driver to explain something or expose specific missing evidence;
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
-- `update_notebook` records sourced observations, revises the current shared understanding, retires outdated reflections, and proposes safe drops for deterministic validation;
+- `update_notebook` adds, supersedes, or retires sourced working conclusions; full reviews explicitly select which existing conclusions to retain;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence;
 - `set_pair_attention` optionally chooses the next useful semantic checkpoint and attention level. It is a terminating, transactionally staged disposition rather than a navigation or execution capability.
 
-A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, the remainder of a large write payload, user-bash output, or user-supplied image—not current checkout state. Successful writes show their content automatically within the trajectory's existing preview limit; larger writes keep the complete interaction behind a receipt. Write previews are pair-model input like the rest of the shared trajectory, so the `pair` profile should use a provider trusted with session content. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. The pair is guided to expand receipts when folded evidence could materially affect its judgment, not as routine exploration. Source-entry IDs remain attached so notebook observations cite primary evidence rather than receipt IDs.
+A receipt is a host-issued capability, not a path or query. It is bound to the issuing pair-session generation and active primary lineage. Expansion returns the immutable payload recorded at that point—such as a successful read result, the remainder of a large write payload, user-bash output, or user-supplied image—not current checkout state. Successful writes show their content automatically within the trajectory's existing preview limit; larger writes keep the complete interaction behind a receipt. Write previews are pair-model input like the rest of the shared trajectory, so the `pair` profile should use a provider trusted with session content. User images appear only as placeholders and receipt handles in the trajectory; expansion returns their original image content blocks through Pi's normal tool-result path, just as an image-producing `read` would. Large payloads return stable opaque continuation handles under Pi's normal output limits. The pair is guided to expand receipts when folded evidence could materially affect its judgment, not as routine exploration. Source-entry IDs remain attached so notebook conclusions cite primary evidence rather than receipt IDs.
 
 Visual inspection requires the model selected by the `pair` profile to declare image input support. Pi replaces image blocks with its normal unsupported-image placeholder for a text-only model.
 
 A review attempt commits its staged notes, consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
-The partner cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
+The partner can curate the notebook but cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate repository state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
 Free-form prose does not start a consultant consultation. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A question is appropriate only when the absent evidence could materially change that judgment; ordinary uncertainty, progress narration, praise, and an all-clear remain silent.
 

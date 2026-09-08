@@ -41,8 +41,6 @@ describe("pair programmer notebook config", () => {
 			compactAfterTokens: 81000,
 			compactAfterTokensMode: "calibrated",
 			compactAfterTokensRatio: 0.68,
-			observationsPoolMaxTokens: 20000,
-			observationsPoolTargetTokens: 10000,
 			passive: false,
 		});
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
@@ -66,8 +64,6 @@ describe("pair programmer notebook config", () => {
 			pair: {
 				notebookAfterTokens: 10,
 				compactAfterTokens: 30,
-				observationsPoolMaxTokens: 40,
-				observationsPoolTargetTokens: 15,
 				passive: false,
 			},
 		});
@@ -80,8 +76,6 @@ describe("pair programmer notebook config", () => {
 		expect(loadConfig(cwd, true, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toMatchObject({
 			notebookAfterTokens: 100,
 			compactAfterTokens: 30,
-			observationsPoolMaxTokens: 40,
-			observationsPoolTargetTokens: 15,
 			passive: true,
 		});
 	});
@@ -92,8 +86,6 @@ describe("pair programmer notebook config", () => {
 				notebookAfterTokens: -1,
 				reflectAfterTokens: 0,
 				compactAfterTokens: 1.5,
-				observationsPoolMaxTokens: "20000",
-				observationsPoolTargetTokens: "10000",
 				agentMaxTurns: null,
 				showWorkerNotifications: "no",
 				passive: "yes",
@@ -102,38 +94,6 @@ describe("pair programmer notebook config", () => {
 		});
 
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
-	});
-
-	it("derives observation pool target from the final max when omitted", () => {
-		writeJson(join(cwd, ".pi", "settings.json"), {
-			pair: {
-				observationsPoolMaxTokens: 40,
-			},
-		});
-
-		expect(loadConfig(cwd, true, {})).toMatchObject({
-			observationsPoolMaxTokens: 40,
-			observationsPoolTargetTokens: 20,
-		});
-	});
-
-	it("falls back to derived target when explicit target is invalid for the final max", () => {
-		writeJson(join(agentDir, "settings.json"), {
-			pair: {
-				observationsPoolMaxTokens: 100,
-				observationsPoolTargetTokens: 80,
-			},
-		});
-		writeJson(join(cwd, ".pi", "settings.json"), {
-			pair: {
-				observationsPoolMaxTokens: 40,
-			},
-		});
-
-		expect(loadConfig(cwd, true, {})).toMatchObject({
-			observationsPoolMaxTokens: 40,
-			observationsPoolTargetTokens: 20,
-		});
 	});
 
 	it("parses passive env override", () => {

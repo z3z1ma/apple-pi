@@ -50,7 +50,14 @@ describe("notebook ledger type guards and builders", () => {
 
 	it("accepts valid notebook reflection records", () => {
 		expect(isReflection(reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]))).toBe(true);
+		expect(
+			isReflection({
+				...reflection("ffffffffffff", []),
+				sourceEntryIds: ["raw-1"],
+			}),
+		).toBe(true);
 		expect(isReflection({ ...reflection("ffffffffffff"), supportingObservationIds: undefined })).toBe(false);
+		expect(isReflection({ ...reflection("222222222222", []), sourceEntryIds: [] })).toBe(false);
 		expect(isReflection({ ...reflection("111111111111"), tokenCount: undefined })).toBe(false);
 	});
 

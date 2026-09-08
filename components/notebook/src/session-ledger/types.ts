@@ -38,6 +38,7 @@ export type Reflection = {
 	id: string;
 	content: string;
 	supportingObservationIds: string[];
+	sourceEntryIds?: string[];
 	tokenCount: number;
 };
 
@@ -123,13 +124,19 @@ export function isObservation(value: unknown): value is Observation {
 
 export function isReflection(value: unknown): value is Reflection {
 	if (!isPlainRecord(value)) return false;
-	return (
-		isNotebookId(value.id) &&
-		isNonEmptyString(value.content) &&
-		!/\r|\n/.test(value.content) &&
-		isNonEmptyStringArray(value.supportingObservationIds) &&
-		isTokenCount(value.tokenCount)
-	);
+	if (
+		!isNotebookId(value.id) ||
+		!isNonEmptyString(value.content) ||
+		/\r|\n/.test(value.content) ||
+		!isTokenCount(value.tokenCount)
+	) {
+		return false;
+	}
+	if (!Array.isArray(value.supportingObservationIds) || !value.supportingObservationIds.every(isNonEmptyString)) {
+		return false;
+	}
+	if (value.sourceEntryIds !== undefined && !isNonEmptyStringArray(value.sourceEntryIds)) return false;
+	return value.supportingObservationIds.length > 0 || (value.sourceEntryIds?.length ?? 0) > 0;
 }
 
 export function isObservationsRecordedData(value: unknown): value is ObservationsRecordedEntryData {

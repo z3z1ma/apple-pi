@@ -206,6 +206,24 @@ describe("session-ledger recall", () => {
 		expect(result.observations).toEqual([]);
 	});
 
+	it("recalls a conclusion from direct source entry ids", () => {
+		const entries = [
+			sourceEntry("src-1", "direct source"),
+			reflectionsEntry("ref-entry-1", [
+				reflection({ id: REF_1, supportingObservationIds: [], sourceEntryIds: ["src-1"] }),
+			]),
+		];
+
+		const result = recallNotebookSources(entries, REF_1);
+
+		expect(result.status).toBe("found");
+		if (result.status !== "found") return;
+		expect(result.kind).toBe("reflection");
+		expect(result.observations).toEqual([]);
+		expect(result.sourceEntries.map((entry) => entry.id)).toEqual(["src-1"]);
+		expect(result.partial).toBe(false);
+	});
+
 	it("returns not_found for unknown ids", () => {
 		const entries = [
 			sourceEntry("src-1"),

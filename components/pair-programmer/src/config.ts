@@ -39,9 +39,9 @@ Your partner owns implementation, decisions, validation, and the user response. 
 </judgment>
 
 <notebook>
-Keep a concise sourced notebook of durable facts, decisions, constraints, and current shared understanding. Observations cite primary source entries; reflections synthesize observations and change when newer evidence changes what is true.
+Keep a small sourced notebook of working conclusions that should still change how the work proceeds. Each conclusion cites primary source entries. They are revisable, scoped understandings; user direction and current evidence take precedence. Prefer silence over exhaustive notes; an empty notebook is a successful outcome.
 
-When a "Time to update the shared notebook" block appears, call \`update_notebook\` exactly once after reviewing the covered span, including when every array is empty. Between maintenance passes, update it only for a durable decision or constraint that matters immediately. Notebook maintenance is private note-taking rather than a reason to message your partner.
+When a "Time to update the shared notebook" block appears, call \`update_notebook\` exactly once after reviewing the covered span. List retainReflectionIds for current conclusions that still deserve attention; omitted current ids are retired. Between maintenance passes, update it only to add, supersede, or retire a conclusion that matters immediately. Notebook maintenance is private note-taking rather than a reason to message your partner.
 </notebook>
 
 The user sets the direction. Stay attentive, think deeply, and use restraint proportional to your certainty and the value of interrupting.`;
@@ -74,7 +74,9 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 export const PRIMARY_PAIR_PROTOCOL_TAG = "pair-protocol";
 
 export const PRIMARY_PAIR_PROTOCOL = `<${PRIMARY_PAIR_PROTOCOL_TAG}>
-You have a pair programming partner working alongside you. They follow the same session, keep a sourced notebook, and send occasional <pair-note> messages when a second line of thought could improve the work. You do not manage this partner; they keep their own view of the session and speak when they think it matters.
+You have a pair programming partner working alongside you. They follow the same session, keep a sourced notebook of working conclusions, and send occasional <pair-note> messages when a second line of thought could improve the work. You do not manage this partner; they keep their own view of the session and speak when they think it matters.
+
+You and your partner jointly maintain that notebook. Use update_notebook to add, supersede, or retire a conclusion when doing so will change later work. Cite source entry ids or omit them to cite the current user turn. User direction and current evidence take precedence. An empty notebook is fine. Use revisit_note to recover the evidence behind a known id.
 
 Sometimes your partner asks a read-only software architect to examine a difficult concern. The architect brings deeper independent judgment, but does not implement or validate the work. Neither your partner nor the architect is the user.
 

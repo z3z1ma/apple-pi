@@ -494,7 +494,7 @@ function noteRows(details: RecallObservationToolDetails, sources: RecallSourceEn
 	if (details.observations.some((match) => match.observation.status === "dropped"))
 		notes.push(noteLine("dropped", "one or more observations are dropped from active notebook but remain recallable"));
 	if (details.reflections.some((reflection) => reflection.status === "retired"))
-		notes.push(noteLine("retired", "one or more reflections are retired from current law but remain recallable"));
+		notes.push(noteLine("retired", "one or more conclusions are retired from the live notebook but remain recallable"));
 	if (details.unavailableSupportingObservations.length > 0)
 		notes.push(
 			noteLine(
@@ -558,13 +558,13 @@ export const recallObservationTool = defineTool({
 	label: "Notebook source",
 	description:
 		"Revisit one specific entry in the session notebook and recover the conversation, commands, or file changes behind it. " +
-		"Use the 12-character id shown beside an observation or reflection when its summary is too compressed to rely on confidently. " +
+		"Use the 12-character id shown beside a working conclusion or archived note when its summary is too compressed to rely on confidently. " +
 		"This follows a known note back to its sources; it does not search the transcript by topic.",
 	promptSnippet: "Use revisit_note({ id }) to see the original session evidence behind a specific notebook entry.",
 	promptGuidelines: [
 		"Use revisit_note before making an important decision that depends on a notebook entry whose details are unclear.",
 		"Use revisit_note when you need the exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered point.",
-		"Use revisit_note when a broad reflection matters but you need to see its supporting observations or original sources before continuing.",
+		"Use revisit_note when a working conclusion matters but you need to see its original sources before continuing.",
 		"Use revisit_note when the user asks why you believe something, what supports a notebook entry, or what was decided earlier.",
 		"Do not use revisit_note as semantic search or transcript browsing; you must already have a specific 12-character notebook id. Use search_session to search the session.",
 		"Do not revisit every note preemptively. Look one up only when the original context will materially improve the next action.",
@@ -573,7 +573,7 @@ export const recallObservationTool = defineTool({
 		id: Type.String({
 			pattern: "^[a-f0-9]{12}$",
 			description:
-				"The 12-character lowercase hex id shown beside an observation or reflection in the compacted notebook, /pair notebook, or a previous revisit_note result. This tool follows a known note; it does not search by topic.",
+				"The 12-character lowercase hex id shown beside a working conclusion or archived note in the compacted notebook, /pair notebook, or a previous revisit_note result. This tool follows a known note; it does not search by topic.",
 		}),
 	}),
 	renderCall(args) {

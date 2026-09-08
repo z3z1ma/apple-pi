@@ -6,35 +6,30 @@ import {
 	NOTEBOOK_PACKET_CUSTOM_TYPE,
 	NOTEBOOK_PACKET_HEADER,
 } from "../../notebook/src/hooks/context-packet.js";
-import { fullProjection } from "../../notebook/src/session-ledger/index.js";
-import { observationToSummaryLine, reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
+import { foldLedger } from "../../notebook/src/session-ledger/fold.js";
+import { reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
 import type { PrimarySessionManager } from "./recall.js";
 
-const PARENT_NOTEBOOK_FRAMING = `This is the sourced notebook you keep for your partner's session, not a notebook for this side conversation.
+const PARENT_NOTEBOOK_FRAMING = `This is the notebook of working conclusions you keep for your partner's session, not a notebook for this side conversation.
 
-- Reflections capture the pair's current shared understanding of the user, project, decisions, constraints, completed outcomes, and pivots that still shape the work. Their ids appear in brackets.
-- Observations preserve working evidence that still matters in detail. They are timestamped, chronological, and include ids in brackets.
+- Working conclusions are revisable, scoped understandings that should still change how the pair proceeds. Their ids appear in brackets.
+- This current view replaces earlier notebook snapshots. User direction and current evidence take precedence. An empty notebook is a successful outcome.
 
-Use the current understanding rather than replaying the notebook as a historical stack. When a newer observation conflicts with a reflection, the observation is the latest known state until you revise the reflection.
-
-Use revisit_note with a relevant observation or reflection id when you need its exact source context. Use expand_receipt only with a handle already shown in your shared trajectory when you need a folded payload. Both tools open evidence from your partner's primary session.`;
+Use revisit_note with a relevant conclusion id when you need its exact source context. Use expand_receipt only with a handle already shown in your shared trajectory when you need a folded payload. Both tools open evidence from your partner's primary session.`;
 
 export function buildParentNotebookPacket(
 	primaryEntries: readonly unknown[],
 ): { customType: string; content: Array<{ type: "text"; text: string }> } | undefined {
 	try {
-		const projection = fullProjection(primaryEntries as Entry[]);
-		if (projection.reflections.length === 0 && projection.observations.length === 0) return undefined;
+		const folded = foldLedger(primaryEntries as Entry[]);
+		if (folded.currentReflections.length === 0) return undefined;
 
-		const parts = [PARENT_NOTEBOOK_FRAMING];
-		if (projection.reflections.length > 0) {
-			parts.push(`## Reflections\n${projection.reflections.map(reflectionToSummaryLine).join("\n")}`);
-		}
-		if (projection.observations.length > 0) {
-			parts.push(`## Observations\n${projection.observations.map(observationToSummaryLine).join("\n")}`);
-		}
+		const parts = [
+			PARENT_NOTEBOOK_FRAMING,
+			`## Working conclusions\n${folded.currentReflections.map(reflectionToSummaryLine).join("\n")}`,
+		];
 
 		return {
 			customType: NOTEBOOK_PACKET_CUSTOM_TYPE,
@@ -45,16 +40,13 @@ export function buildParentNotebookPacket(
 	}
 }
 
-export function insertParentNotebookAfterCompaction(
+export function refreshParentNotebookPacket(
 	messages: readonly AgentMessage[],
-	packet: { customType: string; content: Array<{ type: "text"; text: string }> },
-): { messages: AgentMessage[] } | undefined {
-	if (messages.some((message) => messageHasNotebookPacket(message))) return undefined;
-	const compactIndex = messages.findIndex((message) => message.role === "compactionSummary");
-	if (compactIndex === -1) return undefined;
-
-	const next = [...messages];
-	next.splice(compactIndex + 1, 0, {
+	packet: { customType: string; content: Array<{ type: "text"; text: string }> } | undefined,
+): { messages: AgentMessage[] } {
+	const next = messages.filter((message) => !messageHasNotebookPacket(message));
+	if (!packet) return { messages: next };
+	next.push({
 		role: "custom" as const,
 		customType: packet.customType,
 		content: packet.content,
@@ -64,16 +56,11 @@ export function insertParentNotebookAfterCompaction(
 	return { messages: next };
 }
 
-/**
- * After the pair session compacts, append the implementing agent's live fold
- * immediately after the compaction summary. Recall tools stay on the session
- * allowlist and resolve against the primary manager.
- */
+/** Keep shared conclusions current even when either programmer revises them between compactions. */
 export function registerPairParentNotebookPacket(pi: ExtensionAPI, primarySessionManager: PrimarySessionManager): void {
 	pi.on("context", (event) => {
 		const primaryEntries = primarySessionManager.getBranch?.() ?? primarySessionManager.getEntries?.() ?? [];
 		const packet = buildParentNotebookPacket(primaryEntries);
-		if (!packet) return undefined;
-		return insertParentNotebookAfterCompaction(event.messages ?? [], packet);
+		return refreshParentNotebookPacket(event.messages ?? [], packet);
 	});
 }
