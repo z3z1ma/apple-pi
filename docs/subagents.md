@@ -48,6 +48,16 @@ A root `agent` call is a normal sub-agent handoff. Its prompt is the complete ta
 
 The consultant follows this same public contract when the main agent brings the architect in directly. The pair programming partner's hidden typed second-opinion path is an internal host operation, not an `agent` mode or parameter.
 
+### Child clarification
+
+Every session launched through the public `agent` tool receives `clarify({ question })`, including read-only roles, isolated sessions, and ownership-scoped nested children. A trusted definition can exclude it through `disallowed_tools`. It remains available on resume. Root sessions, Pi Exec workers, BTW, internal consultations, and clarification forks themselves do not receive this tool.
+
+Each call snapshots the **immediate parent's latest active conversation**, system prompt, model, and thinking level. It creates a separate in-memory session with only `read`, `grep`, `find`, and `ls`, plus the usual fast-mode and safety hooks. It neither waits for nor interrupts the parent, and bypasses the background-agent pool so a child can ask while that pool is full. Calls remain independent: each gets a fresh snapshot rather than continuing an earlier clarification conversation.
+
+The snapshot preserves the portable Pi conversation, including compaction summaries, images, and tool results. Unfinished parent tool calls receive explicit unavailable-result placeholders; the fork does not execute them. Parent context-hook projections, provider-private payload state, and extension state are not cloned. The fork reads current repository files, not a filesystem snapshot. The child should include relevant findings or alternatives in its question because its own private conversation is not copied.
+
+The answer returns only to the calling child as tool output. It is advice based on existing intent, not new user authorization or a message from the live parent. Questions requiring a new user decision remain unresolved. The fork is disposed after success, failure, or cancellation; stopping the child or shutting down its owning session also cancels an active clarification. Successful clarification results carry their model usage into the child's session accounting. No separate fork transcript is persisted, though the question and answer remain in the child's normal tool history.
+
 ## Model profiles
 
 Agent definitions select a semantic workload profile rather than naming a provider, model, or thinking level. Built-ins use `quick` for the explorer and researcher, `deep` for the planner and consultant, `coding` for the builder, and `visual-engineering` for the designer. The user maps those names in global `~/.pi/agent/model-profiles.json`; repositories cannot redefine the mapping.

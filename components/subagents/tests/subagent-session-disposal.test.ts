@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { AgentManager, disposeAgentSession } from "../src/agent-manager.js";
+import { AgentManager } from "../src/agent-manager.js";
+import { disposeAgentSession } from "../src/session-lifecycle.js";
 import type { AgentRecord } from "../src/types.js";
 
 describe("child session disposal", () => {

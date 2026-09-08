@@ -20,7 +20,7 @@ const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
 const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "search_session", "mcp"];
-const FORBIDDEN_CHILD_TOOLS = ["revisit_note", "pi_exec", ...Object.values(SUBAGENT_TOOL_NAMES)];
+const FORBIDDEN_CHILD_TOOLS = ["revisit_note", "pi_exec", "clarify", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {
 	for (const name of [...expected, ...CHILD_EXTENSION_TOOLS]) {
@@ -324,10 +324,12 @@ Answer the task.
 		faux.setResponses([
 			(context) => {
 				initialSystemPrompt = context.systemPrompt ?? "";
+				expect(context.tools?.map((tool) => tool.name)).toContain("clarify");
 				return fauxAssistantMessage([fauxText("AGENT-TOOL-OK")]);
 			},
 			(context) => {
 				resumedContext = JSON.stringify(context.messages);
+				expect(context.tools?.map((tool) => tool.name)).toContain("clarify");
 				return fauxAssistantMessage([fauxText("AGENT-RESUME-OK")]);
 			},
 		]);
@@ -358,6 +360,7 @@ Answer the task.
 			installSubagents(pi);
 			const tool = tools.get("agent");
 			expect(tool).toBeDefined();
+			expect(tools.has("clarify")).toBe(false);
 			expect(tool.parameters.properties.output_path.description).toContain("final response verbatim");
 			expect(tool.parameters.required).not.toContain("output_path");
 			const extensionCtx = {

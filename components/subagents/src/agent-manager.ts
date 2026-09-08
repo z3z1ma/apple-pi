@@ -13,6 +13,8 @@ import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
+import { createClarifyTool } from "./clarify.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import { persistAgentOutput } from "./output-file.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import type {
@@ -29,25 +31,6 @@ export type OnAgentComplete = (record: AgentRecord) => void;
 export type OnAgentStart = (record: AgentRecord) => void;
 export type OnAgentCompact = (record: AgentRecord, info: CompactionInfo) => void;
 export type CompactionInfo = { reason: "manual" | "threshold" | "overflow"; tokensBefore: number };
-
-/**
- * Terminate a child session through the same lifecycle boundary as Pi's
- * AgentSessionRuntime. AgentSession.dispose() invalidates extensions without
- * notifying them, which leaves session-scoped resources running.
- */
-export async function disposeAgentSession(session: AgentSession | undefined): Promise<void> {
-	if (!session) return;
-	try {
-		await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
-	} catch {
-		// A broken extension must not prevent the session and its resources closing.
-	}
-	try {
-		session.dispose();
-	} catch {
-		// Dispose is best-effort: this cleanup path must not leak a rejection.
-	}
-}
 
 /** Default max concurrent background agents. */
 const DEFAULT_MAX_CONCURRENT = 4;
@@ -113,6 +96,8 @@ export interface SpawnOptions {
 	toolPolicy?: ManagedAgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
+	/** Public agent launches can consult an ephemeral snapshot of their immediate parent. */
+	enableClarify?: boolean;
 	/** Disable standard child extensions for a narrowly owned internal session. */
 	loadStandardChildExtensions?: boolean;
 	/** Capability owner; internal records cannot be resumed or steered through public tools. */
@@ -382,7 +367,7 @@ export class AgentManager {
 			agentConfig: options.agentConfig,
 			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
-			customTools: options.customTools,
+			customTools: [...(options.customTools ?? []), ...(options.enableClarify ? [createClarifyTool(pi, ctx)] : [])],
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,

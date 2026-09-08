@@ -12,7 +12,8 @@ import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/si
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
-import { AgentManager, disposeAgentSession } from "./agent-manager.js";
+import { AgentManager } from "./agent-manager.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import {
 	getAgentConversation,
 	getDefaultMaxTurns,
@@ -901,6 +902,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				runInBackground: invocation.runInBackground,
 			};
 			const options = {
+				enableClarify: true,
 				description: params.description,
 				agentConfig: config,
 				systemPrompt: invocation.systemPrompt,

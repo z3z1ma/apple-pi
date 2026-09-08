@@ -819,6 +819,7 @@ describe("owned subagent surface", () => {
 			skills: false,
 			systemPrompt: "Use the authorized scoped role.",
 		});
+		expect(options.enableClarify).toBe(true);
 		expect(options.systemPrompt).toBe("Inspect only the requested files.");
 		expect(options.invocation.systemPrompt).toBe("Inspect only the requested files.");
 	});

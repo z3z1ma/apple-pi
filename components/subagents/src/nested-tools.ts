@@ -40,6 +40,7 @@ export const SUBAGENT_TOOL_NAMES = {
 } as const;
 
 interface NestedSpawnOptions {
+	enableClarify: true;
 	description: string;
 	/** Exact enabled config authorized by this nested dispatch. */
 	agentConfig: AgentConfig;
@@ -228,6 +229,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			const model = resolvedAgentProfile.model;
 
 			const options: NestedSpawnOptions = {
+				enableClarify: true,
 				description: params.description,
 				agentConfig: config,
 				systemPrompt: invocation.systemPrompt,

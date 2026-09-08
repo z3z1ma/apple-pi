@@ -12,7 +12,7 @@ export function extractText(content: unknown[]): string {
 		.join("\n");
 }
 
-function parentBranch(ctx: ExtensionContext): any[] {
+function parentBranch(ctx: Pick<ExtensionContext, "sessionManager">): any[] {
 	// Programmatic callers and focused tests can supply a narrower session-manager
 	// surface. No parent branch simply means no handoff, never a spawn failure.
 	return (ctx.sessionManager as any)?.getBranch?.() ?? [];
@@ -23,7 +23,7 @@ function parentBranch(ctx: ExtensionContext): any[] {
  * `inherit_context: true`. Tool and extension records intentionally remain
  * excluded; the child receives the complete parent text conversation.
  */
-export function buildFullParentContext(ctx: ExtensionContext): string {
+export function buildFullParentContext(ctx: Pick<ExtensionContext, "sessionManager">): string {
 	const entries = parentBranch(ctx);
 	if (entries.length === 0) return "";
 

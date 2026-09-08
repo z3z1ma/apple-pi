@@ -37,6 +37,7 @@ import {
 } from "./nested-tools.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { assistantMessageMarker } from "./response-marker.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
@@ -164,7 +165,14 @@ export function selectAgentModel(
 	return explicitModel ?? resolved.model;
 }
 
+export type AgentRunContext = Pick<
+	ExtensionContext,
+	"cwd" | "model" | "modelRegistry" | "thinkingLevel" | "sessionManager" | "getSystemPrompt" | "isProjectTrusted"
+>;
+
 export interface RunOptions {
+	/** Host-prepared session state, used by ephemeral parent forks. */
+	sessionManager?: SessionManager;
 	/** ExtensionAPI instance — used for pi.exec() instead of execSync. */
 	pi: ExtensionAPI;
 	/** Manager-assigned id; suffixes session name to disambiguate parallel spawns (e.g. `explorer#a1b2c3d4`). */
@@ -218,7 +226,7 @@ export interface RunOptions {
 	/** Called at the end of each agentic turn with the cumulative count. */
 	onTurnEnd?: (turnCount: number) => void;
 	/**
-	 * Called once per assistant message_end with that message's usage delta.
+	 * Called for new assistant and nested-tool message_end usage deltas.
 	 * Lets callers maintain a lifetime accumulator that survives compaction
 	 * (which replaces session.state.messages and resets stats-derived sums).
 	 */
@@ -357,7 +365,7 @@ function resolveConfiguredSessionDir(sessionDir: string | undefined, cwd: string
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: AgentSession lifecycle transitions share cancellation, compaction, and usage state.
 export async function runAgent(
-	ctx: ExtensionContext,
+	ctx: AgentRunContext,
 	type: SubagentType,
 	prompt: string,
 	options: RunOptions,
@@ -535,11 +543,13 @@ export async function runAgent(
 	// Nested children stay in memory unless explicitly persisted by their own
 	// definition: their result is already recorded in the owning agent session.
 	const persistSession = agentConfig?.persistSession ?? (options.nested ? false : persistAgentSessions);
-	const sessionManager = persistSession
-		? SessionManager.create(effectiveCwd, configuredSessionDir ?? defaultSessionDir, {
-				parentSession: ctx.sessionManager?.getSessionFile?.(),
-			})
-		: SessionManager.inMemory(effectiveCwd);
+	const sessionManager =
+		options.sessionManager ??
+		(persistSession
+			? SessionManager.create(effectiveCwd, configuredSessionDir ?? defaultSessionDir, {
+					parentSession: ctx.sessionManager?.getSessionFile?.(),
+				})
+			: SessionManager.inMemory(effectiveCwd));
 
 	// Pi 0.80.8 replaced createAgentSession's modelRegistry option with
 	// modelRuntime, but ExtensionContext still exposes only the registry facade.
@@ -585,7 +595,10 @@ export async function runAgent(
 				});
 			},
 		}),
-	);
+	).catch(async (error) => {
+		await disposeAgentSession(session);
+		throw error;
+	});
 
 	// Pi activates a small built-in default at turn 1. Promote every registered
 	// tool that excludeTools did not deny, including ledger_add / ledger_close.
@@ -655,7 +668,7 @@ export async function runAgent(
 		if (event.type === "tool_execution_end") {
 			notifyObserver(options.onToolActivity, { type: "end", toolName: event.toolName });
 		}
-		if (event.type === "message_end" && event.message.role === "assistant") {
+		if (event.type === "message_end" && (event.message.role === "assistant" || event.message.role === "toolResult")) {
 			const u = (event.message as any).usage;
 			if (u)
 				notifyObserver(options.onAssistantUsage, {
@@ -686,6 +699,7 @@ export async function runAgent(
 	// on counts as this run's output (a fresh session, so usually 0).
 	const startLen = session.messages.length;
 	try {
+		options.signal?.throwIfAborted();
 		await session.prompt(effectivePrompt);
 	} finally {
 		unsubTurns();
@@ -770,7 +784,10 @@ export async function resumeAgent(
 							notifyObserver(options.onToolActivity, { type: "start", toolName: event.toolName });
 						if (event.type === "tool_execution_end")
 							notifyObserver(options.onToolActivity, { type: "end", toolName: event.toolName });
-						if (event.type === "message_end" && event.message.role === "assistant") {
+						if (
+							event.type === "message_end" &&
+							(event.message.role === "assistant" || event.message.role === "toolResult")
+						) {
 							const u = (event.message as any).usage;
 							if (u)
 								notifyObserver(options.onAssistantUsage, {
