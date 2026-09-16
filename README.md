@@ -1,20 +1,217 @@
 # apple-pi 🥧
 
-My own personal [Pi](https://github.com/badlogic/pi-mono) package: pair programming, questions, self-reminders, context, exec, subagents, and the workflow skills I actually use.
+> A personal engineering harness for [Pi](https://github.com/badlogic/pi-mono).
+> Bounded programmatic composition, dual-hemisphere pairing, cache-sanctified context, bifurcated memory, and zero-bullshit workflow continuity.
 
-## Why this exists
+---
 
-This repository is my take on what should be in a coding harness, based on real work, accumulated lessons, and my own taste. Pi is the base that made it practical to build. Above that, the rule is simple: the best software asset has the least code and the most function, clarity, and leverage. AI makes it cheap to add another abstraction, state store, or agent; it does not make the result free to understand. I borrow freely from [Superpowers](https://github.com/obra/superpowers), [10x](https://github.com/z3z1ma/10x), [Prime Intellect](https://github.com/PrimeIntellect-ai/prime-agent), [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent), and anywhere else something works, then reduce it into the version I want to carry.
+## The Personal Memo: Why This Exists
 
-There is no single success story for [pair programmer](docs/pair-programmer.md). The value is letting the main agent work with a persistent pair programming partner who follows the same session, carries a sourced notebook, and taps it on the shoulder when a nit, concern, or blocker deserves attention. The partner can ask a read-only senior software architect for an independent opinion on difficult questions. The main agent keeps the keyboard and remains responsible for code, decisions, and validation.
+I spend thousands of hours a year inside coding agent harnesses. If you live on the frontier of AI-assisted software development, you quickly realize a frustrating truth: **95% of contemporary "AI agent" tooling is built backwards.**
 
-Long-horizon context took longer to work out. The persistent [pair programmer](docs/pair-programmer.md) keeps a sourced [notebook](docs/context.md) as the conversation develops: both programmers curate revisable working conclusions backed by retrievable source evidence. Only current conclusions enter live context; earlier observations remain in the archive. [10x](https://github.com/z3z1ma/10x) (originally loom) was my first distillation of the rest of this problem, but one project directory growing forever did not match how I work. I work on a task. The [ledger](docs/ledger.md) keeps the operational context that task needs—plans, specifications, notes, decisions, evidence, assets, progress, outcomes, and retrospective learning—together through history when it ends. The default [self-reminder](docs/reminders.md) lets the model explicitly carry selected follow-up work into the next turn without ambient nagging or a second task system. The retained [backlog and to-do extensions](docs/optional-extensions.md) remain available when an installation explicitly wants their managers and persistent execution state. Knowledge that should survive many tasks goes into the [wiki](docs/wiki.md): Karpathy-style plain files, an index and log, pages and raw sources, with Obsidian links, deterministic lint/backlink tools, and no stored graph to operate.
+The ecosystem is flooded with two extremes:
+1. **The Venture-Backed Framework Trap**: Bloated Python frameworks with 14 layers of leaky abstractions, unreadable trace graphs, local vector databases indexing 30 files, and multi-agent chat loops where models circle-jerk in unstructured English until the context window explodes.
+2. **The Naive Chat Loop**: A single prompt loop wired directly to bash and file-editing tools, dumping 50,000 tokens of raw terminal output, compiler errors, and git diffs straight into the LLM context every turn—destroying attention, nuking prompt cache prefixes, and driving latency and costs through the roof.
 
-[`pi_exec`](docs/exec.md) fundamentally changes how the agent composes work. It can put tools and model calls into bounded JavaScript, then use normal control flow, concurrency, pipelines, fan-out, or map-reduce without dragging every intermediate value through the conversation. The agent reaches for it constantly and writes programs I would never have imagined turning into tools. NVIDIA's [AVO result](https://developer.nvidia.com/blog/nvidia-avo-reaches-100-on-arc-agi-3-demonstrating-a-frontier-level-general-purpose-architecture-for-long-horizon-autonomous-agents/) shows the extreme: Claude Opus 5 inside that harness completed the full public ARC-AGI-3 set—183 levels across 25 environments—with a 100.00 RHAE score. Pi Exec keeps that kind of composition bounded by budgets, concurrency and time limits, cancellation, output limits, and explicit tool bridges. Useful programs can be saved under `.pi/programs`, discovered later, and run again; alongside skills, this gives the agent a legible way to improve its own harness. The built-in [engineering team](docs/subagents.md) gives those fan-outs purposefully different roles—an explorer, a planner, a researcher, a consultant, a builder, and a designer—with prompts, tools, and [model profiles](docs/model-profiles.md) that match the job. The harness only has to suit the way I work, and I am happy to leave out a good idea when carrying it would cost more clarity than it adds.
+The dirty secret of coding agents is that adding more AI does not make software better. Adding **discipline, mechanical leverage, and respect for the model/hardware boundary** does.
 
-## Install
+My fitness function is uncompromising: **minimum code with maximum function, clarity, and leverage.** Every pattern in this repository earned its place through blood, sweat, and token burns across thousands of real engineering sessions. If a pattern didn't make me dramatically faster, or if an abstraction became a tax on understanding, it was mercilessly excised.
 
-apple-pi targets Pi 0.84.4 or newer. Update the Pi host first (`pi update` updates Pi itself; `pi update self` is the explicit equivalent), then install the checkout:
+[Pi](https://github.com/badlogic/pi-mono) (by Mario Zechner) gave me the ideal host: a fast, lean, hackable TypeScript core with zero ambient fluff. Above Pi, **apple-pi** is my personal operating environment. I borrow freely from [Superpowers](https://github.com/obra/superpowers), [10x](https://github.com/z3z1ma/10x), [Prime Intellect](https://github.com/PrimeIntellect-ai/prime-agent), [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent), [craftzdog's tmux workflow](https://github.com/craftzdog/tmux-claude-session-manager), and [NVIDIA AVO](https://developer.nvidia.com/blog/nvidia-avo-reaches-100-on-arc-agi-3-demonstrating-a-frontier-level-general-purpose-architecture-for-long-horizon-autonomous-agents/), but I reduce them into a single, cohesive, hardened package that treats agentic coding as a serious engineering discipline.
+
+---
+
+## The Core Paradigms: How Apple Pi Actually Works
+
+Apple Pi is architected around six core pillars that fundamentally alter how an agent thinks, composes, remembers, and executes.
+
+```
+                     ┌─────────────────────────────────────────────────────────┐
+                     │                   ROOT PI SESSION                       │
+                     │  ┌───────────────────┐        ┌──────────────────────┐  │
+                     │  │    MAIN AGENT     │◄──────►│   PAIR PROGRAMMER    │  │
+                     │  │  (Driver / Keys)  │        │ (Shared Navigator)   │  │
+                     │  └─────────┬─────────┘        └──────────┬───────────┘  │
+                     └────────────┼─────────────────────────────┼──────────────┘
+                                  │                             │ (escalates)
+                                  ▼                             ▼
+                    ┌───────────────────────────┐  ┌───────────────────────────┐
+                    │          PI EXEC          │  │        CONSULTANT         │
+                    │  Disposable Node Worker   │  │ (Senior Architect Review) │
+                    │  • Loops & Pipelines      │  └───────────────────────────┘
+                    │  • Fan-out subagents      │
+                    │  • State snapshots (<id>) │
+                    │  • Schema-filtered return │
+                    └─────────────┬─────────────┘
+                                  │
+         ┌────────────────────────┴────────────────────────┐
+         ▼                                                 ▼
+┌───────────────────────────────┐         ┌─────────────────────────────────┐
+│       THE LEDGER (.ledger/)   │         │       THE WIKI (.wiki/)         │
+│ Operational task context      │         │ Durable cross-task knowledge    │
+│ • task.md + retrospective.md  │         │ • Obsidian [[slug]] pages       │
+│ • Auto-archives to history/   │         │ • Derived on-demand graph       │
+└───────────────────────────────┘         └─────────────────────────────────┘
+```
+
+### 1. Programmatic Composition via `pi_exec`
+
+The prevailing agent pattern—chat-driven tool calling—is an architectural dead end for complex workflows. When an agent searches 40 files or tests 10 hypotheses, dragging each intermediate 10,000-token result through the primary LLM conversation pollutes context, triggers "lost in the middle" reasoning degradation, and incinerates money.
+
+[`pi_exec`](docs/exec.md) changes the game. It gives the agent a **bounded JavaScript async runtime** executed inside a disposable worker. Instead of babbling through tool calls, the model writes real code:
+
+- **True Control Flow**: Normal loops, conditionals, `parallel(items, mapper, concurrency)`, and `pipeline(...)`.
+- **In-Memory Filtering & Reduction**: Parse, grep, transform, and aggregate data inside the worker. Return *only the needle or the distilled summary* back to the conversation via a strict JSON Schema (`outputSchema`).
+- **NVIDIA AVO Pattern**: NVIDIA's ARC-AGI-3 breakthrough (Claude Opus 5 scoring 100.00 RHAE across 183 levels) proved that long-horizon frontier problem solving belongs in programmatic search and verification, not chat loops.
+- **Immutable State Snapshots (`state: <id>`)**: Inspired by `prime-agent`, programs can retain expensive serialized state across calls using explicit, immutable state IDs, without needing a persistent, fragile Python kernel or daemon.
+- **Self-Improving Harness (`.pi/programs/`)**: The model can author reusable async programs in `.pi/programs/<name>.js`. It discovers them via `pi_discover_programs` and runs them via `pi_exec_program`. The agent builds its own leverage.
+
+```javascript
+// Example: Bounded fan-out inspection without context pollution
+const files = (await pi.ls({ path: "components" }))
+  .split("\n")
+  .filter((f) => f.endsWith(".ts"));
+
+return parallel(
+  files,
+  async (file) => {
+    const result = await agent.run({
+      task: "Inspect this file for concurrency leaks or unhandled rejections.",
+      name: file,
+      context: { path: `components/${file}` },
+      outputSchema: std.schema({
+        risk: ["low", "medium", "high"],
+        evidence: "string",
+      }),
+    });
+    return { file, ...(result.value ?? {}) };
+  },
+  4,
+); // Max 4 concurrent workers
+```
+
+### 2. Dual-Hemisphere Pairing & The Escalation Ladder
+
+Most "pair programming" bots are either annoying linters that squawk on every keystroke or separate chat windows that know nothing about your session.
+
+The [pair programmer](docs/pair-programmer.md) in apple-pi implements true dual-hemisphere engineering:
+- **Main Agent (The Driver)**: Holds the keyboard, edits files, executes tests, communicates with the operator, and owns the decisions.
+- **Pair Programmer (The Navigator)**: Runs silently in the background on an economical inference profile (`pair`). It watches the driver's shared screen, diffs, tool calls, and failures.
+- **Capability Receipts (`expand_receipt`)**: Huge file reads, multiline diffs, and images are folded behind opaque receipt tokens. The pair's context is never flooded with noise, but it can selectively expand receipts if concrete evidence is needed.
+- **Transactional Frontier Reviews**: The pair doesn't interrupt on every micro-turn. It spools trajectory deltas and evaluates them at meaningful semantic frontiers (mutations, failures, verification steps). Interventions (`nit`, `concern`, `blocker`) are held until confirmed by newer trajectory evidence.
+- **The Senior Architect Escalation (`ask_consultant`)**: When the pair spots a consequential architectural concern, it doesn't guess. It calls `ask_consultant`, dispatching a senior software architect teammate on the `deep` profile (e.g. Claude Opus 5 xhigh) with a full evidence packet. The consultant returns a formal second opinion (`confirm`, `refute`, `refine`, `uncertain`).
+- **Material Finding Acknowledgment**: When a `concern` or `blocker` is delivered, the driver is held accountable: it must explicitly call `acknowledge_pair_findings` with `address`, `decline`, or `defer`.
+
+### 3. Context Sanctity & Prefix-Cache Preservation
+
+Prompt caching (KV caching) is the single most critical performance and economic factor when working with frontier models. If your harness rewrites message history, reorders messages, or injects synthetic assistant responses mid-turn, it invalidates the provider cache prefix. You pay full cache-write latency (10–30 seconds) and 10x token costs on every single turn.
+
+Apple Pi enforces **strict append-only context**:
+- **Single Compaction Hook Owner**: On xAI models, [`xai-context-compaction`](docs/context.md) invokes server-side `/responses/compact` and replays opaque encrypted tokens. On other providers, native Pi summarization handles the boundary.
+- **Fail-Closed Compaction Safety (`auto-compact`)**: Pi 0.84.4 has an edge-case gap where an over-budget tool result batch fails to trigger native compaction. `auto-compact.ts` patches this via a hidden cut-point marker, preventing runaway context overflows without rewriting provider serialization.
+- **The Sourced Notebook (`update_notebook`)**: The driver and pair continuously curate high-leverage working conclusions backed by exact session citations (`revisit_note`). Only active conclusions are injected—as a single message packet *immediately after compaction*. The harness never rewrites turns mid-flight.
+
+### 4. Bifurcated Memory: The Ledger vs. The Wiki
+
+Monolithic "memory" files or vector databases always rot. They mix temporary task notes with permanent architecture rules, growing until the model gets confused and starts hallucinating stale constraints.
+
+Apple Pi splits memory cleanly by lifecycle:
+
+| Storage | Lifecycle | Purpose | Mechanics |
+| --- | --- | --- | --- |
+| **[The Ledger](docs/ledger.md)** (`.ledger/`) | Ephemeral / Task-Scoped | Operational scratchpad for one undertaking: plans, tickets, specs, decisions, prototypes, evidence. | Created via `ledger_add`. Contains `task.md` and `retrospective.md`. Closed via `ledger_close`, which atomically archives the whole bundle to `.ledger/history/`. Git-native, zero database. |
+| **[The Wiki](docs/wiki.md)** (`.wiki/`) | Durable / Cross-Task | Karpathy-style knowledge base for reusable domain knowledge, architecture patterns, and operational wisdom. | Plain Markdown pages with Obsidian `[[slug]]` links. No vector DB, no daemon. Graph is derived on-demand via `wiki_lint` and `wiki_references`. |
+| **[Distill](docs/distill.md)** (`/distill`) | Retrospective Synthesis | Proposal-first harvesting of durable lessons learned during a session into their rightful homes. | Analyzes the session and proposes updates to `AGENTS.md`, `.wiki/`, task retrospectives, skills, or `.pi/programs/`. Requires human approval before writing. |
+| **[Self-Reminders](docs/reminders.md)** (`remind_me`) | Turn-to-Turn Continuity | Explicit, one-shot follow-up guidance queued in-memory and delivered once the current run settles. | No background cron daemons, no ambient nagging, no persistent task bloat. Pure next-turn execution continuity. |
+| **[Optional Extensions](docs/optional-extensions.md)** | Retained Task Systems | Packaged and tested backlog/to-do implementations for workflows requiring persistent task managers. | Opt-in via project/user configuration; never loaded into the default minimal harness surface. |
+
+### 5. Specialist Team & The Invisible Child Clarification
+
+Instead of a generic agent doing everything poorly, the [subagent system](docs/subagents.md) provides focused specialist lanes mapped to semantic [model profiles](docs/model-profiles.md):
+
+- `explorer` (`quick`): Rapid local codebase reconnaissance (`read`, `grep`, `find`, `ls`).
+- `planner` (`deep`): Implementation strategy and cross-module architectural design.
+- `researcher` (`quick`): External documentation and primary source investigation.
+- `consultant` (`deep`): Senior architect for root-cause analysis, YAGNI enforcement, and second opinions.
+- `builder` (`coding`): Bounded, specified write slices (paired with a sidecar by default).
+- `designer` (`visual-engineering`): User-facing layout, interaction design, and visual polish.
+
+**The Child `clarify` Superpower**: Subagents often get stuck on ambiguous instructions. In traditional systems, they either hallucinate or spam the user. In Apple Pi, every public child subagent receives a child-only `clarify` tool. It takes an in-memory, read-only snapshot of the parent's conversation and answers the child's question *without interrupting the parent or cluttering the parent's context*.
+
+**The Private Sidecar (`/btw`)**: When *you* want to ask a question without derailing the agent or polluting its history, [`/btw`](docs/btw.md) opens an ephemeral, read-only Markdown overlay. Read the answer, copy it to the clipboard (`Ctrl+X`), or inject it directly into the main thread (`Alt+I`).
+
+### 6. Hardware-Level Ergonomics & Terminal Bliss
+
+A great harness must feel like an extension of your nervous system. Apple Pi includes deep OS- and terminal-level integrations:
+
+- **[Tmux Sessions (`tmux-sessions`)](docs/tmux-sessions.md)**: Manage dozens of concurrent Pi sessions across multiple repositories. Each session publishes its state (`busy`, `idle`, `waiting`) atomically to disk. Press `prefix + y` to open/resume a session popup for the current directory; press `prefix + u` to open a fuzzy fzf session switcher with live pane previews. Bell forwarding rings the origin window when an agent finishes.
+- **[Native macOS Notifications (`notify`)](docs/notify.md)**: Completing a long-running turn or blocking on an interactive question fires a native macOS notification via `terminal-notifier` or `Pi Notifier.app`. Clicking the notification immediately focuses Ghostty and selects the exact tmux pane. Includes a smart suppression engine: if your eyes are already on the pane, it stays quiet.
+- **[Vroom / Fast Mode (`vroom`)](docs/vroom.md)**: Run `/fast` to toggle priority service tiers on OpenAI Codex and xAI Grok mid-run across root, subagents, and `pi_exec`.
+- **[Composed Status Footer (`status-footer`)](docs/status-footer.md)**: Replaces Pi's default footer with a clean, responsive single-line status card. Displays model identity, thinking level, active context percentage, token/cache traffic, live session cost, git branch, compaction status, pair state (`q-pair`), and subagent activity—with zero ASCII box clutter.
+- **[Search Root Guard (`home-search-guard`)](docs/home-search-guard.md)**: Fail-closed guardrails that stop the agent from accidentally running recursive greps across `/`, `~`, or workspace roots.
+- **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
+- **[MCP Gateway (`mcp`)](docs/mcp.md)**: Pinned `pi-mcp-adapter` gateway exposed as a token-efficient `mcp` tool (`/mcp`), bridging external tools and resources directly into interactive sessions and `pi_exec` composition.
+- **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
+
+---
+
+## Packaged Workflow Skills
+
+Apple Pi ships with a suite of battle-tested engineering skills in [`skills/`](skills). These are not rigid, inescapable agent pipelines; they are on-demand procedures loaded when the situation demands them:
+
+### High-Leverage Architecture & Design
+- [`/skill:interrogate-to-design`](skills/interrogate-to-design) & [`/interrogate`](prompts/interrogate.md): Deep Socratic interview mapping decisions as a dependency tree and resolving the entire frontier before code is written.
+- [`/skill:to-spec`](skills/to-spec): Synthesizes settled multi-session exploration into a rigorous, testable specification.
+- [`/skill:to-tickets`](skills/to-tickets): Decomposes specifications into tracer-bullet tickets with explicit dependency blocking edges.
+- [`/skill:wayfinder`](skills/wayfinder): Charts multi-session maps of decision tickets for complex greenfield projects.
+- [`/skill:improve-codebase-architecture`](skills/improve-codebase-architecture): Surveys evolving code to identify deepening opportunities and simplify abstractions.
+
+### Execution & Verification
+- [`/skill:implement`](skills/implement): Builds settled tickets through strict TDD, feedback cycles, and reviewer verification.
+- [`/skill:tdd`](skills/tdd): Red → Green → Refactor vertical slices with confirmed test seams.
+- [`/skill:diagnosing-bugs`](skills/diagnosing-bugs): Hypothesis-driven debugging that tightens feedback loops before touching code.
+- [`/skill:prototype`](skills/prototype): Builds throwaway experiments designed exclusively to answer one empirical design question.
+- [`/skill:resolving-merge-conflicts`](skills/resolving-merge-conflicts): Resolves complex git merges by analyzing the intent of both branches.
+
+### Orthogonal Code Review & Ralph
+- [`/skill:code-review`](skills/code-review) ([contract](docs/code-review.md)): Reviews pull requests or working branches across two completely independent axes: **Standards** (repository conventions) vs. **Intent / Spec** (did we build what was asked?). Supports multi-lens `pi_exec` parallel fan-out and candidate verification.
+- [`/skill:ralph`](skills/ralph): Bounded fresh-context execution loops over prepared ledger tasks or self-contained goals.
+
+### Engineering Disciplines
+- [`/skill:domain-modeling`](skills/domain-modeling): Sharpens ubiquitous language, bounded contexts, invariants, and durable domain models.
+- [`/skill:codebase-design`](skills/codebase-design): Designs deep modules, deliberate seams, and high-leverage interfaces with minimal surface area.
+- [`/skill:research`](skills/research): Investigates externally verifiable engineering questions through primary sources and official documentation.
+
+### Harness & Knowledge Authoring
+- [`/skill:pi-exec`](skills/pi-exec): Author bounded, composable JavaScript async programs and reusable `.pi/programs`.
+- [`/skill:skill-authoring`](skills/skill-authoring): Author concise, testable Agent Skills with progressive disclosure.
+- [`/skill:llm-wiki`](skills/llm-wiki): Initialize, ingest, query, and maintain the project-local `.wiki/` knowledge graph.
+
+---
+
+## What Was Deliberately Rejected
+
+Architecture is defined by what you choose *not* to build. Consult [`docs/boundaries.md`](docs/boundaries.md) for the full record of rejected ideas:
+
+- ❌ **No Vector Databases or Local Embedding Stores**: Lexical search, ripgrep, and derived Markdown graph traversal consistently outperform vector similarity on codebases while eliminating database corruptions and indexing lag.
+- ❌ **No Persistent Python Kernels or Background Daemons**: Stateful IPython runtimes leak memory, break determinism, and create ghost state. `pi_exec` uses disposable Node workers with immutable state snapshots.
+- ❌ **No Mid-Turn Context Rewriting**: Editing or shifting messages mid-thread destroys provider KV prompt caching. Context remains strictly append-only.
+- ❌ **No Git Worktree Circus for Subagents**: Subagents operate directly in the workspace or use ordinary git commands when needed. No fragile automated worktree management layers.
+- ❌ **No Monolithic Memory Files**: A single `MEMORY.md` file inevitably becomes a toxic dump of conflicting notes. Apple Pi separates operational task bundles (`.ledger/`) from durable knowledge (`.wiki/`).
+
+---
+
+## Quickstart & Setup
+
+### Requirements
+- **Host**: macOS recommended (for native notifications and Ghostty/tmux focus scripts).
+- **Node.js**: `>= 22.19.0`
+- **Pi**: `>= 0.84.4` (`npm install -g @earendil-works/pi-coding-agent`)
+- **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`.
+
+### Installation
+
+Update Pi, install dependencies, and register the package:
 
 ```bash
 pi update
@@ -22,112 +219,83 @@ npm install
 pi install /absolute/path/to/apple-pi
 ```
 
-Add `-l` for project-local activation. Pi loads every extension from this one package. The exact Pi development dependencies in this repository validate the package against the minimum host contract; Pi itself remains owned and updated by the Pi installer.
+*(Add `-l` to `pi install` if you prefer project-local activation rather than global).*
 
-## What's in the harness
+### Model Profiles Configuration
 
-I think about the package in four groups. They are all installed together, but each has a different job and most of them stay out of the way until they are useful.
+Apple Pi decouples semantic roles from specific provider models via `~/.pi/agent/model-profiles.json`. Configure your preferred providers and thinking levels:
 
-### Working with the agent
-
-These are the pieces I interact with directly while a session is running.
-
-- [`pair programmer`](docs/pair-programmer.md) — a persistent shared-screen navigator with restrained peer questions, receipt-bound text and image expansion, and episodic guidance from a deep software architect
-- [`Ask`](docs/ask-user-question.md) — structured TUI/RPC questionnaire
-- [`BTW`](docs/btw.md) — private read-only side conversation via `/btw`
-- [`Distill`](docs/distill.md) — proposal-first extraction of durable lessons via `/distill [focus]`
-- [`Interrogate`](prompts/interrogate.md) — dependency-ordered questioning via `/interrogate [subject]`
-- [Custom Footer](docs/status-footer.md) — responsive model, context, cost, Git, and live extension status
-
-### Keeping context and work straight
-
-These handle continuity at different timescales without turning everything into one task system.
-
-- [Notebook](docs/context.md) — Native compaction safety, an exceptional oversized-result fallback, shared working conclusions and source recall, `update_notebook`, `search_session`, and `revisit_note`
-- [Self-reminders](docs/reminders.md) — explicit, one-shot model follow-up after the current run
-- [The ledger](docs/ledger.md) — `ledger_add` / `ledger_close` and the `.ledger` directory
-- [Project wiki](docs/wiki.md) — compact `.wiki/` guidance, `wiki_lint`, `wiki_references`, and on-demand knowledge procedures
-- [Optional extensions](docs/optional-extensions.md) — retained backlog and to-do systems, not loaded by default
-
-### Running and delegating work
-
-These give the agent more leverage when a task actually benefits from composition or another context.
-
-- [Pi Exec](docs/exec.md) — bounded JavaScript guest for programmatic tool composition, live-session state snapshots, and reusable `.pi/programs`
-- [Subagents](docs/subagents.md) — typed specialist lanes, foreground and background runs, child-only `clarify` via independent parent snapshots, `/agents`, and FleetView
-- [MCP](docs/mcp.md) — the `pi-mcp-adapter` gateway (`mcp`, `/mcp`)
-
-### Terminal and provider edges
-
-These are the smaller integrations that make the whole setup feel like one harness on my machine.
-
-- [Notify](docs/notify.md) — native macOS completion notifications (`/notify-setup`, `/notify-test`) with Ghostty/tmux click-to-focus
-- [Tmux sessions](docs/tmux-sessions.md) — publishes per-session `busy`/`idle`/`waiting` status to disk (`/pi-sessions`) for the bundled picker, launcher, and bell forwarding
-- [Vroom (fast mode)](docs/vroom.md) — `/fast` toggles priority service tier for OpenAI Codex and xAI mid-run across root, subagent, and `pi_exec` model calls
-- [Search root guard](docs/home-search-guard.md) — forces agent searches below protected filesystem, home, and workspace collection roots
-- [xAI hosted tools](docs/xai-hosted-tools.md) — injects `{ type: "web_search" }` and `{ type: "x_search" }` on Responses-routed Grok
-- [xAI context compaction](docs/context.md) — server-side `/responses/compact` plus opaque-item injection on later Grok Responses requests
-
-The Pi package manifest in [`package.json`](package.json) exports [`extensions`](extensions), [`skills`](skills), and [`prompt templates`](prompts). MCP protocol and UI stay in the pinned `pi-mcp-adapter` dependency; everything else is owned here. Feature contracts live in [`docs`](docs), with adopted and rejected ideas recorded in [`docs/boundaries.md`](docs/boundaries.md).
-
-## Skills
-
-Skills live in [`skills`](skills). Each has a `SKILL.md` plus any references it needs. They are procedures the agent can load when the situation calls for them, not a pipeline every request has to follow.
-
-### Guided workflows
-
-These remain human-invoked so the model does not start them implicitly.
-
-- [`/skill:interrogate-to-design`](skills/interrogate-to-design) — interrogate dependent design decisions while curating reusable wiki knowledge and approved ADRs
-- [`/skill:to-spec`](skills/to-spec) — synthesize settled multi-session work into a task-local specification after confirming test seams
-- [`/skill:to-tickets`](skills/to-tickets) — decompose approved work into task-local tracer-bullet tickets with explicit blocking edges
-- [`/skill:implement`](skills/implement) — build settled tickets or small specifications through TDD, feedback, review, and an authorized commit
-- [`/skill:improve-codebase-architecture`](skills/improve-codebase-architecture) — survey changing code for deepening opportunities, then interrogate one selected candidate
-- [`/skill:wayfinder`](skills/wayfinder) — chart a multi-session map of decision tickets, then resolve them one at a time until the way is clear
-
-### Engineering disciplines
-
-These are reusable techniques the model can load when the situation calls for them.
-
-- [`/skill:prototype`](skills/prototype) — build a throwaway experiment that answers one design question
-- [`/skill:diagnosing-bugs`](skills/diagnosing-bugs) — tighten the feedback loop for hard bugs and performance regressions
-- [`/skill:research`](skills/research) — investigate externally verifiable questions through high-trust primary sources
-- [`/skill:tdd`](skills/tdd) — build concrete behavior through confirmed-seam, vertical red → green slices
-- [`/skill:resolving-merge-conflicts`](skills/resolving-merge-conflicts) — resolve in-progress merges and rebases from both sides' intent while preserving Git authority
-- [`/skill:domain-modeling`](skills/domain-modeling) — sharpen domain language, relationships, invariants, and durable context
-- [`/skill:codebase-design`](skills/codebase-design) — design deep modules, deliberate seams, and high-leverage interfaces
-
-### Review, verification, and execution fundamentals
-
-These Apple Pi procedures preserve evidence, safe integration, and bounded execution without imposing a mandatory lifecycle.
-
-- [`/skill:code-review`](skills/code-review) — review repository standards and originating intent in independent evidence-backed axes, with optional Pi Exec fan-out and reduction
-- [`/skill:ralph`](skills/ralph) — bounded fresh-context loops over general goals or prepared ledger tasks
-
-### Harness authoring
-
-These help build the reusable procedures and composition programs that extend the harness itself.
-
-- [`/skill:pi-exec`](skills/pi-exec) — author bounded `pi_exec` programs
-- [`/skill:skill-authoring`](skills/skill-authoring) — write concise Agent Skills with progressive validation
-
-### Project knowledge
-
-- [`/skill:llm-wiki`](skills/llm-wiki) — initialize, ingest, query, and maintain the [project wiki](docs/wiki.md) through progressively disclosed procedures
-
-## Development
-
-```bash
-npm install
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run pack:check
+```json
+{
+  "profiles": {
+    "quick": {
+      "model": "openai-codex/gpt-5.6-luna",
+      "thinking": "medium"
+    },
+    "balanced": {
+      "model": "openai-codex/gpt-5.6-luna",
+      "thinking": "high"
+    },
+    "pair": {
+      "model": "xai/grok-4.6",
+      "thinking": "medium"
+    },
+    "deep": {
+      "model": "anthropic/claude-opus-5",
+      "thinking": "xhigh"
+    },
+    "coding": {
+      "model": "xai/grok-4.6",
+      "thinking": "high"
+    },
+    "visual-engineering": {
+      "model": "github-copilot/gemini-3.7-flash",
+      "thinking": "medium"
+    },
+    "background": {
+      "model": "openai-codex/gpt-5.6-luna",
+      "thinking": "low"
+    }
+  }
+}
 ```
 
-See [`docs/development.md`](docs/development.md) for module conventions. Networked pair E2E is opt-in: `PAIR_E2E=1 npm run test:pair`.
+### Essential Commands & Keybindings
 
-## Provenance
+| Command / Key | Action |
+| --- | --- |
+| `/pair [on\|off\|status]` | Manage the background pair programming partner and notebook |
+| `/btw [question]` | Open the private, read-only side conversation |
+| `Alt+I` *(in BTW)* | Inject the latest BTW answer into the main conversation |
+| `/fast` | Toggle priority service tier (`⚡`) for OpenAI Codex and xAI |
+| `/distill [focus]` | Harvest durable lessons into `.wiki/`, `.ledger/`, or `AGENTS.md` |
+| `ledger_add` / `ledger_close` | Create or archive an operational task bundle in `.ledger/` |
+| `prefix + y` *(in tmux)* | Launch or attach to a Pi session for the current directory in a popup |
+| `prefix + u` *(in tmux)* | Open the interactive fuzzy session picker |
+| `/notify-setup` | Install the native `Pi Notifier.app` for macOS click-to-focus |
 
-Imported source and licenses: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). New apple-pi code is MIT.
+---
+
+## Development & Verification
+
+All validation commands are enforced via Biome, TypeScript strict mode, Vitest, and custom loader suites:
+
+```bash
+npm run check        # Run format:check, lint, and typecheck
+npm test             # Run unit tests, pair programmer harness, and loader validation
+npm run pack:check   # Verify npm tarball inclusion boundaries
+```
+
+For formatting files you touched:
+```bash
+npx biome format --write README.md
+```
+
+See [`docs/development.md`](docs/development.md) for module conventions and architectural rules.
+
+---
+
+## Provenance & License
+
+- Third-party notices and licenses: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- Original code and novel architectures in `apple-pi` are licensed under [MIT](LICENSE).
