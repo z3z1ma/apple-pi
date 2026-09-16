@@ -6,7 +6,7 @@ Pi 0.84.4 checks context after tool results and normally compacts before the nex
 
 The extension retains one fallback for a native cut-point gap. When an over-budget tool-result batch reaches Pi's `keepRecentTokens` budget, Pi 0.84.4 can detect that compaction is due but produce no preparation or failure event because tool results are not valid cut points. The fallback appends an empty hidden custom-message cut point after the result, then Pi's native threshold compaction proceeds normally. A `context` hook filters the durable marker before provider serialization, including after session reload. No provider registration or synthetic assistant response is replaced. The extension is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers. Pi's `compaction.enabled` setting controls compaction; the pair programmer notebook `passive` setting disables only fallback marker insertion and notebook maintenance.
 
-The notebook adds one live packet of working conclusions through the `context` event. It is rebuilt from the current branch before each model request, independently of compaction. Corrections take effect on the next request, including before the first compaction. Ordinary compaction remains responsible for conversation history and task progress.
+The notebook lands one packet of working conclusions as a persisted custom message right after each compaction (`session_compact`). Nothing rewrites request context per turn: provider prompt caches match on an exact prefix, and a message that moves or changes between requests forces the whole history to be re-sent at cache-write prices. Ordinary compaction remains responsible for conversation history and task progress.
 
 ## xAI server-side compaction
 
@@ -30,9 +30,9 @@ The tool adds conclusions, supersedes existing conclusions, or retires them imme
 
 Full pair maintenance becomes due at `notebookAfterTokens` (default 20,000 uncovered source tokens). The pair explicitly selects `retainReflectionIds`; existing conclusions not selected are retired. This field is required for a full review, and `[]` deliberately retires all existing conclusions. Targeted updates leave other conclusions alone. Completed reviews advance coverage even when there is nothing to add. Reviews without new conclusions use the existing bounded retry backoff. If the pair is disabled or unavailable, automatic maintenance pauses; the main agent can still curate the notebook.
 
-Only current conclusions enter the main packet, pair packet, seed, and maintenance prompt. New conclusions link directly to source entries; exhaustive observation recording and observation-pool pruning are gone. Earlier observations and retired conclusions remain retrievable through `revisit_note`, but are not live guidance. The append-only session archive can grow; active retention is an explicit model decision rather than a token quota or age-based eviction policy.
+Only current conclusions enter the post-compaction packet, pair reseed, and maintenance prompt. New conclusions link directly to source entries; exhaustive observation recording and observation-pool pruning are gone. Earlier observations and retired conclusions remain retrievable through `revisit_note`, but are not live guidance. The append-only session archive can grow; active retention is an explicit model decision rather than a token quota or age-based eviction policy.
 
-`registerNotebookContextPacket` replaces the typed `notebook.packet` with the current branch's conclusions on each context rebuild, removing it when empty. Both programmers see corrections independently of their own compaction timing. The `notebook.*` names are persistent session-record formats, not separate actors.
+`registerNotebookCompactionPacket` appends the typed `notebook.packet` once after each compaction and skips it when the notebook is empty. Conclusions curated between compactions reach the main context at the next compaction; the pair receives them through its reseed summary. The `notebook.*` names are persistent session-record formats, not separate actors.
 
 Commands and tools:
 

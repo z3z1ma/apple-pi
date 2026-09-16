@@ -15,7 +15,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
-import { registerPairParentNotebookPacket } from "./parent-notebook.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
@@ -127,11 +126,10 @@ export async function createPairSession(opts: {
 				factory: (pi: ExtensionAPI) => {
 					// Replay + reseed only. Never register the pair programmer notebook
 					// Runtime, triggers, commands, or revisit_note here — those stay
-					// on the primary session. The parent packet is a read of that
-					// ledger, not a second notebook pipeline.
+					// on the primary session. The reseed summary carries the current
+					// working conclusions; nothing rewrites request context per turn.
 					registerXaiCompactionReplayHooks(pi);
 					pi.on("session_before_compact", (event, ctx) => pairCompactResult(event, opts.seedSource, ctx));
-					registerPairParentNotebookPacket(pi, opts.primarySessionManager);
 				},
 			},
 		],

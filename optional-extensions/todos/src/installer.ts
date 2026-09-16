@@ -161,29 +161,12 @@ export function installTodos(pi: ExtensionAPI) {
 		if (unavailable) return;
 		const todos = controller.list();
 		cadence.onTurnEnd(todos.some((todo) => todo.status === "active"));
-	});
-	pi.on("context", (event) => {
-		if (
-			unavailable ||
-			event.messages.some(
-				(message: any) => message.role === "custom" && message.customType === TODO_REMINDER_CUSTOM_TYPE,
-			)
-		)
-			return;
-		const text = cadence.consume(controller.list(), config.reminders ?? true);
+		const text = cadence.consume(todos, config.reminders ?? true);
 		if (!text) return;
-		return {
-			messages: [
-				...event.messages,
-				{
-					role: "custom" as const,
-					customType: TODO_REMINDER_CUSTOM_TYPE,
-					content: [{ type: "text" as const, text }],
-					display: false,
-					timestamp: Date.now(),
-				},
-			],
-		};
+		pi.sendMessage(
+			{ customType: TODO_REMINDER_CUSTOM_TYPE, content: [{ type: "text", text }], display: false },
+			{ deliverAs: "steer", triggerTurn: false },
+		);
 	});
 
 	const register = <T extends Record<string, unknown>>(

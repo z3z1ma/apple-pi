@@ -39,7 +39,7 @@ import { Type } from "typebox";
 
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
-import { registerNotebookContextPacket } from "../../notebook/src/hooks/context-packet.js";
+import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
 import {
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
@@ -392,11 +392,6 @@ export {
 	formatTurnDelta,
 	formatUserBash,
 } from "./formatting.js";
-export {
-	buildParentNotebookPacket,
-	refreshParentNotebookPacket,
-	registerPairParentNotebookPacket,
-} from "./parent-notebook.js";
 export { bindPairRecallTools, bindPrimaryRecallTools } from "./recall.js";
 export {
 	createExpandReceiptTool,
@@ -1351,7 +1346,7 @@ export default function (pi: ExtensionAPI) {
 	const rootNotebook = inChildSessionContext() ? undefined : new NotebookRuntime();
 	if (rootNotebook) {
 		registerCompactionTrigger(pi, rootNotebook);
-		registerNotebookContextPacket(pi, rootNotebook);
+		registerNotebookCompactionPacket(pi);
 		registerNotebookSourceTool(pi);
 		registerMainNotebookTool(pi, rootNotebook);
 	}

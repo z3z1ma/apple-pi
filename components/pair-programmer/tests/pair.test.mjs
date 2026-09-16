@@ -1177,61 +1177,6 @@ test("compact hook omits the parent fold from the reseed summary", async () => {
 	assert.ok(!result.compaction.summary.includes("## Current law"));
 });
 
-test("parent notebook packet refreshes live conclusions independently of compaction", () => {
-	const packet = A.buildParentNotebookPacket([
-		{ id: "m1", type: "message", message: { role: "user", content: "Build it" } },
-		{
-			id: "r1",
-			type: "custom",
-			customType: "notebook.reflections.recorded",
-			data: {
-				reflections: [
-					{
-						id: "abc123abc123",
-						content: "Do not reimplement auth",
-						supportingObservationIds: ["m1"],
-						tokenCount: 4,
-					},
-				],
-				coversUpToId: "m1",
-			},
-		},
-	]);
-	assert.ok(packet);
-	assert.match(packet.content[0].text, /Do not reimplement auth/);
-	assert.match(packet.content[0].text, /revisit_note/);
-	assert.match(packet.content[0].text, /expand_receipt/);
-	assert.doesNotMatch(packet.content[0].text, /search_session/);
-	assert.match(packet.content[0].text, /not a notebook for this side conversation/);
-	assert.match(packet.content[0].text, /working conclusions you keep for your partner's session/);
-
-	const first = A.refreshParentNotebookPacket(
-		[
-			{ role: "compactionSummary", summary: "reseed" },
-			{ role: "user", content: "next review" },
-		],
-		packet,
-	);
-	assert.equal(first.messages[0].role, "compactionSummary");
-	assert.equal(first.messages[2].customType, "notebook.packet");
-	assert.equal(first.messages[1].role, "user");
-
-	assert.equal(A.refreshParentNotebookPacket(first.messages, packet).messages.length, 3);
-	assert.equal(A.refreshParentNotebookPacket(first.messages, undefined).messages.length, 2);
-	assert.equal(A.refreshParentNotebookPacket([{ role: "user", content: "no compact yet" }], packet).messages.length, 2);
-});
-
-test("pair parent-notebook hook does not register the notebook pipeline", () => {
-	const events = [];
-	const pi = {
-		on(event) {
-			events.push(event);
-		},
-	};
-	A.registerPairParentNotebookPacket(pi, { getBranch: () => [] });
-	assert.deepEqual(events, ["context"]);
-});
-
 test("runtime: a failed prompt keeps the seed and marks each submitted receipt-bearing prompt as presented", async () => {
 	const prompts = [];
 	const presented = [];
