@@ -39,6 +39,7 @@
     "components/tmux-sessions/pi_session_manager.tmux",
     "components/tmux-sessions/LICENSE",
     "components/status-footer/src/",
+    "components/tasks/src/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -70,7 +71,8 @@
       "./extensions/xai-context-compaction.ts",
       "./extensions/notify.ts",
       "./extensions/tmux-sessions.ts",
-      "./extensions/status-footer.ts"
+      "./extensions/status-footer.ts",
+      "./extensions/tasks.ts"
     ],
     "skills": [
       "./skills"

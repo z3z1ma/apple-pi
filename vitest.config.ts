@@ -20,6 +20,7 @@ export default defineConfig({
 			"components/tmux-sessions/tests/**/*.test.ts",
 			"components/status-footer/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",
+			"components/tasks/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

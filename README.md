@@ -151,6 +151,7 @@ A great harness must feel like an extension of your nervous system. Apple Pi inc
 - **[Search Root Guard (`home-search-guard`)](docs/home-search-guard.md)**: Fail-closed guardrails that stop the agent from accidentally running recursive greps across `/`, `~`, or workspace roots.
 - **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
 - **[MCP Gateway (`mcp`)](docs/mcp.md)**: Pinned `pi-mcp-adapter` gateway exposed as a token-efficient `mcp` tool (`/mcp`), bridging external tools and resources directly into interactive sessions and `pi_exec` composition.
+- **[Task Backgrounding & Reactive Wake-Up (`tasks`)](docs/tasks.md)**: Background long-running shell commands proactively with `run_in_background: true` or interactively with `Ctrl+B` during execution. When background tasks complete, reactive notifications wake up the agent or queue for the next turn. Manage running tasks with the `task` tool (`list`, `status`, `kill`).
 - **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
 
 ---
