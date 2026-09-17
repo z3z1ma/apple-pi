@@ -377,8 +377,9 @@ export function classifyPairWork(input: {
 			if (commandLooksLikeVerification(command)) verification = true;
 			else if (commandLooksLikeExploration(command)) exploration = true;
 			else execution = true;
-		} else if (name === "pi_exec" || name === "pi_exec_program") execution = true;
-		else if (name) execution = true;
+		} else if (name === "pi_exec" || name === "pi_exec_program" || name.startsWith("program_")) {
+			execution = true;
+		} else if (name) execution = true;
 	};
 
 	for (const call of calls) consider(toolName(call.name), call, undefined);

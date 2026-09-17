@@ -57,7 +57,12 @@ import {
 	piExecGuestApiContract,
 	savedProgramsSystemPromptContribution,
 } from "../extensions/runtime-api.js";
-import { listSavedPrograms, readSavedProgram } from "../extensions/runtime-saved-programs.js";
+import {
+	listSavedPrograms,
+	paramsFrom,
+	readSavedProgram,
+	savedProgramToolName,
+} from "../extensions/runtime-saved-programs.js";
 import { capturedTools } from "../extensions/runtime-tools.js";
 import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
@@ -1138,6 +1143,7 @@ describe("pi_exec tool", () => {
 		const tools = new Map<string, any>();
 		let resultHandler: any;
 		let shutdownHandler: any;
+		const handlers = new Map<string, any[]>();
 		runtime({
 			registerTool(value: any) {
 				tools.set(value.name, value);
@@ -1145,14 +1151,20 @@ describe("pi_exec tool", () => {
 			on(event: string, handler: any) {
 				if (event === "tool_result") resultHandler = handler;
 				if (event === "session_shutdown") shutdownHandler = handler;
+				const list = handlers.get(event) ?? [];
+				list.push(handler);
+				handlers.set(event, list);
 			},
 		} as any);
 		return {
+			tools,
 			tool: tools.get("pi_exec"),
-			discoverProgramsTool: tools.get("pi_discover_programs"),
 			execProgramTool: tools.get("pi_exec_program"),
 			resultHandler,
 			shutdownHandler,
+			emit(event: string, data: any = {}, ctx: any = {}) {
+				for (const h of handlers.get(event) ?? []) h(data, ctx);
+			},
 		};
 	};
 
@@ -1207,43 +1219,69 @@ describe("pi_exec tool", () => {
 		}
 	});
 
-	it("discovers and executes project-local programs using their JSDoc descriptions", async () => {
+	it("manifests saved programs as typed tools on session start and executes them", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "apple-pi-programs-"));
 		try {
 			const programsDir = join(dir, ".pi", "programs");
 			mkdirSync(programsDir, { recursive: true });
 			writeFileSync(
 				join(programsDir, "echo-input.js"),
-				"/**\n * @description Return the named input unchanged.\n */\nreturn inputs.value;",
+				"/**\n * @description Return the named input unchanged.\n * @param {string} value The value to echo\n */\nreturn inputs.value;",
 				"utf8",
 			);
-			const { discoverProgramsTool, execProgramTool, resultHandler } = register();
-			expect(discoverProgramsTool).toBeDefined();
+			const { tools, execProgramTool, emit, resultHandler } = register();
 			expect(execProgramTool).toBeDefined();
 			expect(execProgramTool.executionMode).toBe("sequential");
-			expect(discoverProgramsTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.discoverSnippet);
-			expect(discoverProgramsTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
 			expect(execProgramTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.executeSnippet);
 			expect(execProgramTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
 			expect(execProgramTool.parameters.properties.name.pattern).toBe("^[a-z0-9]+(?:-[a-z0-9]+)*$");
-			const trustedCtx = { cwd: dir, isProjectTrusted: () => true };
-			const discovered = await discoverProgramsTool.execute("discover", {}, undefined, undefined, trustedCtx);
-			expect(JSON.parse(discovered.content[0].text)).toEqual([
-				{ name: "echo-input", description: "Return the named input unchanged." },
-			]);
 
-			const result = await execProgramTool.execute(
+			const trustedCtx = { cwd: dir, isProjectTrusted: () => true };
+			emit("session_start", {}, trustedCtx);
+
+			const programTool = tools.get("program_echo_input");
+			expect(programTool).toBeDefined();
+			expect(programTool.executionMode).toBe("sequential");
+			expect(programTool.description).toContain("echo-input");
+			expect(programTool.description).toContain("Return the named input unchanged.");
+			expect(programTool.promptSnippet).toBe("Return the named input unchanged.");
+			expect(programTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
+			expect(programTool.parameters.properties.value.description).toBe("The value to echo");
+			expect(programTool.parameters.properties.inputs).toBeDefined();
+			expect(programTool.parameters.properties.state).toBeDefined();
+			expect(programTool.parameters.properties.limits).toBeDefined();
+
+			const typedResult = await programTool.execute(
+				"program-call-typed",
+				{ value: "typed result" },
+				undefined,
+				undefined,
+				trustedCtx,
+			);
+			expect(typedResult.content[0].text).toBe("typed result");
+
+			const inputsResult = await programTool.execute(
+				"program-call-inputs",
+				{ inputs: { value: "inputs result" } },
+				undefined,
+				undefined,
+				trustedCtx,
+			);
+			expect(inputsResult.content[0].text).toBe("inputs result");
+
+			const execResult = await execProgramTool.execute(
 				"program",
 				{ name: "echo-input", inputs: { value: "saved result" } },
 				undefined,
 				undefined,
 				trustedCtx,
 			);
-			expect(result.content[0].text).toBe("saved result");
-			expect(result.details.activity).toMatchObject({
+			expect(execResult.content[0].text).toBe("saved result");
+			expect(execResult.details.activity).toMatchObject({
 				name: "echo-input",
 				description: "Return the named input unchanged.",
 			});
+
 			await expect(
 				execProgramTool.execute("invalid", { name: "../echo-input" }, undefined, undefined, trustedCtx),
 			).rejects.toThrow(/program name must contain/);
@@ -1253,25 +1291,98 @@ describe("pi_exec tool", () => {
 				"/**\n * @description Fail to exercise saved-program error reporting.\n */\nthrow new Error('expected failure');",
 				"utf8",
 			);
-			await expect(
-				execProgramTool.execute("saved-failure", { name: "failure" }, undefined, undefined, trustedCtx),
-			).rejects.toThrow("expected failure");
-			const failure = resultHandler({ toolName: "pi_exec_program", toolCallId: "saved-failure", isError: true });
+			emit("session_compact", {}, trustedCtx);
+			const failureTool = tools.get("program_failure");
+			expect(failureTool).toBeDefined();
+
+			await expect(failureTool.execute("saved-failure", {}, undefined, undefined, trustedCtx)).rejects.toThrow(
+				"expected failure",
+			);
+			const failure = resultHandler({ toolName: "program_failure", toolCallId: "saved-failure", isError: true });
 			expect(failure.details.trace.outcome).toBe("failed");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 
-	it("requires project trust before discovering or running saved programs", async () => {
-		const { discoverProgramsTool, execProgramTool } = register();
-		const ctx = { cwd: process.cwd(), isProjectTrusted: () => false };
-		await expect(discoverProgramsTool.execute("untrusted-discover", {}, undefined, undefined, ctx)).rejects.toThrow(
-			/trusted project/,
-		);
-		await expect(
-			execProgramTool.execute("untrusted-run", { name: "example" }, undefined, undefined, ctx),
-		).rejects.toThrow(/trusted project/);
+	it("preserves KV cache prefix by restricting tool registration to cache-safe boundaries", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-cache-safe-"));
+		try {
+			const programsDir = join(dir, ".pi", "programs");
+			mkdirSync(programsDir, { recursive: true });
+			const { tools, emit } = register();
+
+			writeFileSync(
+				join(programsDir, "first-tool.js"),
+				"/**\n * @description First tool before session starts.\n */\nreturn 1;",
+				"utf8",
+			);
+
+			emit("before_agent_start", {}, { cwd: dir, sessionManager: { getBranch: () => [] } });
+			expect(tools.get("program_first_tool")).toBeDefined();
+
+			writeFileSync(
+				join(programsDir, "mid-turn-tool.js"),
+				"/**\n * @description Created mid-turn.\n */\nreturn 2;",
+				"utf8",
+			);
+			emit(
+				"before_agent_start",
+				{},
+				{
+					cwd: dir,
+					sessionManager: {
+						getBranch: () => [{ type: "message", message: { role: "user", content: "hello" } }],
+					},
+				},
+			);
+			expect(tools.get("program_mid_turn_tool")).toBeUndefined();
+
+			emit("session_compact", {}, { cwd: dir });
+			expect(tools.get("program_mid_turn_tool")).toBeDefined();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("requires project trust before running saved programs", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-trust-"));
+		try {
+			const programsDir = join(dir, ".pi", "programs");
+			mkdirSync(programsDir, { recursive: true });
+			writeFileSync(join(programsDir, "trusted-check.js"), "/**\n * @description Trust check.\n */\nreturn 1;", "utf8");
+			const { tools, execProgramTool, emit } = register();
+			emit("session_start", {}, { cwd: dir });
+			const tool = tools.get("program_trusted_check");
+			expect(tool).toBeDefined();
+
+			const untrustedCtx = { cwd: dir, isProjectTrusted: () => false };
+			await expect(
+				execProgramTool.execute("untrusted-run", { name: "trusted-check" }, undefined, undefined, untrustedCtx),
+			).rejects.toThrow(/trusted project/);
+			await expect(tool.execute("untrusted-tool-call", {}, undefined, undefined, untrustedCtx)).rejects.toThrow(
+				/trusted project/,
+			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("parses JSDoc @param tags into typed parameter schemas", () => {
+		const code = `/**
+ * @description Compute metrics.
+ * @param {string} metric The metric name
+ * @param {number} [threshold=10] Minimum threshold
+ * @param {boolean} verbose - Whether to log details
+ */
+return inputs;`;
+		const params = paramsFrom(code);
+		expect(params).toEqual([
+			{ name: "metric", type: "string", description: "The metric name", optional: false },
+			{ name: "threshold", type: "number", description: "Minimum threshold", optional: true },
+			{ name: "verbose", type: "boolean", description: "Whether to log details", optional: false },
+		]);
+		expect(savedProgramToolName("compute-metrics")).toBe("program_compute_metrics");
 	});
 
 	it("rejects malformed and out-of-project program directories", () => {

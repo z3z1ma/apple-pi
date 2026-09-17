@@ -163,7 +163,6 @@ try {
 		"search_session",
 		"revisit_note",
 		"pi_exec",
-		"pi_discover_programs",
 		"pi_exec_program",
 		"mcp",
 		"agent",

@@ -45,10 +45,14 @@ import {
 } from "./runtime-api.js";
 import { serializeJsonValue } from "./runtime-json.js";
 import {
+	buildProgramParametersSchema,
 	listSavedPrograms,
 	MAX_PROGRAM_NAME_CHARS,
+	paramsFrom,
 	PROJECT_PROGRAM_NAME,
 	readSavedProgram,
+	type SavedProgram,
+	savedProgramToolName,
 } from "./runtime-saved-programs.js";
 import { listSkills, readSkillBody } from "./runtime-skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
@@ -485,6 +489,7 @@ export default function runtime(pi: ExtensionAPI): void {
 		captureError = error instanceof Error ? error.message : String(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
+	const registeredProgramTools = new Set<string>();
 	const stateStore: ProgramStateStore = {
 		snapshots: new Map(),
 		prefix: randomBytes(6).toString("base64url"),
@@ -493,9 +498,16 @@ export default function runtime(pi: ExtensionAPI): void {
 	};
 	pi.on("session_shutdown", (_event, ctx) => {
 		stateStore.snapshots.delete(ctx.sessionManager.getSessionId());
+		registeredProgramTools.clear();
 	});
 	pi.on("tool_result", (event) => {
-		if ((event.toolName !== "pi_exec" && event.toolName !== "pi_exec_program") || !event.isError) return;
+		if (
+			(event.toolName !== "pi_exec" &&
+				event.toolName !== "pi_exec_program" &&
+				!event.toolName.startsWith("program_")) ||
+			!event.isError
+		)
+			return;
 		const failure = failedDetails.get(event.toolCallId);
 		if (!failure) return;
 		failedDetails.delete(event.toolCallId);
@@ -916,25 +928,91 @@ export default function runtime(pi: ExtensionAPI): void {
 	});
 	pi.registerTool(piExecTool);
 
-	pi.registerTool({
-		name: "pi_discover_programs",
-		label: "Discover Pi Exec Programs",
-		description:
-			"List project-local reusable pi_exec programs from .pi/programs. Each program is named by its normalized filename and described by its JSDoc @description.",
-		promptSnippet: savedProgramsSystemPromptContribution.discoverSnippet,
-		promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
-		parameters: Type.Object({}),
-		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
-				throw new Error("pi_exec saved programs require a trusted project");
+	function syncSavedProgramTools(cwd: string): void {
+		try {
+			const programs = listSavedPrograms(cwd);
+			for (const summary of programs) {
+				const toolName = savedProgramToolName(summary.name);
+				let program: SavedProgram;
+				try {
+					program = readSavedProgram(cwd, summary.name);
+				} catch {
+					continue;
+				}
+				const params = paramsFrom(program.code);
+				const parameters = buildProgramParametersSchema(
+					params,
+					piExecTool.parameters.properties.state,
+					piExecTool.parameters.properties.limits,
+				);
+				pi.registerTool({
+					name: toolName,
+					label: summary.description || summary.name,
+					executionMode: "sequential",
+					description: summary.description
+						? `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js): ${summary.description}`
+						: `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js).`,
+					promptSnippet: summary.description || `Run .pi/programs/${summary.name}.js`,
+					promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
+					parameters,
+					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
+						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
+							throw new Error("pi_exec saved programs require a trusted project");
+						}
+						const current = readSavedProgram(ctx.cwd, summary.name);
+						const { state, limits, inputs: explicitInputs, ...rest } = (rawParams ?? {}) as Record<string, any>;
+						const inputs: Record<string, string> = {
+							...(explicitInputs && typeof explicitInputs === "object" ? explicitInputs : {}),
+						};
+						for (const [key, value] of Object.entries(rest)) {
+							if (value !== undefined) {
+								inputs[key] = typeof value === "string" ? value : String(value);
+							}
+						}
+						return piExecTool.execute(
+							toolCallId,
+							{
+								code: current.code,
+								inputs,
+								...(state ? { state } : {}),
+								...(limits ? { limits } : {}),
+								display: { name: current.name, description: current.description },
+							},
+							signal,
+							onUpdate,
+							ctx,
+						);
+					},
+				});
+				registeredProgramTools.add(toolName);
 			}
-			const programs = listSavedPrograms(ctx.cwd);
-			return {
-				content: [{ type: "text", text: JSON.stringify(programs, null, 2) }],
-				details: { programs },
-			};
-		},
+		} catch {
+			// Directory missing, inaccessible, or unparseable.
+		}
+	}
+
+	function hasSessionMessages(ctx: { sessionManager?: { getBranch?: () => unknown[] } }): boolean {
+		try {
+			const branch = ctx.sessionManager?.getBranch?.() ?? [];
+			return branch.some((entry: any) => entry?.type === "message");
+		} catch {
+			return false;
+		}
+	}
+
+	pi.on("session_start", (_event, ctx) => {
+		syncSavedProgramTools(ctx.cwd);
 	});
+	pi.on("session_compact", (_event, ctx) => {
+		syncSavedProgramTools(ctx.cwd);
+	});
+	pi.on("before_agent_start", (_event, ctx) => {
+		if (!hasSessionMessages(ctx)) {
+			syncSavedProgramTools(ctx.cwd);
+		}
+	});
+
+	syncSavedProgramTools(process.cwd());
 
 	pi.registerTool({
 		name: "pi_exec_program",

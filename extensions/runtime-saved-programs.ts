@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import { Type } from "typebox";
 
 export const PROJECT_PROGRAMS_DIRECTORY = ".pi/programs";
 export const PROJECT_PROGRAM_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -16,6 +17,13 @@ export interface SavedProgram {
 export interface SavedProgramSummary {
 	name: string;
 	description: string;
+}
+
+export interface ProgramParam {
+	name: string;
+	type: "string" | "number" | "boolean";
+	description?: string;
+	optional: boolean;
 }
 
 function assertContained(root: string, path: string): void {
@@ -83,4 +91,60 @@ export function listSavedPrograms(cwd: string): SavedProgramSummary[] {
 /** Load one validated project-local Pi Exec program by its normalized filename. */
 export function readSavedProgram(cwd: string, name: string): SavedProgram {
 	return readProgram(cwd, name);
+}
+
+/** Convert a kebab-case program name into its registered tool identifier. */
+export function savedProgramToolName(name: string): string {
+	return `program_${name.replace(/-/g, "_")}`;
+}
+
+/** Extract declared @param annotations from the program's leading JSDoc block. */
+export function paramsFrom(code: string): ProgramParam[] {
+	const doc = /^\s*\/\*\*([\s\S]*?)\*\//.exec(code)?.[1];
+	if (!doc) return [];
+	const params: ProgramParam[] = [];
+	const seen = new Set<string>();
+	const regex =
+		/@param\s+(?:\{([^}]+)\}\s+)?(?:\[([a-zA-Z0-9_$]+)(?:=[^\]]+)?\]|([a-zA-Z0-9_$]+))(?:\s*-\s*|\s+)?([^\r\n]*)/g;
+	while (true) {
+		const match = regex.exec(doc);
+		if (!match) break;
+		const rawType = (match[1] || "").trim().toLowerCase();
+		const isOptional = Boolean(match[2]);
+		const paramName = match[2] || match[3];
+		if (!paramName || seen.has(paramName)) continue;
+		seen.add(paramName);
+		const description = match[4]?.trim() || undefined;
+		let type: "string" | "number" | "boolean" = "string";
+		if (rawType === "number" || rawType === "int" || rawType === "integer" || rawType === "float") {
+			type = "number";
+		} else if (rawType === "boolean" || rawType === "bool") {
+			type = "boolean";
+		}
+		params.push({ name: paramName, type, description, optional: isOptional });
+	}
+	return params;
+}
+
+/** Build the Typebox parameter schema for a saved program tool. */
+export function buildProgramParametersSchema(params: ProgramParam[], stateSchema: unknown, limitsSchema: unknown) {
+	const properties: Record<string, any> = {};
+	for (const param of params) {
+		if (param.name === "state" || param.name === "limits" || param.name === "inputs") continue;
+		const base =
+			param.type === "number"
+				? Type.Number({ description: param.description })
+				: param.type === "boolean"
+					? Type.Boolean({ description: param.description })
+					: Type.String({ description: param.description, maxLength: 200_000 });
+		properties[param.name] = param.optional ? Type.Optional(base) : base;
+	}
+	properties.inputs = Type.Optional(
+		Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
+			description: "Named strings available to the saved program as inputs.<key>.",
+		}),
+	);
+	properties.state = stateSchema;
+	properties.limits = limitsSchema;
+	return Type.Object(properties);
 }

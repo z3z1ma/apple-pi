@@ -373,10 +373,9 @@ export const PI_EXEC_PROMPT_SNIPPET =
 	"pi_exec: compose core Pi tools, fetch, and subagents with branching, fan-out, pipelines, and reduction";
 
 export const savedProgramsSystemPromptContribution = {
-	discoverSnippet: "List reusable project-local Pi Exec programs",
 	executeSnippet: "Run a reusable project-local Pi Exec program",
 	guidelines: [
-		"When a Pi Exec composition is reusable within this project, write its async-function body to .pi/programs/<lowercase-kebab-name>.js with a leading JSDoc @description. Use pi_discover_programs to find saved programs and pi_exec_program({ name }) to run one. Do not save one-off programs.",
+		"When a Pi Exec composition is reusable within this project, write its async-function body to .pi/programs/<lowercase-kebab-name>.js with a leading JSDoc @description and optional @param tags. Saved programs manifest as typed tools (program_<name>) across session starts and compactions, or run on-demand via pi_exec_program({ name }). Do not save one-off programs.",
 	],
 } as const;
 

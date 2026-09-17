@@ -179,7 +179,7 @@ return agent({
 
 - Use `pi_exec` for branching, reduction, or already-justified fan-out. Use direct tools for straightforward sequential inspection.
 - Mutate `state` only for data worth reusing across calls. Returned IDs are immutable and live-session-only; pass one as the tool's `state` parameter to resume or branch from it.
-- Persist a composition only when it is reusable within this project: write its async-function body to `.pi/programs/<lowercase-kebab-name>.js` beginning with a one-line JSDoc `@description`, then use `pi_discover_programs` and `pi_exec_program({ name })`. Do not save one-off programs.
+- Persist a composition only when it is reusable within this project: write its async-function body to `.pi/programs/<lowercase-kebab-name>.js` beginning with a one-line JSDoc `@description` and optional `@param` tags. Saved programs manifest as typed tools (`program_<name>`) across session starts and compactions, or run on-demand via `pi_exec_program({ name })`. Do not save one-off programs.
 - Await every host call. Do not start a call and return before it settles.
 - Keep dependent search → read and edit → verify steps sequential. Never concurrently edit the same file.
 - Return a compact value. Do not dump raw file bodies back into the main context.

@@ -8,20 +8,21 @@ The packaged [`pi-exec`](../skills/pi-exec) skill has the guest signatures and t
 
 ## Saved project programs
 
-When a composition is reusable in one project, save its **async-function body** in `.pi/programs/<lowercase-kebab-name>.js`. Do not persist one-off programs. A saved program must begin with a one-line JSDoc `@description`; the normalized filename is its name and the description is its discoverable label:
+When a composition is reusable in one project, save its **async-function body** in `.pi/programs/<lowercase-kebab-name>.js`. Do not persist one-off programs. A saved program must begin with a one-line JSDoc `@description` and can declare typed parameters via `@param` annotations:
 
 ```javascript
 /**
  * @description List changed TypeScript paths for a quick review pass.
+ * @param {string} [dir=components] Base directory to inspect
  */
-const change = await std.git.change({ paths: ["components"] });
+const change = await std.git.change({ paths: [inputs.dir || "components"] });
 return change.changedFiles.filter((path) => path.endsWith(".ts"));
 ```
 
-- `pi_discover_programs({})` lists the valid saved programs as `{ name, description }` without evaluating them.
-- `pi_exec_program({ name, inputs?, state?, limits? })` loads and executes `.pi/programs/<name>.js` with the same bounded guest runtime as `pi_exec`. The JSDoc description supplies its execution label; `inputs`, `state`, and `limits` have the same contracts as `pi_exec`.
-
-Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it. Both tools require a trusted project because saved programs are repository-owned executable code.
+- **Code-as-Tools (`program_<name>`)**: Saved programs manifest directly as native, typed tools (e.g. `.pi/programs/review-diff.js` becomes `program_review_diff`). Parameter schemas are dynamically synthesized from `@param` tags (`{string}`, `{number}`, `{boolean}`, optionality brackets `[name]`, and descriptions).
+- **Prefix cache stability**: To preserve provider KV-cache hit rates and avoid mid-turn prefix invalidation, tool definitions are strictly synchronized at cache-safe boundaries: session startup/switch/reload (`session_start`), before the first message of a session (`before_agent_start` when the session has no prior messages), and after compaction (`session_compact`). Mid-turn edits to `.pi/programs/` do not mutate active tool schemas.
+- **Dynamic execution (`pi_exec_program`)**: `pi_exec_program({ name, inputs?, state?, limits? })` loads and executes `.pi/programs/<name>.js` on demand by filename, allowing immediate testing of newly written programs before the next compaction or session boundary.
+- **Disk source of truth**: When calling either `program_<name>` or `pi_exec_program`, the program is re-read from disk on execution. Both require a trusted project because saved programs are repository-owned executable code. Names contain only lowercase letters, numbers, and single hyphens, and are at most 120 characters. The programs directory and files must resolve within the project; only regular `.js` files are accepted. Discovery and execution reject a malformed description rather than guessing it.
 
 ## Guest surface
 

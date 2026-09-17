@@ -61,7 +61,12 @@ export const capturedTools = (): CapturedTool[] => {
 	const byName = new Map<string, CapturedTool>();
 	for (const registered of hub()?.latest ?? []) {
 		const definition = registered.definition;
-		if (EXCLUDED_TOOL_NAMES.has(definition.name) || byName.has(definition.name)) continue;
+		if (
+			EXCLUDED_TOOL_NAMES.has(definition.name) ||
+			definition.name.startsWith("program_") ||
+			byName.has(definition.name)
+		)
+			continue;
 		byName.set(definition.name, {
 			name: definition.name,
 			description: definition.description,
