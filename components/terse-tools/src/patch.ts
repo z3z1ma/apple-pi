@@ -2,8 +2,10 @@ import {
 	AssistantMessageComponent,
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
+	ExtensionRunner,
 	Theme,
 	ToolExecutionComponent,
+	UserMessageComponent,
 	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
@@ -13,6 +15,8 @@ import {
 	formatExpandedLines,
 	formatThoughtHeader,
 	formatThoughtSnippet,
+	formatUserMessage,
+	makeMarkdownTheme,
 	stripAnsi,
 } from "./formatters.js";
 import type { ToolStatus } from "./types.js";
@@ -20,6 +24,11 @@ import type { ToolStatus } from "./types.js";
 const PATCH_APPLIED = Symbol.for("apple_pi.terse_tools_patched");
 
 let activeTheme: Theme | undefined;
+
+const userMessageRenderCache = new WeakMap<
+	object,
+	{ text: string; width: number; theme: Theme; renderedLines: string[] }
+>();
 
 const fallbackTheme: Theme = {
 	fg(color: string, text: string) {
@@ -412,5 +421,59 @@ export function installTerseToolRenderer(): void {
 		const summary = (this as any).message?.summary;
 		const expanded = Boolean((this as any).expanded);
 		return formatCompactionSummary("Branch summary", summary, expanded, width, theme, mdTheme);
+	};
+
+	const origUserMessageRender = UserMessageComponent.prototype.render;
+	const origUserMessageInvalidate = UserMessageComponent.prototype.invalidate;
+
+	UserMessageComponent.prototype.invalidate = function () {
+		userMessageRenderCache.delete(this);
+		if (typeof origUserMessageInvalidate === "function") {
+			return origUserMessageInvalidate.call(this);
+		}
+	};
+
+	// Suppress shortcut conflict warnings from our own package. These are
+	// informational — the extension override still wins — and the user has
+	// intentionally overridden the built-in keybindings.
+	const origGetShortcutDiagnostics = ExtensionRunner.prototype.getShortcutDiagnostics;
+	ExtensionRunner.prototype.getShortcutDiagnostics = function () {
+		const diagnostics = origGetShortcutDiagnostics.call(this);
+		return diagnostics.filter((d: { message?: string }) => !d.message?.includes("Using "));
+	};
+
+	UserMessageComponent.prototype.render = function (width: number): string[] {
+		const text = (this as any).text;
+		if (typeof text !== "string") {
+			return origUserMessageRender.call(this, width);
+		}
+
+		const theme = getActiveTheme();
+		const cached = userMessageRenderCache.get(this);
+		if (cached && cached.text === text && cached.width === width && cached.theme === theme) {
+			return cached.renderedLines;
+		}
+
+		try {
+			const childMarkdown = (this as any).children?.[0]?.children?.[0];
+			const mdTheme = makeMarkdownTheme(theme);
+			const defaultTextStyle = {
+				color: (content: string) => theme.fg("userMessageText", content),
+			};
+			const options = childMarkdown?.options;
+
+			const lines = formatUserMessage(text, width, theme, mdTheme, defaultTextStyle, options);
+
+			userMessageRenderCache.set(this, {
+				text,
+				width,
+				theme,
+				renderedLines: lines,
+			});
+
+			return lines;
+		} catch {
+			return origUserMessageRender.call(this, width);
+		}
 	};
 }

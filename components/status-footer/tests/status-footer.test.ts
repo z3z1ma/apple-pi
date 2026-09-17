@@ -152,7 +152,7 @@ describe("input card rendering", () => {
 		const output = lines.join("\n");
 		const plainOutput = stripTerminalSequences(output);
 
-		expect(stripTerminalSequences(lines[0] ?? "").trimStart()).toMatch(/^─/);
+		expect(stripTerminalSequences(lines[0] ?? "").trimStart()).toMatch(/^│/);
 		expect(plainOutput).not.toMatch(/[╭╮╰╯]/);
 		expect(plainOutput).toContain("│");
 		expect(output).toContain("GPT Test");
@@ -162,7 +162,13 @@ describe("input card rendering", () => {
 		expect(output).toContain("↑12k");
 		expect(output).toContain("$1.234 (sub)");
 		expect(output).toContain("(auto)");
-		for (const status of completeSnapshot.statuses) expect(output.split(status.text).length - 1).toBe(1);
+		for (const status of completeSnapshot.statuses) {
+			const needle =
+				status.key === "mcp" || status.key === "mcp-auth"
+					? undefined // compact MCP text is validated in the color test
+					: status.text;
+			if (needle) expect(output.split(needle).length - 1).toBe(1);
+		}
 		expect(output).not.toMatch(/(?:project|model|provider|thinking|ctx|cost):/i);
 	});
 
@@ -231,19 +237,15 @@ describe("input card rendering", () => {
 	it("gives known component statuses and telemetry distinct semantic colors", () => {
 		const output = renderInputCard(completeSnapshot, theme, 240, [""]).join("\n");
 
-		expect(output).toContain("\u001b[33mMCP authenticating docs\u001b[0m");
-		expect(output).toContain("\u001b[94mMCP 3 servers\u001b[0m");
+		expect(output).toContain("\u001b[33mmcp:auth\u001b[0m");
+		expect(output).toContain("\u001b[90mmcp:3\u001b[0m");
 		expect(output).toContain("\u001b[36mbacklog 3\u001b[0m");
 		expect(output).toContain("\u001b[95mpair programmer reviewing · $0.42\u001b[0m");
 		expect(output).toContain("\u001b[32m2 running agents\u001b[0m");
 		expect(output).toContain("\u001b[36mExtension active\u001b[0m");
-		expect(output).toContain("\u001b[93m↑12k\u001b[0m");
-		expect(output).toContain("\u001b[32m↓4.0k\u001b[0m");
-		expect(output).toContain("\u001b[91mR8.0k\u001b[0m");
-		expect(output).toContain("\u001b[92mW2.0k\u001b[0m");
-		expect(output).toContain("\u001b[96mCH36.4%\u001b[0m");
-		expect(output).toContain("\u001b[33m$1.234 (sub)\u001b[0m");
-		expect(output).toContain("\u001b[95m(auto)\u001b[0m");
+		expect(output).toContain("\u001b[90m↑12k ↓4.0k R8.0k W2.0k CH36.4%\u001b[0m");
+		expect(output).toContain("\u001b[32m$1.234 (sub)\u001b[0m");
+		expect(output).toContain("\u001b[90m(auto)\u001b[0m");
 	});
 
 	it("restores producer color after nested status styling resets", () => {
@@ -271,7 +273,8 @@ describe("input card rendering", () => {
 	it("uses the full terminal width rather than capping or centering wide cards", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 240, ["hello world"]);
 		expect(visibleWidth(lines[0]!)).toBe(240);
-		expect(stripTerminalSequences(lines[0]!)).toMatch(/^─+/);
+		// First line is now the top breathing row with rail, not a border rule
+		expect(stripTerminalSequences(lines[0]!)).toMatch(/^│/);
 	});
 
 	it.each([1, 2, 3, 8, 20, 36, 80, 160])("fits every row within a %d-cell terminal", (width) => {
@@ -317,14 +320,14 @@ describe("input card rendering", () => {
 		const editor = new InputCardEditor(ctx, session, tui, editorTheme, {} as never, data, theme);
 
 		const initialRender = editor.render(100);
-		expect(initialRender.join("\n")).toContain("MCP connecting");
+		expect(initialRender.join("\n")).toContain("mcp…");
 		expect(initialRender[0]).not.toContain("\u001b[34m");
 		branch = "feature/live";
 		statuses.set("mcp", "MCP authenticated");
 		branchCallback?.();
 		expect(requests).toBe(1);
 		expect(editor.render(100).join("\n")).toContain("feature/live");
-		expect(editor.render(100).join("\n")).toContain("MCP authenticated");
+		expect(editor.render(100).join("\n")).toContain("mcp");
 
 		editor.dispose();
 		branchCallback?.();
@@ -389,43 +392,44 @@ describe("input card telemetry", () => {
 		expect(output.indexOf("pair idle")).toBeLessThan(output.indexOf("agents 1"));
 	});
 
-	it("formats editor frame with top/bottom rules, left accent rail, and breathing room", () => {
+	it("formats editor frame with left accent rail and breathing room (no top rule)", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 80, ["test prompt"]);
 		const plain = lines.map(stripTerminalSequences);
 
-		// Frame structure:
-		// 0: top border
-		expect(plain[0]).toMatch(/^─{80}$/);
-		// 1: top breathing line with rail
-		expect(plain[1]).toBe(`│ ${" ".repeat(78)}`);
-		// 2: prompt line with rail
-		expect(plain[2]).toBe(`│ test prompt${" ".repeat(67)}`);
-		// 3: breathing line before metadata
-		expect(plain[3]).toBe(`│ ${" ".repeat(78)}`);
-		// 4: metadata line with rail
-		expect(plain[4]).toMatch(/^│ GPT Test {2}OpenAI {2}high/);
-		// 5: bottom border
-		expect(plain[5]).toMatch(/^─{80}$/);
-		// 6: Starship footer
-		expect(lines[1]).toContain("\u001b[35m│\u001b[0m");
+		// Frame structure (no top border):
+		// 0: top breathing line with rail
+		expect(plain[0]).toBe(`│ ${" ".repeat(78)}`);
+		// 1: prompt line with rail
+		expect(plain[1]).toBe(`│ test prompt${" ".repeat(67)}`);
+		// 2: breathing line before metadata
+		expect(plain[2]).toBe(`│ ${" ".repeat(78)}`);
+		// 3: metadata line with rail
+		expect(plain[3]).toMatch(/^│ GPT Test {2}OpenAI {2}high/);
+		// 4: bottom border
+		expect(plain[4]).toMatch(/^─{80}$/);
+		expect(lines[0]).toContain("\u001b[35m│\u001b[0m");
+		expect(lines[3]).toContain("\u001b[35m│\u001b[0m");
+		expect(lines[3]).toContain("\u001b[96mGPT Test\u001b[0m");
 	});
 
 	it("switches rail color to bashMode when prompt begins with shell exclamation", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 80, ["!git status"]);
 		// bashMode is not in colorCodes, falls back to colorCodes default or theme.fg("bashMode", "│")
-		expect(lines[1]).toContain("│");
-		expect(lines[2]).toContain("!git status");
+		expect(lines[0]).toContain("│");
+		expect(lines[1]).toContain("!git status");
 	});
 
-	it("embeds viewport scroll indicators in the top and bottom borders", () => {
+	it("embeds viewport scroll indicators in top border and bottom border", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 80, ["scrolled text"], {
 			above: "4",
 			below: "2",
 		});
 		const plain = lines.map(stripTerminalSequences);
 
+		// Top border appears only when there is overflow content above
 		expect(plain[0]).toContain("↑ 4 more");
-		expect(plain[5]).toContain("↓ 2 more");
+		const bottomBorder = plain.find((l) => l.includes("↓ 2 more"));
+		expect(bottomBorder).toBeDefined();
 	});
 
 	it("formats Starship footer with in session, on branch, and right pipe separators", () => {

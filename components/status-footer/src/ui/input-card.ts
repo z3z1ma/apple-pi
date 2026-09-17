@@ -109,11 +109,11 @@ function orderedStatuses(statuses: readonly FooterStatus[]): FooterStatus[] {
 	});
 }
 
-function contextColor(percent: number | null): "error" | "muted" | "success" | "warning" {
+function contextColor(percent: number | null): "dim" | "error" | "muted" | "warning" {
 	if (percent === null) return "muted";
 	if (percent > 90) return "error";
 	if (percent > 70) return "warning";
-	return "success";
+	return "dim";
 }
 
 /** Apply a foreground while restoring it after cursor or producer-owned ANSI resets. */
@@ -130,14 +130,30 @@ function statusColor(status: FooterStatus): ThemeColor {
 	const text = stripTerminalSequences(status.text).toLowerCase();
 	if (/\b(?:error|failed|failure)\b/.test(text)) return "error";
 	if (status.key === "mcp-auth") return "warning";
-	if (status.key === "mcp") return /\b(?:connecting|authenticating)\b/.test(text) ? "warning" : "syntaxFunction";
+	if (status.key === "mcp") return /\b(?:connecting|authenticating)\b/.test(text) ? "warning" : "dim";
 	if (status.key === "q-pair") return text.includes("reviewing") ? "customMessageLabel" : "muted";
 	if (status.key === "subagents") return /\b(?:queued|waiting|stopped)\b/.test(text) ? "warning" : "success";
 	return "muted";
 }
 
+function formatCompactMcpStatus(text: string): string {
+	const plain = stripTerminalSequences(text);
+	const serverMatch = plain.match(/(\d+)\s*(?:\/\d+\s*)?server/i);
+	if (serverMatch) return `mcp:${serverMatch[1]}`;
+	const ratioMatch = plain.match(/MCP\s+(\d+\/\d+)/i);
+	if (ratioMatch) return `mcp:${ratioMatch[1]}`;
+	if (/\bconnecting\b/i.test(plain)) return "mcp…";
+	if (/\bauthenticat/i.test(plain)) return "mcp:auth";
+	if (/\b(?:error|fail)/i.test(plain)) return "mcp:err";
+	return "mcp";
+}
+
 function styleStatus(status: FooterStatus, theme: Theme): string {
-	return fgPreservingNestedStyles(theme, statusColor(status), sanitizeStatusText(status.text));
+	const displayText =
+		status.key === "mcp" || status.key === "mcp-auth"
+			? formatCompactMcpStatus(status.text)
+			: sanitizeStatusText(status.text);
+	return fgPreservingNestedStyles(theme, statusColor(status), displayText);
 }
 
 function joinSegments(segments: readonly RenderSegment[], separator: string): string {
@@ -235,6 +251,7 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 			});
 		}
 	}
+
 	if (snapshot.sessionName) {
 		segments.push({
 			text: `in ${theme.fg("syntaxVariable", cleanOneLine(snapshot.sessionName))}`,
@@ -250,7 +267,11 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 
 	const statuses = orderedStatuses(snapshot.statuses).filter(
 		(status) =>
-			status.key !== FLEET_NAVIGATION_STATUS && status.key !== FAST_MODE_STATUS && sanitizeStatusText(status.text),
+			status.key !== FLEET_NAVIGATION_STATUS &&
+			status.key !== FAST_MODE_STATUS &&
+			status.key !== "mcp" &&
+			status.key !== "mcp-auth" &&
+			sanitizeStatusText(status.text),
 	);
 	for (const status of statuses) {
 		segments.push({
@@ -293,7 +314,7 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
 	const fast = snapshot.fastModeEnabled && VROOM_PROVIDERS.has(snapshot.model.provider) ? " ⚡" : "";
 
-	const modelPart = theme.bold(theme.fg("accent", model));
+	const modelPart = theme.bold(theme.fg("syntaxType", model));
 	const providerPart = theme.fg("muted", provider);
 
 	let thinkingPart = "";
@@ -328,7 +349,7 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 		const percent = context.percent === null ? "?" : `${context.percent.toFixed(1)}%`;
 		const percentText = theme.fg(contextColor(context.percent), percent);
 		const windowText = context.contextWindow > 0 ? theme.fg("dim", `/${formatTokens(context.contextWindow)}`) : "";
-		const autoText = snapshot.autoCompactionEnabled ? ` ${theme.fg("syntaxKeyword", "(auto)")}` : "";
+		const autoText = snapshot.autoCompactionEnabled ? ` ${theme.fg("dim", "(auto)")}` : "";
 		segments.push({
 			text: `${percentText}${windowText}${autoText}`,
 			priority: 1,
@@ -336,7 +357,7 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 		});
 	} else if (snapshot.autoCompactionEnabled) {
 		segments.push({
-			text: theme.fg("syntaxKeyword", "(auto)"),
+			text: theme.fg("dim", "(auto)"),
 			priority: 2,
 		});
 	}
@@ -344,16 +365,16 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 	const usage = snapshot.usage;
 	if (usage) {
 		const tokenParts: string[] = [];
-		if (usage.input) tokenParts.push(theme.fg("syntaxVariable", `↑${formatTokens(usage.input)}`));
-		if (usage.output) tokenParts.push(theme.fg("success", `↓${formatTokens(usage.output)}`));
-		if (usage.cacheRead) tokenParts.push(theme.fg("syntaxNumber", `R${formatTokens(usage.cacheRead)}`));
-		if (usage.cacheWrite) tokenParts.push(theme.fg("syntaxString", `W${formatTokens(usage.cacheWrite)}`));
+		if (usage.input) tokenParts.push(`↑${formatTokens(usage.input)}`);
+		if (usage.output) tokenParts.push(`↓${formatTokens(usage.output)}`);
+		if (usage.cacheRead) tokenParts.push(`R${formatTokens(usage.cacheRead)}`);
+		if (usage.cacheWrite) tokenParts.push(`W${formatTokens(usage.cacheWrite)}`);
 		if ((usage.cacheRead > 0 || usage.cacheWrite > 0) && usage.latestCacheHitRate !== undefined) {
-			tokenParts.push(theme.fg("syntaxType", `CH${usage.latestCacheHitRate.toFixed(1)}%`));
+			tokenParts.push(`CH${usage.latestCacheHitRate.toFixed(1)}%`);
 		}
 		if (tokenParts.length > 0) {
 			segments.push({
-				text: tokenParts.join(" "),
+				text: theme.fg("dim", tokenParts.join(" ")),
 				priority: 3,
 			});
 		}
@@ -361,13 +382,22 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 
 	if (usage && (usage.cost !== 0 || snapshot.usingSubscription === true)) {
 		segments.push({
-			text: theme.fg("warning", `$${usage.cost.toFixed(3)}${snapshot.usingSubscription ? " (sub)" : ""}`),
+			text: theme.fg("success", `$${usage.cost.toFixed(3)}${snapshot.usingSubscription ? " (sub)" : ""}`),
 			priority: 2,
 		});
 	} else if (snapshot.usingSubscription === true) {
 		segments.push({
-			text: theme.fg("warning", "$0.000 (sub)"),
+			text: theme.fg("success", "$0.000 (sub)"),
 			priority: 2,
+		});
+	}
+	const mcpStatuses = snapshot.statuses.filter(
+		(status) => (status.key === "mcp" || status.key === "mcp-auth") && sanitizeStatusText(status.text),
+	);
+	for (const status of mcpStatuses) {
+		segments.push({
+			text: styleStatus(status, theme),
+			priority: 1,
 		});
 	}
 	return segments;
@@ -452,10 +482,14 @@ export function renderInputCard(
 	const isShellMode = (prompt[0] ?? "").trimStart().startsWith("!");
 	const rail = editorRail(theme, isShellMode);
 
-	const topRule = fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport?.above)), width);
 	const bottomRule = fitToWidth(theme.fg("dim", renderEditorBorder(width, "below", viewport?.below)), width);
 
-	const rows: string[] = [topRule];
+	const rows: string[] = [];
+
+	// Show top border only when there is scrolled-off content above the viewport.
+	if (viewport?.above) {
+		rows.push(fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport.above)), width));
+	}
 
 	// Top padding line
 	rows.push(`${rail}${" ".repeat(innerWidth)}`);

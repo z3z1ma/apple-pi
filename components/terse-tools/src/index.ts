@@ -8,8 +8,10 @@ export {
 	formatThoughtSnippet,
 	formatToolArgs,
 	formatToolName,
+	formatUserMessage,
 	parseDiff,
 	stripAnsi,
+	withPromptZoneMarkers,
 } from "./formatters.js";
 export { default } from "./installer.js";
 export {

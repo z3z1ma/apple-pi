@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
-import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Markdown, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { type Theme, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { Markdown, type MarkdownTheme, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
 const HOME = homedir();
@@ -60,7 +60,7 @@ export function formatThoughtHeader(durationMs: number | undefined, tokens: numb
 }
 
 export function stripAnsi(str: string): string {
-	return str.replace(/\x1b\[[0-9;]*m/g, "");
+	return str.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
 }
 
 export function formatThoughtSnippet(thinkingText: string, width: number, theme: Theme): string {
@@ -591,4 +591,85 @@ export function formatCompactionSummary(
 	}
 
 	return [headerLine, "", ...summaryLines, "", closingLine];
+}
+
+const OSC133_ZONE_START = "\x1b]133;A\x07";
+const OSC133_ZONE_END = "\x1b]133;B\x07";
+const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
+
+export function withPromptZoneMarkers(lines: string[]): string[] {
+	if (lines.length === 0) return lines;
+	if (lines.length === 1) {
+		return [`${OSC133_ZONE_START}${lines[0]}${OSC133_ZONE_END}${OSC133_ZONE_FINAL}`];
+	}
+	const marked = [...lines];
+	marked[0] = `${OSC133_ZONE_START}${marked[0]}`;
+	marked[marked.length - 1] = `${OSC133_ZONE_END}${OSC133_ZONE_FINAL}${marked[marked.length - 1]}`;
+	return marked;
+}
+
+export function makeMarkdownTheme(theme: Theme): MarkdownTheme {
+	const fg = (color: Parameters<Theme["fg"]>[0], text: string) => theme.fg(color, text);
+	return {
+		heading: (text) => fg("mdHeading", text),
+		link: (text) => fg("mdLink", text),
+		linkUrl: (text) => fg("mdLinkUrl", text),
+		code: (text) => fg("mdCode", text),
+		codeBlock: (text) => fg("mdCodeBlock", text),
+		codeBlockBorder: (text) => fg("mdCodeBlockBorder", text),
+		quote: (text) => fg("mdQuote", text),
+		quoteBorder: (text) => fg("mdQuoteBorder", text),
+		hr: (text) => fg("mdHr", text),
+		listBullet: (text) => fg("mdListBullet", text),
+		bold: (text) => theme.bold(text),
+		italic: (text) => theme.italic(text),
+		underline: (text) => theme.underline(text),
+		strikethrough: (text) => theme.strikethrough(text),
+	};
+}
+
+export function formatUserMessage(
+	text: string,
+	width: number,
+	theme: Theme,
+	markdownTheme?: MarkdownTheme,
+	defaultTextStyle?: { color?: (content: string) => string },
+	options?: Record<string, unknown>,
+): string[] {
+	const safeWidth = Math.max(0, Math.floor(width));
+	if (safeWidth <= 0) return [];
+	if (safeWidth <= 2) return [truncateToWidth(text, safeWidth, "")];
+
+	const rail = `${theme.fg("accent", "│")} `;
+	const railWidth = visibleWidth(rail);
+	const contentWidth = Math.max(1, safeWidth - railWidth);
+
+	const md = new Markdown(
+		text,
+		0,
+		0,
+		markdownTheme ?? makeMarkdownTheme(theme),
+		defaultTextStyle ?? {
+			color: (content: string) => theme.fg("userMessageText", content),
+		},
+		{
+			preserveOrderedListMarkers: true,
+			preserveBackslashEscapes: true,
+			...options,
+		},
+	);
+
+	const rawLines = md.render(contentWidth);
+	const body = rawLines.length > 0 ? rawLines : [""];
+
+	const row = (line: string) => {
+		const available = Math.max(0, safeWidth - railWidth);
+		const truncated = truncateToWidth(line, available, "");
+		const pad = " ".repeat(Math.max(0, available - visibleWidth(truncated)));
+		return truncateToWidth(`${rail}${truncated}${pad}`, safeWidth, "");
+	};
+
+	const lines = [row(""), ...body.map(row), row("")];
+
+	return withPromptZoneMarkers(lines);
 }
