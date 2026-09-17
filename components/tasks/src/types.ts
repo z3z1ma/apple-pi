@@ -53,6 +53,14 @@ export const bashParameters = Type.Object({
 
 export type BashParameters = Static<typeof bashParameters>;
 
+export const execBashParameters = Type.Object({
+	command: Type.String({ description: "Shell command to execute" }),
+	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	stdin: Type.Optional(Type.String({ description: "Optional standard input to pass to the command" })),
+});
+
+export type ExecBashParameters = Static<typeof execBashParameters>;
+
 export const taskParameters = Type.Object({
 	action: Type.Union([Type.Literal("list"), Type.Literal("status"), Type.Literal("kill")], {
 		description:

@@ -616,9 +616,15 @@ describe("pi_exec guest API documentation", () => {
 			"{ path: string, edits: [{ oldText: string, newText: string }] }",
 		);
 		expect(formatObjectSignature(definitions.bash.parameters)).toContain("stdin?: string");
+		expect(formatObjectSignature(definitions.bash.parameters)).not.toContain("verbatim");
+		expect(formatObjectSignature(definitions.bash.parameters)).not.toContain("run_in_background");
 		for (const signature of coreGuestSignatures()) {
 			expect(signature).toMatch(/^pi\.[a-z]+\(\{ /);
 			expect(signature).toMatch(/ → Promise</);
+			if (signature.startsWith("pi.bash(")) {
+				expect(signature).not.toContain("verbatim");
+				expect(signature).not.toContain("run_in_background");
+			}
 		}
 	});
 

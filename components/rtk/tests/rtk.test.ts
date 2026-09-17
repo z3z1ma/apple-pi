@@ -9,7 +9,7 @@ import {
 	RTK_SYSTEM_PROMPT_SECTION,
 } from "../src/index.js";
 import { formatCollapsedLine, formatStatusBullet, stripAnsi } from "../../terse-tools/src/formatters.js";
-import { createBashToolDefinition } from "../../tasks/src/bash-tool.js";
+import { createBashToolDefinition, createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
 import installRtk from "../../../extensions/rtk.js";
 
 const mockTheme = {
@@ -174,7 +174,7 @@ describe("Bash tool verbatim parameter", () => {
 		expect(result.details?.rtk).toBe(true);
 	});
 
-	it("defaults to verbatim execution when verbatim is omitted on direct execute", async () => {
+	it("rewrites commands by default when verbatim is omitted on direct execute", async () => {
 		const bashDef = createBashToolDefinition();
 		const result = await bashDef.execute(
 			"call-3",
@@ -185,7 +185,7 @@ describe("Bash tool verbatim parameter", () => {
 			undefined,
 			{} as any,
 		);
-		expect(result.details?.rtk).toBe(false);
+		expect(result.details?.rtk).toBe(true);
 	});
 });
 
@@ -306,5 +306,56 @@ describe("RTK extension tool_call lifecycle", () => {
 
 		expect(input.path).toBe("some/file.ts");
 		expect((input as any)._rtk).toBeUndefined();
+	});
+});
+
+describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
+	it("createBashToolDefinition includes verbatim parameter", () => {
+		const tool = createBashToolDefinition();
+		const properties = (tool.parameters as any).properties;
+		expect(properties.verbatim).toBeDefined();
+		expect(properties.verbatim.description).toContain("RTK");
+		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim: true"))).toBe(true);
+	});
+
+	it("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("call-1", { command: "git status" }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(true);
+	});
+
+	it("createBashToolDefinition rewrites commands when verbatim is false", async () => {
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("call-2", { command: "git status", verbatim: false }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(true);
+	});
+
+	it("createBashToolDefinition runs verbatim when verbatim is true", async () => {
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("call-3", { command: "git status", verbatim: true }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(false);
+	});
+
+	it("createExecBashToolDefinition does not include verbatim or run_in_background parameters", () => {
+		const tool = createExecBashToolDefinition();
+		const properties = (tool.parameters as any).properties;
+		expect(properties.verbatim).toBeUndefined();
+		expect(properties.run_in_background).toBeUndefined();
+		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim"))).toBe(false);
+		expect(tool.promptGuidelines?.some((g: string) => g.includes("run_in_background"))).toBe(false);
+	});
+
+	it("createExecBashToolDefinition never rewrites commands with RTK", async () => {
+		const tool = createExecBashToolDefinition();
+		const result = await tool.execute("call-4", { command: "git status" }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(false);
 	});
 });

@@ -20,7 +20,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { loadSearchRootGuardConfig } from "../components/home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../components/home-search-guard/src/index.js";
-import { createBashToolDefinition } from "../components/tasks/src/bash-tool.js";
+import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
 import {
 	PROGRAM_ENVELOPE_MAXIMA,
 	type ProgramEnvelope,
@@ -227,7 +227,7 @@ function definitionsFor(cwd: string): CoreDefinitions {
 			grep: createGrepToolDefinition(cwd),
 			find: createFindToolDefinition(cwd),
 			ls: createLsToolDefinition(cwd),
-			bash: createBashToolDefinition(cwd),
+			bash: createExecBashToolDefinition(cwd),
 			edit: createEditToolDefinition(cwd),
 			write: createWriteToolDefinition(cwd),
 		};
@@ -821,19 +821,15 @@ export default function runtime(pi: ExtensionAPI): void {
 						const match = /^pi\.(.+)$/.exec(ref);
 						const name = match?.[1];
 						if (!name || !CORE_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
-						const definition = capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!;
+						const definition =
+							name === "bash"
+								? definitionsFor(ctx.cwd).bash
+								: (capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!);
 						try {
 							const config = loadSearchRootGuardConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 							const blocked = searchRootBlockReason(name, rawArgs, ctx.cwd, { home: homedir(), ...config });
 							if (blocked) throw new Error(blocked);
-							const toolArgs =
-								name === "bash" &&
-								rawArgs &&
-								typeof rawArgs === "object" &&
-								(rawArgs as Record<string, unknown>).verbatim === undefined
-									? { ...(rawArgs as Record<string, unknown>), verbatim: true }
-									: rawArgs;
-							const result = await invokeDefinition(definition, toolArgs, operation, runtimeSignal);
+							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
 							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
 							value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
 						} catch (error) {

@@ -24,7 +24,7 @@
    Standard mutation-capable child sessions inherit the RTK extension and benefit from command output compression.
 
 6. **Pi Exec Isolation**:
-   Inside `pi_exec`, commands run uncompressed (verbatim) by default. Guest JavaScript compositions and standard library helpers (such as `std.git`) require exact outputs for deterministic parsing. RTK rewriting only applies in `pi_exec` if `verbatim: false` is explicitly supplied.
+   Inside `pi_exec`, `pi.bash` is isolated from both RTK rewriting and background tasks. Guest JavaScript scripts require deterministic, unaltered command outputs for parsing. The `pi.bash` guest signature accepts `{ command, timeout?, stdin? }` without `verbatim` or `run_in_background` parameters, ensuring commands always execute raw and return their output to the script promise.
 
 ## The `verbatim` Parameter
 

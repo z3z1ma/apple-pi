@@ -72,4 +72,4 @@ export default installTasks;
 export { TaskManager } from "./task-manager.js";
 export { OutputBuffer } from "./output-buffer.js";
 export * from "./types.js";
-export { createBackgroundTaskBashTool, createBashToolDefinition } from "./bash-tool.js";
+export { createBackgroundTaskBashTool, createBashToolDefinition, createExecBashToolDefinition } from "./bash-tool.js";

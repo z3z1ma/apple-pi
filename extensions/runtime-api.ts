@@ -13,7 +13,7 @@ import {
 	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
 	TEAM_SYSTEM_PROMPT_TAG,
 } from "../components/subagents/src/team-system-prompt.js";
-import { createBashToolDefinition } from "../components/tasks/src/bash-tool.js";
+import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
 import { capturedTools } from "./runtime-tools.js";
 
 const CORE_TOOL_FACTORIES = {
@@ -21,7 +21,7 @@ const CORE_TOOL_FACTORIES = {
 	grep: createGrepToolDefinition,
 	find: createFindToolDefinition,
 	ls: createLsToolDefinition,
-	bash: createBashToolDefinition,
+	bash: createExecBashToolDefinition,
 	edit: createEditToolDefinition,
 	write: createWriteToolDefinition,
 } as const;

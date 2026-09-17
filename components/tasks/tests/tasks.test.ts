@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
-import { createBackgroundTaskBashTool } from "../src/bash-tool.js";
+import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
 import installTasks from "../src/index.js";
 import { OutputBuffer } from "../src/output-buffer.js";
 import { TaskManager } from "../src/task-manager.js";
@@ -350,6 +350,45 @@ describe("tasks component", () => {
 			});
 
 			expect(registeredTools.length).toBe(0);
+		});
+	});
+
+	describe("createExecBashToolDefinition", () => {
+		it("excludes run_in_background and verbatim from parameter schema", () => {
+			const tool = createExecBashToolDefinition();
+			const props = (tool.parameters as any).properties;
+			expect(props.command).toBeDefined();
+			expect(props.timeout).toBeDefined();
+			expect(props.stdin).toBeDefined();
+			expect(props.run_in_background).toBeUndefined();
+			expect(props.verbatim).toBeUndefined();
+		});
+
+		it("does not mention backgrounding or verbatim in guidelines and description", () => {
+			const tool = createExecBashToolDefinition();
+			expect(tool.description).not.toContain("run_in_background");
+			expect(tool.description).not.toContain("Ctrl+B");
+			expect(tool.promptSnippet).not.toContain("background");
+			for (const guideline of tool.promptGuidelines ?? []) {
+				expect(guideline).not.toContain("run_in_background");
+				expect(guideline).not.toContain("Ctrl+B");
+				expect(guideline).not.toContain("verbatim");
+			}
+		});
+
+		it("executes commands directly without backgrounding support", async () => {
+			const tool = createExecBashToolDefinition();
+			const result = await tool.execute(
+				"call-exec",
+				{ command: "node -e \"console.log('direct output');\"" },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+			const text = getResultText(result);
+			expect(text).toContain("direct output");
+			expect(result.details?.backgrounded).toBeUndefined();
+			expect(result.details?.rtk).toBe(false);
 		});
 	});
 });
