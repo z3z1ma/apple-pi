@@ -17,6 +17,7 @@ export {
 	isFirstToolInSequence,
 	isLastToolInSequence,
 	isTransparentChild,
+	precedingHasTextDelta,
 	setActiveTheme,
 } from "./patch.js";
 export type { DiffLine, EditDiffSummary, ToolStatus } from "./types.js";

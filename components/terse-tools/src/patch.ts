@@ -1,5 +1,5 @@
 import { AssistantMessageComponent, Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Container, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatCollapsedLine, formatExpandedLines, formatThoughtHeader, formatThoughtSnippet } from "./formatters.js";
 import type { ToolStatus } from "./types.js";
 
@@ -70,9 +70,10 @@ export function isTransparentChild(child: any): boolean {
 		if (!msg) return true;
 		const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
 		const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
+		const hasThinking = msg.content?.some((c: any) => c.type === "thinking" && c.thinking?.trim());
 		const hasStopError =
 			msg.stopReason === "length" || (!hasTools && (msg.stopReason === "aborted" || msg.stopReason === "error"));
-		if (hasTools && !hasText && !hasStopError) {
+		if (hasTools && !hasText && !hasThinking && !hasStopError) {
 			return true;
 		}
 	}
@@ -114,6 +115,29 @@ export function isFirstToolInSequence(component: ToolExecutionComponent): boolea
 	return false;
 }
 
+export function precedingHasTextDelta(component: ToolExecutionComponent): boolean {
+	const parent = (component as any).parentContainer;
+	if (!parent || !Array.isArray(parent.children)) return false;
+	const children: any[] = parent.children;
+	const index = children.indexOf(component);
+	if (index <= 0) return false;
+
+	for (let i = index - 1; i >= 0; i--) {
+		const prev = children[i];
+		if (prev?.constructor?.name === "Spacer") continue;
+		if (prev instanceof ToolExecutionComponent || prev?.constructor?.name === "ToolExecutionComponent") {
+			return false;
+		}
+		if (prev instanceof AssistantMessageComponent || prev?.constructor?.name === "AssistantMessageComponent") {
+			const msg = (prev as any).lastMessage;
+			const hasText = msg?.content?.some((c: any) => c.type === "text" && c.text?.trim());
+			return Boolean(hasText);
+		}
+		return true;
+	}
+	return false;
+}
+
 export function customizeThinkingDisplay(comp: AssistantMessageComponent): void {
 	const msg = (comp as any).lastMessage;
 	if (!msg || !Array.isArray(msg.content)) return;
@@ -126,42 +150,47 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 	const container = (comp as any).contentContainer;
 	if (!container || !Array.isArray(container.children)) return;
 
-	// Intermediate tool-call turn: clear container so it renders 0 lines
-	if (hasTools && !hasText && !hasStopError) {
+	const thinkingBlocks: string[] = [];
+	for (const c of msg.content) {
+		if (c.type === "thinking" && c.thinking?.trim()) {
+			thinkingBlocks.push(c.thinking.trim());
+		}
+	}
+
+	// If no thinking and no text, clear container completely
+	if (thinkingBlocks.length === 0 && !hasText && !hasStopError) {
 		container.clear();
 		return;
 	}
 
-	// Thinking display customization when hiddenThinkingBlock is active
-	if ((comp as any).hideThinkingBlock) {
-		const thinkingBlocks: string[] = [];
-		for (const c of msg.content) {
-			if (c.type === "thinking" && c.thinking?.trim()) {
-				thinkingBlocks.push(c.thinking.trim());
+	if (thinkingBlocks.length > 0) {
+		const theme = getActiveTheme();
+		const durationMs = (comp as any)._durationMs;
+		const tokens = msg.usage?.outputTokens ?? msg.usage?.totalTokens;
+		const header = formatThoughtHeader(durationMs, tokens, theme);
+		const fullThinking = thinkingBlocks.join("\n\n");
+		const snippet = formatThoughtSnippet(fullThinking, 120, theme);
+		const cardText = snippet ? `${header}\n${snippet}` : header;
+
+		let foundThinkingText = false;
+		for (const child of container.children) {
+			if (typeof (child as any).setText === "function") {
+				const textContent = (child as any).text ?? "";
+				if (
+					textContent.includes((comp as any).hiddenThinkingLabel ?? "Thinking...") ||
+					textContent.includes("Thinking...") ||
+					textContent.includes("▶ Thought")
+				) {
+					(child as any).setText(cardText);
+					foundThinkingText = true;
+				}
 			}
 		}
 
-		if (thinkingBlocks.length > 0) {
-			const theme = getActiveTheme();
-			const durationMs = (comp as any)._durationMs;
-			const tokens = msg.usage?.outputTokens ?? msg.usage?.totalTokens;
-			const header = formatThoughtHeader(durationMs, tokens, theme);
-			const fullThinking = thinkingBlocks.join("\n\n");
-			const snippet = formatThoughtSnippet(fullThinking, 80, theme);
-			const cardText = snippet ? `${header}\n${snippet}` : header;
-
-			for (const child of container.children) {
-				if (typeof (child as any).setText === "function") {
-					const textContent = (child as any).text ?? "";
-					if (
-						textContent.includes((comp as any).hiddenThinkingLabel ?? "Thinking...") ||
-						textContent.includes("Thinking...") ||
-						textContent.includes("▶ Thought")
-					) {
-						(child as any).setText(cardText);
-					}
-				}
-			}
+		if (!foundThinkingText && hasTools && !hasText) {
+			container.clear();
+			container.addChild(new Spacer(1));
+			container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
 		}
 	}
 }
@@ -205,9 +234,10 @@ export function installTerseToolRenderer(): void {
 		if (msg) {
 			const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
 			const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
+			const hasThinking = msg.content?.some((c: any) => c.type === "thinking" && c.thinking?.trim());
 			const hasStopError =
 				msg.stopReason === "length" || (!hasTools && (msg.stopReason === "aborted" || msg.stopReason === "error"));
-			if (hasTools && !hasText && !hasStopError) {
+			if (hasTools && !hasText && !hasThinking && !hasStopError) {
 				return [];
 			}
 		}
@@ -228,6 +258,7 @@ export function installTerseToolRenderer(): void {
 				? "error"
 				: "success";
 		const isLast = isLastToolInSequence(this);
+		const hasTextBefore = precedingHasTextDelta(this);
 
 		let lines: string[];
 		if ((this as any).expanded) {
@@ -241,6 +272,9 @@ export function installTerseToolRenderer(): void {
 				(this as any).cwd,
 				width,
 			);
+			if (hasTextBefore) {
+				lines.unshift("");
+			}
 			lines.push("");
 		} else {
 			const line = formatCollapsedLine(
@@ -252,7 +286,7 @@ export function installTerseToolRenderer(): void {
 				(this as any).cwd,
 				width,
 			);
-			lines = [line];
+			lines = hasTextBefore ? ["", line] : [line];
 		}
 
 		const imageComponents = (this as any).imageComponents;

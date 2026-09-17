@@ -39,7 +39,9 @@ export function toPascalCase(name: string): string {
 
 export function formatToolName(toolName: string, theme: Theme): string {
 	const mapped = TOOL_NAME_MAP[toolName] ?? toPascalCase(toolName);
-	return theme.fg("warning", theme.bold(mapped));
+	const colored = theme.fg("warning", mapped);
+	const bolded = theme.bold(colored);
+	return bolded.includes("\x1b[1m") ? bolded : `\x1b[1m${bolded}\x1b[22m`;
 }
 
 export function formatThoughtHeader(durationMs: number | undefined, tokens: number | undefined, theme: Theme): string {
@@ -65,7 +67,7 @@ export function formatThoughtSnippet(thinkingText: string, width: number, theme:
 	if (!firstLine) return "";
 	const maxLen = Math.max(10, width - 4);
 	const snippet = visibleWidth(firstLine) > maxLen ? truncateToWidth(firstLine, maxLen, "...") : firstLine;
-	return theme.fg("dim", `  ${snippet}`);
+	return theme.fg("muted", `  ${snippet}`);
 }
 
 export function formatPath(filePath: string): string {

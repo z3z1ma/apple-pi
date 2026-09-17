@@ -18,6 +18,7 @@ import {
 	isFirstToolInSequence,
 	isLastToolInSequence,
 	isTransparentChild,
+	precedingHasTextDelta,
 	setActiveTheme,
 } from "../src/patch.js";
 
@@ -321,6 +322,21 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		const toolOnlyMsg = new AssistantMessageComponent(
 			{
 				role: "assistant",
+				content: [{ type: "toolCall", id: "c1", name: "bash", args: {} }],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 5, outputTokens: 10 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+		expect(isTransparentChild(toolOnlyMsg)).toBe(true);
+
+		const thoughtOnlyMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
 				content: [
 					{ type: "thinking", thinking: "thinking before tool" },
 					{ type: "toolCall", id: "c1", name: "bash", args: {} },
@@ -334,7 +350,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 			} as any,
 			true,
 		);
-		expect(isTransparentChild(toolOnlyMsg)).toBe(true);
+		expect(isTransparentChild(thoughtOnlyMsg)).toBe(false);
 
 		const textMsg = new AssistantMessageComponent(
 			{
@@ -368,10 +384,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		const intermediateAssistant = new AssistantMessageComponent(
 			{
 				role: "assistant",
-				content: [
-					{ type: "thinking", thinking: "Deciding next tool" },
-					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
-				],
+				content: [{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } }],
 				api: "chat",
 				provider: "test",
 				model: "m",
@@ -396,7 +409,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(intermediateAssistant);
 		container.addChild(t2);
 
-		// intermediateAssistant renders 0 lines
+		// Tool-only intermediate message renders 0 lines
 		expect(intermediateAssistant.render(80)).toHaveLength(0);
 
 		// t1 recognizes intermediateAssistant is transparent, so t1 is NOT the last tool
@@ -404,12 +417,104 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		// t2 is the last tool
 		expect(isLastToolInSequence(t2)).toBe(true);
 
-		// Multi-turn tools render contiguously with no blank line or "Thinking..." between them
+		// Multi-turn tools render contiguously with no blank line between them
 		const lines = container.render(100);
 		expect(lines).toHaveLength(2);
 		expect(stripAnsi(lines[0])).toBe("● Bash(git status)");
 		expect(lines[0]).not.toContain("ctrl+o");
 		expect(stripAnsi(lines[1])).toBe("● Read(foo.ts) (ctrl+o to expand)");
+	});
+
+	it("preserves thought card before tool calls and keeps them dense", () => {
+		const container = new Container();
+
+		const thoughtAssistant = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "The crash log indicates a line rendering issue exceeding terminal width" },
+					{ type: "toolCall", id: "call_1", name: "bash", args: { command: "git status" } },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 100, outputTokens: 595 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const tool = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+
+		container.addChild(thoughtAssistant);
+		container.addChild(tool);
+
+		// Tool call does NOT prepend a newline after thinking alone
+		expect(precedingHasTextDelta(tool)).toBe(false);
+
+		const lines = container.render(100);
+		const joined = lines.map(stripAnsi).join("\n");
+		expect(joined).toContain("▶ Thought");
+		expect(joined).toContain("595 tokens");
+		expect(joined).toContain("The crash log indicates");
+		expect(joined).toContain("● Bash(git status) (ctrl+o to expand)");
+
+		// Thought card and tool call sit directly adjacent without an empty line in between
+		const thoughtIdx = lines.findIndex((l) => l.includes("The crash log indicates"));
+		expect(thoughtIdx).toBeGreaterThanOrEqual(0);
+		expect(stripAnsi(lines[thoughtIdx + 1])).toContain("Bash(git status)");
+	});
+
+	it("prepends a newline before tool call when preceded by a text delta", () => {
+		const container = new Container();
+
+		const textAssistant = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "I will start by checking git status." },
+					{ type: "toolCall", id: "call_1", name: "bash", args: { command: "git status" } },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 50, outputTokens: 50 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const tool = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+
+		container.addChild(textAssistant);
+		container.addChild(tool);
+
+		expect(precedingHasTextDelta(tool)).toBe(true);
+
+		const lines = container.render(100);
+		// lines must contain text followed by a blank line before tool call
+		const textIdx = lines.findIndex((l) => l.includes("I will start by checking"));
+		expect(textIdx).toBeGreaterThanOrEqual(0);
+		expect(lines[textIdx + 1]).toBe("");
+		expect(stripAnsi(lines[textIdx + 2])).toContain("Bash(git status)");
 	});
 
 	it("customizes thinking display to Antigravity thought card when text follows", () => {
