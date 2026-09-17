@@ -22,6 +22,7 @@ export default defineConfig({
 			"components/wiki/tests/**/*.test.ts",
 			"components/tasks/tests/**/*.test.ts",
 			"components/prompt-stash/tests/**/*.test.ts",
+			"components/terse-tools/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

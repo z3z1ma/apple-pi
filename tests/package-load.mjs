@@ -39,13 +39,14 @@ try {
 			"extensions/status-footer.ts",
 			"extensions/tasks.ts",
 			"extensions/prompt-stash.ts",
+			"extensions/terse-tools.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 19);
+	assert.equal(result.extensions.length, 20);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -74,6 +75,10 @@ try {
 	assert(
 		result.extensions.some((extension) => extension.path.endsWith("status-footer.ts")),
 		"missing input card extension",
+	);
+	assert(
+		result.extensions.some((extension) => extension.path.endsWith("terse-tools.ts")),
+		"missing terse tools extension",
 	);
 	assert(
 		result.extensions.some(

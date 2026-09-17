@@ -41,6 +41,7 @@
     "components/status-footer/src/",
     "components/tasks/src/",
     "components/prompt-stash/src/",
+    "components/terse-tools/src/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -74,7 +75,8 @@
       "./extensions/tmux-sessions.ts",
       "./extensions/status-footer.ts",
       "./extensions/tasks.ts",
-      "./extensions/prompt-stash.ts"
+      "./extensions/prompt-stash.ts",
+      "./extensions/terse-tools.ts"
     ],
     "skills": [
       "./skills"
