@@ -40,6 +40,7 @@
     "components/tmux-sessions/LICENSE",
     "components/status-footer/src/",
     "components/tasks/src/",
+    "components/prompt-stash/src/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -72,7 +73,8 @@
       "./extensions/notify.ts",
       "./extensions/tmux-sessions.ts",
       "./extensions/status-footer.ts",
-      "./extensions/tasks.ts"
+      "./extensions/tasks.ts",
+      "./extensions/prompt-stash.ts"
     ],
     "skills": [
       "./skills"

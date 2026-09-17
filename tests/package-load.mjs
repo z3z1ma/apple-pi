@@ -38,13 +38,14 @@ try {
 			"extensions/tmux-sessions.ts",
 			"extensions/status-footer.ts",
 			"extensions/tasks.ts",
+			"extensions/prompt-stash.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 18);
+	assert.equal(result.extensions.length, 19);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -152,6 +153,8 @@ try {
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
+		"stash",
+		"edit-prompt",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
@@ -230,6 +233,14 @@ try {
 	);
 	assert(manifest.pi.extensions.includes("./extensions/wiki.ts"), "package manifest omits wiki workbench");
 	assert(manifest.pi.extensions.includes("./extensions/tasks.ts"), "package manifest omits tasks extension");
+	assert(
+		manifest.pi.extensions.includes("./extensions/prompt-stash.ts"),
+		"package manifest omits prompt-stash extension",
+	);
+	assert(
+		result.extensions.some((extension) => extension.path.endsWith("prompt-stash.ts")),
+		"missing prompt stash extension",
+	);
 	assert(!manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest must not load todos extension");
 	assert(
 		!manifest.pi.extensions.includes("./extensions/backlog.ts"),
@@ -243,6 +254,7 @@ try {
 	assert(manifest.files.includes("components/reminders/src/"), "package manifest omits self-reminder source");
 	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
 	assert(manifest.files.includes("components/tasks/src/"), "package manifest omits tasks source");
+	assert(manifest.files.includes("components/prompt-stash/src/"), "package manifest omits prompt-stash source");
 	assert(
 		manifest.files.includes("optional-extensions/todos/index.ts"),
 		"package manifest omits optional todos entrypoint",

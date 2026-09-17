@@ -21,6 +21,7 @@ export default defineConfig({
 			"components/status-footer/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",
 			"components/tasks/tests/**/*.test.ts",
+			"components/prompt-stash/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

@@ -272,6 +272,10 @@ Apple Pi decouples semantic roles from specific provider models via `~/.pi/agent
 | `ledger_add` / `ledger_close` | Create or archive an operational task bundle in `.ledger/` |
 | `prefix + y` *(in tmux)* | Launch or attach to a Pi session for the current directory in a popup |
 | `prefix + u` *(in tmux)* | Open the interactive fuzzy session picker |
+| `Ctrl+S` / `Alt+S` | Stash the current editor prompt into the prompt stash |
+| `Ctrl+Shift+S` / `Alt+Shift+S` | Pop the top prompt from stash back into the editor |
+| `Ctrl+Alt+S` / `/stash` | Open the interactive prompt stash picker |
+| `Ctrl+E` / `Alt+E` / `/edit-prompt` | Open current prompt in external editor (`$EDITOR` / `vim`) |
 | `/notify-setup` | Install the native `Pi Notifier.app` for macOS click-to-focus |
 
 ---
