@@ -375,7 +375,9 @@ export const PI_EXEC_PROMPT_SNIPPET =
 export const savedProgramsSystemPromptContribution = {
 	executeSnippet: "Run a reusable project-local Pi Exec program",
 	guidelines: [
-		"When a Pi Exec composition is reusable within this project, write its async-function body to .pi/programs/<lowercase-kebab-name>.js with a leading JSDoc @description and optional @param tags. Saved programs manifest as typed tools (program_<name>) across session starts and compactions, or run on-demand via pi_exec_program({ name }). Do not save one-off programs.",
+		"Crystallize recurring multi-step workflows, repository-specific verifications, or fan-out inspection pipelines into `.pi/programs/<lowercase-kebab-name>.js`. These synthesize first-class project tools (`program_<name>`) across session starts and compactions, and run immediately on-demand via `pi_exec_program({ name })`.",
+		"Define program parameters using JSDoc `@param {string|number|boolean} [name=default] - description` in the leading block; the runtime automatically generates typed tool schemas and maps arguments to `inputs.<name>`.",
+		"Reserve `.pi/programs/` for workflows that compound leverage across turns and sessions; execute single-instance scripts directly via `pi_exec`.",
 	],
 } as const;
 

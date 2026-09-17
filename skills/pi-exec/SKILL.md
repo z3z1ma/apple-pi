@@ -175,11 +175,63 @@ return agent({
 });
 ```
 
+## Code-as-Tools: Synthesizing project tools (`.pi/programs/`)
+
+Crystallize recurring multi-step compositions into project-local tools to compound leverage across turns and future sessions. When a workflow embodies a repository-specific verification, multi-stage invariant check, or fan-out inspection pipeline, write its **async-function body** to `.pi/programs/<lowercase-kebab-name>.js`.
+
+### 1. Structure and parameter declarations
+
+Begin the file with a JSDoc block containing a `@description` and declared `@param` annotations. The runtime parses these into typed parameter schemas and makes arguments available under `inputs.<name>`:
+
+```javascript
+/**
+ * @description Inspect TypeScript files in a directory for concurrency risks or unhandled rejections.
+ * @param {string} [dir=components] - Target directory to inspect
+ * @param {number} [concurrency=4] - Maximum concurrent worker evaluations
+ * @param {boolean} [strict=false] - Fail on low-severity warnings
+ */
+const targetDir = inputs.dir || "components";
+const maxConcurrency = Number(inputs.concurrency || 4);
+const isStrict = inputs.strict === "true";
+
+const files = (await pi.ls({ path: targetDir }))
+  .split("\n")
+  .filter((f) => f.endsWith(".ts"));
+
+return parallel(
+  files,
+  async (file) => {
+    return agent.run({
+      task: "Inspect this file for unhandled rejections or race conditions.",
+      name: file,
+      context: { path: `${targetDir}/${file}` },
+      outputSchema: {
+        type: "object",
+        properties: {
+          risk: { type: "string", enum: ["none", "low", "high"] },
+          evidence: { type: "string" },
+        },
+        required: ["risk", "evidence"],
+      },
+    });
+  },
+  maxConcurrency,
+);
+```
+
+### 2. Execution and tool manifestation lifecycle
+
+- **Immediate on-demand testing**: When authoring a program mid-turn, execute it immediately using `pi_exec_program({ name: "<lowercase-kebab-name>", inputs: { ... } })` to verify behavior.
+- **Native tool manifestation**: Across session startups, restarts, and compaction boundaries, every valid `.pi/programs/<name>.js` manifests as a native tool (`program_<name>`) with typed parameter signatures.
+- **Disk is the source of truth**: Tools re-read program code directly from disk at execution time. If code is updated on disk, subsequent tool calls execute the latest code immediately.
+- **KV prefix cache preservation**: Tool manifests remain stable throughout ongoing turns to protect prompt cache hit rates.
+
 ## Authoring rules
 
 - Use `pi_exec` for branching, reduction, or already-justified fan-out. Use direct tools for straightforward sequential inspection.
 - Mutate `state` only for data worth reusing across calls. Returned IDs are immutable and live-session-only; pass one as the tool's `state` parameter to resume or branch from it.
-- Persist a composition only when it is reusable within this project: write its async-function body to `.pi/programs/<lowercase-kebab-name>.js` beginning with a one-line JSDoc `@description` and optional `@param` tags. Saved programs manifest as typed tools (`program_<name>`) across session starts and compactions, or run on-demand via `pi_exec_program({ name })`. Do not save one-off programs.
+- Crystallize recurring multi-step workflows, repository-specific verifications, or fan-out inspection pipelines into `.pi/programs/<lowercase-kebab-name>.js`. Test them immediately with `pi_exec_program({ name })` and leverage them as native `program_<name>` tools across sessions.
+- Reserve `.pi/programs/` for workflows that compound leverage across turns; keep ephemeral single-use scripts in direct `pi_exec` calls.
 - Await every host call. Do not start a call and return before it settles.
 - Keep dependent search → read and edit → verify steps sequential. Never concurrently edit the same file.
 - Return a compact value. Do not dump raw file bodies back into the main context.
