@@ -10,6 +10,7 @@ import {
 } from "../src/index.js";
 import { formatCollapsedLine, formatStatusBullet, stripAnsi } from "../../terse-tools/src/formatters.js";
 import { createBashToolDefinition } from "../../tasks/src/bash-tool.js";
+import installRtk from "../../../extensions/rtk.js";
 
 const mockTheme = {
 	fg: (_color: string, text: string) => text,
@@ -158,10 +159,25 @@ describe("Bash tool verbatim parameter", () => {
 		expect(result.details?.rtk).toBe(false);
 	});
 
-	it("uses RTK rewriting when verbatim is omitted or false", async () => {
+	it("uses RTK rewriting when verbatim is explicitly false", async () => {
 		const bashDef = createBashToolDefinition();
 		const result = await bashDef.execute(
 			"call-2",
+			{
+				command: "git status",
+				verbatim: false,
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
+		expect(result.details?.rtk).toBe(true);
+	});
+
+	it("defaults to verbatim execution when verbatim is omitted on direct execute", async () => {
+		const bashDef = createBashToolDefinition();
+		const result = await bashDef.execute(
+			"call-3",
 			{
 				command: "git status",
 			},
@@ -169,7 +185,7 @@ describe("Bash tool verbatim parameter", () => {
 			undefined,
 			{} as any,
 		);
-		expect(result.details?.rtk).toBe(true);
+		expect(result.details?.rtk).toBe(false);
 	});
 });
 
@@ -231,5 +247,64 @@ describe("Terse tools RTK bullet rendering", () => {
 		expect(line).toContain("▲");
 		expect(stripAnsi(line)).toContain("Bash(git status)");
 		expect(line).not.toContain("rtk git status");
+	});
+});
+
+describe("RTK extension tool_call lifecycle", () => {
+	it("intercepts and rewrites bash tool_call when verbatim is omitted", async () => {
+		const handlers = new Map<string, (...args: any[]) => any>();
+		const mockPi: any = {
+			on: (event: string, handler: (...args: any[]) => any) => {
+				handlers.set(event, handler);
+			},
+		};
+
+		await installRtk(mockPi);
+		const toolCallHandler = handlers.get("tool_call");
+		expect(toolCallHandler).toBeDefined();
+
+		const input = { command: "git status" };
+		await toolCallHandler!({ toolName: "bash", input }, { signal: undefined });
+
+		expect(input.command).toContain("rtk git status");
+		expect((input as any)._rawCommand).toBe("git status");
+		expect((input as any)._rtk).toBe(true);
+	});
+
+	it("does not rewrite bash tool_call when verbatim is true", async () => {
+		const handlers = new Map<string, (...args: any[]) => any>();
+		const mockPi: any = {
+			on: (event: string, handler: (...args: any[]) => any) => {
+				handlers.set(event, handler);
+			},
+		};
+
+		await installRtk(mockPi);
+		const toolCallHandler = handlers.get("tool_call");
+
+		const input = { command: "git status", verbatim: true };
+		await toolCallHandler!({ toolName: "bash", input }, { signal: undefined });
+
+		expect(input.command).toBe("git status");
+		expect((input as any)._rawCommand).toBeUndefined();
+		expect((input as any)._rtk).toBeUndefined();
+	});
+
+	it("ignores non-bash tool calls", async () => {
+		const handlers = new Map<string, (...args: any[]) => any>();
+		const mockPi: any = {
+			on: (event: string, handler: (...args: any[]) => any) => {
+				handlers.set(event, handler);
+			},
+		};
+
+		await installRtk(mockPi);
+		const toolCallHandler = handlers.get("tool_call");
+
+		const input = { path: "some/file.ts" };
+		await toolCallHandler!({ toolName: "read", input }, { signal: undefined });
+
+		expect(input.path).toBe("some/file.ts");
+		expect((input as any)._rtk).toBeUndefined();
 	});
 });

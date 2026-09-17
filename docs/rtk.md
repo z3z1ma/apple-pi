@@ -23,6 +23,9 @@
 5. **Subagent Support**:
    Standard mutation-capable child sessions inherit the RTK extension and benefit from command output compression.
 
+6. **Pi Exec Isolation**:
+   Inside `pi_exec`, commands run uncompressed (verbatim) by default. Guest JavaScript compositions and standard library helpers (such as `std.git`) require exact outputs for deterministic parsing. RTK rewriting only applies in `pi_exec` if `verbatim: false` is explicitly supplied.
+
 ## The `verbatim` Parameter
 
 The `bash` tool includes an optional `verbatim` parameter:

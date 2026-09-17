@@ -1508,6 +1508,23 @@ return inputs;`;
 		});
 	});
 
+	it("executes bash commands verbatim by default without RTK rewriting in pi_exec", async () => {
+		const { tool } = register();
+		const result = await tool.execute(
+			"bash-verbatim",
+			{
+				code: `return pi.bash({ command: "git status" });`,
+			},
+			undefined,
+			undefined,
+			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "bash-verbatim", getSessionFile: () => undefined } },
+		);
+		const parsed = JSON.parse(result.content[0].text);
+		expect(parsed.ok).toBe(true);
+		// Output contains standard git status text, not RTK-compressed summary
+		expect(parsed.output).toMatch(/On branch|HEAD detached|nothing to commit/);
+	});
+
 	it("returns edit and write failures as documented structured results", async () => {
 		const { tool } = register();
 		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mutation-failures" } };

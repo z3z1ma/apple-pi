@@ -73,7 +73,7 @@ export function createBashToolDefinition(
 			let executionCommand = command;
 			let isRtk = Boolean((params as any)._rtk);
 
-			if (verbatim !== true && !isRtk && !command.startsWith("rtk ")) {
+			if (verbatim === false && !isRtk && !command.startsWith("rtk ")) {
 				const rewritten = await rewriteCommand(command, { signal });
 				if (rewritten && rewritten !== command) {
 					executionCommand = rewritten;

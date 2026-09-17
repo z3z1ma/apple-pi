@@ -826,7 +826,14 @@ export default function runtime(pi: ExtensionAPI): void {
 							const config = loadSearchRootGuardConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 							const blocked = searchRootBlockReason(name, rawArgs, ctx.cwd, { home: homedir(), ...config });
 							if (blocked) throw new Error(blocked);
-							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
+							const toolArgs =
+								name === "bash" &&
+								rawArgs &&
+								typeof rawArgs === "object" &&
+								(rawArgs as Record<string, unknown>).verbatim === undefined
+									? { ...(rawArgs as Record<string, unknown>), verbatim: true }
+									: rawArgs;
+							const result = await invokeDefinition(definition, toolArgs, operation, runtimeSignal);
 							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
 							value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
 						} catch (error) {
