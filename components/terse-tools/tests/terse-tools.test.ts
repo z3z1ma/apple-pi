@@ -7,12 +7,15 @@ import {
 	formatExpandedLines,
 	formatPath,
 	formatStatusBullet,
+	formatThinkingSpinnerMessage,
 	formatThoughtHeader,
 	formatThoughtSnippet,
 	formatToolArgs,
 	formatToolName,
 	parseDiff,
+	stripAnsi,
 } from "../src/formatters.js";
+import installTerseToolsExtension from "../src/installer.js";
 import {
 	installTerseToolRenderer,
 	isFirstToolInSequence,
@@ -23,10 +26,6 @@ import {
 } from "../src/patch.js";
 
 const HOME = homedir();
-
-function stripAnsi(str: string): string {
-	return str.replace(/\x1b\[[0-9;]*m/g, "");
-}
 
 const testTheme = {
 	fg(color: string, text: string) {
@@ -468,10 +467,11 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(joined).toContain("The crash log indicates");
 		expect(joined).toContain("● Bash(git status) (ctrl+o to expand)");
 
-		// Thought card and tool call sit directly adjacent without an empty line in between
+		// Thought card has a line break at the bottom before subsequent tool call
 		const thoughtIdx = lines.findIndex((l) => l.includes("The crash log indicates"));
 		expect(thoughtIdx).toBeGreaterThanOrEqual(0);
-		expect(stripAnsi(lines[thoughtIdx + 1])).toContain("Bash(git status)");
+		expect(lines[thoughtIdx + 1]).toBe("");
+		expect(stripAnsi(lines[thoughtIdx + 2])).toContain("Bash(git status)");
 	});
 
 	it("prepends a newline before tool call when preceded by a text delta", () => {
@@ -582,5 +582,178 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		for (const l of expandedLines) {
 			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
 		}
+	});
+
+	it("hides Thinking... from the transcript completely", () => {
+		const hiddenThinkingMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [{ type: "thinking", thinking: "Analyzing something" }],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 10, outputTokens: 20 },
+				stopReason: "stop",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const lines = hiddenThinkingMsg.render(80);
+		const joined = lines.map(stripAnsi).join("\n");
+		expect(joined).not.toContain("Thinking...");
+		expect(joined).not.toContain("Thinking…");
+	});
+
+	it("suppresses transcript output while streaming thinking before tools or text", () => {
+		const streamingThinkingMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [{ type: "thinking", thinking: "Actively thinking about the next step" }],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+		(streamingThinkingMsg as any).isStreaming = true;
+
+		const lines = streamingThinkingMsg.render(80);
+		expect(lines).toHaveLength(0);
+	});
+});
+
+describe("thinking spinner formatting", () => {
+	it("returns Thinking... for empty or whitespace thinking text", () => {
+		expect(formatThinkingSpinnerMessage("")).toBe("Thinking...");
+		expect(formatThinkingSpinnerMessage("   \n\n  ")).toBe("Thinking...");
+	});
+
+	it("extracts and formats active thought trace from single or multiline thinking", () => {
+		expect(formatThinkingSpinnerMessage("Checking git status")).toBe("Thinking (Checking git status)");
+
+		const multiline = `
+I need to inspect the code.
+First checking the patch file.
+Now checking the tests.
+`;
+		expect(formatThinkingSpinnerMessage(multiline)).toBe("Thinking (Now checking the tests.)");
+	});
+
+	it("strips markdown headers, bullets, backticks, and bold/italic markers", () => {
+		expect(formatThinkingSpinnerMessage("### Determining the root cause")).toBe(
+			"Thinking (Determining the root cause)",
+		);
+		expect(formatThinkingSpinnerMessage("- Examining `patch.ts` for errors")).toBe(
+			"Thinking (Examining patch.ts for errors)",
+		);
+		expect(formatThinkingSpinnerMessage("1. **Crucial** verification step")).toBe(
+			"Thinking (Crucial verification step)",
+		);
+	});
+
+	it("truncates long thought trace to maxWidth", () => {
+		const longThought = "A".repeat(80);
+		const formatted = formatThinkingSpinnerMessage(longThought, 30);
+		expect(formatted).toBe(`Thinking (${"A".repeat(27)}...)`);
+	});
+});
+
+describe("terse tools extension spinner and label lifecycle", () => {
+	it("hooks into Pi extension events to manage spinner and clear hidden thinking label", () => {
+		const handlers = new Map<string, (event: any, ctx: any) => void>();
+		const mockPi: any = {
+			on(event: string, handler: (event: any, ctx: any) => void) {
+				handlers.set(event, handler);
+			},
+		};
+
+		let workingMessage: string | undefined = "original";
+		let hiddenLabel: string | undefined = "original";
+
+		const mockCtx: any = {
+			ui: {
+				setWorkingMessage(msg?: string) {
+					workingMessage = msg;
+				},
+				setHiddenThinkingLabel(label?: string) {
+					hiddenLabel = label;
+				},
+			},
+		};
+
+		installTerseToolsExtension(mockPi);
+
+		// session_start clears hidden thinking label
+		handlers.get("session_start")?.({}, mockCtx);
+		expect(hiddenLabel).toBe("");
+
+		// turn_start clears hidden thinking label
+		hiddenLabel = "dirty";
+		handlers.get("turn_start")?.({}, mockCtx);
+		expect(hiddenLabel).toBe("");
+
+		// message_update with thinking updates the spinner
+		handlers.get("message_update")?.(
+			{
+				message: {
+					role: "assistant",
+					content: [{ type: "thinking", thinking: "Analyzing the solution" }],
+				},
+			},
+			mockCtx,
+		);
+		expect(workingMessage).toBe("Thinking (Analyzing the solution)");
+
+		// message_update with subsequent toolCall restores spinner
+		handlers.get("message_update")?.(
+			{
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "thinking", thinking: "Analyzing the solution" },
+						{ type: "toolCall", id: "c1", name: "bash", arguments: {} },
+					],
+				},
+			},
+			mockCtx,
+		);
+		expect(workingMessage).toBeUndefined();
+
+		// message_update with subsequent text restores spinner
+		handlers.get("message_update")?.(
+			{
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "thinking", thinking: "Analyzing the solution" },
+						{ type: "text", text: "Here is the plan" },
+					],
+				},
+			},
+			mockCtx,
+		);
+		expect(workingMessage).toBeUndefined();
+
+		// tool_execution_start restores spinner
+		workingMessage = "Thinking (dirty)";
+		handlers.get("tool_execution_start")?.({}, mockCtx);
+		expect(workingMessage).toBeUndefined();
+
+		// message_end restores spinner
+		workingMessage = "Thinking (dirty)";
+		handlers.get("message_end")?.({}, mockCtx);
+		expect(workingMessage).toBeUndefined();
+
+		// turn_end restores spinner
+		workingMessage = "Thinking (dirty)";
+		handlers.get("turn_end")?.({}, mockCtx);
+		expect(workingMessage).toBeUndefined();
+
+		// agent_end restores spinner
+		workingMessage = "Thinking (dirty)";
+		handlers.get("agent_end")?.({}, mockCtx);
+		expect(workingMessage).toBeUndefined();
 	});
 });

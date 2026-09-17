@@ -1,6 +1,12 @@
 import { AssistantMessageComponent, Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatCollapsedLine, formatExpandedLines, formatThoughtHeader, formatThoughtSnippet } from "./formatters.js";
+import {
+	formatCollapsedLine,
+	formatExpandedLines,
+	formatThoughtHeader,
+	formatThoughtSnippet,
+	stripAnsi,
+} from "./formatters.js";
 import type { ToolStatus } from "./types.js";
 
 const PATCH_APPLIED = Symbol.for("apple_pi.terse_tools_patched");
@@ -142,6 +148,9 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 	const msg = (comp as any).lastMessage;
 	if (!msg || !Array.isArray(msg.content)) return;
 
+	// Always ensure hiddenThinkingLabel is empty so Pi never generates "Thinking..."
+	(comp as any).hiddenThinkingLabel = "";
+
 	const hasTools = msg.content.some((c: any) => c.type === "toolCall");
 	const hasText = msg.content.some((c: any) => c.type === "text" && c.text?.trim());
 	const hasStopError =
@@ -176,21 +185,29 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 		for (const child of container.children) {
 			if (typeof (child as any).setText === "function") {
 				const textContent = (child as any).text ?? "";
+				const stripped = stripAnsi(textContent).trim();
 				if (
-					textContent.includes((comp as any).hiddenThinkingLabel ?? "Thinking...") ||
-					textContent.includes("Thinking...") ||
-					textContent.includes("▶ Thought")
+					stripped === "Thinking..." ||
+					stripped === "Thinking…" ||
+					stripped.toLowerCase() === "thinking..." ||
+					stripped.includes("▶ Thought") ||
+					textContent === ""
 				) {
-					(child as any).setText(cardText);
+					(child as any).setText(hasText ? `${cardText}\n` : cardText);
 					foundThinkingText = true;
 				}
 			}
 		}
 
-		if (!foundThinkingText && hasTools && !hasText) {
-			container.clear();
-			container.addChild(new Spacer(1));
-			container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
+		if (!foundThinkingText && (hasTools || hasText)) {
+			if (hasTools && !hasText) {
+				container.clear();
+				container.addChild(new Spacer(1));
+				container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
+			} else if (hasText) {
+				const thoughtComp = new Text(`${cardText}\n`, (comp as any).outputPad ?? 1, 0);
+				container.children.unshift(thoughtComp);
+			}
 		}
 	}
 }
@@ -200,6 +217,7 @@ export function installTerseToolRenderer(): void {
 		return;
 	}
 	(ToolExecutionComponent as any)[PATCH_APPLIED] = true;
+	(AssistantMessageComponent.prototype as any).hiddenThinkingLabel = "";
 
 	const origAddChild = Container.prototype.addChild;
 	Container.prototype.addChild = function (component: any) {
@@ -217,6 +235,7 @@ export function installTerseToolRenderer(): void {
 
 	const origUpdateContent = AssistantMessageComponent.prototype.updateContent;
 	AssistantMessageComponent.prototype.updateContent = function (message: any, isStreaming?: boolean) {
+		(this as any).hiddenThinkingLabel = "";
 		if (!(this as any)._startTime) {
 			(this as any)._startTime = Date.now();
 		}
@@ -231,17 +250,50 @@ export function installTerseToolRenderer(): void {
 	const origAssistantRender = AssistantMessageComponent.prototype.render;
 	AssistantMessageComponent.prototype.render = function (width: number): string[] {
 		const msg = (this as any).lastMessage;
+		const isStreaming = (this as any).isStreaming;
 		if (msg) {
 			const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
 			const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
 			const hasThinking = msg.content?.some((c: any) => c.type === "thinking" && c.thinking?.trim());
 			const hasStopError =
 				msg.stopReason === "length" || (!hasTools && (msg.stopReason === "aborted" || msg.stopReason === "error"));
+
+			// While streaming thinking (no tools yet and no text yet), do not show thinking in transcript
+			if (isStreaming && !hasTools && !hasText && !hasStopError) {
+				return [];
+			}
+
+			// Tool-only without thinking or text and without error
 			if (hasTools && !hasText && !hasThinking && !hasStopError) {
 				return [];
 			}
 		}
-		const lines = origAssistantRender.call(this, width);
+
+		let lines = origAssistantRender.call(this, width);
+
+		// Filter out any standalone "Thinking..." lines
+		lines = lines.filter((line) => {
+			const text = stripAnsi(line).trim();
+			return text !== "Thinking..." && text !== "Thinking…" && text.toLowerCase() !== "thinking...";
+		});
+
+		// If lines only contain empty/whitespace lines and there is no text/error, return []
+		if (lines.length > 0 && lines.every((l) => l.trim() === "")) {
+			return [];
+		}
+
+		// Ensure a line break at the bottom of the thought card before tool calls
+		if (msg) {
+			const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
+			const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
+			const hasThinking = msg.content?.some((c: any) => c.type === "thinking" && c.thinking?.trim());
+			if (hasTools && !hasText && hasThinking && lines.length > 0) {
+				if (lines[lines.length - 1] !== "") {
+					lines.push("");
+				}
+			}
+		}
+
 		if (width > 0) {
 			return lines.map((l) => (visibleWidth(l) > width ? truncateToWidth(l, width, "...") : l));
 		}

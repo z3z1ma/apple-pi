@@ -3,11 +3,13 @@ export {
 	formatExpandedLines,
 	formatPath,
 	formatStatusBullet,
+	formatThinkingSpinnerMessage,
 	formatThoughtHeader,
 	formatThoughtSnippet,
 	formatToolArgs,
 	formatToolName,
 	parseDiff,
+	stripAnsi,
 } from "./formatters.js";
 export { default } from "./installer.js";
 export {

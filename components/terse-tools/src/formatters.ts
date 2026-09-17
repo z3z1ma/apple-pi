@@ -58,6 +58,10 @@ export function formatThoughtHeader(durationMs: number | undefined, tokens: numb
 	return theme.fg("muted", `▶ Thought${meta}`);
 }
 
+export function stripAnsi(str: string): string {
+	return str.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
 export function formatThoughtSnippet(thinkingText: string, width: number, theme: Theme): string {
 	const firstLine =
 		thinkingText
@@ -68,6 +72,40 @@ export function formatThoughtSnippet(thinkingText: string, width: number, theme:
 	const maxLen = Math.max(10, width - 4);
 	const snippet = visibleWidth(firstLine) > maxLen ? truncateToWidth(firstLine, maxLen, "...") : firstLine;
 	return theme.fg("muted", `  ${snippet}`);
+}
+
+export function formatThinkingSpinnerMessage(thinkingText: string, maxWidth = 50): string {
+	if (!thinkingText?.trim()) {
+		return "Thinking...";
+	}
+
+	const lines = thinkingText.split("\n");
+	let activeLine = "";
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const line = lines[i].trim();
+		if (line.length > 0) {
+			activeLine = line;
+			break;
+		}
+	}
+
+	activeLine = activeLine
+		.replace(/^#+\s*/, "")
+		.replace(/^[-*•]\s+/, "")
+		.replace(/^\d+\.\s+/, "")
+		.replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/\s+/g, " ")
+		.trim();
+
+	if (!activeLine || activeLine.toLowerCase() === "thinking...") {
+		return "Thinking...";
+	}
+
+	const maxTraceLen = Math.max(10, maxWidth);
+	const truncated = activeLine.length > maxTraceLen ? `${activeLine.slice(0, maxTraceLen - 3)}...` : activeLine;
+
+	return `Thinking (${truncated})`;
 }
 
 export function formatPath(filePath: string): string {

@@ -21,19 +21,23 @@ By default, every tool execution renders as a single, terse line:
 - **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes across multi-turn agent execution loops.
 - **Expansion hint**: Only the very last tool call in a contiguous block displays `(ctrl+o to expand)` in muted text.
 
-### Antigravity Thought Cards
+### Antigravity Thought Cards and Thinking Spinner
 
-When reasoning precedes text output (such as the final turn response), thinking is rendered as a concise Antigravity thought card instead of the bulky 3-line italic `Thinking...` block:
+Thinking is treated as an active state of the spinner, not an interruption in the transcript:
+
+- **Spinner thought trace**: While the model is actively reasoning, the status spinner at the bottom updates with the current active thought trace (e.g. `⠙ Thinking (Analyzing git status output)`), truncated to fit the terminal.
+- **Transcript cleanliness**: The static `"Thinking..."` label is hidden from the transcript entirely. During active reasoning, no partial thoughts or placeholders are printed into the transcript.
+- **Thought cards**: When reasoning precedes tool calls or text output, completed thoughts render as a concise Antigravity thought card with a clean line break at the bottom:
 
 ```text
 ▶ Thought for 3s, 1.2k tokens
   Analyzing repository structure...
 
-Here is the result...
+● Bash(git status)
 ```
 
-- During intermediate turns where the model only calls tools, the assistant message is completely transparent (renders 0 lines), eliminating gaps and "Thinking..." interruptions between tool calls.
-- When text follows thinking, the thought header displays duration and token count in `muted` text along with a `dim` indented single-line thought snippet.
+- When text follows thinking, the thought header and snippet also end with a line break before the assistant's text response.
+- Intermediate tool calls remain dense with single-line tool rows (`● Tool(...)`), while thought cards and text deltas maintain clean empty-line separation.
 
 ### Expanded View (`Ctrl+O`)
 
