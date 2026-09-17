@@ -153,7 +153,8 @@ describe("input card rendering", () => {
 		const plainOutput = stripTerminalSequences(output);
 
 		expect(stripTerminalSequences(lines[0] ?? "").trimStart()).toMatch(/^─/);
-		expect(plainOutput).not.toMatch(/[╭╮│╰╯]/);
+		expect(plainOutput).not.toMatch(/[╭╮╰╯]/);
+		expect(plainOutput).toContain("│");
 		expect(output).toContain("GPT Test");
 		expect(plainOutput).toContain("GPT Test  OpenAI");
 		expect(plainOutput).not.toContain("openai/GPT Test");
@@ -174,7 +175,7 @@ describe("input card rendering", () => {
 		};
 		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
 
-		expect(output).toContain("OpenAI · high ⚡");
+		expect(output).toContain("OpenAI  high ⚡");
 		expect(output).not.toMatch(/\bfast\b/);
 		expect(
 			stripTerminalSequences(renderInputCard({ ...snapshot, fastModeEnabled: false }, theme, 120, [""]).join("\n")),
@@ -203,12 +204,12 @@ describe("input card rendering", () => {
 		const plainLines = lines.map(stripTerminalSequences);
 		const metadata = plainLines.find((line) => line.includes("GPT Test"))!;
 
-		expect(metadata.trimStart()).toMatch(/^GPT Test {2}OpenAI · high/);
+		expect(metadata).toMatch(/│ GPT Test {2}OpenAI {2}high/);
 		expect(metadata.trimEnd().endsWith(hint)).toBe(true);
 		expect(plainLines.join("\n").split(hint)).toHaveLength(2);
 
 		const narrow = renderInputCard(snapshot, theme, 36, [""]).map(stripTerminalSequences);
-		expect(narrow.some((line) => line.includes("GPT Test  OpenAI · high"))).toBe(true);
+		expect(narrow.some((line) => line.includes("GPT Test  OpenAI  high"))).toBe(true);
 		expect(narrow.join("\n")).not.toContain("esc to interrupt");
 
 		const withoutModel = renderInputCard({ ...snapshot, model: undefined }, theme, 120, [""])
@@ -219,7 +220,9 @@ describe("input card rendering", () => {
 
 	it("leaves native prompt text styling unchanged", () => {
 		const nativePrompt = "hello \u001b[7mworld\u001b[0m again";
-		const prompt = renderInputCard(completeSnapshot, theme, 80, [nativePrompt])[1]!;
+		const prompt = renderInputCard(completeSnapshot, theme, 80, [nativePrompt]).find((line) =>
+			line.includes(nativePrompt),
+		)!;
 
 		expect(prompt).toContain(nativePrompt);
 		expect(prompt).not.toContain(`\u001b[35m${nativePrompt}`);
@@ -262,7 +265,7 @@ describe("input card rendering", () => {
 		};
 		const output = renderInputCard(snapshot, theme, 120, [""]).join("\n");
 
-		expect(output).toContain("\u001b[97m · future\u001b[0m");
+		expect(output).toContain("\u001b[97mfuture\u001b[0m");
 	});
 
 	it("uses the full terminal width rather than capping or centering wide cards", () => {
@@ -384,5 +387,55 @@ describe("input card telemetry", () => {
 		expect(output.indexOf("backlog 1")).toBeLessThan(output.indexOf("todos 2"));
 		expect(output.indexOf("todos 2")).toBeLessThan(output.indexOf("pair idle"));
 		expect(output.indexOf("pair idle")).toBeLessThan(output.indexOf("agents 1"));
+	});
+
+	it("formats editor frame with top/bottom rules, left accent rail, and breathing room", () => {
+		const lines = renderInputCard(completeSnapshot, theme, 80, ["test prompt"]);
+		const plain = lines.map(stripTerminalSequences);
+
+		// Frame structure:
+		// 0: top border
+		expect(plain[0]).toMatch(/^─{80}$/);
+		// 1: top breathing line with rail
+		expect(plain[1]).toBe(`│ ${" ".repeat(78)}`);
+		// 2: prompt line with rail
+		expect(plain[2]).toBe(`│ test prompt${" ".repeat(67)}`);
+		// 3: breathing line before metadata
+		expect(plain[3]).toBe(`│ ${" ".repeat(78)}`);
+		// 4: metadata line with rail
+		expect(plain[4]).toMatch(/^│ GPT Test {2}OpenAI {2}high/);
+		// 5: bottom border
+		expect(plain[5]).toMatch(/^─{80}$/);
+		// 6: Starship footer
+		expect(lines[1]).toContain("\u001b[35m│\u001b[0m");
+	});
+
+	it("switches rail color to bashMode when prompt begins with shell exclamation", () => {
+		const lines = renderInputCard(completeSnapshot, theme, 80, ["!git status"]);
+		// bashMode is not in colorCodes, falls back to colorCodes default or theme.fg("bashMode", "│")
+		expect(lines[1]).toContain("│");
+		expect(lines[2]).toContain("!git status");
+	});
+
+	it("embeds viewport scroll indicators in the top and bottom borders", () => {
+		const lines = renderInputCard(completeSnapshot, theme, 80, ["scrolled text"], {
+			above: "4",
+			below: "2",
+		});
+		const plain = lines.map(stripTerminalSequences);
+
+		expect(plain[0]).toContain("↑ 4 more");
+		expect(plain[5]).toContain("↓ 2 more");
+	});
+
+	it("formats Starship footer with in session, on branch, and right pipe separators", () => {
+		const lines = renderInputCard(completeSnapshot, theme, 240, [""]);
+		const plain = lines.map(stripTerminalSequences);
+		const footer = plain.find((line) => line.includes("in work"))!;
+
+		expect(footer).toContain("in work");
+		expect(footer).toContain("on ⑂ main");
+		expect(footer).toMatch(/32\.8%\/128k \(auto\) \| ↑12k ↓4\.0k/);
+		expect(footer).toMatch(/\| \$1\.234 \(sub\)/);
 	});
 });

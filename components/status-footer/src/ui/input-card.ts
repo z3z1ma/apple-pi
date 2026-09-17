@@ -23,12 +23,12 @@ import type {
 } from "../types.js";
 import { collectUsageTotals } from "../usage.js";
 
-const SEGMENT_SEPARATOR = "  ·  ";
-const COMPACT_SEPARATOR = " · ";
 const KNOWN_STATUS_ORDER = ["mcp-auth", "mcp", "backlog", "todos", "q-pair", "subagents"];
 const FLEET_NAVIGATION_STATUS = "subagents-navigation";
 const FAST_MODE_STATUS = "fast-mode";
 const VROOM_PROVIDERS = new Set(["openai-codex", "xai"]);
+const RAIL_GLYPH = "│";
+const RAIL_WIDTH = 2;
 
 interface RenderSegment {
 	text: string;
@@ -39,6 +39,10 @@ interface RenderSegment {
 interface NativeEditorSplit {
 	prompt: string[];
 	autocomplete: string[];
+	viewport?: {
+		above?: string;
+		below?: string;
+	};
 }
 
 function safeRead<T>(read: () => T): T | undefined {
@@ -231,16 +235,16 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 			});
 		}
 	}
-	if (snapshot.branch) {
-		segments.push({
-			text: theme.fg("syntaxString", `⎇ ${cleanOneLine(snapshot.branch)}`),
-			priority: 2,
-		});
-	}
 	if (snapshot.sessionName) {
 		segments.push({
-			text: theme.fg("syntaxVariable", `@${cleanOneLine(snapshot.sessionName)}`),
+			text: `in ${theme.fg("syntaxVariable", cleanOneLine(snapshot.sessionName))}`,
 			priority: 3,
+		});
+	}
+	if (snapshot.branch) {
+		segments.push({
+			text: `on ${theme.fg("syntaxKeyword", `⑂ ${cleanOneLine(snapshot.branch)}`)}`,
+			priority: 2,
 		});
 	}
 
@@ -248,9 +252,9 @@ function projectSegments(snapshot: FooterSnapshot, theme: Theme): RenderSegment[
 		(status) =>
 			status.key !== FLEET_NAVIGATION_STATUS && status.key !== FAST_MODE_STATUS && sanitizeStatusText(status.text),
 	);
-	if (statuses.length > 0) {
+	for (const status of statuses) {
 		segments.push({
-			text: statuses.map((status) => styleStatus(status, theme)).join(theme.fg("dim", COMPACT_SEPARATOR)),
+			text: styleStatus(status, theme),
 			priority: 1,
 			essential: true,
 		});
@@ -288,7 +292,19 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	if (!provider || !model) return undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
 	const fast = snapshot.fastModeEnabled && VROOM_PROVIDERS.has(snapshot.model.provider) ? " ⚡" : "";
-	return `${theme.fg("syntaxType", theme.bold(model))}  ${theme.fg("muted", provider)}${thinking ? theme.fg(thinkingColor(thinking), ` · ${thinking}${fast}`) : ""}`;
+
+	const modelPart = theme.bold(theme.fg("accent", model));
+	const providerPart = theme.fg("muted", provider);
+
+	let thinkingPart = "";
+	if (thinking && thinking.toLowerCase() !== "off") {
+		thinkingPart = theme.fg(thinkingColor(thinking), `${thinking}${fast}`);
+	} else if (fast) {
+		thinkingPart = theme.fg("muted", fast.trim());
+	}
+
+	const parts = [modelPart, providerPart, thinkingPart].filter(Boolean);
+	return parts.join("  ");
 }
 
 function fleetNavigationHint(snapshot: FooterSnapshot, theme: Theme): string | undefined {
@@ -299,8 +315,8 @@ function fleetNavigationHint(snapshot: FooterSnapshot, theme: Theme): string | u
 
 function renderMetadataRow(snapshot: FooterSnapshot, theme: Theme, width: number): string | undefined {
 	const metadata = modelMetadata(snapshot, theme);
-	const hint = fleetNavigationHint(snapshot, theme);
 	if (!metadata) return undefined;
+	const hint = fleetNavigationHint(snapshot, theme);
 	if (!hint || visibleWidth(metadata) + visibleWidth(hint) + 1 > width) return fitToWidth(metadata, width);
 	return `${metadata}${" ".repeat(width - visibleWidth(metadata) - visibleWidth(hint))}${hint}`;
 }
@@ -310,17 +326,19 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 	const context = snapshot.context;
 	if (context) {
 		const percent = context.percent === null ? "?" : `${context.percent.toFixed(1)}%`;
+		const percentText = theme.fg(contextColor(context.percent), percent);
+		const windowText = context.contextWindow > 0 ? theme.fg("dim", `/${formatTokens(context.contextWindow)}`) : "";
+		const autoText = snapshot.autoCompactionEnabled ? ` ${theme.fg("syntaxKeyword", "(auto)")}` : "";
 		segments.push({
-			text: theme.fg(contextColor(context.percent), percent),
+			text: `${percentText}${windowText}${autoText}`,
 			priority: 1,
 			essential: true,
 		});
-		if (context.contextWindow > 0) {
-			segments.push({
-				text: theme.fg("dim", `/${formatTokens(context.contextWindow)}`),
-				priority: 3,
-			});
-		}
+	} else if (snapshot.autoCompactionEnabled) {
+		segments.push({
+			text: theme.fg("syntaxKeyword", "(auto)"),
+			priority: 2,
+		});
 	}
 
 	const usage = snapshot.usage;
@@ -352,9 +370,6 @@ function telemetrySegments(snapshot: FooterSnapshot, theme: Theme): RenderSegmen
 			priority: 2,
 		});
 	}
-	if (snapshot.autoCompactionEnabled === true) {
-		segments.push({ text: theme.fg("syntaxKeyword", "(auto)"), priority: 2 });
-	}
 	return segments;
 }
 
@@ -363,18 +378,24 @@ function renderStripRows(snapshot: FooterSnapshot, theme: Theme, width: number):
 	const telemetry = telemetrySegments(snapshot, theme);
 	if (identity.length === 0 && telemetry.length === 0) return [];
 
-	const separator = theme.fg("dim", SEGMENT_SEPARATOR);
-	const identityText = joinSegments(identity, separator);
-	const telemetryText = joinSegments(telemetry, separator);
-	if (identityText && telemetryText && visibleWidth(identityText) + visibleWidth(telemetryText) + 2 <= width) {
-		return [
-			`${identityText}${" ".repeat(width - visibleWidth(identityText) - visibleWidth(telemetryText))}${telemetryText}`,
-		];
+	const leftSeparator = " ";
+	const rightSeparator = theme.fg("dim", " | ");
+	const identityText = identity.map((s) => s.text).join(leftSeparator);
+	const telemetryText = telemetry.map((s) => s.text).join(rightSeparator);
+	if (identityText && telemetryText && visibleWidth(identityText) + visibleWidth(telemetryText) + 1 <= width) {
+		const gap = Math.max(1, width - visibleWidth(identityText) - visibleWidth(telemetryText));
+		return [`${identityText}${" ".repeat(gap)}${telemetryText}`];
+	}
+	if (!telemetryText && visibleWidth(identityText) <= width) {
+		return [identityText];
+	}
+	if (!identityText && visibleWidth(telemetryText) <= width) {
+		return [telemetryText];
 	}
 
 	const rows: string[] = [];
-	const identityRow = packSegments(identity, width, separator, theme);
-	const telemetryRow = packSegments(telemetry, width, separator, theme);
+	const identityRow = packSegments(identity, width, leftSeparator, theme);
+	const telemetryRow = packSegments(telemetry, width, rightSeparator, theme);
 	if (identityRow) rows.push(identityRow);
 	if (telemetryRow) rows.push(telemetryRow);
 	return rows;
@@ -382,6 +403,33 @@ function renderStripRows(snapshot: FooterSnapshot, theme: Theme, width: number):
 
 function cardContent(line: string, width: number): string {
 	return padToWidth(line, width);
+}
+
+function fillLine(content: string, width: number): string {
+	const truncated = truncateToWidth(content, Math.max(0, width), "");
+	const pad = " ".repeat(Math.max(0, width - visibleWidth(truncated)));
+	return `${truncated}${pad}`;
+}
+
+function renderEditorBorder(width: number, direction: "above" | "below", count?: string): string {
+	if (!count || width <= 0) return "─".repeat(Math.max(0, width));
+	const label = ` ${direction === "above" ? "↑" : "↓"} ${count} more `;
+	if (visibleWidth(label) >= width) return "─".repeat(Math.max(0, width));
+	const remaining = width - visibleWidth(label);
+	const left = Math.floor(remaining / 2);
+	const right = remaining - left;
+	return `${"─".repeat(left)}${label}${"─".repeat(right)}`;
+}
+
+function parseViewportCount(line: string): string | undefined {
+	const plain = stripTerminalSequences(line);
+	const match = plain.match(/[↑↓] (\d+) more/);
+	return match ? match[1] : undefined;
+}
+
+function editorRail(theme: Theme, isShellMode = false): string {
+	const color = isShellMode ? "bashMode" : "accent";
+	return `${theme.fg(color, RAIL_GLYPH)} `;
 }
 
 /**
@@ -394,24 +442,44 @@ export function renderInputCard(
 	theme: Theme,
 	width: number,
 	editorLines: readonly string[] = [""],
+	viewport?: { above?: string; below?: string },
 ): string[] {
 	if (width <= 0) return [];
-	const prompt = editorLines.length > 0 ? editorLines : [""];
-	const rule = cardContent(theme.fg("dim", "─".repeat(width)), width);
-	const rows: string[] = [rule];
-	for (const line of prompt) rows.push(cardContent(line, width));
+	if (width <= 2) return editorLines.map((line) => truncateToWidth(line, width, ""));
 
-	const metadata = renderMetadataRow(snapshot, theme, width);
-	if (metadata) {
-		// A breathing row separates thought from quiet model context without
-		// putting either inside a hard terminal-glyph box.
-		rows.push(cardContent("", width));
-		rows.push(cardContent(metadata, width));
+	const prompt = editorLines.length > 0 ? editorLines : [""];
+	const innerWidth = Math.max(0, width - RAIL_WIDTH);
+	const isShellMode = (prompt[0] ?? "").trimStart().startsWith("!");
+	const rail = editorRail(theme, isShellMode);
+
+	const topRule = fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport?.above)), width);
+	const bottomRule = fitToWidth(theme.fg("dim", renderEditorBorder(width, "below", viewport?.below)), width);
+
+	const rows: string[] = [topRule];
+
+	// Top padding line
+	rows.push(`${rail}${" ".repeat(innerWidth)}`);
+
+	// Prompt lines
+	for (const line of prompt) {
+		rows.push(`${rail}${fillLine(line, innerWidth)}`);
 	}
-	rows.push(rule);
+
+	// Model metadata line with breathing gap
+	const metadata = renderMetadataRow(snapshot, theme, innerWidth);
+	if (metadata) {
+		rows.push(`${rail}${" ".repeat(innerWidth)}`);
+		rows.push(`${rail}${fillLine(metadata, innerWidth)}`);
+	}
+
+	// Bottom border
+	rows.push(bottomRule);
+
+	// Starship footer rows
 	for (const strip of renderStripRows(snapshot, theme, width)) {
 		rows.push(cardContent(strip, width));
 	}
+
 	return rows.filter((row) => visibleWidth(row) <= width);
 }
 
@@ -421,7 +489,9 @@ function isNativeEditorBorder(line: string): boolean {
 }
 
 function splitNativeEditorLines(lines: readonly string[]): NativeEditorSplit {
-	if (lines.length <= 2) return { prompt: lines.slice(1), autocomplete: [] };
+	if (lines.length === 0) return { prompt: [""], autocomplete: [] };
+	if (lines.length === 1) return { prompt: [...lines], autocomplete: [] };
+	if (lines.length === 2) return { prompt: [""], autocomplete: [] };
 	let bottom = -1;
 	for (let index = lines.length - 1; index > 0; index--) {
 		if (isNativeEditorBorder(lines[index]!)) {
@@ -430,9 +500,13 @@ function splitNativeEditorLines(lines: readonly string[]): NativeEditorSplit {
 		}
 	}
 	if (bottom <= 0) bottom = lines.length - 1;
+	const prompt = lines.slice(1, bottom);
+	const topCount = parseViewportCount(lines[0] ?? "");
+	const bottomCount = bottom < lines.length ? parseViewportCount(lines[bottom] ?? "") : undefined;
 	return {
-		prompt: lines.slice(1, bottom),
+		prompt: prompt.length > 0 ? prompt : [""],
 		autocomplete: lines.slice(bottom + 1),
+		viewport: topCount || bottomCount ? { above: topCount, below: bottomCount } : undefined,
 	};
 }
 
@@ -538,7 +612,7 @@ export class InputCardEditor extends PiCustomEditor {
 		private readonly footerData: ReadonlyFooterDataProvider,
 		private readonly cardTheme: Theme,
 	) {
-		super(tuiForCard, editorTheme, keybindings, { paddingX: 1 });
+		super(tuiForCard, editorTheme, keybindings, { paddingX: 0 });
 		this.#unsubscribeBranch = footerData.onBranchChange(() => {
 			if (this.#disposed) return;
 			try {
@@ -555,11 +629,15 @@ export class InputCardEditor extends PiCustomEditor {
 
 	render(width: number): string[] {
 		if (this.#disposed || width <= 0) return [];
-		const nativeLines = super.render(width);
+		if (width <= 2) {
+			return super.render(width).map((line) => truncateToWidth(line, width, ""));
+		}
+		const innerWidth = Math.max(0, width - RAIL_WIDTH);
+		const nativeLines = super.render(innerWidth);
 		const split = splitNativeEditorLines(nativeLines);
 		const snapshot = collectInputCardSnapshot(this.ctx, this.footerData, this.session);
 		const theme = safeRead(() => this.ctx.ui.theme) ?? this.cardTheme;
-		const card = renderInputCard(snapshot, theme, width, split.prompt);
+		const card = renderInputCard(snapshot, theme, width, split.prompt, split.viewport);
 		const autocomplete = split.autocomplete.map((line) => fitToWidth(line, width, ""));
 		return [...card, ...autocomplete].filter((line) => visibleWidth(line) <= width);
 	}
