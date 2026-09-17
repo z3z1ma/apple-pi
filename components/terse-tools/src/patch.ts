@@ -1,5 +1,5 @@
 import { AssistantMessageComponent, Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Container } from "@earendil-works/pi-tui";
+import { Container, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatCollapsedLine, formatExpandedLines, formatThoughtHeader, formatThoughtSnippet } from "./formatters.js";
 import type { ToolStatus } from "./types.js";
 
@@ -211,7 +211,11 @@ export function installTerseToolRenderer(): void {
 				return [];
 			}
 		}
-		return origAssistantRender.call(this, width);
+		const lines = origAssistantRender.call(this, width);
+		if (width > 0) {
+			return lines.map((l) => (visibleWidth(l) > width ? truncateToWidth(l, width, "...") : l));
+		}
+		return lines;
 	};
 
 	ToolExecutionComponent.prototype.render = function (width: number): string[] {
@@ -235,6 +239,7 @@ export function installTerseToolRenderer(): void {
 				isLast,
 				theme,
 				(this as any).cwd,
+				width,
 			);
 			lines.push("");
 		} else {
@@ -245,6 +250,7 @@ export function installTerseToolRenderer(): void {
 				isLast,
 				theme,
 				(this as any).cwd,
+				width,
 			);
 			lines = [line];
 		}
@@ -256,6 +262,9 @@ export function installTerseToolRenderer(): void {
 			}
 		}
 
+		if (width > 0) {
+			return lines.map((l) => (visibleWidth(l) > width ? truncateToWidth(l, width, "...") : l));
+		}
 		return lines;
 	};
 }

@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import type { Theme } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
 const HOME = homedir();
@@ -62,8 +63,8 @@ export function formatThoughtSnippet(thinkingText: string, width: number, theme:
 			.map((l) => l.trim())
 			.find((l) => l.length > 0) ?? "";
 	if (!firstLine) return "";
-	const maxLen = Math.max(20, width - 4);
-	const snippet = firstLine.length > maxLen ? `${firstLine.slice(0, maxLen - 3)}...` : firstLine;
+	const maxLen = Math.max(10, width - 4);
+	const snippet = visibleWidth(firstLine) > maxLen ? truncateToWidth(firstLine, maxLen, "...") : firstLine;
 	return theme.fg("dim", `  ${snippet}`);
 }
 
@@ -211,15 +212,33 @@ export function formatCollapsedLine(
 	isLast: boolean,
 	theme: Theme,
 	cwd?: string,
+	width?: number,
 ): string {
 	const bullet = formatStatusBullet(status, theme);
 	const name = formatToolName(toolName, theme);
+	const hint = isLast ? ` ${theme.fg("muted", "(ctrl+o to expand)")}` : "";
 	const argStr = formatToolArgs(toolName, args, cwd);
-	const line = `${bullet} ${name}(${argStr})`;
-	if (isLast) {
-		return `${line} ${theme.fg("muted", "(ctrl+o to expand)")}`;
+
+	if (width !== undefined && width > 0) {
+		const prefix = `${bullet} ${name}(`;
+		const suffix = `)${hint}`;
+		const fixedWidth = visibleWidth(prefix) + visibleWidth(suffix);
+
+		if (fixedWidth >= width) {
+			const rawLine = `${prefix}${argStr}${suffix}`;
+			return truncateToWidth(rawLine, width, "...");
+		}
+
+		const availableArgWidth = width - fixedWidth;
+		const truncatedArgs =
+			visibleWidth(argStr) > availableArgWidth ? truncateToWidth(argStr, availableArgWidth, "...") : argStr;
+
+		const line = `${prefix}${truncatedArgs}${suffix}`;
+		return visibleWidth(line) > width ? truncateToWidth(line, width, "...") : line;
 	}
-	return line;
+
+	const line = `${bullet} ${name}(${argStr})`;
+	return isLast ? `${line}${hint}` : line;
 }
 
 function formatLineListDetail(
@@ -228,17 +247,34 @@ function formatLineListDetail(
 	lines: string[],
 	isLast: boolean,
 	collapseHint: string,
+	width?: number,
 ): string[] {
 	const displayLines = lines.slice(0, MAX_PREVIEW_LINES);
 	const detailLines = displayLines.map((line, idx) => {
 		const isVeryLast = isLast && idx === displayLines.length - 1 && lines.length <= MAX_PREVIEW_LINES;
-		return `    ${line}${isVeryLast ? collapseHint : ""}`;
+		const formatted = `    ${line}${isVeryLast ? collapseHint : ""}`;
+		return width !== undefined && width > 0 && visibleWidth(formatted) > width
+			? truncateToWidth(formatted, width, "...")
+			: formatted;
 	});
 	if (lines.length > MAX_PREVIEW_LINES) {
 		const remaining = lines.length - MAX_PREVIEW_LINES;
-		detailLines.push(`    ... and ${remaining} more lines${isLast ? collapseHint : ""}`);
+		const formatted = `    ... and ${remaining} more lines${isLast ? collapseHint : ""}`;
+		detailLines.push(
+			width !== undefined && width > 0 && visibleWidth(formatted) > width
+				? truncateToWidth(formatted, width, "...")
+				: formatted,
+		);
 	}
-	return [headerLine, summaryLine, ...detailLines];
+	const safeHeader =
+		width !== undefined && width > 0 && visibleWidth(headerLine) > width
+			? truncateToWidth(headerLine, width, "...")
+			: headerLine;
+	const safeSummary =
+		width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+			? truncateToWidth(summaryLine, width, "...")
+			: summaryLine;
+	return [safeHeader, safeSummary, ...detailLines];
 }
 
 function formatEditExpanded(
@@ -248,11 +284,20 @@ function formatEditExpanded(
 	isLast: boolean,
 	theme: Theme,
 	collapseHint: string,
+	width?: number,
 ): string[] {
 	const diffText = result.details?.diff || result.details?.patch || "";
 	if (!diffText) {
 		const summaryLine = `  └ Successfully edited ${formatPath(args?.path || "")}${isLast ? collapseHint : ""}`;
-		return [headerLine, summaryLine];
+		const safeHeader =
+			width !== undefined && width > 0 && visibleWidth(headerLine) > width
+				? truncateToWidth(headerLine, width, "...")
+				: headerLine;
+		const safeSummary =
+			width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+				? truncateToWidth(summaryLine, width, "...")
+				: summaryLine;
+		return [safeHeader, safeSummary];
 	}
 	const { added, removed, lines } = parseDiff(diffText);
 	const summaryLine = `  └ ${theme.fg("toolDiffAdded", `+${added}`)} / ${theme.fg("toolDiffRemoved", `-${removed} lines`)}${lines.length === 0 && isLast ? collapseHint : ""}`;
@@ -267,13 +312,29 @@ function formatEditExpanded(
 			styled = theme.fg("dim", line.content);
 		}
 		const isVeryLast = isLast && idx === displayLines.length - 1 && lines.length <= MAX_PREVIEW_LINES;
-		return `    ${styled}${isVeryLast ? collapseHint : ""}`;
+		const formatted = `    ${styled}${isVeryLast ? collapseHint : ""}`;
+		return width !== undefined && width > 0 && visibleWidth(formatted) > width
+			? truncateToWidth(formatted, width, "...")
+			: formatted;
 	});
 	if (lines.length > MAX_PREVIEW_LINES) {
 		const remaining = lines.length - MAX_PREVIEW_LINES;
-		detailLines.push(`    ... and ${remaining} more lines${isLast ? collapseHint : ""}`);
+		const formatted = `    ... and ${remaining} more lines${isLast ? collapseHint : ""}`;
+		detailLines.push(
+			width !== undefined && width > 0 && visibleWidth(formatted) > width
+				? truncateToWidth(formatted, width, "...")
+				: formatted,
+		);
 	}
-	return [headerLine, summaryLine, ...detailLines];
+	const safeHeader =
+		width !== undefined && width > 0 && visibleWidth(headerLine) > width
+			? truncateToWidth(headerLine, width, "...")
+			: headerLine;
+	const safeSummary =
+		width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+			? truncateToWidth(summaryLine, width, "...")
+			: summaryLine;
+	return [safeHeader, safeSummary, ...detailLines];
 }
 
 function formatErrorExpanded(
@@ -281,15 +342,111 @@ function formatErrorExpanded(
 	result: { content?: Array<{ type: string; text?: string }> },
 	isLast: boolean,
 	collapseHint: string,
+	width?: number,
 ): string[] {
 	const errorText = result.content?.find((c) => c.type === "text")?.text || "Command failed";
 	const errorLines = errorText.trim().split("\n");
 	const summaryLine = `  └ ${errorLines[0]}${errorLines.length === 1 && isLast ? collapseHint : ""}`;
 	const detailLines = errorLines.slice(1, MAX_PREVIEW_LINES).map((line, idx, arr) => {
 		const isVeryLast = isLast && idx === arr.length - 1;
-		return `    ${line}${isVeryLast ? collapseHint : ""}`;
+		const formatted = `    ${line}${isVeryLast ? collapseHint : ""}`;
+		return width !== undefined && width > 0 && visibleWidth(formatted) > width
+			? truncateToWidth(formatted, width, "...")
+			: formatted;
 	});
-	return [headerLine, summaryLine, ...detailLines];
+	const safeHeader =
+		width !== undefined && width > 0 && visibleWidth(headerLine) > width
+			? truncateToWidth(headerLine, width, "...")
+			: headerLine;
+	const safeSummary =
+		width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+			? truncateToWidth(summaryLine, width, "...")
+			: summaryLine;
+	return [safeHeader, safeSummary, ...detailLines];
+}
+
+function formatHeaderLine(bullet: string, name: string, argStr: string, width?: number): string {
+	let headerLine = `${bullet} ${name}(${argStr})`;
+	if (width !== undefined && width > 0) {
+		const prefix = `${bullet} ${name}(`;
+		const suffix = ")";
+		const fixedWidth = visibleWidth(prefix) + visibleWidth(suffix);
+		if (fixedWidth < width) {
+			const availableArgWidth = width - fixedWidth;
+			const truncatedArgs =
+				visibleWidth(argStr) > availableArgWidth ? truncateToWidth(argStr, availableArgWidth, "...") : argStr;
+			headerLine = `${prefix}${truncatedArgs}${suffix}`;
+		} else {
+			headerLine = truncateToWidth(headerLine, width, "...");
+		}
+	}
+	return headerLine;
+}
+
+function formatToolSuccessExpanded(
+	toolName: string,
+	args: any,
+	result: { content?: Array<{ type: string; text?: string }>; details?: any },
+	headerLine: string,
+	isLast: boolean,
+	theme: Theme,
+	collapseHint: string,
+	width?: number,
+): string[] {
+	const contentText = result.content?.find((c) => c.type === "text")?.text || "";
+
+	switch (toolName) {
+		case "edit":
+			return formatEditExpanded(headerLine, args, result, isLast, theme, collapseHint, width);
+
+		case "read": {
+			const lines = contentText.split("\n");
+			const summaryLine = `  └ Read ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
+		}
+
+		case "write": {
+			const lines = contentText.split("\n");
+			const summaryLine = `  └ Wrote ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
+		}
+
+		case "grep": {
+			const lines = contentText.trim().split("\n").filter(Boolean);
+			const summaryLine = `  └ Found ${lines.length} matches${lines.length === 0 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
+		}
+
+		case "find": {
+			const lines = contentText.trim().split("\n").filter(Boolean);
+			const summaryLine = `  └ Found ${lines.length} files${lines.length === 0 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
+		}
+
+		case "ls": {
+			const lines = contentText.trim().split("\n").filter(Boolean);
+			const summaryLine = `  └ ${lines.length} entries${lines.length === 0 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
+		}
+
+		default: {
+			if (!contentText.trim()) {
+				const summaryLine = `  └ (no output)${isLast ? collapseHint : ""}`;
+				const safeHeader =
+					width !== undefined && width > 0 && visibleWidth(headerLine) > width
+						? truncateToWidth(headerLine, width, "...")
+						: headerLine;
+				const safeSummary =
+					width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+						? truncateToWidth(summaryLine, width, "...")
+						: summaryLine;
+				return [safeHeader, safeSummary];
+			}
+			const lines = contentText.trim().split("\n");
+			const summaryLine = `  └ ${lines[0]}${lines.length === 1 && isLast ? collapseHint : ""}`;
+			return formatLineListDetail(headerLine, summaryLine, lines.slice(1), isLast, collapseHint, width);
+		}
+	}
 }
 
 export function formatExpandedLines(
@@ -300,68 +457,32 @@ export function formatExpandedLines(
 	isLast: boolean,
 	theme: Theme,
 	cwd?: string,
+	width?: number,
 ): string[] {
 	const status: ToolStatus = isPartial ? "running" : result?.isError ? "error" : "success";
 	const bullet = formatStatusBullet(status, theme);
 	const name = formatToolName(toolName, theme);
 	const argStr = formatToolArgs(toolName, args, cwd);
-	const headerLine = `${bullet} ${name}(${argStr})`;
+	const headerLine = formatHeaderLine(bullet, name, argStr, width);
 
 	if (isPartial || !result) {
 		const summaryLine = `  └ running...${isLast ? ` ${theme.fg("muted", "(ctrl+o to collapse)")}` : ""}`;
-		return [headerLine, summaryLine];
+		const safeHeader =
+			width !== undefined && width > 0 && visibleWidth(headerLine) > width
+				? truncateToWidth(headerLine, width, "...")
+				: headerLine;
+		const safeSummary =
+			width !== undefined && width > 0 && visibleWidth(summaryLine) > width
+				? truncateToWidth(summaryLine, width, "...")
+				: summaryLine;
+		return [safeHeader, safeSummary];
 	}
 
 	const collapseHint = ` ${theme.fg("muted", "(ctrl+o to collapse)")}`;
 
 	if (result.isError) {
-		return formatErrorExpanded(headerLine, result, isLast, collapseHint);
+		return formatErrorExpanded(headerLine, result, isLast, collapseHint, width);
 	}
 
-	const contentText = result.content?.find((c) => c.type === "text")?.text || "";
-
-	switch (toolName) {
-		case "edit":
-			return formatEditExpanded(headerLine, args, result, isLast, theme, collapseHint);
-
-		case "read": {
-			const lines = contentText.split("\n");
-			const summaryLine = `  └ Read ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint);
-		}
-
-		case "write": {
-			const lines = contentText.split("\n");
-			const summaryLine = `  └ Wrote ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint);
-		}
-
-		case "grep": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
-			const summaryLine = `  └ Found ${lines.length} matches${lines.length === 0 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint);
-		}
-
-		case "find": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
-			const summaryLine = `  └ Found ${lines.length} files${lines.length === 0 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint);
-		}
-
-		case "ls": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
-			const summaryLine = `  └ ${lines.length} entries${lines.length === 0 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint);
-		}
-
-		default: {
-			if (!contentText.trim()) {
-				const summaryLine = `  └ (no output)${isLast ? collapseHint : ""}`;
-				return [headerLine, summaryLine];
-			}
-			const lines = contentText.trim().split("\n");
-			const summaryLine = `  └ ${lines[0]}${lines.length === 1 && isLast ? collapseHint : ""}`;
-			return formatLineListDetail(headerLine, summaryLine, lines.slice(1), isLast, collapseHint);
-		}
-	}
+	return formatToolSuccessExpanded(toolName, args, result, headerLine, isLast, theme, collapseHint, width);
 }

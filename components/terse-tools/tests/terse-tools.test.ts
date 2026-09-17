@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { AssistantMessageComponent, initTheme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Container, Spacer } from "@earendil-works/pi-tui";
+import { Container, Spacer, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	formatCollapsedLine,
@@ -436,5 +436,46 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(joined).toContain("2.4k tokens");
 		expect(joined).toContain("Analyzing the solution");
 		expect(joined).not.toContain("Thinking...");
+	});
+
+	it("truncates long collapsed commands to terminal width while preserving hint", () => {
+		const longCmd =
+			'ls components && echo "==== extensions ====" && ls extensions && echo "==== pair-programmer ====" && ls components/pair-programmer && echo "==== pair src ====" && find components/pair-programmer -type f | head -80';
+		const line = formatCollapsedLine("bash", { command: longCmd }, "running", true, testTheme, undefined, 123);
+		expect(visibleWidth(line)).toBeLessThanOrEqual(123);
+		expect(line).toContain("ctrl+o to expand");
+		expect(line).toContain("...");
+	});
+
+	it("guarantees ToolExecutionComponent.render lines never exceed terminal width", () => {
+		const container = new Container();
+		const longCmd = `${"echo ".repeat(50)}very-long-argument-string`;
+		const tool = new ToolExecutionComponent(
+			"bash",
+			"call_long",
+			{ command: longCmd },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool);
+
+		// Collapsed
+		const collapsedLines = tool.render(80);
+		for (const l of collapsedLines) {
+			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
+		}
+
+		// Expanded
+		tool.setExpanded(true);
+		tool.updateResult({
+			content: [{ type: "text", text: `${"line 1 ".repeat(30)}\nline 2` }],
+			isError: false,
+		});
+		const expandedLines = tool.render(80);
+		for (const l of expandedLines) {
+			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
+		}
 	});
 });
