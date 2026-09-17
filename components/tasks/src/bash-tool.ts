@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import {
-	createBashToolDefinition,
+	createBashToolDefinition as createDefaultBashToolDefinition,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	formatSize,
@@ -40,45 +40,55 @@ function resolveShellEnv(ctx?: ExtensionContext): NodeJS.ProcessEnv {
 	return env;
 }
 
-export function createBackgroundTaskBashTool(
-	taskManager: TaskManager,
+export function createBashToolDefinition(
+	cwd: string = process.cwd(),
+	taskManager?: TaskManager,
 ): ToolDefinition<typeof bashParameters, any, any> {
-	const defaultBashDef = createBashToolDefinition(process.cwd());
+	const defaultBashDef = createDefaultBashToolDefinition(cwd);
 
 	return {
 		name: "bash",
 		label: "bash",
 		description:
-			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports background execution via run_in_background: true, or interactive detachment with Ctrl+B.",
-		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports background execution.",
+			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin, background execution via run_in_background: true, or interactive detachment with Ctrl+B.",
+		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports background execution and standard input.",
 		promptGuidelines: [
 			"You can inspect PI_* environment variables for current model and session details.",
 			"Use run_in_background: true to run long-running commands (e.g. builds, servers, watchers, CI wait) in the background. You will receive a notification when the task completes.",
 			"While a foreground command is executing, the operator can press Ctrl+B to background it.",
+			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
 		],
 		parameters: bashParameters,
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: shell command execution handles backgrounding, detach, timeout, stdin piping, and live terminal updates.
 		async execute(_toolCallId, params: BashParameters, signal, onUpdate, ctx) {
-			const { command, timeout, run_in_background } = params;
-			const cwd = ctx.cwd || process.cwd();
+			const { command, timeout, run_in_background, stdin } = params;
+			const effectiveCwd = ctx?.cwd || cwd || process.cwd();
 			const shellConfig = getShellConfig();
 			const env = resolveShellEnv(ctx);
 			const commandFromStdin = shellConfig.commandTransport === "stdin";
+			const stdinPipe = commandFromStdin || stdin !== undefined;
 
 			if (run_in_background) {
+				if (!taskManager) {
+					throw new Error("Background command execution requires a task manager");
+				}
 				const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
-					cwd,
+					cwd: effectiveCwd,
 					detached: process.platform !== "win32",
 					env,
-					stdio: [commandFromStdin ? "pipe" : "ignore", "pipe", "pipe"],
+					stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
 					windowsHide: true,
 				});
 
 				if (commandFromStdin) {
 					child.stdin?.on("error", () => {});
 					child.stdin?.end(command);
+				} else if (stdin !== undefined) {
+					child.stdin?.on("error", () => {});
+					child.stdin?.end(stdin);
 				}
 
-				const task = taskManager.createTask(command, cwd, child);
+				const task = taskManager.createTask(command, effectiveCwd, child);
 
 				return {
 					content: [
@@ -100,16 +110,19 @@ export function createBackgroundTaskBashTool(
 
 			// Foreground execution with Ctrl+B backgrounding support
 			const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
-				cwd,
+				cwd: effectiveCwd,
 				detached: process.platform !== "win32",
 				env,
-				stdio: [commandFromStdin ? "pipe" : "ignore", "pipe", "pipe"],
+				stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
 				windowsHide: true,
 			});
 
 			if (commandFromStdin) {
 				child.stdin?.on("error", () => {});
 				child.stdin?.end(command);
+			} else if (stdin !== undefined) {
+				child.stdin?.on("error", () => {});
+				child.stdin?.end(stdin);
 			}
 
 			const output = new OutputBuffer({ tempFilePrefix: "pi-bash" });
@@ -170,23 +183,24 @@ export function createBackgroundTaskBashTool(
 			});
 
 			// Intercept Ctrl+B to background the running command
-			const unsubscribeInput = ctx.ui?.onTerminalInput
-				? ctx.ui.onTerminalInput((data) => {
-						if (matchesKey(data, "ctrl+b") || data === "\x02") {
-							acceptingOutput = false;
-							clearUpdateTimer();
-							const currentSnapshot = output.getSnapshot();
-							detachedTask = taskManager.createTask(command, cwd, child, {
-								detachedByOperator: true,
-								initialText: currentSnapshot.content,
-							});
-							ctx.ui?.notify?.(`Backgrounded command (${detachedTask.id})`, "info");
-							resolveDetach?.();
-							return { consume: true };
-						}
-						return undefined;
-					})
-				: undefined;
+			const unsubscribeInput =
+				taskManager && ctx?.ui?.onTerminalInput
+					? ctx.ui.onTerminalInput((data) => {
+							if (matchesKey(data, "ctrl+b") || data === "\x02") {
+								acceptingOutput = false;
+								clearUpdateTimer();
+								const currentSnapshot = output.getSnapshot();
+								detachedTask = taskManager.createTask(command, effectiveCwd, child, {
+									detachedByOperator: true,
+									initialText: currentSnapshot.content,
+								});
+								ctx.ui?.notify?.(`Backgrounded command (${detachedTask.id})`, "info");
+								resolveDetach?.();
+								return { consume: true };
+							}
+							return undefined;
+						})
+					: undefined;
 
 			try {
 				let timedOut = false;
@@ -198,9 +212,18 @@ export function createBackgroundTaskBashTool(
 					}, timeout * 1000);
 				}
 
+				const onAbort = () => {
+					if (child.pid) killProcessTree(child.pid);
+				};
+				if (signal) {
+					if (signal.aborted) onAbort();
+					else signal.addEventListener("abort", onAbort, { once: true });
+				}
+
 				const processResult = await Promise.race([
-					new Promise<{ exitCode: number | null }>((resolve) => {
+					new Promise<{ exitCode: number | null }>((resolve, reject) => {
 						let code: number | null = null;
+						child.once("error", reject);
 						child.once("exit", (c) => {
 							code = c;
 						});
@@ -209,24 +232,13 @@ export function createBackgroundTaskBashTool(
 						});
 					}),
 					detachPromise.then(() => ({ detached: true })),
-					new Promise<never>((_, reject) => {
-						if (signal?.aborted) {
-							if (child.pid) killProcessTree(child.pid);
-							reject(new Error("Command aborted"));
-						}
-						signal?.addEventListener(
-							"abort",
-							() => {
-								if (child.pid) killProcessTree(child.pid);
-								reject(new Error("Command aborted"));
-							},
-							{ once: true },
-						);
-					}),
 				]);
 
 				if (timeoutHandle) {
 					clearTimeout(timeoutHandle);
+				}
+				if (signal) {
+					signal.removeEventListener("abort", onAbort);
 				}
 
 				if ("detached" in processResult && processResult.detached && detachedTask) {
@@ -259,6 +271,10 @@ export function createBackgroundTaskBashTool(
 
 				if (snapshot.truncated && snapshot.fullOutputPath) {
 					outputText += `\n\n[Truncated (${formatSize(DEFAULT_MAX_BYTES)} / ${DEFAULT_MAX_LINES} lines limit). Full output: ${snapshot.fullOutputPath}]`;
+				}
+
+				if (signal?.aborted) {
+					throw new Error(`${outputText ? `${outputText}\n\n` : ""}Command aborted`);
 				}
 
 				if (timedOut) {
@@ -298,4 +314,10 @@ export function createBackgroundTaskBashTool(
 			return defaultBashDef.renderResult?.(result, options, theme, context) ?? new Text(fallbackText, 0, 0);
 		},
 	};
+}
+
+export function createBackgroundTaskBashTool(
+	taskManager: TaskManager,
+): ToolDefinition<typeof bashParameters, any, any> {
+	return createBashToolDefinition(process.cwd(), taskManager);
 }

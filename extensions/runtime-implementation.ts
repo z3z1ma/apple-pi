@@ -5,7 +5,6 @@ import { homedir } from "node:os";
 import { basename } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
-	createBashToolDefinition,
 	createEditToolDefinition,
 	createFindToolDefinition,
 	createGrepToolDefinition,
@@ -21,6 +20,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { loadSearchRootGuardConfig } from "../components/home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../components/home-search-guard/src/index.js";
+import { createBashToolDefinition } from "../components/tasks/src/bash-tool.js";
 import {
 	PROGRAM_ENVELOPE_MAXIMA,
 	type ProgramEnvelope,

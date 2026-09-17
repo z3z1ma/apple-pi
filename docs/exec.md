@@ -28,7 +28,7 @@ return change.changedFiles.filter((path) => path.endsWith(".ts"));
 
 Available globals:
 
-- `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
+- `pi.read({ path })`, `pi.grep({ pattern })`, `pi.find({ pattern })`, `pi.ls({ path? })`, `pi.bash({ command, stdin? })`, `pi.edit({ path, edits })`, and `pi.write({ path, content })` — each takes one object matching the parent tool, never a positional string
 - `fetch` with `URL`, `URLSearchParams`, `Headers`, `Request`, `Response`, `AbortController`, `AbortSignal`, and `DOMException`
 - `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `structuredClone`, and `queueMicrotask`
 - `tools.list/search/describe/call` and `extensions.<tool>(args)` for eligible registered Pi extension tools. Interactive subagent tools (`agent`, result retrieval, steering, and stopping) are excluded because `agent()` / `agent.run()` is the runtime-owned worker abstraction. The `pi_exec` `code` parameter lists every available guest signature, including captured extension tools such as the MCP gateway, before the program is written.

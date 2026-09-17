@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import installPromptStash, {

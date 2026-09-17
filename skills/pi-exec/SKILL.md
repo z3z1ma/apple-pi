@@ -32,7 +32,7 @@ Each `pi.*` function takes **one object** matching the parent Pi tool. Never pas
 - `await pi.grep({ pattern: string, path?: string, glob?: string, ignoreCase?: boolean, literal?: boolean, context?: number, limit?: number })` → string
 - `await pi.find({ pattern: string, path?: string, limit?: number })` → string
 - `await pi.ls({ path?: string, limit?: number })` → string
-- `await pi.bash({ command: string, timeout?: number })` → `{ ok: boolean, output: string }`
+- `await pi.bash({ command: string, timeout?: number, stdin?: string })` → `{ ok: boolean, output: string }`
 - `await pi.edit({ path: string, edits: [{ oldText: string, newText: string }] })` → `{ ok: boolean, output: string }`
 - `await pi.write({ path: string, content: string })` → `{ ok: boolean, output: string }`
 

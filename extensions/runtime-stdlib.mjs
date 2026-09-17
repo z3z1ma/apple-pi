@@ -35,7 +35,11 @@ export const STDLIB_SETUP_SOURCE = String.raw`
 
   const shellQuote = (value) => "'" + String(value).replaceAll("'", "'\\\"'\\\"'") + "'";
   const shellArgs = (values) => values.map(shellQuote).join(" ");
-  const shellRun = (command, options = {}) => stdPi.bash({ command, ...(options.timeout === undefined ? {} : { timeout: options.timeout }) });
+  const shellRun = (command, options = {}) => stdPi.bash({
+    command,
+    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+    ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
+  });
   const shellOutput = async (command, options) => {
     const result = await shellRun(command, options);
     if (!result.ok) throw new Error(result.output || "shell command failed");

@@ -615,6 +615,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(formatObjectSignature(definitions.edit.parameters)).toBe(
 			"{ path: string, edits: [{ oldText: string, newText: string }] }",
 		);
+		expect(formatObjectSignature(definitions.bash.parameters)).toContain("stdin?: string");
 		for (const signature of coreGuestSignatures()) {
 			expect(signature).toMatch(/^pi\.[a-z]+\(\{ /);
 			expect(signature).toMatch(/ → Promise</);
@@ -1484,6 +1485,26 @@ return inputs;`;
 		expect(JSON.parse(result.content[0].text)).toEqual({
 			ok: false,
 			output: expect.stringContaining("Command exited with code 7"),
+		});
+	});
+
+	it("executes bash with stdin when provided in pi_exec", async () => {
+		const { tool } = register();
+		const result = await tool.execute(
+			"bash-stdin",
+			{
+				code: `return pi.bash({
+					command: "node -e \\"let d = ''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log('piped:' + d.trim()));\\"",
+					stdin: "hello from sandbox"
+				});`,
+			},
+			undefined,
+			undefined,
+			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "bash-stdin", getSessionFile: () => undefined } },
+		);
+		expect(JSON.parse(result.content[0].text)).toEqual({
+			ok: true,
+			output: expect.stringContaining("piped:hello from sandbox"),
 		});
 	});
 

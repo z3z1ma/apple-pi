@@ -23,16 +23,18 @@ The tasks extension provides process backgrounding with reactive wake-up for she
 
 ### `bash` (extended)
 
-The standard `bash` tool is extended with backgrounding support:
+The standard `bash` tool is extended with backgrounding and standard input support:
 
 ```json
 {
   "command": "npm run test",
   "timeout": 60,
+  "stdin": "optional text piped to process standard input",
   "run_in_background": true
 }
 ```
 
+- `stdin` (optional string): Text piped into the process's standard input stream.
 - `run_in_background` (optional boolean): When `true`, detaches the command immediately and returns a task descriptor (`task-1`).
 
 ### `task`

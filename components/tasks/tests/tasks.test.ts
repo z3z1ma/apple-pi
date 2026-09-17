@@ -107,6 +107,48 @@ describe("tasks component", () => {
 			expect(getResultText(result)).toContain("foreground output");
 		});
 
+		it("passes stdin to foreground commands", async () => {
+			const manager = createManager();
+			const bashTool = createBackgroundTaskBashTool(manager);
+
+			const result = await bashTool.execute(
+				"call-stdin-fg",
+				{
+					command:
+						"node -e \"let d = ''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log('received:' + d));\"",
+					stdin: "piped foreground input",
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+
+			expect(getResultText(result)).toContain("received:piped foreground input");
+		});
+
+		it("passes stdin to background commands", async () => {
+			const manager = createManager();
+			const bashTool = createBackgroundTaskBashTool(manager);
+
+			const result = await bashTool.execute(
+				"call-stdin-bg",
+				{
+					command:
+						"node -e \"let d = ''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log('bg received:' + d));\"",
+					stdin: "piped bg input",
+					run_in_background: true,
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+
+			expect(result.details?.backgrounded).toBe(true);
+			const task = await manager.waitFor("task-1", 5000);
+			expect(task?.status).toBe("completed");
+			expect(task?.output.getSnapshot().content).toContain("bg received:piped bg input");
+		});
+
 		it("starts commands in background when run_in_background is true", async () => {
 			const manager = createManager();
 			const bashTool = createBackgroundTaskBashTool(manager);
@@ -174,6 +216,24 @@ describe("tasks component", () => {
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
 			expect(task?.output.getSnapshot().content).toContain("late output");
+		});
+
+		it("terminates foreground command and throws when aborted", async () => {
+			const manager = createManager();
+			const bashTool = createBackgroundTaskBashTool(manager);
+			const controller = new AbortController();
+
+			const executePromise = bashTool.execute(
+				"call-abort",
+				{ command: "node -e \"setTimeout(() => console.log('not printed'), 2000);\"" },
+				controller.signal,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+
+			setTimeout(() => controller.abort(), 50);
+
+			await expect(executePromise).rejects.toThrow("Command aborted");
 		});
 	});
 

@@ -37,6 +37,7 @@ export const TASK_NOTIFICATION_CUSTOM_TYPE = "apple-pi.task-notification";
 export const bashParameters = Type.Object({
 	command: Type.String({ description: "Shell command to execute" }),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	stdin: Type.Optional(Type.String({ description: "Optional standard input to pass to the command" })),
 	run_in_background: Type.Optional(
 		Type.Boolean({
 			description: "Run command in background detached from the current turn. Returns immediately with task ID.",
