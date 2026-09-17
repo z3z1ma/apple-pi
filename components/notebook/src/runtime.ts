@@ -15,6 +15,7 @@ export class Runtime {
 	configProjectTrusted: boolean | undefined;
 	disposed = false;
 	compactInFlight = false;
+	idleCompactionTimer: ReturnType<typeof setTimeout> | undefined;
 	notebookEmptyBackoff:
 		| {
 				sessionIdentity: string | undefined;
@@ -22,6 +23,13 @@ export class Runtime {
 				tokensAtEmpty: number;
 		  }
 		| undefined;
+
+	clearIdleCompaction(): void {
+		if (this.idleCompactionTimer) {
+			clearTimeout(this.idleCompactionTimer);
+			this.idleCompactionTimer = undefined;
+		}
+	}
 
 	ensureConfig(cwd: string, projectTrusted = false): Config {
 		if (this.configLoaded && this.configCwd === cwd && this.configProjectTrusted === projectTrusted) return this.config;
@@ -34,5 +42,6 @@ export class Runtime {
 
 	dispose(): void {
 		this.disposed = true;
+		this.clearIdleCompaction();
 	}
 }

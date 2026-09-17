@@ -39,8 +39,9 @@ describe("pair programmer notebook config", () => {
 		expect(DEFAULTS).toEqual({
 			notebookAfterTokens: 20000,
 			compactAfterTokens: 81000,
-			compactAfterTokensMode: "calibrated",
+			compactAfterTokensMode: "ratio",
 			compactAfterTokensRatio: 0.68,
+			compactIdleMinutes: 4,
 			passive: false,
 		});
 		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
@@ -64,6 +65,7 @@ describe("pair programmer notebook config", () => {
 			pair: {
 				notebookAfterTokens: 10,
 				compactAfterTokens: 30,
+				compactIdleMinutes: 2.5,
 				passive: false,
 			},
 		});
@@ -76,6 +78,7 @@ describe("pair programmer notebook config", () => {
 		expect(loadConfig(cwd, true, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toMatchObject({
 			notebookAfterTokens: 100,
 			compactAfterTokens: 30,
+			compactIdleMinutes: 2.5,
 			passive: true,
 		});
 	});
@@ -86,6 +89,7 @@ describe("pair programmer notebook config", () => {
 				notebookAfterTokens: -1,
 				reflectAfterTokens: 0,
 				compactAfterTokens: 1.5,
+				compactIdleMinutes: -2,
 				agentMaxTurns: null,
 				showWorkerNotifications: "no",
 				passive: "yes",
@@ -100,6 +104,32 @@ describe("pair programmer notebook config", () => {
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "on" })).toEqual({ passive: true });
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "0" })).toEqual({ passive: false });
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "maybe" })).toEqual({});
+	});
+
+	describe("compactIdleMinutes setting", () => {
+		it("accepts valid non-negative numbers including 0", () => {
+			writeJson(join(cwd, ".pi", "settings.json"), {
+				pair: { compactIdleMinutes: 0 },
+			});
+			expect(loadConfig(cwd, true, {})).toMatchObject({ compactIdleMinutes: 0 });
+
+			writeJson(join(cwd, ".pi", "settings.json"), {
+				pair: { compactIdleMinutes: 3.5 },
+			});
+			expect(loadConfig(cwd, true, {})).toMatchObject({ compactIdleMinutes: 3.5 });
+		});
+
+		it("rejects negative numbers or non-numbers and falls back to default", () => {
+			writeJson(join(cwd, ".pi", "settings.json"), {
+				pair: { compactIdleMinutes: -1 },
+			});
+			expect(loadConfig(cwd, {})).toMatchObject({ compactIdleMinutes: 4 });
+
+			writeJson(join(cwd, ".pi", "settings.json"), {
+				pair: { compactIdleMinutes: "five" },
+			});
+			expect(loadConfig(cwd, {})).toMatchObject({ compactIdleMinutes: 4 });
+		});
 	});
 
 	describe("compactAfterTokens ratio mode", () => {
@@ -117,14 +147,14 @@ describe("pair programmer notebook config", () => {
 			});
 		});
 
-		it("rejects invalid mode values and falls back to default calibrated", () => {
+		it("rejects invalid mode values and falls back to default ratio", () => {
 			writeJson(join(cwd, ".pi", "settings.json"), {
 				pair: {
 					compactAfterTokensMode: "auto",
 				},
 			});
 
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensMode: "calibrated" });
+			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensMode: "ratio" });
 		});
 
 		it("rejects ratio outside (0, 1) and falls back to default", () => {

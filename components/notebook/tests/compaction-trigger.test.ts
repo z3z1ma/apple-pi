@@ -8,17 +8,19 @@ function captureHandler(
 		compactAfterTokens?: number;
 		compactAfterTokensMode?: "calibrated" | "ratio";
 		compactAfterTokensRatio?: number;
+		compactIdleMinutes?: number;
 		passive?: boolean;
 		compactInFlight?: boolean;
 		hostCompactionPending?: () => boolean;
 		hostOwnsUsageThreshold?: () => boolean;
 	} = {},
 ) {
+	const handlers = new Map<string, (event: unknown, ctx: unknown) => void>();
 	let handler: ((event: unknown, ctx: unknown) => void) | undefined;
 	const pi = {
-		on: vi.fn((name: string, cb: typeof handler) => {
-			expect(name).toBe("agent_settled");
-			handler = cb;
+		on: vi.fn((name: string, cb: any) => {
+			handlers.set(name, cb);
+			if (name === "agent_settled") handler = cb;
 		}),
 	};
 	const runtime = {
@@ -27,16 +29,24 @@ function captureHandler(
 			compactAfterTokens: args.compactAfterTokens ?? 3,
 			compactAfterTokensMode: args.compactAfterTokensMode ?? "calibrated",
 			compactAfterTokensRatio: args.compactAfterTokensRatio ?? 0.68,
+			compactIdleMinutes: args.compactIdleMinutes ?? 4,
 			passive: args.passive ?? false,
 		},
 		compactInFlight: args.compactInFlight ?? false,
+		idleCompactionTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+		clearIdleCompaction() {
+			if (this.idleCompactionTimer) {
+				clearTimeout(this.idleCompactionTimer);
+				this.idleCompactionTimer = undefined;
+			}
+		},
 	};
 	registerCompactionTrigger(pi as any, runtime as any, {
 		hostCompactionPending: args.hostCompactionPending,
 		hostOwnsUsageThreshold: args.hostOwnsUsageThreshold,
 	});
 	if (!handler) throw new Error("agent_settled handler was not registered");
-	return { handler, runtime };
+	return { handler, handlers, runtime };
 }
 
 function agentSettled() {
@@ -550,6 +560,94 @@ describe("pair programmer notebook compaction trigger", () => {
 
 			expect(ctx.compact).not.toHaveBeenCalled();
 			expect(runtime.compactInFlight).toBe(false);
+		});
+	});
+
+	describe("idle compaction timing", () => {
+		it("delays compaction until compactIdleMinutes elapses", async () => {
+			const { handler, runtime } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 4 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			expect(runtime.compactInFlight).toBe(true);
+
+			// At 3 minutes, should not have compacted yet
+			await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+			expect(ctx.compact).not.toHaveBeenCalled();
+			expect(runtime.compactInFlight).toBe(true);
+
+			// At 4 minutes, compaction triggers
+			await vi.advanceTimersByTimeAsync(1 * 60 * 1000);
+			expect(ctx.compact).toHaveBeenCalledTimes(1);
+		});
+
+		it("cancels pending idle compaction on agent_start", async () => {
+			const { handler, handlers, runtime } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 4 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			expect(runtime.compactInFlight).toBe(true);
+
+			await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+			handlers.get("agent_start")?.({}, {});
+
+			expect(runtime.compactInFlight).toBe(false);
+			await vi.runAllTimersAsync();
+			expect(ctx.compact).not.toHaveBeenCalled();
+		});
+
+		it("cancels pending idle compaction on turn_start", async () => {
+			const { handler, handlers, runtime } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 4 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			expect(runtime.compactInFlight).toBe(true);
+
+			await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+			handlers.get("turn_start")?.({}, {});
+
+			expect(runtime.compactInFlight).toBe(false);
+			await vi.runAllTimersAsync();
+			expect(ctx.compact).not.toHaveBeenCalled();
+		});
+
+		it("cancels pending idle compaction on session_shutdown", async () => {
+			const { handler, handlers, runtime } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 4 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			expect(runtime.compactInFlight).toBe(true);
+
+			handlers.get("session_shutdown")?.({}, {});
+
+			expect(runtime.compactInFlight).toBe(false);
+			await vi.runAllTimersAsync();
+			expect(ctx.compact).not.toHaveBeenCalled();
+		});
+
+		it("skips idle compaction if system was suspended past cache TTL", async () => {
+			const { handler, runtime } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 4 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			expect(runtime.compactInFlight).toBe(true);
+
+			// System wake-up 10 minutes later (well past 5-minute cache TTL)
+			vi.setSystemTime(Date.now() + 10 * 60 * 1000);
+			await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+
+			expect(ctx.compact).not.toHaveBeenCalled();
+			expect(runtime.compactInFlight).toBe(false);
+		});
+
+		it("compacts immediately when compactIdleMinutes is 0", async () => {
+			const { handler } = captureHandler({ compactAfterTokens: 3, compactIdleMinutes: 0 });
+			const ctx = fakeCtx([dueBranch]);
+
+			handler(agentSettled(), ctx);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(ctx.compact).toHaveBeenCalledTimes(1);
 		});
 	});
 });

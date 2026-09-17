@@ -3,6 +3,9 @@ import { resolveCompactAfterTokens } from "../config.js";
 import { isStaleExtensionCtxError, type Runtime } from "../runtime.js";
 import { type Entry, rawTokensSinceLastCompaction } from "../session-ledger/index.js";
 
+/** Max age of provider prefix cache before it expires (5 minutes). */
+const MAX_CACHE_TTL_MS = 5 * 60 * 1000;
+
 /** Pi's manual `ctx.compact()` throws if the live leaf is already a compaction. */
 function branchEndsWithCompaction(entries: Entry[] | undefined): boolean {
 	if (!entries || entries.length === 0) return false;
@@ -28,12 +31,25 @@ export function registerCompactionTrigger(
 	runtime: Runtime,
 	options: CompactionTriggerOptions = {},
 ): void {
+	const cancelPending = () => {
+		if (runtime.idleCompactionTimer) {
+			runtime.clearIdleCompaction?.();
+			runtime.compactInFlight = false;
+		}
+	};
+
+	pi.on("agent_start", cancelPending);
+	pi.on("turn_start", cancelPending);
+	pi.on("session_shutdown", cancelPending);
+
 	// Pi emits agent_settled only after retries, automatic compaction, and queued
 	// continuation have finished, so retry policy stays owned by Pi.
 	pi.on("agent_settled", (_event, ctx) => {
+		if (runtime.compactInFlight) return;
+		cancelPending();
+
 		runtime.ensureConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 		if (runtime.config.passive === true) return;
-		if (runtime.compactInFlight) return;
 		if (options.hostCompactionPending?.()) return;
 
 		const entries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
@@ -45,19 +61,18 @@ export function registerCompactionTrigger(
 		const threshold = resolveCompactAfterTokens(runtime.config, contextWindow);
 		if (progress < threshold) return;
 
+		const idleMinutes = runtime.config.compactIdleMinutes ?? 4;
+		const delayMs = Math.max(0, Math.round(idleMinutes * 60 * 1000));
+		const settledAt = Date.now();
+
 		// Capture ctx properties synchronously — the setTimeout + async work below
 		// may outlive the extension ctx (stale after session replacement/reload).
 		const hasUI = ctx.hasUI;
 		const ui = ctx.ui;
 
-		if (hasUI)
-			ui?.notify(
-				`Pair programmer notebook: compaction threshold reached (~${progress.toLocaleString()} estimated source tokens); triggering compaction`,
-				"info",
-			);
-
 		runtime.compactInFlight = true;
-		setTimeout(() => {
+		runtime.idleCompactionTimer = setTimeout(() => {
+			runtime.idleCompactionTimer = undefined;
 			try {
 				if (options.hostCompactionPending?.()) {
 					runtime.compactInFlight = false;
@@ -67,6 +82,13 @@ export function registerCompactionTrigger(
 					runtime.compactInFlight = false;
 					if (hasUI)
 						ui?.notify("Pair programmer notebook: compaction deferred — agent became busy before compaction", "info");
+					return;
+				}
+				// Skip if system sleep or suspension caused the timer to fire after the 5-minute cache TTL expired
+				const elapsedMs = Date.now() - settledAt;
+				const maxAllowedElapsedMs = Math.max(MAX_CACHE_TTL_MS, delayMs + 30_000);
+				if (delayMs > 0 && elapsedMs >= maxAllowedElapsedMs) {
+					runtime.compactInFlight = false;
 					return;
 				}
 				const currentEntries = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
@@ -93,6 +115,11 @@ export function registerCompactionTrigger(
 					runtime.compactInFlight = false;
 					return;
 				}
+				if (hasUI)
+					ui?.notify(
+						`Pair programmer notebook: compaction threshold reached (~${currentProgress.toLocaleString()} estimated source tokens); triggering compaction`,
+						"info",
+					);
 				ctx.compact({
 					onComplete: () => {
 						runtime.compactInFlight = false;
@@ -114,6 +141,6 @@ export function registerCompactionTrigger(
 				const msg = error instanceof Error ? error.message : String(error);
 				if (hasUI) ui?.notify(`Pair programmer notebook: compact threw: ${msg}`, "error");
 			}
-		}, 0);
+		}, delayMs);
 	});
 }

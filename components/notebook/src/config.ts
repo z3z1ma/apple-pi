@@ -10,14 +10,16 @@ export interface Config {
 	compactAfterTokens: number;
 	compactAfterTokensMode: CompactAfterTokensMode;
 	compactAfterTokensRatio: number;
+	compactIdleMinutes: number;
 	passive: boolean;
 }
 
 export const DEFAULTS: Config = {
 	notebookAfterTokens: 20_000,
 	compactAfterTokens: 81_000,
-	compactAfterTokensMode: "calibrated",
+	compactAfterTokensMode: "ratio",
 	compactAfterTokensRatio: 0.68,
+	compactIdleMinutes: 4,
 	passive: false,
 };
 
@@ -63,6 +65,10 @@ function validRatioOrUndefined(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 1 ? value : undefined;
 }
 
+function nonNegativeNumberOrUndefined(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config> {
 	const normalized: Partial<Config> = {};
 	const numberKeys = ["notebookAfterTokens", "notebookSourceMaxTokens", "compactAfterTokens"] as const;
@@ -75,6 +81,8 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	}
 	const ratio = validRatioOrUndefined(value.compactAfterTokensRatio);
 	if (ratio !== undefined) normalized.compactAfterTokensRatio = ratio;
+	const idleMinutes = nonNegativeNumberOrUndefined(value.compactIdleMinutes);
+	if (idleMinutes !== undefined) normalized.compactIdleMinutes = idleMinutes;
 	if (typeof value.passive === "boolean") normalized.passive = value.passive;
 	return normalized;
 }
