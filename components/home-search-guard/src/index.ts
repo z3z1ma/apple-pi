@@ -14,6 +14,7 @@ import { BASELINE_PROTECTED_ROOTS, loadSearchRootGuardConfig, type SearchRootGua
 
 const PI_SEARCH_TOOLS = new Set(["grep", "find", "glob"]);
 const SEARCH_COMMANDS = new Set(["rg", "ripgrep", "grep", "egrep", "fgrep", "find", "fd", "fdfind"]);
+const STDIN_SEARCH_COMMANDS = new Set(["rg", "ripgrep", "grep", "egrep", "fgrep"]);
 // Only bare `find` takes paths with no leading pattern argument; `fd`/`fdfind` (like rg/grep) take
 // PATTERN first.
 const NO_LEADING_PATTERN_COMMANDS = new Set(["find"]);
@@ -215,41 +216,106 @@ function maskHeredocBodies(command: string): string {
 	return output;
 }
 
+type BashSegment = { raw: string; piped: boolean };
+
 // --- best-effort bash tokenizing ------------------------------------------------------------------
 //
 // Split on top-level `;`, `|`, `&`, and newline, respecting quotes only. Unlike a real shell, this
 // does not track `$(...)`/backtick/paren nesting: a separator character inside a command
 // substitution can cause an over-eager split. That is an accepted, deliberate imprecision — this
 // guard does not try to fully parse nested shell constructs, it gives up on them.
-function bashSegments(command: string): string[] {
-	const segments: string[] = [];
+function bashSegments(command: string): BashSegment[] {
+	const segments: BashSegment[] = [];
 	let start = 0;
 	let quote: "'" | '"' | undefined;
 	let escaped = false;
-	for (let index = 0; index < command.length; index += 1) {
+	let currentPiped = false;
+	let index = 0;
+
+	while (index < command.length) {
 		const character = command[index]!;
 		if (escaped) {
 			escaped = false;
+			index += 1;
 			continue;
 		}
 		if (character === "\\" && quote !== "'") {
 			escaped = true;
+			index += 1;
 			continue;
 		}
 		if (quote) {
 			if (character === quote) quote = undefined;
+			index += 1;
 			continue;
 		}
 		if (character === "'" || character === '"') {
 			quote = character;
+			index += 1;
 			continue;
 		}
-		if (character === ";" || character === "|" || character === "&" || character === "\n") {
-			segments.push(command.slice(start, index));
-			start = index + 1;
+
+		if (character === "&") {
+			if (index > 0 && (command[index - 1] === ">" || command[index - 1] === "<")) {
+				index += 1;
+				continue;
+			}
+			if (index + 1 < command.length && command[index + 1] === ">") {
+				index += 1;
+				continue;
+			}
 		}
+
+		let opLength = 0;
+		let nextPiped = false;
+
+		if (character === "|") {
+			if (index + 1 < command.length && command[index + 1] === "|") {
+				opLength = 2;
+				nextPiped = false;
+			} else if (index + 1 < command.length && command[index + 1] === "&") {
+				opLength = 2;
+				nextPiped = true;
+			} else {
+				opLength = 1;
+				nextPiped = true;
+			}
+		} else if (character === "&") {
+			if (index + 1 < command.length && command[index + 1] === "&") {
+				opLength = 2;
+				nextPiped = false;
+			} else {
+				opLength = 1;
+				nextPiped = false;
+			}
+		} else if (character === ";") {
+			opLength = 1;
+			nextPiped = false;
+		} else if (character === "\n") {
+			opLength = 1;
+			nextPiped = false;
+		}
+
+		if (opLength > 0) {
+			const slice = command.slice(start, index);
+			if (slice.trim() !== "") {
+				segments.push({ raw: slice, piped: currentPiped });
+				currentPiped = nextPiped;
+			} else if (nextPiped) {
+				currentPiped = true;
+			}
+			start = index + opLength;
+			index = start;
+			continue;
+		}
+
+		index += 1;
 	}
-	segments.push(command.slice(start));
+
+	const lastSlice = command.slice(start);
+	if (lastSlice.trim() !== "") {
+		segments.push({ raw: lastSlice, piped: currentPiped });
+	}
 	return segments;
 }
 
@@ -331,24 +397,29 @@ function resolveLiteralPath(word: ShellWord, home: string, cwd: string): string 
 // first with no pattern. Either way, flags are simply skipped wherever they appear — this does not
 // try to know which flags take a value, so a flag's value word is occasionally (harmlessly)
 // re-checked as if it were a root too.
-function candidateRoots(command: string, args: ShellWord[]): ShellWord[] {
+function candidateRoots(command: string, args: ShellWord[]): { roots: ShellWord[]; explicitStdin: boolean } {
 	const roots: ShellWord[] = [];
 	let patternSeen = NO_LEADING_PATTERN_COMMANDS.has(command);
+	let explicitStdin = false;
 	for (const word of args) {
 		if (word.value !== "-" && word.value.startsWith("-")) continue;
 		if (!patternSeen) {
 			patternSeen = true;
 			continue;
 		}
+		if (word.value === "-") {
+			explicitStdin = true;
+			continue;
+		}
 		roots.push(word);
 	}
-	return roots;
+	return { roots, explicitStdin };
 }
 
 function bashSearchBlockReason(command: string, cwd: string, policy: SearchRootPolicy): string | undefined {
 	let trackedCwd: string | undefined = canonicalPath(cwd);
-	for (const rawSegment of bashSegments(maskHeredocBodies(command))) {
-		const words = shellWords(rawSegment);
+	for (const segment of bashSegments(maskHeredocBodies(command))) {
+		const words = shellWords(segment.raw);
 		let index = 0;
 		while (index < words.length && isAssignment(words[index]!.value)) index += 1;
 		const first = words[index];
@@ -368,8 +439,9 @@ function bashSearchBlockReason(command: string, cwd: string, policy: SearchRootP
 		if (!SEARCH_COMMANDS.has(invokedCommand)) continue;
 		// --help/--version don't traverse anything at all; don't treat them as an implicit search.
 		if (args.some((word) => word.value === "--help" || word.value === "--version")) continue;
-		const roots = candidateRoots(invokedCommand, args);
+		const { roots, explicitStdin } = candidateRoots(invokedCommand, args);
 		if (roots.length === 0) {
+			if (STDIN_SEARCH_COMMANDS.has(invokedCommand) && (segment.piped || explicitStdin)) continue;
 			if (trackedCwd === undefined) continue;
 			const protectedRoot = matchingProtectedRoot(trackedCwd, trackedCwd, policy);
 			if (protectedRoot) {

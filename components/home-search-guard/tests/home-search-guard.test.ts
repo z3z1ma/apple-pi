@@ -239,3 +239,44 @@ describe("search root guard: bash, best-effort means giving up on real ambiguity
 		expect(searchRootBlockReason("bash", { command: "rg needle -r / ." }, REPO, POLICY)).toMatch(/protected root/i);
 	});
 });
+
+describe("search root guard: bash, pipeline and standard input handling", () => {
+	it.each([
+		"git status | grep modified",
+		"git status | rg modified",
+		"cat file.txt | grep -i needle",
+		"cat file.txt | rg -i needle",
+		"ps aux | grep node",
+		"echo 'hello' | ripgrep hello",
+		"echo 'hello' | egrep hello",
+		"echo 'hello' | fgrep hello",
+		"git log --oneline | grep fix | rg -v test",
+		"git status 2>&1 | grep modified",
+		"git status |& grep modified",
+		["git status |", "  grep modified"].join("\n"),
+		"cd ~ && git status | grep modified",
+		"git status | grep needle -",
+		"git status | rg needle -",
+		"grep needle -",
+		'echo "hello | world" | grep hello',
+	])("allows stdin search commands piped without filesystem root arguments in protected cwd: %s", (command) => {
+		expect(searchRootBlockReason("bash", { command }, HOME, POLICY)).toBeUndefined();
+	});
+
+	it.each([
+		"echo 'test' | fd needle",
+		"echo 'test' | fdfind needle",
+		"echo 'test' | find . -name '*.ts'",
+		"cat file.txt | grep needle /",
+		"cat file.txt | rg needle ~",
+		"cat file.txt | grep needle ~/code_projects/work",
+		"echo 'hello' | grep needle - /",
+		"git status | grep modified && rg needle",
+		"git status | grep modified || rg needle",
+		"git status | grep modified ; rg needle",
+		["git status | grep modified", "rg needle"].join("\n"),
+		"cd ~ && git status | grep modified && rg needle",
+	])("still blocks searches that touch protected filesystem roots despite pipes: %s", (command) => {
+		expect(searchRootBlockReason("bash", { command }, HOME, POLICY)).toMatch(/protected root/i);
+	});
+});
