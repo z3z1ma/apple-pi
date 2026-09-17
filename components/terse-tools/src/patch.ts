@@ -144,6 +144,21 @@ export function precedingHasTextDelta(component: ToolExecutionComponent): boolea
 	return false;
 }
 
+export function precedingIsToolCall(component: AssistantMessageComponent): boolean {
+	const parent = (component as any).parentContainer;
+	if (!parent || !Array.isArray(parent.children)) return false;
+	const children: any[] = parent.children;
+	const index = children.indexOf(component);
+	if (index <= 0) return false;
+
+	for (let i = index - 1; i >= 0; i--) {
+		const prev = children[i];
+		if (isTransparentChild(prev)) continue;
+		return prev instanceof ToolExecutionComponent || prev?.constructor?.name === "ToolExecutionComponent";
+	}
+	return false;
+}
+
 export function customizeThinkingDisplay(comp: AssistantMessageComponent): void {
 	const msg = (comp as any).lastMessage;
 	if (!msg || !Array.isArray(msg.content)) return;
@@ -181,32 +196,36 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 		const snippet = formatThoughtSnippet(fullThinking, 120, theme);
 		const cardText = snippet ? `${header}\n${snippet}` : header;
 
-		let foundThinkingText = false;
+		// Collect text and stop-error children, excluding spacers and thinking blocks
+		const nonThinkingChildren: any[] = [];
 		for (const child of container.children) {
-			if (typeof (child as any).setText === "function") {
-				const textContent = (child as any).text ?? "";
-				const stripped = stripAnsi(textContent).trim();
+			if (!child || child.constructor?.name === "Spacer") continue;
+			if (child.constructor?.name === "Markdown") {
+				const isThinking = (child as any).defaultTextStyle?.italic === true;
+				if (!isThinking) {
+					nonThinkingChildren.push(child);
+				}
+			} else if (child.constructor?.name === "Text") {
+				const text = (child as any).text ?? "";
+				const stripped = stripAnsi(text).trim();
 				if (
-					stripped === "Thinking..." ||
-					stripped === "Thinking…" ||
-					stripped.toLowerCase() === "thinking..." ||
-					stripped.includes("▶ Thought") ||
-					textContent === ""
+					stripped !== "" &&
+					stripped !== "Thinking..." &&
+					stripped !== "Thinking…" &&
+					!stripped.startsWith("▶ Thought")
 				) {
-					(child as any).setText(hasText ? `${cardText}\n` : cardText);
-					foundThinkingText = true;
+					nonThinkingChildren.push(child);
 				}
 			}
 		}
 
-		if (!foundThinkingText && (hasTools || hasText)) {
-			if (hasTools && !hasText) {
-				container.clear();
-				container.addChild(new Spacer(1));
-				container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
-			} else if (hasText) {
-				const thoughtComp = new Text(`${cardText}\n`, (comp as any).outputPad ?? 1, 0);
-				container.children.unshift(thoughtComp);
+		container.clear();
+		container.addChild(new Spacer(1));
+		container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
+		if (nonThinkingChildren.length > 0) {
+			container.addChild(new Spacer(1));
+			for (const child of nonThinkingChildren) {
+				container.addChild(child);
 			}
 		}
 	}
@@ -282,12 +301,25 @@ export function installTerseToolRenderer(): void {
 			return [];
 		}
 
-		// Ensure a line break at the bottom of the thought card before tool calls
+		// Collapse multiple leading blank lines
+		while (lines.length > 1 && lines[0] === "" && lines[1] === "") {
+			lines.shift();
+		}
+
+		// Ensure exactly one leading blank line if preceded by a tool execution
+		if (precedingIsToolCall(this) && lines.length > 0 && lines[0] !== "") {
+			lines.unshift("");
+		}
+
+		// Ensure a single line break at the bottom of the thought card before tool calls
 		if (msg) {
 			const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
 			const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
 			const hasThinking = msg.content?.some((c: any) => c.type === "thinking" && c.thinking?.trim());
 			if (hasTools && !hasText && hasThinking && lines.length > 0) {
+				while (lines.length > 1 && lines[lines.length - 1] === "" && lines[lines.length - 2] === "") {
+					lines.pop();
+				}
 				if (lines[lines.length - 1] !== "") {
 					lines.push("");
 				}

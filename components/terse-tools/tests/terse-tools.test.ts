@@ -474,6 +474,117 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(lines[thoughtIdx + 2])).toContain("Bash(git status)");
 	});
 
+	it("ensures harmonious 1 blank line before and after thought cards across multi-turn tools", () => {
+		const container = new Container();
+
+		const tool1 = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool1);
+
+		// Turn 2: Thought card without text before tool call
+		const thoughtAssistant = new AssistantMessageComponent(
+			undefined,
+			false, // hideThinkingBlock = false
+		);
+		container.addChild(thoughtAssistant);
+
+		thoughtAssistant.updateContent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "Analyzing the repository state" },
+					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
+				],
+				usage: { outputTokens: 500 },
+			} as any,
+			false,
+		);
+
+		const tool2 = new ToolExecutionComponent(
+			"read",
+			"call_2",
+			{ path: "foo.ts" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool2);
+
+		const lines = container.render(100);
+		expect(stripAnsi(lines[0])).toBe("● Bash(git status) (ctrl+o to expand)");
+		expect(lines[1]).toBe("");
+		expect(stripAnsi(lines[2])).toContain("▶ Thought");
+		expect(stripAnsi(lines[3])).toContain("Analyzing the repository state");
+		expect(lines[4]).toBe("");
+		expect(stripAnsi(lines[5])).toBe("● Read(foo.ts) (ctrl+o to expand)");
+		expect(lines).toHaveLength(6);
+	});
+
+	it("ensures single blank line between thought card and text delta, and before next tool", () => {
+		const container = new Container();
+
+		const tool1 = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool1);
+
+		// Assistant message with thought AND text delta
+		const assistantMsg = new AssistantMessageComponent(undefined, false);
+		container.addChild(assistantMsg);
+
+		assistantMsg.updateContent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "Analyzing the repository state" },
+					{ type: "text", text: "README is the pitch." },
+					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
+				],
+				usage: { outputTokens: 500 },
+			} as any,
+			false,
+		);
+
+		const tool2 = new ToolExecutionComponent(
+			"read",
+			"call_2",
+			{ path: "foo.ts" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool2);
+
+		const lines = container.render(100);
+		expect(stripAnsi(lines[0])).toBe("● Bash(git status) (ctrl+o to expand)");
+		// Exactly 1 blank line before thought card
+		expect(lines[1]).toBe("");
+		expect(stripAnsi(lines[2])).toContain("▶ Thought");
+		expect(stripAnsi(lines[3])).toContain("Analyzing the repository state");
+		// Exactly 1 blank line between thought card and text
+		expect(lines[4]).toBe("");
+		expect(stripAnsi(lines[5])).toContain("README is the pitch.");
+		// Exactly 1 blank line between text and next tool
+		expect(lines[6]).toBe("");
+		expect(stripAnsi(lines[7])).toBe("● Read(foo.ts) (ctrl+o to expand)");
+		expect(lines).toHaveLength(8);
+	});
+
 	it("prepends a newline before tool call when preceded by a text delta", () => {
 		const container = new Container();
 
