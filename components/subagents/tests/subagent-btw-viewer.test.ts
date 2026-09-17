@@ -104,6 +104,25 @@ describe("BtwViewer", () => {
 			expect(formatUserPrompt).toHaveBeenCalledWith(prompt);
 			expect(rendered).toContain("? my real question");
 		});
+
+		it("wraps multiline questions without emitting raw newlines inside rendered rows", () => {
+			const prompt = `<btw-parent-context>\n[Parent user]\nparent\n</btw-parent-context>\n\n<btw-question>\nLine 1\nLine 2\nLine 3\n</btw-question>`;
+			const messages = [
+				{ role: "user", content: prompt },
+				{ role: "assistant", content: [{ type: "text", text: "Answer." }] },
+			];
+			const viewer = new BtwViewer(mockTui(30, 80), mockSession(messages), mockRecord(), ansiTheme(), vi.fn());
+
+			const lines = viewer.render(80);
+			for (const line of lines) {
+				expect(line).not.toContain("\n");
+				expect(line).not.toContain("\r");
+			}
+			const rendered = lines.join("\n");
+			expect(rendered).toContain("? Line 1");
+			expect(rendered).toContain("Line 2");
+			expect(rendered).toContain("Line 3");
+		});
 	});
 
 	describe("rendering answers & tool calls without result bodies", () => {

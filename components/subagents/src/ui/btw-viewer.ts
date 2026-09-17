@@ -200,12 +200,16 @@ export class BtwViewer implements Component {
 			const vis = visibleWidth(s);
 			return s + " ".repeat(Math.max(0, len - vis));
 		};
-		const row = (content: string) =>
-			th.fg("border", "│") +
-			" " +
-			truncateToWidth(pad(content, innerW), innerW, "...", true) +
-			" " +
-			th.fg("border", "│");
+		const row = (content: string) => {
+			const singleLine = content.replace(/[\r\n]+/g, " ");
+			return (
+				th.fg("border", "│") +
+				" " +
+				truncateToWidth(pad(singleLine, innerW), innerW, "...", true) +
+				" " +
+				th.fg("border", "│")
+			);
+		};
 		const hrTop = th.fg("border", `╭${"─".repeat(width - 2)}╮`);
 		const hrBot = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
 		const hrMid = row(th.fg("dim", "─".repeat(innerW)));
@@ -416,7 +420,11 @@ export class BtwViewer implements Component {
 				if (!visibleQuestion) continue;
 
 				if (needsSeparator) lines.push(th.fg("dim", "───"));
-				lines.push(th.fg("accent", `? ${visibleQuestion}`));
+				const questionLines = wrapTextWithAnsi(visibleQuestion, Math.max(1, width - 2));
+				for (let i = 0; i < questionLines.length; i++) {
+					const prefix = i === 0 ? "? " : "  ";
+					lines.push(th.fg("accent", `${prefix}${questionLines[i]}`));
+				}
 				needsSeparator = true;
 			} else if (msg.role === "assistant") {
 				const textParts: string[] = [];
