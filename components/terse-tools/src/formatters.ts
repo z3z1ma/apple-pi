@@ -38,7 +38,33 @@ export function toPascalCase(name: string): string {
 
 export function formatToolName(toolName: string, theme: Theme): string {
 	const mapped = TOOL_NAME_MAP[toolName] ?? toPascalCase(toolName);
-	return theme.fg("accent", theme.bold(mapped));
+	return theme.fg("warning", theme.bold(mapped));
+}
+
+export function formatThoughtHeader(durationMs: number | undefined, tokens: number | undefined, theme: Theme): string {
+	const parts: string[] = [];
+	if (durationMs !== undefined && durationMs > 0) {
+		const sec = Math.max(1, Math.round(durationMs / 1000));
+		parts.push(`${sec}s`);
+	}
+	if (tokens !== undefined && tokens > 0) {
+		const tokenStr = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : `${tokens}`;
+		parts.push(`${tokenStr} tokens`);
+	}
+	const meta = parts.length > 0 ? ` for ${parts.join(", ")}` : "";
+	return theme.fg("muted", `▶ Thought${meta}`);
+}
+
+export function formatThoughtSnippet(thinkingText: string, width: number, theme: Theme): string {
+	const firstLine =
+		thinkingText
+			.split("\n")
+			.map((l) => l.trim())
+			.find((l) => l.length > 0) ?? "";
+	if (!firstLine) return "";
+	const maxLen = Math.max(20, width - 4);
+	const snippet = firstLine.length > maxLen ? `${firstLine.slice(0, maxLen - 3)}...` : firstLine;
+	return theme.fg("dim", `  ${snippet}`);
 }
 
 export function formatPath(filePath: string): string {

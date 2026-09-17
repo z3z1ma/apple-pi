@@ -1,17 +1,25 @@
 import { homedir } from "node:os";
-import { initTheme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Container } from "@earendil-works/pi-tui";
+import { AssistantMessageComponent, initTheme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { Container, Spacer } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	formatCollapsedLine,
 	formatExpandedLines,
 	formatPath,
 	formatStatusBullet,
+	formatThoughtHeader,
+	formatThoughtSnippet,
 	formatToolArgs,
 	formatToolName,
 	parseDiff,
 } from "../src/formatters.js";
-import { installTerseToolRenderer, isFirstToolInSequence, isLastToolInSequence, setActiveTheme } from "../src/patch.js";
+import {
+	installTerseToolRenderer,
+	isFirstToolInSequence,
+	isLastToolInSequence,
+	isTransparentChild,
+	setActiveTheme,
+} from "../src/patch.js";
 
 const HOME = homedir();
 
@@ -280,5 +288,153 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(lines[0])).toBe("● Bash(echo hello)");
 		expect(stripAnsi(lines[1])).toBe("  └ hello");
 		expect(stripAnsi(lines[2])).toBe("    world (ctrl+o to collapse)");
+	});
+
+	it("uses warning color for tool names matching Antigravity gold", () => {
+		const formatted = formatToolName("bash", testTheme);
+		expect(formatted).toContain("\x1b[33m");
+		expect(formatted).not.toContain("\x1b[36m");
+	});
+
+	it("formats thought header with duration and tokens", () => {
+		expect(stripAnsi(formatThoughtHeader(3200, 1500, testTheme))).toBe("▶ Thought for 3s, 1.5k tokens");
+		expect(stripAnsi(formatThoughtHeader(10000, undefined, testTheme))).toBe("▶ Thought for 10s");
+		expect(stripAnsi(formatThoughtHeader(undefined, 850, testTheme))).toBe("▶ Thought for 850 tokens");
+		expect(stripAnsi(formatThoughtHeader(undefined, undefined, testTheme))).toBe("▶ Thought");
+		expect(formatThoughtHeader(1000, 100, testTheme)).toContain("\x1b[2m"); // muted
+	});
+
+	it("formats thought snippet with indentation and line trimming", () => {
+		const thinking = "\n  Examining the repository structure\nSecond line";
+		expect(stripAnsi(formatThoughtSnippet(thinking, 80, testTheme))).toBe("  Examining the repository structure");
+
+		const longLine = "x".repeat(100);
+		const truncated = formatThoughtSnippet(longLine, 40, testTheme);
+		expect(stripAnsi(truncated)).toBe(`  ${"x".repeat(33)}...`);
+	});
+
+	it("identifies transparent intermediate siblings with isTransparentChild", () => {
+		expect(isTransparentChild(null)).toBe(true);
+		expect(isTransparentChild(undefined)).toBe(true);
+		expect(isTransparentChild(new Spacer(1))).toBe(true);
+
+		const toolOnlyMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "thinking before tool" },
+					{ type: "toolCall", id: "c1", name: "bash", args: {} },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 5, outputTokens: 10 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+		expect(isTransparentChild(toolOnlyMsg)).toBe(true);
+
+		const textMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "Finished the task." }],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 5, outputTokens: 10 },
+				stopReason: "stop",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+		expect(isTransparentChild(textMsg)).toBe(false);
+	});
+
+	it("unifies multi-turn tool loops across intermediate assistant messages", () => {
+		const container = new Container();
+
+		const t1 = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+
+		const intermediateAssistant = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "Deciding next tool" },
+					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 10, outputTokens: 20 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const t2 = new ToolExecutionComponent(
+			"read",
+			"call_2",
+			{ path: "foo.ts" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+
+		container.addChild(t1);
+		container.addChild(intermediateAssistant);
+		container.addChild(t2);
+
+		// intermediateAssistant renders 0 lines
+		expect(intermediateAssistant.render(80)).toHaveLength(0);
+
+		// t1 recognizes intermediateAssistant is transparent, so t1 is NOT the last tool
+		expect(isLastToolInSequence(t1)).toBe(false);
+		// t2 is the last tool
+		expect(isLastToolInSequence(t2)).toBe(true);
+
+		// Multi-turn tools render contiguously with no blank line or "Thinking..." between them
+		const lines = container.render(100);
+		expect(lines).toHaveLength(2);
+		expect(stripAnsi(lines[0])).toBe("● Bash(git status)");
+		expect(lines[0]).not.toContain("ctrl+o");
+		expect(stripAnsi(lines[1])).toBe("● Read(foo.ts) (ctrl+o to expand)");
+	});
+
+	it("customizes thinking display to Antigravity thought card when text follows", () => {
+		const assistantMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "Analyzing the solution\nSecond line" },
+					{ type: "text", text: "Here is the result." },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 100, outputTokens: 2400 },
+				stopReason: "stop",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const lines = assistantMsg.render(80);
+		const joined = lines.map(stripAnsi).join("\n");
+		expect(joined).toContain("▶ Thought");
+		expect(joined).toContain("2.4k tokens");
+		expect(joined).toContain("Analyzing the solution");
+		expect(joined).not.toContain("Thinking...");
 	});
 });

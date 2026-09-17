@@ -16,10 +16,24 @@ By default, every tool execution renders as a single, terse line:
   - Yellow / Warning: Running or in-progress tool execution.
   - Green / Success: Tool execution completed successfully.
   - Red / Error: Tool execution failed.
-- **`<ToolName>`**: PascalCase name in bold accent color (`Bash`, `Read`, `Edit`, `Write`, `Search`, `Find`, `Ls`, `ManageTask`, `Schedule`, `Exec`, `AskUserQuestion`).
+- **`<ToolName>`**: PascalCase name in bold warm yellow/gold `warning` color (`Bash`, `Read`, `Edit`, `Write`, `Search`, `Find`, `Ls`, `ManageTask`, `Schedule`, `Exec`, `AskUserQuestion`).
 - **Arguments**: Concise, single-line string representation (e.g. `Bash(git status --short --branch)`, `Read(~/src/index.ts:10-40)`, `Search(pattern in path)`). File paths shorten `$HOME` to `~`.
-- **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes. The first tool call after non-tool text has a single blank line prefix.
+- **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes across multi-turn agent execution loops.
 - **Expansion hint**: Only the very last tool call in a contiguous block displays `(ctrl+o to expand)` in muted text.
+
+### Antigravity Thought Cards
+
+When reasoning precedes text output (such as the final turn response), thinking is rendered as a concise Antigravity thought card instead of the bulky 3-line italic `Thinking...` block:
+
+```text
+▶ Thought for 3s, 1.2k tokens
+  Analyzing repository structure...
+
+Here is the result...
+```
+
+- During intermediate turns where the model only calls tools, the assistant message is completely transparent (renders 0 lines), eliminating gaps and "Thinking..." interruptions between tool calls.
+- When text follows thinking, the thought header displays duration and token count in `muted` text along with a `dim` indented single-line thought snippet.
 
 ### Expanded View (`Ctrl+O`)
 
@@ -41,5 +55,6 @@ Pressing `Ctrl+O` (`app.tools.expand`) toggles full detail:
 
 The extension hooks into Pi at startup via `extensions/terse-tools.ts`:
 - Patches `ToolExecutionComponent.prototype.render` to format output via terse formatters.
-- Patches `Container.prototype.addChild` to track the parent container, enabling each tool execution component to determine its sibling position (first or last in a contiguous sequence of tool calls).
+- Patches `AssistantMessageComponent.prototype.render` and `updateContent` to silence tool-only intermediate turns and render concise thought cards before text.
+- Patches `Container.prototype.addChild` to track the parent container, enabling each tool execution component to determine its sibling position across transparent intermediate assistant messages.
 - Dynamically captures active theme styling via `Theme.prototype.fg` and falls back cleanly to standard ANSI codes if uninitialized.
