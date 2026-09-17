@@ -1,7 +1,15 @@
-import { AssistantMessageComponent, Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import {
+	AssistantMessageComponent,
+	BranchSummaryMessageComponent,
+	CompactionSummaryMessageComponent,
+	Theme,
+	ToolExecutionComponent,
+	getMarkdownTheme,
+} from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
 	formatCollapsedLine,
+	formatCompactionSummary,
 	formatExpandedLines,
 	formatThoughtHeader,
 	formatThoughtSnippet,
@@ -135,6 +143,7 @@ export function precedingHasTextDelta(component: ToolExecutionComponent): boolea
 			return false;
 		}
 		if (prev instanceof AssistantMessageComponent || prev?.constructor?.name === "AssistantMessageComponent") {
+			if (isTransparentChild(prev)) continue;
 			const msg = (prev as any).lastMessage;
 			const hasText = msg?.content?.some((c: any) => c.type === "text" && c.text?.trim());
 			return Boolean(hasText);
@@ -384,5 +393,21 @@ export function installTerseToolRenderer(): void {
 			return lines.map((l) => (visibleWidth(l) > width ? truncateToWidth(l, width, "...") : l));
 		}
 		return lines;
+	};
+
+	CompactionSummaryMessageComponent.prototype.render = function (width: number): string[] {
+		const theme = getActiveTheme();
+		const mdTheme = (this as any).markdownTheme ?? getMarkdownTheme();
+		const summary = (this as any).message?.summary;
+		const expanded = Boolean((this as any).expanded);
+		return formatCompactionSummary("Conversation compacted", summary, expanded, width, theme, mdTheme);
+	};
+
+	BranchSummaryMessageComponent.prototype.render = function (width: number): string[] {
+		const theme = getActiveTheme();
+		const mdTheme = (this as any).markdownTheme ?? getMarkdownTheme();
+		const summary = (this as any).message?.summary;
+		const expanded = Boolean((this as any).expanded);
+		return formatCompactionSummary("Branch summary", summary, expanded, width, theme, mdTheme);
 	};
 }

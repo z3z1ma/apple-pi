@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Markdown, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
 const HOME = homedir();
@@ -525,4 +525,67 @@ export function formatExpandedLines(
 	}
 
 	return formatToolSuccessExpanded(toolName, args, result, headerLine, isLast, theme, collapseHint, width);
+}
+
+export function formatCompactionRule(title: string, width: number, theme: Theme): string {
+	const safeWidth = Math.max(0, Math.floor(width));
+	if (safeWidth <= 0) return "";
+
+	const label = ` ${title} `;
+	const labelWidth = visibleWidth(label);
+	if (safeWidth <= labelWidth) {
+		return theme.fg("dim", truncateToWidth(title, safeWidth, "..."));
+	}
+
+	const remaining = safeWidth - labelWidth;
+	const leftLen = Math.floor(remaining / 2);
+	const rightLen = remaining - leftLen;
+	const line = `${"─".repeat(leftLen)}${label}${"─".repeat(rightLen)}`;
+	return theme.fg("dim", line);
+}
+
+export function formatHorizontalLine(width: number, theme: Theme): string {
+	const safeWidth = Math.max(0, Math.floor(width));
+	if (safeWidth <= 0) return "";
+	return theme.fg("dim", "─".repeat(safeWidth));
+}
+
+export function formatCompactionSummary(
+	title: string,
+	summaryText: string | undefined,
+	expanded: boolean,
+	width: number,
+	theme: Theme,
+	markdownTheme?: any,
+): string[] {
+	const safeWidth = Math.max(0, Math.floor(width));
+	if (safeWidth <= 0) return [];
+
+	const headerLine = formatCompactionRule(title, safeWidth, theme);
+	if (!expanded) {
+		return [headerLine];
+	}
+
+	const closingLine = formatHorizontalLine(safeWidth, theme);
+	const text = summaryText?.trim() ?? "";
+	if (!text) {
+		return [headerLine, closingLine];
+	}
+
+	const md = new Markdown(text, 1, 0, markdownTheme);
+	const rawLines = md.render(safeWidth);
+	const summaryLines = rawLines.map((l) => (visibleWidth(l) > safeWidth ? truncateToWidth(l, safeWidth, "...") : l));
+
+	while (summaryLines.length > 0 && summaryLines[0]?.trim() === "") {
+		summaryLines.shift();
+	}
+	while (summaryLines.length > 0 && summaryLines[summaryLines.length - 1]?.trim() === "") {
+		summaryLines.pop();
+	}
+
+	if (summaryLines.length === 0) {
+		return [headerLine, closingLine];
+	}
+
+	return [headerLine, "", ...summaryLines, "", closingLine];
 }

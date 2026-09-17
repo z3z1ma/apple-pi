@@ -1,10 +1,19 @@
 import { homedir } from "node:os";
-import { AssistantMessageComponent, initTheme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import {
+	AssistantMessageComponent,
+	BranchSummaryMessageComponent,
+	CompactionSummaryMessageComponent,
+	initTheme,
+	ToolExecutionComponent,
+} from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	formatCollapsedLine,
+	formatCompactionRule,
+	formatCompactionSummary,
 	formatExpandedLines,
+	formatHorizontalLine,
 	formatPath,
 	formatStatusBullet,
 	formatThinkingSpinnerMessage,
@@ -211,6 +220,65 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(errorExpanded[0])).toBe("● Bash(bad-cmd)");
 		expect(stripAnsi(errorExpanded[1])).toBe("  └ command not found: bad-cmd (ctrl+o to collapse)");
 		expect(errorExpanded[errorExpanded.length - 1]).toContain("(ctrl+o to collapse)");
+	});
+
+	it("formats compaction divider rule with centered title and dim styling", () => {
+		const rule = formatCompactionRule("Conversation compacted", 80, testTheme);
+		expect(rule).toContain("\x1b[2m"); // dim
+		const stripped = stripAnsi(rule);
+		expect(visibleWidth(stripped)).toBe(80);
+		expect(stripped).toContain(" Conversation compacted ");
+		// Label is 24 chars (" Conversation compacted "), remaining 56 = 28 left, 28 right
+		expect(stripped).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+
+		// Odd width
+		const oddRule = stripAnsi(formatCompactionRule("Conversation compacted", 81, testTheme));
+		expect(visibleWidth(oddRule)).toBe(81);
+		expect(oddRule).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(29)}`);
+
+		// Narrow width truncates gracefully
+		const narrow = stripAnsi(formatCompactionRule("Conversation compacted", 20, testTheme));
+		expect(visibleWidth(narrow)).toBeLessThanOrEqual(20);
+		expect(narrow).toContain("...");
+
+		// Width <= 0
+		expect(formatCompactionRule("Conversation compacted", 0, testTheme)).toBe("");
+	});
+
+	it("formats horizontal rule spanning the terminal width", () => {
+		const line = formatHorizontalLine(80, testTheme);
+		expect(line).toContain("\x1b[2m");
+		expect(stripAnsi(line)).toBe("─".repeat(80));
+		expect(visibleWidth(stripAnsi(line))).toBe(80);
+		expect(formatHorizontalLine(0, testTheme)).toBe("");
+	});
+
+	it("formats compaction summary in collapsed and expanded modes", () => {
+		const summaryText = "Fixed the rendering bug in TUI.\nAll tests are passing.";
+
+		// Collapsed mode: single line
+		const collapsed = formatCompactionSummary("Conversation compacted", summaryText, false, 80, testTheme);
+		expect(collapsed).toHaveLength(1);
+		expect(stripAnsi(collapsed[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+
+		// Expanded mode: header, blank line, markdown summary, blank line, closing rule
+		const expanded = formatCompactionSummary("Conversation compacted", summaryText, true, 80, testTheme);
+		expect(expanded[0]).toBe(collapsed[0]);
+		expect(expanded[1]).toBe("");
+		expect(stripAnsi(expanded[2])).toContain("Fixed the rendering bug in TUI.");
+		expect(expanded[expanded.length - 2]).toBe("");
+		expect(stripAnsi(expanded[expanded.length - 1])).toBe("─".repeat(80));
+
+		// All expanded lines stay within terminal width
+		for (const l of expanded) {
+			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
+		}
+
+		// Empty summary in expanded mode: header + closing rule
+		const emptyExpanded = formatCompactionSummary("Conversation compacted", "", true, 80, testTheme);
+		expect(emptyExpanded).toHaveLength(2);
+		expect(emptyExpanded[0]).toBe(collapsed[0]);
+		expect(stripAnsi(emptyExpanded[1])).toBe("─".repeat(80));
 	});
 });
 
@@ -732,6 +800,149 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 
 		const lines = streamingThinkingMsg.render(80);
 		expect(lines).toHaveLength(0);
+	});
+
+	it("renders CompactionSummaryMessageComponent as single divider line when collapsed", () => {
+		const comp = new CompactionSummaryMessageComponent({
+			role: "compactionSummary",
+			summary: "Successfully compacted the context.",
+			tokensBefore: 45000,
+			timestamp: Date.now(),
+		});
+
+		const lines = comp.render(80);
+		expect(lines).toHaveLength(1);
+		expect(stripAnsi(lines[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+		expect(visibleWidth(lines[0])).toBe(80);
+	});
+
+	it("renders CompactionSummaryMessageComponent with Antigravity card layout when expanded", () => {
+		const comp = new CompactionSummaryMessageComponent({
+			role: "compactionSummary",
+			summary: "Short summary of work done.",
+			tokensBefore: 45000,
+			timestamp: Date.now(),
+		});
+		comp.setExpanded(true);
+
+		const lines = comp.render(80);
+		expect(lines.length).toBeGreaterThan(2);
+		expect(stripAnsi(lines[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+		expect(lines[1]).toBe("");
+		expect(stripAnsi(lines[2])).toContain("Short summary of work done.");
+		expect(lines[lines.length - 2]).toBe("");
+		expect(stripAnsi(lines[lines.length - 1])).toBe("─".repeat(80));
+
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(80);
+		}
+	});
+
+	it("renders BranchSummaryMessageComponent as centered divider line when collapsed and card when expanded", () => {
+		const comp = new BranchSummaryMessageComponent({
+			role: "branchSummary",
+			summary: "Summary of branch exploration.",
+			fromId: "parent-id",
+			timestamp: Date.now(),
+		});
+
+		const collapsed = comp.render(80);
+		expect(collapsed).toHaveLength(1);
+		expect(stripAnsi(collapsed[0])).toContain("Branch summary");
+		expect(visibleWidth(collapsed[0])).toBe(80);
+
+		comp.setExpanded(true);
+		const expanded = comp.render(80);
+		expect(stripAnsi(expanded[0])).toContain("Branch summary");
+		expect(stripAnsi(expanded[expanded.length - 1])).toBe("─".repeat(80));
+		for (const line of expanded) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(80);
+		}
+	});
+
+	it("ensures clean vertical spacing between compaction and following tool calls", () => {
+		const container = new Container();
+
+		const compaction = new CompactionSummaryMessageComponent({
+			role: "compactionSummary",
+			summary: "Compacted",
+			tokensBefore: 12000,
+			timestamp: Date.now(),
+		});
+		container.addChild(compaction);
+
+		const tool1 = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool1);
+
+		const tool2 = new ToolExecutionComponent(
+			"bash",
+			"call_2",
+			{ command: "npm test" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool2);
+
+		const lines = container.render(80);
+		expect(stripAnsi(lines[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+		expect(lines[1]).toBe("");
+		expect(stripAnsi(lines[2])).toBe("● Bash(git status)");
+		expect(stripAnsi(lines[3])).toBe("● Bash(npm test) (ctrl+o to expand)");
+		expect(lines).toHaveLength(4);
+	});
+
+	it("ensures clean vertical spacing when tool follows compaction across transparent assistant message", () => {
+		const container = new Container();
+
+		const compaction = new CompactionSummaryMessageComponent({
+			role: "compactionSummary",
+			summary: "Compacted",
+			tokensBefore: 12000,
+			timestamp: Date.now(),
+		});
+		container.addChild(compaction);
+
+		const transparentAssistant = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [{ type: "toolCall", id: "call_1", name: "bash", args: { command: "git status" } }],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 10, outputTokens: 20 },
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+		container.addChild(transparentAssistant);
+
+		const tool = new ToolExecutionComponent(
+			"bash",
+			"call_1",
+			{ command: "git status" },
+			{},
+			undefined,
+			{} as any,
+			process.cwd(),
+		);
+		container.addChild(tool);
+
+		const lines = container.render(80);
+		expect(stripAnsi(lines[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
+		expect(lines[1]).toBe("");
+		expect(stripAnsi(lines[2])).toBe("● Bash(git status) (ctrl+o to expand)");
+		expect(lines).toHaveLength(3);
 	});
 });
 
