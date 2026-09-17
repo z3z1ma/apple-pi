@@ -30,12 +30,14 @@ The standard `bash` tool is extended with backgrounding and standard input suppo
   "command": "npm run test",
   "timeout": 60,
   "stdin": "optional text piped to process standard input",
-  "run_in_background": true
+  "run_in_background": true,
+  "verbatim": false
 }
 ```
 
 - `stdin` (optional string): Text piped into the process's standard input stream.
 - `run_in_background` (optional boolean): When `true`, detaches the command immediately and returns a task descriptor (`task-1`).
+- `verbatim` (optional boolean): When `true`, executes the command without RTK output compression when exact raw output is required.
 
 ### `task`
 

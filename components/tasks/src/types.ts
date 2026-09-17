@@ -43,6 +43,12 @@ export const bashParameters = Type.Object({
 			description: "Run command in background detached from the current turn. Returns immediately with task ID.",
 		}),
 	),
+	verbatim: Type.Optional(
+		Type.Boolean({
+			description:
+				"Run command verbatim without RTK output compression or rewriting. Use when exact raw output or unfiltered flags are required.",
+		}),
+	),
 });
 
 export type BashParameters = Static<typeof bashParameters>;

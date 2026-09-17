@@ -207,7 +207,7 @@ Architecture is defined by what you choose *not* to build. Consult [`docs/bounda
 - **Host**: macOS recommended (for native notifications and Ghostty/tmux focus scripts).
 - **Node.js**: `>= 22.19.0`
 - **Pi**: `>= 0.84.4` (`npm install -g @earendil-works/pi-coding-agent`)
-- **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`.
+- **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`, [`rtk`](docs/rtk.md) (≥ 0.23.0 for token-efficient bash execution).
 
 ### Installation
 

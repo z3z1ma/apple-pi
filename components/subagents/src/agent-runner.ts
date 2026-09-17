@@ -22,6 +22,7 @@ import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-searc
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
+import { RTK_EXTENSION_PATH } from "../../../extensions/rtk.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
@@ -95,6 +96,7 @@ export function childSessionExtensions(
 			WIKI_EXTENSION_PATH,
 			SESSION_SEARCH_EXTENSION_PATH,
 			MCP_EXTENSION_PATH,
+			RTK_EXTENSION_PATH,
 		);
 		if (pair) additionalExtensionPaths.push(PAIR_EXTENSION_PATH);
 	} else if (readOnly) {

@@ -22,14 +22,15 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	ask_user_question: "AskUserQuestion",
 };
 
-export function formatStatusBullet(status: ToolStatus, theme: Theme): string {
+export function formatStatusBullet(status: ToolStatus, theme: Theme, isRtk = false): string {
+	const symbol = isRtk ? "▲" : "●";
 	switch (status) {
 		case "running":
-			return theme.fg("warning", "●");
+			return theme.fg("warning", symbol);
 		case "error":
-			return theme.fg("error", "●");
+			return theme.fg("error", symbol);
 		case "success":
-			return theme.fg("success", "●");
+			return theme.fg("success", symbol);
 	}
 }
 
@@ -190,7 +191,7 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 	switch (toolName) {
 		case "bash":
 		case "powershell": {
-			const cmd = args.command || args.cmd || "";
+			const cmd = args._rawCommand || args.command || args.cmd || "";
 			return typeof cmd === "string" ? cmd.replace(/[\r\n]+/g, " ").trim() : "";
 		}
 		case "read":
@@ -253,8 +254,9 @@ export function formatCollapsedLine(
 	theme: Theme,
 	cwd?: string,
 	width?: number,
+	isRtk = false,
 ): string {
-	const bullet = formatStatusBullet(status, theme);
+	const bullet = formatStatusBullet(status, theme, isRtk);
 	const name = formatToolName(toolName, theme);
 	const hint = isLast ? ` ${theme.fg("muted", "(ctrl+o to expand)")}` : "";
 	const argStr = formatToolArgs(toolName, args, cwd);
@@ -498,9 +500,10 @@ export function formatExpandedLines(
 	theme: Theme,
 	cwd?: string,
 	width?: number,
+	isRtk = false,
 ): string[] {
 	const status: ToolStatus = isPartial ? "running" : result?.isError ? "error" : "success";
-	const bullet = formatStatusBullet(status, theme);
+	const bullet = formatStatusBullet(status, theme, isRtk);
 	const name = formatToolName(toolName, theme);
 	const argStr = formatToolArgs(toolName, args, cwd);
 	const headerLine = formatHeaderLine(bullet, name, argStr, width);

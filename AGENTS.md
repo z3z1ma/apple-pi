@@ -59,6 +59,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/reminders/` | Queues explicit model-authored follow-up guidance for the next root turn | A reminder is one-shot, in-memory continuation guidance, not persistent task state or new authority. |
 | `components/tasks/` | Process backgrounding for shell commands (operator Ctrl+B detach, agent run_in_background: true), reactive wake-up notifications, and task management | Root sessions only. Dispatches followUp messages with triggerTurn: true on task completion. Overrides built-in bash tool. |
+| `components/rtk/` | Detects host RTK (Rust Token Killer), rewrites bash commands for token efficiency, and injects model guidance | Root sessions and standard child sessions. Intercepts bash tool execution when `verbatim !== true`, falls open cleanly if RTK is missing or disabled (`RTK_DISABLED=1`). |
 | `components/prompt-stash/` | In-memory prompt stashing with FIFO eviction and external editor ($EDITOR / vim) integration | Root sessions only. Registers shortcuts (Ctrl+S, Alt+S, Ctrl+Shift+S, Alt+Shift+S, Ctrl+Alt+S, Ctrl+E, Alt+E) and commands (/stash, /edit-prompt). |
 | `components/terse-tools/` | Replaces default bulky tool boxes with terse Antigravity-style single-line TUI rendering (`● Tool(args)`) and tree-style expansion | Interactive TUI sessions. Patches `ToolExecutionComponent.prototype.render` and `Container.prototype.addChild` to eliminate box borders and format collapsed/expanded views with theme colors. |
 | `optional-extensions/` | Retained backlog and to-do implementations that are packaged and tested but not loaded by default | Keep these extensions self-contained and opt-in; they must not add tools, commands, widgets, or prompt guidance to the default harness. |
@@ -137,6 +138,7 @@ Use the narrowest production owner:
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
 - Default next-turn continuity: `components/reminders/`; keep reminders root-only, one-shot, and in memory.
+- RTK command rewriting and prompt injection: `components/rtk/` for detector, rewriter, and prompt; `extensions/rtk.ts` for Pi event wiring.
 - Optional backlog and to-do behavior: `optional-extensions/`; preserve loadability and tests without adding them to the default package surface.
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - ledger behavior: keep add/close/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.

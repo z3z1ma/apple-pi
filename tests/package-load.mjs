@@ -40,13 +40,14 @@ try {
 			"extensions/tasks.ts",
 			"extensions/prompt-stash.ts",
 			"extensions/terse-tools.ts",
+			"extensions/rtk.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 20);
+	assert.equal(result.extensions.length, 21);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -144,6 +145,10 @@ try {
 				extension.path.endsWith("subagents.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
 		),
 		"missing live subagent-team system-prompt injection",
+	);
+	assert(
+		result.extensions.some((extension) => extension.path.endsWith("rtk.ts")),
+		"missing rtk extension",
 	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));

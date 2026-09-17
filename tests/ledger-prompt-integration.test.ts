@@ -14,6 +14,7 @@ import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guar
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
+import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
@@ -87,6 +88,7 @@ describe("ledger system prompt distribution", () => {
 				WIKI_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				MCP_EXTENSION_PATH,
+				RTK_EXTENSION_PATH,
 			],
 		});
 	});
@@ -109,6 +111,7 @@ describe("ledger system prompt distribution", () => {
 				WIKI_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				MCP_EXTENSION_PATH,
+				RTK_EXTENSION_PATH,
 				PAIR_EXTENSION_PATH,
 			],
 		});

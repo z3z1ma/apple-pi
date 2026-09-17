@@ -12,7 +12,9 @@ By default, every tool execution renders as a single, terse line:
 ● <ToolName>(<concise arguments>)
 ```
 
-- **Bullet `●`**: Colored dynamically based on status:
+- **Bullet `●` / `▲`**: Colored dynamically based on status:
+  - Standard circle `●`: Regular tool execution.
+  - Upward triangle `▲`: Command output was compressed by RTK (Rust Token Killer).
   - Yellow / Warning: Running or in-progress tool execution.
   - Green / Success: Tool execution completed successfully.
   - Red / Error: Tool execution failed.

@@ -13,6 +13,7 @@ import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
 import type { TaskManager } from "./task-manager.js";
 import { type BackgroundTask, type BashParameters, bashParameters } from "./types.js";
+import { rewriteCommand } from "../../rtk/src/index.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -57,32 +58,48 @@ export function createBashToolDefinition(
 			"Use run_in_background: true to run long-running commands (e.g. builds, servers, watchers, CI wait) in the background. You will receive a notification when the task completes.",
 			"While a foreground command is executing, the operator can press Ctrl+B to background it.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
+			"Pass verbatim: true to run commands without RTK output compression when exact raw output is required.",
 		],
 		parameters: bashParameters,
 		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: shell command execution handles backgrounding, detach, timeout, stdin piping, and live terminal updates.
 		async execute(_toolCallId, params: BashParameters, signal, onUpdate, ctx) {
-			const { command, timeout, run_in_background, stdin } = params;
+			const { command, timeout, run_in_background, stdin, verbatim } = params;
 			const effectiveCwd = ctx?.cwd || cwd || process.cwd();
 			const shellConfig = getShellConfig();
 			const env = resolveShellEnv(ctx);
 			const commandFromStdin = shellConfig.commandTransport === "stdin";
 			const stdinPipe = commandFromStdin || stdin !== undefined;
 
+			let executionCommand = command;
+			let isRtk = Boolean((params as any)._rtk);
+
+			if (verbatim !== true && !isRtk && !command.startsWith("rtk ")) {
+				const rewritten = await rewriteCommand(command, { signal });
+				if (rewritten && rewritten !== command) {
+					executionCommand = rewritten;
+					isRtk = true;
+				}
+			}
+
 			if (run_in_background) {
 				if (!taskManager) {
 					throw new Error("Background command execution requires a task manager");
 				}
-				const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
-					cwd: effectiveCwd,
-					detached: process.platform !== "win32",
-					env,
-					stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
-					windowsHide: true,
-				});
+				const child = spawn(
+					shellConfig.shell,
+					commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
+					{
+						cwd: effectiveCwd,
+						detached: process.platform !== "win32",
+						env,
+						stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
+						windowsHide: true,
+					},
+				);
 
 				if (commandFromStdin) {
 					child.stdin?.on("error", () => {});
-					child.stdin?.end(command);
+					child.stdin?.end(executionCommand);
 				} else if (stdin !== undefined) {
 					child.stdin?.on("error", () => {});
 					child.stdin?.end(stdin);
@@ -104,22 +121,27 @@ export function createBashToolDefinition(
 						pid: task.pid,
 						status: "running",
 						backgrounded: true,
+						rtk: isRtk,
 					},
 				};
 			}
 
 			// Foreground execution with Ctrl+B backgrounding support
-			const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
-				cwd: effectiveCwd,
-				detached: process.platform !== "win32",
-				env,
-				stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
-				windowsHide: true,
-			});
+			const child = spawn(
+				shellConfig.shell,
+				commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
+				{
+					cwd: effectiveCwd,
+					detached: process.platform !== "win32",
+					env,
+					stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
+					windowsHide: true,
+				},
+			);
 
 			if (commandFromStdin) {
 				child.stdin?.on("error", () => {});
-				child.stdin?.end(command);
+				child.stdin?.end(executionCommand);
 			} else if (stdin !== undefined) {
 				child.stdin?.on("error", () => {});
 				child.stdin?.end(stdin);
@@ -291,6 +313,8 @@ export function createBashToolDefinition(
 					details: {
 						truncated: snapshot.truncated,
 						fullOutputPath: snapshot.fullOutputPath,
+						rtk: isRtk,
+						originalCommand: (params as any)._rawCommand || command,
 					},
 				};
 			} finally {
@@ -299,11 +323,15 @@ export function createBashToolDefinition(
 			}
 		},
 		renderCall(args, theme, context) {
+			const displayCmd = (args as any)?._rawCommand || args?.command || "...";
 			if (args?.run_in_background) {
-				const cmd = args.command || "...";
-				return new Text(theme.fg("toolTitle", theme.bold(`$ ${cmd}`)) + theme.fg("muted", " (background)"), 0, 0);
+				return new Text(
+					theme.fg("toolTitle", theme.bold(`$ ${displayCmd}`)) + theme.fg("muted", " (background)"),
+					0,
+					0,
+				);
 			}
-			return defaultBashDef.renderCall?.(args, theme, context) ?? new Text(`$ ${args?.command || "..."}`, 0, 0);
+			return defaultBashDef.renderCall?.(args, theme, context) ?? new Text(`$ ${displayCmd}`, 0, 0);
 		},
 		renderResult(result, options, theme, context) {
 			const details = result.details as any;

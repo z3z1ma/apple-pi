@@ -42,6 +42,7 @@
     "components/tasks/src/",
     "components/prompt-stash/src/",
     "components/terse-tools/src/",
+    "components/rtk/src/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -76,7 +77,8 @@
       "./extensions/status-footer.ts",
       "./extensions/tasks.ts",
       "./extensions/prompt-stash.ts",
-      "./extensions/terse-tools.ts"
+      "./extensions/terse-tools.ts",
+      "./extensions/rtk.ts"
     ],
     "skills": [
       "./skills"

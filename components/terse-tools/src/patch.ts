@@ -352,6 +352,7 @@ export function installTerseToolRenderer(): void {
 				: "success";
 		const isLast = isLastToolInSequence(this);
 		const hasTextBefore = precedingHasTextDelta(this);
+		const isRtk = Boolean((this as any).result?.details?.rtk || (this as any).args?._rtk);
 
 		let lines: string[];
 		if ((this as any).expanded) {
@@ -364,6 +365,7 @@ export function installTerseToolRenderer(): void {
 				theme,
 				(this as any).cwd,
 				width,
+				isRtk,
 			);
 			if (hasTextBefore) {
 				lines.unshift("");
@@ -378,6 +380,7 @@ export function installTerseToolRenderer(): void {
 				theme,
 				(this as any).cwd,
 				width,
+				isRtk,
 			);
 			lines = hasTextBefore ? ["", line] : [line];
 		}
