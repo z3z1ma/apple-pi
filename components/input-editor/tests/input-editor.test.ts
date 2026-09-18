@@ -80,7 +80,7 @@ describe("input editor rendering", () => {
 		// 2: breathing line before metadata
 		expect(plain[2]).toBe(`│ ${" ".repeat(118)}`);
 		// 3: metadata line with right-justified status
-		expect(plain[3]).toMatch(/^│ GPT Test {2}OpenAI {2}high/);
+		expect(plain[3]).toMatch(/^│ GPT Test OpenAI high/);
 		expect(plain[3].trimEnd().endsWith("pair · mcp:3 · ctx 32.8%")).toBe(true);
 		expect(lines).toHaveLength(4);
 	});
@@ -89,7 +89,7 @@ describe("input editor rendering", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 120, [""], undefined, " ●    ");
 		const plain = lines.map(stripTerminalSequences);
 		expect(plain[0]).toBe(`│ ${" ".repeat(118)}`);
-		expect(plain.at(-1)).toMatch(/^│ GPT Test {2}OpenAI {2}high ·  ●/);
+		expect(plain.at(-1)).toMatch(/^│ GPT Test OpenAI high ·  ●/);
 		expect(lines).toHaveLength(4);
 	});
 
@@ -136,9 +136,9 @@ describe("input editor rendering", () => {
 	});
 
 	it("preserves full model metadata at moderate width by dropping optional status parts before context", () => {
-		const lines = renderInputCard(completeSnapshot, theme, 40, [""]);
+		const lines = renderInputCard(completeSnapshot, theme, 36, [""]);
 		const bottom = stripTerminalSequences(lines.at(-1)!);
-		expect(bottom).toContain("GPT Test  OpenAI  high");
+		expect(bottom).toContain("GPT Test OpenAI high");
 		expect(bottom).toContain("ctx 32.8%");
 		expect(bottom).not.toContain("pair");
 		expect(bottom).not.toContain("mcp");
@@ -168,7 +168,7 @@ describe("input editor rendering", () => {
 			statuses: [...completeSnapshot.statuses, { key: "fast-mode", text: "fast" }],
 		};
 		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
-		expect(output).toContain("OpenAI  high ⚡");
+		expect(output).toContain("OpenAI high ⚡");
 		expect(output).not.toMatch(/\bfast\b/);
 	});
 

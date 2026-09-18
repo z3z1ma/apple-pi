@@ -105,7 +105,7 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme, workingStatus?: s
 	}
 
 	const parts = [modelPart, providerPart, thinkingPart].filter(Boolean);
-	const base = parts.join("  ");
+	const base = parts.join(" ");
 	return workingPart ? `${base} ${workingPart}` : base;
 }
 
