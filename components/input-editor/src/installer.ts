@@ -7,12 +7,15 @@ import { createInputCardEditorFactory, type InputCardEditor } from "./ui/input-e
 const TRACK_WIDTH = 5;
 const BOUNCE_FRAMES_COUNT = (TRACK_WIDTH - 1) * 2;
 
-function buildBouncingBallFrames(accentFn: (text: string) => string): string[] {
+function buildBouncingBallFrames(accentFn: (text: string) => string, mutedFn: (text: string) => string): string[] {
 	const frames: string[] = [];
 	for (let i = 0; i < BOUNCE_FRAMES_COUNT; i++) {
 		const pos = i < TRACK_WIDTH ? i : BOUNCE_FRAMES_COUNT - i;
-		const track = `${" ".repeat(pos)}●${" ".repeat(TRACK_WIDTH - 1 - pos)}`;
-		frames.push(accentFn(track));
+		const inner = `${" ".repeat(pos)}●${" ".repeat(TRACK_WIDTH - 1 - pos)}`;
+		const left = mutedFn("(");
+		const ball = accentFn(inner);
+		const right = mutedFn(")");
+		frames.push(`${left}${ball}${right}`);
 	}
 	return frames;
 }
@@ -112,7 +115,10 @@ export function installForTui(ctx: ExtensionContext): void {
 	const editorFactory = createInputCardEditorFactory(ctx, footerData);
 	try {
 		ctx.ui.setWorkingIndicator({
-			frames: buildBouncingBallFrames((text) => ctx.ui.theme.fg("accent", text)),
+			frames: buildBouncingBallFrames(
+				(text) => ctx.ui.theme.fg("accent", text),
+				(text) => ctx.ui.theme.fg("muted", text),
+			),
 			intervalMs: 100,
 		});
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
