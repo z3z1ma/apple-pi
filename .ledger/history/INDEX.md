@@ -75,3 +75,5 @@
 - `.ledger/history/202609171626-assess-pi-0-85-x/task.md` — done — Assess Pi 0.85.x opportunities for Apple Pi — Research Pi 0.85.0/0.85.1 and unreleased main against Apple Pi's custom editor, footer, bash, pair, ledger, and compaction surfaces.
 
 - `.ledger/history/202609171730-adopt-pi-0-85-1/task.md` — done — Adopt Pi 0.85.1 host pins — Align Apple Pi's four Pi development pins and pi-mcp-adapter with the already-running 0.85.1 host. Leave the working spinner standalone.
+
+- `.ledger/history/202608311324-refine-llm-wiki-tools/task.md` — done — Refine the LLM wiki with prompt and graph tools — Add compact wiki system guidance, deterministic Obsidian-link validation, graph neighborhood retrieval, and clearer on-demand wiki procedures.
