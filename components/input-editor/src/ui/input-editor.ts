@@ -309,9 +309,10 @@ export function collapseDockFooter(tui: unknown): void {
 		for (const rootEntry of root.entries) {
 			const candidate = rootEntry?.component;
 			if (candidate && Array.isArray(candidate.entries)) {
-				const lastEntry = candidate.entries[candidate.entries.length - 1];
-				if (lastEntry && lastEntry.minSize === 1) {
-					lastEntry.minSize = 0;
+				for (const entry of candidate.entries) {
+					if (entry && entry.minSize === 1) {
+						entry.minSize = 0;
+					}
 				}
 			}
 		}
