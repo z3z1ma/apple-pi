@@ -369,7 +369,10 @@ export class InputCardEditor extends PiCustomEditor {
 		const split = splitNativeEditorLines(nativeLines);
 		const snapshot = collectInputCardSnapshot(this.ctx, this.footerData);
 		const theme = safeRead(() => this.ctx.ui.theme) ?? this.cardTheme;
-		const workingStatus = this.workingStatusIndicator?.renderInBorder(innerWidth);
+		const indicator = (this as any).workingStatusIndicator as
+			| { renderSpinnerInBorder(width: number): string }
+			| undefined;
+		const workingStatus = indicator?.renderSpinnerInBorder(innerWidth);
 		const card = renderInputCard(snapshot, theme, width, split.prompt, split.viewport, workingStatus);
 		const autocomplete = split.autocomplete.map((line) => fitToWidth(line, width, ""));
 		return [...card, ...autocomplete].filter((line) => visibleWidth(line) <= width);

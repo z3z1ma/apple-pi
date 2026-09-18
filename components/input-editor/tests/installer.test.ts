@@ -52,6 +52,7 @@ function contextFor(
 					? (factory as EmptyFooterFactory)({} as TUI, theme, footerData)
 					: undefined;
 		},
+		setWorkingIndicator: () => {},
 		notify: (message: string) => notifications.push(message),
 	} as unknown as ExtensionUIContext;
 	const ctx = {

@@ -4,6 +4,19 @@ import type { Component } from "@earendil-works/pi-tui";
 import type { EmptyFooterFactory } from "./types.js";
 import { createInputCardEditorFactory, type InputCardEditor } from "./ui/input-editor.js";
 
+const TRACK_WIDTH = 5;
+const BOUNCE_FRAMES_COUNT = (TRACK_WIDTH - 1) * 2;
+
+function buildBouncingBallFrames(accentFn: (text: string) => string): string[] {
+	const frames: string[] = [];
+	for (let i = 0; i < BOUNCE_FRAMES_COUNT; i++) {
+		const pos = i < TRACK_WIDTH ? i : BOUNCE_FRAMES_COUNT - i;
+		const track = `${" ".repeat(pos)}●${" ".repeat(TRACK_WIDTH - 1 - pos)}`;
+		frames.push(accentFn(track));
+	}
+	return frames;
+}
+
 class EmptyFooter implements Component {
 	constructor(private readonly onDispose?: () => void) {}
 
@@ -98,6 +111,10 @@ export function installForTui(ctx: ExtensionContext): void {
 
 	const editorFactory = createInputCardEditorFactory(ctx, footerData);
 	try {
+		ctx.ui.setWorkingIndicator({
+			frames: buildBouncingBallFrames((text) => ctx.ui.theme.fg("accent", text)),
+			intervalMs: 100,
+		});
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
 			activeEditor?.dispose();
 			activeEditor = editorFactory(tui, theme, keybindings);
