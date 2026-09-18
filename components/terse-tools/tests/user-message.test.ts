@@ -1,7 +1,7 @@
 import { UserMessageComponent } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
-import { formatUserMessage, stripAnsi, withPromptZoneMarkers } from "../src/formatters.js";
+import { formatUserMessage } from "../src/formatters.js";
 import { installTerseToolRenderer, setActiveTheme } from "../src/patch.js";
 
 const testTheme = {

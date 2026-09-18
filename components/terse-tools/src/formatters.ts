@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { type Theme, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, type MarkdownTheme, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
@@ -19,6 +19,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	manage_task: "ManageTask",
 	schedule: "Schedule",
 	pi_exec: "Exec",
+	pi_exec_program: "Program",
 	ask_user_question: "AskUserQuestion",
 };
 
@@ -35,7 +36,7 @@ export function formatStatusBullet(status: ToolStatus, theme: Theme, isRtk = fal
 }
 
 export function toPascalCase(name: string): string {
-	return name.replace(/[-_](\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, (c) => c.toUpperCase());
+	return name.replace(/[-_]+([a-zA-Z0-9])/g, (_, c) => c.toUpperCase()).replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function formatToolName(toolName: string, theme: Theme): string {
@@ -118,8 +119,74 @@ export function formatPath(filePath: string): string {
 	return filePath;
 }
 
+function summarizeObject(obj: Record<string, unknown>): string {
+	const preferredKeys = [
+		"content",
+		"question",
+		"prompt",
+		"message",
+		"title",
+		"name",
+		"description",
+		"reason",
+		"pattern",
+		"command",
+		"cmd",
+		"path",
+		"file",
+		"id",
+		"target",
+		"task",
+	];
+
+	if (typeof obj.disposition === "string") {
+		const id = obj.id ? ` ${obj.id}` : "";
+		const reason = obj.reason
+			? `: ${String(obj.reason)
+					.replace(/[\r\n]+/g, " ")
+					.trim()}`
+			: "";
+		return `${obj.disposition}${id}${reason}`;
+	}
+
+	for (const key of preferredKeys) {
+		const v = obj[key];
+		if (typeof v === "string" || typeof v === "number") {
+			return String(v)
+				.replace(/[\r\n]+/g, " ")
+				.trim();
+		}
+	}
+
+	const parts = Object.entries(obj)
+		.filter(([_, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+		.map(([k, v]) => `${k}: ${v}`);
+	return parts.join(", ");
+}
+
+function summarizeArray(arr: unknown[]): string {
+	if (arr.length === 0) return "";
+	const first = arr[0];
+	let summary = "";
+
+	if (typeof first === "string" || typeof first === "number" || typeof first === "boolean") {
+		if (arr.every((item) => typeof item === "string" || typeof item === "number")) {
+			return (arr as (string | number)[]).join(", ");
+		}
+		summary = String(first);
+	} else if (first && typeof first === "object") {
+		summary = summarizeObject(first as Record<string, unknown>);
+	}
+
+	if (!summary) return "";
+	if (arr.length > 1) {
+		return `${summary} (+${arr.length - 1} more)`;
+	}
+	return summary;
+}
+
 function formatDefaultArgs(args: Record<string, unknown>): string {
-	const keys = [
+	const priorityKeys = [
 		"query",
 		"command",
 		"cmd",
@@ -130,18 +197,46 @@ function formatDefaultArgs(args: Record<string, unknown>): string {
 		"title",
 		"name",
 		"id",
+		"question",
+		"questions",
+		"reflections",
+		"findings",
+		"target",
+		"task",
+		"agent_id",
+		"tool",
 		"prompt",
 		"message",
 		"action",
 	];
-	for (const key of keys) {
-		if (typeof args[key] === "string" || typeof args[key] === "number") {
-			return String(args[key]);
+	for (const key of priorityKeys) {
+		const val = args[key];
+		if (typeof val === "string" || typeof val === "number") {
+			return String(val)
+				.replace(/[\r\n]+/g, " ")
+				.trim();
+		}
+		if (Array.isArray(val) && val.length > 0) {
+			const arrSummary = summarizeArray(val);
+			if (arrSummary) return arrSummary;
 		}
 	}
-	const entries = Object.entries(args)
-		.filter(([_, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
-		.map(([k, v]) => `${k}: ${v}`);
+	const entries: string[] = [];
+	for (const [k, v] of Object.entries(args)) {
+		if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+			entries.push(`${k}: ${v}`);
+		} else if (Array.isArray(v) && v.length > 0) {
+			const arrSummary = summarizeArray(v);
+			if (arrSummary) {
+				entries.push(`${k}: ${arrSummary}`);
+			}
+		} else if (v && typeof v === "object" && Object.keys(v).length > 0) {
+			const objSummary = summarizeObject(v as Record<string, unknown>);
+			if (objSummary) {
+				entries.push(`${k}: ${objSummary}`);
+			}
+		}
+	}
 	if (entries.length > 0) {
 		const joined = entries.join(", ");
 		return joined.length > 80 ? `${joined.slice(0, 77)}...` : joined;
@@ -176,7 +271,7 @@ function formatScheduleArgs(args: any): string {
 }
 
 function formatExecArgs(args: any): string {
-	const title = args.title || args.name || args.goal;
+	const title = args.display?.name || args.display?.description || args.title || args.name || args.goal;
 	if (title) return String(title);
 	if (typeof args.code === "string") {
 		const firstLine = args.code.split(/[\r\n]+/)[0]?.trim() || "";
@@ -185,8 +280,119 @@ function formatExecArgs(args: any): string {
 	return "";
 }
 
+function formatUpdateNotebookArgs(args: any): string {
+	if (Array.isArray(args.reflections) && args.reflections.length > 0) {
+		const first = String(args.reflections[0]?.content || "")
+			.replace(/[\r\n]+/g, " ")
+			.trim();
+		const more = args.reflections.length > 1 ? ` (+${args.reflections.length - 1} more)` : "";
+		const retire =
+			Array.isArray(args.retireReflectionIds) && args.retireReflectionIds.length > 0
+				? ` (retire: ${args.retireReflectionIds.length})`
+				: "";
+		return `${first}${more}${retire}`;
+	}
+	if (Array.isArray(args.retireReflectionIds) && args.retireReflectionIds.length > 0) {
+		return `retire: ${args.retireReflectionIds.join(", ")}`;
+	}
+	if (Array.isArray(args.retainReflectionIds) && args.retainReflectionIds.length > 0) {
+		return `retain: ${args.retainReflectionIds.length}`;
+	}
+	return "";
+}
+
+function formatAcknowledgeFindingsArgs(args: any): string {
+	if (!Array.isArray(args.findings) || args.findings.length === 0) return "";
+	if (args.findings.length === 1) {
+		const f = args.findings[0];
+		const id = f.id || "";
+		const disp = f.disposition || "";
+		const reason = (f.reason || "").replace(/[\r\n]+/g, " ").trim();
+		if (disp && id && reason) return `${disp} ${id}: ${reason}`;
+		if (disp && id) return `${disp} ${id}`;
+		if (disp && reason) return `${disp}: ${reason}`;
+		return disp || id || reason;
+	}
+	return args.findings
+		.map((f: any) => {
+			const id = f.id || "";
+			const disp = f.disposition || "";
+			return id ? `${disp} ${id}` : disp;
+		})
+		.filter(Boolean)
+		.join(", ");
+}
+
+function formatAgentArgs(args: any): string {
+	const type = args.subagent_type || args.type || "";
+	const desc =
+		args.description || (typeof args.prompt === "string" ? args.prompt.split(/[\r\n]+/)[0]?.trim() : "") || "";
+	const bg = args.run_in_background ? " (bg)" : "";
+	if (type && desc) return `${type}${bg}: ${desc}`;
+	if (type) return `${type}${bg}`;
+	return desc;
+}
+
+function formatSubagentArgs(args: any): string {
+	const id = args.agent_id || args.id || "";
+	if (args.message) {
+		const msg = String(args.message)
+			.replace(/[\r\n]+/g, " ")
+			.trim();
+		return id ? `${id}: ${msg}` : msg;
+	}
+	return String(id);
+}
+
+function formatSearchSessionArgs(args: any): string {
+	if (args.query) {
+		const mode = args.mode && args.mode !== "history" ? ` (${args.mode})` : "";
+		return `${args.query}${mode}`;
+	}
+	if (args.mode) {
+		return `mode: ${args.mode}`;
+	}
+	if (Array.isArray(args.expand) && args.expand.length > 0) {
+		return `expand: ${args.expand.join(", ")}`;
+	}
+	return "";
+}
+
+function formatLedgerCloseArgs(args: any): string {
+	const task = args.task || "";
+	const status = args.status || "";
+	if (task && status) return `${status} ${task}`;
+	return task || status;
+}
+
+function formatWikiReferencesArgs(args: any): string {
+	const target = args.target || "";
+	const extras = [
+		args.direction && args.direction !== "both" ? args.direction : "",
+		args.depth && args.depth > 1 ? `depth ${args.depth}` : "",
+	].filter(Boolean);
+	return extras.length > 0 ? `${target} (${extras.join(", ")})` : target;
+}
+
+function formatMcpArgs(args: any): string {
+	if (args.tool) {
+		const server = args.server ? `${args.server}/` : "";
+		const inner = args.args && typeof args.args === "object" ? formatDefaultArgs(args.args) : "";
+		return `${server}${args.tool}${inner ? `(${inner})` : ""}`;
+	}
+	if (args.search) return `search: ${args.search}`;
+	if (args.describe) return `describe: ${args.describe}`;
+	if (args.connect) return `connect: ${args.connect}`;
+	if (args.action) return `${args.action}${args.url ? ` ${args.url}` : ""}`;
+	return formatDefaultArgs(args);
+}
+
 export function formatToolArgs(toolName: string, args: any, _cwd?: string): string {
 	if (!args || typeof args !== "object") return "";
+
+	if (toolName.startsWith("mcp__")) {
+		return formatMcpArgs(args);
+	}
 
 	switch (toolName) {
 		case "bash":
@@ -218,8 +424,28 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 			return formatExecArgs(args);
 		case "ask_user_question":
 			return Array.isArray(args.questions) && args.questions[0]
-				? args.questions[0].question || args.questions[0].prompt || ""
+				? String(args.questions[0].question || args.questions[0].prompt || "")
+						.replace(/[\r\n]+/g, " ")
+						.trim()
 				: "";
+		case "update_notebook":
+			return formatUpdateNotebookArgs(args);
+		case "acknowledge_pair_findings":
+			return formatAcknowledgeFindingsArgs(args);
+		case "agent":
+			return formatAgentArgs(args);
+		case "get_subagent_result":
+		case "steer_subagent":
+		case "stop_subagent":
+			return formatSubagentArgs(args);
+		case "search_session":
+			return formatSearchSessionArgs(args);
+		case "ledger_close":
+			return formatLedgerCloseArgs(args);
+		case "wiki_references":
+			return formatWikiReferencesArgs(args);
+		case "mcp":
+			return formatMcpArgs(args);
 		default:
 			return formatDefaultArgs(args);
 	}

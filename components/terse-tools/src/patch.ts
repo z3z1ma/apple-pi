@@ -3,10 +3,10 @@ import {
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
 	ExtensionRunner,
+	getMarkdownTheme,
 	Theme,
 	ToolExecutionComponent,
 	UserMessageComponent,
-	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {

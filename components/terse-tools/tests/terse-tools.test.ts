@@ -93,7 +93,12 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(formatToolName("manage_task", testTheme))).toBe("ManageTask");
 		expect(stripAnsi(formatToolName("schedule", testTheme))).toBe("Schedule");
 		expect(stripAnsi(formatToolName("pi_exec", testTheme))).toBe("Exec");
+		expect(stripAnsi(formatToolName("pi_exec_program", testTheme))).toBe("Program");
 		expect(stripAnsi(formatToolName("ask_user_question", testTheme))).toBe("AskUserQuestion");
+		expect(stripAnsi(formatToolName("update_notebook", testTheme))).toBe("UpdateNotebook");
+		expect(stripAnsi(formatToolName("acknowledge_pair_findings", testTheme))).toBe("AcknowledgePairFindings");
+		expect(stripAnsi(formatToolName("mcp__atlassian", testTheme))).toBe("McpAtlassian");
+		expect(stripAnsi(formatToolName("mcp__slack", testTheme))).toBe("McpSlack");
 		expect(stripAnsi(formatToolName("slack_send_message", testTheme))).toBe("SlackSendMessage");
 		expect(stripAnsi(formatToolName("custom-tool-name", testTheme))).toBe("CustomToolName");
 	});
@@ -148,13 +153,105 @@ describe("terse tool formatters", () => {
 			"Trace prior cron and sensor design",
 		);
 		expect(
+			formatToolArgs("pi_exec", {
+				code: "await pi.read({ path: 'test.ts' })",
+				display: { name: "Read test file" },
+			}),
+		).toBe("Read test file");
+		expect(formatToolArgs("pi_exec", { code: "const x = 1;\nconsole.log(x);" })).toBe("const x = 1;");
+
+		expect(
 			formatToolArgs("ask_user_question", {
 				questions: [{ question: "Do you want to proceed?" }],
 			}),
 		).toBe("Do you want to proceed?");
 
+		expect(
+			formatToolArgs("update_notebook", {
+				reflections: [{ content: "Fix verified in Vitest" }],
+				retireReflectionIds: [],
+			}),
+		).toBe("Fix verified in Vitest");
+		expect(
+			formatToolArgs("update_notebook", {
+				reflections: [{ content: "First point" }, { content: "Second point" }],
+				retireReflectionIds: [],
+			}),
+		).toBe("First point (+1 more)");
+		expect(
+			formatToolArgs("update_notebook", {
+				reflections: [{ content: "New point" }],
+				retireReflectionIds: ["a1b2c3d4e5f6"],
+			}),
+		).toBe("New point (retire: 1)");
+		expect(
+			formatToolArgs("update_notebook", {
+				reflections: [],
+				retireReflectionIds: ["a1b2c3d4e5f6", "b2c3d4e5f6a1"],
+			}),
+		).toBe("retire: a1b2c3d4e5f6, b2c3d4e5f6a1");
+
+		expect(
+			formatToolArgs("acknowledge_pair_findings", {
+				findings: [{ id: "c1", disposition: "address", reason: "Fixing edge case" }],
+			}),
+		).toBe("address c1: Fixing edge case");
+		expect(
+			formatToolArgs("acknowledge_pair_findings", {
+				findings: [
+					{ id: "c1", disposition: "address", reason: "Fixing" },
+					{ id: "c2", disposition: "decline", reason: "N/A" },
+				],
+			}),
+		).toBe("address c1, decline c2");
+
+		expect(
+			formatToolArgs("agent", {
+				subagent_type: "explorer",
+				description: "Search for symbols across repo",
+			}),
+		).toBe("explorer: Search for symbols across repo");
+		expect(
+			formatToolArgs("agent", {
+				subagent_type: "builder",
+				description: "Implement tests",
+				run_in_background: true,
+			}),
+		).toBe("builder (bg): Implement tests");
+
+		expect(formatToolArgs("get_subagent_result", { agent_id: "agent-123", verbose: false })).toBe("agent-123");
+		expect(formatToolArgs("steer_subagent", { agent_id: "agent-123", message: "Focus on index.ts" })).toBe(
+			"agent-123: Focus on index.ts",
+		);
+		expect(formatToolArgs("stop_subagent", { agent_id: "agent-123" })).toBe("agent-123");
+
+		expect(formatToolArgs("search_session", { query: "export function" })).toBe("export function");
+		expect(formatToolArgs("search_session", { query: "#1:src/index.ts", mode: "file" })).toBe("#1:src/index.ts (file)");
+		expect(formatToolArgs("search_session", { mode: "touched" })).toBe("mode: touched");
+		expect(formatToolArgs("search_session", { expand: [1, 2] })).toBe("expand: 1, 2");
+
+		expect(formatToolArgs("ledger_close", { task: "20260901-task", status: "done" })).toBe("done 20260901-task");
+		expect(formatToolArgs("wiki_references", { target: "my-page", depth: 1, direction: "both" })).toBe("my-page");
+		expect(formatToolArgs("wiki_references", { target: "my-page", depth: 2, direction: "inbound" })).toBe(
+			"my-page (inbound, depth 2)",
+		);
+
+		expect(formatToolArgs("mcp", { tool: "get_issue", args: { issueId: "PROJ-1" } })).toBe(
+			"get_issue(issueId: PROJ-1)",
+		);
+		expect(formatToolArgs("mcp", { search: "slack" })).toBe("search: slack");
+		expect(formatToolArgs("mcp__atlassian", { tool: "get_issue", args: { issueId: "PROJ-2" } })).toBe(
+			"get_issue(issueId: PROJ-2)",
+		);
+
 		expect(formatToolArgs("custom_tool", { query: "hello world" })).toBe("hello world");
 		expect(formatToolArgs("custom_tool", { foo: "bar", count: 42 })).toBe("foo: bar, count: 42");
+		expect(
+			formatToolArgs("batch_tool", {
+				items: [{ name: "First item" }, { name: "Second item" }],
+			}),
+		).toBe("items: First item (+1 more)");
+		expect(formatToolArgs("execute_tool", { ids: [10, 20, 30] })).toBe("ids: 10, 20, 30");
 	});
 
 	it("parses diff text counting added and removed lines", () => {
