@@ -85,10 +85,12 @@ describe("input editor rendering", () => {
 		expect(lines).toHaveLength(4);
 	});
 
-	it("renders the working status in the top rail line when active", () => {
+	it("renders the working status in muted color to the right of model effort with a dot separator", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 120, [""], undefined, "⠼ Working");
 		const plain = lines.map(stripTerminalSequences);
-		expect(plain[0]).toContain("│ ⠼ Working");
+		expect(plain[0]).toBe(`│ ${" ".repeat(118)}`);
+		expect(plain.at(-1)).toMatch(/^│ GPT Test {2}OpenAI {2}high · ⠼ Working/);
+		expect(lines.at(-1)).toContain("\u001b[36m· ⠼ Working\u001b[0m");
 		expect(lines).toHaveLength(4);
 	});
 

@@ -83,13 +83,14 @@ function thinkingColor(level: string): ThemeColor {
 	}
 }
 
-function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefined {
-	if (!snapshot.model) return undefined;
+function modelMetadata(snapshot: FooterSnapshot, theme: Theme, workingStatus?: string): string | undefined {
+	const workingPart = workingStatus ? theme.fg("muted", `· ${stripTerminalSequences(workingStatus)}`) : undefined;
+	if (!snapshot.model) return workingStatus ? theme.fg("muted", stripTerminalSequences(workingStatus)) : undefined;
 	const modelName = snapshot.model.name || snapshot.model.id;
-	if (!modelName) return undefined;
+	if (!modelName) return workingStatus ? theme.fg("muted", stripTerminalSequences(workingStatus)) : undefined;
 	const provider = cleanOneLine(snapshot.model.providerName ?? snapshot.model.provider);
 	const model = cleanOneLine(modelName);
-	if (!provider || !model) return undefined;
+	if (!provider || !model) return workingStatus ? theme.fg("muted", stripTerminalSequences(workingStatus)) : undefined;
 	const thinking = snapshot.model.reasoning ? snapshot.model.thinkingLevel || "off" : undefined;
 	const fast = snapshot.fastModeEnabled && VROOM_PROVIDERS.has(snapshot.model.provider) ? " ⚡" : "";
 
@@ -104,7 +105,8 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme): string | undefin
 	}
 
 	const parts = [modelPart, providerPart, thinkingPart].filter(Boolean);
-	return parts.join("  ");
+	const base = parts.join("  ");
+	return workingPart ? `${base} ${workingPart}` : base;
 }
 
 function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | undefined {
@@ -138,8 +140,13 @@ function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | 
 	return fitToWidth(parts.join(" · "), width, "");
 }
 
-function renderMetadataRow(snapshot: FooterSnapshot, theme: Theme, width: number): string | undefined {
-	const metadata = modelMetadata(snapshot, theme);
+function renderMetadataRow(
+	snapshot: FooterSnapshot,
+	theme: Theme,
+	width: number,
+	workingStatus?: string,
+): string | undefined {
+	const metadata = modelMetadata(snapshot, theme, workingStatus);
 	const metadataWidth = metadata ? visibleWidth(metadata) : 0;
 	const minStatusWidth = snapshot.context ? visibleWidth(`ctx ${snapshot.context.percent?.toFixed(1) ?? "?"}%`) : 0;
 	const statusBudget = metadata ? Math.max(minStatusWidth, width - metadataWidth - 1) : width;
@@ -204,12 +211,8 @@ export function renderInputCard(
 		rows.push(fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport.above)), width));
 	}
 
-	// Top line: working status indicator if active, otherwise top breathing line
-	if (workingStatus) {
-		rows.push(`${rail}${fillLine(workingStatus, innerWidth)}`);
-	} else {
-		rows.push(`${rail}${" ".repeat(innerWidth)}`);
-	}
+	// Top padding line
+	rows.push(`${rail}${" ".repeat(innerWidth)}`);
 
 	// Prompt lines
 	for (const line of prompt) {
@@ -217,7 +220,7 @@ export function renderInputCard(
 	}
 
 	// Model metadata line with breathing gap
-	const metadata = renderMetadataRow(snapshot, theme, innerWidth);
+	const metadata = renderMetadataRow(snapshot, theme, innerWidth, workingStatus);
 	if (metadata) {
 		rows.push(`${rail}${" ".repeat(innerWidth)}`);
 		rows.push(`${rail}${fillLine(metadata, innerWidth)}`);
