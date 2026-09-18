@@ -187,6 +187,7 @@ export function renderInputCard(
 	width: number,
 	editorLines: readonly string[] = [""],
 	viewport?: { above?: string; below?: string },
+	workingStatus?: string,
 ): string[] {
 	if (width <= 0) return [];
 	if (width <= 2) return editorLines.map((line) => truncateToWidth(line, width, ""));
@@ -203,8 +204,12 @@ export function renderInputCard(
 		rows.push(fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport.above)), width));
 	}
 
-	// Top padding line
-	rows.push(`${rail}${" ".repeat(innerWidth)}`);
+	// Top line: working status indicator if active, otherwise top breathing line
+	if (workingStatus) {
+		rows.push(`${rail}${fillLine(workingStatus, innerWidth)}`);
+	} else {
+		rows.push(`${rail}${" ".repeat(innerWidth)}`);
+	}
 
 	// Prompt lines
 	for (const line of prompt) {
@@ -334,7 +339,7 @@ export class InputCardEditor extends PiCustomEditor {
 		private readonly footerData: ReadonlyFooterDataProvider | undefined,
 		private readonly cardTheme: Theme,
 	) {
-		super(tuiForCard, editorTheme, keybindings, { paddingX: 0 });
+		super(tuiForCard, editorTheme, keybindings, { paddingX: 0, embedWorkingStatus: true });
 		collapseDockFooter(tuiForCard);
 		this.#unsubscribeBranch = footerData?.onBranchChange(() => {
 			if (this.#disposed) return;
@@ -361,7 +366,8 @@ export class InputCardEditor extends PiCustomEditor {
 		const split = splitNativeEditorLines(nativeLines);
 		const snapshot = collectInputCardSnapshot(this.ctx, this.footerData);
 		const theme = safeRead(() => this.ctx.ui.theme) ?? this.cardTheme;
-		const card = renderInputCard(snapshot, theme, width, split.prompt, split.viewport);
+		const workingStatus = this.workingStatusIndicator?.renderInBorder(innerWidth);
+		const card = renderInputCard(snapshot, theme, width, split.prompt, split.viewport, workingStatus);
 		const autocomplete = split.autocomplete.map((line) => fitToWidth(line, width, ""));
 		return [...card, ...autocomplete].filter((line) => visibleWidth(line) <= width);
 	}

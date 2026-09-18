@@ -85,6 +85,13 @@ describe("input editor rendering", () => {
 		expect(lines).toHaveLength(4);
 	});
 
+	it("renders the working status in the top rail line when active", () => {
+		const lines = renderInputCard(completeSnapshot, theme, 120, [""], undefined, "⠼ Working");
+		const plain = lines.map(stripTerminalSequences);
+		expect(plain[0]).toContain("│ ⠼ Working");
+		expect(lines).toHaveLength(4);
+	});
+
 	it("renders the compact status in one muted style on the bottom editor line", () => {
 		const output = renderInputCard(completeSnapshot, theme, 120, [""]).join("\n");
 		expect(output).toContain("\u001b[36mpair · mcp:3 · ctx 32.8%\u001b[0m");
