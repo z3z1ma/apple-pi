@@ -84,8 +84,9 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 ## pi-mcp-adapter (runtime dependency)
 
 - Source: <https://github.com/nicobailon/pi-mcp-adapter>
-- Reviewed commit: `5ee81b47b571b3c4ac2e68a03812c64e3f95cb98`
-- Pinned npm version: `2.26.0`
+- Reviewed commit: `5ee81b47b571b3c4ac2e68a03812c64e3f95cb98` (2.26.0 integration)
+- Pinned npm version: `2.34.0`
+- 2.34.0 change: npm pin only. Adapter source is still not copied. `mcpScript` is still filtered at registration. Peer now accepts Pi 0.85.
 - Author named by the source package: Nico Bailon
 - Integration path: `extensions/mcp.ts`
 - License: MIT

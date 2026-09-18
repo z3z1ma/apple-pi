@@ -36,7 +36,7 @@ try {
 			"extensions/xai-context-compaction.ts",
 			"extensions/notify.ts",
 			"extensions/tmux-sessions.ts",
-			"extensions/status-footer.ts",
+			"extensions/input-editor.ts",
 			"extensions/tasks.ts",
 			"extensions/prompt-stash.ts",
 			"extensions/terse-tools.ts",
@@ -74,7 +74,7 @@ try {
 		"missing tmux-sessions status-publishing hooks",
 	);
 	assert(
-		result.extensions.some((extension) => extension.path.endsWith("status-footer.ts")),
+		result.extensions.some((extension) => extension.path.endsWith("input-editor.ts")),
 		"missing input card extension",
 	);
 	assert(
@@ -191,6 +191,7 @@ try {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
 	for (const name of [
+		"mcpScript",
 		"backlog_add",
 		"backlog_list",
 		"backlog_take",

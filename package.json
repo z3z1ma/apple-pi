@@ -38,7 +38,7 @@
     "components/tmux-sessions/scripts/",
     "components/tmux-sessions/pi_session_manager.tmux",
     "components/tmux-sessions/LICENSE",
-    "components/status-footer/src/",
+    "components/input-editor/src/",
     "components/tasks/src/",
     "components/prompt-stash/src/",
     "components/terse-tools/src/",
@@ -74,7 +74,7 @@
       "./extensions/xai-context-compaction.ts",
       "./extensions/notify.ts",
       "./extensions/tmux-sessions.ts",
-      "./extensions/status-footer.ts",
+      "./extensions/input-editor.ts",
       "./extensions/tasks.ts",
       "./extensions/prompt-stash.ts",
       "./extensions/terse-tools.ts",
@@ -109,10 +109,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
-    "@earendil-works/pi-agent-core": "0.84.4",
-    "@earendil-works/pi-ai": "0.84.4",
-    "@earendil-works/pi-coding-agent": "0.84.4",
-    "@earendil-works/pi-tui": "0.84.4",
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^24.0.0",
     "typebox": "^1.1.38",
@@ -123,6 +123,6 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
-    "pi-mcp-adapter": "2.26.0"
+    "pi-mcp-adapter": "2.34.0"
   }
 }

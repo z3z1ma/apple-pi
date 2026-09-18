@@ -6,3 +6,5 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+/graphify-out
+/components/graphify-out/cache

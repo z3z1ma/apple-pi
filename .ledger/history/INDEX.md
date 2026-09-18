@@ -71,3 +71,7 @@
 - `.ledger/history/202609022314-deepen-pair-collaboration/task.md` — done — Deepen pair collaboration and image visibility — Let the pair use restrained probing/view requests through share_note, simplify behavioral framing around frontier judgment, and add source-bound on-demand receipts for user images.
 
 - `.ledger/history/202609031702-pace-pair-reviews/task.md` — done — Pace pair reviews within active runs — Replace per-turn pair inference with semantic checkpoint scheduling, pair-selected attention leases, starvation safeguards, and expedited finding confirmation while preserving every trajectory delta and normal model compaction.
+
+- `.ledger/history/202609171626-assess-pi-0-85-x/task.md` — done — Assess Pi 0.85.x opportunities for Apple Pi — Research Pi 0.85.0/0.85.1 and unreleased main against Apple Pi's custom editor, footer, bash, pair, ledger, and compaction surfaces.
+
+- `.ledger/history/202609171730-adopt-pi-0-85-1/task.md` — done — Adopt Pi 0.85.1 host pins — Align Apple Pi's four Pi development pins and pi-mcp-adapter with the already-running 0.85.1 host. Leave the working spinner standalone.

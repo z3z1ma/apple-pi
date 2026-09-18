@@ -18,7 +18,7 @@ export default defineConfig({
 			"components/subagents/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
-			"components/status-footer/tests/**/*.test.ts",
+			"components/input-editor/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",
 			"components/tasks/tests/**/*.test.ts",
 			"components/prompt-stash/tests/**/*.test.ts",

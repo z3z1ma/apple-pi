@@ -1,6 +1,6 @@
 # MCP
 
-apple-pi installs `pi-mcp-adapter` 2.26.0 and exposes its normal `mcp` tool, `/mcp` setup/status panel, `/mcp-auth`, lazy server lifecycle, metadata cache, stdio/HTTP/SSE/socket transports, OAuth/keyring integration, approvals, output guards, prompts/resources, and MCP UI support. It reads the adapter's standard `.mcp.json`, shared global, and Pi override locations.
+apple-pi installs `pi-mcp-adapter` 2.34.0 and exposes its normal `mcp` tool, `/mcp` setup/status panel, `/mcp-auth`, lazy server lifecycle, metadata cache, stdio/HTTP/SSE/socket transports, OAuth/keyring integration, approvals, output guards, prompts/resources, and MCP UI support. It reads the adapter's standard `.mcp.json`, shared global, and Pi override locations.
 
 Run `/mcp setup` for guided configuration or create `.mcp.json` directly. Single calls use the ordinary gateway:
 
