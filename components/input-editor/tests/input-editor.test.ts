@@ -2,7 +2,7 @@ import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@earen
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import type { FooterSnapshot } from "../src/index.js";
-import { collectInputCardSnapshot, InputCardEditor, renderInputCard } from "../src/index.js";
+import { collapseDockFooter, collectInputCardSnapshot, InputCardEditor, renderInputCard } from "../src/index.js";
 
 const colorCodes: Record<string, number> = {
 	accent: 35,
@@ -209,6 +209,23 @@ describe("input editor rendering", () => {
 		editor.handleInput("hello");
 		expect(nativeHandler).toHaveBeenCalledWith("hello");
 		nativeHandler.mockRestore();
+	});
+
+	it("collapses dock footer minSize to 0 in fullscreen layout", () => {
+		const dock = {
+			entries: [
+				{ component: {}, minSize: 0 },
+				{ component: {}, minSize: 3 },
+				{ component: {}, minSize: 1 },
+			],
+		};
+		const tui = {
+			layoutRoot: {
+				entries: [{ component: {} }, { component: dock }],
+			},
+		};
+		collapseDockFooter(tui);
+		expect(dock.entries[2].minSize).toBe(0);
 	});
 });
 
