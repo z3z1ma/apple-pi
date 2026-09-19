@@ -650,6 +650,9 @@ describe("pi_exec guest API documentation", () => {
 		expect(guidelines).toContain("gather→bind→judge for one typed worker decision");
 		expect(guidelines).toContain("map→agent.run→reconcile for independent per-item analysis");
 		expect(guidelines).toContain("stage→stage when one typed result becomes the next worker's context");
+		expect(guidelines).toContain("Canonical gather→bind→typed fan-out→reconcile");
+		expect(guidelines).toContain('context: row, outputSchema: std.schema({ id: "int", verdict: "string" })');
+		expect(guidelines).toContain('run.status === "completed" ? run.value : { error: run.error }');
 		expect(guidelines).toContain("complete live contract on the code parameter");
 		expect(guidelines).toContain("take one object matching their listed schema");
 		expect(guidelines).toContain("bind compact evidence through agent context");

@@ -247,6 +247,9 @@ try {
 	for (const shape of ["collect→reduce", "gather→bind→judge", "map→agent.run→reconcile", "stage→stage"]) {
 		assert(piExecGuidance.includes(shape), `pi_exec always-on guidance omits ${shape}`);
 	}
+	assert.match(piExecGuidance, /Canonical gather→bind→typed fan-out→reconcile/);
+	assert.match(piExecGuidance, /context: row, outputSchema:/);
+	assert.match(piExecGuidance, /run\.status === "completed" \? run\.value/);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);

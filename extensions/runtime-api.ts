@@ -388,6 +388,12 @@ export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec when programmatic composition materially reduces intermediate context or coordinates already-justified parallel work. Use direct tools for straightforward sequential inspection.",
 	"Treat pi_exec as a context-shaping boundary: gather, branch, transform, and reduce inside the program so only decision-relevant results return to the root context.",
 	"Choose the smallest useful program shape: collect→reduce for host-only evidence; gather→bind→judge for one typed worker decision; map→agent.run→reconcile for independent per-item analysis; or stage→stage when one typed result becomes the next worker's context.",
+	`Canonical gather→bind→typed fan-out→reconcile:
+\`\`\`js
+const evidence = await parallel(ids, async (id) => ({ id, text: (await extensions.mcp({ tool: "issues.get", args: { id } })).text }));
+const runs = await parallel(evidence, (row) => agent.run({ task: "Judge this row.", context: row, outputSchema: std.schema({ id: "int", verdict: "string" }) }));
+return runs.map((run) => run.status === "completed" ? run.value : { error: run.error });
+\`\`\``,
 	...savedProgramsSystemPromptContribution.guidelines,
 	"Write the JavaScript async-function body from the complete live contract on the code parameter. Await every host call; pi.* and extensions.* take one object matching their listed schema.",
 	"Gather host or MCP results in the program, bind compact evidence through agent context, keep task as the instruction, and use outputSchema instead of parsing model prose. Prefer agent.run for fan-out so each worker has a structured status and one failure does not abort the program.",
