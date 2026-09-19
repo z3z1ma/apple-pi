@@ -1203,6 +1203,8 @@ describe("pi_exec tool", () => {
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		const exec = { ...echo, name: "pi_exec" };
 		const savedProgram = { ...echo, name: "pi_exec_program" };
+		const task = { ...echo, name: "task" };
+		const schedule = { ...echo, name: "schedule" };
 		const subagentTools: Array<[string, { definition: typeof echo }]> = Object.values(SUBAGENT_TOOL_NAMES).map(
 			(name) => [name, { definition: { ...echo, name } }],
 		);
@@ -1212,6 +1214,8 @@ describe("pi_exec tool", () => {
 					["echo_value", { definition: echo }],
 					["pi_exec", { definition: exec }],
 					["pi_exec_program", { definition: savedProgram }],
+					["task", { definition: task }],
+					["schedule", { definition: schedule }],
 					...subagentTools,
 				]),
 			},
@@ -1221,7 +1225,7 @@ describe("pi_exec tool", () => {
 		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
 		expect(tool.description).not.toContain("extensions.echo_value({ value: string })");
-		for (const name of Object.values(SUBAGENT_TOOL_NAMES)) {
+		for (const name of [...Object.values(SUBAGENT_TOOL_NAMES), "task", "schedule"]) {
 			expect(tool.parameters.properties.code.description).not.toContain(`extensions.${name}(`);
 		}
 	});

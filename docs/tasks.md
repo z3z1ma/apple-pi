@@ -1,33 +1,22 @@
-# Task backgrounding and reactive wake-up
+# Managed tasks and reactive wake-up
 
-The tasks extension provides process backgrounding with reactive wake-up for shell commands in `apple-pi`.
+The tasks extension owns immediate background commands, one-shot schedules, task inspection and cancellation, and root-session wake-up when deferred work becomes actionable.
 
 ## Capabilities
 
-1. **Human-initiated backgrounding (`Ctrl+B`)**:
-   While a foreground command executes in the terminal, the operator can press `Ctrl+B` to background it. The foreground `bash` tool call returns early with the accumulated partial output and task ID. The process continues running detached in the background.
-
-2. **Agent-initiated backgrounding (`run_in_background: true`)**:
-   The agent can execute commands with `run_in_background: true` on the `bash` tool. The tool returns immediately with the task ID and initial status, letting the agent continue working without blocking.
-
-3. **Reactive wake-up**:
-   When any background task completes (code 0) or fails (non-zero code or error), a high-priority follow-up notification is dispatched to the session (`triggerTurn: true`). If the agent is idle, it wakes up immediately to process the result; if the agent is actively executing a turn, the notification queues as a follow-up for the next turn.
-
-4. **Task management (`task` tool)**:
-   The agent can manage background tasks at any time using the `task` tool:
-   - `list`: Shows all background tasks, status, PID, duration, exit code, and command.
-   - `status`: Shows detailed status and recent output for a specific `task_id`. Accepts optional `wait_seconds` to pause and wait for completion.
-   - `kill`: Terminates a background task and its entire child process tree.
+1. **Human-initiated backgrounding (`Ctrl+B`)**: While a foreground command executes, the operator can press `Ctrl+B` to detach it. The `bash` call returns partial output and a task ID while the process continues.
+2. **Agent-initiated backgrounding (`run_in_background: true`)**: `bash` starts a command immediately, returns its task ID, and lets the agent continue without blocking.
+3. **One-shot scheduling (`schedule`)**: A prompt or command becomes due after a relative delay. Prompts wake the agent; commands start silently and wake it on completion or failure.
+4. **Reactive wake-up**: Completion and due-prompt messages use `deliverAs: "followUp"` with `triggerTurn: true`. An idle agent wakes immediately; an active run receives the follow-up after it settles.
+5. **Task management (`task`)**: All scheduled prompts, scheduled commands, and immediate background commands share `task-*` IDs and one inspection/cancellation surface.
 
 ## Tools
 
 ### `bash` (extended)
 
-The standard `bash` tool is extended with backgrounding and standard input support:
-
 ```json
 {
-  "command": "npm run test",
+  "command": "npm test",
   "timeout": 60,
   "stdin": "optional text piped to process standard input",
   "run_in_background": true,
@@ -35,30 +24,49 @@ The standard `bash` tool is extended with backgrounding and standard input suppo
 }
 ```
 
-- `stdin` (optional string): Text piped into the process's standard input stream.
-- `run_in_background` (optional boolean): When `true`, detaches the command immediately and returns a task descriptor (`task-1`).
-- `verbatim` (optional boolean): When `true`, executes the command without RTK output compression when exact raw output is required.
+- `stdin`: Optional process standard input.
+- `run_in_background`: Start immediately and return a managed task descriptor.
+- `verbatim`: Bypass RTK command rewriting when exact raw execution is required.
+
+### `schedule`
+
+Schedule exactly one prompt or command:
+
+```json
+{
+  "delay_seconds": 0,
+  "prompt": "Continue after the active run settles."
+}
+```
+
+```json
+{
+  "delay_seconds": 120,
+  "command": "gh run watch --exit-status"
+}
+```
+
+`delay_seconds` must be a finite non-negative number. A zero-delay prompt preserves next-turn continuation. A scheduled command uses the working directory and shell environment captured when it is created.
 
 ### `task`
 
 ```json
 {
-  "action": "list" | "status" | "kill",
+  "action": "list" | "status" | "cancel",
   "task_id": "task-1",
   "wait_seconds": 10
 }
 ```
 
-- `action`:
-  - `"list"`: Formatted table of all background tasks in the session.
-  - `"status"`: Full metadata and output preview for `task_id`.
-  - `"kill"`: Terminate the task process tree.
-- `task_id` (string, required for `status` and `kill`): The task identifier.
-- `wait_seconds` (number, optional): Maximum seconds to wait for a running task to complete when querying `status`.
+- `list`: Show managed tasks, kinds, states, due times, process IDs, and summaries.
+- `status`: Show prompt details or command output. `wait_seconds` optionally waits for active work to settle.
+- `cancel`: Cancel a scheduled prompt or command, or terminate a running command and its process tree.
 
-## Notification format
+Prompt states are `scheduled`, `due`, `delivered`, or `cancelled`. Command states are `scheduled`, `running`, `completed`, `failed`, or `cancelled`.
 
-When a task finishes, a custom message (`apple-pi.task-notification`) is appended to the transcript:
+## Command notification format
+
+When a command finishes, an `apple-pi.task-notification` message is appended to the transcript:
 
 ```xml
 <task-notification id="task-1" status="completed">
@@ -70,16 +78,10 @@ Output:
 </task-notification>
 ```
 
-In interactive TUI sessions, this renders as a compact card:
-
-```text
-✓ Background Task task-1 (completed, 14.2s, exit 0)
-  $ npm run build
-  ⎿  Build completed successfully in 12.8s
-```
-
 ## Lifecycle and safety
 
-- **Root session only**: Background tasks run exclusively in root sessions. Child sessions and subagents do not load the extension.
-- **Process cleanup**: When the session shuts down or switches (`session_shutdown`, `session_before_switch`), all active background tasks are killed and temporary output files are deleted.
-- **Memory bounded**: Task output maintains a rolling buffer in memory. If output exceeds standard limits (2000 lines or 50KB), full output streams to a temporary log file while preserving the tail in memory.
+- **Root session only**: Child sessions and subagents do not load the extension.
+- **Session local**: Schedules are one-shot and in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work.
+- **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
+- **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
+- **Pi Exec isolation**: `schedule` and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct and has no background-task or scheduling parameters.

@@ -23,7 +23,6 @@ try {
 			"extensions/pi-pair.ts",
 			"extensions/ask-user-question.ts",
 			"extensions/context.ts",
-			"extensions/remind-me.ts",
 			"extensions/auto-compact.ts",
 			"extensions/vroom.ts",
 			"extensions/home-search-guard.ts",
@@ -47,7 +46,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 21);
+	assert.equal(result.extensions.length, 20);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -172,7 +171,7 @@ try {
 		"acknowledge_pair_findings",
 		"update_notebook",
 		"ask_user_question",
-		"remind_me",
+		"schedule",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -192,6 +191,7 @@ try {
 	}
 	for (const name of [
 		"mcpScript",
+		"remind_me",
 		"backlog_add",
 		"backlog_list",
 		"backlog_take",
@@ -207,14 +207,20 @@ try {
 		assert(!tools.has(name), `default package must not expose ${name}`);
 	}
 	for (const name of ["backlog", "todos"]) assert(!commands.has(name), `default package must not expose /${name}`);
-	const reminderTool = result.extensions
+	const scheduleTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "remind_me");
-	assert(reminderTool, "missing remind_me tool");
-	assert.deepEqual(Object.keys(reminderTool.definition.parameters.properties), ["message"]);
+		.find((tool) => tool.definition.name === "schedule");
+	assert(scheduleTool, "missing schedule tool");
+	const scheduleSchema = scheduleTool.definition.parameters;
+	assert.equal(scheduleSchema.type, "object");
+	assert.deepEqual(Object.keys(scheduleSchema.properties), ["delay_seconds", "prompt", "command"]);
+	assert.equal(scheduleSchema.oneOf.length, 2);
 	assert(
-		result.extensions.some((extension) => extension.path.endsWith("remind-me.ts")),
-		"missing self-reminder extension",
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("tasks.ts") && extension.tools.has("schedule") && extension.tools.has("task"),
+		),
+		"tasks extension must own schedule and task",
 	);
 
 	const piExecTool = result.extensions
@@ -239,8 +245,8 @@ try {
 		"package manifest omits home search guard",
 	);
 	assert(
-		manifest.pi.extensions.includes("./extensions/remind-me.ts"),
-		"package manifest omits self-reminder extension",
+		!manifest.pi.extensions.includes("./extensions/remind-me.ts"),
+		"package manifest must not load the removed self-reminder extension",
 	);
 	assert(manifest.pi.extensions.includes("./extensions/wiki.ts"), "package manifest omits wiki workbench");
 	assert(manifest.pi.extensions.includes("./extensions/tasks.ts"), "package manifest omits tasks extension");
@@ -262,7 +268,10 @@ try {
 		manifest.files.includes("components/home-search-guard/src/"),
 		"package manifest omits home search guard source",
 	);
-	assert(manifest.files.includes("components/reminders/src/"), "package manifest omits self-reminder source");
+	assert(
+		!manifest.files.includes("components/reminders/src/"),
+		"package manifest must not include removed reminders source",
+	);
 	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
 	assert(manifest.files.includes("components/tasks/src/"), "package manifest omits tasks source");
 	assert(manifest.files.includes("components/prompt-stash/src/"), "package manifest omits prompt-stash source");

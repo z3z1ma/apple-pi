@@ -5,7 +5,6 @@ export default defineConfig({
 		environment: "node",
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
-			"components/reminders/tests/**/*.test.ts",
 			"optional-extensions/backlog/tests/**/*.test.ts",
 			"components/vroom/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",

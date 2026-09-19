@@ -77,3 +77,5 @@
 - `.ledger/history/202609171730-adopt-pi-0-85-1/task.md` — done — Adopt Pi 0.85.1 host pins — Align Apple Pi's four Pi development pins and pi-mcp-adapter with the already-running 0.85.1 host. Leave the working spinner standalone.
 
 - `.ledger/history/202608311324-refine-llm-wiki-tools/task.md` — done — Refine the LLM wiki with prompt and graph tools — Add compact wiki system guidance, deterministic Obsidian-link validation, graph neighborhood retrieval, and clearer on-demand wiki procedures.
+
+- `.ledger/history/202609191341-replace-reminders-with-scheduling/task.md` — done — Replace self-reminders with managed scheduling — Implement a root-only one-shot schedule tool for deferred prompts or bash commands, integrate schedules into task management, and keep schedule/task unavailable to Pi Exec.

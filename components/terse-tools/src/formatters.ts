@@ -265,9 +265,14 @@ function formatGrepArgs(args: any): string {
 
 function formatScheduleArgs(args: any): string {
 	const dur =
-		args.duration || (args.DurationSeconds ? `${args.DurationSeconds}s` : "") || args.cron || args.CronExpression || "";
-	const prompt = args.prompt || args.Prompt || args.message || "";
-	return dur ? `${dur}: ${prompt}` : prompt;
+		(args.delay_seconds !== undefined ? `${args.delay_seconds}s` : "") ||
+		args.duration ||
+		(args.DurationSeconds ? `${args.DurationSeconds}s` : "") ||
+		args.cron ||
+		args.CronExpression ||
+		"";
+	const work = args.prompt || args.Prompt || args.message || args.command || "";
+	return dur ? `${dur}: ${work}` : work;
 }
 
 function formatExecArgs(args: any): string {

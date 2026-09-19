@@ -1,10 +1,103 @@
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, defineTool, formatSize } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import type { TaskManager } from "./task-manager.js";
-import { type TaskParameters, type TaskToolDetails, taskParameters } from "./types.js";
+import { type ManagedTask, type TaskParameters, type TaskToolDetails, taskParameters } from "./types.js";
 
 function formatDuration(ms: number): string {
 	return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function isActive(task: ManagedTask): boolean {
+	return task.status === "scheduled" || task.status === "due" || task.status === "running";
+}
+
+function taskSummary(task: ManagedTask): string {
+	return task.kind === "prompt" ? task.prompt : task.command;
+}
+
+function listTasks(taskManager: TaskManager) {
+	const tasks = taskManager.list();
+	if (tasks.length === 0) {
+		return {
+			content: [{ type: "text" as const, text: "No managed tasks found." }],
+			details: {},
+		};
+	}
+
+	const lines = [
+		"Managed tasks:",
+		"",
+		"ID       KIND     STATUS      DUE                       PID     SUMMARY",
+		"--------------------------------------------------------------------------------",
+	];
+	for (const task of tasks) {
+		const id = task.id.padEnd(8);
+		const kind = task.kind.padEnd(8);
+		const status = task.status.padEnd(11);
+		const due = new Date(task.dueAt).toISOString().padEnd(25);
+		const pid = (task.kind === "command" && task.pid ? String(task.pid) : "-").padEnd(7);
+		const rawSummary = taskSummary(task);
+		const summary = rawSummary.length > 50 ? `${rawSummary.slice(0, 47)}...` : rawSummary;
+		lines.push(`${id} ${kind} ${status} ${due} ${pid} ${summary}`);
+	}
+	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: {} };
+}
+
+async function taskStatus(taskManager: TaskManager, taskId: string | undefined, waitSeconds: number | undefined) {
+	if (!taskId) throw new Error("task_id is required for action: 'status'");
+	let task = taskManager.get(taskId);
+	if (!task) throw new Error(`Task '${taskId}' not found`);
+	if (waitSeconds && waitSeconds > 0 && isActive(task)) {
+		task = (await taskManager.waitFor(taskId, waitSeconds * 1000)) ?? task;
+	}
+
+	const lines = [
+		`Task: ${task.id}`,
+		`Kind: ${task.kind}`,
+		`Status: ${task.status}`,
+		`Created: ${new Date(task.createdAt).toISOString()}`,
+		`Due: ${new Date(task.dueAt).toISOString()}`,
+	];
+	if (task.kind === "prompt") {
+		lines.push(`Prompt: ${task.prompt}`);
+		if (task.endedAt) lines.push(`Delivered: ${new Date(task.endedAt).toISOString()}`);
+	} else {
+		const durationStart = task.startedAt ?? task.createdAt;
+		const durationMs = (task.endedAt ?? Date.now()) - durationStart;
+		const snapshot = task.output.getSnapshot();
+		lines.push(
+			`PID: ${task.pid ?? "not started"}`,
+			`Command: ${task.command}`,
+			`Working Directory: ${task.cwd}`,
+			`Duration: ${formatDuration(durationMs)}`,
+			`Exit Code: ${task.exitCode ?? "null"}`,
+			"",
+			`Output: ${snapshot.content || "(no output recorded yet)"}`,
+		);
+		if (snapshot.truncated && snapshot.fullOutputPath) {
+			lines.push(
+				"",
+				`[Truncated (${formatSize(DEFAULT_MAX_BYTES)} / ${DEFAULT_MAX_LINES} lines limit). Full output: ${snapshot.fullOutputPath}]`,
+			);
+		}
+	}
+	return {
+		content: [{ type: "text" as const, text: lines.join("\n") }],
+		details: {
+			taskId: task.id,
+			status: task.status,
+			...(task.kind === "command" ? { exitCode: task.exitCode } : {}),
+		},
+	};
+}
+
+function cancelTask(taskManager: TaskManager, taskId: string | undefined) {
+	if (!taskId) throw new Error("task_id is required for action: 'cancel'");
+	const result = taskManager.cancel(taskId);
+	return {
+		content: [{ type: "text" as const, text: result.message }],
+		details: { taskId, success: result.success },
+	};
 }
 
 export function createTaskManagementTool(taskManager: TaskManager) {
@@ -12,115 +105,18 @@ export function createTaskManagementTool(taskManager: TaskManager) {
 		name: "task",
 		label: "task",
 		description:
-			"Manage background tasks: list running/completed tasks, check status and output, or kill tasks. Use wait_seconds with status to wait for completion.",
-		promptSnippet: "Manage background tasks (list, check status/output, or terminate).",
+			"Manage scheduled prompts and commands plus immediate background commands: list tasks, inspect status and output, or cancel active work. Use wait_seconds with status to wait for completion or delivery.",
+		promptSnippet: "Manage scheduled or background tasks (list, inspect, wait, or cancel).",
 		parameters: taskParameters,
 		async execute(_toolCallId, params: TaskParameters) {
-			const { action, task_id, wait_seconds } = params;
-
-			if (action === "list") {
-				const tasks = taskManager.list();
-				if (tasks.length === 0) {
-					return {
-						content: [{ type: "text" as const, text: "No background tasks found." }],
-						details: {},
-					};
-				}
-
-				const lines = [
-					"Background tasks:",
-					"",
-					"ID       STATUS     PID     DURATION  EXIT  COMMAND",
-					"----------------------------------------------------------------------",
-				];
-
-				for (const task of tasks) {
-					const durationMs = (task.endedAt ?? Date.now()) - task.startedAt;
-					const duration = formatDuration(durationMs).padEnd(9);
-					const id = task.id.padEnd(8);
-					const status = task.status.padEnd(10);
-					const pid = String(task.pid).padEnd(7);
-					const exitCode =
-						task.exitCode !== undefined && task.exitCode !== null ? String(task.exitCode).padEnd(5) : "-    ";
-					const cmd = task.command.length > 50 ? `${task.command.slice(0, 47)}...` : task.command;
-					lines.push(`${id} ${status} ${pid} ${duration} ${exitCode} ${cmd}`);
-				}
-
-				return {
-					content: [{ type: "text" as const, text: lines.join("\n") }],
-					details: {},
-				};
+			switch (params.action) {
+				case "list":
+					return listTasks(taskManager);
+				case "status":
+					return taskStatus(taskManager, params.task_id, params.wait_seconds);
+				case "cancel":
+					return cancelTask(taskManager, params.task_id);
 			}
-
-			if (action === "status") {
-				if (!task_id) {
-					throw new Error("task_id is required for action: 'status'");
-				}
-
-				let task = taskManager.get(task_id);
-				if (!task) {
-					throw new Error(`Task '${task_id}' not found`);
-				}
-
-				if (wait_seconds && wait_seconds > 0 && task.status === "running") {
-					task = (await taskManager.waitFor(task_id, wait_seconds * 1000)) ?? task;
-				}
-
-				const durationMs = (task.endedAt ?? Date.now()) - task.startedAt;
-				const snapshot = task.output.getSnapshot();
-
-				const lines = [
-					`Task: ${task.id}`,
-					`Status: ${task.status}`,
-					`PID: ${task.pid}`,
-					`Command: ${task.command}`,
-					`Working Directory: ${task.cwd}`,
-					`Duration: ${formatDuration(durationMs)}`,
-					`Exit Code: ${task.exitCode ?? "null"}`,
-				];
-
-				if (snapshot.content) {
-					lines.push("");
-					lines.push("Output:");
-					lines.push(snapshot.content);
-				} else {
-					lines.push("");
-					lines.push("Output: (no output recorded yet)");
-				}
-
-				if (snapshot.truncated && snapshot.fullOutputPath) {
-					lines.push("");
-					lines.push(
-						`[Truncated (${formatSize(DEFAULT_MAX_BYTES)} / ${DEFAULT_MAX_LINES} lines limit). Full output: ${snapshot.fullOutputPath}]`,
-					);
-				}
-
-				return {
-					content: [{ type: "text" as const, text: lines.join("\n") }],
-					details: {
-						taskId: task.id,
-						status: task.status,
-						exitCode: task.exitCode,
-					},
-				};
-			}
-
-			if (action === "kill") {
-				if (!task_id) {
-					throw new Error("task_id is required for action: 'kill'");
-				}
-
-				const result = taskManager.kill(task_id);
-				return {
-					content: [{ type: "text" as const, text: result.message }],
-					details: {
-						taskId: task_id,
-						success: result.success,
-					},
-				};
-			}
-
-			throw new Error(`Unknown action: '${action}'`);
 		},
 		renderCall(args, theme) {
 			const action = args.action || "list";

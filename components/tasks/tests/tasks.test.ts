@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
@@ -6,14 +7,14 @@ import installTasks from "../src/index.js";
 import { OutputBuffer } from "../src/output-buffer.js";
 import { TaskManager } from "../src/task-manager.js";
 import { createTaskManagementTool } from "../src/task-tool.js";
-import { TASK_NOTIFICATION_CUSTOM_TYPE } from "../src/types.js";
+import { scheduleParameters, TASK_NOTIFICATION_CUSTOM_TYPE } from "../src/types.js";
 
 describe("tasks component", () => {
 	const activeManagers: TaskManager[] = [];
 
 	afterEach(() => {
 		for (const manager of activeManagers) {
-			manager.killAll();
+			manager.cancelAll();
 			manager.cleanupAll();
 		}
 		activeManagers.length = 0;
@@ -66,8 +67,11 @@ describe("tasks component", () => {
 
 			const finishedTask = await manager.waitFor(task.id, 5000);
 			expect(finishedTask?.status).toBe("completed");
-			expect(finishedTask?.exitCode).toBe(0);
-			expect(finishedTask?.output.getSnapshot().content).toContain("hello world");
+			expect(finishedTask?.kind).toBe("command");
+			if (finishedTask?.kind === "command") {
+				expect(finishedTask.exitCode).toBe(0);
+				expect(finishedTask.output.getSnapshot().content).toContain("hello world");
+			}
 		});
 
 		it("handles non-zero exit codes as failed", async () => {
@@ -77,17 +81,71 @@ describe("tasks component", () => {
 
 			const finishedTask = await manager.waitFor(task.id, 5000);
 			expect(finishedTask?.status).toBe("failed");
-			expect(finishedTask?.exitCode).toBe(42);
+			expect(finishedTask?.kind).toBe("command");
+			if (finishedTask?.kind === "command") expect(finishedTask.exitCode).toBe(42);
 		});
 
-		it("kills running processes and process trees", async () => {
+		it("schedules commands without starting them before they are due", async () => {
 			const manager = createManager();
-			const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"]);
-			const task = manager.createTask("node endless", process.cwd(), child);
+			const start = vi.fn(() => spawn(process.execPath, ["-e", "console.log('scheduled command');"]));
+			const task = manager.scheduleCommand("node scheduled", process.cwd(), 25, start);
 
-			const result = manager.kill(task.id);
-			expect(result.success).toBe(true);
-			expect(task.status).toBe("killed");
+			expect(task.status).toBe("scheduled");
+			expect(task.pid).toBeUndefined();
+			expect(start).not.toHaveBeenCalled();
+
+			const finishedTask = await manager.waitFor(task.id, 5000);
+			expect(start).toHaveBeenCalledTimes(1);
+			expect(finishedTask?.status).toBe("completed");
+			if (finishedTask?.kind === "command") {
+				expect(finishedTask.output.getSnapshot().content).toContain("scheduled command");
+			}
+		});
+
+		it("marks prompts due until their delivery is confirmed", async () => {
+			const manager = createManager();
+			const due = vi.fn();
+			manager.onPromptDue(due);
+			const task = manager.schedulePrompt("Continue after settlement.", 0);
+
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(due).toHaveBeenCalledWith(task);
+			expect(task.status).toBe("due");
+
+			expect(manager.markPromptDelivered(task.id)).toBe(true);
+			expect(task.status).toBe("delivered");
+		});
+
+		it("cancels scheduled and running work", async () => {
+			const manager = createManager();
+			const scheduled = manager.schedulePrompt("Do not deliver.", 60_000);
+			const scheduledResult = manager.cancel(scheduled.id);
+			expect(scheduledResult.success).toBe(true);
+			expect(scheduled.status).toBe("cancelled");
+
+			const start = vi.fn(() => spawn(process.execPath, ["-e", "process.exit(0)"]));
+			const command = manager.scheduleCommand("node later", process.cwd(), 20, start);
+			expect(manager.cancel(command.id).success).toBe(true);
+			await new Promise((resolve) => setTimeout(resolve, 40));
+			expect(start).not.toHaveBeenCalled();
+
+			const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"]);
+			const running = manager.createTask("node endless", process.cwd(), child);
+			const runningResult = manager.cancel(running.id);
+			expect(runningResult.success).toBe(true);
+			expect(running.status).toBe("cancelled");
+		});
+	});
+
+	describe("schedule schema", () => {
+		it("accepts exactly one prompt or command with a non-negative delay", () => {
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue." })).toBe(true);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 1, command: "npm test" })).toBe(true);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0 })).toBe(false);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue.", command: "npm test" })).toBe(
+				false,
+			);
+			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
 		});
 	});
 
@@ -146,7 +204,8 @@ describe("tasks component", () => {
 			expect(result.details?.backgrounded).toBe(true);
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
-			expect(task?.output.getSnapshot().content).toContain("bg received:piped bg input");
+			expect(task?.kind).toBe("command");
+			if (task?.kind === "command") expect(task.output.getSnapshot().content).toContain("bg received:piped bg input");
 		});
 
 		it("starts commands in background when run_in_background is true", async () => {
@@ -171,7 +230,8 @@ describe("tasks component", () => {
 			// The task should continue running in the background and eventually complete
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
-			expect(task?.output.getSnapshot().content).toContain("bg finished");
+			expect(task?.kind).toBe("command");
+			if (task?.kind === "command") expect(task.output.getSnapshot().content).toContain("bg finished");
 		});
 
 		it("detaches foreground command when operator inputs Ctrl+B", async () => {
@@ -215,7 +275,8 @@ describe("tasks component", () => {
 			// Ensure the process continues in background and finishes
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
-			expect(task?.output.getSnapshot().content).toContain("late output");
+			expect(task?.kind).toBe("command");
+			if (task?.kind === "command") expect(task.output.getSnapshot().content).toContain("late output");
 		});
 
 		it("terminates foreground command and throws when aborted", async () => {
@@ -238,13 +299,13 @@ describe("tasks component", () => {
 	});
 
 	describe("task management tool", () => {
-		it("lists, gets status, and kills background tasks", async () => {
+		it("lists, gets status, and cancels managed tasks", async () => {
 			const manager = createManager();
 			const taskTool = createTaskManagementTool(manager);
 
 			// Initially empty
 			const emptyList = await taskTool.execute("call-list-1", { action: "list" }, undefined, undefined, {} as any);
-			expect(getResultText(emptyList)).toBe("No background tasks found.");
+			expect(getResultText(emptyList)).toBe("No managed tasks found.");
 
 			// Spawn a task
 			const child = spawn(process.execPath, ["-e", "setTimeout(() => console.log('done'), 150);"]);
@@ -271,22 +332,22 @@ describe("tasks component", () => {
 			expect(getResultText(statusResult)).toContain("Status: completed");
 			expect(getResultText(statusResult)).toContain("done");
 
-			// Kill action
+			// Cancel action
 			const child2 = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"]);
 			const task2 = manager.createTask("node endless", process.cwd(), child2);
 
-			const killResult = await taskTool.execute(
-				"call-kill-1",
+			const cancelResult = await taskTool.execute(
+				"call-cancel-1",
 				{
-					action: "kill",
+					action: "cancel",
 					task_id: task2.id,
 				},
 				undefined,
 				undefined,
 				{} as any,
 			);
-			expect(getResultText(killResult)).toContain(`Task '${task2.id}' (PID ${task2.pid}) was killed.`);
-			expect(task2.status).toBe("killed");
+			expect(getResultText(cancelResult)).toContain(`Task '${task2.id}' was cancelled.`);
+			expect(task2.status).toBe("cancelled");
 		});
 	});
 
@@ -310,6 +371,7 @@ describe("tasks component", () => {
 			installTasks(mockPi as any);
 
 			expect(registeredTools.some((t) => t.name === "bash")).toBe(true);
+			expect(registeredTools.some((t) => t.name === "schedule")).toBe(true);
 			expect(registeredTools.some((t) => t.name === "task")).toBe(true);
 
 			const bashTool = registeredTools.find((t) => t.name === "bash");
@@ -334,6 +396,77 @@ describe("tasks component", () => {
 			// Shutdown cleanup
 			const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
 			for (const h of shutdownHandlers) h();
+		});
+
+		it("delivers due prompts once after the active run settles", async () => {
+			const registeredTools: any[] = [];
+			const sentMessages: any[] = [];
+			const eventHandlers = new Map<string, any[]>();
+			const mockPi = {
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
+				on: (event: string, handler: any) => {
+					const list = eventHandlers.get(event) ?? [];
+					list.push(handler);
+					eventHandlers.set(event, list);
+				},
+			};
+			installTasks(mockPi as any);
+
+			for (const handler of eventHandlers.get("before_agent_start") ?? []) handler();
+			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const result = await scheduleTool.execute(
+				"schedule-prompt",
+				{ delay_seconds: 0, prompt: "Run the focused test." },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			await scheduleTool.execute(
+				"schedule-second-prompt",
+				{ delay_seconds: 0, prompt: "Then inspect the diff." },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(getResultText(result)).toContain("task-1");
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(sentMessages).toHaveLength(0);
+
+			for (const handler of eventHandlers.get("agent_settled") ?? []) handler();
+			expect(sentMessages).toHaveLength(1);
+			expect(sentMessages[0].msg.content).toContain("Run the focused test.");
+			expect(sentMessages[0].msg.content).toContain("Then inspect the diff.");
+			expect(sentMessages[0].msg.content).toMatch(/own deferred prompts/i);
+			expect(sentMessages[0].msg.content).toMatch(/not new operator authority/i);
+			expect(sentMessages[0].opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+		});
+
+		it("starts scheduled commands and wakes only after completion", async () => {
+			const registeredTools: any[] = [];
+			const sentMessages: any[] = [];
+			const handlers = new Map<string, any[]>();
+			installTasks({
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
+				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+			} as any);
+
+			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			await scheduleTool.execute(
+				"schedule-command",
+				{ delay_seconds: 0.02, command: "node -e \"console.log('scheduled wake');\"" },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(sentMessages).toHaveLength(0);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			const notification = sentMessages.find((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE);
+			expect(notification?.msg.content).toContain("scheduled wake");
+			expect(notification?.opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
 		});
 
 		it("skips installation in child sessions", () => {

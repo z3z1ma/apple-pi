@@ -48,6 +48,69 @@ function resolveShellEnv(ctx?: ExtensionContext): NodeJS.ProcessEnv {
 	return env;
 }
 
+export interface PreparedShellCommand {
+	readonly command: string;
+	readonly cwd: string;
+	readonly isRtk: boolean;
+	start(): ReturnType<typeof spawn>;
+}
+
+export async function prepareShellCommand(
+	cwd: string,
+	params: BashParameters | ExecBashParameters,
+	signal: AbortSignal | undefined,
+	ctx: ExtensionContext | undefined,
+	allowRtk: boolean,
+): Promise<PreparedShellCommand> {
+	const { command, stdin } = params;
+	const verbatim = (params as BashParameters).verbatim === true;
+	const effectiveCwd = ctx?.cwd || cwd || process.cwd();
+	const shellConfig = getShellConfig();
+	const env = resolveShellEnv(ctx);
+	const commandFromStdin = shellConfig.commandTransport === "stdin";
+	const stdinPipe = commandFromStdin || stdin !== undefined;
+	let executionCommand = command;
+	let isRtk = false;
+
+	if (allowRtk) {
+		isRtk = Boolean((params as any)._rtk);
+		if (!verbatim && !isRtk && !command.startsWith("rtk ")) {
+			const rewritten = await rewriteCommand(command, { signal });
+			if (rewritten && rewritten !== command) {
+				executionCommand = rewritten;
+				isRtk = true;
+			}
+		}
+	}
+
+	return {
+		command,
+		cwd: effectiveCwd,
+		isRtk,
+		start() {
+			const child = spawn(
+				shellConfig.shell,
+				commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
+				{
+					cwd: effectiveCwd,
+					detached: process.platform !== "win32",
+					env,
+					stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
+					windowsHide: true,
+				},
+			);
+			if (commandFromStdin) {
+				child.stdin?.on("error", () => {});
+				child.stdin?.end(executionCommand);
+			} else if (stdin !== undefined) {
+				child.stdin?.on("error", () => {});
+				child.stdin?.end(stdin);
+			}
+			return child;
+		},
+	};
+}
+
 function renderBashCall(args: any, theme: any, context: any, defaultBashDef: any) {
 	const displayCmd = args?._rawCommand || args?.command || "...";
 	if (args?.run_in_background) {
@@ -65,7 +128,6 @@ function renderBashResult(result: any, options: any, theme: any, context: any, d
 	return defaultBashDef.renderResult?.(result, options, theme, context) ?? new Text(fallbackText, 0, 0);
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: shell command execution handles backgrounding, detach, timeout, stdin piping, and live terminal updates.
 async function executeBashImpl(
 	cwd: string,
 	params: BashParameters | ExecBashParameters,
@@ -75,53 +137,16 @@ async function executeBashImpl(
 	taskManager?: TaskManager,
 	allowRtk = false,
 ): Promise<AgentToolResult<any>> {
-	const { command, timeout, stdin } = params;
+	const { command, timeout } = params;
 	const run_in_background = "run_in_background" in params ? Boolean(params.run_in_background) : false;
-	const verbatim = (params as BashParameters).verbatim === true;
-	const effectiveCwd = ctx?.cwd || cwd || process.cwd();
-	const shellConfig = getShellConfig();
-	const env = resolveShellEnv(ctx);
-	const commandFromStdin = shellConfig.commandTransport === "stdin";
-	const stdinPipe = commandFromStdin || stdin !== undefined;
-
-	let executionCommand = command;
-	let isRtk = false;
-
-	if (allowRtk) {
-		isRtk = Boolean((params as any)._rtk);
-		if (!verbatim && !isRtk && !command.startsWith("rtk ")) {
-			const rewritten = await rewriteCommand(command, { signal });
-			if (rewritten && rewritten !== command) {
-				executionCommand = rewritten;
-				isRtk = true;
-			}
-		}
-	}
+	const prepared = await prepareShellCommand(cwd, params, signal, ctx, allowRtk);
+	const { cwd: effectiveCwd, isRtk } = prepared;
 
 	if (run_in_background) {
 		if (!taskManager) {
 			throw new Error("Background command execution requires a task manager");
 		}
-		const child = spawn(
-			shellConfig.shell,
-			commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
-			{
-				cwd: effectiveCwd,
-				detached: process.platform !== "win32",
-				env,
-				stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
-				windowsHide: true,
-			},
-		);
-
-		if (commandFromStdin) {
-			child.stdin?.on("error", () => {});
-			child.stdin?.end(executionCommand);
-		} else if (stdin !== undefined) {
-			child.stdin?.on("error", () => {});
-			child.stdin?.end(stdin);
-		}
-
+		const child = prepared.start();
 		const task = taskManager.createTask(command, effectiveCwd, child);
 
 		return {
@@ -143,26 +168,7 @@ async function executeBashImpl(
 		};
 	}
 
-	const child = spawn(
-		shellConfig.shell,
-		commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
-		{
-			cwd: effectiveCwd,
-			detached: process.platform !== "win32",
-			env,
-			stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
-			windowsHide: true,
-		},
-	);
-
-	if (commandFromStdin) {
-		child.stdin?.on("error", () => {});
-		child.stdin?.end(executionCommand);
-	} else if (stdin !== undefined) {
-		child.stdin?.on("error", () => {});
-		child.stdin?.end(stdin);
-	}
-
+	const child = prepared.start();
 	const output = new OutputBuffer({ tempFilePrefix: "pi-bash" });
 	let acceptingOutput = true;
 	let updateTimer: NodeJS.Timeout | undefined;

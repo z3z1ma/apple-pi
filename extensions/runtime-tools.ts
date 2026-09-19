@@ -8,7 +8,13 @@ interface ToolCaptureHub {
 }
 
 const CAPTURE_HUB = Symbol.for("apple-pi.registered-tool-capture.v1");
-const EXCLUDED_TOOL_NAMES = new Set(["pi_exec", "pi_exec_program", ...Object.values(SUBAGENT_TOOL_NAMES)]);
+const EXCLUDED_TOOL_NAMES = new Set([
+	"pi_exec",
+	"pi_exec_program",
+	"schedule",
+	"task",
+	...Object.values(SUBAGENT_TOOL_NAMES),
+]);
 
 /**
  * Observe Pi's public registered-tool assembly point. Pi exposes custom-tool

@@ -4,7 +4,7 @@ import type { BackgroundTask } from "./types.js";
  * Format a task notification message for the session transcript and agent wake-up.
  */
 export function formatTaskNotification(task: BackgroundTask): string {
-	const durationMs = (task.endedAt ?? Date.now()) - task.startedAt;
+	const durationMs = (task.endedAt ?? Date.now()) - (task.startedAt ?? task.createdAt);
 	const durationSec = Math.round((durationMs / 1000) * 10) / 10;
 	const snapshot = task.output.getSnapshot();
 

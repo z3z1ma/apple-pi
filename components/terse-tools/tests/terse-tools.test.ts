@@ -140,14 +140,14 @@ describe("terse tool formatters", () => {
 		expect(formatToolArgs("ls", { path: "components" })).toBe("components");
 
 		expect(formatToolArgs("task", { action: "status", task_id: "task-54" })).toBe("status task-54");
-		expect(formatToolArgs("manage_task", { action: "kill", taskId: "task-58" })).toBe("kill task-58");
+		expect(formatToolArgs("manage_task", { action: "cancel", taskId: "task-58" })).toBe("cancel task-58");
 
 		expect(
 			formatToolArgs("schedule", {
-				DurationSeconds: 10,
-				Prompt: "Wait for test suite to finish",
+				delay_seconds: 10,
+				command: "npm test",
 			}),
-		).toBe("10s: Wait for test suite to finish");
+		).toBe("10s: npm test");
 
 		expect(formatToolArgs("pi_exec", { title: "Trace prior cron and sensor design" })).toBe(
 			"Trace prior cron and sensor design",
