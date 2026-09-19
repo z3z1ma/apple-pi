@@ -20,7 +20,6 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	schedule: "Schedule",
 	monitor: "Monitor",
 	pi_exec: "Exec",
-	pi_exec_program: "Program",
 	ask_user_question: "AskUserQuestion",
 };
 

@@ -94,7 +94,6 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(formatToolName("schedule", testTheme))).toBe("Schedule");
 		expect(stripAnsi(formatToolName("monitor", testTheme))).toBe("Monitor");
 		expect(stripAnsi(formatToolName("pi_exec", testTheme))).toBe("Exec");
-		expect(stripAnsi(formatToolName("pi_exec_program", testTheme))).toBe("Program");
 		expect(stripAnsi(formatToolName("ask_user_question", testTheme))).toBe("AskUserQuestion");
 		expect(stripAnsi(formatToolName("update_notebook", testTheme))).toBe("UpdateNotebook");
 		expect(stripAnsi(formatToolName("acknowledge_pair_findings", testTheme))).toBe("AcknowledgePairFindings");

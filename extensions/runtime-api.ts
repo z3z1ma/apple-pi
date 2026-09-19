@@ -373,9 +373,8 @@ export const PI_EXEC_PROMPT_SNIPPET =
 	"pi_exec: compose core Pi tools, fetch, and subagents with branching, fan-out, pipelines, and reduction";
 
 export const savedProgramsSystemPromptContribution = {
-	executeSnippet: "Run a reusable project-local Pi Exec program",
 	guidelines: [
-		"Crystallize recurring multi-step workflows, repository-specific verifications, or fan-out inspection pipelines into `.pi/programs/<lowercase-kebab-name>.js`. These synthesize first-class project tools (`program_<name>`) across session starts and compactions, and run immediately on-demand via `pi_exec_program({ name })`.",
+		"Crystallize recurring multi-step workflows, repository-specific verifications, or fan-out inspection pipelines into `.pi/programs/<lowercase-kebab-name>.js`. These manifest as first-class project tools (`program_<name>`) at cache-safe session-start and compaction boundaries.",
 		"Define program parameters using JSDoc `@param {string|number|boolean} [name=default] - description` in the leading block; the runtime automatically generates typed tool schemas and maps arguments to `inputs.<name>`.",
 		"Reserve `.pi/programs/` for workflows that compound leverage across turns and sessions; execute single-instance scripts directly via `pi_exec`.",
 	],
@@ -388,7 +387,7 @@ export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec when programmatic composition materially reduces intermediate context or coordinates already-justified parallel work. Use direct tools for straightforward sequential inspection.",
 	"Treat pi_exec as a context-shaping boundary: gather, branch, transform, and reduce inside the program so only decision-relevant results return to the root context.",
 	"Choose the smallest useful program shape: collect→reduce for host-only evidence; gather→bind→judge for one typed worker decision; map→agent.run→reconcile for independent per-item analysis; or stage→stage when one typed result becomes the next worker's context.",
-	`Canonical gather→bind→typed fan-out→reconcile:
+	`Simple gather→bind→typed fan-out→reconcile example:
 \`\`\`js
 const evidence = await parallel(ids, async (id) => ({ id, text: (await extensions.mcp({ tool: "issues.get", args: { id } })).text }));
 const runs = await parallel(evidence, (row) => agent.run({ task: "Judge this row.", context: row, outputSchema: std.schema({ id: "int", verdict: "string" }) }));

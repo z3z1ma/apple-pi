@@ -176,7 +176,6 @@ try {
 		"search_session",
 		"revisit_note",
 		"pi_exec",
-		"pi_exec_program",
 		"mcp",
 		"agent",
 		"get_subagent_result",
@@ -192,6 +191,7 @@ try {
 	}
 	for (const name of [
 		"mcpScript",
+		"pi_exec_program",
 		"remind_me",
 		"backlog_add",
 		"backlog_list",
@@ -247,7 +247,7 @@ try {
 	for (const shape of ["collect→reduce", "gather→bind→judge", "map→agent.run→reconcile", "stage→stage"]) {
 		assert(piExecGuidance.includes(shape), `pi_exec always-on guidance omits ${shape}`);
 	}
-	assert.match(piExecGuidance, /Canonical gather→bind→typed fan-out→reconcile/);
+	assert.match(piExecGuidance, /Simple gather→bind→typed fan-out→reconcile example/);
 	assert.match(piExecGuidance, /context: row, outputSchema:/);
 	assert.match(piExecGuidance, /run\.status === "completed" \? run\.value/);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;

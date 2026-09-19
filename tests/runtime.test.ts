@@ -55,7 +55,6 @@ import {
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
 	piExecGuestApiContract,
-	savedProgramsSystemPromptContribution,
 } from "../extensions/runtime-api.js";
 import {
 	listSavedPrograms,
@@ -650,7 +649,7 @@ describe("pi_exec guest API documentation", () => {
 		expect(guidelines).toContain("gather→bind→judge for one typed worker decision");
 		expect(guidelines).toContain("map→agent.run→reconcile for independent per-item analysis");
 		expect(guidelines).toContain("stage→stage when one typed result becomes the next worker's context");
-		expect(guidelines).toContain("Canonical gather→bind→typed fan-out→reconcile");
+		expect(guidelines).toContain("Simple gather→bind→typed fan-out→reconcile example");
 		expect(guidelines).toContain('context: row, outputSchema: std.schema({ id: "int", verdict: "string" })');
 		expect(guidelines).toContain('run.status === "completed" ? run.value : { error: run.error }');
 		expect(guidelines).toContain("complete live contract on the code parameter");
@@ -1174,7 +1173,6 @@ describe("pi_exec tool", () => {
 		return {
 			tools,
 			tool: tools.get("pi_exec"),
-			execProgramTool: tools.get("pi_exec_program"),
 			resultHandler,
 			shutdownHandler,
 			emit(event: string, data: any = {}, ctx: any = {}) {
@@ -1210,7 +1208,6 @@ describe("pi_exec tool", () => {
 		};
 		const runner = Object.create(ExtensionRunner.prototype) as any;
 		const exec = { ...echo, name: "pi_exec" };
-		const savedProgram = { ...echo, name: "pi_exec_program" };
 		const task = { ...echo, name: "task" };
 		const schedule = { ...echo, name: "schedule" };
 		const monitor = { ...echo, name: "monitor" };
@@ -1222,7 +1219,6 @@ describe("pi_exec tool", () => {
 				tools: new Map([
 					["echo_value", { definition: echo }],
 					["pi_exec", { definition: exec }],
-					["pi_exec_program", { definition: savedProgram }],
 					["task", { definition: task }],
 					["schedule", { definition: schedule }],
 					["monitor", { definition: monitor }],
@@ -1250,12 +1246,8 @@ describe("pi_exec tool", () => {
 				"/**\n * @description Return the named input unchanged.\n * @param {string} value The value to echo\n */\nreturn inputs.value;",
 				"utf8",
 			);
-			const { tools, execProgramTool, emit, resultHandler } = register();
-			expect(execProgramTool).toBeDefined();
-			expect(execProgramTool.executionMode).toBe("sequential");
-			expect(execProgramTool.promptSnippet).toBe(savedProgramsSystemPromptContribution.executeSnippet);
-			expect(execProgramTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
-			expect(execProgramTool.parameters.properties.name.pattern).toBe("^[a-z0-9]+(?:-[a-z0-9]+)*$");
+			const { tools, emit, resultHandler } = register();
+			expect(tools.get("pi_exec_program")).toBeUndefined();
 
 			const trustedCtx = { cwd: dir, isProjectTrusted: () => true };
 			emit("session_start", {}, trustedCtx);
@@ -1266,7 +1258,7 @@ describe("pi_exec tool", () => {
 			expect(programTool.description).toContain("echo-input");
 			expect(programTool.description).toContain("Return the named input unchanged.");
 			expect(programTool.promptSnippet).toBe("Return the named input unchanged.");
-			expect(programTool.promptGuidelines).toEqual(savedProgramsSystemPromptContribution.guidelines);
+			expect(programTool.promptGuidelines).toBeUndefined();
 			expect(programTool.parameters.properties.value.description).toBe("The value to echo");
 			expect(programTool.parameters.properties.inputs).toBeDefined();
 			expect(programTool.parameters.properties.state).toBeDefined();
@@ -1289,23 +1281,6 @@ describe("pi_exec tool", () => {
 				trustedCtx,
 			);
 			expect(inputsResult.content[0].text).toBe("inputs result");
-
-			const execResult = await execProgramTool.execute(
-				"program",
-				{ name: "echo-input", inputs: { value: "saved result" } },
-				undefined,
-				undefined,
-				trustedCtx,
-			);
-			expect(execResult.content[0].text).toBe("saved result");
-			expect(execResult.details.activity).toMatchObject({
-				name: "echo-input",
-				description: "Return the named input unchanged.",
-			});
-
-			await expect(
-				execProgramTool.execute("invalid", { name: "../echo-input" }, undefined, undefined, trustedCtx),
-			).rejects.toThrow(/program name must contain/);
 
 			writeFileSync(
 				join(programsDir, "failure.js"),
@@ -1372,15 +1347,12 @@ describe("pi_exec tool", () => {
 			const programsDir = join(dir, ".pi", "programs");
 			mkdirSync(programsDir, { recursive: true });
 			writeFileSync(join(programsDir, "trusted-check.js"), "/**\n * @description Trust check.\n */\nreturn 1;", "utf8");
-			const { tools, execProgramTool, emit } = register();
+			const { tools, emit } = register();
 			emit("session_start", {}, { cwd: dir });
 			const tool = tools.get("program_trusted_check");
 			expect(tool).toBeDefined();
 
 			const untrustedCtx = { cwd: dir, isProjectTrusted: () => false };
-			await expect(
-				execProgramTool.execute("untrusted-run", { name: "trusted-check" }, undefined, undefined, untrustedCtx),
-			).rejects.toThrow(/trusted project/);
 			await expect(tool.execute("untrusted-tool-call", {}, undefined, undefined, untrustedCtx)).rejects.toThrow(
 				/trusted project/,
 			);

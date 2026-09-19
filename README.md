@@ -63,7 +63,7 @@ The prevailing agent pattern—chat-driven tool calling—is an architectural de
 - **True Control Flow**: Normal loops, conditionals, `parallel(items, mapper, concurrency)`, and `pipeline(...)`.
 - **In-Memory Filtering & Reduction**: Parse, grep, transform, and aggregate data inside the worker. Return *only the needle or the distilled summary* back to the conversation via a strict JSON Schema (`outputSchema`).
 - **Immutable State Snapshots (`state: <id>`)**: Inspired by `prime-agent`, programs can retain expensive serialized state across calls using explicit, immutable state IDs, without needing a persistent, fragile Python kernel or daemon.
-- **Code-as-Tools Harness (`.pi/programs/`)**: The model can author reusable async programs in `.pi/programs/<name>.js` with typed `@param` JSDoc annotations. Saved programs manifest directly as native, typed tools (`program_<name>`) on session starts and compactions (preserving KV prefix cache stability mid-turn), or run dynamically via `pi_exec_program`. The agent builds its own first-class tool abstractions.
+- **Code-as-Tools Harness (`.pi/programs/`)**: The model can author reusable async programs in `.pi/programs/<name>.js` with typed `@param` JSDoc annotations. Saved programs manifest directly as native, typed tools (`program_<name>`) at cache-safe session-start and compaction boundaries. The agent builds its own first-class tool abstractions.
 
 ```javascript
 // Example: Bounded fan-out inspection without context pollution

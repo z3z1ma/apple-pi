@@ -41,15 +41,12 @@ import {
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 	piExecToolDescription,
-	savedProgramsSystemPromptContribution,
 } from "./runtime-api.js";
 import { serializeJsonValue } from "./runtime-json.js";
 import {
 	buildProgramParametersSchema,
 	listSavedPrograms,
-	MAX_PROGRAM_NAME_CHARS,
 	paramsFrom,
-	PROJECT_PROGRAM_NAME,
 	readSavedProgram,
 	type SavedProgram,
 	savedProgramToolName,
@@ -489,7 +486,6 @@ export default function runtime(pi: ExtensionAPI): void {
 		captureError = error instanceof Error ? error.message : String(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
-	const registeredProgramTools = new Set<string>();
 	const stateStore: ProgramStateStore = {
 		snapshots: new Map(),
 		prefix: randomBytes(6).toString("base64url"),
@@ -498,16 +494,9 @@ export default function runtime(pi: ExtensionAPI): void {
 	};
 	pi.on("session_shutdown", (_event, ctx) => {
 		stateStore.snapshots.delete(ctx.sessionManager.getSessionId());
-		registeredProgramTools.clear();
 	});
 	pi.on("tool_result", (event) => {
-		if (
-			(event.toolName !== "pi_exec" &&
-				event.toolName !== "pi_exec_program" &&
-				!event.toolName.startsWith("program_")) ||
-			!event.isError
-		)
-			return;
+		if ((event.toolName !== "pi_exec" && !event.toolName.startsWith("program_")) || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
 		if (!failure) return;
 		failedDetails.delete(event.toolCallId);
@@ -956,7 +945,6 @@ export default function runtime(pi: ExtensionAPI): void {
 						? `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js): ${summary.description}`
 						: `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js).`,
 					promptSnippet: summary.description || `Run .pi/programs/${summary.name}.js`,
-					promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
 					parameters,
 					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
 						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
@@ -987,7 +975,6 @@ export default function runtime(pi: ExtensionAPI): void {
 						);
 					},
 				});
-				registeredProgramTools.add(toolName);
 			}
 		} catch {
 			// Directory missing, inaccessible, or unparseable.
@@ -1016,48 +1003,4 @@ export default function runtime(pi: ExtensionAPI): void {
 	});
 
 	syncSavedProgramTools(process.cwd());
-
-	pi.registerTool({
-		name: "pi_exec_program",
-		label: "Pi Exec Program",
-		executionMode: "sequential",
-		description:
-			"Execute a named project-local pi_exec program from .pi/programs/<name>.js. The program name is its normalized filename without .js; its JSDoc @description supplies the execution label.",
-		promptSnippet: savedProgramsSystemPromptContribution.executeSnippet,
-		promptGuidelines: [...savedProgramsSystemPromptContribution.guidelines],
-		parameters: Type.Object({
-			name: Type.String({
-				minLength: 1,
-				maxLength: MAX_PROGRAM_NAME_CHARS,
-				pattern: PROJECT_PROGRAM_NAME.source,
-				description: "Lowercase-kebab program filename without the .js extension.",
-			}),
-			inputs: Type.Optional(
-				Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
-					description: "Named strings available to the saved program as inputs.<key>.",
-				}),
-			),
-			state: piExecTool.parameters.properties.state,
-			limits: piExecTool.parameters.properties.limits,
-		}),
-		async execute(toolCallId, params, signal, onUpdate, ctx) {
-			if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
-				throw new Error("pi_exec saved programs require a trusted project");
-			}
-			const program = readSavedProgram(ctx.cwd, params.name);
-			return piExecTool.execute(
-				toolCallId,
-				{
-					code: program.code,
-					...(params.inputs ? { inputs: params.inputs } : {}),
-					...(params.state ? { state: params.state } : {}),
-					...(params.limits ? { limits: params.limits } : {}),
-					display: { name: program.name, description: program.description },
-				},
-				signal,
-				onUpdate,
-				ctx,
-			);
-		},
-	});
 }
