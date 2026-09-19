@@ -177,6 +177,32 @@ export function precedingIsToolCall(component: AssistantMessageComponent): boole
 	return false;
 }
 
+function collectNonThinkingChildren(container: { children: any[] }): any[] {
+	const children: any[] = [];
+	for (const child of container.children) {
+		if (!child || child.constructor?.name === "Spacer" || child.constructor?.name === "MouseRegion") continue;
+		if (child.constructor?.name === "Markdown") {
+			if ((child as any).defaultTextStyle?.italic !== true) children.push(child);
+			continue;
+		}
+		if (child.constructor?.name === "Text") {
+			const text = (child as any).text ?? "";
+			const stripped = stripAnsi(text).trim();
+			if (
+				stripped !== "" &&
+				stripped !== "Thinking..." &&
+				stripped !== "Thinking…" &&
+				!stripped.startsWith("▶ Thought")
+			) {
+				children.push(child);
+			}
+			continue;
+		}
+		children.push(child);
+	}
+	return children;
+}
+
 export function customizeThinkingDisplay(comp: AssistantMessageComponent): void {
 	const msg = (comp as any).lastMessage;
 	if (!msg || !Array.isArray(msg.content)) return;
@@ -206,6 +232,17 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 	}
 
 	if (thinkingBlocks.length > 0) {
+		const nonThinkingChildren = collectNonThinkingChildren(container);
+		container.clear();
+
+		if ((comp as any).hideThinkingBlock) {
+			if (nonThinkingChildren.length > 0) {
+				container.addChild(new Spacer(1));
+				for (const child of nonThinkingChildren) container.addChild(child);
+			}
+			return;
+		}
+
 		const theme = getActiveTheme();
 		const durationMs = (comp as any)._durationMs;
 		const tokens = msg.usage?.outputTokens ?? msg.usage?.totalTokens;
@@ -214,37 +251,11 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 		const snippet = formatThoughtSnippet(fullThinking, 120, theme);
 		const cardText = snippet ? `${header}\n${snippet}` : header;
 
-		// Collect text and stop-error children, excluding spacers and thinking blocks
-		const nonThinkingChildren: any[] = [];
-		for (const child of container.children) {
-			if (!child || child.constructor?.name === "Spacer") continue;
-			if (child.constructor?.name === "Markdown") {
-				const isThinking = (child as any).defaultTextStyle?.italic === true;
-				if (!isThinking) {
-					nonThinkingChildren.push(child);
-				}
-			} else if (child.constructor?.name === "Text") {
-				const text = (child as any).text ?? "";
-				const stripped = stripAnsi(text).trim();
-				if (
-					stripped !== "" &&
-					stripped !== "Thinking..." &&
-					stripped !== "Thinking…" &&
-					!stripped.startsWith("▶ Thought")
-				) {
-					nonThinkingChildren.push(child);
-				}
-			}
-		}
-
-		container.clear();
 		container.addChild(new Spacer(1));
 		container.addChild(new Text(cardText, (comp as any).outputPad ?? 1, 0));
 		if (nonThinkingChildren.length > 0) {
 			container.addChild(new Spacer(1));
-			for (const child of nonThinkingChildren) {
-				container.addChild(child);
-			}
+			for (const child of nonThinkingChildren) container.addChild(child);
 		}
 	}
 }

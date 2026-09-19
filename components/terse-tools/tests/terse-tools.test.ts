@@ -514,7 +514,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 			} as any,
 			true,
 		);
-		expect(isTransparentChild(thoughtOnlyMsg)).toBe(false);
+		expect(isTransparentChild(thoughtOnlyMsg)).toBe(true);
 
 		const textMsg = new AssistantMessageComponent(
 			{
@@ -532,7 +532,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(isTransparentChild(textMsg)).toBe(false);
 	});
 
-	it("unifies multi-turn tool loops across intermediate assistant messages", () => {
+	it("unifies multi-turn tool loops across hidden intermediate thinking", () => {
 		const container = new Container();
 
 		const t1 = new ToolExecutionComponent(
@@ -548,7 +548,10 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		const intermediateAssistant = new AssistantMessageComponent(
 			{
 				role: "assistant",
-				content: [{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } }],
+				content: [
+					{ type: "thinking", thinking: "Inspecting the file before the next tool call" },
+					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
+				],
 				api: "chat",
 				provider: "test",
 				model: "m",
@@ -573,7 +576,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(intermediateAssistant);
 		container.addChild(t2);
 
-		// Tool-only intermediate message renders 0 lines
+		// Hidden thinking contributes no rows between tool calls.
 		expect(intermediateAssistant.render(80)).toHaveLength(0);
 
 		// t1 recognizes intermediateAssistant is transparent, so t1 is NOT the last tool
@@ -606,7 +609,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 				stopReason: "toolUse",
 				timestamp: Date.now(),
 			} as any,
-			true,
+			false,
 		);
 
 		const tool = new ToolExecutionComponent(
@@ -808,7 +811,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 				stopReason: "stop",
 				timestamp: Date.now(),
 			} as any,
-			true,
+			false,
 		);
 
 		const lines = assistantMsg.render(80);
@@ -817,6 +820,30 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(joined).toContain("2.4k tokens");
 		expect(joined).toContain("Analyzing the solution");
 		expect(joined).not.toContain("Thinking...");
+	});
+
+	it("hides thought cards without hiding the following assistant text", () => {
+		const assistantMsg = new AssistantMessageComponent(
+			{
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "Private reasoning" },
+					{ type: "text", text: "Visible answer." },
+				],
+				api: "chat",
+				provider: "test",
+				model: "m",
+				usage: { inputTokens: 100, outputTokens: 200 },
+				stopReason: "stop",
+				timestamp: Date.now(),
+			} as any,
+			true,
+		);
+
+		const joined = assistantMsg.render(80).map(stripAnsi).join("\n");
+		expect(joined).toContain("Visible answer.");
+		expect(joined).not.toContain("Thought");
+		expect(joined).not.toContain("Private reasoning");
 	});
 
 	it("truncates long collapsed commands to terminal width while preserving hint", () => {
@@ -876,9 +903,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		);
 
 		const lines = hiddenThinkingMsg.render(80);
-		const joined = lines.map(stripAnsi).join("\n");
-		expect(joined).not.toContain("Thinking...");
-		expect(joined).not.toContain("Thinking…");
+		expect(lines).toEqual([]);
 	});
 
 	it("suppresses transcript output while streaming thinking before tools or text", () => {

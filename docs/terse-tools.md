@@ -29,7 +29,7 @@ Thinking is treated as an active state of the spinner, not an interruption in th
 
 - **Spinner thought trace**: While the model is actively reasoning, the status spinner at the bottom updates with the current active thought trace (e.g. `⠙ Thinking (Analyzing git status output)`), truncated to fit the terminal.
 - **Transcript cleanliness**: The static `"Thinking..."` label is hidden from the transcript entirely. During active reasoning, no partial thoughts or placeholders are printed into the transcript.
-- **Thought cards**: When reasoning precedes tool calls or text output, completed thoughts render as a concise Antigravity thought card with a clean line break at the bottom:
+- **Thought cards**: When `Thinking blocks` is visible and reasoning precedes tool calls or text output, completed thoughts render as a concise Antigravity thought card with a clean line break at the bottom:
 
 ```text
 ▶ Thought for 3s, 1.2k tokens
@@ -38,8 +38,9 @@ Thinking is treated as an active state of the spinner, not an interruption in th
 ● Bash(git status)
 ```
 
-- When text follows thinking, the thought header and snippet also end with a line break before the assistant's text response.
-- Intermediate tool calls remain dense with single-line tool rows (`● Tool(...)`), while thought cards and text deltas maintain clean empty-line separation.
+- When `Thinking blocks` is hidden, completed reasoning renders no transcript rows. Surrounding tool calls remain a single unbroken sequence; assistant text and stop errors remain visible.
+- When text follows visible thinking, the thought header and snippet also end with a line break before the assistant's text response.
+- Intermediate tool calls remain dense with single-line tool rows (`● Tool(...)`), while visible thought cards and text deltas maintain clean empty-line separation.
 
 ### Expanded View (`Ctrl+O`)
 
