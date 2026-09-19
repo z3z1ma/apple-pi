@@ -393,6 +393,14 @@ const evidence = await parallel(ids, async (id) => ({ id, text: (await extension
 const runs = await parallel(evidence, (row) => agent.run({ task: "Judge this row.", context: row, outputSchema: std.schema({ id: "int", verdict: "string" }) }));
 return runs.map((run) => run.status === "completed" ? run.value : { error: run.error });
 \`\`\``,
+	`Simple semantic test-selection example:
+\`\`\`js
+const candidates = (await pi.find({ pattern: "*.test.ts" })).split("\\n").filter((path) => path && !path.includes("/fixtures/"));
+const pick = await agent.run({ task: "Select the test indices that best cover the goal; read candidates as needed.", context: { goal: inputs.goal ?? "current task", candidates }, outputSchema: std.schema({ indices: ["int"], reason: "string" }) });
+if (pick.status !== "completed") return pick;
+const tests = [...new Set(pick.value.indices)].map((index) => candidates[index]).filter(Boolean);
+return tests.length ? { reason: pick.value.reason, run: await pi.bash({ command: "xargs -0 npm test --", stdin: tests.join("\\0") }) } : { reason: pick.value.reason, run: "not_run" };
+\`\`\``,
 	...savedProgramsSystemPromptContribution.guidelines,
 	"Write the JavaScript async-function body from the complete live contract on the code parameter. Await every host call; pi.* and extensions.* take one object matching their listed schema.",
 	"Gather host or MCP results in the program, bind compact evidence through agent context, keep task as the instruction, and use outputSchema instead of parsing model prose. Prefer agent.run for fan-out so each worker has a structured status and one failure does not abort the program.",

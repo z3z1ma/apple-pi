@@ -250,6 +250,9 @@ try {
 	assert.match(piExecGuidance, /Simple gather→bind→typed fan-out→reconcile example/);
 	assert.match(piExecGuidance, /context: row, outputSchema:/);
 	assert.match(piExecGuidance, /run\.status === "completed" \? run\.value/);
+	assert.match(piExecGuidance, /Simple semantic test-selection example/);
+	assert.match(piExecGuidance, /await pi\.find/);
+	assert.match(piExecGuidance, /xargs -0 npm test --/);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);

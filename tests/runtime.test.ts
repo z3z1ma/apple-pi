@@ -652,6 +652,10 @@ describe("pi_exec guest API documentation", () => {
 		expect(guidelines).toContain("Simple gather→bind→typed fan-out→reconcile example");
 		expect(guidelines).toContain('context: row, outputSchema: std.schema({ id: "int", verdict: "string" })');
 		expect(guidelines).toContain('run.status === "completed" ? run.value : { error: run.error }');
+		expect(guidelines).toContain("Simple semantic test-selection example");
+		expect(guidelines).toContain('await pi.find({ pattern: "*.test.ts" })');
+		expect(guidelines).toContain('outputSchema: std.schema({ indices: ["int"], reason: "string" })');
+		expect(guidelines).toContain('command: "xargs -0 npm test --", stdin: tests.join("\\0")');
 		expect(guidelines).toContain("complete live contract on the code parameter");
 		expect(guidelines).toContain("take one object matching their listed schema");
 		expect(guidelines).toContain("bind compact evidence through agent context");
