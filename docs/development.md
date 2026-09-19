@@ -13,6 +13,18 @@
 
 `PairRuntime`, Pi Exec's invocation controller, `agent-runner.ts`, and `agent-manager.ts` remain intact because they each own a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
 
+## Capability guidance
+
+Treat the harness as a small computational world rather than a catalog of unrelated tools:
+
+- Tool names and argument shapes should map directly to familiar model priors.
+- A tool description and schema own exact invocation semantics and local constraints.
+- `promptSnippet` and `promptGuidelines` own concise capability selection, relationships to neighboring native tools, and the few composition patterns needed for ordinary use.
+- Product documentation owns the complete human and maintainer contract.
+- Skills own repeatable engineering procedures or optional progressive disclosure. A model should not need to discover a skill before it can use a native tool correctly.
+
+Avoid duplicating the same manual across these layers. Put each fact at the narrowest layer that is always present when the model needs it.
+
 ## Skill composition
 
 Pi loads every skill into its resource catalog, but removes `disable-model-invocation: true` skills from the model's automatic system-prompt catalog. A user's `/skill:<name>` command still resolves against the full catalog and expands the chosen body with its absolute location and base directory.

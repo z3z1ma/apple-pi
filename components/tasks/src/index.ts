@@ -2,13 +2,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
-import { formatTaskNotification } from "./notifications.js";
+import { createMonitorTool } from "./monitor-tool.js";
+import { formatMonitorEvent, formatTaskNotification } from "./notifications.js";
 import { createScheduleTool } from "./schedule-tool.js";
 import { TaskManager } from "./task-manager.js";
 import { createTaskManagementTool } from "./task-tool.js";
 import {
+	MONITOR_EVENT_CUSTOM_TYPE,
 	SCHEDULED_PROMPT_CUSTOM_TYPE,
 	TASK_NOTIFICATION_CUSTOM_TYPE,
+	type MonitorEventDetails,
 	type PromptTask,
 	type TaskNotificationDetails,
 } from "./types.js";
@@ -63,6 +66,25 @@ export function installTasks(pi: ExtensionAPI): void {
 		if (!runActive) queuePromptFlush();
 	});
 
+	taskManager.onMonitorEvent((event) => {
+		pi.sendMessage<MonitorEventDetails>(
+			{
+				customType: MONITOR_EVENT_CUSTOM_TYPE,
+				content: formatMonitorEvent(event),
+				display: true,
+				details: {
+					taskId: event.task.id,
+					command: event.task.command,
+					line: event.line,
+					eventIndex: event.eventIndex,
+					maxEvents: event.task.monitor?.maxEvents,
+					reachedLimit: event.reachedLimit,
+				},
+			},
+			{ deliverAs: "steer", triggerTurn: true },
+		);
+	});
+
 	taskManager.onTaskFinished((task) => {
 		if (task.kind !== "command" || (task.status !== "completed" && task.status !== "failed")) return;
 		const content = formatTaskNotification(task);
@@ -77,11 +99,24 @@ export function installTasks(pi: ExtensionAPI): void {
 					exitCode: task.exitCode,
 					command: task.command,
 					durationMs: (task.endedAt ?? Date.now()) - (task.startedAt ?? task.createdAt),
+					monitor: task.monitor !== undefined,
 					outputPreview: task.output.getSnapshot().content.slice(-500),
 				},
 			},
 			{ deliverAs: "followUp", triggerTurn: true },
 		);
+	});
+
+	pi.registerMessageRenderer<MonitorEventDetails>(MONITOR_EVENT_CUSTOM_TYPE, (message, _options, theme) => {
+		const details = message.details;
+		if (!details) return undefined;
+		const position =
+			details.maxEvents === undefined ? String(details.eventIndex) : `${details.eventIndex}/${details.maxEvents}`;
+		const header = `${theme.fg("accent", "↯")} ${theme.bold(`Monitor ${details.taskId}`)} ${theme.fg("dim", `(event ${position})`)}`;
+		const suffix = details.reachedLimit
+			? `\n  ${theme.fg("warning", "Event limit reached; continuing silently.")}`
+			: "";
+		return new Text(`${header}\n  ${theme.fg("muted", details.line)}${suffix}`, 0, 0);
 	});
 
 	pi.registerMessageRenderer<TaskNotificationDetails>(TASK_NOTIFICATION_CUSTOM_TYPE, (message, { expanded }, theme) => {
@@ -90,7 +125,8 @@ export function installTasks(pi: ExtensionAPI): void {
 		const isSuccess = details.status === "completed";
 		const icon = isSuccess ? theme.fg("success", "✓") : theme.fg("error", "✗");
 		const durationSec = Math.round((details.durationMs / 1000) * 10) / 10;
-		const header = `${icon} ${theme.bold(`Background Task ${details.taskId}`)} ${theme.fg("dim", `(${details.status}, ${durationSec}s, exit ${details.exitCode ?? "?"})`)}`;
+		const label = details.monitor ? "Monitor" : "Background Task";
+		const header = `${icon} ${theme.bold(`${label} ${details.taskId}`)} ${theme.fg("dim", `(${details.status}, ${durationSec}s, exit ${details.exitCode ?? "?"})`)}`;
 		const cmd = theme.fg("muted", `$ ${details.command}`);
 		if (!details.outputPreview) return new Text(`${header}\n  ${cmd}`, 0, 0);
 		const lines = details.outputPreview.split("\n");
@@ -107,6 +143,7 @@ export function installTasks(pi: ExtensionAPI): void {
 
 	pi.registerTool(createBackgroundTaskBashTool(taskManager));
 	pi.registerTool(createScheduleTool(taskManager));
+	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
 	pi.on("before_agent_start", () => {
@@ -141,4 +178,5 @@ export {
 	createExecBashToolDefinition,
 	prepareShellCommand,
 } from "./bash-tool.js";
+export { createMonitorTool } from "./monitor-tool.js";
 export { createScheduleTool } from "./schedule-tool.js";

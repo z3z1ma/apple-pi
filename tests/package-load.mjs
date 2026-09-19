@@ -172,6 +172,7 @@ try {
 		"update_notebook",
 		"ask_user_question",
 		"schedule",
+		"monitor",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -215,12 +216,26 @@ try {
 	assert.equal(scheduleSchema.type, "object");
 	assert.deepEqual(Object.keys(scheduleSchema.properties), ["delay_seconds", "prompt", "command"]);
 	assert.equal(scheduleSchema.oneOf.length, 2);
+	const monitorTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "monitor");
+	assert(monitorTool, "missing monitor tool");
+	assert.deepEqual(Object.keys(monitorTool.definition.parameters.properties), ["command", "max_events"]);
+	assert.deepEqual(monitorTool.definition.parameters.required, ["command"]);
+	assert.match(monitorTool.definition.promptGuidelines.join("\n"), /Choose root execution by intent/);
+	assert.match(
+		monitorTool.definition.promptGuidelines.join("\n"),
+		/every newline-terminated stdout line immediately steers/,
+	);
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.endsWith("tasks.ts") && extension.tools.has("schedule") && extension.tools.has("task"),
+				extension.path.endsWith("tasks.ts") &&
+				extension.tools.has("schedule") &&
+				extension.tools.has("monitor") &&
+				extension.tools.has("task"),
 		),
-		"tasks extension must own schedule and task",
+		"tasks extension must own schedule, monitor, and task",
 	);
 
 	const piExecTool = result.extensions
@@ -332,7 +347,7 @@ try {
 		"domain-modeling",
 		"codebase-design",
 	];
-	const fundamentalSkills = ["code-review", "ralph", "pi-exec", "skill-authoring", "llm-wiki"];
+	const fundamentalSkills = ["code-review", "ralph", "skill-authoring", "llm-wiki"];
 	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
@@ -343,6 +358,7 @@ try {
 	assert.deepEqual(loadedSkills.diagnostics, []);
 	assert.deepEqual(loadedSkills.skills.map((skill) => skill.name).sort(), packagedSkills.toSorted());
 	assert(!loadedSkills.skills.some((skill) => skill.name === "review"), "legacy review skill must be absent");
+	assert(!existsSync("skills/pi-exec"), "native Pi Exec guidance must not be packaged as a prerequisite skill");
 	for (const skill of loadedSkills.skills) {
 		assert.equal(skill.filePath.split("/").at(-2), skill.name, `skill directory/name mismatch: ${skill.filePath}`);
 		assert.equal(

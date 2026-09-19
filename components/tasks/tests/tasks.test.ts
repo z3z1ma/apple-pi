@@ -4,10 +4,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
 import installTasks from "../src/index.js";
+import { createMonitorTool } from "../src/monitor-tool.js";
 import { OutputBuffer } from "../src/output-buffer.js";
 import { TaskManager } from "../src/task-manager.js";
 import { createTaskManagementTool } from "../src/task-tool.js";
-import { scheduleParameters, TASK_NOTIFICATION_CUSTOM_TYPE } from "../src/types.js";
+import {
+	MONITOR_EVENT_CUSTOM_TYPE,
+	monitorParameters,
+	scheduleParameters,
+	TASK_NOTIFICATION_CUSTOM_TYPE,
+} from "../src/types.js";
 
 describe("tasks component", () => {
 	const activeManagers: TaskManager[] = [];
@@ -116,6 +122,38 @@ describe("tasks component", () => {
 			expect(task.status).toBe("delivered");
 		});
 
+		it("emits completed stdout lines from monitors without treating stderr or fragments as events", async () => {
+			const manager = createManager();
+			const events: string[] = [];
+			manager.onMonitorEvent((event) => events.push(event.line));
+			const child = spawn(process.execPath, [
+				"-e",
+				"process.stdout.write('first\\npartial'); process.stderr.write('stderr\\n'); setTimeout(() => process.stdout.write(' rest\\nunterminated'), 20);",
+			]);
+			const task = manager.createMonitor("node monitor", process.cwd(), () => child);
+
+			await manager.waitFor(task.id, 5000);
+			expect(events).toEqual(["first", "partial rest"]);
+			expect(task.output.getSnapshot().content).toContain("stderr");
+			expect(task.output.getSnapshot().content).toContain("unterminated");
+		});
+
+		it("silences a monitor after its caller-owned event limit", async () => {
+			const manager = createManager();
+			const events: Array<{ line: string; reachedLimit: boolean }> = [];
+			manager.onMonitorEvent((event) => events.push({ line: event.line, reachedLimit: event.reachedLimit }));
+			const child = spawn(process.execPath, ["-e", "process.stdout.write('one\\ntwo\\nthree\\n');"]);
+			const task = manager.createMonitor("node monitor", process.cwd(), () => child, 2);
+
+			await manager.waitFor(task.id, 5000);
+			expect(events).toEqual([
+				{ line: "one", reachedLimit: false },
+				{ line: "two", reachedLimit: true },
+			]);
+			expect(task.monitor).toMatchObject({ maxEvents: 2, deliveredEvents: 2, muted: true });
+			expect(task.output.getSnapshot().content).toContain("three");
+		});
+
 		it("cancels scheduled and running work", async () => {
 			const manager = createManager();
 			const scheduled = manager.schedulePrompt("Do not deliver.", 60_000);
@@ -137,7 +175,14 @@ describe("tasks component", () => {
 		});
 	});
 
-	describe("schedule schema", () => {
+	describe("monitor and schedule schemas", () => {
+		it("accepts a command with an optional positive event limit", () => {
+			expect(Value.Check(monitorParameters, { command: "tail -F app.log" })).toBe(true);
+			expect(Value.Check(monitorParameters, { command: "tail -F app.log", max_events: 5 })).toBe(true);
+			expect(Value.Check(monitorParameters, { command: "tail -F app.log", max_events: 0 })).toBe(false);
+			expect(Value.Check(monitorParameters, { command: "tail -F app.log", max_events: 1.5 })).toBe(false);
+		});
+
 		it("accepts exactly one prompt or command with a non-negative delay", () => {
 			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue." })).toBe(true);
 			expect(Value.Check(scheduleParameters, { delay_seconds: 1, command: "npm test" })).toBe(true);
@@ -146,6 +191,24 @@ describe("tasks component", () => {
 				false,
 			);
 			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
+		});
+	});
+
+	describe("monitor tool", () => {
+		it("starts a verbatim managed command and returns its task ID", async () => {
+			const manager = createManager();
+			const monitorTool = createMonitorTool(manager);
+			const result = await monitorTool.execute(
+				"call-monitor",
+				{ command: "node -e \"console.log('event')\"", max_events: 1 },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+
+			expect(getResultText(result)).toContain("Monitor started as task-1");
+			expect(result.details).toMatchObject({ taskId: "task-1", status: "running", maxEvents: 1 });
+			expect((await manager.waitFor("task-1", 5000))?.status).toBe("completed");
 		});
 	});
 
@@ -349,6 +412,41 @@ describe("tasks component", () => {
 			expect(getResultText(cancelResult)).toContain(`Task '${task2.id}' was cancelled.`);
 			expect(task2.status).toBe("cancelled");
 		});
+
+		it("labels monitors and cancelled prompts accurately", async () => {
+			const manager = createManager();
+			const taskTool = createTaskManagementTool(manager);
+			const monitor = manager.createMonitor(
+				"node monitor",
+				process.cwd(),
+				() => spawn(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]),
+				2,
+			);
+			const list = await taskTool.execute("list", { action: "list" }, undefined, undefined, {} as any);
+			expect(getResultText(list)).toContain("monitor");
+			const status = await taskTool.execute(
+				"status",
+				{ action: "status", task_id: monitor.id },
+				undefined,
+				undefined,
+				{} as any,
+			);
+			expect(getResultText(status)).toContain("Kind: monitor");
+			expect(getResultText(status)).toContain("Monitor Events: 0/2");
+			manager.cancel(monitor.id);
+
+			const prompt = manager.schedulePrompt("Do not deliver", 60_000);
+			manager.cancel(prompt.id);
+			const promptStatus = await taskTool.execute(
+				"prompt-status",
+				{ action: "status", task_id: prompt.id },
+				undefined,
+				undefined,
+				{} as any,
+			);
+			expect(getResultText(promptStatus)).toContain("Cancelled:");
+			expect(getResultText(promptStatus)).not.toContain("Delivered:");
+		});
 	});
 
 	describe("extension installation & reactive wake-up", () => {
@@ -372,6 +470,7 @@ describe("tasks component", () => {
 
 			expect(registeredTools.some((t) => t.name === "bash")).toBe(true);
 			expect(registeredTools.some((t) => t.name === "schedule")).toBe(true);
+			expect(registeredTools.some((t) => t.name === "monitor")).toBe(true);
 			expect(registeredTools.some((t) => t.name === "task")).toBe(true);
 
 			const bashTool = registeredTools.find((t) => t.name === "bash");
@@ -396,6 +495,43 @@ describe("tasks component", () => {
 			// Shutdown cleanup
 			const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
 			for (const h of shutdownHandlers) h();
+		});
+
+		it("steers once per monitor stdout line and still follows up on completion", async () => {
+			const registeredTools: any[] = [];
+			const sentMessages: any[] = [];
+			const handlers = new Map<string, any[]>();
+			installTasks({
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
+				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+			} as any);
+
+			const monitorTool = registeredTools.find((tool) => tool.name === "monitor");
+			await monitorTool.execute(
+				"monitor",
+				{
+					command: "node -e \"console.log('first'); console.log('second'); console.error('diagnostic')\"",
+					max_events: 2,
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+
+			const events = sentMessages.filter((message) => message.msg.customType === MONITOR_EVENT_CUSTOM_TYPE);
+			expect(events).toHaveLength(2);
+			expect(events.map((message) => message.msg.details.line)).toEqual(["first", "second"]);
+			expect(events[0].opts).toEqual({ deliverAs: "steer", triggerTurn: true });
+			expect(events[1].msg.content).toMatch(/continue silently/i);
+			expect(events.some((message) => message.msg.content.includes("diagnostic"))).toBe(false);
+			const completion = sentMessages.find((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE);
+			expect(completion?.opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+			expect(completion?.msg.details.monitor).toBe(true);
+
+			for (const handler of handlers.get("session_shutdown") ?? []) handler();
 		});
 
 		it("delivers due prompts once after the active run settles", async () => {

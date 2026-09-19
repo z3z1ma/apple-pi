@@ -79,3 +79,5 @@
 - `.ledger/history/202608311324-refine-llm-wiki-tools/task.md` — done — Refine the LLM wiki with prompt and graph tools — Add compact wiki system guidance, deterministic Obsidian-link validation, graph neighborhood retrieval, and clearer on-demand wiki procedures.
 
 - `.ledger/history/202609191341-replace-reminders-with-scheduling/task.md` — done — Replace self-reminders with managed scheduling — Implement a root-only one-shot schedule tool for deferred prompts or bash commands, integrate schedules into task management, and keep schedule/task unavailable to Pi Exec.
+
+- `.ledger/history/202609191514-reactive-monitor-core-guidance/task.md` — done — Add reactive monitor and consolidate native capability guidance — Add stdout-driven monitor tasks with immediate steering and optional caller-owned limits, integrate them into the managed-task lifecycle, and move native Pi Exec/execution education into concise core tool guidance rather than a prerequisite skill.

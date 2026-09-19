@@ -4,7 +4,7 @@
 
 `pi_exec` is deliberately available only to the root session. Interactive subagents do not receive it, even when their extension configuration explicitly selects the runtime; nested delegation must use their ownership- and depth-scoped `agent` tools. This prevents child sessions from bypassing those limits through `agent.run` or the captured root extension-tool catalog.
 
-The packaged [`pi-exec`](../skills/pi-exec) skill has the guest signatures and the common authoring mistakes. Write programs from the live signatures on the `pi_exec` `code` parameter.
+Pi Exec is a native harness capability rather than a prerequisite skill. Its concise selection rules live in the core system prompt, and the live `pi_exec` `code` parameter is the complete guest API contract. Write programs from those signatures.
 
 ## Saved project programs
 

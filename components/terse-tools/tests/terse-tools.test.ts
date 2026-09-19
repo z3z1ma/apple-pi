@@ -92,6 +92,7 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(formatToolName("task", testTheme))).toBe("ManageTask");
 		expect(stripAnsi(formatToolName("manage_task", testTheme))).toBe("ManageTask");
 		expect(stripAnsi(formatToolName("schedule", testTheme))).toBe("Schedule");
+		expect(stripAnsi(formatToolName("monitor", testTheme))).toBe("Monitor");
 		expect(stripAnsi(formatToolName("pi_exec", testTheme))).toBe("Exec");
 		expect(stripAnsi(formatToolName("pi_exec_program", testTheme))).toBe("Program");
 		expect(stripAnsi(formatToolName("ask_user_question", testTheme))).toBe("AskUserQuestion");
@@ -148,6 +149,9 @@ describe("terse tool formatters", () => {
 				command: "npm test",
 			}),
 		).toBe("10s: npm test");
+		expect(formatToolArgs("monitor", { command: "tail -F app.log | grep ERROR", max_events: 5 })).toBe(
+			"tail -F app.log | grep ERROR",
+		);
 
 		expect(formatToolArgs("pi_exec", { title: "Trace prior cron and sensor design" })).toBe(
 			"Trace prior cron and sensor design",

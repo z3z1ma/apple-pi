@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
-import type { CommandTask, ManagedTask, PromptTask } from "./types.js";
+import type { CommandTask, ManagedTask, MonitorEvent, PromptTask } from "./types.js";
 
 export interface CreateTaskOptions {
 	detachedByOperator?: boolean;
@@ -12,6 +12,7 @@ interface TaskControl {
 	child?: ChildProcess;
 	timer?: NodeJS.Timeout;
 	graceTimer?: NodeJS.Timeout;
+	stdoutRemainder?: string;
 	settled: boolean;
 }
 
@@ -24,19 +25,19 @@ export class TaskManager {
 	private readonly controls = new Map<string, TaskControl>();
 	private readonly finishListeners = new Set<(task: ManagedTask) => void>();
 	private readonly promptDueListeners = new Set<(task: PromptTask) => void>();
+	private readonly monitorEventListeners = new Set<(event: MonitorEvent) => void>();
 
 	createTask(command: string, cwd: string, child: ChildProcess, options: CreateTaskOptions = {}): CommandTask {
-		const now = Date.now();
-		const task = this.createCommandRecord(command, cwd, now, {
-			...options,
-			startedAt: now,
-			status: "running",
-			pid: child.pid,
+		return this.createRunningCommand(command, cwd, child, options);
+	}
+
+	createMonitor(command: string, cwd: string, start: () => ChildProcess, maxEvents?: number): CommandTask {
+		if (maxEvents !== undefined && (!Number.isSafeInteger(maxEvents) || maxEvents < 1)) {
+			throw new Error("maxEvents must be a positive integer");
+		}
+		return this.createRunningCommand(command, cwd, start(), {
+			monitor: { maxEvents, deliveredEvents: 0, muted: false },
 		});
-		const control: TaskControl = { child, settled: false };
-		this.controls.set(task.id, control);
-		this.attachChild(task, child, control);
-		return task;
 	}
 
 	scheduleCommand(command: string, cwd: string, delayMs: number, start: () => ChildProcess): CommandTask {
@@ -190,8 +191,34 @@ export class TaskManager {
 		};
 	}
 
+	onMonitorEvent(listener: (event: MonitorEvent) => void): () => void {
+		this.monitorEventListeners.add(listener);
+		return () => {
+			this.monitorEventListeners.delete(listener);
+		};
+	}
+
 	private allocateId(): string {
 		return `task-${this.nextId++}`;
+	}
+
+	private createRunningCommand(
+		command: string,
+		cwd: string,
+		child: ChildProcess,
+		options: CreateTaskOptions & { monitor?: CommandTask["monitor"] },
+	): CommandTask {
+		const now = Date.now();
+		const task = this.createCommandRecord(command, cwd, now, {
+			...options,
+			startedAt: now,
+			status: "running",
+			pid: child.pid,
+		});
+		const control: TaskControl = { child, settled: false };
+		this.controls.set(task.id, control);
+		this.attachChild(task, child, control);
+		return task;
 	}
 
 	private createCommandRecord(
@@ -202,6 +229,7 @@ export class TaskManager {
 			status: CommandTask["status"];
 			startedAt?: number;
 			pid?: number;
+			monitor?: CommandTask["monitor"];
 		},
 	): CommandTask {
 		const task: CommandTask = {
@@ -218,6 +246,7 @@ export class TaskManager {
 				initialText: options.initialText,
 				tempFilePrefix: `pi-task`,
 			}),
+			monitor: options.monitor,
 			detachedByOperator: options.detachedByOperator,
 		};
 		this.tasks.set(task.id, task);
@@ -225,7 +254,11 @@ export class TaskManager {
 	}
 
 	private attachChild(task: CommandTask, child: ChildProcess, control: TaskControl): void {
-		child.stdout?.on("data", (chunk: Buffer) => task.output.append(chunk));
+		if (task.monitor && child.stdout) child.stdout.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: Buffer | string) => {
+			task.output.append(chunk);
+			if (task.monitor && !control.settled) this.consumeMonitorStdout(task, control, String(chunk));
+		});
 		child.stderr?.on("data", (chunk: Buffer) => task.output.append(chunk));
 		let exitCode: number | null = null;
 
@@ -252,6 +285,38 @@ export class TaskManager {
 			control.graceTimer = setTimeout(() => finalize(exitCode), 100);
 		});
 		child.once("close", (code) => finalize(code ?? exitCode));
+	}
+
+	private consumeMonitorStdout(task: CommandTask, control: TaskControl, chunk: string): void {
+		control.stdoutRemainder = `${control.stdoutRemainder ?? ""}${chunk}`;
+		let newlineIndex = control.stdoutRemainder.indexOf("\n");
+		while (newlineIndex >= 0) {
+			const rawLine = control.stdoutRemainder.slice(0, newlineIndex);
+			control.stdoutRemainder = control.stdoutRemainder.slice(newlineIndex + 1);
+			this.emitMonitorEvent(task, rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine);
+			newlineIndex = control.stdoutRemainder.indexOf("\n");
+		}
+	}
+
+	private emitMonitorEvent(task: CommandTask, line: string): void {
+		const monitor = task.monitor;
+		if (!monitor || monitor.muted) return;
+		monitor.deliveredEvents++;
+		const reachedLimit = monitor.maxEvents !== undefined && monitor.deliveredEvents >= monitor.maxEvents;
+		if (reachedLimit) monitor.muted = true;
+		const event: MonitorEvent = {
+			task,
+			line,
+			eventIndex: monitor.deliveredEvents,
+			reachedLimit,
+		};
+		for (const listener of this.monitorEventListeners) {
+			try {
+				listener(event);
+			} catch {
+				// One listener must not prevent another from observing an event.
+			}
+		}
 	}
 
 	private emitFinished(task: ManagedTask): void {

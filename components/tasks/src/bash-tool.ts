@@ -369,7 +369,7 @@ export function createBashToolDefinition(
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports background execution and standard input.",
 		promptGuidelines: [
 			"You can inspect PI_* environment variables for current model and session details.",
-			"Use run_in_background: true to run long-running commands (e.g. builds, servers, watchers, CI wait) in the background. You will receive a notification when the task completes.",
+			"Use bash with run_in_background: true for immediate commands that may run while you continue and should wake you only when they complete or fail.",
 			"While a foreground command is executing, the operator can press Ctrl+B to background it.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
 			"Pass verbatim: true to run commands without RTK output compression when exact raw output is required.",

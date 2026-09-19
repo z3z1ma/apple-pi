@@ -31,7 +31,7 @@ At a high level, the package adds six kinds of capability to Pi:
 
 1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, plus a structured user-question tool.
 2. **Context continuity** — xAI server-side or Pi default compaction, the pair programmer's sourced notebook, two complementary session-recall paths, and a project-local wiki for reusable knowledge.
-3. **Execution continuity** — root-session one-shot scheduling for deferred prompts or commands, plus the ledger for durable operational memory.
+3. **Execution continuity** — root-session background work, one-shot scheduling, and reactive command monitoring, plus the ledger for durable operational memory.
 4. **Execution and team collaboration** — a bounded JavaScript composition runtime plus an interactive team of specialist agents.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
 6. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
@@ -46,7 +46,7 @@ There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
 - **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Mutation-capable children load vroom (fast mode), automatic-compaction safety/fallback, the search root guard, ledger, wiki, `search_session`, and MCP via explicit paths (`--no-extensions` plus `-e`); public read-only roles load the safety guards, wiki, and `search_session`. Either may load the pair programmer sidecar when `pair: true`. The internal `/btw` child loads only vroom (fast mode) and the mandatory safety guards. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
-- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Root-only `schedule` and `task` are excluded from captured extension tools. Nested model workers receive only explicitly granted core tools and bound context. They load vroom (fast mode), automatic-compaction safety/fallback, the search root guard, ledger, wiki, and `search_session` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
+- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Root-only `schedule`, `monitor`, and `task` are excluded from captured extension tools. Nested model workers receive only explicitly granted core tools and bound context. They load vroom (fast mode), automatic-compaction safety/fallback, the search root guard, ledger, wiki, and `search_session` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
 
@@ -57,7 +57,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; shared-lifecycle runtime modules may remain cohesive here. |
 | `components/pair-programmer/` | Gives the main agent a persistent shared-screen pair programming partner | Uses the user-global `pair` model profile, follows only the presented trajectory, expands host-issued receipts for folded text or user images, keeps the shared notebook, shares concise findings or restrained evidence questions, and can ask the consultant teammate for an independent architectural opinion using the `deep` profile; neither role may implement. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
-| `components/tasks/` | Process backgrounding, one-shot prompt/command scheduling, managed-task inspection and cancellation, and reactive wake-up | Root sessions only. Due prompts and completed commands dispatch followUp messages with triggerTurn: true. Overrides the built-in bash tool; `schedule` and `task` stay outside Pi Exec. |
+| `components/tasks/` | Process backgrounding, one-shot prompt/command scheduling, stdout-driven command monitoring, managed-task inspection and cancellation, and reactive delivery | Root sessions only. Monitor lines dispatch immediate steer messages; due prompts and completed commands dispatch followUp messages. Overrides the built-in bash tool; `schedule`, `monitor`, and `task` stay outside Pi Exec. |
 | `components/rtk/` | Detects host RTK (Rust Token Killer), rewrites bash commands for token efficiency, and injects model guidance | Root sessions and standard child sessions. Intercepts bash tool execution when `verbatim !== true`, falls open cleanly if RTK is missing or disabled (`RTK_DISABLED=1`). |
 | `components/prompt-stash/` | In-memory prompt stashing with FIFO eviction and external editor ($EDITOR / vim) integration | Root sessions only. Registers shortcuts (Ctrl+S, Alt+S, Ctrl+Shift+S, Alt+Shift+S, Ctrl+Alt+S, Ctrl+E, Alt+E) and commands (/stash, /edit-prompt). |
 | `components/terse-tools/` | Replaces default bulky tool boxes with terse Antigravity-style single-line TUI rendering (`● Tool(args)`) and tree-style expansion | Interactive TUI sessions. Patches `ToolExecutionComponent.prototype.render` and `Container.prototype.addChild` to eliminate box borders and format collapsed/expanded views with theme colors. |
@@ -86,6 +86,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - The package ships source ESM; there is no generated build directory or separate compilation artifact.
 - TypeScript uses NodeNext semantics, and relative TypeScript imports use `.js` suffixes because that is the runtime ESM path.
 - The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
+- Native harness capabilities teach their concise selection and ordinary-use model through tool names, schemas, prompt snippets, and prompt guidelines. Skills own repeatable engineering procedures and optional progressive disclosure; they are not prerequisite manuals for calling native tools.
 - The package-load test is the executable smoke test for loading an explicit checkout entrypoint list and checking the expected tool/command boundary. It does not discover entries from the manifest or load the packed tarball, so keep its list aligned with `package.json` and inspect packaging separately.
 
 ### Context and notebook
@@ -137,7 +138,7 @@ Use the narrowest production owner:
 - Terminal rendering for a component: that component's `ui/` modules.
 - Logic used by multiple real subsystems with identical semantics: `components/shared/`.
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
-- Deferred root-session continuity: `components/tasks/`; keep scheduling root-only, one-shot, relative, in memory, and outside Pi Exec.
+- Deferred and reactive root-session execution: `components/tasks/`; keep scheduling one-shot and relative, keep monitor stdout line-oriented and steering, reuse the managed-task lifecycle, and keep `schedule`, `monitor`, and `task` outside Pi Exec.
 - RTK command rewriting and prompt injection: `components/rtk/` for detector, rewriter, and prompt; `extensions/rtk.ts` for Pi event wiring.
 - Optional backlog and to-do behavior: `optional-extensions/`; preserve loadability and tests without adding them to the default package surface.
 - Stable maintainer conventions or architecture rationale: `docs/`.

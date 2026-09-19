@@ -645,13 +645,13 @@ describe("pi_exec guest API documentation", () => {
 	it("embeds live object signatures in the tool contract", () => {
 		const guidelines = PI_EXEC_PROMPT_GUIDELINES.join("\n");
 		const contract = piExecGuestApiContract();
-		expect(guidelines).toContain("never a positional string");
-		expect(guidelines).toContain("pi.read({ path })");
-		expect(guidelines).toContain("live <subagent-team> block lists every callable teammate");
-		expect(guidelines).toContain("separate <inference-profiles> block lists the inference profiles");
-		expect(guidelines).toContain("type selects a teammate; profile selects an inference profile");
-		expect(guidelines).toContain("equivalent subagent_type, profile, and system_prompt combination");
-		expect(guidelines).toContain("display is a pi_exec tool parameter");
+		expect(guidelines).toContain("complete live contract on the code parameter");
+		expect(guidelines).toContain("take one object matching their listed schema");
+		expect(guidelines).toContain("bind compact evidence through agent context");
+		expect(guidelines).toContain("root agent tool for persistent collaboration");
+		expect(guidelines).toContain("live <subagent-team> and <inference-profiles> blocks");
+		expect(guidelines).toContain("Pass display, inputs, state, and limits on the pi_exec tool call");
+		expect(guidelines).not.toContain("pi-exec skill");
 		expect(PI_EXEC_DESCRIPTION).toContain("never a positional string");
 		expect(PI_EXEC_DESCRIPTION).toContain("outputSchema?");
 		expect(PI_EXEC_DESCRIPTION).toContain("value?");
@@ -1205,6 +1205,7 @@ describe("pi_exec tool", () => {
 		const savedProgram = { ...echo, name: "pi_exec_program" };
 		const task = { ...echo, name: "task" };
 		const schedule = { ...echo, name: "schedule" };
+		const monitor = { ...echo, name: "monitor" };
 		const subagentTools: Array<[string, { definition: typeof echo }]> = Object.values(SUBAGENT_TOOL_NAMES).map(
 			(name) => [name, { definition: { ...echo, name } }],
 		);
@@ -1216,6 +1217,7 @@ describe("pi_exec tool", () => {
 					["pi_exec_program", { definition: savedProgram }],
 					["task", { definition: task }],
 					["schedule", { definition: schedule }],
+					["monitor", { definition: monitor }],
 					...subagentTools,
 				]),
 			},
@@ -1225,7 +1227,7 @@ describe("pi_exec tool", () => {
 		expect(capturedTools().map((captured) => captured.name)).toEqual(["echo_value"]);
 		expect(tool.parameters.properties.code.description).toContain("extensions.echo_value({ value: string })");
 		expect(tool.description).not.toContain("extensions.echo_value({ value: string })");
-		for (const name of [...Object.values(SUBAGENT_TOOL_NAMES), "task", "schedule"]) {
+		for (const name of [...Object.values(SUBAGENT_TOOL_NAMES), "task", "schedule", "monitor"]) {
 			expect(tool.parameters.properties.code.description).not.toContain(`extensions.${name}(`);
 		}
 	});

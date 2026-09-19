@@ -11,6 +11,12 @@ interface ManagedTaskBase {
 	status: TaskStatus;
 }
 
+export interface MonitorState {
+	readonly maxEvents?: number;
+	deliveredEvents: number;
+	muted: boolean;
+}
+
 export interface CommandTask extends ManagedTaskBase {
 	readonly kind: "command";
 	readonly command: string;
@@ -19,6 +25,7 @@ export interface CommandTask extends ManagedTaskBase {
 	startedAt?: number;
 	exitCode?: number | null;
 	readonly output: OutputBuffer;
+	readonly monitor?: MonitorState;
 	detachedByOperator?: boolean;
 }
 
@@ -30,12 +37,29 @@ export interface PromptTask extends ManagedTaskBase {
 export type ManagedTask = CommandTask | PromptTask;
 export type BackgroundTask = CommandTask;
 
+export interface MonitorEvent {
+	task: CommandTask;
+	line: string;
+	eventIndex: number;
+	reachedLimit: boolean;
+}
+
+export interface MonitorEventDetails {
+	taskId: string;
+	command: string;
+	line: string;
+	eventIndex: number;
+	maxEvents?: number;
+	reachedLimit: boolean;
+}
+
 export interface TaskNotificationDetails {
 	taskId: string;
 	status: TaskStatus;
 	exitCode?: number | null;
 	command: string;
 	durationMs: number;
+	monitor: boolean;
 	outputPreview?: string;
 }
 
@@ -53,7 +77,15 @@ export interface ScheduleToolDetails {
 	dueAt: number;
 }
 
+export interface MonitorToolDetails {
+	taskId: string;
+	pid?: number;
+	status: TaskStatus;
+	maxEvents?: number;
+}
+
 export const TASK_NOTIFICATION_CUSTOM_TYPE = "apple-pi.task-notification";
+export const MONITOR_EVENT_CUSTOM_TYPE = "apple-pi.monitor-event";
 export const SCHEDULED_PROMPT_CUSTOM_TYPE = "apple-pi.scheduled-prompt";
 
 export const bashParameters = Type.Object({
@@ -103,6 +135,25 @@ export const scheduleParameters = Type.Object(
 );
 
 export type ScheduleParameters = Static<typeof scheduleParameters>;
+
+export const monitorParameters = Type.Object(
+	{
+		command: Type.String({
+			minLength: 1,
+			description: "Shell command whose newline-terminated stdout lines are events.",
+		}),
+		max_events: Type.Optional(
+			Type.Integer({
+				minimum: 1,
+				description:
+					"Maximum stdout events to deliver before the monitor continues silently until completion. Omit for an open-ended event stream.",
+			}),
+		),
+	},
+	{ additionalProperties: false },
+);
+
+export type MonitorParameters = Static<typeof monitorParameters>;
 
 export const taskParameters = Type.Object({
 	action: Type.Union([Type.Literal("list"), Type.Literal("status"), Type.Literal("cancel")], {

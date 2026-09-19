@@ -23,8 +23,8 @@
 5. **Subagent Support**:
    Standard mutation-capable child sessions inherit the RTK extension and benefit from command output compression.
 
-6. **Pi Exec Isolation**:
-   Inside `pi_exec`, `pi.bash` is isolated from both RTK rewriting and background tasks. Guest JavaScript scripts require deterministic, unaltered command outputs for parsing. The `pi.bash` guest signature accepts `{ command, timeout?, stdin? }` without `verbatim` or `run_in_background` parameters, ensuring commands always execute raw and return their output to the script promise.
+6. **Raw execution boundaries**:
+   Inside `pi_exec`, `pi.bash` is isolated from both RTK rewriting and background tasks. Guest JavaScript programs require deterministic, unaltered command output for parsing. The root `monitor` tool also bypasses RTK because each stdout line is an agent event and rewriting would change that protocol. Pi Exec's `pi.bash` accepts `{ command, timeout?, stdin? }` without `verbatim` or `run_in_background`; `monitor` accepts its own command and optional event-delivery limit.
 
 ## The `verbatim` Parameter
 

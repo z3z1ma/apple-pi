@@ -18,6 +18,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	task: "ManageTask",
 	manage_task: "ManageTask",
 	schedule: "Schedule",
+	monitor: "Monitor",
 	pi_exec: "Exec",
 	pi_exec_program: "Program",
 	ask_user_question: "AskUserQuestion",
@@ -401,7 +402,8 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 
 	switch (toolName) {
 		case "bash":
-		case "powershell": {
+		case "powershell":
+		case "monitor": {
 			const cmd = args._rawCommand || args.command || args.cmd || "";
 			return typeof cmd === "string" ? cmd.replace(/[\r\n]+/g, " ").trim() : "";
 		}

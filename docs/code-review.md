@@ -35,7 +35,7 @@ The examples under [`skills/code-review/references`](../skills/code-review/refer
 - `multi-lens-review.js` — fixed independent lenses;
 - `residual-review-loop.js` — one bounded verifier-directed coverage pass.
 
-Load [`pi-exec`](../skills/pi-exec) before adapting a program. Pass the comparison explicitly. Planned and fixed-lens programs also require the axes the root intends to assess; pass applicable standards and intent source paths so reducers can inspect the governing evidence.
+Use the live `pi_exec` tool contract when adapting a program. Pass the comparison explicitly. Planned and fixed-lens programs also require the axes the root intends to assess; pass applicable standards and intent source paths so reducers can inspect the governing evidence.
 
 ## Evidence and authority
 

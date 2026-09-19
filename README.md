@@ -122,6 +122,7 @@ Apple Pi splits memory cleanly by lifecycle:
 | **[The Wiki](docs/wiki.md)** (`.wiki/`) | Durable / Cross-Task | Karpathy-style knowledge base for reusable domain knowledge, architecture patterns, and operational wisdom. | Plain Markdown pages with Obsidian `[[slug]]` links. No vector DB, no daemon. Graph is derived on-demand via `wiki_lint` and `wiki_references`. |
 | **[Distill](docs/distill.md)** (`/distill`) | Retrospective Synthesis | Proposal-first harvesting of durable lessons learned during a session into their rightful homes. | Analyzes the session and proposes updates to `AGENTS.md`, `.wiki/`, task retrospectives, skills, or `.pi/programs/`. Requires human approval before writing. |
 | **[One-Shot Scheduling](docs/scheduling.md)** (`schedule`) | Execution Continuity | Defer one self-authored prompt or bash command within the root session. | Prompts wake when due; commands start silently and wake on completion. Shared `task` IDs, cancellation, and lifecycle cleanup; no cron daemon or persistent scheduler. |
+| **[Reactive Monitoring](docs/tasks.md)** (`monitor`) | Execution Continuity | Run a shell event adapter whose meaningful stdout lines steer the agent while it continues working. | One event per completed stdout line, optional caller-owned delivery limit, shared task inspection/cancellation, and completion wake-up. |
 | **[Optional Extensions](docs/optional-extensions.md)** | Retained Task Systems | Packaged and tested backlog/to-do implementations for workflows requiring persistent task managers. | Opt-in via project/user configuration; never loaded into the default minimal harness surface. |
 
 ### 5. Specialist Team & The Invisible Child Clarification
@@ -150,7 +151,7 @@ A great harness must feel like an extension of your nervous system. Apple Pi inc
 - **[Search Root Guard (`home-search-guard`)](docs/home-search-guard.md)**: Fail-closed guardrails that stop the agent from accidentally running recursive greps across `/`, `~`, or workspace roots.
 - **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
 - **[MCP Gateway (`mcp`)](docs/mcp.md)**: Pinned `pi-mcp-adapter` gateway exposed as a token-efficient `mcp` tool (`/mcp`), bridging external tools and resources directly into interactive sessions and `pi_exec` composition.
-- **[Managed Tasks, Scheduling & Reactive Wake-Up (`tasks`)](docs/tasks.md)**: Background commands immediately or schedule one-shot prompts and commands for later. Due prompts and command completion wake the agent; `task` lists, inspects, waits for, or cancels managed work. Root-only `schedule` and `task` stay outside `pi_exec`.
+- **[Managed Tasks, Scheduling & Reactive Execution (`tasks`)](docs/tasks.md)**: Start quiet background commands, schedule one-shot prompts and commands, or run `monitor` event adapters whose completed stdout lines steer the agent immediately. All use shared `task` inspection/cancellation and completion wake-up. Root-only `schedule`, `monitor`, and `task` stay outside `pi_exec`.
 - **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
 
 ---
@@ -183,7 +184,7 @@ Apple Pi ships with a suite of battle-tested engineering skills in [`skills/`](s
 - [`/skill:research`](skills/research): Investigates externally verifiable engineering questions through primary sources and official documentation.
 
 ### Harness & Knowledge Authoring
-- [`/skill:pi-exec`](skills/pi-exec): Author bounded, composable JavaScript async programs and reusable `.pi/programs`.
+- `pi_exec` is a native harness capability whose core instructions and live schema teach bounded JavaScript composition and reusable `.pi/programs`; it does not require a separate skill.
 - [`/skill:skill-authoring`](skills/skill-authoring): Author concise, testable Agent Skills with progressive disclosure.
 - [`/skill:llm-wiki`](skills/llm-wiki): Initialize, ingest, query, and maintain the project-local `.wiki/` knowledge graph.
 

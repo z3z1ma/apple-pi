@@ -1,14 +1,17 @@
-# Managed tasks and reactive wake-up
+# Managed tasks and reactive execution
 
-The tasks extension owns immediate background commands, one-shot schedules, task inspection and cancellation, and root-session wake-up when deferred work becomes actionable.
+The tasks extension owns immediate background commands, command monitors, one-shot schedules, task inspection and cancellation, and root-session wake-up when managed work becomes actionable.
 
-## Capabilities
+## Execution model
 
-1. **Human-initiated backgrounding (`Ctrl+B`)**: While a foreground command executes, the operator can press `Ctrl+B` to detach it. The `bash` call returns partial output and a task ID while the process continues.
-2. **Agent-initiated backgrounding (`run_in_background: true`)**: `bash` starts a command immediately, returns its task ID, and lets the agent continue without blocking.
-3. **One-shot scheduling (`schedule`)**: A prompt or command becomes due after a relative delay. Prompts wake the agent; commands start silently and wake it on completion or failure.
-4. **Reactive wake-up**: Completion and due-prompt messages use `deliverAs: "followUp"` with `triggerTurn: true`. An idle agent wakes immediately; an active run receives the follow-up after it settles.
-5. **Task management (`task`)**: All scheduled prompts, scheduled commands, and immediate background commands share `task-*` IDs and one inspection/cancellation surface.
+Choose the entrypoint by intent:
+
+1. **`bash`** runs work now. `run_in_background: true` is for finite or quiet work that should wake the agent only when it completes or fails.
+2. **`schedule`** arranges one prompt or command to start after a relative delay.
+3. **`monitor`** starts a continuing shell event source now. Every newline-terminated stdout line immediately steers the agent while the command keeps running.
+4. **`task`** lists, inspects, waits for, or cancels any managed command, monitor, or schedule.
+
+All command forms share the same `TaskManager`, `task-*` IDs, rolling output, process-tree cancellation, completion notification, and session lifecycle. A monitor is a managed command with stdout event delivery, not a second task system.
 
 ## Tools
 
@@ -25,8 +28,9 @@ The tasks extension owns immediate background commands, one-shot schedules, task
 ```
 
 - `stdin`: Optional process standard input.
-- `run_in_background`: Start immediately and return a managed task descriptor.
+- `run_in_background`: Start immediately and return a managed task descriptor. Completion or failure sends a follow-up that wakes an idle agent or waits until an active run settles.
 - `verbatim`: Bypass RTK command rewriting when exact raw execution is required.
+- While a foreground command executes, the operator can press `Ctrl+B` to detach it into the same managed-task lifecycle.
 
 ### `schedule`
 
@@ -48,6 +52,26 @@ Schedule exactly one prompt or command:
 
 `delay_seconds` must be a finite non-negative number. A zero-delay prompt preserves next-turn continuation. A scheduled command uses the working directory and shell environment captured when it is created.
 
+### `monitor`
+
+```json
+{
+  "command": "tail -F app.log | awk '/ERROR/ { print; fflush() }'",
+  "max_events": 5
+}
+```
+
+`monitor` runs the command verbatim because stdout is its event protocol. Every newline-terminated stdout line creates one visible `apple-pi.monitor-event` message with `deliverAs: "steer"` and `triggerTurn: true`:
+
+- during an active run, Pi delivers the event after the current assistant turn finishes its tool calls and before the next model call;
+- while idle, the event starts a model turn;
+- completed lines are delivered individually rather than coalesced or deferred until settlement;
+- stderr and unterminated stdout fragments remain recorded task output and do not create events.
+
+Write monitor commands as event adapters. Emit only meaningful state changes on stdout, redirect or suppress diagnostic noise, and use line-buffered or unbuffered producers. Useful adapters include `awk` with `fflush()`, `jq --unbuffered`, and programs that explicitly flush after each event.
+
+`max_events` is an optional positive integer chosen for the workflow. The last permitted event says that delivery is now silent; the process itself keeps running, all output remains available through `task status`, and completion or failure still sends the normal follow-up. Omit `max_events` when an open-ended event stream is appropriate.
+
 ### `task`
 
 ```json
@@ -58,20 +82,30 @@ Schedule exactly one prompt or command:
 }
 ```
 
-- `list`: Show managed tasks, kinds, states, due times, process IDs, and summaries.
-- `status`: Show prompt details or command output. `wait_seconds` optionally waits for active work to settle.
-- `cancel`: Cancel a scheduled prompt or command, or terminate a running command and its process tree.
+- `list`: Show managed tasks, kinds, states, due times, process IDs, and summaries. Monitors are labeled `monitor`.
+- `status`: Show prompt details or command output. Monitor status also reports delivered events and whether event delivery is active or silent. `wait_seconds` optionally waits for active work to settle.
+- `cancel`: Cancel a scheduled prompt or command, or terminate a running background command or monitor and its process tree.
 
-Prompt states are `scheduled`, `due`, `delivered`, or `cancelled`. Command states are `scheduled`, `running`, `completed`, `failed`, or `cancelled`.
+Prompt states are `scheduled`, `due`, `delivered`, or `cancelled`. Command and monitor states are `scheduled`, `running`, `completed`, `failed`, or `cancelled`.
 
-## Command notification format
+## Message formats
 
-When a command finishes, an `apple-pi.task-notification` message is appended to the transcript:
+A monitor line is appended to the transcript as:
+
+```xml
+<monitor-event id="task-1" event="2" max-events="5">
+ERROR connection pool exhausted
+</monitor-event>
+```
+
+The final limited event includes the silent-until-completion notice inside the same message.
+
+When any command finishes, an `apple-pi.task-notification` message is appended:
 
 ```xml
 <task-notification id="task-1" status="completed">
-Task task-1 (completed) finished in 14.2s with exit code 0.
-Command: npm run build
+Monitor task-1 (completed) finished in 14.2s with exit code 0.
+Command: tail -F app.log | awk '/ERROR/ { print; fflush() }'
 
 Output:
 ...
@@ -81,7 +115,7 @@ Output:
 ## Lifecycle and safety
 
 - **Root session only**: Child sessions and subagents do not load the extension.
-- **Session local**: Schedules are one-shot and in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work.
+- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
-- **Pi Exec isolation**: `schedule` and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct and has no background-task or scheduling parameters.
+- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

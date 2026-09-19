@@ -30,4 +30,4 @@ Every schedule returns a `task-*` ID and resolved due time. Use `task` to list, 
 
 Scheduling is root-only, one-shot, relative, and in memory. Scheduled work is cancelled on session start, fork, tree navigation, switch, and shutdown. It does not survive Pi exit or execute while the owning session is closed. There are no absolute dates, recurrence, cron expressions, arbitrary delayed tool calls, ambient reminders, or persistent scheduler state.
 
-`schedule` and `task` are intentionally unavailable inside `pi_exec`; programs already have bounded timers and direct `pi.bash`, while root-session wake-up and managed-task ownership remain outside the guest runtime.
+`schedule`, `monitor`, and `task` are intentionally unavailable inside `pi_exec`; programs already have bounded timers and direct `pi.bash`, while root-session wake-up, steering, and managed-task ownership remain outside the guest runtime.

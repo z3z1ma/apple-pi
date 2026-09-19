@@ -15,6 +15,10 @@ function taskSummary(task: ManagedTask): string {
 	return task.kind === "prompt" ? task.prompt : task.command;
 }
 
+function taskKind(task: ManagedTask): string {
+	return task.kind === "command" && task.monitor ? "monitor" : task.kind;
+}
+
 function listTasks(taskManager: TaskManager) {
 	const tasks = taskManager.list();
 	if (tasks.length === 0) {
@@ -32,7 +36,7 @@ function listTasks(taskManager: TaskManager) {
 	];
 	for (const task of tasks) {
 		const id = task.id.padEnd(8);
-		const kind = task.kind.padEnd(8);
+		const kind = taskKind(task).padEnd(8);
 		const status = task.status.padEnd(11);
 		const due = new Date(task.dueAt).toISOString().padEnd(25);
 		const pid = (task.kind === "command" && task.pid ? String(task.pid) : "-").padEnd(7);
@@ -53,14 +57,17 @@ async function taskStatus(taskManager: TaskManager, taskId: string | undefined, 
 
 	const lines = [
 		`Task: ${task.id}`,
-		`Kind: ${task.kind}`,
+		`Kind: ${taskKind(task)}`,
 		`Status: ${task.status}`,
 		`Created: ${new Date(task.createdAt).toISOString()}`,
 		`Due: ${new Date(task.dueAt).toISOString()}`,
 	];
 	if (task.kind === "prompt") {
 		lines.push(`Prompt: ${task.prompt}`);
-		if (task.endedAt) lines.push(`Delivered: ${new Date(task.endedAt).toISOString()}`);
+		if (task.endedAt) {
+			const label = task.status === "delivered" ? "Delivered" : "Cancelled";
+			lines.push(`${label}: ${new Date(task.endedAt).toISOString()}`);
+		}
 	} else {
 		const durationStart = task.startedAt ?? task.createdAt;
 		const durationMs = (task.endedAt ?? Date.now()) - durationStart;
@@ -71,9 +78,13 @@ async function taskStatus(taskManager: TaskManager, taskId: string | undefined, 
 			`Working Directory: ${task.cwd}`,
 			`Duration: ${formatDuration(durationMs)}`,
 			`Exit Code: ${task.exitCode ?? "null"}`,
-			"",
-			`Output: ${snapshot.content || "(no output recorded yet)"}`,
 		);
+		if (task.monitor) {
+			const limit = task.monitor.maxEvents === undefined ? "open-ended" : String(task.monitor.maxEvents);
+			const delivery = isActive(task) ? (task.monitor.muted ? "silent until completion" : "active") : "finished";
+			lines.push(`Monitor Events: ${task.monitor.deliveredEvents}/${limit}`, `Monitor Delivery: ${delivery}`);
+		}
+		lines.push("", `Output: ${snapshot.content || "(no output recorded yet)"}`);
 		if (snapshot.truncated && snapshot.fullOutputPath) {
 			lines.push(
 				"",
@@ -105,8 +116,8 @@ export function createTaskManagementTool(taskManager: TaskManager) {
 		name: "task",
 		label: "task",
 		description:
-			"Manage scheduled prompts and commands plus immediate background commands: list tasks, inspect status and output, or cancel active work. Use wait_seconds with status to wait for completion or delivery.",
-		promptSnippet: "Manage scheduled or background tasks (list, inspect, wait, or cancel).",
+			"Manage scheduled prompts and commands, immediate background commands, and monitors: list tasks, inspect status and output, or cancel active work. Use wait_seconds with status to wait for completion or delivery.",
+		promptSnippet: "Manage scheduled, background, or monitored tasks (list, inspect, wait, or cancel).",
 		parameters: taskParameters,
 		async execute(_toolCallId, params: TaskParameters) {
 			switch (params.action) {
