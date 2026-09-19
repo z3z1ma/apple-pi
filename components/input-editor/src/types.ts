@@ -18,6 +18,7 @@ export interface FooterSnapshot {
 	context?: {
 		percent: number | null;
 	};
+	cacheHitRate?: number;
 	fastModeEnabled?: boolean;
 	statuses: readonly FooterStatus[];
 }

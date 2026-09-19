@@ -3,6 +3,7 @@ import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import type { FooterSnapshot } from "../src/index.js";
 import { collapseDockFooter, collectInputCardSnapshot, InputCardEditor, renderInputCard } from "../src/index.js";
+import { CacheHitRateTracker } from "../src/ui/input-editor.js";
 
 const colorCodes: Record<string, number> = {
 	accent: 35,
@@ -27,7 +28,20 @@ function footerData(statuses: Map<string, string>): ReadonlyFooterDataProvider {
 	};
 }
 
-function contextFor(statuses = new Map<string, string>()): {
+function assistantEntry(input: number, cacheRead: number, cacheWrite = 0) {
+	return {
+		type: "message",
+		message: {
+			role: "assistant",
+			usage: { input, output: 1_000, cacheRead, cacheWrite },
+		},
+	};
+}
+
+function contextFor(
+	statuses = new Map<string, string>(),
+	entries: readonly ReturnType<typeof assistantEntry>[] = [assistantEntry(2_000, 8_000)],
+): {
 	ctx: ExtensionContext;
 	data: ReadonlyFooterDataProvider;
 } {
@@ -46,6 +60,7 @@ function contextFor(statuses = new Map<string, string>()): {
 		thinkingLevel: "high",
 		modelRegistry: { getProviderDisplayName: () => "OpenAI" },
 		getContextUsage: () => ({ tokens: 42_000, contextWindow: 128_000, percent: 32.8 }),
+		sessionManager: { getEntries: () => entries },
 	} as unknown as ExtensionContext;
 	return { ctx, data };
 }
@@ -60,6 +75,7 @@ const completeSnapshot: FooterSnapshot = {
 		thinkingLevel: "high",
 	},
 	context: { percent: 32.8 },
+	cacheHitRate: 80,
 	statuses: [
 		{ key: "subagents", text: "2 running agents" },
 		{ key: "q-pair", text: "│ Pair programmer (reviewing): $0.42" },
@@ -81,7 +97,7 @@ describe("input editor rendering", () => {
 		expect(plain[2]).toBe(`│ ${" ".repeat(118)}`);
 		// 3: metadata line with right-justified status
 		expect(plain[3]).toMatch(/^│ GPT Test OpenAI high/);
-		expect(plain[3].trimEnd().endsWith("pair · mcp:3 · ctx 32.8%")).toBe(true);
+		expect(plain[3].trimEnd().endsWith("pair · mcp:3 · hit:80% · ctx:33%")).toBe(true);
 		expect(lines).toHaveLength(4);
 	});
 
@@ -89,13 +105,13 @@ describe("input editor rendering", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 120, [""], undefined, " ●    ");
 		const plain = lines.map(stripTerminalSequences);
 		expect(plain[0]).toBe(`│ ${" ".repeat(118)}`);
-		expect(plain.at(-1)).toMatch(/^│ GPT Test OpenAI high ·  ●/);
+		expect(plain.at(-1)).toMatch(/^│ GPT Test OpenAI high · {2}●/);
 		expect(lines).toHaveLength(4);
 	});
 
 	it("renders the compact status in one muted style on the bottom editor line", () => {
 		const output = renderInputCard(completeSnapshot, theme, 120, [""]).join("\n");
-		expect(output).toContain("\u001b[36mpair · mcp:3 · ctx 32.8%\u001b[0m");
+		expect(output).toContain("\u001b[36mpair · mcp:3 · hit:80% · ctx:33%\u001b[0m");
 	});
 
 	it("shows pair only while it is reviewing", () => {
@@ -107,7 +123,7 @@ describe("input editor rendering", () => {
 			],
 		};
 		const output = stripTerminalSequences(renderInputCard(idle, theme, 120, [""]).join("\n"));
-		expect(output).toContain("mcp:3 · ctx 32.8%");
+		expect(output).toContain("mcp:3 · hit:80% · ctx:33%");
 		expect(output).not.toMatch(/\bpair\b/);
 	});
 
@@ -119,36 +135,38 @@ describe("input editor rendering", () => {
 	])("derives the configured MCP server count from %s", (status, expected) => {
 		const snapshot = { ...completeSnapshot, statuses: [{ key: "mcp", text: status }] };
 		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
-		expect(output).toContain(`${expected} · ctx 32.8%`);
+		expect(output).toContain(`${expected} · hit:80% · ctx:33%`);
 	});
 
 	it("omits MCP when no server count is available", () => {
 		const snapshot = { ...completeSnapshot, statuses: [{ key: "mcp", text: "MCP authenticating" }] };
 		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
-		expect(output).toContain("ctx 32.8%");
+		expect(output).toContain("hit:80% · ctx:33%");
 		expect(output).not.toContain("mcp");
 	});
 
 	it("right-aligns context when no model metadata is present", () => {
 		const lines = renderInputCard({ context: { percent: 0 }, statuses: [] }, theme, 30, [""]);
 		const bottom = stripTerminalSequences(lines.at(-1)!);
-		expect(bottom).toBe(`│ ${" ".repeat(20)}ctx 0.0%`);
+		expect(bottom).toBe(`│ ${" ".repeat(22)}ctx:0%`);
 	});
 
 	it("preserves full model metadata at moderate width by dropping optional status parts before context", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 36, [""]);
 		const bottom = stripTerminalSequences(lines.at(-1)!);
 		expect(bottom).toContain("GPT Test OpenAI high");
-		expect(bottom).toContain("ctx 32.8%");
+		expect(bottom).toContain("ctx:33%");
 		expect(bottom).not.toContain("pair");
 		expect(bottom).not.toContain("mcp");
+		expect(bottom).not.toContain("hit");
 	});
 
 	it("drops optional status parts when the terminal is narrow, keeping context", () => {
 		const output = renderInputCard(completeSnapshot, theme, 18, ["prompt"]).map(stripTerminalSequences);
-		expect(output.at(-1)).toContain("ctx 32.8%");
+		expect(output.at(-1)).toContain("ctx:33%");
 		expect(output.at(-1)).not.toContain("pair");
 		expect(output.at(-1)).not.toContain("mcp");
+		expect(output.at(-1)).not.toContain("hit");
 	});
 
 	it("does not render any bottom rail or former Starship footer", () => {
@@ -238,7 +256,22 @@ describe("input editor rendering", () => {
 });
 
 describe("input editor snapshot", () => {
-	it("reads model, context, and extension status from public Pi APIs", () => {
+	it("initializes the session cache hit rate from history, then updates it incrementally", () => {
+		const entries = [assistantEntry(1_000, 9_000)];
+		const tracker = new CacheHitRateTracker(entries as never);
+		expect(tracker.rate).toBe(90);
+
+		const next = assistantEntry(7_500, 2_500);
+		entries.push(next);
+		expect(tracker.rate).toBe(90);
+		tracker.observeMessage(next.message as never);
+		expect(tracker.rate).toBeCloseTo(57.5);
+
+		const { ctx, data } = contextFor();
+		expect(collectInputCardSnapshot(ctx, data, tracker).cacheHitRate).toBeCloseTo(57.5);
+	});
+
+	it("reads model, context, cache hit rate, and extension status from public Pi APIs", () => {
 		const statuses = new Map([
 			["q-pair", "Pair programmer (reviewing): $0.00"],
 			["mcp", "3 servers enabled"],
@@ -247,9 +280,29 @@ describe("input editor snapshot", () => {
 		const snapshot = collectInputCardSnapshot(ctx, data);
 		expect(snapshot.model?.name).toBe("GPT Test");
 		expect(snapshot.context?.percent).toBe(32.8);
+		expect(snapshot.cacheHitRate).toBe(80);
 		expect(snapshot.statuses).toEqual([
 			{ key: "q-pair", text: "Pair programmer (reviewing): $0.00" },
 			{ key: "mcp", text: "3 servers enabled" },
 		]);
+	});
+
+	it("uses the prompt-token-weighted cache hit rate for the whole session", () => {
+		const { ctx, data } = contextFor(new Map(), [assistantEntry(1_000, 9_000), assistantEntry(7_500, 2_500)]);
+		expect(collectInputCardSnapshot(ctx, data).cacheHitRate).toBeCloseTo(57.5);
+	});
+
+	it("includes compaction usage in the overall session rate", () => {
+		const tracker = new CacheHitRateTracker([assistantEntry(1_000, 9_000)] as never);
+		tracker.observeEntry({
+			type: "compaction",
+			usage: { input: 9_000, output: 1_000, cacheRead: 1_000, cacheWrite: 0 },
+		} as never);
+		expect(tracker.rate).toBe(50);
+	});
+
+	it("omits cache hit rate until the provider reports cache activity", () => {
+		const { ctx, data } = contextFor(new Map(), [assistantEntry(10_000, 0)]);
+		expect(collectInputCardSnapshot(ctx, data).cacheHitRate).toBeUndefined();
 	});
 });

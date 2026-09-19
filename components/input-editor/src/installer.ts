@@ -2,7 +2,12 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { Component } from "@earendil-works/pi-tui";
 
 import type { EmptyFooterFactory } from "./types.js";
-import { createInputCardEditorFactory, type InputCardEditor } from "./ui/input-editor.js";
+import {
+	type CacheHitRateTracker,
+	cacheHitTrackerFromHistory,
+	createInputCardEditorFactory,
+	type InputCardEditor,
+} from "./ui/input-editor.js";
 
 const TRACK_WIDTH = 5;
 const BOUNCE_FRAMES_COUNT = (TRACK_WIDTH - 1) * 2;
@@ -80,8 +85,9 @@ function restoreBuiltInSurfaces(ctx: ExtensionContext): void {
 }
 
 /** Install the TUI-only input editor through Pi's public editor and footer APIs. */
-export function installForTui(ctx: ExtensionContext): void {
+export function installForTui(ctx: ExtensionContext, cacheHitTracker?: CacheHitRateTracker): void {
 	if (ctx.mode !== "tui") return;
+	cacheHitTracker ??= cacheHitTrackerFromHistory(ctx);
 	const editorBoundary = getEditorBoundary(ctx);
 	if (editorBoundary) {
 		notifyUnavailable(ctx, editorBoundary);
@@ -112,7 +118,7 @@ export function installForTui(ctx: ExtensionContext): void {
 		return;
 	}
 
-	const editorFactory = createInputCardEditorFactory(ctx, footerData);
+	const editorFactory = createInputCardEditorFactory(ctx, footerData, cacheHitTracker);
 	try {
 		ctx.ui.setWorkingIndicator({
 			frames: buildBouncingBallFrames(
@@ -140,13 +146,33 @@ export function installForTui(ctx: ExtensionContext): void {
 
 /** Register the TUI-only Apple Pi input editor without changing RPC UI state. */
 export default function installInputEditor(pi: ExtensionAPI): void {
+	let cacheHitTracker: CacheHitRateTracker | undefined;
+
 	pi.on("session_start", (_event, ctx) => {
+		cacheHitTracker = undefined;
 		if (ctx.mode !== "tui") return;
 		try {
-			installForTui(ctx);
+			cacheHitTracker = cacheHitTrackerFromHistory(ctx);
+			installForTui(ctx, cacheHitTracker);
 		} catch (error) {
 			notifyUnavailable(ctx, "installation failed", error);
 		}
+	});
+
+	pi.on("message_end", (event, ctx) => {
+		if (ctx.mode === "tui") cacheHitTracker?.observeMessage(event.message);
+	});
+
+	pi.on("session_compact", (event, ctx) => {
+		if (ctx.mode === "tui") cacheHitTracker?.observeEntry(event.compactionEntry);
+	});
+
+	pi.on("session_tree", (event, ctx) => {
+		if (ctx.mode === "tui" && event.summaryEntry) cacheHitTracker?.observeEntry(event.summaryEntry);
+	});
+
+	pi.on("session_shutdown", () => {
+		cacheHitTracker = undefined;
 	});
 }
 

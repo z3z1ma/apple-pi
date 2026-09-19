@@ -1,8 +1,10 @@
 import {
 	type ExtensionContext,
 	type KeybindingsManager,
+	type MessageEndEvent,
 	CustomEditor as PiCustomEditor,
 	type ReadonlyFooterDataProvider,
+	type SessionEntry,
 	type Theme,
 	type ThemeColor,
 } from "@earendil-works/pi-coding-agent";
@@ -109,6 +111,48 @@ function modelMetadata(snapshot: FooterSnapshot, theme: Theme, workingStatus?: s
 	return workingPart ? `${base} ${workingPart}` : base;
 }
 
+export class CacheHitRateTracker {
+	#cacheReadTokens = 0;
+	#promptTokens = 0;
+	#hasCacheActivity = false;
+
+	constructor(entries: readonly SessionEntry[]) {
+		for (const entry of entries) this.observeEntry(entry);
+	}
+
+	get rate(): number | undefined {
+		return this.#hasCacheActivity && this.#promptTokens > 0
+			? (this.#cacheReadTokens / this.#promptTokens) * 100
+			: undefined;
+	}
+
+	observeEntry(entry: SessionEntry): void {
+		if (entry.type === "message") this.observeMessage(entry.message);
+		else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+			this.#observeUsage(entry.usage);
+		}
+	}
+
+	observeMessage(message: MessageEndEvent["message"]): void {
+		if (message.role !== "assistant" && message.role !== "toolResult") return;
+		if (message.usage) this.#observeUsage(message.usage);
+	}
+
+	#observeUsage(usage: { input: number; cacheRead: number; cacheWrite: number }): void {
+		this.#cacheReadTokens += usage.cacheRead;
+		this.#promptTokens += usage.input + usage.cacheRead + usage.cacheWrite;
+		if (usage.cacheRead + usage.cacheWrite > 0) this.#hasCacheActivity = true;
+	}
+}
+
+export function cacheHitTrackerFromHistory(ctx: ExtensionContext): CacheHitRateTracker {
+	return new CacheHitRateTracker(safeRead(() => ctx.sessionManager.getEntries()) ?? []);
+}
+
+function cacheHitRateFromHistory(ctx: ExtensionContext): number | undefined {
+	return cacheHitTrackerFromHistory(ctx).rate;
+}
+
 function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | undefined {
 	const parts: string[] = [];
 	const pairReviewing = snapshot.statuses.some(
@@ -127,9 +171,11 @@ function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | 
 		if (count && Number(count) > 0) parts.push(`mcp:${count}`);
 	}
 
+	if (snapshot.cacheHitRate !== undefined) parts.push(`hit:${snapshot.cacheHitRate.toFixed(0)}%`);
+
 	if (snapshot.context) {
 		const percent = snapshot.context.percent;
-		parts.push(`ctx ${percent === null ? "?" : `${percent.toFixed(1)}%`}`);
+		parts.push(`ctx:${percent === null ? "?" : `${percent.toFixed(0)}%`}`);
 	}
 
 	if (parts.length === 0) return undefined;
@@ -148,7 +194,9 @@ function renderMetadataRow(
 ): string | undefined {
 	const metadata = modelMetadata(snapshot, theme, workingStatus);
 	const metadataWidth = metadata ? visibleWidth(metadata) : 0;
-	const minStatusWidth = snapshot.context ? visibleWidth(`ctx ${snapshot.context.percent?.toFixed(1) ?? "?"}%`) : 0;
+	const minStatusWidth = snapshot.context
+		? visibleWidth(`ctx:${snapshot.context.percent === null ? "?" : `${snapshot.context.percent.toFixed(0)}%`}`)
+		: 0;
 	const statusBudget = metadata ? Math.max(minStatusWidth, width - metadataWidth - 1) : width;
 	const statusText = compactEditorStatus(snapshot, statusBudget);
 	const status = statusText ? theme.fg("muted", statusText) : undefined;
@@ -264,6 +312,7 @@ function splitNativeEditorLines(lines: readonly string[]): NativeEditorSplit {
 export function collectInputCardSnapshot(
 	ctx: ExtensionContext,
 	footerData?: ReadonlyFooterDataProvider,
+	cacheHitTracker?: CacheHitRateTracker,
 ): FooterSnapshot {
 	const model = safeRead(() => ctx.model);
 	const modelProvider = model && typeof model.provider === "string" && model.provider ? model.provider : undefined;
@@ -303,6 +352,7 @@ export function collectInputCardSnapshot(
 					}
 				: undefined,
 		context,
+		cacheHitRate: cacheHitTracker ? cacheHitTracker.rate : cacheHitRateFromHistory(ctx),
 		fastModeEnabled:
 			modelProvider !== undefined && VROOM_PROVIDERS.has(modelProvider) && statusMap?.has(FAST_MODE_STATUS) === true,
 		statuses,
@@ -341,6 +391,7 @@ export class InputCardEditor extends PiCustomEditor {
 		keybindings: KeybindingsManager,
 		private readonly footerData: ReadonlyFooterDataProvider | undefined,
 		private readonly cardTheme: Theme,
+		private readonly cacheHitTracker?: CacheHitRateTracker,
 	) {
 		super(tuiForCard, editorTheme, keybindings, { paddingX: 0, embedWorkingStatus: true });
 		collapseDockFooter(tuiForCard);
@@ -367,7 +418,7 @@ export class InputCardEditor extends PiCustomEditor {
 		const innerWidth = Math.max(0, width - RAIL_WIDTH);
 		const nativeLines = super.render(innerWidth);
 		const split = splitNativeEditorLines(nativeLines);
-		const snapshot = collectInputCardSnapshot(this.ctx, this.footerData);
+		const snapshot = collectInputCardSnapshot(this.ctx, this.footerData, this.cacheHitTracker);
 		const theme = safeRead(() => this.ctx.ui.theme) ?? this.cardTheme;
 		const indicator = (this as any).workingStatusIndicator as
 			| { renderSpinnerInBorder(width: number): string }
@@ -392,10 +443,11 @@ export class InputCardEditor extends PiCustomEditor {
 export function createInputCardEditorFactory(
 	ctx: ExtensionContext,
 	footerData?: ReadonlyFooterDataProvider,
+	cacheHitTracker?: CacheHitRateTracker,
 ): (tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) => InputCardEditor {
 	return (tui, theme, keybindings) => {
 		collapseDockFooter(tui);
-		return new InputCardEditor(ctx, tui, theme, keybindings, footerData, ctx.ui.theme);
+		return new InputCardEditor(ctx, tui, theme, keybindings, footerData, ctx.ui.theme, cacheHitTracker);
 	};
 }
 

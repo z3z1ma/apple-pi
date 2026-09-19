@@ -18,7 +18,12 @@ const footerData: ReadonlyFooterDataProvider = {
 };
 
 function contextFor(
-	options: { existingEditor?: unknown; provideFooterData?: boolean; throwWhenSettingEditor?: boolean } = {},
+	options: {
+		existingEditor?: unknown;
+		provideFooterData?: boolean;
+		throwWhenReadingHistory?: boolean;
+		throwWhenSettingEditor?: boolean;
+	} = {},
 ): ExtensionContext & {
 	footerCalls: unknown[];
 	editorCalls: unknown[];
@@ -60,6 +65,12 @@ function contextFor(
 		mode: "tui",
 		cwd: "/tmp/project",
 		model: undefined,
+		sessionManager: {
+			getEntries: () => {
+				if (options.throwWhenReadingHistory) throw new Error("history unavailable");
+				return [];
+			},
+		},
 		getContextUsage: () => undefined,
 	} as unknown as ExtensionContext;
 	Object.assign(ctx, { footerCalls, editorCalls, notifications });
@@ -81,6 +92,14 @@ describe("input editor installation", () => {
 
 	it("installs empty footer and custom editor", () => {
 		const ctx = contextFor();
+		installForTui(ctx);
+		expect(ctx.footerCalls).toHaveLength(1);
+		expect(ctx.editorCalls).toHaveLength(1);
+		expect(ctx.notifications).toEqual([]);
+	});
+
+	it("installs without cache history when session entries are unavailable", () => {
+		const ctx = contextFor({ throwWhenReadingHistory: true });
 		installForTui(ctx);
 		expect(ctx.footerCalls).toHaveLength(1);
 		expect(ctx.editorCalls).toHaveLength(1);
