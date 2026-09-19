@@ -642,9 +642,14 @@ describe("pi_exec guest API documentation", () => {
 		);
 	});
 
-	it("embeds live object signatures in the tool contract", () => {
+	it("keeps composition guidance alongside the live object signatures", () => {
 		const guidelines = PI_EXEC_PROMPT_GUIDELINES.join("\n");
 		const contract = piExecGuestApiContract();
+		expect(guidelines).toContain("context-shaping boundary");
+		expect(guidelines).toContain("collect→reduce for host-only evidence");
+		expect(guidelines).toContain("gather→bind→judge for one typed worker decision");
+		expect(guidelines).toContain("map→agent.run→reconcile for independent per-item analysis");
+		expect(guidelines).toContain("stage→stage when one typed result becomes the next worker's context");
 		expect(guidelines).toContain("complete live contract on the code parameter");
 		expect(guidelines).toContain("take one object matching their listed schema");
 		expect(guidelines).toContain("bind compact evidence through agent context");

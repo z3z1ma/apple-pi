@@ -86,7 +86,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - The package ships source ESM; there is no generated build directory or separate compilation artifact.
 - TypeScript uses NodeNext semantics, and relative TypeScript imports use `.js` suffixes because that is the runtime ESM path.
 - The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
-- Native harness capabilities teach their concise selection and ordinary-use model through tool names, schemas, prompt snippets, and prompt guidelines. Skills own repeatable engineering procedures and optional progressive disclosure; they are not prerequisite manuals for calling native tools.
+- Native harness capabilities teach their concise selection, mental model, and ordinary composition patterns through runtime prompt-bearing surfaces: tool names, schemas, prompt snippets/guidelines, or explicit system-prompt injection. Repository documentation is invisible to the running model and never satisfies this requirement. Skills own repeatable engineering procedures and optional progressive disclosure; they are not prerequisite manuals for calling native tools.
 - The package-load test is the executable smoke test for loading an explicit checkout entrypoint list and checking the expected tool/command boundary. It does not discover entries from the manifest or load the packed tarball, so keep its list aligned with `package.json` and inspect packaging separately.
 
 ### Context and notebook
@@ -249,12 +249,13 @@ Never move credentials, private transcript content, or notebook records into rep
 3. Preserve tool scope, serialization, budgeting, cancellation, trace recovery, usage accounting, and cleanup.
 4. Test both success and the relevant failure boundary; use integration tests when subprocess or extension capture is involved.
 
-### Adding or changing a skill
+### Adding, changing, or removing a skill
 
 1. Keep the trigger precise so the skill is not loaded for unrelated work.
 2. Put reusable long examples or role prompts in that skill's `references/` directory.
 3. Keep runtime code in production modules; skills instruct agents but are not hidden application state.
-4. Verify package inclusion and any loader/integration invariant that depends on the skill.
+4. Before removing a skill, inventory its mental models, selection rules, procedures, and examples. Migrate anything required for ordinary native capability use into an always-present runtime prompt surface; documentation is not a substitute.
+5. Verify package inclusion and any loader/integration invariant that depends on the skill, and assert retained runtime guidance in tests when removing one.
 
 ### Importing third-party work
 

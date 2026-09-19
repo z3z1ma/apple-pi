@@ -19,11 +19,11 @@ Treat the harness as a small computational world rather than a catalog of unrela
 
 - Tool names and argument shapes should map directly to familiar model priors.
 - A tool description and schema own exact invocation semantics and local constraints.
-- `promptSnippet` and `promptGuidelines` own concise capability selection, relationships to neighboring native tools, and the few composition patterns needed for ordinary use.
-- Product documentation owns the complete human and maintainer contract.
+- `promptSnippet`, `promptGuidelines`, and explicit system-prompt hooks own concise capability selection, relationships to neighboring native tools, mental models, and the composition patterns needed for ordinary use.
+- Product documentation owns the complete human and maintainer contract. It is invisible to the running model and contributes no runtime guidance.
 - Skills own repeatable engineering procedures or optional progressive disclosure. A model should not need to discover a skill before it can use a native tool correctly.
 
-Avoid duplicating the same manual across these layers. Put each fact at the narrowest layer that is always present when the model needs it.
+Avoid duplicating the same manual across these layers. Put each fact at the narrowest layer that is always present when the model needs it. Before deleting a skill, classify its content and migrate every ordinary-use concept that would otherwise disappear from runtime instructions; tests should assert the retained prompt-bearing surface rather than pointing to documentation.
 
 ## Skill composition
 

@@ -241,6 +241,12 @@ try {
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "pi_exec");
+	assert(piExecTool, "missing pi_exec tool");
+	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
+	assert.match(piExecGuidance, /context-shaping boundary/);
+	for (const shape of ["collect→reduce", "gather→bind→judge", "map→agent.run→reconcile", "stage→stage"]) {
+		assert(piExecGuidance.includes(shape), `pi_exec always-on guidance omits ${shape}`);
+	}
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);

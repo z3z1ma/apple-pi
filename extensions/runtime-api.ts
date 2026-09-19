@@ -386,11 +386,13 @@ export const PI_EXEC_DESCRIPTION =
 
 export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec when programmatic composition materially reduces intermediate context or coordinates already-justified parallel work. Use direct tools for straightforward sequential inspection.",
+	"Treat pi_exec as a context-shaping boundary: gather, branch, transform, and reduce inside the program so only decision-relevant results return to the root context.",
+	"Choose the smallest useful program shape: collect→reduce for host-only evidence; gather→bind→judge for one typed worker decision; map→agent.run→reconcile for independent per-item analysis; or stage→stage when one typed result becomes the next worker's context.",
 	...savedProgramsSystemPromptContribution.guidelines,
 	"Write the JavaScript async-function body from the complete live contract on the code parameter. Await every host call; pi.* and extensions.* take one object matching their listed schema.",
-	"Gather host or MCP results in the program, bind compact evidence through agent context, keep task as the instruction, and use outputSchema instead of parsing model prose. Prefer agent.run for fan-out so one failed worker does not abort the program.",
+	"Gather host or MCP results in the program, bind compact evidence through agent context, keep task as the instruction, and use outputSchema instead of parsing model prose. Prefer agent.run for fan-out so each worker has a structured status and one failure does not abort the program.",
 	`Use the root agent tool for persistent collaboration, backgrounding, steering, or resume. Use pi_exec agent.run for workers inside a program graph; select teammate types and model profiles from the live <${TEAM_SYSTEM_PROMPT_TAG}> and <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> blocks.`,
-	"Use Promise.all or parallel for independent work and pipeline for staged transforms. Keep dependent search→read and edit→verify calls sequential; never concurrently edit the same file.",
+	"Use JavaScript control flow for data-dependent branches, Promise.all or parallel for independent work, and pipeline for uniform staged transforms. Keep dependent search→read, worker→worker, and edit→verify calls sequential; never concurrently edit the same file.",
 	"Pass display, inputs, state, and limits on the pi_exec tool call; they are not program globals. Mutate state only for expensive JSON data worth reusing across calls.",
 ];
 
