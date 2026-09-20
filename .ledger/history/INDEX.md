@@ -83,3 +83,5 @@
 - `.ledger/history/202609191514-reactive-monitor-core-guidance/task.md` — done — Add reactive monitor and consolidate native capability guidance — Add stdout-driven monitor tasks with immediate steering and optional caller-owned limits, integrate them into the managed-task lifecycle, and move native Pi Exec/execution education into concise core tool guidance rather than a prerequisite skill.
 
 - `.ledger/history/202609191702-assess-pi-0-86-0/task.md` — done — Assess Pi 0.86.0 compatibility — Research Pi 0.86.0 changes, verify apple-pi against the new package family, and identify required or beneficial updates.
+
+- `.ledger/history/202609191856-adopt-pi-0-86-0-safely/task.md` — done — Adopt Pi 0.86.0 safely — Prepare Apple Pi for Pi 0.86.0, validate the repository migration, and define a gated self-update and rollback sequence before updating the global Pi binary.
