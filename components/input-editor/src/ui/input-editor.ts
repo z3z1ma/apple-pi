@@ -173,6 +173,17 @@ function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | 
 
 	if (snapshot.cacheHitRate !== undefined) parts.push(`hit:${snapshot.cacheHitRate.toFixed(0)}%`);
 
+	for (const [key, label] of [
+		["subagents", "agents"],
+		["tasks", "tasks"],
+	] as const) {
+		const status = snapshot.statuses.find((candidate) => candidate.key === key);
+		const count = status
+			? stripTerminalSequences(status.text).match(new RegExp(`\\b${label}:(\\d+)\\b`, "i"))?.[1]
+			: undefined;
+		if (count && Number(count) > 0) parts.push(`${label}:${count}`);
+	}
+
 	if (snapshot.context) {
 		const percent = snapshot.context.percent;
 		parts.push(`ctx:${percent === null ? "?" : `${percent.toFixed(0)}%`}`);

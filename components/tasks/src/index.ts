@@ -1,6 +1,8 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
+import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
 import { createMonitorTool } from "./monitor-tool.js";
 import { formatMonitorEvent, formatTaskNotification } from "./notifications.js";
@@ -9,12 +11,13 @@ import { TaskManager } from "./task-manager.js";
 import { createTaskManagementTool } from "./task-tool.js";
 import {
 	MONITOR_EVENT_CUSTOM_TYPE,
-	SCHEDULED_PROMPT_CUSTOM_TYPE,
-	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type MonitorEventDetails,
 	type PromptTask,
+	SCHEDULED_PROMPT_CUSTOM_TYPE,
+	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type TaskNotificationDetails,
 } from "./types.js";
+import { openTaskManager, TaskDetailViewer } from "./ui/task-manager.js";
 
 function formatScheduledPrompts(prompts: ReadonlyArray<{ id: string; prompt: string }>): string {
 	return `<scheduled-prompt>
@@ -30,6 +33,9 @@ export function installTasks(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 
 	const taskManager = new TaskManager();
+	const activeWork = getActiveWorkSurface(pi);
+	const unregisterActiveWork = activeWork.registerSource(createTaskActiveWorkSource(taskManager));
+	const unsubscribeActiveWork = taskManager.onTaskChanged(() => activeWork.update());
 	const duePromptIds = new Set<string>();
 	let runActive = false;
 	let flushQueued = false;
@@ -146,6 +152,35 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
+	const openTaskDetail = async (ctx: ExtensionCommandContext, task: ReturnType<TaskManager["get"]>) => {
+		if (!ctx.hasUI || !task) return;
+		await ctx.ui.custom<undefined>(
+			(tui, theme, keybindings, done) =>
+				new TaskDetailViewer(
+					tui,
+					task,
+					theme,
+					() => done(undefined),
+					() => {
+						taskManager.cancel(task.id);
+					},
+					keybindings,
+				),
+			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
+		);
+	};
+
+	pi.registerCommand("tasks", {
+		description: "Inspect and manage session-local scheduled prompts, commands, and monitors",
+		handler: async (_args, ctx) => {
+			if (!ctx.hasUI) return;
+			await openTaskManager(ctx.ui, {
+				getTasks: () => taskManager.list(),
+				inspect: (task) => openTaskDetail(ctx, task),
+			});
+		},
+	});
+
 	pi.on("before_agent_start", () => {
 		runActive = true;
 	});
@@ -157,11 +192,19 @@ export function installTasks(pi: ExtensionAPI): void {
 	const cleanup = () => {
 		runActive = false;
 		duePromptIds.clear();
-		taskManager.cancelAll();
-		taskManager.cleanupAll();
+		taskManager.reset();
+		activeWork.update();
 	};
-	pi.on("session_start", cleanup);
-	pi.on("session_shutdown", cleanup);
+	pi.on("session_start", (_event, ctx) => {
+		cleanup();
+		if (ctx.hasUI) activeWork.setUICtx(ctx.ui);
+	});
+	pi.on("session_shutdown", () => {
+		cleanup();
+		unsubscribeActiveWork();
+		unregisterActiveWork();
+		activeWork.clearUI();
+	});
 	pi.on("session_before_switch", cleanup);
 	pi.on("session_before_fork", cleanup);
 	pi.on("session_before_tree", cleanup);
@@ -169,9 +212,6 @@ export function installTasks(pi: ExtensionAPI): void {
 }
 
 export default installTasks;
-export { TaskManager } from "./task-manager.js";
-export { OutputBuffer } from "./output-buffer.js";
-export * from "./types.js";
 export {
 	createBackgroundTaskBashTool,
 	createBashToolDefinition,
@@ -179,4 +219,7 @@ export {
 	prepareShellCommand,
 } from "./bash-tool.js";
 export { createMonitorTool } from "./monitor-tool.js";
+export { OutputBuffer } from "./output-buffer.js";
 export { createScheduleTool } from "./schedule-tool.js";
+export { TaskManager } from "./task-manager.js";
+export * from "./types.js";

@@ -44,6 +44,6 @@ Data-only defaults are read from `$PI_CODING_AGENT_DIR/todos.json`. Trusted proj
 
 ## Managed execution
 
-An executable to-do needs `agent_type`; `profile` is optional. Execution uses the owned managed-subagent service and creates an ordinary public `AgentRecord`, visible in `/agents` and FleetView—not a second runtime, process tracker, transcript, or RPC path. It atomically claims the to-do before launch, records the agent ID, and settles only if both to-do and run IDs still match. Successful runs complete the to-do and retain bounded result output; failures reopen it with a bounded error. Stop applies only to a locally owned attached run.
+An executable to-do needs `agent_type`; `profile` is optional. Execution uses the owned managed-subagent service and creates an ordinary public `AgentRecord`, visible in `/agents` and the above-editor activity widget—not a second runtime, process tracker, transcript, or RPC path. It atomically claims the to-do before launch, records the agent ID, and settles only if both to-do and run IDs still match. Successful runs complete the to-do and retain bounded result output; failures reopen it with a bounded error. Stop applies only to a locally owned attached run.
 
 With `autoCascade`, a successful prerequisite can start each now-unblocked, open, agent-backed dependent through the same claim path. It never starts blocked, manual, already claimed, or failed-to-launch work.

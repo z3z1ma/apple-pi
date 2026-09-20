@@ -29,7 +29,7 @@ import {
 	formatSessionTokens,
 	type Theme,
 } from "./agent-widget.js";
-import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
+import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../../../shared/src/viewer-keys.js";
 
 /** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
 const CHROME_LINES_BASE = 6;

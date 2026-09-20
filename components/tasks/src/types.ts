@@ -37,6 +37,20 @@ export interface PromptTask extends ManagedTaskBase {
 export type ManagedTask = CommandTask | PromptTask;
 export type BackgroundTask = CommandTask;
 
+export function isActiveTask(task: ManagedTask): boolean {
+	return task.status === "scheduled" || task.status === "due" || task.status === "running";
+}
+
+export function taskPreview(task: ManagedTask): string {
+	const text = task.kind === "prompt" ? task.prompt : task.command;
+	return (
+		text
+			.split(/\r?\n/)
+			.find((line) => line.trim())
+			?.trim() ?? ""
+	);
+}
+
 export interface MonitorEvent {
 	task: CommandTask;
 	line: string;

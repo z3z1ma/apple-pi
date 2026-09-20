@@ -18,6 +18,7 @@ import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
+import installSubagents from "../src/installer.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
@@ -41,6 +42,93 @@ afterEach(() => {
 });
 
 describe("owned subagent surface", () => {
+	it("keeps passive subagent UI above the editor without installing prompt-level navigation", async () => {
+		const handlers = new Map<string, Array<(event: unknown, ctx: any) => unknown>>();
+		const terminalInput = vi.fn(() => () => {});
+		const setWidget = vi.fn();
+		const setStatus = vi.fn();
+		const pi = {
+			events: { on: vi.fn(() => () => {}), emit: vi.fn() },
+			on: (name: string, handler: (event: unknown, ctx: any) => unknown) => {
+				const registered = handlers.get(name) ?? [];
+				registered.push(handler);
+				handlers.set(name, registered);
+			},
+			registerShortcut: vi.fn(),
+			registerCommand: vi.fn(),
+			registerMessageRenderer: vi.fn(),
+			registerTool: vi.fn(),
+			sendMessage: vi.fn(),
+		};
+		installSubagents(pi as any);
+		const ctx = {
+			cwd: temporaryRoot(),
+			hasUI: true,
+			isProjectTrusted: () => false,
+			ui: { onTerminalInput: terminalInput, setWidget, setStatus },
+		};
+
+		try {
+			for (const handler of handlers.get("session_start") ?? []) await handler({}, ctx);
+			expect(terminalInput).not.toHaveBeenCalled();
+			expect(setWidget).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				expect.objectContaining({ placement: "belowEditor" }),
+			);
+		} finally {
+			for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, ctx);
+		}
+	});
+
+	it("opens /agents as a focused custom overlay rather than a prompt-level selector", async () => {
+		const commands = new Map<string, any>();
+		const handlers = new Map<string, Array<(event: unknown, ctx: any) => unknown>>();
+		const custom = vi.fn(async (factory: any) => {
+			let action: any;
+			const component = factory(
+				{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
+				{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
+				undefined,
+				(result: any) => {
+					action = result;
+				},
+			);
+			component.handleInput("q");
+			component.dispose();
+			return action;
+		});
+		const pi = {
+			events: { on: vi.fn(() => () => {}), emit: vi.fn() },
+			on: (name: string, handler: (event: unknown, ctx: any) => unknown) => {
+				handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+			},
+			registerShortcut: vi.fn(),
+			registerCommand: (name: string, command: any) => commands.set(name, command),
+			registerMessageRenderer: vi.fn(),
+			registerTool: vi.fn(),
+			sendMessage: vi.fn(),
+		};
+		installSubagents(pi as any);
+		const ctx = {
+			cwd: temporaryRoot(),
+			hasUI: true,
+			isProjectTrusted: () => false,
+			ui: { custom, select: vi.fn(), setWidget: vi.fn(), setStatus: vi.fn() },
+		};
+
+		try {
+			await commands.get("agents").handler("", ctx);
+			expect(custom).toHaveBeenCalledWith(expect.any(Function), {
+				overlay: true,
+				overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" },
+			});
+			expect(ctx.ui.select).not.toHaveBeenCalled();
+		} finally {
+			for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, ctx);
+		}
+	});
+
 	it("releases partial capacity when a queued start throws", () => {
 		const manager = new AgentManager(undefined, 1);
 		const record = { id: "queued", status: "queued", isBackground: true };
@@ -679,11 +767,10 @@ describe("owned subagent surface", () => {
 			JSON.stringify({
 				maxConcurrent: 7,
 				persistAgentSessions: false,
-				widgetMode: "all",
 			}),
 		);
 		const settings = loadSettings({ cwd: root, projectTrusted: true }) as Record<string, unknown>;
-		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false, widgetMode: "all" });
+		expect(settings).toMatchObject({ maxConcurrent: 7, persistAgentSessions: false });
 	});
 
 	it("ignores project subagent settings until the project is trusted", () => {
@@ -954,11 +1041,9 @@ describe("owned subagent surface", () => {
 			setDefaultJoinMode: () => {},
 			setStrictAgentFiles: () => {},
 			setDisableDefaultAgents: () => {},
-			setFleetView: () => {},
 			setPersistAgentSessions: (value) => {
 				persistent = value;
 			},
-			setWidgetMode: () => {},
 			setMaxSubagentDepth: () => {},
 		});
 		expect(persistent).toBe(false);

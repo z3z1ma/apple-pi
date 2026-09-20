@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { JoinMode, SubagentConfigScope, WidgetMode } from "./types.js";
+import type { JoinMode, SubagentConfigScope } from "./types.js";
 
 export interface SubagentsSettings {
 	maxConcurrent?: number;
@@ -10,9 +10,7 @@ export interface SubagentsSettings {
 	defaultJoinMode?: JoinMode;
 	strictAgentFiles?: boolean;
 	disableDefaultAgents?: boolean;
-	fleetView?: boolean;
 	persistAgentSessions?: boolean;
-	widgetMode?: WidgetMode;
 	maxSubagentDepth?: number;
 }
 
@@ -23,9 +21,7 @@ export const DEFAULT_SUBAGENT_SETTINGS: Required<SubagentsSettings> = {
 	defaultJoinMode: "smart",
 	strictAgentFiles: false,
 	disableDefaultAgents: false,
-	fleetView: true,
 	persistAgentSessions: true,
-	widgetMode: "background",
 	maxSubagentDepth: 2,
 };
 
@@ -36,14 +32,11 @@ export interface SettingsAppliers {
 	setDefaultJoinMode: (mode: JoinMode) => void;
 	setStrictAgentFiles: (enabled: boolean) => void;
 	setDisableDefaultAgents: (enabled: boolean) => void;
-	setFleetView: (enabled: boolean) => void;
 	setPersistAgentSessions: (enabled: boolean) => void;
-	setWidgetMode: (mode: WidgetMode) => void;
 	setMaxSubagentDepth: (n: number) => void;
 }
 
 const JOIN_MODES = new Set<JoinMode>(["async", "group", "smart"]);
-const WIDGET_MODES = new Set<WidgetMode>(["all", "background", "off"]);
 
 function sanitize(raw: unknown): SubagentsSettings {
 	if (!raw || typeof raw !== "object") return {};
@@ -76,10 +69,7 @@ function sanitize(raw: unknown): SubagentsSettings {
 	if (typeof value.defaultJoinMode === "string" && JOIN_MODES.has(value.defaultJoinMode as JoinMode)) {
 		result.defaultJoinMode = value.defaultJoinMode as JoinMode;
 	}
-	if (typeof value.widgetMode === "string" && WIDGET_MODES.has(value.widgetMode as WidgetMode)) {
-		result.widgetMode = value.widgetMode as WidgetMode;
-	}
-	for (const key of ["strictAgentFiles", "disableDefaultAgents", "fleetView", "persistAgentSessions"] as const) {
+	for (const key of ["strictAgentFiles", "disableDefaultAgents", "persistAgentSessions"] as const) {
 		if (typeof value[key] === "boolean") result[key] = value[key];
 	}
 	return result;
@@ -122,9 +112,7 @@ export function applySettings(settings: SubagentsSettings, appliers: SettingsApp
 	if (settings.defaultJoinMode) appliers.setDefaultJoinMode(settings.defaultJoinMode);
 	if (settings.strictAgentFiles !== undefined) appliers.setStrictAgentFiles(settings.strictAgentFiles);
 	if (settings.disableDefaultAgents !== undefined) appliers.setDisableDefaultAgents(settings.disableDefaultAgents);
-	if (settings.fleetView !== undefined) appliers.setFleetView(settings.fleetView);
 	if (settings.persistAgentSessions !== undefined) appliers.setPersistAgentSessions(settings.persistAgentSessions);
-	if (settings.widgetMode) appliers.setWidgetMode(settings.widgetMode);
 	if (settings.maxSubagentDepth !== undefined) appliers.setMaxSubagentDepth(settings.maxSubagentDepth);
 }
 
@@ -140,8 +128,6 @@ export function applyCompleteSettings(settings: SubagentsSettings, appliers: Set
 	appliers.setDefaultJoinMode(resolved.defaultJoinMode);
 	appliers.setStrictAgentFiles(resolved.strictAgentFiles);
 	appliers.setDisableDefaultAgents(resolved.disableDefaultAgents);
-	appliers.setFleetView(resolved.fleetView);
 	appliers.setPersistAgentSessions(resolved.persistAgentSessions);
-	appliers.setWidgetMode(resolved.widgetMode);
 	appliers.setMaxSubagentDepth(resolved.maxSubagentDepth);
 }

@@ -114,6 +114,50 @@ describe("input editor rendering", () => {
 		expect(output).toContain("\u001b[36mpair · mcp:3 · hit:80% · ctx:33%\u001b[0m");
 	});
 
+	it("shows only a non-zero active-agent count beside context usage", () => {
+		const active = renderInputCard(
+			{ context: { percent: 32.8 }, statuses: [{ key: "subagents", text: "agents:2" }] },
+			theme,
+			24,
+			[""],
+		).map(stripTerminalSequences);
+		expect(active.at(-1)).toContain("agents:2 · ctx:33%");
+
+		const idle = renderInputCard(
+			{ context: { percent: 32.8 }, statuses: [{ key: "subagents", text: "agents:0" }] },
+			theme,
+			24,
+			[""],
+		).map(stripTerminalSequences);
+		expect(idle.at(-1)).not.toContain("agents:");
+		expect(idle.at(-1)).toContain("ctx:33%");
+	});
+
+	it("shows coherent non-zero agent and task counts while preserving context usage", () => {
+		const active = renderInputCard(
+			{
+				context: { percent: 32.8 },
+				statuses: [
+					{ key: "subagents", text: "agents:2" },
+					{ key: "tasks", text: "tasks:3" },
+				],
+			},
+			theme,
+			36,
+			[""],
+		).map(stripTerminalSequences);
+		expect(active.at(-1)).toContain("agents:2 · tasks:3 · ctx:33%");
+
+		const idle = renderInputCard(
+			{ context: { percent: 32.8 }, statuses: [{ key: "tasks", text: "tasks:0" }] },
+			theme,
+			24,
+			[""],
+		).map(stripTerminalSequences);
+		expect(idle.at(-1)).not.toContain("tasks:");
+		expect(idle.at(-1)).toContain("ctx:33%");
+	});
+
 	it("shows pair only while it is reviewing", () => {
 		const idle = {
 			...completeSnapshot,

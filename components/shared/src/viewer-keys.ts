@@ -1,5 +1,5 @@
 /**
- * viewer-keys.ts — Scroll key matchers for the conversation viewer.
+ * Shared selection and scroll key matchers for focused TUI managers.
  *
  * Resolves `tui.select.*` through the user's keybindings when pi provides a
  * manager, falling back to the previous hardcoded keys otherwise. The viewer's
@@ -28,18 +28,42 @@ export interface ViewerKeys {
 	pageUp(data: string): boolean;
 	pageDown(data: string): boolean;
 	copyMessage(data: string): boolean;
+	upKey: KeyId;
+	downKey: KeyId;
+	pageUpKey: KeyId;
+	pageDownKey: KeyId;
 	copyKey: KeyId | undefined;
+}
+
+export function formatViewerKey(key: KeyId): string {
+	switch (key) {
+		case "up":
+			return "↑";
+		case "down":
+			return "↓";
+		case "pageUp":
+			return "PgUp";
+		case "pageDown":
+			return "PgDn";
+		default:
+			return key;
+	}
 }
 
 export function createViewerKeys(keybindings?: ViewerKeybindings): ViewerKeys {
 	const matches = (data: string, id: ViewerKeybinding, fallback: KeyId): boolean =>
 		keybindings ? keybindings.matches(data, id) : matchesKey(data, fallback);
+	const configured = (id: ViewerKeybinding, fallback: KeyId): KeyId => keybindings?.getKeys?.(id)[0] ?? fallback;
 	return {
 		scrollUp: (data) => matches(data, "tui.select.up", "up") || matchesKey(data, "k"),
 		scrollDown: (data) => matches(data, "tui.select.down", "down") || matchesKey(data, "j"),
 		pageUp: (data) => matches(data, "tui.select.pageUp", "pageUp") || matchesKey(data, "shift+up"),
 		pageDown: (data) => matches(data, "tui.select.pageDown", "pageDown") || matchesKey(data, "shift+down"),
 		copyMessage: (data) => matches(data, "app.message.copy", "ctrl+x"),
+		upKey: configured("tui.select.up", "up"),
+		downKey: configured("tui.select.down", "down"),
+		pageUpKey: configured("tui.select.pageUp", "pageUp"),
+		pageDownKey: configured("tui.select.pageDown", "pageDown"),
 		copyKey: keybindings ? keybindings.getKeys?.("app.message.copy")[0] : "ctrl+x",
 	};
 }

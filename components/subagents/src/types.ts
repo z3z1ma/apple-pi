@@ -35,7 +35,6 @@ export interface AgentConfig {
 }
 
 export type JoinMode = "async" | "group" | "smart";
-export type WidgetMode = "all" | "background" | "off";
 
 export type AgentTerminationCause =
 	| "operator_stop"

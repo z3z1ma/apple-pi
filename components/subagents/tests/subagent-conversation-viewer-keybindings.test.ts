@@ -2,8 +2,8 @@ import { KeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRecord } from "../src/types.js";
 import { ConversationViewer } from "../src/ui/conversation-viewer.js";
-import type { ViewerKeybindings } from "../src/ui/viewer-keys.js";
-import { createViewerKeys } from "../src/ui/viewer-keys.js";
+import type { ViewerKeybindings } from "../../shared/src/viewer-keys.js";
+import { createViewerKeys } from "../../shared/src/viewer-keys.js";
 
 const CTRL_P = "\x10";
 const CTRL_N = "\x0e";
@@ -93,6 +93,20 @@ describe("viewer-keys", () => {
 		expect(keys.scrollDown(CTRL_N)).toBe(false);
 	});
 
+	it("exposes configured selection keys for rendered action hints", () => {
+		const manager = new KeybindingsManager(TUI_KEYBINDINGS, {
+			"tui.select.up": "ctrl+p",
+			"tui.select.down": "ctrl+n",
+			"tui.select.pageUp": "ctrl+u",
+			"tui.select.pageDown": "ctrl+d",
+		});
+		const keys = createViewerKeys(manager);
+		expect(keys.upKey).toBe("ctrl+p");
+		expect(keys.downKey).toBe("ctrl+n");
+		expect(keys.pageUpKey).toBe("ctrl+u");
+		expect(keys.pageDownKey).toBe("ctrl+d");
+	});
+
 	it("respects rebinding that removes a default key", () => {
 		const manager = new KeybindingsManager(TUI_KEYBINDINGS, {
 			"tui.select.up": "ctrl+p",
@@ -125,6 +139,18 @@ describe("ConversationViewer custom keybindings", () => {
 		viewer.handleInput(DOWN);
 		viewer.handleInput("j");
 		expect(scrollOffset(viewer)).toBe(bottom);
+	});
+
+	it("renders the configured navigation keys in its action hint", () => {
+		const manager = new KeybindingsManager(TUI_KEYBINDINGS, {
+			"tui.select.up": "ctrl+p",
+			"tui.select.down": "ctrl+n",
+			"tui.select.pageUp": "ctrl+u",
+			"tui.select.pageDown": "ctrl+d",
+		});
+		const viewer = createViewer(manager);
+		expect(viewer.render(80).join("\n")).toContain("ctrl+p/ctrl+n scroll · ctrl+u/ctrl+d page");
+		viewer.dispose();
 	});
 
 	it("treats ctrl+p/ctrl+n as unbound without a keybindings manager", () => {

@@ -14,9 +14,9 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createClarifyTool } from "./clarify.js";
-import { disposeAgentSession } from "./session-lifecycle.js";
 import { persistAgentOutput } from "./output-file.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import type {
 	AgentConfig,
 	AgentInvocation,
@@ -289,11 +289,8 @@ export class AgentManager {
 			abortController,
 			lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 			compactionCount: 0,
-			// Raw tri-state (not coerced to a boolean): true = background, false =
-			// foreground (has an inline tool-result surface), undefined = caller never
-			// declared it (e.g. a programmatic spawn). The widget's background-
-			// only filter excludes only explicit `false`, so undefined agents — which
-			// have no inline surface — stay visible instead of vanishing.
+			// Preserve whether the invocation was foreground, background, or unspecified.
+			// Result and notification behavior uses this tri-state independently of UI visibility.
 			isBackground: options.isBackground,
 			invocation: options.invocation,
 			depth: options.depth ?? 1,

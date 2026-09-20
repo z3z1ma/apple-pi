@@ -57,7 +57,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Local paths: `components/subagents/`, `extensions/subagents.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 tintinweb`
-- Adopted code was substantially reduced and integrated. Retained responsibilities include Markdown agent discovery, Pi AgentSession execution, foreground/background management, nested delegation, result/steering tools, usage and compaction tracking, widgets, FleetView, and the conversation viewer. Worktree isolation, scheduling, prompt mentions, plugin-local memory, duplicate output transcripts, cross-extension RPC, and model-scope policy were removed.
+- Adopted code was substantially reduced and integrated. Retained responsibilities include Markdown agent discovery, Pi AgentSession execution, foreground/background management, nested delegation, result/steering tools, usage and compaction tracking, passive above-editor activity, and the conversation viewer. Worktree isolation, scheduling, prompt mentions, plugin-local memory, duplicate output transcripts, cross-extension RPC, below-editor Fleet navigation, and model-scope policy were removed.
 
 ## pi-tasks → To-dos
 

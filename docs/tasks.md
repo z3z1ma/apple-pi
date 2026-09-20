@@ -13,6 +13,19 @@ Choose the entrypoint by intent:
 
 All command forms share the same `TaskManager`, `task-*` IDs, rolling output, process-tree cancellation, completion notification, and session lifecycle. A monitor is a managed command with stdout event delivery, not a second task system.
 
+## Interactive visibility and management
+
+Scheduled, due, and running tasks join public subagents in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
+
+`/tasks` opens the session-local task roster with active work before settled outcomes. It uses the same configured selection keys as `/agents`: select a row and press `Enter` to inspect it, or use `Esc`/`q` to close. Task detail shows:
+
+- complete prompt text, creation/due timing, and delivery state;
+- command text, working directory, timing, PID, exit state, and a live rolling output tail;
+- monitor event delivery count, caller-owned limit, and active/silent/finished delivery state;
+- an explicit truncation notice and full-output path when the rolling output is incomplete.
+
+Use `x` twice in detail to confirm cancellation of scheduled, due, or running work. Settled tasks remain readable and offer no cancellation action. Detail scrolling follows the configured selection and page keys; `Home` and `End` move to the start or live tail.
+
 ## Tools
 
 ### `bash` (extended)
@@ -115,7 +128,7 @@ Output:
 ## Lifecycle and safety
 
 - **Root session only**: Child sessions and subagents do not load the extension.
-- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work.
+- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work and clear the prior session's task roster.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
 - **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

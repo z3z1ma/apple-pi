@@ -156,6 +156,7 @@ try {
 		"mcp",
 		"mcp-auth",
 		"agents",
+		"tasks",
 		"btw",
 		"fast",
 		"notify-setup",

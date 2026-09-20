@@ -7,13 +7,13 @@ import {
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
+import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager } from "./agent-manager.js";
-import { disposeAgentSession } from "./session-lifecycle.js";
 import {
 	getAgentConversation,
 	getDefaultMaxTurns,
@@ -47,6 +47,7 @@ import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import { completionError, detailsFor, formatNotification, notificationDetails } from "./notifications.js";
 import { formatAgentOutput, resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
 import {
@@ -56,14 +57,8 @@ import {
 	type TeamMember,
 	toTeamMember,
 } from "./team-system-prompt.js";
-import type {
-	AgentInvocation,
-	AgentRecord,
-	JoinMode,
-	NotificationDetails,
-	SubagentConfigScope,
-	WidgetMode,
-} from "./types.js";
+import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
+import { type AgentTypeSummary, openAgentManager } from "./ui/agent-manager.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -77,7 +72,6 @@ import {
 	SPINNER,
 } from "./ui/agent-widget.js";
 import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./ui/conversation-viewer.js";
-import { FleetList } from "./ui/fleet-list.js";
 import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
@@ -120,8 +114,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	registerAgents(new Map());
 
 	const activityById = new Map<string, AgentActivity>();
-	let widgetMode: WidgetMode = "background";
-	let fleetEnabled = true;
 	let defaultJoinMode: JoinMode = "smart";
 
 	const pendingNotifications = new Map<string, ReturnType<typeof setTimeout>>();
@@ -143,7 +135,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 
 	let manager!: AgentManager;
 	let widget!: AgentWidget;
-	let fleet!: FleetList;
 	const backgroundCompletions = new Map<string, (record: AgentRecord) => void>();
 	const lifecycleCancelledIds = new Set<string>();
 	const settleBackgroundCompletion = (record: AgentRecord) => {
@@ -153,11 +144,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		resolve(record);
 	};
 
-	const finishUi = (record: AgentRecord) => {
-		widget.markFinished(record.id);
-		fleet.onAgentFinished(record.id);
+	const finishUi = (_record: AgentRecord) => {
 		widget.update();
-		fleet.update();
 	};
 
 	const emitNudge = (record: AgentRecord) => {
@@ -255,11 +243,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		undefined,
 		(record) => {
 			if (record.parentAgentId || record.internalOwner) return;
-			widget.markRunning(record.id);
-			widget.ensureTimer();
-			fleet.ensureTimer();
 			widget.update();
-			fleet.update();
 			pi.events.emit("subagents:started", { id: record.id, type: record.type, description: record.description });
 		},
 		(record, info) => {
@@ -267,8 +251,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				pi.events.emit("subagents:compacted", { id: record.id, ...info, compactionCount: record.compactionCount });
 		},
 	);
-	widget = new AgentWidget(manager, activityById, () => widgetMode);
-	fleet = new FleetList(manager, activityById);
+	widget = new AgentWidget(manager, activityById, getActiveWorkSurface(pi));
 	registerBtwCommand(pi, manager);
 
 	const managedService: ManagedSubagentService = {
@@ -288,14 +271,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (resolved.error) throw new Error(resolved.error);
 			const invocation = resolveAgentInvocationConfig(agentConfig, { run_in_background: true });
 			const maxTurns = normalizeMaxTurns(invocation.maxTurns ?? getDefaultMaxTurns());
-			const tracker = createActivityTracker(
-				maxTurns,
-				() => {
-					widget.update();
-					fleet.update();
-				},
-				request.onActivity,
-			);
+			const tracker = createActivityTracker(maxTurns, () => widget.update(), request.onActivity);
 			const id = manager.spawn(pi, ctx, dispatch.type, request.prompt, {
 				description: request.description,
 				agentConfig,
@@ -330,6 +306,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				},
 			});
 			activityById.set(id, tracker.state);
+			widget.update();
 			const record = manager.getRecord(id);
 			if (!record) throw new Error("Managed agent record was not created");
 			const completion = new Promise<AgentRecord>((resolve) => backgroundCompletions.set(id, resolve));
@@ -475,10 +452,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			const internalOwner = request.internalOwner ?? `managed:${request.type}`;
 			const tracker = createActivityTracker(
 				normalizeMaxTurns(request.maxTurns ?? request.agentConfig.maxTurns ?? getDefaultMaxTurns()),
-				() => {
-					widget.update();
-					fleet.update();
-				},
+				() => widget.update(),
 				request.onActivity,
 			);
 			const recordUsage = (usage: Parameters<typeof tracker.callbacks.onAssistantUsage>[0]) => {
@@ -627,15 +601,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				strictAgentFiles = value;
 			},
 			setDisableDefaultAgents: setDefaultsDisabled,
-			setFleetView: (value) => {
-				fleetEnabled = value;
-				fleet.setEnabled(value);
-			},
 			setPersistAgentSessions,
-			setWidgetMode: (value) => {
-				widgetMode = value;
-				widget.update();
-			},
 			setMaxSubagentDepth,
 		});
 		reloadAgents(scope, strictAgentFiles);
@@ -670,17 +636,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		bindSessionContext(ctx);
 		manager.clearCompleted(true);
-		if (ctx.hasUI) {
-			widget.setUICtx(ctx.ui);
-			fleet.setUICtx(ctx.ui as any);
-			fleet.setEnabled(fleetEnabled);
-		}
+		if (ctx.hasUI) widget.setUICtx(ctx.ui);
 	});
 	pi.on("tool_execution_start", async (_event, ctx) => {
 		if (ctx.hasUI) {
 			widget.setUICtx(ctx.ui);
-			fleet.setUICtx(ctx.ui as any);
-			widget.onTurnStart();
+			widget.update();
 		}
 	});
 	const prepareSessionNavigation = () => {
@@ -697,7 +658,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		currentBatch = [];
 		groupJoin.dispose();
 		widget.update();
-		fleet.update();
 	};
 	pi.on("session_before_switch", prepareSessionNavigation);
 	pi.on("session_before_fork", prepareSessionNavigation);
@@ -708,7 +668,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		manager.clearCompleted(false);
 		activityById.clear();
 		widget.update();
-		fleet.update();
 	});
 	pi.on("session_shutdown", async () => {
 		prepareSessionNavigation();
@@ -717,8 +676,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		pendingNotifications.clear();
 		if (batchTimer) clearTimeout(batchTimer);
 		groupJoin.dispose();
+		widget.clearUI();
 		widget.dispose();
-		fleet.dispose();
 		manager.dispose();
 	});
 
@@ -870,7 +829,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			let id: string | undefined;
 			const tracker = createActivityTracker(effectiveMaxTurns, () => {
 				widget.update();
-				fleet.update();
 				if (id && onUpdate) {
 					const record = manager.getRecord(id);
 					if (record)
@@ -928,6 +886,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				if (invocation.runInBackground) {
 					id = manager.spawn(pi, ctx, type, params.prompt, { ...options, isBackground: true });
 					activityById.set(id, tracker.state);
+					widget.update();
 					const record = manager.getRecord(id)!;
 					record.toolCallId = toolCallId;
 					const joinMode = resolveJoinMode(defaultJoinMode, true)!;
@@ -941,6 +900,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const result = await manager.spawnAndWait(pi, ctx, type, params.prompt, { ...options, signal }, (agentId) => {
 					id = agentId;
 					activityById.set(agentId, tracker.state);
+					widget.update();
 					const record = manager.getRecord(agentId);
 					if (record) record.toolCallId = toolCallId;
 				});
@@ -1118,12 +1078,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	);
 
 	async function openConversation(ctx: ExtensionCommandContext, record: AgentRecord): Promise<void> {
-		if (!record.session || !ctx.hasUI) return;
+		if (!ctx.hasUI) return;
 		await ctx.ui.custom<undefined>(
 			(tui, theme, keybindings, done) =>
 				new ConversationViewer(
 					tui,
-					record.session!,
+					record.session,
 					record,
 					activityById.get(record.id),
 					theme,
@@ -1137,31 +1097,20 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	}
 
 	pi.registerCommand("agents", {
-		description: "View live subagents and discovered Markdown agent types",
+		description: "Inspect and manage public subagents or browse discovered agent types",
 		handler: async (_args, ctx) => {
 			if (!ctx.hasUI) return;
 			bindSessionContext(ctx);
-			const records = manager.listAgents().filter((record) => !record.parentAgentId && !record.internalOwner);
-			const choices = [
-				...records.map(
-					(record) =>
-						`${record.status === "running" ? "●" : "○"} ${record.description} · ${record.type} · ${record.id}`,
-				),
-				"Agent types",
-			];
-			const selected = await ctx.ui.select("Subagents", choices);
-			if (!selected) return;
-			if (selected === "Agent types") {
-				const types = getAvailableTypes();
-				const type = await ctx.ui.select("Agent types", types);
-				if (!type) return;
-				const config = getAgentConfig(type);
-				ctx.ui.notify(`${config?.description ?? type}${config?.sourcePath ? `\n${config.sourcePath}` : ""}`, "info");
-				return;
-			}
-			const index = choices.indexOf(selected);
-			const record = records[index];
-			if (record) await openConversation(ctx, record);
+			const types: AgentTypeSummary[] = getAvailableTypes().map((name) => {
+				const config = getAgentConfig(name);
+				return { name, description: config?.description ?? name, sourcePath: config?.sourcePath };
+			});
+			await openAgentManager(ctx.ui, {
+				getRecords: () => manager.listAgents(),
+				getActivity: (id) => activityById.get(id),
+				types,
+				inspect: (record) => openConversation(ctx, record),
+			});
 		},
 	});
 }

@@ -29,11 +29,15 @@ import {
 	formatSessionTokens,
 	getPromptModeLabel,
 } from "./agent-widget.js";
-import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
+import {
+	createViewerKeys,
+	formatViewerKey,
+	type ViewerKeybindings,
+	type ViewerKeys,
+} from "../../../shared/src/viewer-keys.js";
 
 /** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
 const CHROME_LINES_BASE = 6;
-const MIN_VIEWPORT = 3;
 /** Height ceiling shared by the overlay's `maxHeight` and the viewer's internal viewport cap. */
 export const VIEWPORT_HEIGHT_PCT = 70;
 
@@ -41,6 +45,8 @@ export class ConversationViewer implements Component {
 	private scrollOffset = 0;
 	private autoScroll = true;
 	private unsubscribe: (() => void) | undefined;
+	private subscribedSession: AgentSession | undefined;
+	private readonly refreshTimer: ReturnType<typeof setInterval>;
 	private lastInnerW = 0;
 	private closed = false;
 	/** Two-press confirm guard for the stop key, so a stray key can't kill the agent. */
@@ -51,7 +57,7 @@ export class ConversationViewer implements Component {
 
 	constructor(
 		private tui: TUI,
-		private session: AgentSession,
+		private session: AgentSession | undefined,
 		private record: AgentRecord,
 		private activity: AgentActivity | undefined,
 		private theme: Theme,
@@ -64,7 +70,24 @@ export class ConversationViewer implements Component {
 		private onSteer?: (message: string) => void,
 	) {
 		this.keys = createViewerKeys(keybindings);
-		this.unsubscribe = session.subscribe(() => {
+		this.bindSession();
+		this.refreshTimer = setInterval(() => {
+			if (this.closed) return;
+			this.bindSession();
+			this.tui.requestRender();
+		}, 500);
+		this.refreshTimer.unref();
+	}
+
+	private bindSession(): void {
+		const next = this.record.session ?? this.session;
+		if (next === this.subscribedSession) return;
+		this.unsubscribe?.();
+		this.unsubscribe = undefined;
+		this.subscribedSession = next;
+		this.session = next;
+		if (!next) return;
+		this.unsubscribe = next.subscribe(() => {
 			if (this.closed) return;
 			this.tui.requestRender();
 		});
@@ -223,7 +246,10 @@ export class ConversationViewer implements Component {
 			if (this.isStoppable()) {
 				actions.push(this.stopArmed ? th.fg("error", "x again to STOP") : th.fg("dim", "x stop"));
 			}
-			const footerRight = th.fg("dim", "↑↓ scroll · PgUp/PgDn or Shift+↑↓ · Esc close");
+			const footerRight = th.fg(
+				"dim",
+				`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} scroll · ${formatViewerKey(this.keys.pageUpKey)}/${formatViewerKey(this.keys.pageDownKey)} page · Esc close`,
+			);
 
 			// Prepend the line-count/scroll-% readout only when there's spare width —
 			// it's the first thing dropped so it never crowds out the hints.
@@ -241,7 +267,12 @@ export class ConversationViewer implements Component {
 		}
 		lines.push(hrBot);
 
-		return lines;
+		const maxRows = Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100));
+		if (lines.length <= maxRows) return lines;
+		const compact = [lines[1] ?? lines[0], lines.at(-2) ?? lines.at(-1)].filter(
+			(line): line is string => line !== undefined,
+		);
+		return compact.slice(0, maxRows);
 	}
 
 	/** Stoppable only when a stop handler exists and the agent is still active. */
@@ -278,6 +309,7 @@ export class ConversationViewer implements Component {
 
 	dispose(): void {
 		this.closed = true;
+		clearInterval(this.refreshTimer);
 		if (this.unsubscribe) {
 			this.unsubscribe();
 			this.unsubscribe = undefined;
@@ -289,8 +321,8 @@ export class ConversationViewer implements Component {
 	private viewportHeight(): number {
 		// Cap mirrors the overlay's maxHeight — otherwise the viewer would render
 		// more lines than the overlay shows and clip the footer.
-		const maxRows = Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100);
-		return Math.max(MIN_VIEWPORT, maxRows - this.chromeLines());
+		const maxRows = Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100));
+		return Math.max(0, maxRows - this.chromeLines());
 	}
 
 	private chromeLines(): number {
@@ -310,7 +342,7 @@ export class ConversationViewer implements Component {
 		if (width <= 0) return [];
 
 		const th = this.theme;
-		const messages = this.session.messages;
+		const messages = this.session?.messages ?? [];
 		const lines: string[] = [];
 
 		if (messages.length === 0) {

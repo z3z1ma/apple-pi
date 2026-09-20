@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { registerAgents } from "../src/agent-types.js";
 import { renderRunningAgentStatus } from "../src/index.js";
-import type { WidgetMode } from "../src/types.js";
 import {
 	type AgentActivity,
 	AgentWidget,
@@ -89,8 +88,8 @@ describe("AgentWidget", () => {
 	}
 
 	/** Render the widget for a manager and return the produced lines ("" if nothing rendered). */
-	function renderLines(manager: unknown, activityId: string, mode?: () => WidgetMode): string {
-		const widget = new AgentWidget(manager as any, new Map([[activityId, makeActivity()]]), mode);
+	function renderLines(manager: unknown, activityId: string): string {
+		const widget = new AgentWidget(manager as any, new Map([[activityId, makeActivity()]]));
 		let factory: any;
 		widget.setUICtx({
 			setStatus: () => {},
@@ -105,48 +104,109 @@ describe("AgentWidget", () => {
 			.join("\n");
 	}
 
-	// "all" (and the no-policy constructor default) shows every agent.
-	it("shows foreground agents in 'all' mode (and by default)", () => {
+	it("shows every active public top-level agent", () => {
 		registerAgents(new Map());
-		const manager = { listAgents: () => [makeRecord("foreground", { isBackground: false })] };
-		expect(renderLines(manager, "foreground")).toContain("foreground description");
-		expect(renderLines(manager, "foreground", () => "all")).toContain("Explorer");
+		const manager = {
+			listAgents: () => [
+				makeRecord("foreground", { isBackground: false }),
+				makeRecord("background", { isBackground: true }),
+				makeRecord("unflagged"),
+			],
+		};
+		const lines = renderLines(manager, "foreground");
+		expect(lines).toContain("foreground description");
+		expect(lines).toContain("background description");
+		expect(lines).toContain("unflagged description");
 	});
 
-	it("hides nested children in every coordinator widget mode", () => {
+	it("hides nested children", () => {
 		const manager = {
 			listAgents: () => [makeRecord("nested", { isBackground: true, parentAgentId: "parent" })],
 		};
-		expect(renderLines(manager, "nested", () => "all")).toBe("");
-		expect(renderLines(manager, "nested", () => "background")).toBe("");
+		expect(renderLines(manager, "nested")).toBe("");
 	});
 
-	it("excludes foreground agents in 'background' mode", () => {
-		const manager = { listAgents: () => [makeRecord("foreground", { isBackground: false })] };
-		expect(renderLines(manager, "foreground", () => "background")).toBe("");
+	it("moves the complete active projection when the UI context is replaced", () => {
+		const running = makeRecord("running", { isBackground: true });
+		const widget = new AgentWidget({ listAgents: () => [running] } as any, new Map());
+		const first = { setStatus: vi.fn(), setWidget: vi.fn() };
+		const second = { setStatus: vi.fn(), setWidget: vi.fn() };
+
+		widget.setUICtx(first);
+		widget.update();
+		widget.setUICtx(second);
+
+		expect(first.setWidget).toHaveBeenLastCalledWith("active-work", undefined);
+		expect(first.setStatus).toHaveBeenLastCalledWith("subagents", undefined);
+		expect(second.setWidget).toHaveBeenCalledWith("active-work", expect.any(Function), { placement: "aboveEditor" });
+		expect(second.setStatus).toHaveBeenCalledWith("subagents", "agents:1");
+		widget.dispose();
 	});
 
-	// Also covers scheduler-spawned agents (isBackground=true, no `invocation`
-	// snapshot): if the filter still keyed off `invocation.runInBackground` —
-	// #118's original approach — this would wrongly vanish.
-	it("renders background agents in 'background' mode", () => {
-		const manager = { listAgents: () => [makeRecord("background", { isBackground: true })] };
-		const lines = renderLines(manager, "background", () => "background");
-		expect(lines).toContain("Agents");
-		expect(lines).toContain("background description");
+	it("clears an invalidated widget when its last active agent settles", () => {
+		const running = makeRecord("running", { isBackground: true });
+		const widget = new AgentWidget({ listAgents: () => [running] } as any, new Map());
+		const setWidget = vi.fn();
+		let factory: any;
+		widget.setUICtx({
+			setStatus: vi.fn(),
+			setWidget: (_key, content, options) => {
+				setWidget(_key, content, options);
+				if (content) factory = content;
+			},
+		});
+		factory({ terminal: { columns: 120 }, requestRender: () => {} }, theme).invalidate();
+
+		running.status = "completed";
+		(running as any).completedAt = Date.now();
+		widget.update();
+
+		expect(setWidget).toHaveBeenLastCalledWith("active-work", undefined, undefined);
+		widget.dispose();
 	});
 
-	// 'background' excludes only agents *known* to be foreground; one with no
-	// isBackground flag (e.g. a cross-extension RPC spawn) is kept, not hidden.
-	it("keeps agents with no isBackground flag in 'background' mode", () => {
-		const manager = { listAgents: () => [makeRecord("unflagged", {})] };
-		expect(renderLines(manager, "unflagged", () => "background")).toContain("unflagged description");
-	});
+	it("publishes the active count and renders only running or queued agent identities above the editor", () => {
+		const running = makeRecord("running", { isBackground: true });
+		const queued = { ...makeRecord("queued", { isBackground: true }), status: "queued" };
+		const completed = {
+			...makeRecord("completed", { isBackground: true }),
+			status: "completed",
+			completedAt: Date.now(),
+		};
+		const records = [running, queued, completed];
+		const manager = { listAgents: () => records };
+		const widget = new AgentWidget(manager as any, new Map([[running.id, makeActivity()]]));
+		const statuses: Array<[string, string | undefined]> = [];
+		const widgets: Array<[string, unknown, unknown]> = [];
+		let factory: any;
+		widget.setUICtx({
+			setStatus: (key, text) => statuses.push([key, text]),
+			setWidget: (key, content, options) => {
+				widgets.push([key, content, options]);
+				factory = content;
+			},
+		});
 
-	// "off" hides the widget entirely — even a background agent renders nothing.
-	it("renders nothing in 'off' mode", () => {
-		const manager = { listAgents: () => [makeRecord("background", { isBackground: true })] };
-		expect(renderLines(manager, "background", () => "off")).toBe("");
+		widget.update();
+		const lines = factory({ terminal: { columns: 120 }, requestRender: () => {} }, theme)
+			.render()
+			.join("\n");
+		expect(statuses.at(-1)).toEqual(["subagents", "agents:2"]);
+		expect(widgets.at(-1)?.slice(0, 1)).toEqual(["active-work"]);
+		expect(widgets.at(-1)?.[2]).toEqual({ placement: "aboveEditor" });
+		expect(lines).toContain("Active work");
+		expect(lines).toContain("running description");
+		expect(lines).toContain("queued description");
+		expect(lines).not.toContain("completed description");
+
+		running.status = "completed";
+		(running as any).completedAt = Date.now();
+		queued.status = "stopped";
+		(queued as any).completedAt = Date.now();
+		widget.update();
+		expect(statuses.at(-1)).toEqual(["subagents", undefined]);
+		expect(widgets.at(-1)?.slice(0, 2)).toEqual(["active-work", undefined]);
+		widget.dispose();
 	});
 });
 
@@ -175,8 +235,8 @@ describe("AgentWidget overflow accounting", () => {
 		};
 	}
 
-	/** Render a whole fleet (mixed statuses) and return the produced lines. */
-	function renderFleet(counts: { running: number; queued: number; finished: number }): string[] {
+	/** Render a mixed set of agent statuses and return the active projection. */
+	function renderActiveWork(counts: { running: number; queued: number; finished: number }): string[] {
 		const agents = [
 			...Array.from({ length: counts.running }, (_, i) => record(`run${i}`, "running")),
 			...Array.from({ length: counts.queued }, (_, i) => record(`q${i}`, "queued")),
@@ -194,7 +254,7 @@ describe("AgentWidget overflow accounting", () => {
 				} as AgentActivity,
 			]),
 		);
-		const widget = new AgentWidget({ listAgents: () => agents } as any, activity, () => "all");
+		const widget = new AgentWidget({ listAgents: () => agents } as any, activity);
 		let factory: any;
 		widget.setUICtx({
 			setStatus: () => {},
@@ -208,9 +268,9 @@ describe("AgentWidget overflow accounting", () => {
 	}
 
 	/** The `+N more (…)` footer, if the widget overflowed. */
-	const footer = (lines: string[]) => lines.find((l) => l.includes("more ("));
+	const footer = (lines: string[]) => lines.find((line) => line.includes("more active"));
 
-	/** Every fleet shape worth rendering — swept, not sampled. */
+	/** Every relevant status mix — swept, not sampled. */
 	const SHAPES: { running: number; queued: number; finished: number }[] = [];
 	for (let running = 0; running <= 8; running++)
 		for (let queued = 0; queued <= 8; queued++)
@@ -218,106 +278,33 @@ describe("AgentWidget overflow accounting", () => {
 
 	// Swept rather than sampled: reserving the queued row moves `budget` around by
 	// hand, and an off-by-one there overflows the cap only for specific shapes.
-	it("never exceeds the line cap, for any fleet shape", () => {
+	it("never exceeds the line cap, for any status mix", () => {
 		for (const counts of SHAPES) {
-			expect(renderFleet(counts).length, JSON.stringify(counts)).toBeLessThanOrEqual(12);
+			expect(renderActiveWork(counts).length, JSON.stringify(counts)).toBeLessThanOrEqual(12);
 		}
 	});
 
-	it("never prints a footer that miscounts what it hid, for any fleet shape", () => {
+	it("reports exactly how many active agents are hidden", () => {
 		for (const counts of SHAPES) {
-			const f = footer(renderFleet(counts));
-			if (!f) continue;
-			const total = Number(/\+(\d+) more/.exec(f)?.[1]);
-			const where = `${JSON.stringify(counts)} → ${f}`;
-			// A visible footer means something was dropped, so "+0 more ()" is a lie...
-			expect(total, where).toBeGreaterThan(0);
-			// ...and it counts agents that have their own row, so it can never exceed
-			// them — in particular the queued summary must not be counted as an agent.
-			expect(total, where).toBeLessThanOrEqual(counts.running + counts.finished);
+			const lines = renderActiveWork(counts);
+			const f = footer(lines);
+			const body = lines.join("\n");
+			const activeIds = [
+				...Array.from({ length: counts.running }, (_, index) => `run${index}`),
+				...Array.from({ length: counts.queued }, (_, index) => `q${index}`),
+			];
+			const hidden = activeIds.filter((id) => !body.includes(`${id} description`)).length;
+			const reported = f ? Number(/\+(\d+) more active/.exec(f)?.[1] ?? -1) : 0;
+			expect(reported, `${JSON.stringify(counts)} → ${f ?? "no footer"}`).toBe(hidden);
 		}
 	});
 
-	it("keeps the queued summary visible when the running agents fill the widget", () => {
-		// 5 running (10 lines) consume the entire budget, so the queued line is
-		// dropped — and with it, any sign that 3 agents are waiting to start.
-		const lines = renderFleet({ running: 5, queued: 3, finished: 1 });
-		expect(lines.join("\n")).toContain("3 queued");
-	});
-
-	it("counts everything it hid — the footer total matches what is missing", () => {
-		// Computed rather than hardcoded, so this survives a scenario change but not
-		// a change to what the footer counts.
-		const counts = { running: 5, queued: 3, finished: 1 };
-		const lines = renderFleet(counts);
+	it("renders queued identities and excludes settled identities", () => {
+		const lines = renderActiveWork({ running: 2, queued: 1, finished: 1 });
 		const body = lines.join("\n");
-
-		const shownRunning =
-			counts.running - [...Array(counts.running).keys()].filter((i) => !body.includes(`run${i} description`)).length;
-		const shownFinished =
-			counts.finished - [...Array(counts.finished).keys()].filter((i) => !body.includes(`fin${i} description`)).length;
-		const actuallyHidden = counts.running - shownRunning + (counts.finished - shownFinished);
-
-		const reported = Number(/\+(\d+) more/.exec(footer(lines) ?? "")?.[1] ?? -1);
-		expect(reported).toBe(actuallyHidden);
-	});
-
-	it("gives the queued summary priority over finished lines", () => {
-		const lines = renderFleet({ running: 4, queued: 2, finished: 3 });
-		expect(lines.join("\n")).toContain("2 queued");
-	});
-
-	it("renders everything with no footer when the fleet fits", () => {
-		const lines = renderFleet({ running: 2, queued: 1, finished: 1 });
-		expect(lines.join("\n")).toContain("1 queued");
+		expect(body).toContain("q0 description");
+		expect(body).toContain("queued");
+		expect(body).not.toContain("fin0 description");
 		expect(footer(lines)).toBeUndefined();
-	});
-
-	// A background resume runs an agent that already finished once. markFinished
-	// only seeds an age it has not seen before, so without markRunning the agent
-	// carries its previous run's age — already past the linger limit — and the
-	// resumed run's ✓ line never renders: the agent just disappears.
-	it("shows the completion line again after a finished agent is resumed", () => {
-		const agent = record("resumed", "completed");
-		const activity = new Map([
-			[
-				agent.id,
-				{
-					activeTools: new Map(),
-					toolUses: 0,
-					responseText: "",
-					turnCount: 1,
-					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
-				} as AgentActivity,
-			],
-		]);
-		const widget = new AgentWidget({ listAgents: () => [agent] } as any, activity, () => "all");
-		let factory: any;
-		widget.setUICtx({
-			setStatus: () => {},
-			setWidget: (_k: any, c: any) => {
-				factory = c;
-			},
-		} as any);
-		const render = () => {
-			widget.update();
-			return (factory?.({ terminal: { columns: 200 }, requestRender: () => {} }, theme).render() ?? []).join("\n");
-		};
-
-		// First run finishes and ages out of the widget.
-		widget.markFinished(agent.id);
-		widget.onTurnStart();
-		widget.onTurnStart();
-		expect(render()).not.toContain("resumed description");
-
-		// Background resume puts it back on the running list.
-		agent.status = "running";
-		widget.markRunning(agent.id);
-		expect(render()).toContain("resumed description");
-
-		// ...and its completion is visible when the resumed run settles.
-		agent.status = "completed";
-		widget.markFinished(agent.id);
-		expect(render()).toContain("resumed description");
 	});
 });

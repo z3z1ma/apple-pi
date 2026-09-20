@@ -1,29 +1,21 @@
 /**
- * agent-widget.ts — Persistent widget showing running/completed agents above the editor.
+ * Persistent above-editor projection of active public subagents.
  *
- * Displays a tree of agents with animated spinners, live stats, and activity descriptions.
- * Uses the callback form of setWidget for themed rendering.
+ * The transcript owns terminal outcomes; this widget shows only running and queued work.
  */
 
 import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { type ActiveWorkSource, ActiveWorkSurface } from "../../../shared/src/active-work.js";
 import { renderAgentName } from "../agent-color.js";
 import type { AgentManager } from "../agent-manager.js";
 import { getConfig } from "../agent-types.js";
-import type { AgentInvocation, SubagentType, WidgetMode } from "../types.js";
+import type { AgentInvocation, AgentRecord, SubagentType } from "../types.js";
 import { getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type SessionLike } from "../usage.js";
 
 // ---- Constants ----
 
-/** Maximum number of rendered lines before overflow collapse kicks in. */
-const MAX_WIDGET_LINES = 12;
-/** Spinner/render cadence while agents run; activity deltas are separately debounced. */
-const WIDGET_TICK_MS = 500;
-
 /** Braille spinner frames for animated running indicator. */
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-/** Statuses that indicate an error/non-success outcome (used for linger behavior and icon rendering). */
-export const ERROR_STATUSES = new Set(["error", "aborted", "steered", "stopped"]);
 
 /** Tool name → human-readable action for activity descriptions. */
 const TOOL_DISPLAY: Record<string, string> = {
@@ -188,13 +180,18 @@ export function buildInvocationTags(invocation: AgentInvocation | undefined): { 
 	return { modelName: invocation.modelName, tags };
 }
 
+export function firstNonEmptyLine(text: string): string {
+	return (
+		text
+			.split(/\r?\n/)
+			.find((line) => line.trim())
+			?.trim() ?? ""
+	);
+}
+
 /** Truncate text to a single line, max `len` chars. */
 function truncateLine(text: string, len = 60): string {
-	const line =
-		text
-			.split("\n")
-			.find((l) => l.trim())
-			?.trim() ?? "";
+	const line = firstNonEmptyLine(text);
 	if (line.length <= len) return line;
 	return `${line.slice(0, len)}…`;
 }
@@ -227,415 +224,102 @@ export function describeActivity(activeTools: Map<string, string>, responseText?
 	return "thinking…";
 }
 
-// ---- Widget manager ----
+// ---- Active-work source ----
+
+function activeAgents(manager: AgentManager): AgentRecord[] {
+	return manager
+		.listAgents()
+		.filter(
+			(agent) =>
+				!agent.parentAgentId && !agent.internalOwner && (agent.status === "running" || agent.status === "queued"),
+		);
+}
+
+function runningLines(
+	agent: AgentRecord,
+	activity: AgentActivity | undefined,
+	frame: string,
+	width: number,
+	theme: Theme,
+): string[] {
+	const modeLabel = getPromptModeLabel(agent.type);
+	const modeTag = modeLabel ? ` ${theme.fg("dim", `(${modeLabel})`)}` : "";
+	const toolUses = activity?.toolUses ?? agent.toolUses;
+	const tokens = getLifetimeTotal(activity?.lifetimeUsage ?? agent.lifetimeUsage);
+	const contextPercent = getSessionContextPercent(activity?.session);
+	const tokenText = tokens > 0 ? formatSessionTokens(tokens, contextPercent, theme, agent.compactionCount) : "";
+	const stats = [
+		activity ? formatTurns(activity.turnCount, activity.maxTurns) : "",
+		toolUses > 0 ? `${toolUses} tool use${toolUses === 1 ? "" : "s"}` : "",
+		tokenText,
+		formatMs(Date.now() - agent.startedAt),
+	]
+		.filter(Boolean)
+		.join(" · ");
+	const currentActivity = activity ? describeActivity(activity.activeTools, activity.responseText) : "thinking…";
+	return [
+		truncateToWidth(
+			theme.fg("dim", "├─") +
+				` ${theme.fg("accent", frame)} ${renderAgentName(agent.type, theme, { bold: true })}${modeTag}  ${theme.fg("muted", firstNonEmptyLine(agent.description))} ${theme.fg("dim", "·")} ${fgPreservingNestedStyles(theme, "dim", stats)}`,
+			width,
+		),
+		truncateToWidth(theme.fg("dim", "│  ") + theme.fg("dim", `  ⎿  ${currentActivity}`), width),
+	];
+}
+
+function queuedLines(agent: AgentRecord, width: number, theme: Theme): string[] {
+	const elapsed = formatMs(Date.now() - agent.startedAt);
+	return [
+		truncateToWidth(
+			`${theme.fg("dim", "├─")} ${theme.fg("muted", "◦")} ${renderAgentName(agent.type, theme)}  ${theme.fg("muted", firstNonEmptyLine(agent.description))} ${theme.fg("dim", `· queued · ${elapsed}`)}`,
+			width,
+		),
+	];
+}
+
+export function createAgentActiveWorkSource(
+	manager: AgentManager,
+	agentActivity: Map<string, AgentActivity>,
+): ActiveWorkSource {
+	return {
+		key: "agents",
+		statusKey: "subagents",
+		countLabel: "agents",
+		getEntries: () =>
+			activeAgents(manager).map((agent) => ({
+				id: agent.id,
+				render: (width, theme, frame) =>
+					agent.status === "running"
+						? runningLines(agent, agentActivity.get(agent.id), frame, width, theme)
+						: queuedLines(agent, width, theme),
+			})),
+	};
+}
 
 export class AgentWidget {
-	private uiCtx: UICtx | undefined;
-	private widgetFrame = 0;
-	private widgetInterval: ReturnType<typeof setInterval> | undefined;
-	/** Tracks how many turns each finished agent has survived. Key: agent ID, Value: turns since finished. */
-	private finishedTurnAge = new Map<string, number>();
-	/** How many extra turns errors/aborted agents linger (completed agents clear after 1 turn). */
-	private static readonly ERROR_LINGER_TURNS = 2;
-
-	/** Whether the widget callback is currently registered with the TUI. */
-	private widgetRegistered = false;
-	/** Cached TUI reference from widget factory callback, used for requestRender(). */
-	private tui: any | undefined;
-	/** Last status bar text, used to avoid redundant setStatus calls. */
-	private lastStatusText: string | undefined;
+	private readonly unregister: () => void;
 
 	constructor(
-		private manager: AgentManager,
-		private agentActivity: Map<string, AgentActivity>,
-		/**
-		 * Read live at render time. Selects which agents the widget shows — see
-		 * `WidgetMode`. Defaults to `"all"` when a caller supplies no policy; the
-		 * extension supplies one defaulting to `"background"`.
-		 */
-		private mode: () => WidgetMode = () => "all",
-	) {}
-
-	/**
-	 * Agents eligible for the widget, per the current `WidgetMode`:
-	 *   - `off`: none (the widget's existing empty-state path hides it entirely).
-	 *   - `background`: drop only agents *known* to be foreground
-	 *     (`isBackground === false`); keep everything else — background, queued,
-	 *     programmatically spawned (`undefined`). Keying off the `isBackground`
-	 *     record flag rather than the UI-only `invocation` snapshot (which only the
-	 *     Agent-tool path sets), and excluding rather than allow-listing, means
-	 *     only proven-foreground runs drop out — nothing else silently vanishes.
-	 *   - `all`: every agent.
-	 */
-	private widgetAgents() {
-		const all = this.manager.listAgents().filter((a) => !a.parentAgentId && !a.internalOwner);
-		switch (this.mode()) {
-			case "off":
-				return [];
-			case "background":
-				return all.filter((a) => a.isBackground !== false);
-			default:
-				return all;
-		}
+		manager: AgentManager,
+		agentActivity: Map<string, AgentActivity>,
+		private readonly surface = new ActiveWorkSurface(),
+	) {
+		this.unregister = this.surface.registerSource(createAgentActiveWorkSource(manager, agentActivity));
 	}
 
-	/** Set the UI context (grabbed from first tool execution). */
-	setUICtx(ctx: UICtx) {
-		if (ctx !== this.uiCtx) {
-			// UICtx changed — the widget registered on the old context is gone.
-			// Force re-registration on next update().
-			this.uiCtx = ctx;
-			this.widgetRegistered = false;
-			this.tui = undefined;
-			this.lastStatusText = undefined;
-		}
+	setUICtx(ctx: UICtx): void {
+		this.surface.setUICtx(ctx);
 	}
 
-	/**
-	 * Called on each new turn (tool_execution_start).
-	 * Ages finished agents and clears those that have lingered long enough.
-	 */
-	onTurnStart() {
-		// Age all finished agents
-		for (const [id, age] of this.finishedTurnAge) {
-			this.finishedTurnAge.set(id, age + 1);
-		}
-		// Trigger a widget refresh (will filter out expired agents)
-		this.update();
+	update(): void {
+		this.surface.update();
 	}
 
-	/** Ensure the widget update timer is running. */
-	ensureTimer() {
-		if (!this.widgetInterval) {
-			this.widgetInterval = setInterval(() => this.update(), WIDGET_TICK_MS);
-		}
+	clearUI(): void {
+		this.surface.clearUI();
 	}
 
-	/** Check if a finished agent should still be shown in the widget. */
-	private shouldShowFinished(agentId: string, status: string): boolean {
-		const age = this.finishedTurnAge.get(agentId) ?? 0;
-		const maxAge = ERROR_STATUSES.has(status) ? AgentWidget.ERROR_LINGER_TURNS : 1;
-		return age < maxAge;
-	}
-
-	/** Record an agent as finished (call when agent completes). */
-	markFinished(agentId: string) {
-		if (!this.finishedTurnAge.has(agentId)) {
-			this.finishedTurnAge.set(agentId, 0);
-		}
-	}
-
-	/**
-	 * Drop an agent's finished-age (call when a settled agent starts running
-	 * again, i.e. a background resume). markFinished only seeds an age it has not
-	 * seen before, so a resumed agent would otherwise keep the age from its
-	 * previous run — already past the linger limit, hiding the new run's
-	 * completion line entirely.
-	 */
-	markRunning(agentId: string) {
-		this.finishedTurnAge.delete(agentId);
-	}
-
-	/** Render a finished agent line. */
-	private renderFinishedLine(
-		a: {
-			id: string;
-			type: SubagentType;
-			status: string;
-			description: string;
-			toolUses: number;
-			startedAt: number;
-			completedAt?: number;
-			error?: string;
-		},
-		theme: Theme,
-	): string {
-		const modeLabel = getPromptModeLabel(a.type);
-		const duration = formatMs((a.completedAt ?? Date.now()) - a.startedAt);
-
-		let icon: string;
-		let statusText: string;
-		if (a.status === "completed") {
-			icon = theme.fg("success", "✓");
-			statusText = "";
-		} else if (a.status === "steered") {
-			icon = theme.fg("warning", "✓");
-			statusText = theme.fg("warning", " (turn limit)");
-		} else if (a.status === "stopped") {
-			icon = theme.fg("dim", "■");
-			statusText = theme.fg("dim", " stopped");
-		} else if (a.status === "error") {
-			icon = theme.fg("error", "✗");
-			const errMsg = a.error ? `: ${a.error.slice(0, 60)}` : "";
-			statusText = theme.fg("error", ` error${errMsg}`);
-		} else {
-			// aborted
-			icon = theme.fg("error", "✗");
-			statusText = theme.fg("warning", " aborted");
-		}
-
-		const parts: string[] = [];
-		const activity = this.agentActivity.get(a.id);
-		if (activity) parts.push(formatTurns(activity.turnCount, activity.maxTurns));
-		if (a.toolUses > 0) parts.push(`${a.toolUses} tool use${a.toolUses === 1 ? "" : "s"}`);
-		parts.push(duration);
-
-		const modeTag = modeLabel ? ` ${theme.fg("dim", `(${modeLabel})`)}` : "";
-		return `${icon} ${renderAgentName(a.type, theme, { fallbackColor: "dim" })}${modeTag}  ${theme.fg("dim", a.description)} ${theme.fg("dim", "·")} ${theme.fg("dim", parts.join(" · "))}${statusText}`;
-	}
-
-	/**
-	 * Render the widget content. Called from the registered widget's render() callback,
-	 * reading live state each time instead of capturing it in a closure.
-	 */
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the widget renders one shared presentation model for all agent states.
-	private renderWidget(tui: any, theme: Theme): string[] {
-		const allAgents = this.widgetAgents();
-		const running = allAgents.filter((a) => a.status === "running");
-		const queued = allAgents.filter((a) => a.status === "queued");
-		const finished = allAgents.filter(
-			(a) =>
-				a.status !== "running" && a.status !== "queued" && a.completedAt && this.shouldShowFinished(a.id, a.status),
-		);
-
-		const hasActive = running.length > 0 || queued.length > 0;
-		const hasFinished = finished.length > 0;
-
-		// Nothing to show — return empty (widget will be unregistered by update())
-		if (!hasActive && !hasFinished) return [];
-
-		const w = tui.terminal.columns;
-		const truncate = (line: string) => truncateToWidth(line, w);
-		const headingColor = hasActive ? "accent" : "dim";
-		const headingIcon = hasActive ? "●" : "○";
-		const frame = SPINNER[this.widgetFrame % SPINNER.length];
-
-		// Build sections separately for overflow-aware assembly.
-		// Each running agent = 2 lines (header + activity), finished = 1 line, queued = 1 line.
-
-		const finishedLines: string[] = [];
-		for (const a of finished) {
-			finishedLines.push(truncate(`${theme.fg("dim", "├─")} ${this.renderFinishedLine(a, theme)}`));
-		}
-
-		const runningLines: string[][] = []; // each entry is [header, activity]
-		for (const a of running) {
-			const modeLabel = getPromptModeLabel(a.type);
-			const modeTag = modeLabel ? ` ${theme.fg("dim", `(${modeLabel})`)}` : "";
-			const elapsed = formatMs(Date.now() - a.startedAt);
-
-			const bg = this.agentActivity.get(a.id);
-			const toolUses = bg?.toolUses ?? a.toolUses;
-			const tokens = getLifetimeTotal(bg?.lifetimeUsage);
-			const contextPercent = getSessionContextPercent(bg?.session);
-			const tokenText = tokens > 0 ? formatSessionTokens(tokens, contextPercent, theme, a.compactionCount) : "";
-
-			const parts: string[] = [];
-			if (bg) parts.push(formatTurns(bg.turnCount, bg.maxTurns));
-			if (toolUses > 0) parts.push(`${toolUses} tool use${toolUses === 1 ? "" : "s"}`);
-			if (tokenText) parts.push(tokenText);
-			parts.push(elapsed);
-			const statsText = parts.join(" · ");
-
-			const activity = bg ? describeActivity(bg.activeTools, bg.responseText) : "thinking…";
-
-			runningLines.push([
-				truncate(
-					theme.fg("dim", "├─") +
-						` ${theme.fg("accent", frame)} ${renderAgentName(a.type, theme, { bold: true })}${modeTag}  ${theme.fg("muted", a.description)} ${theme.fg("dim", "·")} ${fgPreservingNestedStyles(theme, "dim", statsText)}`,
-				),
-				truncate(theme.fg("dim", "│  ") + theme.fg("dim", `  ⎿  ${activity}`)),
-			]);
-		}
-
-		const queuedLine =
-			queued.length > 0
-				? truncate(`${theme.fg("dim", "├─")} ${theme.fg("muted", "◦")} ${theme.fg("dim", `${queued.length} queued`)}`)
-				: undefined;
-
-		// Assemble with overflow cap (heading + overflow indicator = 2 reserved lines).
-		const maxBody = MAX_WIDGET_LINES - 1; // heading takes 1 line
-		const totalBody = finishedLines.length + runningLines.length * 2 + (queuedLine ? 1 : 0);
-
-		const lines: string[] = [truncate(`${theme.fg(headingColor, headingIcon)} ${theme.fg(headingColor, "Agents")}`)];
-
-		if (totalBody <= maxBody) {
-			// Everything fits — add all lines and fix up connectors for the last item.
-			lines.push(...finishedLines);
-			for (const pair of runningLines) lines.push(...pair);
-			if (queuedLine) lines.push(queuedLine);
-
-			// Fix last connector: swap ├─ → └─ and │ → space for activity lines.
-			if (lines.length > 1) {
-				const last = lines.length - 1;
-				lines[last] = lines[last].replace("├─", "└─");
-				// If last item is a running agent activity line, fix indent of that line
-				// and fix the header line above it.
-				if (runningLines.length > 0 && !queuedLine) {
-					// The last two lines are the last running agent's header + activity.
-					if (last >= 2) {
-						lines[last - 1] = lines[last - 1].replace("├─", "└─");
-						lines[last] = lines[last].replace("│  ", "   ");
-					}
-				}
-			}
-		} else {
-			// Overflow — prioritize: running > queued > finished.
-			// Reserve 1 line for overflow indicator.
-			let budget = maxBody - 1;
-			let hiddenRunning = 0;
-			let hiddenFinished = 0;
-
-			// Reserve the queued line's row up front. It is a single summary of N
-			// waiting agents, so it cannot be folded into the "+N more" count (which
-			// is denominated in agents) without either under-reporting it as 1 or
-			// inflating the total with agents that were never getting their own rows.
-			// Reserving costs at most one running agent — which IS counted below —
-			// and makes the drop unreachable. It matters most exactly when it used to
-			// vanish: the pool is saturated and the queue is what the user needs to see.
-			const queuedReserve = queuedLine ? 1 : 0;
-			budget -= queuedReserve;
-
-			// 1. Running agents (2 lines each)
-			for (const pair of runningLines) {
-				if (budget >= 2) {
-					lines.push(...pair);
-					budget -= 2;
-				} else {
-					hiddenRunning++;
-				}
-			}
-
-			// 2. Queued line (always fits — its row was reserved above)
-			if (queuedLine) {
-				budget += queuedReserve;
-				lines.push(queuedLine);
-				budget--;
-			}
-
-			// 3. Finished agents
-			for (const fl of finishedLines) {
-				if (budget >= 1) {
-					lines.push(fl);
-					budget--;
-				} else {
-					hiddenFinished++;
-				}
-			}
-
-			// Overflow summary
-			const overflowParts: string[] = [];
-			if (hiddenRunning > 0) overflowParts.push(`${hiddenRunning} running`);
-			if (hiddenFinished > 0) overflowParts.push(`${hiddenFinished} finished`);
-			const overflowText = overflowParts.join(", ");
-			lines.push(
-				truncate(
-					`${theme.fg("dim", "└─")} ${theme.fg("dim", `+${hiddenRunning + hiddenFinished} more (${overflowText})`)}`,
-				),
-			);
-		}
-
-		return lines;
-	}
-
-	/** Force an immediate widget update. */
-	update() {
-		if (!this.uiCtx) return;
-		const allAgents = this.widgetAgents();
-
-		// Lightweight existence checks — full categorization happens in renderWidget()
-		let runningCount = 0;
-		let queuedCount = 0;
-		let hasFinished = false;
-		for (const a of allAgents) {
-			if (a.status === "running") {
-				runningCount++;
-			} else if (a.status === "queued") {
-				queuedCount++;
-			} else if (a.completedAt && this.shouldShowFinished(a.id, a.status)) {
-				hasFinished = true;
-			}
-		}
-		const hasActive = runningCount > 0 || queuedCount > 0;
-
-		// Nothing to show — clear widget
-		if (!hasActive && !hasFinished) {
-			if (this.widgetRegistered) {
-				this.uiCtx.setWidget("agents", undefined);
-				this.widgetRegistered = false;
-				this.tui = undefined;
-			}
-			if (this.lastStatusText !== undefined) {
-				this.uiCtx.setStatus("subagents", undefined);
-				this.lastStatusText = undefined;
-			}
-			if (this.widgetInterval) {
-				clearInterval(this.widgetInterval);
-				this.widgetInterval = undefined;
-			}
-			// Clean up stale entries
-			for (const [id] of this.finishedTurnAge) {
-				if (!allAgents.some((a) => a.id === id)) this.finishedTurnAge.delete(id);
-			}
-			return;
-		}
-
-		// Status bar — only call setStatus when the text actually changes
-		let newStatusText: string | undefined;
-		if (hasActive) {
-			const statusParts: string[] = [];
-			if (runningCount > 0) statusParts.push(`${runningCount} running`);
-			if (queuedCount > 0) statusParts.push(`${queuedCount} queued`);
-			const total = runningCount + queuedCount;
-			newStatusText = `${statusParts.join(", ")} agent${total === 1 ? "" : "s"}`;
-		}
-		if (newStatusText !== this.lastStatusText) {
-			this.uiCtx.setStatus("subagents", newStatusText);
-			this.lastStatusText = newStatusText;
-		}
-
-		this.widgetFrame++;
-
-		// Register widget callback once; subsequent updates use requestRender()
-		// which re-invokes render() without replacing the component (avoids layout thrashing).
-		if (!this.widgetRegistered) {
-			this.uiCtx.setWidget(
-				"agents",
-				(tui, theme) => {
-					this.tui = tui;
-					return {
-						render: () => this.renderWidget(tui, theme),
-						invalidate: () => {
-							// Theme changed — force re-registration so factory captures fresh theme.
-							this.widgetRegistered = false;
-							this.tui = undefined;
-						},
-					};
-				},
-				{ placement: "aboveEditor" },
-			);
-			this.widgetRegistered = true;
-		} else {
-			// Widget already registered — just request a re-render of existing components.
-			this.tui?.requestRender();
-		}
-	}
-
-	dispose() {
-		if (this.widgetInterval) {
-			clearInterval(this.widgetInterval);
-			this.widgetInterval = undefined;
-		}
-		if (this.uiCtx) {
-			this.uiCtx.setWidget("agents", undefined);
-			this.uiCtx.setStatus("subagents", undefined);
-		}
-		this.widgetRegistered = false;
-		this.tui = undefined;
-		this.lastStatusText = undefined;
-		// A trailing activity debounce may fire after teardown. Clearing the UI
-		// context makes that update a no-op instead of re-registering a widget on
-		// a closed session.
-		this.uiCtx = undefined;
+	dispose(): void {
+		this.unregister();
 	}
 }

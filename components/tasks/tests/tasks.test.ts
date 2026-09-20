@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
+import { createTaskActiveWorkSource } from "../src/active-work.js";
 import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
 import installTasks from "../src/index.js";
 import { createMonitorTool } from "../src/monitor-tool.js";
@@ -63,6 +65,38 @@ describe("tasks component", () => {
 	});
 
 	describe("TaskManager", () => {
+		it("publishes prompt creation, due, delivery, and cancellation lifecycle changes", async () => {
+			vi.useFakeTimers();
+			const manager = createManager();
+			const changes: Array<{ id: string; status: string }> = [];
+			manager.onTaskChanged((task) => changes.push({ id: task.id, status: task.status }));
+
+			const delivered = manager.schedulePrompt("Continue.", 100);
+			const cancelled = manager.schedulePrompt("Cancel me.", 500);
+			expect(changes).toContainEqual({ id: delivered.id, status: "scheduled" });
+			expect(changes).toContainEqual({ id: cancelled.id, status: "scheduled" });
+
+			await vi.advanceTimersByTimeAsync(100);
+			expect(changes).toContainEqual({ id: delivered.id, status: "due" });
+			manager.markPromptDelivered(delivered.id);
+			expect(changes).toContainEqual({ id: delivered.id, status: "delivered" });
+			manager.cancel(cancelled.id);
+			expect(changes).toContainEqual({ id: cancelled.id, status: "cancelled" });
+			vi.useRealTimers();
+		});
+
+		it("resets all active and settled records at a session boundary", () => {
+			const manager = createManager();
+			const settled = manager.schedulePrompt("Old session", 60_000);
+			manager.cancel(settled.id);
+			manager.schedulePrompt("Still active", 60_000);
+			expect(manager.list()).toHaveLength(2);
+
+			manager.reset();
+
+			expect(manager.list()).toEqual([]);
+		});
+
 		it("tracks process lifecycle and exit codes", async () => {
 			const manager = createManager();
 			const child = spawn(process.execPath, ["-e", "console.log('hello world'); process.exit(0);"]);
@@ -173,6 +207,41 @@ describe("tasks component", () => {
 			const runningResult = manager.cancel(running.id);
 			expect(runningResult.success).toBe(true);
 			expect(running.status).toBe("cancelled");
+		});
+	});
+
+	describe("active-work projection", () => {
+		it("renders active prompt, command, and monitor state and excludes settled tasks", () => {
+			const manager = createManager();
+			const prompt = manager.schedulePrompt("Recheck the release branch\nwithout adding a widget line", 60_000);
+			const command = manager.scheduleCommand("npm test", "/project", 60_000, () => {
+				throw new Error("not due");
+			});
+			const monitor = manager.createMonitor(
+				"tail -F app.log",
+				"/project",
+				() => spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]),
+				2,
+			);
+			const source = createTaskActiveWorkSource(manager);
+			const entries = source.getEntries();
+			const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+			const rendered = entries.flatMap((entry) => entry.render(72, theme, "⠋"));
+			const text = rendered.join("\n");
+
+			expect(entries.map((entry) => entry.id)).toEqual([prompt.id, command.id, monitor.id]);
+			expect(text).toContain("Prompt");
+			expect(text).toContain("due in");
+			expect(text).toContain("Command");
+			expect(text).toContain("Monitor");
+			expect(text).toContain("events 0/2");
+			for (const line of rendered) {
+				expect(line).not.toContain("\n");
+				expect(visibleWidth(line)).toBeLessThanOrEqual(72);
+			}
+
+			manager.cancel(prompt.id);
+			expect(source.getEntries().map((entry) => entry.id)).not.toContain(prompt.id);
 		});
 	});
 
@@ -469,6 +538,58 @@ describe("tasks component", () => {
 	});
 
 	describe("extension installation & reactive wake-up", () => {
+		it("publishes active task counts and rows above the editor without terminal input interception", async () => {
+			const registeredTools: any[] = [];
+			const commands = new Map<string, any>();
+			const handlers = new Map<string, any[]>();
+			const setStatus = vi.fn();
+			const setWidget = vi.fn();
+			const terminalInput = vi.fn();
+			installTasks({
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: (name: string, command: any) => commands.set(name, command),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: vi.fn(),
+				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+			} as any);
+			let overlayCall = 0;
+			const custom = vi.fn(async (factory: any) => {
+				overlayCall++;
+				let result: any;
+				const component = factory(
+					{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
+					{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
+					undefined,
+					(value: any) => {
+						result = value;
+					},
+				);
+				component.handleInput(overlayCall === 1 ? "\r" : "q");
+				component.dispose();
+				return result;
+			});
+			const ctx = {
+				cwd: process.cwd(),
+				hasUI: true,
+				ui: { custom, setStatus, setWidget, onTerminalInput: terminalInput },
+			};
+			for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
+			const schedule = registeredTools.find((tool) => tool.name === "schedule");
+			const task = registeredTools.find((tool) => tool.name === "task");
+
+			await schedule.execute("schedule", { delay_seconds: 60, prompt: "Continue later" }, undefined, undefined, ctx);
+			expect(setStatus).toHaveBeenCalledWith("tasks", "tasks:1");
+			expect(setWidget).toHaveBeenCalledWith("active-work", expect.any(Function), { placement: "aboveEditor" });
+			expect(terminalInput).not.toHaveBeenCalled();
+			await commands.get("tasks").handler("", ctx);
+			expect(custom).toHaveBeenCalledTimes(3);
+			expect(terminalInput).not.toHaveBeenCalled();
+
+			await task.execute("cancel", { action: "cancel", task_id: "task-1" }, undefined, undefined, ctx);
+			expect(setStatus).toHaveBeenLastCalledWith("tasks", undefined);
+			for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
+		});
+
 		it("sends reactive wake-up message when background task finishes", async () => {
 			const registeredTools: any[] = [];
 			const sentMessages: any[] = [];
@@ -476,6 +597,7 @@ describe("tasks component", () => {
 
 			const mockPi = {
 				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: (event: string, handler: any) => {
@@ -522,6 +644,7 @@ describe("tasks component", () => {
 			const handlers = new Map<string, any[]>();
 			installTasks({
 				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
@@ -559,6 +682,7 @@ describe("tasks component", () => {
 			const eventHandlers = new Map<string, any[]>();
 			const mockPi = {
 				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: (event: string, handler: any) => {
@@ -604,6 +728,7 @@ describe("tasks component", () => {
 			const handlers = new Map<string, any[]>();
 			installTasks({
 				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),

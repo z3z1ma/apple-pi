@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
-import type { CommandTask, ManagedTask, MonitorEvent, PromptTask } from "./types.js";
+import { isActiveTask, type CommandTask, type ManagedTask, type MonitorEvent, type PromptTask } from "./types.js";
 
 export interface CreateTaskOptions {
 	detachedByOperator?: boolean;
@@ -16,13 +16,11 @@ interface TaskControl {
 	settled: boolean;
 }
 
-const isActive = (task: ManagedTask): boolean =>
-	task.status === "scheduled" || task.status === "due" || task.status === "running";
-
 export class TaskManager {
 	private nextId = 1;
 	private readonly tasks = new Map<string, ManagedTask>();
 	private readonly controls = new Map<string, TaskControl>();
+	private readonly changeListeners = new Set<(task: ManagedTask) => void>();
 	private readonly finishListeners = new Set<(task: ManagedTask) => void>();
 	private readonly promptDueListeners = new Set<(task: PromptTask) => void>();
 	private readonly monitorEventListeners = new Set<(event: MonitorEvent) => void>();
@@ -55,6 +53,7 @@ export class TaskManager {
 				control.child = child;
 				task.pid = child.pid;
 				this.attachChild(task, child, control);
+				this.emitChanged(task);
 			} catch (error) {
 				task.output.append(`Process error: ${error instanceof Error ? error.message : String(error)}\n`);
 				task.exitCode = -1;
@@ -66,6 +65,7 @@ export class TaskManager {
 			}
 		}, delayMs);
 		this.controls.set(task.id, control);
+		this.emitChanged(task);
 		return task;
 	}
 
@@ -84,6 +84,7 @@ export class TaskManager {
 			control.timer = undefined;
 			if (control.settled || task.status !== "scheduled") return;
 			task.status = "due";
+			this.emitChanged(task);
 			for (const listener of this.promptDueListeners) {
 				try {
 					listener(task);
@@ -94,6 +95,7 @@ export class TaskManager {
 		}, delayMs);
 		this.tasks.set(task.id, task);
 		this.controls.set(task.id, control);
+		this.emitChanged(task);
 		return task;
 	}
 
@@ -122,13 +124,17 @@ export class TaskManager {
 		if (!task || !control) {
 			return { success: false, message: `Task '${taskId}' not found.` };
 		}
-		if (!isActive(task) || control.settled) {
+		if (!isActiveTask(task) || control.settled) {
 			return { success: false, message: `Task '${taskId}' is not active (status: ${task.status}).` };
 		}
 
 		if (control.timer) {
 			clearTimeout(control.timer);
 			control.timer = undefined;
+		}
+		if (control.graceTimer) {
+			clearTimeout(control.graceTimer);
+			control.graceTimer = undefined;
 		}
 		control.settled = true;
 		task.status = "cancelled";
@@ -142,7 +148,7 @@ export class TaskManager {
 	async waitFor(taskId: string, timeoutMs: number): Promise<ManagedTask | undefined> {
 		const task = this.tasks.get(taskId);
 		if (!task) return undefined;
-		if (!isActive(task)) return task;
+		if (!isActiveTask(task)) return task;
 
 		return new Promise<ManagedTask>((resolve) => {
 			let timer: NodeJS.Timeout | undefined;
@@ -167,7 +173,7 @@ export class TaskManager {
 
 	cancelAll(): void {
 		for (const task of this.tasks.values()) {
-			if (isActive(task)) this.cancel(task.id);
+			if (isActiveTask(task)) this.cancel(task.id);
 		}
 	}
 
@@ -175,6 +181,21 @@ export class TaskManager {
 		for (const task of this.tasks.values()) {
 			if (task.kind === "command") task.output.cleanup();
 		}
+	}
+
+	reset(): void {
+		this.cancelAll();
+		this.cleanupAll();
+		this.tasks.clear();
+		this.controls.clear();
+		this.nextId = 1;
+	}
+
+	onTaskChanged(listener: (task: ManagedTask) => void): () => void {
+		this.changeListeners.add(listener);
+		return () => {
+			this.changeListeners.delete(listener);
+		};
 	}
 
 	onTaskFinished(listener: (task: ManagedTask) => void): () => void {
@@ -218,6 +239,7 @@ export class TaskManager {
 		const control: TaskControl = { child, settled: false };
 		this.controls.set(task.id, control);
 		this.attachChild(task, child, control);
+		this.emitChanged(task);
 		return task;
 	}
 
@@ -310,6 +332,7 @@ export class TaskManager {
 			eventIndex: monitor.deliveredEvents,
 			reachedLimit,
 		};
+		this.emitChanged(task);
 		for (const listener of this.monitorEventListeners) {
 			try {
 				listener(event);
@@ -319,7 +342,18 @@ export class TaskManager {
 		}
 	}
 
+	private emitChanged(task: ManagedTask): void {
+		for (const listener of this.changeListeners) {
+			try {
+				listener(task);
+			} catch {
+				// Listener errors must not affect other listeners.
+			}
+		}
+	}
+
 	private emitFinished(task: ManagedTask): void {
+		this.emitChanged(task);
 		for (const listener of this.finishListeners) {
 			try {
 				listener(task);

@@ -9,12 +9,14 @@ The bottom row of the editor displays:
   - `hit:X%`: the overall session's prompt-cache hit rate, rounded to a whole number and shown after cache activity is reported.
   - `pair`: shown only while the pair programmer is actively reviewing.
   - `mcp:N`: shown when MCP servers are configured.
+  - `agents:N`: shown for running and queued public top-level subagents.
+  - `tasks:N`: shown for scheduled, due, and running managed tasks.
 
-A typical status is `mcp:N · hit:X% · ctx:X%`; active pair review prefixes it with `pair ·`. Cache hit rate is the session-wide cached prompt tokens divided by all session prompt tokens (uncached input, cache reads, and cache writes), including compaction and branch-summary model calls. It is initialized once from session history, then updated as new usage completes.
+A typical status is `mcp:N · hit:X% · agents:N · tasks:N · ctx:X%`; active pair review prefixes it with `pair ·`. Cache hit rate is the session-wide cached prompt tokens divided by all session prompt tokens (uncached input, cache reads, and cache writes), including compaction and branch-summary model calls. It is initialized once from session history, then updated as new usage completes.
 
 No bottom rail `─────────` or separate status footer is rendered below the editor; the editor component is the last visible element and touches the bottom of the terminal.
 
-At narrow terminal widths, optional items are dropped from left to right (`pair`, `mcp:N`, then `hit:X%`) before `ctx:X%`. All right-aligned status text is rendered in muted theme color.
+At narrow terminal widths, optional items are dropped from left to right (`pair`, `mcp:N`, then `hit:X%`, `agents:N`, and `tasks:N`) before `ctx:X%`. All right-aligned status text is rendered in muted theme color.
 
 ## Compatibility boundary
 

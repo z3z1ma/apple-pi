@@ -1,14 +1,10 @@
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, defineTool, formatSize } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import type { TaskManager } from "./task-manager.js";
-import { type ManagedTask, type TaskParameters, type TaskToolDetails, taskParameters } from "./types.js";
+import { isActiveTask, type ManagedTask, type TaskParameters, type TaskToolDetails, taskParameters } from "./types.js";
 
 function formatDuration(ms: number): string {
 	return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function isActive(task: ManagedTask): boolean {
-	return task.status === "scheduled" || task.status === "due" || task.status === "running";
 }
 
 function taskSummary(task: ManagedTask): string {
@@ -51,7 +47,7 @@ async function taskStatus(taskManager: TaskManager, taskId: string | undefined, 
 	if (!taskId) throw new Error("task_id is required for action: 'status'");
 	let task = taskManager.get(taskId);
 	if (!task) throw new Error(`Task '${taskId}' not found`);
-	if (waitSeconds && waitSeconds > 0 && isActive(task)) {
+	if (waitSeconds && waitSeconds > 0 && isActiveTask(task)) {
 		task = (await taskManager.waitFor(taskId, waitSeconds * 1000)) ?? task;
 	}
 
@@ -81,7 +77,7 @@ async function taskStatus(taskManager: TaskManager, taskId: string | undefined, 
 		);
 		if (task.monitor) {
 			const limit = task.monitor.maxEvents === undefined ? "open-ended" : String(task.monitor.maxEvents);
-			const delivery = isActive(task) ? (task.monitor.muted ? "silent until completion" : "active") : "finished";
+			const delivery = isActiveTask(task) ? (task.monitor.muted ? "silent until completion" : "active") : "finished";
 			lines.push(`Monitor Events: ${task.monitor.deliveredEvents}/${limit}`, `Monitor Delivery: ${delivery}`);
 		}
 		lines.push("", `Output: ${snapshot.content || "(no output recorded yet)"}`);

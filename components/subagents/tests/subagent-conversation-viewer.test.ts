@@ -296,6 +296,19 @@ describe("ConversationViewer", () => {
 			}
 		});
 
+		it("does not exceed the overlay height on a short terminal", () => {
+			const tui = mockTui(4, 80);
+			const viewer = new ConversationViewer(
+				tui,
+				mockSession([{ role: "assistant", content: [{ type: "text", text: "hello" }] }]),
+				mockRecord(),
+				undefined,
+				ansiTheme(),
+				vi.fn(),
+			);
+			expect(viewer.render(80).length).toBeLessThanOrEqual(2);
+		});
+
 		it("no line exceeds width with mixed ANSI + unicode content", () => {
 			const text = `\x1b[32m✓\x1b[0m Test passed — 日本語テスト ${"あ".repeat(50)} \x1b[33m⚠\x1b[0m`;
 			const messages = [{ role: "toolResult", toolUseId: "t1", content: [{ type: "text", text }] }];
@@ -686,5 +699,34 @@ describe("ConversationViewer", () => {
 			expect(calls.find((call) => call.text === "───")?.color).toBe("dim");
 			expect(colorOf("Esc close")).toBe("dim");
 		});
+	});
+
+	it("keeps queued agents inspectable and removes steer/stop actions after settlement", () => {
+		const stop = vi.fn();
+		const steer = vi.fn();
+		const queued = mockRecord({ status: "queued", session: undefined });
+		const viewer = new ConversationViewer(
+			mockTui(),
+			undefined as any,
+			queued,
+			undefined,
+			ansiTheme(),
+			vi.fn(),
+			stop,
+			undefined,
+			steer,
+		);
+
+		expect(viewer.render(80).join("\n")).toContain("waiting for first message");
+		viewer.handleInput("x");
+		viewer.handleInput("x");
+		expect(stop).toHaveBeenCalledTimes(1);
+
+		queued.status = "completed";
+		queued.completedAt = Date.now();
+		const settled = viewer.render(80).join("\n");
+		expect(settled).not.toContain("Enter steer");
+		expect(settled).not.toContain("x stop");
+		viewer.dispose();
 	});
 });

@@ -145,7 +145,7 @@ describe("subagent settings rebinding", () => {
 		roots.push(agentDir, first, second);
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		mkdirSync(join(first, ".pi"), { recursive: true });
-		writeFileSync(join(first, ".pi", "subagents.json"), JSON.stringify({ maxConcurrent: 9, widgetMode: "all" }));
+		writeFileSync(join(first, ".pi", "subagents.json"), JSON.stringify({ maxConcurrent: 9 }));
 
 		const applied: Record<string, unknown> = {};
 		const appliers = {
@@ -167,14 +167,8 @@ describe("subagent settings rebinding", () => {
 			setDisableDefaultAgents: (value: boolean) => {
 				applied.disableDefaultAgents = value;
 			},
-			setFleetView: (value: boolean) => {
-				applied.fleetView = value;
-			},
 			setPersistAgentSessions: (value: boolean) => {
 				applied.persistAgentSessions = value;
-			},
-			setWidgetMode: (value: string) => {
-				applied.widgetMode = value;
 			},
 			setMaxSubagentDepth: (value: number) => {
 				applied.maxSubagentDepth = value;
@@ -182,13 +176,12 @@ describe("subagent settings rebinding", () => {
 		};
 
 		applyCompleteSettings(loadSettings({ cwd: first, projectTrusted: true }), appliers);
-		expect(applied).toMatchObject({ maxConcurrent: 9, widgetMode: "all" });
+		expect(applied).toMatchObject({ maxConcurrent: 9 });
 		applySettings({ persistAgentSessions: false }, appliers);
 		expect(applied.persistAgentSessions).toBe(false);
 		applyCompleteSettings(loadSettings({ cwd: second, projectTrusted: true }), appliers);
 		expect(applied).toMatchObject({
 			maxConcurrent: 4,
-			widgetMode: "background",
 			persistAgentSessions: true,
 		});
 	});
