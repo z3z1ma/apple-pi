@@ -84,10 +84,9 @@ try {
 		result.extensions.some(
 			(extension) =>
 				extension.path.endsWith("auto-compact.ts") &&
-				(extension.handlers.get("turn_end")?.length ?? 0) > 0 &&
 				(extension.handlers.get("session_compact_failed")?.length ?? 0) > 0,
 		),
-		"missing automatic-compaction safety/fallback",
+		"missing automatic-compaction failure safety",
 	);
 	assert(
 		result.extensions.some(

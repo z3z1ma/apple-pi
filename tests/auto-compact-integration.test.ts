@@ -25,7 +25,7 @@ type Scenario = "success" | "failure" | "cancel";
 
 type HarnessOptions = {
 	keepRecentTokens?: number;
-	loadOverflowFallback?: boolean;
+	loadAutoCompactExtension?: boolean;
 	pauseFailedCompaction?: boolean;
 	sessionId?: string;
 };
@@ -63,6 +63,7 @@ import {
 	createAssistantMessageEventStream,
 	fauxAssistantMessage,
 	fauxToolCall,
+	getCurrentTools,
 	registerApiProvider,
 } from "@earendil-works/pi-ai/compat";
 
@@ -77,7 +78,7 @@ function response(message) {
 }
 
 function record(source, context) {
-	const kind = context.tools === undefined ? "summary" : "agent";
+	const kind = getCurrentTools(context.messages).length === 0 ? "summary" : "agent";
 	const customTypes = context.messages
 		.filter((message) => message.role === "custom")
 		.map((message) => message.customType);
@@ -161,7 +162,7 @@ export default function (pi) {
 		cwd,
 		agentDir: join(cwd, "agent"),
 		additionalExtensionPaths: [
-			options.loadOverflowFallback ? AUTO_COMPACT_EXTENSION_PATH : COMPACTION_SAFETY_EXTENSION_PATH,
+			options.loadAutoCompactExtension ? AUTO_COMPACT_EXTENSION_PATH : COMPACTION_SAFETY_EXTENSION_PATH,
 			providerPath,
 			scenarioExtension,
 		],
@@ -369,10 +370,10 @@ it("aborts the same-run continuation when native threshold compaction is cancell
 	}
 });
 
-it("adds a hidden cut point when a tool result exceeds Pi's keep-recent budget", async () => {
+it("compacts when a tool result exceeds Pi's keep-recent budget", async () => {
 	const { cwd, readCalls, reload, session, sessionManager } = await createHarness("success", {
 		keepRecentTokens: 1,
-		loadOverflowFallback: true,
+		loadAutoCompactExtension: true,
 	});
 	const events: unknown[] = [];
 	session.subscribe((event) => events.push(JSON.parse(JSON.stringify(event))));
@@ -388,12 +389,10 @@ it("adds a hidden cut point when a tool result exceeds Pi's keep-recent budget",
 			expect.objectContaining({ type: "compaction_end", reason: "threshold", willRetry: false, aborted: false }),
 		);
 		const branch = sessionManager.getBranch();
-		const marker = branch.find(
-			(entry) => entry.type === "custom_message" && entry.customType === "apple-pi.compaction-cut-point",
-		);
-		const compaction = branch.find((entry) => entry.type === "compaction");
-		expect(marker).toBeDefined();
-		expect(compaction).toMatchObject({ firstKeptEntryId: marker?.id });
+		expect(
+			branch.some((entry) => entry.type === "custom_message" && entry.customType === "apple-pi.compaction-cut-point"),
+		).toBe(false);
+		expect(branch.some((entry) => entry.type === "compaction")).toBe(true);
 		expect(JSON.stringify(session.messages.at(-1))).toContain("completed after compaction");
 
 		session.dispose();

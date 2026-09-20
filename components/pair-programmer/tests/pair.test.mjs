@@ -1505,7 +1505,12 @@ test("pair programmer settings inherit Pi's native HTTP idle timeout", () => {
 	try {
 		const settings = S.createPairSettingsManager(cwd, agentDir, false);
 		assert.equal(settings.getHttpIdleTimeoutMs(), 123_456);
-		assert.deepEqual(settings.getRetrySettings(), { enabled: true, maxRetries: 1, baseDelayMs: 1000 });
+		assert.deepEqual(settings.getRetrySettings(), {
+			enabled: true,
+			maxRetries: 1,
+			baseDelayMs: 1000,
+			maxAgentDelayMs: 60_000,
+		});
 		assert.deepEqual(settings.getProviderRetrySettings(), {
 			timeoutMs: 234_567,
 			maxRetries: 0,

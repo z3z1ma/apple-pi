@@ -29,16 +29,16 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Local path: `components/session-search/` (recall only); integration in `extensions/session-search.ts` and `extensions/context.ts`
 - License: MIT, as declared by the source README. The imported commit did not contain a standalone license file or separate copyright notice.
 
-## pi-auto-compact → Oversized-result compaction fallback
+## pi-auto-compact → Fail-closed automatic compaction
 
 - Source: <https://github.com/tmustier/pi-auto-compact>
 - Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
 - Upstream version at import: `0.1.9`
 - Author named by the source package: Thomas Mustier
-- Local paths: `components/notebook/src/hooks/overflow-guard.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
+- Local paths: `extensions/compaction-safety.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Thomas Mustier`
-- apple-pi retains the upstream fail-closed goal, but no longer replaces provider streams or produces a synthetic assistant response. When an over-budget tool-result batch leaves Pi 0.84.4 without a valid cut point, Apple Pi appends a hidden custom-message marker and lets native threshold compaction proceed; failed automatic compaction is gated before provider dispatch. The implementation omits upstream's provider interception, separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
+- apple-pi retains the upstream fail-closed goal, but no longer replaces provider streams, produces a synthetic assistant response, or supplies a cut-point fallback. Pi owns automatic compaction and oversized-result cut-point selection; Apple Pi aborts the active continuation when automatic compaction fails or is cancelled. The implementation omits upstream's provider interception, separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
 
 ## pi-observational-memory
 
@@ -86,7 +86,7 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - Source: <https://github.com/nicobailon/pi-mcp-adapter>
 - Reviewed commit: `5ee81b47b571b3c4ac2e68a03812c64e3f95cb98` (2.26.0 integration)
 - Pinned npm version: `2.34.0`
-- 2.34.0 change: npm pin only. Adapter source is still not copied. `mcpScript` is still filtered at registration. Peer now accepts Pi 0.85.
+- Adapter source is not copied, and `mcpScript` remains filtered at registration. Version 2.34.0 declares Pi AI support through 0.85; this personal harness deliberately retains it with Pi 0.86 after its compile, loader, unit, and MCP integration checks pass.
 - Author named by the source package: Nico Bailon
 - Integration path: `extensions/mcp.ts`
 - License: MIT

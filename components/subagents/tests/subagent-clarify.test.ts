@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
+} from "@earendil-works/pi-ai";
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { type AgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -145,7 +151,7 @@ describe("clarify with real Pi sessions", () => {
 		faux.setResponses([
 			(context, _options, _state, model) => {
 				expect(model.id).toBe("child");
-				expect(context.tools?.map((tool) => tool.name)).toContain("clarify");
+				expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("clarify");
 				expect(JSON.stringify(context.messages)).not.toContain("Original parent request");
 				parent.sessionManager.appendMessage({
 					role: "user",
@@ -159,11 +165,9 @@ describe("clarify with real Pi sessions", () => {
 			(context, options, _state, model) => {
 				expect(model.id).toBe("parent");
 				expect(options?.reasoning).toBe("high");
-				expect(
-					context.tools?.map((tool) => tool.name).sort(),
-					JSON.stringify(context.tools?.map((tool) => tool.name)),
-				).toEqual(["find", "grep", "ls", "read"]);
-				expect(context.systemPrompt).toContain("respect the agreed scope");
+				const toolNames = getCurrentTools(context.messages).map((tool) => tool.name);
+				expect(toolNames.sort(), JSON.stringify(toolNames)).toEqual(["find", "grep", "ls", "read"]);
+				expect(getCurrentSystemPrompt(context.messages)).toContain("respect the agreed scope");
 				expect(JSON.stringify(context.messages)).toContain("Latest decision: keep it read-only");
 				return fauxAssistantMessage([fauxToolCall("read", { path: "evidence.txt" })], { stopReason: "toolUse" });
 			},

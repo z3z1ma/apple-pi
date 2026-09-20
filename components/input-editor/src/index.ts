@@ -5,7 +5,6 @@ export { default, EmptyFooter, installForTui } from "./installer.js";
 export type { EmptyFooterFactory, FooterSnapshot, FooterStatus } from "./types.js";
 export type { InputCardEditorFactory, InputCardFactory } from "./ui/input-editor.js";
 export {
-	collapseDockFooter,
 	collectFooterSnapshot,
 	collectInputCardSnapshot,
 	createInputCardEditorFactory,

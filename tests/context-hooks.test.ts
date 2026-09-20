@@ -8,10 +8,9 @@ const SOURCE_ROOTS = ["components", "extensions", "optional-extensions"];
 /**
  * Provider prompt caches match on an exact prefix. A `context` hook that
  * rebuilds, moves, or removes a message on every request invalidates the
- * cache for the whole history and re-sends it at cache-write prices. Only the
- * overflow guard may filter, and it only drops an empty marker.
+ * cache for the whole history and re-sends it at cache-write prices.
  */
-const ALLOWED_CONTEXT_HOOKS = ["components/notebook/src/hooks/overflow-guard.ts"];
+const ALLOWED_CONTEXT_HOOKS: string[] = [];
 
 function sourceFiles(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

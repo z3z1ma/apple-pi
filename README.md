@@ -107,7 +107,7 @@ Prompt caching (KV caching) is the single most critical performance and economic
 
 Apple Pi enforces **strict append-only context**:
 - **Single Compaction Hook Owner**: On xAI models, [`xai-context-compaction`](docs/context.md) invokes server-side `/responses/compact` and replays opaque encrypted tokens. On other providers, native Pi summarization handles the boundary.
-- **Fail-Closed Compaction Safety (`auto-compact`)**: Pi 0.84.4 has an edge-case gap where an over-budget tool result batch fails to trigger native compaction. `auto-compact.ts` patches this via a hidden cut-point marker, preventing runaway context overflows without rewriting provider serialization.
+- **Fail-Closed Compaction Safety (`auto-compact`)**: Pi owns automatic compaction and oversized-result cut-point selection. `auto-compact.ts` aborts the active continuation when automatic compaction fails or is cancelled, so an uncompacted request is never dispatched silently.
 - **The Sourced Notebook (`update_notebook`)**: The driver and pair continuously curate high-leverage working conclusions backed by exact session citations (`revisit_note`). Only active conclusions are injected—as a single message packet *immediately after compaction*. The harness never rewrites turns mid-flight.
 
 ### 4. Bifurcated Memory: The Ledger vs. The Wiki
@@ -207,7 +207,7 @@ Architecture is defined by what you choose *not* to build. Consult [`docs/bounda
 ### Requirements
 - **Host**: macOS recommended (for native notifications and Ghostty/tmux focus scripts).
 - **Node.js**: `>= 22.19.0`
-- **Pi**: `>= 0.85.1` (`npm install -g @earendil-works/pi-coding-agent`)
+- **Pi**: `>= 0.86.0` (`npm install -g @earendil-works/pi-coding-agent`)
 - **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`, [`rtk`](docs/rtk.md) (≥ 0.23.0 for token-efficient bash execution).
 
 ### Installation

@@ -359,26 +359,6 @@ export function collectInputCardSnapshot(
 	};
 }
 
-/** Collapse the dock footer entry's minSize from 1 to 0 in fullscreen viewport dock. */
-export function collapseDockFooter(tui: unknown): void {
-	try {
-		const root = (tui as any)?.layoutRoot;
-		if (!root || !Array.isArray(root.entries)) return;
-		for (const rootEntry of root.entries) {
-			const candidate = rootEntry?.component;
-			if (candidate && Array.isArray(candidate.entries)) {
-				for (const entry of candidate.entries) {
-					if (entry && entry.minSize === 1) {
-						entry.minSize = 0;
-					}
-				}
-			}
-		}
-	} catch {
-		// Fall open safely if runtime layout shape differs
-	}
-}
-
 /** Custom editor that preserves Pi's complete native editor behavior. */
 export class InputCardEditor extends PiCustomEditor {
 	#disposed = false;
@@ -386,7 +366,7 @@ export class InputCardEditor extends PiCustomEditor {
 
 	constructor(
 		private readonly ctx: ExtensionContext,
-		private readonly tuiForCard: TUI,
+		tuiForCard: TUI,
 		editorTheme: EditorTheme,
 		keybindings: KeybindingsManager,
 		private readonly footerData: ReadonlyFooterDataProvider | undefined,
@@ -394,7 +374,6 @@ export class InputCardEditor extends PiCustomEditor {
 		private readonly cacheHitTracker?: CacheHitRateTracker,
 	) {
 		super(tuiForCard, editorTheme, keybindings, { paddingX: 0, embedWorkingStatus: true });
-		collapseDockFooter(tuiForCard);
 		this.#unsubscribeBranch = footerData?.onBranchChange(() => {
 			if (this.#disposed) return;
 			try {
@@ -411,7 +390,6 @@ export class InputCardEditor extends PiCustomEditor {
 
 	render(width: number): string[] {
 		if (this.#disposed || width <= 0) return [];
-		collapseDockFooter(this.tuiForCard);
 		if (width <= 2) {
 			return super.render(width).map((line) => truncateToWidth(line, width, ""));
 		}
@@ -445,10 +423,8 @@ export function createInputCardEditorFactory(
 	footerData?: ReadonlyFooterDataProvider,
 	cacheHitTracker?: CacheHitRateTracker,
 ): (tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) => InputCardEditor {
-	return (tui, theme, keybindings) => {
-		collapseDockFooter(tui);
-		return new InputCardEditor(ctx, tui, theme, keybindings, footerData, ctx.ui.theme, cacheHitTracker);
-	};
+	return (tui, theme, keybindings) =>
+		new InputCardEditor(ctx, tui, theme, keybindings, footerData, ctx.ui.theme, cacheHitTracker);
 }
 
 export const renderCard = renderInputCard;

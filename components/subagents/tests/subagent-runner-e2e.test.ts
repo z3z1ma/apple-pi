@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
+} from "@earendil-works/pi-ai";
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -323,13 +329,13 @@ Answer the task.
 		let resumedContext = "";
 		faux.setResponses([
 			(context) => {
-				initialSystemPrompt = context.systemPrompt ?? "";
-				expect(context.tools?.map((tool) => tool.name)).toContain("clarify");
+				initialSystemPrompt = getCurrentSystemPrompt(context.messages);
+				expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("clarify");
 				return fauxAssistantMessage([fauxText("AGENT-TOOL-OK")]);
 			},
 			(context) => {
 				resumedContext = JSON.stringify(context.messages);
-				expect(context.tools?.map((tool) => tool.name)).toContain("clarify");
+				expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("clarify");
 				return fauxAssistantMessage([fauxText("AGENT-RESUME-OK")]);
 			},
 		]);
@@ -558,7 +564,7 @@ Answer the task.
 			faux.appendResponses([
 				(context) => {
 					queuedContext = JSON.stringify(context);
-					queuedToolNames = context.tools?.map((candidate) => candidate.name) ?? [];
+					queuedToolNames = getCurrentTools(context.messages).map((candidate) => candidate.name);
 					return fauxAssistantMessage([fauxText("QUEUED-SNAPSHOT-DONE")]);
 				},
 			]);
@@ -841,13 +847,13 @@ RELOADED ROLE MUST NOT RUN.
 		faux.setResponses([
 			(context) => {
 				requestTexts.push(JSON.stringify(context.messages));
-				systemText = context.systemPrompt ?? "";
-				activeToolSets.push(context.tools?.map((candidate) => candidate.name) ?? []);
+				systemText = getCurrentSystemPrompt(context.messages);
+				activeToolSets.push(getCurrentTools(context.messages).map((candidate) => candidate.name));
 				return fauxAssistantMessage([fauxText("The risk appears to be flush ordering.")]);
 			},
 			(context) => {
 				requestTexts.push(JSON.stringify(context.messages));
-				activeToolSets.push(context.tools?.map((candidate) => candidate.name) ?? []);
+				activeToolSets.push(getCurrentTools(context.messages).map((candidate) => candidate.name));
 				return fauxAssistantMessage(
 					[
 						fauxToolCall("give_second_opinion", {
@@ -1067,10 +1073,20 @@ export default function pairMarker(pi) {
 			models: [{ id: "faux-pair-scope", contextWindow: 200_000 }],
 		});
 		fauxProviders.push(faux);
+		const systemPrompts: string[] = [];
 		faux.setResponses([
-			() => fauxAssistantMessage([fauxText("PAIR-OFF")]),
-			() => fauxAssistantMessage([fauxText("PAIR-ON")]),
-			() => fauxAssistantMessage([fauxText("PAIR-UNTRUSTED")]),
+			(context) => {
+				systemPrompts.push(getCurrentSystemPrompt(context.messages));
+				return fauxAssistantMessage([fauxText("PAIR-OFF")]);
+			},
+			(context) => {
+				systemPrompts.push(getCurrentSystemPrompt(context.messages));
+				return fauxAssistantMessage([fauxText("PAIR-ON")]);
+			},
+			(context) => {
+				systemPrompts.push(getCurrentSystemPrompt(context.messages));
+				return fauxAssistantMessage([fauxText("PAIR-UNTRUSTED")]);
+			},
 		]);
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
@@ -1115,9 +1131,8 @@ export default function pairMarker(pi) {
 					},
 				},
 			);
-			const systemPrompt = result.session.systemPrompt;
 			result.session.dispose();
-			return { tools, systemPrompt };
+			return { tools, systemPrompt: systemPrompts.at(-1) ?? "" };
 		};
 
 		const off = await run(false);

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Context, Model } from "@earendil-works/pi-ai";
+import { getCurrentTools, type Model, type TranscriptContext } from "@earendil-works/pi-ai";
 import {
 	createAssistantMessageEventStream,
 	fauxAssistantMessage,
@@ -43,10 +43,14 @@ it("keeps compaction and branch summarization on the raw stream outside before_p
 		hasPayloadHook: boolean;
 		payload: Record<string, unknown>;
 	}> = [];
-	const stream = (requestModel: Model<"openai-responses">, context: Context, options: ProviderRequestOptions) => {
+	const stream = (
+		requestModel: Model<"openai-responses">,
+		context: TranscriptContext,
+		options: ProviderRequestOptions,
+	) => {
 		const payload = { model: requestModel.id };
 		const hasPayloadHook = typeof options.onPayload === "function";
-		const kind: "summary" | "agent" = context.tools === undefined ? "summary" : "agent";
+		const kind: "summary" | "agent" = getCurrentTools(context.messages).length === 0 ? "summary" : "agent";
 		const record: (typeof calls)[number] = { kind, hasPayloadHook, payload };
 		calls.push(record);
 		if (options.onPayload) {

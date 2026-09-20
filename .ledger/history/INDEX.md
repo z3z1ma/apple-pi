@@ -81,3 +81,5 @@
 - `.ledger/history/202609191341-replace-reminders-with-scheduling/task.md` — done — Replace self-reminders with managed scheduling — Implement a root-only one-shot schedule tool for deferred prompts or bash commands, integrate schedules into task management, and keep schedule/task unavailable to Pi Exec.
 
 - `.ledger/history/202609191514-reactive-monitor-core-guidance/task.md` — done — Add reactive monitor and consolidate native capability guidance — Add stdout-driven monitor tasks with immediate steering and optional caller-owned limits, integrate them into the managed-task lifecycle, and move native Pi Exec/execution education into concise core tool guidance rather than a prerequisite skill.
+
+- `.ledger/history/202609191702-assess-pi-0-86-0/task.md` — done — Assess Pi 0.86.0 compatibility — Research Pi 0.86.0 changes, verify apple-pi against the new package family, and identify required or beneficial updates.

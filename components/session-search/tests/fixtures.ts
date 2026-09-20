@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { JsonObject, Message } from "@earendil-works/pi-ai";
 
 const ts = Date.now();
 const assistBase = {
@@ -40,7 +40,7 @@ export const assistantWithThinking = (text: string, thinking: string): Message =
 	stopReason: "stop",
 });
 
-export const assistantWithToolCall = (name: string, args: Record<string, unknown>): Message => ({
+export const assistantWithToolCall = (name: string, args: JsonObject): Message => ({
 	role: "assistant",
 	content: [{ type: "toolCall", id: "tc_1", name, arguments: args }],
 	...assistBase,
