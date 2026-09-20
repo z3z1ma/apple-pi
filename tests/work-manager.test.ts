@@ -87,6 +87,30 @@ describe("work manager entrypoints", () => {
 		for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, ctx);
 	});
 
+	it("renders the active section inside a rounded modal border", () => {
+		const section: WorkSection = {
+			key: "agents",
+			label: "Agents",
+			create: () => ({ render: () => ["Agents roster", "footer"], invalidate: () => {} }),
+			inspect: async () => {},
+		};
+		const component = new WorkManagerComponent(
+			{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any,
+			theme,
+			[section],
+			"agents",
+			new Map(),
+			vi.fn(),
+			undefined,
+		);
+
+		const lines = component.render(60);
+		expect(lines[0]).toMatch(/^╭─+╮$/);
+		expect(lines.at(-1)).toMatch(/^╰─+╯$/);
+		expect(lines.slice(1, -1).every((line) => line.startsWith("│") && line.endsWith("│"))).toBe(true);
+		component.dispose();
+	});
+
 	it("switches tabs while preserving each tab's local selection", () => {
 		const tui = { terminal: { rows: 20, columns: 100 }, requestRender: vi.fn() } as any;
 		const section = (key: string, label: string): WorkSection => ({

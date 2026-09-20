@@ -1,5 +1,13 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, isKeyRelease, Key, matchesKey, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import {
+	type Component,
+	isKeyRelease,
+	Key,
+	matchesKey,
+	type TUI,
+	truncateToWidth,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import type { ViewerKeybindings } from "./viewer-keys.js";
 
 type ManagedComponent = Component & { dispose?(): void };
@@ -66,7 +74,7 @@ export class WorkManagerComponent implements Component {
 					if (action.type === "close") this.done({ type: "close" });
 					else this.done({ type: "inspect", section: section.key, id: action.id });
 				},
-				1,
+				4,
 			),
 		);
 	}
@@ -94,24 +102,46 @@ export class WorkManagerComponent implements Component {
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
 		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
+		const edge = (left: string, right: string): string => {
+			if (renderWidth === 1) return this.theme.fg("border", left);
+			return this.theme.fg("border", `${left}${"─".repeat(renderWidth - 2)}${right}`);
+		};
+		const middleWidth = Math.max(0, renderWidth - 2);
+		const horizontalPadding = renderWidth >= 4 ? 1 : 0;
+		const contentWidth = Math.max(0, middleWidth - horizontalPadding * 2);
+		const row = (text: string): string => {
+			if (renderWidth === 1) return this.theme.fg("border", "│");
+			const clipped = truncateToWidth(text, contentWidth, "");
+			const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(clipped)));
+			const sidePadding = " ".repeat(horizontalPadding);
+			return `${this.theme.fg("border", "│")}${sidePadding}${clipped}${padding}${sidePadding}${this.theme.fg("border", "│")}`;
+		};
+		const top = edge("╭", "╮");
+		const bottom = edge("╰", "╯");
+		if (maxLines === 1) return [top];
+		if (maxLines === 2) return [top, bottom];
+
 		const tabs = this.sections.map((section, index) => {
 			const text = ` ${section.label} `;
 			return index === this.activeIndex
 				? this.theme.bg("selectedBg", this.theme.fg("text", text))
 				: this.theme.fg("muted", text);
 		});
-		const header = truncateToWidth(
-			`${this.theme.fg("accent", this.theme.bold("Work"))}  ${tabs.join(" ")}  ${this.theme.fg("dim", "Tab/←→ switch")}`,
-			renderWidth,
-			"",
-		);
-		if (maxLines === 1) return [header];
+		const header = `${this.theme.fg("accent", this.theme.bold("Work"))}  ${tabs.join(" ")}  ${this.theme.fg("dim", "Tab/←→ switch")}`;
+		if (maxLines === 3) return [top, row(header), bottom];
 
-		const body = this.children[this.activeIndex]?.render(renderWidth) ?? [];
-		const available = maxLines - 1;
-		if (body.length <= available) return [header, ...body];
-		if (available === 1) return [header, body[0]!];
-		return [header, body[0]!, ...body.slice(1, available - 1), body.at(-1)!];
+		const separator = row(this.theme.fg("dim", "─".repeat(contentWidth)));
+		const body = this.children[this.activeIndex]?.render(Math.max(1, contentWidth)) ?? [];
+		const available = maxLines - 4;
+		const visibleBody =
+			body.length <= available
+				? body
+				: available === 0
+					? []
+					: available === 1
+						? [body[0]!]
+						: [body[0]!, ...body.slice(1, available - 1), body.at(-1)!];
+		return [top, row(header), separator, ...visibleBody.map(row), bottom];
 	}
 
 	invalidate(): void {
