@@ -15,9 +15,47 @@ import { BASELINE_PROTECTED_ROOTS, loadSearchRootGuardConfig, type SearchRootGua
 const PI_SEARCH_TOOLS = new Set(["grep", "find", "glob"]);
 const SEARCH_COMMANDS = new Set(["rg", "ripgrep", "grep", "egrep", "fgrep", "find", "fd", "fdfind"]);
 const STDIN_SEARCH_COMMANDS = new Set(["rg", "ripgrep", "grep", "egrep", "fgrep"]);
-// Only bare `find` takes paths with no leading pattern argument; `fd`/`fdfind` (like rg/grep) take
-// PATTERN first.
-const NO_LEADING_PATTERN_COMMANDS = new Set(["find"]);
+const SEARCH_PATTERN_OPTIONS = new Set(["-e", "--regexp", "-f", "--file"]);
+const RG_OPTIONS_WITH_VALUE = new Set([
+	"-A",
+	"-B",
+	"-C",
+	"-E",
+	"-g",
+	"-j",
+	"-M",
+	"-m",
+	"-r",
+	"-T",
+	"-t",
+	"--after-context",
+	"--before-context",
+	"--color",
+	"--colors",
+	"--context",
+	"--context-separator",
+	"--encoding",
+	"--engine",
+	"--field-context-separator",
+	"--field-match-separator",
+	"--glob",
+	"--iglob",
+	"--ignore-file",
+	"--max-columns",
+	"--max-count",
+	"--max-depth",
+	"--max-filesize",
+	"--path-separator",
+	"--pre",
+	"--pre-glob",
+	"--replace",
+	"--sort",
+	"--sortr",
+	"--threads",
+	"--type",
+	"--type-add",
+	"--type-not",
+]);
 const BRACED_HOME = "$" + "{HOME}";
 
 type ShellWord = { raw: string; value: string };
@@ -393,15 +431,51 @@ function resolveLiteralPath(word: ShellWord, home: string, cwd: string): string 
 	return isAbsolute(path) ? path : resolve(cwd, path);
 }
 
-// grep/rg/egrep/fgrep take PATTERN first, then any path arguments; find/fd take path arguments
-// first with no pattern. Either way, flags are simply skipped wherever they appear — this does not
-// try to know which flags take a value, so a flag's value word is occasionally (harmlessly)
-// re-checked as if it were a root too.
-function candidateRoots(command: string, args: ShellWord[]): { roots: ShellWord[]; explicitStdin: boolean } {
+function findCandidateRoots(args: ShellWord[]): ShellWord[] {
 	const roots: ShellWord[] = [];
-	let patternSeen = NO_LEADING_PATTERN_COMMANDS.has(command);
+	for (let index = 0; index < args.length; index += 1) {
+		const word = args[index]!;
+		if (word.value === "--" || /^-(?:[HLP]|[EXdsx]+)$/.test(word.value)) continue;
+		if (word.value === "-D") {
+			index += 1;
+			continue;
+		}
+		if (/^-O\d+$/.test(word.value)) continue;
+		if (word.value === "-f") {
+			const root = args[index + 1];
+			if (root) roots.push(root);
+			index += 1;
+			continue;
+		}
+		if (word.value.startsWith("-") || word.value === "!" || word.value === "(") break;
+		roots.push(word);
+	}
+	return roots;
+}
+
+// grep/rg/egrep/fgrep take PATTERN first, then any path arguments. find takes only its leading
+// starting points: values after the first expression primary (for example `-path PATTERN`) are
+// predicates, not traversal roots. fd/fdfind take PATTERN first like rg/grep.
+function candidateRoots(command: string, args: ShellWord[]): { roots: ShellWord[]; explicitStdin: boolean } {
+	if (command === "find") return { roots: findCandidateRoots(args), explicitStdin: false };
+
+	const roots: ShellWord[] = [];
+	let patternSeen = false;
 	let explicitStdin = false;
-	for (const word of args) {
+	for (let index = 0; index < args.length; index += 1) {
+		const word = args[index]!;
+		const option = word.value.includes("=") ? word.value.slice(0, word.value.indexOf("=")) : word.value;
+		const suppliesPattern =
+			STDIN_SEARCH_COMMANDS.has(command) && (SEARCH_PATTERN_OPTIONS.has(option) || /^-[ef].+/.test(word.value));
+		if (suppliesPattern) {
+			patternSeen = true;
+			if (SEARCH_PATTERN_OPTIONS.has(option) && word.value === option) index += 1;
+			continue;
+		}
+		if ((command === "rg" || command === "ripgrep") && RG_OPTIONS_WITH_VALUE.has(option) && word.value === option) {
+			index += 1;
+			continue;
+		}
 		if (word.value !== "-" && word.value.startsWith("-")) continue;
 		if (!patternSeen) {
 			patternSeen = true;

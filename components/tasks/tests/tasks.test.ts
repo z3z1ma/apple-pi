@@ -6,6 +6,7 @@ import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../s
 import installTasks from "../src/index.js";
 import { createMonitorTool } from "../src/monitor-tool.js";
 import { OutputBuffer } from "../src/output-buffer.js";
+import { createScheduleTool } from "../src/schedule-tool.js";
 import { TaskManager } from "../src/task-manager.js";
 import { createTaskManagementTool } from "../src/task-tool.js";
 import {
@@ -183,14 +184,32 @@ describe("tasks component", () => {
 			expect(Value.Check(monitorParameters, { command: "tail -F app.log", max_events: 1.5 })).toBe(false);
 		});
 
-		it("accepts exactly one prompt or command with a non-negative delay", () => {
+		it("keeps the provider schema structural and Bedrock-compatible", () => {
+			expect(scheduleParameters).not.toHaveProperty("oneOf");
 			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue." })).toBe(true);
 			expect(Value.Check(scheduleParameters, { delay_seconds: 1, command: "npm test" })).toBe(true);
-			expect(Value.Check(scheduleParameters, { delay_seconds: 0 })).toBe(false);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0 })).toBe(true);
 			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue.", command: "npm test" })).toBe(
-				false,
+				true,
 			);
 			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
+		});
+
+		it("enforces exactly one prompt or command at execution time", async () => {
+			const tool = createScheduleTool(createManager());
+			const context = { cwd: process.cwd() } as any;
+			await expect(tool.execute("missing", { delay_seconds: 0 }, undefined, undefined, context)).rejects.toThrow(
+				"schedule requires exactly one prompt or command",
+			);
+			await expect(
+				tool.execute(
+					"both",
+					{ delay_seconds: 0, prompt: "Continue.", command: "npm test" },
+					undefined,
+					undefined,
+					context,
+				),
+			).rejects.toThrow("schedule requires exactly one prompt or command");
 		});
 	});
 

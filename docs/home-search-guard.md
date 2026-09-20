@@ -20,14 +20,14 @@ Configured roots must be absolute paths or supported `~`, `$HOME`, or `${HOME}` 
 The guard covers:
 
 - Pi `grep`, `find`, and `glob` tool calls when their explicit or implicit root resolves to a protected root;
-- agent `bash` calls that use `rg`, `ripgrep`, `grep`, `egrep`, `fgrep`, `find`, `fd`, or `fdfind` with a protected or unverifiable search root;
+- agent `bash` calls that use `rg`, `ripgrep`, `grep`, `egrep`, `fgrep`, `find`, `fd`, or `fdfind` with a protected literal search root the guard can resolve;
 - path aliases that resolve through an existing symlink to a protected root;
 - the same tools in the root session, interactive child agents, and `pi_exec` workers;
 - direct `pi.grep`, `pi.find`, and `pi.bash` calls inside `pi_exec`.
 
 A path below a protected root remains valid. For example, Pi `grep` or shell `rg` may search `$HOME/code_projects/work/repos/service`; searching `$HOME/code_projects/work` is blocked.
 
-For recognized shell search commands, the extension uses a bounded grammar for direct `rg`, `grep`, `find`, and `fd` invocations, common wrappers, command substitutions, simple `cd` chains, and command-specific path operands. Unknown search-bearing syntax, options, cwd changes, and expansions fail closed. Patterns are not treated as roots, so commands such as `rg '/' .` remain valid. Search-bearing `xargs` is deliberately rejected because its input stream can inject new root operands. Options that follow descendant symlinks are rejected because they can escape an otherwise narrow root; use the command's non-following form. Structured glob patterns with brace-expanded roots are likewise rejected in favor of one literal root per call.
+For recognized shell search commands, the extension uses a bounded grammar for direct invocations and simple literal `cd` chains. It blocks only when it can resolve an actual traversal root to a protected root; ambiguous shell syntax, wrappers, variables, substitutions, and unknown indirection fail open rather than risking a false positive. Patterns are not treated as roots, so commands such as `rg '/' .` remain valid. For `find`, only leading starting points are roots; expression operands such as `-path PATTERN` are inert predicates even when they resemble protected paths.
 
 This is best-effort shell inspection, not an operating-system sandbox for arbitrary programs launched through `bash`. Read-only explorer agents do not receive `bash`, so all of their filesystem searches pass through the guarded Pi tools.
 

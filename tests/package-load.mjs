@@ -214,7 +214,8 @@ try {
 	const scheduleSchema = scheduleTool.definition.parameters;
 	assert.equal(scheduleSchema.type, "object");
 	assert.deepEqual(Object.keys(scheduleSchema.properties), ["delay_seconds", "prompt", "command"]);
-	assert.equal(scheduleSchema.oneOf.length, 2);
+	assert.deepEqual(scheduleSchema.required, ["delay_seconds"]);
+	assert.equal(scheduleSchema.oneOf, undefined);
 	const monitorTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "monitor");

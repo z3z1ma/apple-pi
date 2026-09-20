@@ -125,9 +125,34 @@ describe("search root guard: bash, obvious direct invocations", () => {
 	});
 
 	it.each([HOME, WORK])("blocks an implicit bash search root at %s", (cwd) => {
-		for (const command of ["rg needle", "grep -r needle .", "find . -name '*.ts'", "fd needle .", "fdfind needle ."]) {
+		for (const command of [
+			"rg needle",
+			"grep -r needle .",
+			"find . -name '*.ts'",
+			"find -name '*.ts'",
+			"fd needle .",
+			"fdfind needle .",
+		]) {
 			expect(searchRootBlockReason("bash", { command }, cwd, POLICY)).toMatch(/protected root/i);
 		}
+	});
+
+	it.each([
+		`find ${HOME}/.bun/install/global/node_modules -path '*/@aws-sdk/credential-provider-node/package.json' -o -path '*/@aws-sdk/client-sts/package.json' -o -path '*/@aws-sdk/client-bedrock-runtime/package.json' | head -30`,
+		`find ${HOME}/.bun/install/global/node_modules/@earendil-works -path '*/@aws-sdk/credential-provider-node/package.json' -o -path '*/@aws-sdk/client-sts/package.json' -o -path '*/@aws-sdk/client-bedrock-runtime/package.json' | head -30`,
+		`find /tmp -path ${WORK} -o -name package.json`,
+		"find -E /tmp -regex '.*'",
+		"find -EXdsx /tmp -name '*.ts'",
+		"find -- /tmp -name '*.ts'",
+	])("allows find expression operands that name or normalize to a protected root: %s", (command) => {
+		expect(searchRootBlockReason("bash", { command }, WORK, POLICY)).toBeUndefined();
+	});
+
+	it.each([
+		String.raw`rg -n --hidden --glob '*.{ts,js,json,mjs,cjs}' 'oneOf|anyOf|allOf|Type\.Union|Type\.Intersect|Schema\.Union|prompt.*command|command.*prompt' ~/.pi/agent | head -250`,
+		String.raw`find ~/.pi/agent -maxdepth 3 -type f \( -name '*.ts' -o -name '*.js' -o -name '*.json' \) -print | sort | head -250`,
+	])("allows a search over a specific home subdirectory with expression options: %s", (command) => {
+		expect(searchRootBlockReason("bash", { command }, WORK, POLICY)).toBeUndefined();
 	});
 
 	it.each([
@@ -232,12 +257,12 @@ describe("search root guard: bash, best-effort means giving up on real ambiguity
 		);
 	});
 
-	it("known imprecision: rg's -r/--replace value isn't tracked as a flag value, so it can look like a root", () => {
-		// This is the one direction the imprecision runs the other way (over-cautious rather than
-		// permissive). It is rare in practice (an agent's replacement text or file argument would
-		// have to literally equal a protected path) and not worth reintroducing flag-value tracking.
-		expect(searchRootBlockReason("bash", { command: "rg needle -r / ." }, REPO, POLICY)).toMatch(/protected root/i);
-	});
+	it.each(["rg needle -r / .", "rg needle --replace / ."])(
+		"allows an rg replacement value that resembles a protected root: %s",
+		(command) => {
+			expect(searchRootBlockReason("bash", { command }, REPO, POLICY)).toBeUndefined();
+		},
+	);
 });
 
 describe("search root guard: bash, pipeline and standard input handling", () => {

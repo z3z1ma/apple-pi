@@ -127,10 +127,6 @@ export const scheduleParameters = Type.Object(
 	{
 		additionalProperties: false,
 		description: "Schedule exactly one self-authored prompt or bash command.",
-		oneOf: [
-			{ required: ["prompt"], not: { required: ["command"] } },
-			{ required: ["command"], not: { required: ["prompt"] } },
-		],
 	},
 );
 
