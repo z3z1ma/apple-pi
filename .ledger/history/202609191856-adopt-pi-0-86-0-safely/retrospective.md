@@ -8,7 +8,7 @@ Updated: 2026-09-19
 
 Auditing the Pi 0.86 source before editing separated real migration work from obsolete defensive code. Testing all four Pi packages together in a disposable checkout exposed both the transcript API changes and the unrelated MCP peer declaration before the live host changed.
 
-A committed repository checkpoint made the host update reversible. The fresh RPC smoke test then proved the new global binary loaded the actual user package and MCP adapter, rather than only proving the local TypeScript suite.
+A committed repository checkpoint made the host update reversible. The fresh RPC smoke test then proved the new global binary loaded the actual user package, MCP adapter, and separately installed Antigravity provider rather than only proving the local TypeScript suite. `/antigravity.doctor` verified that integration's native transport and schemas without spending a model call; a live Antigravity response stream remained outside this compatibility rollout.
 
 ## Learnings
 
