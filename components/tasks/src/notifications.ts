@@ -1,34 +1,27 @@
-import type { BackgroundTask, MonitorEvent } from "./types.js";
+import type { ManagedTask, MonitorEvent } from "./types.js";
 
 /**
  * Format a task notification message for the session transcript and agent wake-up.
  */
-export function formatTaskNotification(task: BackgroundTask): string {
-	const durationMs = (task.endedAt ?? Date.now()) - (task.startedAt ?? task.createdAt);
+export function formatTaskNotification(task: ManagedTask): string {
+	const startedAt = task.kind === "command" ? (task.startedAt ?? task.createdAt) : task.createdAt;
+	const durationMs = (task.endedAt ?? Date.now()) - startedAt;
 	const durationSec = Math.round((durationMs / 1000) * 10) / 10;
-	const snapshot = task.output.getSnapshot();
-	const label = task.monitor ? "Monitor" : "Task";
+	const label = task.kind === "prompt" ? "Prompt" : task.monitor ? "Monitor" : "Task";
+	const subject = task.kind === "prompt" ? `Prompt: ${task.prompt}` : `Command: ${task.command}`;
+	const outcome =
+		task.kind === "command"
+			? `${label} ${task.id} (${task.status}) finished in ${durationSec}s with exit code ${task.exitCode ?? "null"}.`
+			: `${label} ${task.id} (${task.status}) finished in ${durationSec}s.`;
+	const lines = [`<task-notification id="${task.id}" status="${task.status}">`, outcome, subject];
 
-	const lines = [
-		`<task-notification id="${task.id}" status="${task.status}">`,
-		`${label} ${task.id} (${task.status}) finished in ${durationSec}s with exit code ${task.exitCode ?? "null"}.`,
-		`Command: ${task.command}`,
-	];
-
-	if (snapshot.content.trim()) {
-		lines.push("");
-		lines.push("Output:");
-		lines.push(snapshot.content.trim());
+	if (task.kind === "command") {
+		const snapshot = task.output.getSnapshot();
+		if (snapshot.content.trim()) lines.push("", "Output:", snapshot.content.trim());
+		if (snapshot.fullOutputPath) lines.push("", `Full output: ${snapshot.fullOutputPath}`);
 	}
 
-	if (snapshot.fullOutputPath) {
-		lines.push("");
-		lines.push(`Full output: ${snapshot.fullOutputPath}`);
-	}
-
-	lines.push("");
-	lines.push("</task-notification>");
-
+	lines.push("", "</task-notification>");
 	return lines.join("\n");
 }
 

@@ -41,7 +41,7 @@ Use `x` twice in detail to confirm cancellation of scheduled, due, or running wo
 ```
 
 - `stdin`: Optional process standard input.
-- `run_in_background`: Start immediately and return a managed task descriptor. Completion or failure sends a follow-up that wakes an idle agent or waits until an active run settles.
+- `run_in_background`: Start immediately and return a managed task descriptor. Completion, failure, cancellation, or process termination sends an XML task notification through `deliverAs: "steer"` so the main agent sees the terminal transition.
 - `verbatim`: Bypass RTK command rewriting when exact raw execution is required.
 - While a foreground command executes, the operator can press `Ctrl+B` to detach it into the same managed-task lifecycle.
 
@@ -63,7 +63,7 @@ Schedule exactly one prompt or command:
 }
 ```
 
-`delay_seconds` must be a finite non-negative number. A zero-delay prompt preserves next-turn continuation. A scheduled command uses the working directory and shell environment captured when it is created.
+`delay_seconds` must be a finite non-negative number. A zero-delay prompt preserves next-turn continuation. Due prompts use `deliverAs: "steer"`: they enter an active run at its next safe turn boundary or start a turn while idle. A scheduled command uses the working directory and shell environment captured when it is created.
 
 ### `monitor`
 
@@ -83,7 +83,7 @@ Schedule exactly one prompt or command:
 
 Write monitor commands as event adapters. Emit only meaningful state changes on stdout, redirect or suppress diagnostic noise, and use line-buffered or unbuffered producers. Useful adapters include `awk` with `fflush()`, `jq --unbuffered`, and programs that explicitly flush after each event.
 
-`max_events` is an optional positive integer chosen for the workflow. The last permitted event says that delivery is now silent; the process itself keeps running, all output remains available through `task status`, and completion or failure still sends the normal follow-up. Omit `max_events` when an open-ended event stream is appropriate.
+`max_events` is an optional positive integer chosen for the workflow. The last permitted event says that delivery is now silent; the process itself keeps running, all output remains available through `task status`, and every terminal outcome still sends the normal steer notification. Omit `max_events` when an open-ended event stream is appropriate.
 
 ### `task`
 
@@ -113,7 +113,7 @@ ERROR connection pool exhausted
 
 The final limited event includes the silent-until-completion notice inside the same message.
 
-When any command finishes, an `apple-pi.task-notification` message is appended:
+Every command or monitor terminal outcome—completion, failure, cancellation, or external termination—steers one `apple-pi.task-notification` message into the main agent. Cancelling a scheduled prompt sends the same message shape with its prompt text. Successfully delivered prompts are already the steering message and do not emit a duplicate terminal notification:
 
 ```xml
 <task-notification id="task-1" status="completed">

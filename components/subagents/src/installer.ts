@@ -158,7 +158,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				display: true,
 				details: notificationDetails(record, 500, activityById.get(record.id)),
 			},
-			{ deliverAs: "followUp", triggerTurn: true },
+			{ deliverAs: "steer", triggerTurn: true },
 		);
 	};
 
@@ -179,7 +179,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					display: true,
 					details,
 				},
-				{ deliverAs: "followUp", triggerTurn: true },
+				{ deliverAs: "steer", triggerTurn: true },
 			);
 		});
 	});

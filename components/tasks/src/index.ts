@@ -54,7 +54,7 @@ export function installTasks(pi: ExtensionAPI): void {
 				content: formatScheduledPrompts(prompts),
 				display: true,
 			},
-			{ deliverAs: "followUp", triggerTurn: true },
+			{ deliverAs: "steer", triggerTurn: true },
 		);
 		for (const prompt of prompts) taskManager.markPromptDelivered(prompt.id);
 	};
@@ -93,8 +93,17 @@ export function installTasks(pi: ExtensionAPI): void {
 	});
 
 	taskManager.onTaskFinished((task) => {
-		if (task.kind !== "command" || (task.status !== "completed" && task.status !== "failed")) return;
+		if (task.status === "delivered") return;
 		const content = formatTaskNotification(task);
+		const commandDetails =
+			task.kind === "command"
+				? {
+						command: task.command,
+						exitCode: task.exitCode,
+						monitor: task.monitor !== undefined,
+						outputPreview: task.output.getSnapshot().content.slice(-500),
+					}
+				: { prompt: task.prompt };
 		pi.sendMessage<TaskNotificationDetails>(
 			{
 				customType: TASK_NOTIFICATION_CUSTOM_TYPE,
@@ -102,15 +111,15 @@ export function installTasks(pi: ExtensionAPI): void {
 				display: true,
 				details: {
 					taskId: task.id,
+					kind: task.kind,
 					status: task.status,
-					exitCode: task.exitCode,
-					command: task.command,
-					durationMs: (task.endedAt ?? Date.now()) - (task.startedAt ?? task.createdAt),
-					monitor: task.monitor !== undefined,
-					outputPreview: task.output.getSnapshot().content.slice(-500),
+					durationMs:
+						(task.endedAt ?? Date.now()) -
+						(task.kind === "command" ? (task.startedAt ?? task.createdAt) : task.createdAt),
+					...commandDetails,
 				},
 			},
-			{ deliverAs: "followUp", triggerTurn: true },
+			{ deliverAs: "steer", triggerTurn: true },
 		);
 	});
 
@@ -132,14 +141,18 @@ export function installTasks(pi: ExtensionAPI): void {
 		const isSuccess = details.status === "completed";
 		const icon = isSuccess ? theme.fg("success", "✓") : theme.fg("error", "✗");
 		const durationSec = Math.round((details.durationMs / 1000) * 10) / 10;
-		const label = details.monitor ? "Monitor" : "Background Task";
-		const header = `${icon} ${theme.bold(`${label} ${details.taskId}`)} ${theme.fg("dim", `(${details.status}, ${durationSec}s, exit ${details.exitCode ?? "?"})`)}`;
-		const cmd = theme.fg("muted", `$ ${details.command}`);
-		if (!details.outputPreview) return new Text(`${header}\n  ${cmd}`, 0, 0);
+		const label = details.kind === "prompt" ? "Prompt" : details.monitor ? "Monitor" : "Background Task";
+		const exit = details.kind === "command" ? `, exit ${details.exitCode ?? "?"}` : "";
+		const header = `${icon} ${theme.bold(`${label} ${details.taskId}`)} ${theme.fg("dim", `(${details.status}, ${durationSec}s${exit})`)}`;
+		const subject = theme.fg(
+			"muted",
+			details.kind === "prompt" ? (details.prompt ?? "") : `$ ${details.command ?? ""}`,
+		);
+		if (!details.outputPreview) return new Text(`${header}\n  ${subject}`, 0, 0);
 		const lines = details.outputPreview.split("\n");
 		const preview = expanded ? details.outputPreview : lines.slice(-3).join("\n");
 		return new Text(
-			`${header}\n  ${cmd}\n${preview
+			`${header}\n  ${subject}\n${preview
 				.split("\n")
 				.map((line) => `  ${theme.fg("dim", line)}`)
 				.join("\n")}`,

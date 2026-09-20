@@ -539,13 +539,14 @@ describe("tasks component", () => {
 	});
 
 	describe("extension installation & reactive wake-up", () => {
-		it("publishes active task counts and rows above the editor without terminal input interception", async () => {
+		it("publishes active task UI and steers the main agent when the modal cancels work", async () => {
 			const registeredTools: any[] = [];
 			const commands = new Map<string, any>();
 			const handlers = new Map<string, any[]>();
 			const setStatus = vi.fn();
 			const setWidget = vi.fn();
 			const terminalInput = vi.fn();
+			const sendMessage = vi.fn();
 			const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
 			const pi = {
 				events: {
@@ -563,7 +564,7 @@ describe("tasks component", () => {
 				registerShortcut: vi.fn(),
 				registerCommand: (name: string, command: any) => commands.set(name, command),
 				registerMessageRenderer: vi.fn(),
-				sendMessage: vi.fn(),
+				sendMessage,
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 			};
 			installWorkManager(pi as any);
@@ -580,7 +581,12 @@ describe("tasks component", () => {
 						result = value;
 					},
 				);
-				component.handleInput(overlayCall === 1 ? "\r" : "q");
+				if (overlayCall === 1) component.handleInput("\r");
+				else if (overlayCall === 2) {
+					component.handleInput("x");
+					component.handleInput("x");
+					component.handleInput("q");
+				} else component.handleInput("q");
 				component.dispose();
 				return result;
 			});
@@ -591,23 +597,33 @@ describe("tasks component", () => {
 				ui: { custom, setStatus, setWidget, onTerminalInput: terminalInput },
 			};
 			for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
-			const schedule = registeredTools.find((tool) => tool.name === "schedule");
-			const task = registeredTools.find((tool) => tool.name === "task");
+			const bashTool = registeredTools.find((tool) => tool.name === "bash");
 
-			await schedule.execute("schedule", { delay_seconds: 60, prompt: "Continue later" }, undefined, undefined, ctx);
+			await bashTool.execute(
+				"background-command",
+				{ command: 'node -e "setInterval(() => {}, 1000);"', run_in_background: true },
+				undefined,
+				undefined,
+				ctx,
+			);
 			expect(setStatus).toHaveBeenCalledWith("tasks", "tasks:1");
 			expect(setWidget).toHaveBeenCalledWith("active-work", expect.any(Function), { placement: "aboveEditor" });
 			expect(terminalInput).not.toHaveBeenCalled();
 			await commands.get("tasks").handler("", ctx);
 			expect(custom).toHaveBeenCalledTimes(3);
 			expect(terminalInput).not.toHaveBeenCalled();
-
-			await task.execute("cancel", { action: "cancel", task_id: "task-1" }, undefined, undefined, ctx);
 			expect(setStatus).toHaveBeenLastCalledWith("tasks", undefined);
+			expect(sendMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					customType: TASK_NOTIFICATION_CUSTOM_TYPE,
+					content: expect.stringContaining('<task-notification id="task-1" status="cancelled">'),
+				}),
+				{ deliverAs: "steer", triggerTurn: true },
+			);
 			for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
 		});
 
-		it("sends reactive wake-up message when background task finishes", async () => {
+		it("steers the main agent when a background task fails", async () => {
 			const registeredTools: any[] = [];
 			const sentMessages: any[] = [];
 			const eventHandlers = new Map<string, any[]>();
@@ -635,7 +651,7 @@ describe("tasks component", () => {
 			const bashTool = registeredTools.find((t) => t.name === "bash");
 			await bashTool.execute(
 				"call-bg",
-				{ command: "node -e \"console.log('wake me up!');\"", run_in_background: true },
+				{ command: "node -e \"console.log('wake me up!'); process.exitCode = 3;\"", run_in_background: true },
 				undefined,
 				undefined,
 				{ cwd: process.cwd() },
@@ -647,16 +663,16 @@ describe("tasks component", () => {
 			expect(sentMessages.length).toBeGreaterThanOrEqual(1);
 			const notification = sentMessages.find((m) => m.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE);
 			expect(notification).toBeDefined();
-			expect(notification.msg.content).toContain('<task-notification id="task-1" status="completed">');
+			expect(notification.msg.content).toContain('<task-notification id="task-1" status="failed">');
 			expect(notification.msg.content).toContain("wake me up!");
-			expect(notification.opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+			expect(notification.opts).toEqual({ deliverAs: "steer", triggerTurn: true });
 
 			// Shutdown cleanup
 			const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
 			for (const h of shutdownHandlers) h();
 		});
 
-		it("steers once per monitor stdout line and still follows up on completion", async () => {
+		it("steers once per monitor stdout line and again on completion", async () => {
 			const registeredTools: any[] = [];
 			const sentMessages: any[] = [];
 			const handlers = new Map<string, any[]>();
@@ -689,7 +705,7 @@ describe("tasks component", () => {
 			expect(events[1].msg.content).toMatch(/continue silently/i);
 			expect(events.some((message) => message.msg.content.includes("diagnostic"))).toBe(false);
 			const completion = sentMessages.find((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE);
-			expect(completion?.opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+			expect(completion?.opts).toEqual({ deliverAs: "steer", triggerTurn: true });
 			expect(completion?.msg.details.monitor).toBe(true);
 
 			for (const handler of handlers.get("session_shutdown") ?? []) handler();
@@ -739,7 +755,8 @@ describe("tasks component", () => {
 			expect(sentMessages[0].msg.content).toContain("Then inspect the diff.");
 			expect(sentMessages[0].msg.content).toMatch(/own deferred prompts/i);
 			expect(sentMessages[0].msg.content).toMatch(/not new operator authority/i);
-			expect(sentMessages[0].opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+			expect(sentMessages[0].opts).toEqual({ deliverAs: "steer", triggerTurn: true });
+			expect(sentMessages.some((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE)).toBe(false);
 		});
 
 		it("starts scheduled commands and wakes only after completion", async () => {
@@ -767,7 +784,39 @@ describe("tasks component", () => {
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			const notification = sentMessages.find((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE);
 			expect(notification?.msg.content).toContain("scheduled wake");
-			expect(notification?.opts).toEqual({ deliverAs: "followUp", triggerTurn: true });
+			expect(notification?.opts).toEqual({ deliverAs: "steer", triggerTurn: true });
+		});
+
+		it("steers once when a scheduled prompt is cancelled", async () => {
+			const registeredTools: any[] = [];
+			const sentMessages: any[] = [];
+			installTasks({
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
+				on: vi.fn(),
+			} as any);
+			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const taskTool = registeredTools.find((tool) => tool.name === "task");
+			await scheduleTool.execute(
+				"schedule-prompt",
+				{ delay_seconds: 60, prompt: "Do not run this." },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			await taskTool.execute("cancel-prompt", { action: "cancel", task_id: "task-1" }, undefined, undefined, {
+				cwd: process.cwd(),
+			});
+
+			expect(sentMessages).toHaveLength(1);
+			expect(sentMessages[0].msg).toMatchObject({
+				customType: TASK_NOTIFICATION_CUSTOM_TYPE,
+				details: { taskId: "task-1", kind: "prompt", status: "cancelled", prompt: "Do not run this." },
+			});
+			expect(sentMessages[0].opts).toEqual({ deliverAs: "steer", triggerTurn: true });
 		});
 
 		it("skips installation in child sessions", () => {

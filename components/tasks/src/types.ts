@@ -69,11 +69,13 @@ export interface MonitorEventDetails {
 
 export interface TaskNotificationDetails {
 	taskId: string;
+	kind: ManagedTask["kind"];
 	status: TaskStatus;
-	exitCode?: number | null;
-	command: string;
 	durationMs: number;
-	monitor: boolean;
+	command?: string;
+	prompt?: string;
+	exitCode?: number | null;
+	monitor?: boolean;
 	outputPreview?: string;
 }
 

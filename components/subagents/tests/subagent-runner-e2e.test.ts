@@ -12,6 +12,7 @@ import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { installWorkManager } from "../../shared/src/work-manager.js";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
@@ -342,27 +343,40 @@ Answer the task.
 		const model = faux.getModel();
 		const runtime = fauxModelBackend(model);
 		const tools = new Map<string, any>();
+		const commands = new Map<string, any>();
 		const lifecycle = new Map<string, (...args: any[]) => any>();
+		const busListeners = new Map<string, Set<(payload: unknown) => void>>();
 		const sentMessages: any[] = [];
+		const sentDeliveries: Array<{ message: any; options: any }> = [];
 		const emittedEvents: Array<{ name: string; payload: any }> = [];
 		const pi = {
 			registerMessageRenderer: () => {},
 			registerTool: (tool: any) => tools.set(tool.name, tool),
-			registerCommand: () => {},
+			registerCommand: (name: string, command: any) => commands.set(name, command),
 			registerShortcut: () => {},
 			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
 			events: {
-				emit: (name: string, payload: any) => emittedEvents.push({ name, payload }),
-				on: () => () => {},
+				emit: (name: string, payload: any) => {
+					emittedEvents.push({ name, payload });
+					for (const listener of busListeners.get(name) ?? []) listener(payload);
+				},
+				on: (name: string, listener: (payload: unknown) => void) => {
+					const listeners = busListeners.get(name) ?? new Set();
+					listeners.add(listener);
+					busListeners.set(name, listeners);
+					return () => listeners.delete(listener);
+				},
 			},
-			sendMessage: (message: any) => {
+			sendMessage: (message: any, options: any) => {
 				sentMessages.push(message);
+				sentDeliveries.push({ message, options });
 			},
 			exec: async () => ({ code: 1, stdout: "", stderr: "" }),
 		} as any;
 		const previousCwd = process.cwd();
 		process.chdir(cwd);
 		try {
+			installWorkManager(pi);
 			installSubagents(pi);
 			const tool = tools.get("agent");
 			expect(tool).toBeDefined();
@@ -609,7 +623,11 @@ RELOADED ROLE MUST NOT RUN.
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
-			expect(sentMessages.some((message) => String(message.content).includes(backgroundOutputPath))).toBe(true);
+			const liveDeliveries = sentDeliveries.filter(({ message }) =>
+				String(message.content).includes(backgroundOutputPath),
+			);
+			expect(liveDeliveries).toHaveLength(1);
+			expect(liveDeliveries[0].options).toEqual({ deliverAs: "steer", triggerTurn: true });
 			expect(sentMessages.some((message) => String(message.content).includes("LIVE-AGENT-DONE"))).toBe(false);
 			expect(readFileSync(backgroundOutputPath, "utf8")).toBe("LIVE-AGENT-DONE");
 			const queuedResult = await checkResult.execute(
@@ -722,12 +740,66 @@ RELOADED ROLE MUST NOT RUN.
 			expect(queuedResumeTimeout.content[0].text).toContain("Yield interval (0.01s) reached");
 			expect(queuedResumeSettled).toBe(false);
 
-			const stopped = await stopTool.execute("public-agent-stop", { agent_id: stoppableAgentId });
-			expect(stopped.isError).toBe(false);
-			expect(stopped.content[0].text).toBe(`Stopped subagent ${stoppableAgentId}.`);
+			let modalCall = 0;
+			const modalCtx = {
+				...extensionCtx,
+				hasUI: true,
+				mode: "tui",
+				ui: {
+					custom: async (factory: any) => {
+						modalCall++;
+						let action: any;
+						const component = factory(
+							{ terminal: { rows: 30, columns: 100 }, requestRender: () => {} },
+							{
+								fg: (_color: string, text: string) => text,
+								bg: (_color: string, text: string) => text,
+								bold: (text: string) => text,
+							},
+							undefined,
+							(result: any) => {
+								action = result;
+							},
+						);
+						if (modalCall === 1) {
+							let selected = false;
+							for (let index = 0; index < 20; index++) {
+								selected = component
+									.render(100)
+									.some((line: string) => line.includes(">") && line.includes("Model stop test"));
+								if (selected) break;
+								component.handleInput("j");
+							}
+							expect(selected).toBe(true);
+							component.handleInput("\r");
+						} else if (modalCall === 2) {
+							component.handleInput("x");
+							component.handleInput("x");
+							component.handleInput("q");
+						} else component.handleInput("q");
+						component.dispose?.();
+						return action;
+					},
+				},
+			};
+			await commands.get("agents").handler("", modalCtx);
+			expect(modalCall).toBe(3);
 			releaseStoppedResponse?.();
 			const queuedResumeResult = await queuedResumeWait;
 			expect(queuedResumeResult.content[0].text).toContain("QUEUED-RESUME-DONE");
+			for (
+				let attempt = 0;
+				attempt < 100 &&
+				!sentMessages.some((message) => String(message.content).includes(`<task-id>${stoppableAgentId}</task-id>`));
+				attempt++
+			) {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+			const stoppedDeliveries = sentDeliveries.filter(({ message }) =>
+				String(message.content).includes(`<task-id>${stoppableAgentId}</task-id>`),
+			);
+			expect(stoppedDeliveries).toHaveLength(1);
+			expect(stoppedDeliveries[0].options).toEqual({ deliverAs: "steer", triggerTurn: true });
 
 			const stoppedSnapshot = await checkResult.execute(
 				"public-agent-stopped-check",
@@ -738,8 +810,45 @@ RELOADED ROLE MUST NOT RUN.
 				undefined,
 			);
 			expect(stoppedSnapshot.content[0].text).toContain(`Agent ${stoppableAgentId} is stopped.`);
+			expect(sentMessages.some((message) => String(message.content).includes(`<task-id>${agentId}</task-id>`))).toBe(
+				false,
+			);
 			const stoppedAgain = await stopTool.execute("public-agent-stop-again", { agent_id: stoppableAgentId });
 			expect(stoppedAgain.isError).toBe(true);
+
+			let releaseInlineStop: (() => void) | undefined;
+			const inlineStopGate = new Promise<void>((resolve) => {
+				releaseInlineStop = resolve;
+			});
+			faux.appendResponses([
+				async () => {
+					await inlineStopGate;
+					return fauxAssistantMessage([fauxText("INLINE-STOP-DONE")]);
+				},
+			]);
+			const inlineStopLaunch = await tool.execute(
+				"public-agent-inline-stop",
+				{
+					prompt: "stop through the tool",
+					description: "Inline stop suppression test",
+					subagent_type: "tool-test",
+					run_in_background: true,
+				},
+				undefined,
+				undefined,
+				extensionCtx,
+			);
+			const inlineStopAgentId = (inlineStopLaunch.content[0].text as string).match(/Agent ID: ([^\s]+)/)?.[1];
+			expect(inlineStopAgentId).toBeTruthy();
+			const inlineStopResult = await stopTool.execute("public-agent-inline-stop", {
+				agent_id: inlineStopAgentId,
+			});
+			expect(inlineStopResult.isError).toBe(false);
+			releaseInlineStop?.();
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			expect(
+				sentMessages.some((message) => String(message.content).includes(`<task-id>${inlineStopAgentId}</task-id>`)),
+			).toBe(false);
 		} finally {
 			await lifecycle.get("session_shutdown")?.();
 			process.chdir(previousCwd);

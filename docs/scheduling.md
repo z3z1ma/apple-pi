@@ -11,7 +11,7 @@
 }
 ```
 
-A zero-delay prompt becomes due immediately but waits for the active agent run to settle before delivery. Positive delays wake an idle agent when due or queue behind the active run. Prompts that become due together are delivered in one visible follow-up. The injected message identifies them as the model's own deferred prompts rather than new operator authority and requires reassessment against current direction and repository state.
+A zero-delay prompt becomes due immediately. Due prompts use `deliverAs: "steer"`: during an active run they arrive at the next safe turn boundary, and while idle they start a turn. Prompts that become due together are delivered in one visible steering message. The injected message identifies them as the model's own deferred prompts rather than new operator authority and requires reassessment against current direction and repository state.
 
 ## Commands
 
@@ -22,7 +22,7 @@ A zero-delay prompt becomes due immediately but waits for the active agent run t
 }
 ```
 
-A due command starts without an inference turn. Its managed task moves from `scheduled` to `running`; completion or failure sends the same reactive wake-up used by an immediately backgrounded bash command. Use `bash` with `run_in_background: true` when a command should start immediately.
+A due command starts without an inference turn. Its managed task moves from `scheduled` to `running`; completion, failure, cancellation, or external termination sends the same steering notification used by an immediately backgrounded bash command. Use `bash` with `run_in_background: true` when a command should start immediately.
 
 Every schedule returns a `task-*` ID and resolved due time. Use `task` to list, inspect, wait for, or cancel it.
 
