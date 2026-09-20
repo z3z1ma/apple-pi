@@ -136,6 +136,8 @@ Instead of a generic agent doing everything poorly, the [subagent system](docs/s
 - `builder` (`coding`): Bounded, specified write slices (paired with a sidecar by default).
 - `designer` (`visual-engineering`): User-facing layout, interaction design, and visual polish.
 
+**Active Work (`/work`, `Ctrl+W`)**: Open one tabbed manager for public subagents and managed tasks. The retained `/agents` and `/tasks` aliases open their matching tabs directly. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut.
+
 **The Child `clarify` Superpower**: Subagents often get stuck on ambiguous instructions. In traditional systems, they either hallucinate or spam the user. In Apple Pi, every public child subagent receives a child-only `clarify` tool. It takes an in-memory, read-only snapshot of the parent's conversation and answers the child's question *without interrupting the parent or cluttering the parent's context*.
 
 **The Private Sidecar (`/btw`)**: When *you* want to ask a question without derailing the agent or polluting its history, [`/btw`](docs/btw.md) opens an ephemeral, read-only Markdown overlay. Read the answer, copy it to the clipboard (`Ctrl+X`), or inject it directly into the main thread (`Alt+I`).
@@ -151,7 +153,7 @@ A great harness must feel like an extension of your nervous system. Apple Pi inc
 - **[Search Root Guard (`home-search-guard`)](docs/home-search-guard.md)**: Fail-closed guardrails that stop the agent from accidentally running recursive greps across `/`, `~`, or workspace roots.
 - **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
 - **[MCP Gateway (`mcp`)](docs/mcp.md)**: Pinned `pi-mcp-adapter` gateway exposed as a token-efficient `mcp` tool (`/mcp`), bridging external tools and resources directly into interactive sessions and `pi_exec` composition.
-- **[Managed Tasks, Scheduling & Reactive Execution (`tasks`)](docs/tasks.md)**: Start quiet background commands, schedule one-shot prompts and commands, or run `monitor` event adapters whose completed stdout lines steer the agent immediately. Active work appears above the editor and in `tasks:N` metadata; `/tasks` provides focused inspection and confirmed cancellation. Root-only `schedule`, `monitor`, and `task` stay outside `pi_exec`.
+- **[Managed Tasks, Scheduling & Reactive Execution (`tasks`)](docs/tasks.md)**: Start quiet background commands, schedule one-shot prompts and commands, or run `monitor` event adapters whose completed stdout lines steer the agent immediately. Active work appears above the editor and in `tasks:N` metadata; the `/work` Tasks tab provides focused inspection and confirmed cancellation. Root-only `schedule`, `monitor`, and `task` stay outside `pi_exec`.
 - **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
 
 ---

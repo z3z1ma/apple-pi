@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { installWorkManager } from "../../shared/src/work-manager.js";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "../src/active-work.js";
 import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
@@ -545,13 +546,28 @@ describe("tasks component", () => {
 			const setStatus = vi.fn();
 			const setWidget = vi.fn();
 			const terminalInput = vi.fn();
-			installTasks({
+			const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
+			const pi = {
+				events: {
+					on: (channel: string, handler: (data: unknown) => void) => {
+						const listeners = eventHandlers.get(channel) ?? new Set();
+						listeners.add(handler);
+						eventHandlers.set(channel, listeners);
+						return () => listeners.delete(handler);
+					},
+					emit: (channel: string, data: unknown) => {
+						for (const listener of eventHandlers.get(channel) ?? []) listener(data);
+					},
+				},
 				registerTool: (tool: any) => registeredTools.push(tool),
+				registerShortcut: vi.fn(),
 				registerCommand: (name: string, command: any) => commands.set(name, command),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: vi.fn(),
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
-			} as any);
+			};
+			installWorkManager(pi as any);
+			installTasks(pi as any);
 			let overlayCall = 0;
 			const custom = vi.fn(async (factory: any) => {
 				overlayCall++;
@@ -571,6 +587,7 @@ describe("tasks component", () => {
 			const ctx = {
 				cwd: process.cwd(),
 				hasUI: true,
+				mode: "tui",
 				ui: { custom, setStatus, setWidget, onTerminalInput: terminalInput },
 			};
 			for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
@@ -596,6 +613,7 @@ describe("tasks component", () => {
 			const eventHandlers = new Map<string, any[]>();
 
 			const mockPi = {
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
 				registerTool: (tool: any) => registeredTools.push(tool),
 				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
@@ -643,6 +661,7 @@ describe("tasks component", () => {
 			const sentMessages: any[] = [];
 			const handlers = new Map<string, any[]>();
 			installTasks({
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
 				registerTool: (tool: any) => registeredTools.push(tool),
 				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
@@ -681,6 +700,7 @@ describe("tasks component", () => {
 			const sentMessages: any[] = [];
 			const eventHandlers = new Map<string, any[]>();
 			const mockPi = {
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
 				registerTool: (tool: any) => registeredTools.push(tool),
 				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
@@ -727,6 +747,7 @@ describe("tasks component", () => {
 			const sentMessages: any[] = [];
 			const handlers = new Map<string, any[]>();
 			installTasks({
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
 				registerTool: (tool: any) => registeredTools.push(tool),
 				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),

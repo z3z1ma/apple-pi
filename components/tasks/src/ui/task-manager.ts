@@ -18,33 +18,6 @@ import { isActiveTask, type ManagedTask, taskPreview } from "../types.js";
 
 export type TaskManagerAction = { type: "close" } | { type: "inspect"; id: string };
 
-export interface TaskManagerUI {
-	custom<T>(
-		factory: (tui: TUI, theme: ActiveWorkTheme, keybindings: ViewerKeybindings, done: (result: T) => void) => Component,
-		options?: { overlay?: boolean; overlayOptions?: Record<string, unknown> },
-	): Promise<T>;
-}
-
-export interface OpenTaskManagerOptions {
-	getTasks(): readonly ManagedTask[];
-	inspect(task: ManagedTask): Promise<void>;
-}
-
-export async function openTaskManager(ui: TaskManagerUI, options: OpenTaskManagerOptions): Promise<void> {
-	let selectedId: string | undefined;
-	while (true) {
-		const action = await ui.custom<TaskManagerAction>(
-			(tui, theme, keybindings, done) =>
-				new TaskManagerComponent(tui, theme, options.getTasks, selectedId, done, keybindings),
-			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
-		);
-		if (action.type === "close") return;
-		selectedId = action.id;
-		const task = options.getTasks().find((candidate) => candidate.id === action.id);
-		if (task) await options.inspect(task);
-	}
-}
-
 function taskLabel(task: ManagedTask): "Prompt" | "Command" | "Monitor" {
 	if (task.kind === "prompt") return "Prompt";
 	return task.monitor ? "Monitor" : "Command";
@@ -95,6 +68,7 @@ export class TaskManagerComponent implements Component {
 		selectedId: string | undefined,
 		private readonly done: (action: TaskManagerAction) => void,
 		keybindings?: ViewerKeybindings,
+		private readonly reservedLines = 0,
 	) {
 		this.selectedId = selectedId;
 		this.keys = createViewerKeys(keybindings);
@@ -133,7 +107,7 @@ export class TaskManagerComponent implements Component {
 			0,
 			tasks.findIndex((task) => task.id === this.selectedId),
 		);
-		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
+		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8) - this.reservedLines);
 		const lines = [line(this.theme.fg("accent", this.theme.bold(`Tasks · ${tasks.length}`)))];
 		if (maxLines === 1) return lines;
 		const slots = Math.max(0, maxLines - 2);

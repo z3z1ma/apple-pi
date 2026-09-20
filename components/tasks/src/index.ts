@@ -1,6 +1,7 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
+import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
@@ -17,7 +18,7 @@ import {
 	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type TaskNotificationDetails,
 } from "./types.js";
-import { openTaskManager, TaskDetailViewer } from "./ui/task-manager.js";
+import { TaskDetailViewer, TaskManagerComponent } from "./ui/task-manager.js";
 
 function formatScheduledPrompts(prompts: ReadonlyArray<{ id: string; prompt: string }>): string {
 	return `<scheduled-prompt>
@@ -152,7 +153,7 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
-	const openTaskDetail = async (ctx: ExtensionCommandContext, task: ReturnType<TaskManager["get"]>) => {
+	const openTaskDetail = async (ctx: ExtensionContext, task: ReturnType<TaskManager["get"]>) => {
 		if (!ctx.hasUI || !task) return;
 		await ctx.ui.custom<undefined>(
 			(tui, theme, keybindings, done) =>
@@ -170,15 +171,12 @@ export function installTasks(pi: ExtensionAPI): void {
 		);
 	};
 
-	pi.registerCommand("tasks", {
-		description: "Inspect and manage session-local scheduled prompts, commands, and monitors",
-		handler: async (_args, ctx) => {
-			if (!ctx.hasUI) return;
-			await openTaskManager(ctx.ui, {
-				getTasks: () => taskManager.list(),
-				inspect: (task) => openTaskDetail(ctx, task),
-			});
-		},
+	registerWorkSection(pi, {
+		key: "tasks",
+		label: "Tasks",
+		create: (tui, theme, keybindings, selectedId, done, reservedLines) =>
+			new TaskManagerComponent(tui, theme, () => taskManager.list(), selectedId, done, keybindings, reservedLines),
+		inspect: async (ctx, id) => openTaskDetail(ctx, taskManager.get(id)),
 	});
 
 	pi.on("before_agent_start", () => {

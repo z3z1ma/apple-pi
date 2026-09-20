@@ -65,6 +65,7 @@
       "./extensions/home-search-guard.ts",
       "./extensions/runtime.ts",
       "./extensions/mcp.ts",
+      "./extensions/work.ts",
       "./extensions/subagents.ts",
       "./extensions/ledger.ts",
       "./extensions/wiki.ts",

@@ -1,7 +1,7 @@
 import {
 	defineTool,
 	type ExtensionAPI,
-	type ExtensionCommandContext,
+	type ExtensionContext,
 	getMarkdownTheme,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
@@ -10,6 +10,7 @@ import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
 import { renderAgentName } from "./agent-color.js";
@@ -58,7 +59,7 @@ import {
 	toTeamMember,
 } from "./team-system-prompt.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
-import { type AgentTypeSummary, openAgentManager } from "./ui/agent-manager.js";
+import { AgentManagerComponent, type AgentTypeSummary } from "./ui/agent-manager.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -1077,7 +1078,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		}),
 	);
 
-	async function openConversation(ctx: ExtensionCommandContext, record: AgentRecord): Promise<void> {
+	async function openConversation(ctx: ExtensionContext, record: AgentRecord): Promise<void> {
 		if (!ctx.hasUI) return;
 		await ctx.ui.custom<undefined>(
 			(tui, theme, keybindings, done) =>
@@ -1096,21 +1097,32 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		);
 	}
 
-	pi.registerCommand("agents", {
-		description: "Inspect and manage public subagents or browse discovered agent types",
-		handler: async (_args, ctx) => {
-			if (!ctx.hasUI) return;
-			bindSessionContext(ctx);
+	registerWorkSection(pi, {
+		key: "agents",
+		label: "Agents",
+		prepare: (ctx) => bindSessionContext(ctx),
+		create: (tui, theme, keybindings, selectedId, done, reservedLines) => {
 			const types: AgentTypeSummary[] = getAvailableTypes().map((name) => {
 				const config = getAgentConfig(name);
 				return { name, description: config?.description ?? name, sourcePath: config?.sourcePath };
 			});
-			await openAgentManager(ctx.ui, {
-				getRecords: () => manager.listAgents(),
-				getActivity: (id) => activityById.get(id),
+			return new AgentManagerComponent(
+				tui,
+				theme,
+				() => manager.listAgents(),
+				(id) => activityById.get(id),
 				types,
-				inspect: (record) => openConversation(ctx, record),
-			});
+				selectedId,
+				done,
+				keybindings,
+				reservedLines,
+			);
+		},
+		inspect: async (ctx, id) => {
+			const record = manager
+				.listAgents()
+				.find((candidate) => !candidate.parentAgentId && !candidate.internalOwner && candidate.id === id);
+			if (record) await openConversation(ctx, record);
 		},
 	});
 }

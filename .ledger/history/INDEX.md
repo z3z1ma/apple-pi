@@ -87,3 +87,5 @@
 - `.ledger/history/202609191856-adopt-pi-0-86-0-safely/task.md` — done — Adopt Pi 0.86.0 safely — Prepare Apple Pi for Pi 0.86.0, validate the repository migration, and define a gated self-update and rollback sequence before updating the global Pi binary.
 
 - `.ledger/history/202609192323-polish-managed-task-active-work-ui/task.md` — done — Polish managed tasks and subagent active-work UI — Replace below-editor Fleet duplication with polished above-editor active-work visibility and first-class agent/task management overlays.
+
+- `.ledger/history/202609200830-unify-active-work-manager/task.md` — done — Unify active-work management under /work — Replace separate /agents and /tasks entrypoints with one tabbed work modal opened by /work or Ctrl+W, while preserving domain-specific detail actions.

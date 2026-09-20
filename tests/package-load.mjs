@@ -28,6 +28,7 @@ try {
 			"extensions/home-search-guard.ts",
 			"extensions/runtime.ts",
 			"extensions/mcp.ts",
+			"extensions/work.ts",
 			"extensions/subagents.ts",
 			"extensions/ledger.ts",
 			"extensions/wiki.ts",
@@ -46,7 +47,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 20);
+	assert.equal(result.extensions.length, 21);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -155,6 +156,7 @@ try {
 		"pair",
 		"mcp",
 		"mcp-auth",
+		"work",
 		"agents",
 		"tasks",
 		"btw",
@@ -167,6 +169,11 @@ try {
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
+	const workCommandCount = result.extensions.reduce(
+		(count, extension) => count + Number(extension.commands.has("work")),
+		0,
+	);
+	assert(workCommandCount === 1, `expected exactly one /work registration, got ${workCommandCount}`);
 	for (const tool of [
 		"acknowledge_pair_findings",
 		"update_notebook",
@@ -277,6 +284,7 @@ try {
 		"package manifest must not load the removed self-reminder extension",
 	);
 	assert(manifest.pi.extensions.includes("./extensions/wiki.ts"), "package manifest omits wiki workbench");
+	assert(manifest.pi.extensions.includes("./extensions/work.ts"), "package manifest omits work extension");
 	assert(manifest.pi.extensions.includes("./extensions/tasks.ts"), "package manifest omits tasks extension");
 	assert(
 		manifest.pi.extensions.includes("./extensions/prompt-stash.ts"),

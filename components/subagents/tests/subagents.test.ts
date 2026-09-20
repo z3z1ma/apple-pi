@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { installWorkManager } from "../../shared/src/work-manager.js";
 import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
 import { AgentManager } from "../src/agent-manager.js";
 import { selectAgentModel } from "../src/agent-runner.js";
@@ -84,6 +85,7 @@ describe("owned subagent surface", () => {
 	it("opens /agents as a focused custom overlay rather than a prompt-level selector", async () => {
 		const commands = new Map<string, any>();
 		const handlers = new Map<string, Array<(event: unknown, ctx: any) => unknown>>();
+		const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
 		const custom = vi.fn(async (factory: any) => {
 			let action: any;
 			const component = factory(
@@ -99,7 +101,17 @@ describe("owned subagent surface", () => {
 			return action;
 		});
 		const pi = {
-			events: { on: vi.fn(() => () => {}), emit: vi.fn() },
+			events: {
+				on: (channel: string, handler: (data: unknown) => void) => {
+					const listeners = eventHandlers.get(channel) ?? new Set();
+					listeners.add(handler);
+					eventHandlers.set(channel, listeners);
+					return () => listeners.delete(handler);
+				},
+				emit: (channel: string, data: unknown) => {
+					for (const listener of eventHandlers.get(channel) ?? []) listener(data);
+				},
+			},
 			on: (name: string, handler: (event: unknown, ctx: any) => unknown) => {
 				handlers.set(name, [...(handlers.get(name) ?? []), handler]);
 			},
@@ -109,10 +121,12 @@ describe("owned subagent surface", () => {
 			registerTool: vi.fn(),
 			sendMessage: vi.fn(),
 		};
+		installWorkManager(pi as any);
 		installSubagents(pi as any);
 		const ctx = {
 			cwd: temporaryRoot(),
 			hasUI: true,
+			mode: "tui",
 			isProjectTrusted: () => false,
 			ui: { custom, select: vi.fn(), setWidget: vi.fn(), setStatus: vi.fn() },
 		};

@@ -29,44 +29,6 @@ export type AgentManagerAction = { type: "close" } | { type: "inspect"; id: stri
 
 const isPublic = (record: AgentRecord): boolean => !record.parentAgentId && !record.internalOwner;
 
-export interface AgentManagerUI {
-	custom<T>(
-		factory: (tui: TUI, theme: Theme, keybindings: ViewerKeybindings, done: (result: T) => void) => Component,
-		options?: { overlay?: boolean; overlayOptions?: Record<string, unknown> },
-	): Promise<T>;
-}
-
-export interface OpenAgentManagerOptions {
-	getRecords(): readonly AgentRecord[];
-	getActivity(id: string): AgentActivity | undefined;
-	types: readonly AgentTypeSummary[];
-	inspect(record: AgentRecord): Promise<void>;
-}
-
-export async function openAgentManager(ui: AgentManagerUI, options: OpenAgentManagerOptions): Promise<void> {
-	let selectedId: string | undefined;
-	while (true) {
-		const action = await ui.custom<AgentManagerAction>(
-			(tui, theme, keybindings, done) =>
-				new AgentManagerComponent(
-					tui,
-					theme,
-					options.getRecords,
-					options.getActivity,
-					options.types,
-					selectedId,
-					done,
-					keybindings,
-				),
-			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
-		);
-		if (action.type === "close") return;
-		selectedId = action.id;
-		const record = options.getRecords().find((candidate) => isPublic(candidate) && candidate.id === action.id);
-		if (record) await options.inspect(record);
-	}
-}
-
 export class AgentManagerComponent implements Component {
 	private selectedId: string | undefined;
 	private readonly keys: ViewerKeys;
@@ -83,6 +45,7 @@ export class AgentManagerComponent implements Component {
 		selectedId: string | undefined,
 		private readonly done: (action: AgentManagerAction) => void,
 		keybindings?: ViewerKeybindings,
+		private readonly reservedLines = 0,
 	) {
 		this.selectedId = selectedId;
 		this.keys = createViewerKeys(keybindings);
@@ -133,7 +96,7 @@ export class AgentManagerComponent implements Component {
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
 		const line = (text: string) => truncateToWidth(text, renderWidth, "");
-		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
+		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8) - this.reservedLines);
 		if (this.mode === "types") {
 			const header = line(this.theme.fg("accent", this.theme.bold(`Agent types · ${this.types.length}`)));
 			if (maxLines === 1) return [header];

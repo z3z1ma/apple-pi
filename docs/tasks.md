@@ -17,7 +17,7 @@ All command forms share the same `TaskManager`, `task-*` IDs, rolling output, pr
 
 Scheduled, due, and running tasks join public subagents in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
 
-`/tasks` opens the session-local task roster with active work before settled outcomes. It uses the same configured selection keys as `/agents`: select a row and press `Enter` to inspect it, or use `Esc`/`q` to close. Task detail shows:
+`/work` or `Ctrl+W` opens one active-work manager with Agents and Tasks tabs; `/tasks` remains an alias that opens the Tasks tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. Use `Tab`/`Shift+Tab` or left/right to switch tabs. The session-local task roster orders active work before settled outcomes and uses the configured selection keys: select a row and press `Enter` to inspect it, or use `Esc`/`q` to close. Task detail shows:
 
 - complete prompt text, creation/due timing, and delivery state;
 - command text, working directory, timing, PID, exit state, and a live rolling output tail;

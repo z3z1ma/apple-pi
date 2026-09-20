@@ -2,7 +2,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { OutputBuffer } from "../src/output-buffer.js";
 import type { CommandTask, ManagedTask, PromptTask } from "../src/types.js";
-import { openTaskManager, TaskDetailViewer, TaskManagerComponent } from "../src/ui/task-manager.js";
+import { TaskDetailViewer, TaskManagerComponent } from "../src/ui/task-manager.js";
 
 const theme = {
 	fg: (_color: string, text: string) => text,
@@ -56,47 +56,28 @@ describe("TaskManagerComponent", () => {
 		component.dispose();
 	});
 
-	it("uses configured navigation and returns from detail to the same task ID", async () => {
+	it("uses configured navigation", () => {
 		const now = Date.now();
-		let tasks: ManagedTask[] = [command("first", "running", now + 20), prompt("second", "scheduled", now + 10)];
-		const selectedLines: string[] = [];
-		let call = 0;
-		const ui = {
-			custom: async (factory: any) => {
-				call++;
-				let action: any;
-				const component = factory(
-					{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
-					theme,
-					{
-						matches: (data: string, binding: string) => data === "D" && binding === "tui.select.down",
-						getKeys: (binding: string) =>
-							binding === "tui.select.up" ? ["ctrl+p"] : binding === "tui.select.down" ? ["ctrl+n"] : [],
-					},
-					(result: any) => {
-						action = result;
-					},
-				);
-				if (call === 1) {
-					expect(component.render(100).join("\n")).toContain("ctrl+p/ctrl+n select");
-					component.handleInput("D");
-					component.handleInput("\r");
-				} else {
-					selectedLines.push(component.render(100).find((line: string) => line.startsWith(">")) ?? "");
-					component.handleInput("q");
-				}
-				component.dispose();
-				return action;
+		const tasks: ManagedTask[] = [command("first", "running", now + 20), prompt("second", "scheduled", now + 10)];
+		const done = vi.fn();
+		const component = new TaskManagerComponent(
+			{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any,
+			theme,
+			() => tasks,
+			undefined,
+			done,
+			{
+				matches: (data: string, binding: string) => data === "D" && binding === "tui.select.down",
+				getKeys: (binding: string) =>
+					binding === "tui.select.up" ? ["ctrl+p"] : binding === "tui.select.down" ? ["ctrl+n"] : [],
 			},
-		};
-		const inspect = vi.fn(async () => {
-			tasks = [command("new", "running", now + 30), ...tasks];
-		});
+		);
 
-		await openTaskManager(ui as any, { getTasks: () => tasks, inspect });
-
-		expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ id: "second" }));
-		expect(selectedLines[0]).toContain("second");
+		expect(component.render(100).join("\n")).toContain("ctrl+p/ctrl+n select");
+		component.handleInput("D");
+		component.handleInput("\r");
+		expect(done).toHaveBeenCalledWith({ type: "inspect", id: "second" });
+		component.dispose();
 	});
 });
 

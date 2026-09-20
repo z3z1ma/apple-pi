@@ -14,6 +14,7 @@ export type ViewerKeybinding =
 	| "tui.select.down"
 	| "tui.select.pageUp"
 	| "tui.select.pageDown"
+	| "tui.input.tab"
 	| "app.message.copy";
 
 /** Structural subset of pi-tui's `KeybindingsManager` (which satisfies it). */
