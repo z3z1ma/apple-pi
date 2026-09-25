@@ -20,6 +20,8 @@ All to-do tools are lowercase native tools; there are no `Task*` compatibility a
 | `todo_output` | `id`, optional `wait` | Shows stored output and execution state; `wait` waits only for a locally owned run. |
 | `todo_stop` | `id` | Stops a locally owned managed execution. |
 
+Escape during `todo_output(wait: true)` cancels only the foreground wait; the managed run continues and its result remains available through `todo_output`.
+
 To-do records have statuses `open`, `active`, and `completed`. “Blocked” is derived only when an `open` to-do has an incomplete prerequisite; it is not stored status. `blockedBy` is the only persisted edge direction; `blocks` is derived. The implementation rejects missing prerequisites, self-dependencies, duplicate edges, cycles, and making an `active` to-do while a prerequisite remains incomplete. Invalid mutations are atomic: the previous list remains intact. A managed execution cannot be edited or deleted; its run identity controls settlement so late workers cannot settle a newer attempt or branch.
 
 ## `/todos` and the widget

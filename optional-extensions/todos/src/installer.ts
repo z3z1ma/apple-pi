@@ -173,7 +173,10 @@ export function installTodos(pi: ExtensionAPI) {
 		name: string,
 		description: string,
 		parameters: ReturnType<typeof Type.Object>,
-		execute: (params: T) => { text: string; details: unknown } | Promise<{ text: string; details: unknown }>,
+		execute: (
+			params: T,
+			signal?: AbortSignal,
+		) => { text: string; details: unknown } | Promise<{ text: string; details: unknown }>,
 	) => {
 		pi.registerTool(
 			defineTool({
@@ -186,10 +189,10 @@ export function installTodos(pi: ExtensionAPI) {
 				],
 				parameters,
 				executionMode: "sequential",
-				async execute(_id, params, _signal, _update, ctx) {
+				async execute(_id, params, signal, _update, ctx) {
 					try {
 						if (unavailable) throw new Error(unavailable);
-						const result = await execute(params as T);
+						const result = await execute(params as T, signal);
 						return {
 							content: [{ type: "text" as const, text: result.text }],
 							details: result.details,
@@ -286,9 +289,9 @@ export function installTodos(pi: ExtensionAPI) {
 			id: Type.Integer({ minimum: 1 }),
 			wait: Type.Optional(Type.Boolean()),
 		}),
-		async (params) => {
+		async (params, signal) => {
 			const todo = params.wait
-				? await execution.waitForOutput(params.id as number)
+				? await execution.waitForOutput(params.id as number, signal)
 				: execution.output(params.id as number);
 			return { text: formatTodoDetail(todo), details: todo };
 		},

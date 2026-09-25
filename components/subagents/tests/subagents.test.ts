@@ -143,6 +143,56 @@ describe("owned subagent surface", () => {
 		}
 	});
 
+	it("releases a nested foreground agent wait interrupted during startup", async () => {
+		const root = temporaryRoot();
+		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(root, ".pi", "agents", "probe.md"),
+			"---\nname: probe\ndescription: Test role\ntools: read\nskills: false\n---\n\nInspect.\n",
+		);
+		let settle!: () => void;
+		const pending = new Promise<{ record: any }>((resolve) => {
+			settle = () => resolve({ record: { status: "stopped" } });
+		});
+		const spawnAndWait = vi.fn(() => pending);
+		const tools = createNestedSubagentTools({
+			manager: { spawnAndWait } as any,
+			pi: {} as any,
+			parentAgentId: "parent",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: root,
+			projectTrusted: true,
+		});
+		const controller = new AbortController();
+		const call = tools
+			.find((tool) => tool.name === "agent")!
+			.execute(
+				"start",
+				{
+					prompt: "Inspect",
+					description: "Inspect",
+					subagent_type: "probe",
+					run_in_background: false,
+					isolated: false,
+					inherit_context: false,
+				} as any,
+				controller.signal,
+				undefined,
+				{ model: { provider: "xai", id: "parent-model" }, modelRegistry: { find: vi.fn() } } as any,
+			);
+		try {
+			controller.abort();
+			const result = await Promise.race([call, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))]);
+			expect(result).not.toBe("waiting");
+			expect(result).toMatchObject({ isError: true });
+			expect(spawnAndWait).toHaveBeenCalledOnce();
+		} finally {
+			settle();
+		}
+	});
+
 	it("releases partial capacity when a queued start throws", () => {
 		const manager = new AgentManager(undefined, 1);
 		const record = { id: "queued", status: "queued", isBackground: true };

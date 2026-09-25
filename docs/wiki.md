@@ -63,7 +63,7 @@ Findings include source paths and line/column evidence. Run it after page-link, 
 
 Use inbound depth one for direct backlinks. Use both directions at depth two for nearby context before changing or synthesizing a page. The tool returns paths and directed edges with source evidence; use the normal `read` tool for page bodies.
 
-Both tools are read-only, stay inside the project-local non-symlink `.wiki/` boundary, and use Pi's standard output truncation behavior.
+Both tools are read-only, stay inside the project-local non-symlink `.wiki/` boundary, and use Pi's standard output truncation behavior. Pressing `Esc` during a scan stops traversal at the next filesystem step.
 
 ## Prompt and skill boundary
 

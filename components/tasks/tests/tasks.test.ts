@@ -265,6 +265,23 @@ describe("tasks component", () => {
 			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
 		});
 
+		it("does not schedule a command after its call was interrupted", async () => {
+			const manager = createManager();
+			const controller = new AbortController();
+			controller.abort();
+
+			await expect(
+				createScheduleTool(manager).execute(
+					"cancelled-schedule",
+					{ delay_seconds: 60, command: "echo should-not-run" },
+					controller.signal,
+					undefined,
+					{ cwd: process.cwd() } as any,
+				),
+			).rejects.toMatchObject({ name: "AbortError" });
+			expect(manager.list()).toHaveLength(0);
+		});
+
 		it("enforces exactly one prompt or command at execution time", async () => {
 			const tool = createScheduleTool(createManager());
 			const context = { cwd: process.cwd() } as any;
@@ -500,6 +517,50 @@ describe("tasks component", () => {
 			);
 			expect(getResultText(cancelResult)).toContain(`Task '${task2.id}' was cancelled.`);
 			expect(task2.status).toBe("cancelled");
+		});
+
+		it("interrupts a status wait without cancelling the managed task", async () => {
+			const manager = createManager();
+			const taskTool = createTaskManagementTool(manager);
+			const task = manager.schedulePrompt("Still scheduled", 60_000);
+			const controller = new AbortController();
+			const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+			const wait = taskTool.execute(
+				"wait-status",
+				{ action: "status", task_id: task.id, wait_seconds: 30 },
+				controller.signal,
+				undefined,
+				{} as any,
+			);
+			const outcome = wait.then(
+				() => "resolved",
+				() => "aborted",
+			);
+
+			controller.abort();
+			expect(
+				await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("still waiting"), 50))]),
+			).toBe("aborted");
+			expect(task.status).toBe("scheduled");
+			expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+		});
+
+		it("rejects a status wait if already interrupted", async () => {
+			const manager = createManager();
+			const task = manager.schedulePrompt("Still scheduled", 60_000);
+			const controller = new AbortController();
+			controller.abort();
+
+			await expect(
+				createTaskManagementTool(manager).execute(
+					"wait-status",
+					{ action: "status", task_id: task.id, wait_seconds: 30 },
+					controller.signal,
+					undefined,
+					{} as any,
+				),
+			).rejects.toMatchObject({ name: "AbortError" });
+			expect(task.status).toBe("scheduled");
 		});
 
 		it("labels monitors and cancelled prompts accurately", async () => {

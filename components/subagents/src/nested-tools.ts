@@ -7,6 +7,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { abortable } from "../../shared/src/abortable.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import {
 	buildAgentRegistry,
@@ -274,10 +275,13 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 						`Your teammate is working in the background. Agent ID: ${id}\n\nCall get_subagent_result with this agent_id when you are ready for their final report.`,
 					);
 				}
-				const { record } = await context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, {
-					...options,
+				const { record } = await abortable(
+					context.manager.spawnAndWait(context.pi, ctx, resolvedType, params.prompt, {
+						...options,
+						signal,
+					}),
 					signal,
-				});
+				);
 				return textResult(formatRecord(record, true), record.status === "error");
 			} catch (error) {
 				return textResult(error instanceof Error ? error.message : String(error), true);

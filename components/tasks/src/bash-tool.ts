@@ -62,6 +62,7 @@ export async function prepareShellCommand(
 	ctx: ExtensionContext | undefined,
 	allowRtk: boolean,
 ): Promise<PreparedShellCommand> {
+	signal?.throwIfAborted();
 	const { command, stdin } = params;
 	const verbatim = (params as BashParameters).verbatim === true;
 	const effectiveCwd = ctx?.cwd || cwd || process.cwd();
@@ -83,6 +84,7 @@ export async function prepareShellCommand(
 		}
 	}
 
+	signal?.throwIfAborted();
 	return {
 		command,
 		cwd: effectiveCwd,

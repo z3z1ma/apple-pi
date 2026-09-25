@@ -96,7 +96,7 @@ Write monitor commands as event adapters. Emit only meaningful state changes on 
 ```
 
 - `list`: Show managed tasks, kinds, states, due times, process IDs, and summaries. Monitors are labeled `monitor`.
-- `status`: Show prompt details or command output. Monitor status also reports delivered events and whether event delivery is active or silent. `wait_seconds` optionally waits for active work to settle.
+- `status`: Show prompt details or command output. Monitor status also reports delivered events and whether event delivery is active or silent. `wait_seconds` optionally waits for active work to settle. Press `Esc` to interrupt the wait without cancelling the task.
 - `cancel`: Cancel a scheduled prompt or command, or terminate a running background command or monitor and its process tree.
 
 Prompt states are `scheduled`, `due`, `delivered`, or `cancelled`. Command and monitor states are `scheduled`, `running`, `completed`, `failed`, or `cancelled`.

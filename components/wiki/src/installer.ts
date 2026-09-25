@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -14,6 +14,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { abortable } from "../../shared/src/abortable.js";
 import {
 	getWikiReferences,
 	lintWiki,
@@ -79,15 +80,26 @@ function formatReferences(result: WikiReferencesResult): string {
 async function boundedOutput(
 	fullOutput: string,
 	fileName: string,
+	signal?: AbortSignal,
 ): Promise<{ text: string; truncation?: TruncationResult; fullOutputPath?: string }> {
+	signal?.throwIfAborted();
 	const truncation = truncateHead(fullOutput, { maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES });
 	if (!truncation.truncated) return { text: fullOutput };
 
 	const directory = await mkdtemp(join(tmpdir(), "apple-pi-wiki-"));
-	const fullOutputPath = join(directory, fileName);
-	await withFileMutationQueue(fullOutputPath, () => writeFile(fullOutputPath, fullOutput, "utf8"));
-	const text = `${truncation.content}\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}). Full output saved to: ${fullOutputPath}]`;
-	return { text, truncation, fullOutputPath };
+	try {
+		signal?.throwIfAborted();
+		const fullOutputPath = join(directory, fileName);
+		await withFileMutationQueue(fullOutputPath, () =>
+			writeFile(fullOutputPath, fullOutput, { encoding: "utf8", signal }),
+		);
+		signal?.throwIfAborted();
+		const text = `${truncation.content}\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}). Full output saved to: ${fullOutputPath}]`;
+		return { text, truncation, fullOutputPath };
+	} catch (error) {
+		await rm(directory, { recursive: true, force: true });
+		throw error;
+	}
 }
 
 function createWikiLintTool() {
@@ -99,9 +111,9 @@ function createWikiLintTool() {
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
 			signal?.throwIfAborted();
-			const result = await lintWiki(ctx.cwd);
+			const result = await abortable(lintWiki(ctx.cwd, signal), signal);
 			signal?.throwIfAborted();
-			const output = await boundedOutput(formatLint(result), "wiki-lint.txt");
+			const output = await abortable(boundedOutput(formatLint(result), "wiki-lint.txt", signal), signal);
 			const details: WikiToolDetails = {
 				status: result.ok ? "passed" : "findings",
 				pageCount: result.pageCount,
@@ -152,9 +164,12 @@ function createWikiReferencesTool() {
 			signal?.throwIfAborted();
 			const depth = params.depth ?? 1;
 			if (depth !== 1 && depth !== 2) throw new Error("wiki_references depth must be 1 or 2");
-			const result = await getWikiReferences(ctx.cwd, params.target, params.direction ?? "both", depth);
+			const result = await abortable(
+				getWikiReferences(ctx.cwd, params.target, params.direction ?? "both", depth, signal),
+				signal,
+			);
 			signal?.throwIfAborted();
-			const output = await boundedOutput(formatReferences(result), "wiki-references.txt");
+			const output = await abortable(boundedOutput(formatReferences(result), "wiki-references.txt", signal), signal);
 			const details: WikiToolDetails = {
 				status: "references",
 				nodeCount: result.nodes.length,

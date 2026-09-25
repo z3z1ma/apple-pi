@@ -18,7 +18,8 @@ export function resetRtkCache(): void {
 	cachedStatus = undefined;
 }
 
-export async function probeRtk(options?: { timeoutMs?: number }): Promise<RtkStatus> {
+export async function probeRtk(options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<RtkStatus> {
+	options?.signal?.throwIfAborted();
 	if (cachedStatus !== undefined) {
 		return cachedStatus;
 	}
@@ -31,8 +32,10 @@ export async function probeRtk(options?: { timeoutMs?: number }): Promise<RtkSta
 	try {
 		const { stdout } = await execFileAsync("rtk", ["--version"], {
 			timeout: options?.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
+			signal: options?.signal,
 			windowsHide: true,
 		});
+		options?.signal?.throwIfAborted();
 
 		const rawVersion = stdout.replace(/^rtk\s+/, "").trim();
 		const parsed = parseSemver(rawVersion);
@@ -51,12 +54,13 @@ export async function probeRtk(options?: { timeoutMs?: number }): Promise<RtkSta
 		cachedStatus = { available: true, version: rawVersion || undefined };
 		return cachedStatus;
 	} catch {
+		options?.signal?.throwIfAborted();
 		cachedStatus = { available: false };
 		return cachedStatus;
 	}
 }
 
-export async function isRtkAvailable(): Promise<boolean> {
-	const status = await probeRtk();
+export async function isRtkAvailable(signal?: AbortSignal): Promise<boolean> {
+	const status = await probeRtk({ signal });
 	return status.available;
 }

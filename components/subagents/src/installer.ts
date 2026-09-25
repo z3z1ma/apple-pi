@@ -8,6 +8,7 @@ import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
+import { abortable } from "../../shared/src/abortable.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
@@ -898,13 +899,16 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						detailsFor(record, tracker.state, { status: "background" }),
 					);
 				}
-				const result = await manager.spawnAndWait(pi, ctx, type, params.prompt, { ...options, signal }, (agentId) => {
-					id = agentId;
-					activityById.set(agentId, tracker.state);
-					widget.update();
-					const record = manager.getRecord(agentId);
-					if (record) record.toolCallId = toolCallId;
-				});
+				const result = await abortable(
+					manager.spawnAndWait(pi, ctx, type, params.prompt, { ...options, signal }, (agentId) => {
+						id = agentId;
+						activityById.set(agentId, tracker.state);
+						widget.update();
+						const record = manager.getRecord(agentId);
+						if (record) record.toolCallId = toolCallId;
+					}),
+					signal,
+				);
 				const record = result.record;
 				const output = `${formatAgentOutput(record, inlineAgentOutput(record, true))}${continuationSuffix(record)}`;
 				return textResult(

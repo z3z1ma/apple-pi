@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { abortable } from "../../../components/shared/src/abortable.js";
 import type {
 	HarnessBoundedActivity,
 	ManagedBackgroundRun,
@@ -157,10 +158,10 @@ export class TodoExecution {
 		return todo;
 	}
 
-	async waitForOutput(id: number): Promise<TodoView> {
+	async waitForOutput(id: number, signal?: AbortSignal): Promise<TodoView> {
 		const todo = this.output(id);
 		const run = todo.execution && this.local.get(todo.execution.runId);
-		if (run) await run.run.completion;
+		if (run) await abortable(run.run.completion, signal);
 		return this.output(id);
 	}
 

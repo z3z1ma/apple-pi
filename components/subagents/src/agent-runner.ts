@@ -396,6 +396,7 @@ export async function runAgent(
 	const configCwd = options.configCwd ?? effectiveCwd;
 
 	const env = await detectEnv(options.pi, effectiveCwd);
+	options.signal?.throwIfAborted();
 
 	// Get parent system prompt for append-mode agents
 	const parentSystemPrompt = ctx.getSystemPrompt();
@@ -461,6 +462,7 @@ export async function runAgent(
 		appendSystemPromptOverride: () => [],
 	});
 	await runInChildSessionContext(() => loader.reload());
+	options.signal?.throwIfAborted();
 
 	// Plain entries in `tools:` are expected to be built-in names (extension tools
 	// go through `ext:`), so an unknown name there is unambiguously a typo. Previously
@@ -588,19 +590,23 @@ export async function runAgent(
 	// Bind the explicit `-e` extensions so session_start fires. Registry scope
 	// is `excludeTools` from session construction. Stay in child-session ALS so
 	// a leaked context.ts factory cannot register the pair programmer notebook.
-	await runInChildSessionContext(() =>
-		session.bindExtensions({
-			onError: (err) => {
-				notifyObserver(options.onToolActivity, {
-					type: "end",
-					toolName: `extension-error:${err.extensionPath}`,
-				});
-			},
-		}),
-	).catch(async (error) => {
+	try {
+		options.signal?.throwIfAborted();
+		await runInChildSessionContext(() =>
+			session.bindExtensions({
+				onError: (err) => {
+					notifyObserver(options.onToolActivity, {
+						type: "end",
+						toolName: `extension-error:${err.extensionPath}`,
+					});
+				},
+			}),
+		);
+		options.signal?.throwIfAborted();
+	} catch (error) {
 		await disposeAgentSession(session);
 		throw error;
-	});
+	}
 
 	// Pi activates a small built-in default at turn 1. Promote every registered
 	// tool that excludeTools did not deny, including ledger_add / ledger_close.

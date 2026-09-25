@@ -109,22 +109,30 @@ function sameFile(left: { dev: number; ino: number }, right: { dev: number; ino:
 	return left.dev === right.dev && left.ino === right.ino;
 }
 
-async function readNonSymlinkFile(path: string, expected: { dev: number; ino: number }): Promise<string> {
+async function readNonSymlinkFile(
+	path: string,
+	expected: { dev: number; ino: number },
+	signal?: AbortSignal,
+): Promise<string> {
+	signal?.throwIfAborted();
 	const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
 	try {
+		signal?.throwIfAborted();
 		const stat = await handle.stat();
 		if (!stat.isFile() || !sameFile(expected, stat)) throw new Error(".wiki changed while scanning");
-		return await handle.readFile({ encoding: "utf8" });
+		return await handle.readFile({ encoding: "utf8", signal });
 	} finally {
 		await handle.close();
 	}
 }
 
 /** Resolve the nearest Git worktree root, or retain the current project directory outside Git. */
-export async function findWikiProjectRoot(start: string): Promise<string> {
+export async function findWikiProjectRoot(start: string, signal?: AbortSignal): Promise<string> {
+	signal?.throwIfAborted();
 	const initial = await realpath(resolve(start));
 	let current = initial;
 	while (true) {
+		signal?.throwIfAborted();
 		if (await lstatIfPresent(join(current, ".git"))) return current;
 		const parent = dirname(current);
 		if (parent === current) return initial;
@@ -322,8 +330,9 @@ function sortFindings(findings: WikiFinding[]): WikiFinding[] {
 	);
 }
 
-async function loadWikiGraph(start: string): Promise<WikiGraph> {
-	const projectRoot = await findWikiProjectRoot(start);
+async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiGraph> {
+	const projectRoot = await findWikiProjectRoot(start, signal);
+	signal?.throwIfAborted();
 	const wikiRoot = join(projectRoot, ".wiki");
 	const wikiStat = await lstatIfPresent(wikiRoot);
 	if (!wikiStat) throw new Error(`No project wiki found at ${portablePath(relative(projectRoot, wikiRoot))}`);
@@ -331,6 +340,7 @@ async function loadWikiGraph(start: string): Promise<WikiGraph> {
 		throw new Error(".wiki must be a non-symlink directory inside the project root");
 	}
 	const canonicalWikiRoot = await realpath(wikiRoot);
+	signal?.throwIfAborted();
 	if (canonicalWikiRoot !== wikiRoot && !canonicalWikiRoot.startsWith(`${projectRoot}${sep}`)) {
 		throw new Error(".wiki resolves outside the project root");
 	}
@@ -338,12 +348,14 @@ async function loadWikiGraph(start: string): Promise<WikiGraph> {
 	const pages: WikiPage[] = [];
 	const findings: WikiFinding[] = [];
 	async function visit(directory: string): Promise<void> {
+		signal?.throwIfAborted();
 		const before = await lstat(directory);
 		if (before.isSymbolicLink() || !before.isDirectory()) throw new Error(".wiki changed while scanning");
 		const entries = (await readdir(directory, { withFileTypes: true })).sort((left, right) =>
 			left.name.localeCompare(right.name),
 		);
 		for (const entry of entries) {
+			signal?.throwIfAborted();
 			const absolute = join(directory, entry.name);
 			const path = portablePath(relative(projectRoot, absolute));
 			const stat = await lstat(absolute);
@@ -361,7 +373,8 @@ async function loadWikiGraph(start: string): Promise<WikiGraph> {
 			}
 			if (!stat.isFile() || extname(entry.name).toLowerCase() !== ".md") continue;
 			const slug = parse(entry.name).name;
-			const content = await readNonSymlinkFile(absolute, stat);
+			const content = await readNonSymlinkFile(absolute, stat, signal);
+			signal?.throwIfAborted();
 			const after = await lstat(absolute);
 			if (!sameFile(stat, after) || after.isSymbolicLink()) throw new Error(".wiki changed while scanning");
 			pages.push({
@@ -378,6 +391,7 @@ async function loadWikiGraph(start: string): Promise<WikiGraph> {
 		}
 	}
 	await visit(wikiRoot);
+	signal?.throwIfAborted();
 	pages.sort((left, right) => left.path.localeCompare(right.path));
 
 	const pagesBySlug = new Map<string, WikiPage[]>();
@@ -471,8 +485,8 @@ async function loadWikiGraph(start: string): Promise<WikiGraph> {
 	};
 }
 
-export async function lintWiki(start: string): Promise<WikiLintResult> {
-	const graph = await loadWikiGraph(start);
+export async function lintWiki(start: string, signal?: AbortSignal): Promise<WikiLintResult> {
+	const graph = await loadWikiGraph(start, signal);
 	return {
 		projectRoot: graph.projectRoot,
 		wikiRoot: graph.wikiRoot,
@@ -528,12 +542,13 @@ export async function getWikiReferences(
 	targetInput: string,
 	direction: WikiDirection,
 	depth: WikiDepth,
+	signal?: AbortSignal,
 ): Promise<WikiReferencesResult> {
 	if (!(["inbound", "outbound", "both"] as const).includes(direction)) {
 		throw new Error("wiki_references direction must be inbound, outbound, or both");
 	}
 	if (depth !== 1 && depth !== 2) throw new Error("wiki_references depth must be 1 or 2");
-	const graph = await loadWikiGraph(start);
+	const graph = await loadWikiGraph(start, signal);
 	const target = resolveTarget(graph, targetInput);
 	const distances = new Map<string, number>([[target.path, 0]]);
 	const queue = [target.path];

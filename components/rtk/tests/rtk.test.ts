@@ -53,6 +53,11 @@ describe("RTK detector", () => {
 		}
 	});
 
+	it("does not probe or cache availability after cancellation", async () => {
+		await expect(probeRtk({ signal: AbortSignal.abort() })).rejects.toMatchObject({ name: "AbortError" });
+		expect((await probeRtk()).available).toBe(true);
+	});
+
 	it("detects RTK when installed on the host", async () => {
 		const status = await probeRtk();
 		expect(status.available).toBe(true);
@@ -86,6 +91,12 @@ describe("RTK rewriteCommand", () => {
 	beforeEach(() => {
 		resetRtkCache();
 		delete process.env.RTK_DISABLED;
+	});
+
+	it("propagates cancellation rather than failing open", async () => {
+		await expect(rewriteCommand("git status", { signal: AbortSignal.abort() })).rejects.toMatchObject({
+			name: "AbortError",
+		});
 	});
 
 	it("ignores empty, whitespace, or invalid commands", async () => {

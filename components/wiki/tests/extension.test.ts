@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as graph from "../src/graph.js";
 import { installWiki } from "../src/installer.js";
 import { WIKI_SYSTEM_PROMPT_TAG } from "../src/system-prompt.js";
 
@@ -30,6 +31,7 @@ function captureWikiExtension() {
 }
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -67,6 +69,43 @@ describe("wiki extension", () => {
 			.execute("refs-1", { target: "b", direction: "inbound", depth: 1 }, undefined, undefined, ctx);
 		expect(references.content[0].text).toContain(".wiki/pages/a.md:1:1 [[b#Details]] -> .wiki/pages/b.md");
 		expect(references.details).toMatchObject({ status: "references", nodeCount: 2, edgeCount: 1 });
+	});
+
+	it("releases an interrupted scan even when a filesystem operation remains pending", async () => {
+		const root = createProject({ ".wiki/pages/a.md": "# A" });
+		vi.spyOn(graph, "lintWiki").mockImplementation(() => new Promise(() => {}));
+		const { tools } = captureWikiExtension();
+		const controller = new AbortController();
+		const wait = tools.get("wiki_lint").execute("blocked-scan", {}, controller.signal, undefined, { cwd: root });
+
+		controller.abort();
+		const outcome = wait.then(
+			() => "completed",
+			() => "aborted",
+		);
+		expect(await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))])).toBe(
+			"aborted",
+		);
+	});
+
+	it.each(["wiki_lint", "wiki_references"])("stops %s while scanning after cancellation", async (name) => {
+		const root = createProject({ ".wiki/pages/a.md": "[[b]]", ".wiki/pages/b.md": "# B" });
+		const { tools } = captureWikiExtension();
+		const controller = new AbortController();
+		const originalCheck = controller.signal.throwIfAborted.bind(controller.signal);
+		let checks = 0;
+		vi.spyOn(controller.signal, "throwIfAborted").mockImplementation(() => {
+			if (++checks === 3) controller.abort();
+			originalCheck();
+		});
+
+		await expect(
+			tools
+				.get(name)
+				.execute("cancelled-wiki", name === "wiki_lint" ? {} : { target: "a" }, controller.signal, undefined, {
+					cwd: root,
+				}),
+		).rejects.toMatchObject({ name: "AbortError" });
 	});
 
 	it("renders an empty heading fragment explicitly", async () => {

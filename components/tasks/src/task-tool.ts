@@ -43,12 +43,17 @@ function listTasks(taskManager: TaskManager) {
 	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: {} };
 }
 
-async function taskStatus(taskManager: TaskManager, taskId: string | undefined, waitSeconds: number | undefined) {
+async function taskStatus(
+	taskManager: TaskManager,
+	taskId: string | undefined,
+	waitSeconds: number | undefined,
+	signal: AbortSignal | undefined,
+) {
 	if (!taskId) throw new Error("task_id is required for action: 'status'");
 	let task = taskManager.get(taskId);
 	if (!task) throw new Error(`Task '${taskId}' not found`);
 	if (waitSeconds && waitSeconds > 0 && isActiveTask(task)) {
-		task = (await taskManager.waitFor(taskId, waitSeconds * 1000)) ?? task;
+		task = (await taskManager.waitFor(taskId, waitSeconds * 1000, signal)) ?? task;
 	}
 
 	const lines = [
@@ -115,12 +120,12 @@ export function createTaskManagementTool(taskManager: TaskManager) {
 			"Manage scheduled prompts and commands, immediate background commands, and monitors: list tasks, inspect status and output, or cancel active work. Use wait_seconds with status to wait for completion or delivery.",
 		promptSnippet: "Manage scheduled, background, or monitored tasks (list, inspect, wait, or cancel).",
 		parameters: taskParameters,
-		async execute(_toolCallId, params: TaskParameters) {
+		async execute(_toolCallId, params: TaskParameters, signal) {
 			switch (params.action) {
 				case "list":
 					return listTasks(taskManager);
 				case "status":
-					return taskStatus(taskManager, params.task_id, params.wait_seconds);
+					return taskStatus(taskManager, params.task_id, params.wait_seconds, signal);
 				case "cancel":
 					return cancelTask(taskManager, params.task_id);
 			}

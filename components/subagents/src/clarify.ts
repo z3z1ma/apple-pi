@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type AgentRunContext, runAgent } from "./agent-runner.js";
+import { abortable } from "../../shared/src/abortable.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import type { AgentConfig } from "./types.js";
 
@@ -107,6 +108,7 @@ export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
 			const snapshot = captureClarifyContext(parent);
 			let session: AgentSession | undefined;
 			let unsubscribe: (() => void) | undefined;
+			let running: ReturnType<typeof runAgent> | undefined;
 			const usage: Usage = {
 				input: 0,
 				output: 0,
@@ -116,7 +118,7 @@ export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 			};
 			try {
-				const result = await runAgent(
+				running = runAgent(
 					snapshot,
 					CLARIFICATION_CONFIG.name,
 					`Clarification question from your child agent:\n\n${question}`,
@@ -145,6 +147,7 @@ export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
 						},
 					},
 				);
+				const result = await abortable(running, signal);
 				signal?.throwIfAborted();
 				if (result.aborted) throw new Error("Clarification was aborted.");
 				if (result.failure) throw new Error(`Clarification failed: ${result.failure}`);
@@ -154,8 +157,17 @@ export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
 					usage,
 				};
 			} finally {
-				unsubscribe?.();
-				await disposeAgentSession(session);
+				if (session && signal?.aborted && running) {
+					void running
+						.finally(async () => {
+							unsubscribe?.();
+							await disposeAgentSession(session);
+						})
+						.catch(() => {});
+				} else {
+					unsubscribe?.();
+					await disposeAgentSession(session);
+				}
 			}
 		},
 	});

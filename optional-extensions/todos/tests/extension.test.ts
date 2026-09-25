@@ -105,6 +105,55 @@ it("latches unavailable without exposing a mutation when session snapshot persis
 	await expect(byName("todo_list").execute("call", {})).rejects.toThrow(/unavailable after snapshot failure/);
 });
 
+it("releases an aborted todo_output wait without stopping or losing the managed run", async () => {
+	const tools: any[] = [];
+	const handlers = new Map<string, any>();
+	let resolveRun!: (record: { status: string; result?: string }) => void;
+	const completion = new Promise<{ status: string; result?: string }>((resolve) => {
+		resolveRun = resolve;
+	});
+	const abortRun = vi.fn(() => true);
+	const service = { startBackground: () => ({ id: "agent-1", completion, abort: abortRun }) };
+	installTodos({
+		appendEntry: vi.fn(),
+		on: (name: string, handler: any) => handlers.set(name, handler),
+		registerTool: (tool: any) => tools.push(tool),
+		registerCommand: vi.fn(),
+		events: { emit: (_name: string, reply: (value: unknown) => void) => reply(service) },
+	} as any);
+	const ctx = {
+		cwd: process.cwd(),
+		isProjectTrusted: () => false,
+		sessionManager: { getBranch: () => [] },
+	};
+	handlers.get("session_start")({}, ctx);
+	const byName = (name: string) => tools.find((tool) => tool.name === name);
+	await byName("todo_create").execute("call", { title: "run", agent_type: "builder" }, undefined, undefined, ctx);
+	await byName("todo_execute").execute("call", { ids: [1] }, undefined, undefined, ctx);
+	const controller = new AbortController();
+	const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+	const waiting = byName("todo_output").execute("call", { id: 1, wait: true }, controller.signal, undefined, ctx);
+	controller.abort();
+	await expect(
+		Promise.race([waiting, new Promise((resolve) => setTimeout(() => resolve("still waiting"), 100))]),
+	).rejects.toMatchObject({ name: "AbortError" });
+	expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+	expect(abortRun).not.toHaveBeenCalled();
+	expect(
+		(await byName("todo_output").execute("call", { id: 1, wait: false }, controller.signal, undefined, ctx)).details,
+	).toMatchObject({ status: "active" });
+	const next = new AbortController();
+	const removeOnCompletion = vi.spyOn(next.signal, "removeEventListener");
+	const finishing = byName("todo_output").execute("call", { id: 1, wait: true }, next.signal, undefined, ctx);
+	resolveRun({ status: "completed", result: "done" });
+	expect((await finishing).details).toMatchObject({ status: "completed", result: "done" });
+	expect(removeOnCompletion).toHaveBeenCalledWith("abort", expect.any(Function));
+	expect((await byName("todo_output").execute("call", { id: 1 }, undefined, undefined, ctx)).details).toMatchObject({
+		status: "completed",
+		result: "done",
+	});
+});
+
 it("settles local execution before tree navigation and never appends old state after session_tree", async () => {
 	const tools: any[] = [];
 	const handlers = new Map<string, any>();

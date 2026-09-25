@@ -145,12 +145,13 @@ export class TaskManager {
 		return { success: true, message: `Task '${taskId}' was cancelled.` };
 	}
 
-	async waitFor(taskId: string, timeoutMs: number): Promise<ManagedTask | undefined> {
+	async waitFor(taskId: string, timeoutMs: number, signal?: AbortSignal): Promise<ManagedTask | undefined> {
+		signal?.throwIfAborted();
 		const task = this.tasks.get(taskId);
 		if (!task) return undefined;
 		if (!isActiveTask(task)) return task;
 
-		return new Promise<ManagedTask>((resolve) => {
+		return new Promise<ManagedTask>((resolve, reject) => {
 			let timer: NodeJS.Timeout | undefined;
 			const unsubscribe = this.onTaskFinished((finishedTask) => {
 				if (finishedTask.id === taskId) {
@@ -161,7 +162,13 @@ export class TaskManager {
 			const cleanup = () => {
 				if (timer) clearTimeout(timer);
 				unsubscribe();
+				signal?.removeEventListener("abort", onAbort);
 			};
+			const onAbort = () => {
+				cleanup();
+				reject(signal?.reason ?? new DOMException("The operation was aborted", "AbortError"));
+			};
+			signal?.addEventListener("abort", onAbort, { once: true });
 			if (timeoutMs > 0) {
 				timer = setTimeout(() => {
 					cleanup();

@@ -272,6 +272,75 @@ describe("clarify with real Pi sessions", () => {
 		expect(disposals[0]).toHaveBeenCalledTimes(1);
 	}, 30_000);
 
+	it("releases a cancelled clarification while its fork is still settling", async () => {
+		const { parent, pi } = setup();
+		const dispose = vi.fn();
+		const session = {
+			extensionRunner: { emit: vi.fn() },
+			dispose,
+			subscribe: vi.fn(() => () => {}),
+		} as unknown as AgentSession;
+		let finish!: () => void;
+		const pending = new Promise<never>((_resolve, reject) => {
+			finish = () => reject(new Error("fork aborted"));
+		});
+		vi.spyOn(runner, "runAgent").mockImplementation((_ctx, _type, _prompt, options) => {
+			options.onSessionCreated?.(session);
+			return pending;
+		});
+		const controller = new AbortController();
+		const call = createClarifyTool(pi, parent).execute(
+			"pending",
+			{ question: "What happened?" },
+			controller.signal,
+			undefined,
+			parent,
+		);
+		try {
+			controller.abort();
+			const outcome = call.then(
+				() => "completed",
+				() => "aborted",
+			);
+			expect(await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))])).toBe(
+				"aborted",
+			);
+			expect(dispose).not.toHaveBeenCalled();
+		} finally {
+			finish();
+		}
+		await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+	});
+
+	it("releases clarification interrupted during fork startup", async () => {
+		const { parent, pi } = setup();
+		let release!: () => void;
+		const git = new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+			release = () => resolve({ code: 1, stdout: "", stderr: "" });
+		});
+		pi.exec.mockImplementation(() => git);
+		const controller = new AbortController();
+		const call = createClarifyTool(pi, parent).execute(
+			"start",
+			{ question: "What was decided?" },
+			controller.signal,
+			undefined,
+			parent,
+		);
+		try {
+			controller.abort();
+			const outcome = call.then(
+				() => "completed",
+				() => "aborted",
+			);
+			expect(await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))])).toBe(
+				"aborted",
+			);
+		} finally {
+			release();
+		}
+	});
+
 	it("avoids creating a fork for a blank question or an already cancelled call", async () => {
 		const { parent, pi } = setup();
 		const tool = createClarifyTool(pi, parent);

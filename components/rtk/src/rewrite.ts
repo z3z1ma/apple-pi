@@ -35,6 +35,7 @@ function execRtkRewrite(
  * Returns the rewritten command string, or null if unrewritten / RTK unavailable.
  */
 export async function rewriteCommand(command: string, options?: RewriteOptions): Promise<string | null> {
+	options?.signal?.throwIfAborted();
 	if (!command || typeof command !== "string" || !command.trim()) {
 		return null;
 	}
@@ -48,7 +49,8 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 		return null;
 	}
 
-	const available = await isRtkAvailable();
+	const available = await isRtkAvailable(options?.signal);
+	options?.signal?.throwIfAborted();
 	if (!available) {
 		return null;
 	}
@@ -56,6 +58,7 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 	try {
 		const timeoutMs = options?.timeoutMs ?? DEFAULT_REWRITE_TIMEOUT_MS;
 		const result = await execRtkRewrite(command, timeoutMs, options?.signal);
+		options?.signal?.throwIfAborted();
 
 		if (result.code === 0 || result.code === 3) {
 			const rewritten = result.stdout.trim();
@@ -64,6 +67,7 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 
 		return null;
 	} catch {
+		options?.signal?.throwIfAborted();
 		// Fail-open: never block or throw on unexpected rewrite errors
 		return null;
 	}
