@@ -22,8 +22,8 @@ afterEach(() => {
 	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 });
 
-describe("MCP alongside Python pi_exec", () => {
-	it("keeps MCP callable directly while the Python guest exposes only core tools", async () => {
+describe("MCP through Python pi_exec", () => {
+	it("calls the captured MCP gateway from Monty and keeps the direct tool available", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-mcp-exec-"));
 		directories.push(cwd);
 		process.env.PI_CODING_AGENT_DIR = join(cwd, "agent");
@@ -73,7 +73,22 @@ describe("MCP alongside Python pi_exec", () => {
 		const execInfo = session.getAllTools().find((tool) => tool.name === "pi_exec");
 		const codeDescription = String((execInfo?.parameters as any)?.properties.code.description ?? "");
 		expect(codeDescription).toContain("async def read(");
-		expect(codeDescription).not.toContain("extensions.mcp");
+		expect(codeDescription).toContain("async def mcp(");
+		session.setActiveToolsByName(["pi_exec"]);
+		const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
+		expect(exec).toBeDefined();
+		const composed = await exec!.execute(
+			"mcp-python-test",
+			{ code: 'response = await mcp(tool="test_echo", args={"value": "APPLE"})\nresponse["text"]' },
+			undefined,
+			() => {},
+		);
+		const composedText = composed.content.find((part) => part.type === "text");
+		if (composedText?.type !== "text") throw new Error("missing text result");
+		expect(composedText.text).toContain("echo:APPLE");
+		expect((composed.details as any).trace.operations).toEqual(
+			expect.arrayContaining([expect.objectContaining({ ref: "extensions.mcp", outcome: "succeeded" })]),
+		);
 		session.setActiveToolsByName(["mcp"]);
 		const gateway = session.agent.state.tools.find((tool) => tool.name === "mcp");
 		expect(gateway).toBeDefined();

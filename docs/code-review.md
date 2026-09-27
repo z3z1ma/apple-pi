@@ -31,9 +31,9 @@ Pi Exec is for a real graph, not merely because a change spans files. Two reduce
 
 The examples under [`skills/code-review/references`](../skills/code-review/references) are adaptable program bodies rather than hidden review engines:
 
-- `plan-review-verify.js` — dynamic partitions and focuses;
-- `multi-lens-review.js` — fixed independent lenses;
-- `residual-review-loop.js` — one bounded verifier-directed coverage pass.
+- `plan-review-verify.py` — dynamic partitions and focuses;
+- `multi-lens-review.py` — fixed independent lenses;
+- `residual-review-loop.py` — one bounded verifier-directed coverage pass.
 
 Use the live `pi_exec` tool contract when adapting a program. Pass the comparison explicitly. Planned and fixed-lens programs also require the axes the root intends to assess; pass applicable standards and intent source paths so reducers can inspect the governing evidence.
 

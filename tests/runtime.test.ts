@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createServer } from "node:http";
 import { join } from "node:path";
-import { ExtensionRunner } from "@earendil-works/pi-coding-agent";
+import { ExtensionRunner, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
@@ -431,10 +432,14 @@ describe("pi_exec agent binding", () => {
 describe("pi_exec tool", () => {
 	const register = () => {
 		const tools = new Map<string, any>();
+		const manager = SessionManager.inMemory(process.cwd());
 		let resultHandler: any;
 		let shutdownHandler: any;
 		const handlers = new Map<string, any[]>();
 		runtime({
+			appendEntry(type: string, data: unknown) {
+				manager.appendCustomEntry(type, data);
+			},
 			registerTool(value: any) {
 				tools.set(value.name, value);
 			},
@@ -446,16 +451,241 @@ describe("pi_exec tool", () => {
 				handlers.set(event, list);
 			},
 		} as any);
+		const tool = tools.get("pi_exec");
+		const execute = tool.execute.bind(tool);
+		tool.execute = (id: string, params: unknown, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) =>
+			execute(id, params, signal, onUpdate, { ...ctx, sessionManager: manager });
 		return {
 			tools,
-			tool: tools.get("pi_exec"),
+			tool,
 			resultHandler,
 			shutdownHandler,
 			emit(event: string, data: any = {}, ctx: any = {}) {
-				for (const h of handlers.get(event) ?? []) h(data, ctx);
+				for (const h of handlers.get(event) ?? []) h(data, { ...ctx, sessionManager: manager });
 			},
 		};
 	};
+
+	it("compiles strict schema shorthand inside a Python program", async () => {
+		const { tool } = register();
+		const result = await tool.execute(
+			"schema-shape",
+			{
+				code: 'schema(shape={"id": "int", "label?": "str", "tags": ["str"]})',
+			},
+			undefined,
+			undefined,
+			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "schema-shape" } },
+		);
+		expect(JSON.parse(result.content[0].text)).toEqual({
+			type: "object",
+			properties: {
+				id: { type: "integer" },
+				label: { type: "string" },
+				tags: { type: "array", items: { type: "string" } },
+			},
+			required: ["id", "tags"],
+			additionalProperties: false,
+		});
+	});
+
+	it("compiles repeated schemas locally without consuming host suspensions", async () => {
+		const { tool } = register();
+		const result = await tool.execute(
+			"local-schema",
+			{
+				code: 'for i in range(20):\n    value = schema({"id": "int"})\nvalue',
+				limits: { callBudget: 1 },
+			},
+			undefined,
+			undefined,
+			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "local-schema" } },
+		);
+		expect(JSON.parse(result.content[0].text)).toEqual({
+			type: "object",
+			properties: { id: { type: "integer" } },
+			required: ["id"],
+			additionalProperties: false,
+		});
+		expect(result.details.trace.operations).toEqual([]);
+	});
+
+	it("honors agent budgets for worker functions defined in an earlier feed", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			await tool.execute(
+				"define-worker",
+				{ code: 'async def call_worker():\n    return await agent_run(task="later")' },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			const result = await tool.execute(
+				"invoke-worker",
+				{ code: "await call_worker()", limits: { agentBudget: 1 } },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(JSON.parse(result.content[0].text)).toMatchObject({ status: "completed", text: "text:later" });
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("rejects unknown worker options before starting a worker", async () => {
+		const { tool, resultHandler } = register();
+		await expect(
+			tool.execute(
+				"worker-unknown",
+				{ code: 'await agent_run(task="test", unknown_option=True)' },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			),
+		).rejects.toThrow(/unknown_option/);
+		expect(
+			resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "worker-unknown" }).details.trace.operations,
+		).toEqual([]);
+	});
+
+	it("gathers three schema-checked worker values", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"three-workers",
+				{
+					code: 'import asyncio\nrows = await asyncio.gather(*[agent_run(task=name, context={"id": name}, output_schema=schema({"id": "str"})) for name in ["a", "b", "c"]])\nrows',
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(JSON.parse(result.content[0].text).map((row: any) => row.value)).toEqual([
+				{ id: "a" },
+				{ id: "b" },
+				{ id: "c" },
+			]);
+			expect(result.usage.totalTokens).toBe(30);
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("gathers structured worker results, keeps failures local, and aggregates usage", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const code =
+				'import asyncio\ntasks = ["a", "bad", "b"]\nrows = await asyncio.gather(*[agent_run(task=t, context={"id": t}, output_schema=schema({"id": "str"})) for t in tasks])\nrows';
+			const result = await tool.execute("worker-fanout", { code, limits: { concurrency: 3 } }, undefined, undefined, {
+				cwd: process.cwd(),
+				sessionManager: { getSessionId: () => "worker-fanout" },
+			});
+			const rows = JSON.parse(result.content[0].text);
+			expect(rows.map((row: any) => row.status)).toEqual(["completed", "failed", "completed"]);
+			expect(rows[0].value).toEqual({ id: "a" });
+			expect(rows[2].value).toEqual({ id: "b" });
+			expect(rows[1].error).toMatch(/worker failed/);
+			expect(result.usage).toMatchObject({ input: 8, output: 12, totalTokens: 20 });
+			expect(result.details.trace.operations).toHaveLength(3);
+			expect(result.details.trace.operations[0].children[0]).toMatchObject({
+				ref: "pi_exec_return",
+				outcome: "succeeded",
+			});
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("fits marked agent contexts before binding them to a worker", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"marked-context",
+				{
+					code: 'context = {"id": await context_clippable(value="abcdef", max_chars=3)}\nawait agent_run(task="fit", context=context, output_schema=schema({"id": "str"}))',
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(JSON.parse(result.content[0].text)).toMatchObject({
+				status: "completed",
+				value: { id: "abc" },
+				context: { truncated: ["$.id"], dropped: [] },
+			});
+			expect(result.details.trace.operations.map((operation: any) => operation.ref)).toEqual([
+				"evidence.context_clippable",
+				"agent.run",
+			]);
+			expect(JSON.stringify(result.details.trace.operations[0])).not.toContain("abcdef");
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("automatically fits an oversized marked worker context", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"oversized-context",
+				{
+					code: 'patch = await context_clippable(value="x" * 60_000)\nawait agent_run(task="fit", context={"id": "small", "patch": patch}, output_schema=schema({"id": "str"}))',
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			const row = JSON.parse(result.content[0].text);
+			expect(row.value).toEqual({ id: "small" });
+			expect(row.context.truncated).toEqual(["$.patch"]);
+			expect(row.context.serializedChars).toBeLessThanOrEqual(48_000);
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("agent returns text or a structured value based on output_schema", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"agent-values",
+				{
+					code: 'plain = await agent(task="text")\nstructured = await agent(task="typed", output_schema=schema({"id": "str"}))\n[plain, structured]',
+				},
+				undefined,
+				undefined,
+				{ cwd: process.cwd(), sessionManager: { getSessionId: () => "agent-values" } },
+			);
+			expect(JSON.parse(result.content[0].text)).toEqual(["text:text", { id: "typed" }]);
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
+	it("rejects an unknown agent option before starting any worker", async () => {
+		const { tool, resultHandler } = register();
+		const id = "agent-option";
+		await expect(
+			tool.execute(id, { code: 'await agent_run(task="inspect", unrecognized=True)' }, undefined, undefined, {
+				cwd: process.cwd(),
+				sessionManager: { getSessionId: () => id },
+			}),
+		).rejects.toThrow(/unknown-argument/i);
+		expect(resultHandler({ toolName: "pi_exec", isError: true, toolCallId: id }).details.trace.operations).toEqual([]);
+	});
 
 	it("rejects a wrong core-tool keyword before dispatching any host call", async () => {
 		const { tool, resultHandler } = register();
@@ -468,6 +698,110 @@ describe("pi_exec tool", () => {
 		).rejects.toThrow(/unknown-argument|pat.*argument/i);
 		const failure = resultHandler({ toolName: "pi_exec", isError: true, toolCallId: id });
 		expect(failure.details.trace.operations).toEqual([]);
+	});
+
+	it("type-checks captured extension tools before any host call", async () => {
+		const { tool, resultHandler } = register();
+		let calls = 0;
+		const mirror = {
+			name: "mirror",
+			label: "Mirror",
+			description: "Echo a value",
+			parameters: Type.Object({ value: Type.String() }),
+			async execute(_id: string, args: { value: string }) {
+				calls++;
+				return { content: [{ type: "text", text: `echo:${args.value}` }] };
+			},
+		};
+		const runner = Object.create(ExtensionRunner.prototype) as any;
+		runner.extensions = [
+			{
+				tools: new Map([
+					["mirror", { definition: mirror }],
+					["pi_exec", { definition: { ...mirror, name: "pi_exec" } }],
+				]),
+			},
+		];
+		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+		try {
+			expect(tool.parameters.properties.code.description).toContain("async def mirror(*, value: str)");
+			const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mirror" } };
+			await expect(
+				tool.execute(
+					"mirror-invalid",
+					{ code: 'await mirror(value="first")\nawait mirror(vlaue="second")' },
+					undefined,
+					undefined,
+					ctx,
+				),
+			).rejects.toThrow(/unknown-argument/);
+			expect(
+				resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "mirror-invalid" }).details.trace.operations,
+			).toEqual([]);
+			expect(calls).toBe(0);
+			const result = await tool.execute(
+				"mirror-valid",
+				{ code: 'response = await mirror(value="ok")\nresponse["text"]' },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(result.content[0].text).toBe("echo:ok");
+			expect(calls).toBe(1);
+		} finally {
+			runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...mirror, name: "pi_exec" } }]]) }];
+			ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+		}
+	});
+
+	it("discovers and calls a captured extension through the dynamic tool API", async () => {
+		const { tool } = register();
+		const mirror = {
+			name: "mirror",
+			label: "Mirror",
+			description: "Echo a value",
+			parameters: Type.Object({ value: Type.String() }),
+			async execute(_id: string, args: { value: string }) {
+				return { content: [{ type: "text", text: `echo:${args.value}` }] };
+			},
+		};
+		const runner = Object.create(ExtensionRunner.prototype) as any;
+		runner.extensions = [
+			{
+				tools: new Map([
+					["mirror", { definition: mirror }],
+					["pi_exec", { definition: { ...mirror, name: "pi_exec" } }],
+				]),
+			},
+		];
+		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+		try {
+			const code =
+				'names = [t["name"] for t in await tools_search(query="Echo a value")]\nfound = await tools_describe(name="mirror")\nreply = await tools_call(name="mirror", args={"value": "dynamic"})\n[names, found["name"] if found is not None else "", reply["text"]]';
+			const result = await tool.execute("dynamic-tools", { code }, undefined, undefined, {
+				cwd: process.cwd(),
+				sessionManager: { getSessionId: () => "dynamic-tools" },
+			});
+			expect(JSON.parse(result.content[0].text)).toEqual([["mirror"], "mirror", "echo:dynamic"]);
+		} finally {
+			runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...mirror, name: "pi_exec" } }]]) }];
+			ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
+		}
+	});
+
+	it("rejects root-only and interactive manager tools at the Python type-check boundary", async () => {
+		const { tool, resultHandler } = register();
+		const id = "excluded-tools";
+		await expect(
+			tool.execute(
+				id,
+				{ code: 'await schedule(delay_seconds=1, prompt="later")\nawait get_subagent_result(agent_id="x")' },
+				undefined,
+				undefined,
+				{ cwd: process.cwd(), sessionManager: { getSessionId: () => id } },
+			),
+		).rejects.toThrow(/unresolved-reference/);
+		expect(resultHandler({ toolName: "pi_exec", isError: true, toolCallId: id }).details.trace.operations).toEqual([]);
 	});
 
 	it("type-checks against the active parent core-tool schema", async () => {
@@ -617,10 +951,11 @@ describe("pi_exec tool", () => {
 		expect((await tool.execute("post-abort", { code: "1 + 1" }, undefined, undefined, ctx)).content[0].text).toBe("2");
 	});
 
-	it("aborting one invocation leaves a concurrent invocation running", async () => {
-		const { tool } = register();
+	it("aborting one root session leaves another running", async () => {
+		const { tool: siblingTool } = register();
+		const { tool: cancelledTool } = register();
 		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "sibling" } };
-		const sibling = tool.execute(
+		const sibling = siblingTool.execute(
 			"sibling",
 			{ code: "import asyncio\nawait asyncio.sleep(0.5)\n42" },
 			undefined,
@@ -628,7 +963,7 @@ describe("pi_exec tool", () => {
 			ctx,
 		);
 		const controller = new AbortController();
-		const cancelled = tool.execute(
+		const cancelled = cancelledTool.execute(
 			"cancel-sibling",
 			{ code: "while True:\n    pass", limits: { timeoutSeconds: 5 } },
 			controller.signal,
@@ -675,6 +1010,33 @@ describe("pi_exec tool", () => {
 		setTimeout(() => controller.abort(), 100);
 		await expect(running).rejects.toThrow(/aborted/);
 		expect(Date.now() - started).toBeLessThan(2_000);
+	});
+
+	it("cancels gathered host work when Python raises an ordinary exception", async () => {
+		let disconnected = false;
+		const server = createServer((request, response) => {
+			request.on("close", () => {
+				disconnected = true;
+			});
+			setTimeout(() => response.end("late"), 1_500).unref();
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		try {
+			const address = server.address();
+			if (!address || typeof address === "string") throw new Error("Expected a local HTTP port");
+			const { tool, resultHandler } = register();
+			const code = `import asyncio\nasync def fail():\n    await asyncio.sleep(0.2)\n    raise ValueError("boom")\nawait asyncio.gather(fail(), fetch("http://127.0.0.1:${address.port}/slow"))`;
+			await expect(
+				tool.execute("gather-failure", { code }, undefined, undefined, { cwd: process.cwd() }),
+			).rejects.toThrow(/boom/);
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			expect(disconnected).toBe(true);
+			const trace = resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "gather-failure" }).details.trace;
+			expect(trace.operations.find((operation: any) => operation.ref === "fetch")?.outcome).toBe("aborted");
+		} finally {
+			server.closeAllConnections();
+			server.close();
+		}
 	});
 
 	it("stops runaway Python at the deadline and permits the next call", async () => {
@@ -747,6 +1109,65 @@ describe("pi_exec tool", () => {
 		).rejects.toThrow(/refusing to search from protected root/);
 	});
 
+	it("reads model-invocable skill bodies without frontmatter and rejects human-only skills", async () => {
+		const { tool } = register();
+		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "skills" } };
+		const result = await tool.execute(
+			"skills",
+			{
+				code: 'names = [item["name"] for item in await skills_list()]\nbody = await skills_body(name="code-review")\n["code-review" in names, body.startswith("---"), "Review" in body]',
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(JSON.parse(result.content[0].text)).toEqual([true, false, true]);
+		await expect(
+			tool.execute("human-skill", { code: 'await skills_body("implement")' }, undefined, undefined, ctx),
+		).rejects.toThrow(/unknown|not available|model-invocable/i);
+	});
+
+	it("fetches a local response without tracing header or body values and cancels in flight", async () => {
+		const server = createServer((request, response) => {
+			if (request.url?.startsWith("/wait")) {
+				const timer = setTimeout(() => response.end("late"), 5_000);
+				response.on("close", () => clearTimeout(timer));
+				return;
+			}
+			response.setHeader("content-type", "text/plain");
+			response.setHeader("x-source", "local");
+			response.end("pong");
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		try {
+			const address = server.address();
+			if (!address || typeof address === "string") throw new Error("no listening port");
+			const origin = `http://127.0.0.1:${address.port}`;
+			const { tool, resultHandler } = register();
+			const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "fetch" } };
+			const code = `response = await fetch(url=${JSON.stringify(`${origin}/text?token=private`)}, method="POST", headers={"authorization": "Bearer secret"}, body="private")\n[response["status"], response["headers"]["x-source"], response["text"]]`;
+			const result = await tool.execute("fetch", { code }, undefined, undefined, ctx);
+			expect(JSON.parse(result.content[0].text)).toEqual([200, "local", "pong"]);
+			expect(JSON.stringify(result.details.trace.operations)).not.toMatch(/secret|private/);
+			const controller = new AbortController();
+			const running = tool.execute(
+				"fetch-abort",
+				{ code: `await fetch(${JSON.stringify(`${origin}/wait`)})` },
+				controller.signal,
+				undefined,
+				ctx,
+			);
+			setTimeout(() => controller.abort(), 100);
+			await expect(running).rejects.toThrow(/aborted/);
+			expect(
+				resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "fetch-abort" }).details.trace.outcome,
+			).toBe("aborted");
+		} finally {
+			server.closeAllConnections();
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+		}
+	});
+
 	it("honors the core call budget and captures print without host calls", async () => {
 		const { tool, resultHandler } = register();
 		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "budget" } };
@@ -795,28 +1216,6 @@ describe("pi_exec tool", () => {
 		expect(editResult.ok).toBe(false);
 		expect(editResult.output).toMatch(/missing|not found|ENOENT/i);
 		expect(result.details.trace.operations.map((operation: any) => operation.outcome)).toEqual(["succeeded", "failed"]);
-	});
-
-	it("resumes JSON state by ID until branch-aligned Monty sessions replace it", async () => {
-		const { tool } = register();
-		const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "state" } };
-		const first = await tool.execute(
-			"state-1",
-			{ code: 'state["count"] = 1\nstate["count"]' },
-			undefined,
-			undefined,
-			ctx,
-		);
-		expect(first.content[0].text).toBe("1");
-		expect(first.details.stateId).toBeTypeOf("string");
-		const second = await tool.execute(
-			"state-2",
-			{ code: 'state["count"] + 1', state: first.details.stateId },
-			undefined,
-			undefined,
-			ctx,
-		);
-		expect(second.content[0].text).toBe("2");
 	});
 
 	it("writes and edits through the core-tool bridge with nested Python arguments", async () => {

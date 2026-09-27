@@ -89,3 +89,5 @@
 - `.ledger/history/202609192323-polish-managed-task-active-work-ui/task.md` — done — Polish managed tasks and subagent active-work UI — Replace below-editor Fleet duplication with polished above-editor active-work visibility and first-class agent/task management overlays.
 
 - `.ledger/history/202609200830-unify-active-work-manager/task.md` — done — Unify active-work management under /work — Replace separate /agents and /tasks entrypoints with one tabbed work modal opened by /work or Ctrl+W, while preserving domain-specific detail actions.
+
+- `.ledger/history/202609251319-monty-pi-exec/task.md` — done — Replace pi_exec JavaScript VM with Monty Python sandbox — Research and plan to rebuild pi_exec on @pydantic/monty: type-checked Python guest, host-function bridges, VM-enforced limits, optional branch-aligned persistent sessions.

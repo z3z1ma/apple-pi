@@ -256,6 +256,10 @@ try {
 	assert.match(piExecGuidance, /asyncio\.gather/);
 	assert.match(piExecGuidance, /before any host call runs/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /async def git_change\(/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /async def agent_run\(/);
+	assert(piExecTool.definition.parameters.properties.reset, "pi_exec reset parameter missing");
+	assert.equal(piExecTool.definition.parameters.properties.state, undefined);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);
@@ -435,9 +439,9 @@ try {
 	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
 	assert.match(resultTool.definition.description, /use a very large value/);
 	assert.match(resultTool.definition.description, /leaves them working in the background/);
-	assert(existsSync("skills/code-review/references/plan-review-verify.js"), "missing code-review planned reference");
-	assert(existsSync("skills/code-review/references/multi-lens-review.js"), "missing code-review multi-lens reference");
-	assert(existsSync("skills/code-review/references/residual-review-loop.js"), "missing code-review residual reference");
+	assert(existsSync("skills/code-review/references/plan-review-verify.py"), "missing code-review planned reference");
+	assert(existsSync("skills/code-review/references/multi-lens-review.py"), "missing code-review multi-lens reference");
+	assert(existsSync("skills/code-review/references/residual-review-loop.py"), "missing code-review residual reference");
 	assert(existsSync("skills/code-review/references/planner.md"), "missing code-review planner reference");
 	assert(existsSync("skills/code-review/references/reviewer.md"), "missing code-review reviewer reference");
 	assert(existsSync("skills/code-review/references/verifier.md"), "missing code-review verifier reference");
@@ -447,8 +451,8 @@ try {
 		!existsSync("skills/code-review/references/security-baseline-review.js"),
 		"security review should use the fixed multi-lens graph",
 	);
-	assert(existsSync("skills/ralph/references/ralph-simple.js"), "missing general Ralph reference");
-	assert(existsSync("skills/ralph/references/ralph-ledger.js"), "missing ledger Ralph reference");
+	assert(existsSync("skills/ralph/references/ralph-simple.py"), "missing general Ralph reference");
+	assert(existsSync("skills/ralph/references/ralph-ledger.py"), "missing ledger Ralph reference");
 	assert(
 		!existsSync("skills/ralph/references/ralph-ledger-review.js"),
 		"duplicated reviewed Ralph graph must be absent",

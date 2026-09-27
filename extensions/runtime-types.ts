@@ -27,10 +27,9 @@ export interface ExecutionOperation {
 
 export interface ProgramExecution {
 	value?: unknown;
-	state?: unknown;
-	stateChanged?: boolean;
 	outcome: ExecutionOutcome;
 	error?: string;
+	sessionUsable: boolean;
 }
 
 export type ProgramHostCall = (ref: string, args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;

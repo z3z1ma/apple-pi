@@ -40,7 +40,7 @@ Apple Pi is architected around six core pillars that fundamentally alter how an 
                     │  Monty Python Subprocess  │  │ (Senior Architect Review) │
                     │  • Loops & asyncio.gather │  └───────────────────────────┘
                     │  • Core Pi tool calls     │
-                    │  • JSON state IDs         │
+                    │  • Branch-aligned state   │
                     │  • JSON final expression  │
                     └─────────────┬─────────────┘
                                   │
@@ -67,7 +67,7 @@ texts = await asyncio.gather(*[read(path=path) for path in paths])
 {path: len(text) for path, text in zip(paths, texts)}
 ```
 
-The current slice exposes the core Pi tools. Model workers, extension tools, HTTP, the evidence library, saved Python programs, and branch-aligned session persistence follow in the governing ledger tickets.
+The guest also composes model workers, captured extension tools, HTTP, Git and test evidence, and saved Python programs. Its globals follow Pi's session tree through Monty checkpoints.
 
 ### 2. Dual-Hemisphere Pairing & The Escalation Ladder
 
@@ -177,7 +177,7 @@ Apple Pi ships with a suite of battle-tested engineering skills in [`skills/`](s
 Architecture is defined by what you choose *not* to build. Consult [`docs/boundaries.md`](docs/boundaries.md) for the full record of rejected ideas:
 
 - ❌ **No Vector Databases or Local Embedding Stores**: Lexical search, ripgrep, and derived Markdown graph traversal consistently outperform vector similarity on codebases while eliminating database corruptions and indexing lag.
-- ❌ **No IPython Kernel or Background Daemon**: `pi_exec` runs each Python snippet in a bounded Monty worker. Session-tree-aligned Monty state is planned separately.
+- ❌ **No IPython Kernel or Background Daemon**: `pi_exec` keeps a bounded Monty worker for the root session and restores its checkpoint on tree navigation or reload; there is no separate daemon.
 - ❌ **No Mid-Turn Context Rewriting**: Editing or shifting messages mid-thread destroys provider KV prompt caching. Context remains strictly append-only.
 - ❌ **No Git Worktree Circus for Subagents**: Subagents operate directly in the workspace or use ordinary git commands when needed. No fragile automated worktree management layers.
 - ❌ **No Monolithic Memory Files**: A single `MEMORY.md` file inevitably becomes a toxic dump of conflicting notes. Apple Pi separates operational task bundles (`.ledger/`) from durable knowledge (`.wiki/`).

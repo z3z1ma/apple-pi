@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename } from "node:path";
@@ -36,13 +36,23 @@ import {
 } from "./runtime-agent.js";
 import {
 	attachLiveDescription,
+	guestPythonStubs,
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 	piExecToolDescription,
 } from "./runtime-api.js";
+import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./runtime-evidence.js";
+import { sealCheckpoint, verifyCheckpoint } from "./runtime-checkpoint.js";
 import { serializeJsonValue } from "./runtime-json.js";
+import {
+	buildProgramParametersSchema,
+	listSavedPrograms,
+	readSavedProgram,
+	SAVED_PROGRAM_PROMPT_GUIDELINE,
+	savedProgramToolName,
+} from "./runtime-saved-programs.js";
 import { listSkills, readSkillBody } from "./runtime-skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
@@ -80,16 +90,14 @@ export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimit
 	const derived: ProgramEnvelope = {
 		callBudget,
 		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
-		agentBudget: hasWorkers ? DEFAULT_AGENT_BUDGET : 0,
+		agentBudget: DEFAULT_AGENT_BUDGET,
 		memoryMb: 128,
 		timeoutSeconds: hasWorkers ? 600 : 300,
 	};
 	return {
 		callBudget: clampLimit(limits.callBudget, derived.callBudget, 1, PROGRAM_ENVELOPE_MAXIMA.callBudget),
 		concurrency: clampLimit(limits.concurrency, derived.concurrency, 1, PROGRAM_ENVELOPE_MAXIMA.concurrency),
-		agentBudget: hasWorkers
-			? clampLimit(limits.agentBudget, derived.agentBudget, 1, PROGRAM_ENVELOPE_MAXIMA.agentBudget)
-			: 0,
+		agentBudget: clampLimit(limits.agentBudget, derived.agentBudget, 1, PROGRAM_ENVELOPE_MAXIMA.agentBudget),
 		memoryMb: derived.memoryMb,
 		timeoutSeconds: clampLimit(
 			limits.timeoutSeconds,
@@ -104,84 +112,17 @@ const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhi
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
+const MONTY_ENTRY_TYPE = "apple-pi:monty-session";
+const ROLLBACK_NOTICE =
+	"Monty state was rolled back to the last saved checkpoint. Completed tool, file, and process effects were not undone.";
 
-const MAX_STATE_SNAPSHOTS_PER_SESSION = 32;
-const MAX_STATE_SNAPSHOT_BYTES = 200_000;
-const MAX_STATE_BYTES_PER_SESSION = 1_000_000;
-const MAX_STATE_SNAPSHOTS = 128;
-const MAX_STATE_BYTES = 4_000_000;
-
-interface StateSnapshot {
-	state: unknown;
-	bytes: number;
-	sequence: number;
-}
-
-interface ProgramStateStore {
-	snapshots: Map<string, Map<string, StateSnapshot>>;
-	prefix: string;
-	nextId: number;
-	nextSequence: number;
-}
-
-function restoreProgramState(
-	store: ProgramStateStore,
-	sessionId: string | undefined,
-	stateId: string | undefined,
-): unknown {
-	if (!stateId) return {};
-	const snapshots = sessionId ? store.snapshots.get(sessionId) : undefined;
-	const snapshot = snapshots?.get(stateId);
-	if (!snapshot) throw new Error(`Unknown pi_exec state: ${stateId}`);
-	return snapshot.state;
-}
-
-function saveProgramState(store: ProgramStateStore, sessionId: string, state: unknown): string {
-	const serialized = JSON.stringify(state);
-	if (typeof serialized !== "string") throw new Error("pi_exec state snapshot is not JSON-serializable");
-	const bytes = Buffer.byteLength(serialized);
-	if (bytes > MAX_STATE_SNAPSHOT_BYTES) {
-		throw new Error(`pi_exec state snapshot exceeds ${MAX_STATE_SNAPSHOT_BYTES.toLocaleString()} bytes`);
+function branchCheckpoint(ctx: ExtensionContext): { found: boolean; data?: unknown } {
+	const branch = ctx.sessionManager.getBranch();
+	for (let index = branch.length - 1; index >= 0; index--) {
+		const entry = branch[index]!;
+		if (entry.type === "custom" && entry.customType === MONTY_ENTRY_TYPE) return { found: true, data: entry.data };
 	}
-	let snapshots = store.snapshots.get(sessionId);
-	if (!snapshots) {
-		snapshots = new Map();
-		store.snapshots.set(sessionId, snapshots);
-	}
-	const totalBytes = () => [...snapshots.values()].reduce((total, snapshot) => total + snapshot.bytes, 0);
-	const evictOldest = (allSessions: boolean) => {
-		if (!allSessions) return snapshots.delete(snapshots.keys().next().value!);
-		let oldest: { sessionId: string; stateId: string; sequence: number } | undefined;
-		for (const [candidateSessionId, candidateSnapshots] of store.snapshots) {
-			for (const [candidateStateId, candidate] of candidateSnapshots) {
-				if (!oldest || candidate.sequence < oldest.sequence) {
-					oldest = { sessionId: candidateSessionId, stateId: candidateStateId, sequence: candidate.sequence };
-				}
-			}
-		}
-		if (!oldest) return false;
-		const oldestSnapshots = store.snapshots.get(oldest.sessionId)!;
-		oldestSnapshots.delete(oldest.stateId);
-		if (oldestSnapshots.size === 0) store.snapshots.delete(oldest.sessionId);
-		return true;
-	};
-	while (
-		snapshots.size >= MAX_STATE_SNAPSHOTS_PER_SESSION ||
-		(totalBytes() + bytes > MAX_STATE_BYTES_PER_SESSION && snapshots.size > 0)
-	) {
-		evictOldest(false);
-	}
-	const allSnapshots = () => [...store.snapshots.values()].flatMap((session) => [...session.values()]);
-	while (
-		allSnapshots().length >= MAX_STATE_SNAPSHOTS ||
-		allSnapshots().reduce((total, snapshot) => total + snapshot.bytes, 0) + bytes > MAX_STATE_BYTES
-	) {
-		if (!evictOldest(true)) break;
-	}
-	if (!store.snapshots.has(sessionId)) store.snapshots.set(sessionId, snapshots);
-	const stateId = `${store.prefix}.${(store.nextId++).toString(36)}`;
-	snapshots.set(stateId, { state, bytes, sequence: store.nextSequence++ });
-	return stateId;
+	return { found: false };
 }
 
 export const aggregateUsage = (usages: Usage[]): Usage => ({
@@ -415,7 +356,7 @@ async function runAgent(
 	}
 }
 
-import { executeProgram } from "./runtime-program.js";
+import { createProgramSession, executeProgram } from "./runtime-program.js";
 
 export { executeProgram } from "./runtime-program.js";
 export { listSkills, packagedSkillPaths, readSkillBody } from "./runtime-skills.js";
@@ -478,15 +419,78 @@ export default function runtime(pi: ExtensionAPI): void {
 		captureError = error instanceof Error ? error.message : String(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
-	const stateStore: ProgramStateStore = {
-		snapshots: new Map(),
-		prefix: randomBytes(6).toString("base64url"),
-		nextId: 1,
-		nextSequence: 1,
+	let owner: Awaited<ReturnType<typeof createProgramSession>> | undefined;
+	let ownerHash: string | undefined;
+	let hostCalls = 0;
+	let selected: ReturnType<typeof branchCheckpoint> | undefined;
+	let notice: string | undefined;
+	let generation = 0;
+	let executing = false;
+	let activeAbort: AbortController | undefined;
+	const stopWorker = (live: Awaited<ReturnType<typeof createProgramSession>>, pid: number | undefined) => {
+		if (pid === undefined || live.session.workerPid !== undefined) return;
+		try {
+			process.kill(pid, "SIGKILL");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ESRCH")
+				console.error("pi_exec could not stop Monty worker", error);
+		}
 	};
-	pi.on("session_shutdown", (_event, ctx) => {
-		stateStore.snapshots.delete(ctx.sessionManager.getSessionId());
+	const discard = async () => {
+		generation++;
+		activeAbort?.abort();
+		const previous = owner;
+		owner = undefined;
+		ownerHash = undefined;
+		hostCalls = 0;
+		if (previous) await previous.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
+	};
+	const selectBranch = async (ctx: ExtensionContext) => {
+		await discard();
+		selected = branchCheckpoint(ctx);
+		notice = undefined;
+	};
+	pi.on("session_start", (_event, ctx) => selectBranch(ctx));
+	pi.on("session_tree", (_event, ctx) => selectBranch(ctx));
+	pi.on("session_shutdown", async () => {
+		await discard();
+		selected = undefined;
 	});
+	const ensureOwner = async (ctx: ExtensionContext) => {
+		if (owner) return owner;
+		const stubs = guestPythonStubs(ctx.cwd);
+		const hash = createHash("sha256").update(stubs).digest("hex");
+		const checkpoint = selected ?? branchCheckpoint(ctx);
+		selected = undefined;
+		if (checkpoint.found) {
+			const dump = await verifyCheckpoint(ctx.sessionManager, checkpoint.data, hash);
+			if (dump) {
+				try {
+					owner = await createProgramSession(stubs, dump);
+					ownerHash = hash;
+					return owner;
+				} catch (error) {
+					notice = `Monty checkpoint could not be loaded; started an empty session: ${error instanceof Error ? error.message : String(error)}`;
+				}
+			} else {
+				notice = "Monty checkpoint is incompatible or unverifiable; started an empty session.";
+			}
+		}
+		owner = await createProgramSession(stubs);
+		ownerHash = hash;
+		return owner;
+	};
+	const appendCheckpoint = async (
+		ctx: ExtensionContext,
+		live: Awaited<ReturnType<typeof createProgramSession>>,
+		expectedGeneration: number,
+	) => {
+		const dump = await live.session.dump();
+		const checkpoint = await sealCheckpoint(ctx.sessionManager, dump, ownerHash!);
+		if (generation !== expectedGeneration || owner !== live)
+			throw new Error("pi_exec session changed during checkpoint");
+		pi.appendEntry(MONTY_ENTRY_TYPE, checkpoint);
+	};
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && !event.toolName.startsWith("program_")) || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
@@ -503,7 +507,7 @@ export default function runtime(pi: ExtensionAPI): void {
 			return piExecToolDescription();
 		},
 		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
-		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES],
+		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 		parameters: Type.Object({
 			code: attachLiveDescription(Type.String({ minLength: 1, maxLength: 100_000 }), piExecGuestApiContract),
 			inputs: Type.Optional(
@@ -511,12 +515,8 @@ export default function runtime(pi: ExtensionAPI): void {
 					description: "Named strings available to the program as inputs.<key>.",
 				}),
 			),
-			state: Type.Optional(
-				Type.String({
-					minLength: 1,
-					maxLength: 64,
-					description: "Resume the live-session state snapshot returned by an earlier successful call.",
-				}),
+			reset: Type.Optional(
+				Type.Boolean({ description: "Start a fresh Monty session on this branch before running the snippet." }),
 			),
 			display: Type.Optional(
 				Type.Object(
@@ -574,7 +574,10 @@ export default function runtime(pi: ExtensionAPI): void {
 		renderResult(result, options, theme, context) {
 			return renderExecResult(result as any, options, theme, context);
 		},
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: invocation-local Monty ownership shares budgets, cancellation, rollback, traces, and activity lifecycle.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			if (executing) throw new Error("pi_exec already has a running program in this session");
+			executing = true;
 			const startedAt = Date.now();
 			const envelope = deriveProgramEnvelope(params.code, params.limits);
 			const { callBudget, concurrency, agentBudget } = envelope;
@@ -636,6 +639,7 @@ export default function runtime(pi: ExtensionAPI): void {
 				})),
 			});
 			const emit = () => {
+				if (finishedAt !== undefined) return;
 				const completed = operations.filter((operation) => !pendingOperations.has(operation));
 				widget?.refresh();
 				onUpdate?.({
@@ -711,7 +715,18 @@ export default function runtime(pi: ExtensionAPI): void {
 					sequence: calls - 1,
 					ref,
 					args:
-						ref === "fetch" ? fetchOperationArgs(rawArgs) : ref === "agent.run" ? agentOperationArgs(rawArgs) : rawArgs,
+						ref === "fetch"
+							? fetchOperationArgs(rawArgs)
+							: ref === "agent.run"
+								? agentOperationArgs(rawArgs)
+								: ref.startsWith("evidence.context_")
+									? Object.fromEntries(
+											Object.entries(rawArgs).map(([key, value]) => [
+												key,
+												key === "value" || key === "items" ? { bound: true } : value,
+											]),
+										)
+									: rawArgs,
 					outcome: "succeeded",
 				};
 				operations.push(operation);
@@ -727,6 +742,11 @@ export default function runtime(pi: ExtensionAPI): void {
 					let value: unknown;
 					if (ref === "fetch") {
 						value = await executeFetch(rawArgs, runtimeSignal);
+					} else if (
+						ref.startsWith("evidence.") &&
+						EVIDENCE_FUNCTION_NAMES.includes(ref.slice(9) as (typeof EVIDENCE_FUNCTION_NAMES)[number])
+					) {
+						value = await runEvidenceFunction(ref.slice(9), rawArgs, { cwd: ctx.cwd, signal: runtimeSignal });
 					} else if (ref === "tools.list" || ref === "tools.search" || ref === "tools.describe") {
 						const tools = availableExtensionTools();
 						const query = typeof rawArgs.query === "string" ? rawArgs.query.toLowerCase() : "";
@@ -773,6 +793,8 @@ export default function runtime(pi: ExtensionAPI): void {
 						agentCalls++;
 						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);
 						const request = parseAgentRequest(rawArgs);
+						const context = containsContextMarks(request.context) ? fitContext(request.context) : undefined;
+						if (context) request.context = context.value;
 						const result = await runAgent(agentCalls - 1, request, ctx, runtimeSignal, (nextActivity) => {
 							operation.activity = nextActivity;
 							emit();
@@ -786,6 +808,15 @@ export default function runtime(pi: ExtensionAPI): void {
 									text: result.output,
 									toolCalls: result.operations.length,
 									...(result.usage ? { usage: result.usage } : {}),
+									...(context
+										? {
+												context: {
+													truncated: context.truncated,
+													dropped: context.dropped,
+													serializedChars: context.serializedChars,
+												},
+											}
+										: {}),
 								}
 							: {
 									status: "completed",
@@ -793,6 +824,15 @@ export default function runtime(pi: ExtensionAPI): void {
 									toolCalls: result.operations.length,
 									...(result.value !== undefined ? { value: result.value } : {}),
 									...(result.usage ? { usage: result.usage } : {}),
+									...(context
+										? {
+												context: {
+													truncated: context.truncated,
+													dropped: context.dropped,
+													serializedChars: context.serializedChars,
+												},
+											}
+										: {}),
 								};
 						if (result.error) {
 							operation.outcome = "failed";
@@ -829,7 +869,9 @@ export default function runtime(pi: ExtensionAPI): void {
 									url: traceFetchUrl((value as Record<string, unknown>).url),
 									bodyBytes: (value as Record<string, unknown>).bodyBytes,
 								}
-							: traceValue(value);
+							: ref.startsWith("evidence.context_")
+								? { bound: true }
+								: traceValue(value);
 					return value;
 				} catch (error) {
 					operation.outcome = runtimeSignal.aborted ? "aborted" : "failed";
@@ -845,20 +887,77 @@ export default function runtime(pi: ExtensionAPI): void {
 			};
 
 			try {
-				const stateSessionId = params.state ? ctx.sessionManager.getSessionId() : undefined;
-				const initialState = restoreProgramState(stateStore, stateSessionId, params.state);
-				const timeoutMs = envelope.timeoutSeconds * 1_000;
-				const result = await executeProgram(
+				if (params.reset) {
+					await discard();
+					selected = { found: false };
+					notice = undefined;
+				}
+				// Monty counts suspensions across a checkout; rebase from the last checkpoint before the next call could exhaust it.
+				if (owner && hostCalls + callBudget > PROGRAM_ENVELOPE_MAXIMA.callBudget) {
+					await discard();
+					selected = branchCheckpoint(ctx);
+				}
+				const currentGeneration = generation;
+				const live = await ensureOwner(ctx);
+				if (currentGeneration !== generation) {
+					if (owner === live) {
+						owner = undefined;
+						await live.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
+					}
+					throw new Error("pi_exec session changed during checkout");
+				}
+				if (params.reset) {
+					try {
+						await appendCheckpoint(ctx, live, currentGeneration);
+					} catch (error) {
+						if (owner === live) {
+							owner = undefined;
+							await live.close().catch((cleanupError) => console.error("pi_exec Monty cleanup failed", cleanupError));
+						}
+						throw error;
+					}
+				}
+				const callNotice = notice;
+				notice = undefined;
+				activeAbort = new AbortController();
+				const workerPid = live.session.workerPid;
+				const runtimeSignal = signal ? AbortSignal.any([signal, activeAbort.signal]) : activeAbort.signal;
+				let result = await executeProgram(
+					live.session,
 					params.code,
 					params.inputs ?? {},
-					timeoutMs,
+					envelope.timeoutSeconds * 1_000,
 					hostCall,
-					signal,
+					runtimeSignal,
 					(values) => logs.push(values.map(displayValue).join(" ")),
-					envelope.memoryMb,
-					initialState,
-					callBudget,
+					() => stopWorker(live, workerPid),
 				);
+				hostCalls += calls;
+				if (result.sessionUsable && currentGeneration === generation && owner === live) {
+					try {
+						await appendCheckpoint(ctx, live, currentGeneration);
+					} catch (error) {
+						result = {
+							outcome: "failed",
+							error: `pi_exec could not save Monty state: ${error instanceof Error ? error.message : String(error)}`,
+							sessionUsable: false,
+						};
+					}
+				}
+				if (!result.sessionUsable || currentGeneration !== generation) {
+					if (owner === live) {
+						owner = undefined;
+						ownerHash = undefined;
+						hostCalls = 0;
+					}
+					await live.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
+					result = {
+						...result,
+						outcome: result.outcome === "succeeded" ? "aborted" : result.outcome,
+						error: `${result.error ?? "pi_exec session changed"} ${ROLLBACK_NOTICE}`,
+						sessionUsable: false,
+					};
+				}
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
 					for (const operation of pendingOperations) {
@@ -872,31 +971,43 @@ export default function runtime(pi: ExtensionAPI): void {
 					kind: "apple-pi.execution" as const,
 					version: 1 as const,
 					outcome: result.outcome,
-					operations,
+					operations: structuredClone(operations),
 				};
 				const finalActivity = activity();
 				if (result.outcome !== "succeeded") {
 					failedDetails.set(toolCallId, {
-						details: { trace, logs, activity: finalActivity, policy: envelope },
+						details: {
+							trace,
+							logs,
+							activity: finalActivity,
+							policy: envelope,
+							...(callNotice ? { notice: callNotice } : {}),
+						},
 						...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
 					});
-					throw new Error(result.error ?? `pi_exec ${result.outcome}`);
+					throw new Error(`${result.error ?? `pi_exec ${result.outcome}`}${callNotice ? `\n${callNotice}` : ""}`);
 				}
-				const stateId = result.stateChanged
-					? saveProgramState(stateStore, stateSessionId ?? ctx.sessionManager.getSessionId(), result.state)
-					: undefined;
-				const output = [logs.length > 0 ? `Logs:\n${logs.join("\n")}` : "", displayValue(result.value)]
+				const output = [
+					callNotice ? `Notice: ${callNotice}` : "",
+					logs.length > 0 ? `Logs:\n${logs.join("\n")}` : "",
+					displayValue(result.value),
+				]
 					.filter(Boolean)
 					.join("\n\n");
 				return {
-					content: [
-						{ type: "text" as const, text: output },
-						...(stateId ? [{ type: "text" as const, text: `state: ${stateId}` }] : []),
-					],
-					details: { trace, logs, activity: finalActivity, policy: envelope, ...(stateId ? { stateId } : {}) },
+					content: [{ type: "text" as const, text: output }],
+					details: {
+						trace,
+						logs,
+						activity: finalActivity,
+						policy: envelope,
+						...(callNotice ? { notice: callNotice } : {}),
+					},
 					...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
 				};
 			} finally {
+				executing = false;
+				activeAbort = undefined;
 				widget?.dispose();
 				if (widgetMounted) {
 					try {
@@ -912,4 +1023,72 @@ export default function runtime(pi: ExtensionAPI): void {
 		},
 	});
 	pi.registerTool(piExecTool);
+
+	function syncSavedProgramTools(cwd: string): void {
+		try {
+			for (const program of listSavedPrograms(cwd)) {
+				const parameters = buildProgramParametersSchema(
+					program.params,
+					piExecTool.parameters.properties.reset,
+					piExecTool.parameters.properties.limits,
+				);
+				pi.registerTool({
+					name: savedProgramToolName(program.name),
+					label: program.description,
+					executionMode: "sequential",
+					description: `Execute project-local Python program '${program.name}' (.pi/programs/${program.name}.py): ${program.description}`,
+					promptSnippet: program.description,
+					promptGuidelines: [SAVED_PROGRAM_PROMPT_GUIDELINE],
+					parameters,
+					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
+						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
+							throw new Error("pi_exec saved programs require a trusted project");
+						}
+						const current = readSavedProgram(ctx.cwd, program.name);
+						const { reset, limits, inputs: explicitInputs, ...rest } = rawParams as Record<string, any>;
+						// Defaults belong to the registered schema, not a mid-turn source edit.
+						const inputs: Record<string, string> = Object.create(null);
+						for (const param of program.params) {
+							if (param.default !== undefined) inputs[param.name] = String(param.default);
+						}
+						Object.assign(inputs, explicitInputs ?? {});
+						for (const [key, value] of Object.entries(rest)) {
+							if (value !== undefined) inputs[key] = String(value);
+						}
+						return piExecTool.execute(
+							toolCallId,
+							{
+								code: current.code,
+								inputs,
+								...(reset ? { reset } : {}),
+								...(limits ? { limits } : {}),
+								display: { name: current.name, description: current.description },
+							},
+							signal,
+							onUpdate,
+							ctx,
+						);
+					},
+				});
+			}
+		} catch {
+			// Missing, inaccessible, or unconfined programs directories expose no tools.
+		}
+	}
+
+	function hasSessionMessages(ctx: ExtensionContext): boolean {
+		try {
+			return (ctx.sessionManager.getBranch() ?? []).some((entry) => entry.type === "message");
+		} catch {
+			// If the cache state is unknown, do not risk a mid-turn schema mutation.
+			return true;
+		}
+	}
+
+	pi.on("session_start", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
+	pi.on("session_compact", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
+	pi.on("before_agent_start", (_event, ctx) => {
+		if (!hasSessionMessages(ctx)) syncSavedProgramTools(ctx.cwd);
+	});
+	syncSavedProgramTools(process.cwd());
 }

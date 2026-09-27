@@ -93,11 +93,13 @@ Use direct `agent` sessions because neither lane determines the other and the ro
 
 ### Pi Exec review graphs
 
-Author and adapt review programs from the live `pi_exec` tool contract. Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
+Author and adapt the Python reference snippets from the live `pi_exec` tool contract. Inline the referenced role prompts before running. Each snippet uses top-level `await`, keyword host arguments (`git_change`, `git_patch`, `context_fit`, `context_pack`, `agent_run`, and `agent`), `schema` for strict outputs, and a trailing result expression. Independent work uses `asyncio.gather`; Monty does not support `create_task`. Coverage and ID reconciliation are ordinary Python sets and dicts, not host-library functions.
 
-- [Fixed multi-lens review](references/multi-lens-review.js): known independent risk questions need typed fan-in and independent candidate verification. Security-sensitive changes may use paired attacker and defender lenses over the same boundary rather than a separate security graph.
-- [Planned review](references/plan-review-verify.js): the change is broad or structurally uncertain, so a planner must create cohesive partitions and focused investigations before fan-out.
-- [Residual review](references/residual-review-loop.js): a first reducer identifies specific material coverage gaps that justify one bounded additional investigation wave.
+Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
+
+- [Fixed multi-lens review](references/multi-lens-review.py): known independent risk questions need typed fan-in and independent candidate verification. Security-sensitive changes may use paired attacker and defender lenses over the same boundary rather than a separate security graph.
+- [Planned review](references/plan-review-verify.py): the change is broad or structurally uncertain, so a planner must create cohesive partitions and focused investigations before fan-out.
+- [Residual review](references/residual-review-loop.py): a first reducer identifies specific material coverage gaps that justify one bounded additional investigation wave.
 
 A planner partitions and asks questions; it does not pre-review, suppress risks, or decide findings. Every planner, reviewer, reducer, and verifier is read-only and may not invoke `code-review`, spawn another reviewer, or re-enter the graph.
 

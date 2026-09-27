@@ -46,7 +46,7 @@ There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
 - **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Ordinary children, including the four advisory built-ins, load vroom (fast mode), automatic-compaction failure safety, the search root guard, ledger, wiki, `search_session`, MCP, and RTK via explicit paths (`--no-extensions` plus `-e`). Advisory roles omit the built-in `edit` and `write` tools; their non-modification guidance is a prompt, not a sandbox. Either may load the pair programmer sidecar when `pair: true`. The internal `/btw` child loads only vroom (fast mode) and the mandatory safety guards. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
-- **`pi_exec` guest/worker** — runs type-checked Python in Monty subprocesses with an explicit bridge to core Pi tools. It does not receive ambient Node filesystem or process authority. Model workers, captured extension tools, fetch, and saved programs are separate migration tickets. Root-only `schedule`, `monitor`, and `task` remain outside the guest.
+- **`pi_exec` guest/worker** — runs type-checked Python in Monty subprocesses with an explicit bridge to core Pi tools. It does not receive ambient Node filesystem or process authority. It can call model workers, captured extension tools, fetch, evidence helpers, and saved programs, and its Monty state follows Pi's session tree. Root-only `schedule`, `monitor`, and `task` remain outside the guest.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
 
@@ -217,7 +217,7 @@ Preserve these categories:
 
 - **Package configuration** — tracked manifest and docs in this repository.
 - **User/project Pi configuration** — user-global model profiles plus settings, MCP, subagent definitions, and optional pair guidance resolved at runtime with their documented trust boundaries.
-- **Session state** — Pi session JSONL, including context and pair programmer notebook entries.
+- **Session state** — Pi session JSONL, including context, pair programmer notebook entries, and authenticated Monty checkpoints.
 - **Task workbench state** — `.ledger`, governed by repository-owner storage policy.
 - **Knowledge workbench state** — `.wiki`, whose Markdown pages are the source of truth and whose storage/sharing policy belongs to the repository owner.
 - **Temporary worker state** — bounded files/processes that must be cleaned up on success, failure, cancellation, and shutdown.

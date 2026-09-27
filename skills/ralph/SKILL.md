@@ -11,10 +11,12 @@ Ralph can operate with or without ledger. Use the smallest program matching the 
 
 ## Choose a program
 
-- [`references/ralph-simple.js`](references/ralph-simple.js) runs bounded fresh increments over any caller-owned goal. It has no ledger dependency.
-- [`references/ralph-ledger.js`](references/ralph-ledger.js) runs bounded increments over a prepared ledger task and stops when that task becomes `done` or `blocked`.
+- [`references/ralph-simple.py`](references/ralph-simple.py) runs bounded fresh increments over any caller-owned goal. It has no ledger dependency.
+- [`references/ralph-ledger.py`](references/ralph-ledger.py) runs bounded increments over a prepared ledger task and stops when that task becomes `done` or `blocked`.
 
-Adapt [`references/simple-increment.md`](references/simple-increment.md) for the general program or [`references/ledger-increment.md`](references/ledger-increment.md) for the ledger program. Inline the adapted prompt in the chosen JavaScript body before calling `pi_exec`; do not dynamically load these prompts with `skills.body`.
+Adapt [`references/simple-increment.md`](references/simple-increment.md) for the general program or [`references/ledger-increment.md`](references/ledger-increment.md) for the ledger program. Inline the adapted prompt in the chosen Python snippet before calling `pi_exec`; do not dynamically load these prompts with `skills_body`.
+
+The snippets call `agent_run`, `git_change`, `bash`, and (for ledger status) `read` with keyword arguments against the live signature contract. The final `await main()` expression is the result. Only independent untracked-file fingerprints use `asyncio.gather`; workers remain strictly sequential. Monty does not support `create_task`.
 
 ## Shared inputs and outputs
 
@@ -22,7 +24,7 @@ Every program requires:
 
 - `goal`: a non-empty caller-owned outcome.
 - `iterations`: a canonical positive safe-integer string chosen by the caller.
-- `stack`: newline-separated repository context paths. It is optional for `ralph-simple.js` and required for the ledger programs.
+- `stack`: newline-separated repository context paths. It is optional for `ralph-simple.py` and required for the ledger programs.
 
 The ledger programs additionally require:
 
@@ -30,7 +32,7 @@ The ledger programs additionally require:
 
 The simple and default ledger programs return:
 
-```javascript
+```text
 {
   status: "completed" | "failed" | "stopped",
   stopReason?: "task-done" | "task-blocked" | "low-mutation",
@@ -58,20 +60,20 @@ Workers inspect current repository state, choose one coherent increment, impleme
 
 ## General bounded loop
 
-Use `ralph-simple.js` when the user wants repeated fresh iterations over a bounded goal but no ledger task is the authoritative state owner.
+Use `ralph-simple.py` when the user wants repeated fresh iterations over a bounded goal but no ledger task is the authoritative state owner.
 
-```javascript
+```json
 {
-  code: "<adapted references/ralph-simple.js>",
-  display: {
-    name: "Ralph loop",
-    description: "Run bounded fresh implementation increments.",
+  "code": "<adapted references/ralph-simple.py>",
+  "display": {
+    "name": "Ralph loop",
+    "description": "Run bounded fresh implementation increments."
   },
-  inputs: {
-    goal: "Improve the selected implementation until the requested behavior is satisfied.",
-    stack: "README.md\nsrc/feature.ts\ntests/feature.test.ts",
-    iterations: "4",
-  },
+  "inputs": {
+    "goal": "Improve the selected implementation until the requested behavior is satisfied.",
+    "stack": "README.md\nsrc/feature.ts\ntests/feature.test.ts",
+    "iterations": "4"
+  }
 }
 ```
 
@@ -79,21 +81,21 @@ The repository is the shared memory. The caller must make the goal concrete enou
 
 ## ledger loop
 
-Use `ralph-ledger.js` when a prepared ledger task owns intent and acceptance, an active plan owns unfinished increments and blocking state, and `evidence/` owns observations.
+Use `ralph-ledger.py` when a prepared ledger task owns intent and acceptance, an active plan owns unfinished increments and blocking state, and `evidence/` owns observations.
 
-```javascript
+```json
 {
-  code: "<adapted references/ralph-ledger.js>",
-  display: {
-    name: "ledger Ralph loop",
-    description: "Run bounded fresh increments over a prepared task.",
+  "code": "<adapted references/ralph-ledger.py>",
+  "display": {
+    "name": "ledger Ralph loop",
+    "description": "Run bounded fresh increments over a prepared task."
   },
-  inputs: {
-    goal: "Implement the prepared task. Choose the most important unfinished increment.",
-    task: ".ledger/<task-id>/task.md",
-    stack: ".ledger/INDEX.md\n.ledger/<task-id>/plans/implementation.md",
-    iterations: "4",
-  },
+  "inputs": {
+    "goal": "Implement the prepared task. Choose the most important unfinished increment.",
+    "task": ".ledger/<task-id>/task.md",
+    "stack": ".ledger/INDEX.md\n.ledger/<task-id>/plans/implementation.md",
+    "iterations": "4"
+  }
 }
 ```
 
