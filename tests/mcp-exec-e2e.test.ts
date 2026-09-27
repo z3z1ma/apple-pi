@@ -22,8 +22,8 @@ afterEach(() => {
 	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 });
 
-describe("MCP through pi_exec", () => {
-	it("discovers and calls an MCP server through the captured mcp gateway", async () => {
+describe("MCP alongside Python pi_exec", () => {
+	it("keeps MCP callable directly while the Python guest exposes only core tools", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-mcp-exec-"));
 		directories.push(cwd);
 		process.env.PI_CODING_AGENT_DIR = join(cwd, "agent");
@@ -72,31 +72,19 @@ describe("MCP through pi_exec", () => {
 		expect(session.getAllTools().map((tool) => tool.name)).toEqual(expect.arrayContaining(["pi_exec", "mcp"]));
 		const execInfo = session.getAllTools().find((tool) => tool.name === "pi_exec");
 		const codeDescription = String((execInfo?.parameters as any)?.properties.code.description ?? "");
-		expect(codeDescription).toContain("extensions.mcp({");
-		expect(codeDescription).toContain("tool?");
-		expect(codeDescription).toContain("search?");
-		session.setActiveToolsByName(["pi_exec"]);
-		const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
-		expect(exec).toBeDefined();
-		const result = await exec!.execute(
-			"mcp-exec-test",
-			{
-				code: `
-const found = await tools.search("mcp gateway");
-if (!found.some((tool) => tool.name === "mcp")) throw new Error("mcp gateway not captured");
-const response = await extensions.mcp({ tool: "test_echo", args: { value: "APPLE" } });
-return response.text;
-`,
-				deadlineMs: 30_000,
-			},
+		expect(codeDescription).toContain("async def read(");
+		expect(codeDescription).not.toContain("extensions.mcp");
+		session.setActiveToolsByName(["mcp"]);
+		const gateway = session.agent.state.tools.find((tool) => tool.name === "mcp");
+		expect(gateway).toBeDefined();
+		const result = await gateway!.execute(
+			"mcp-direct-test",
+			{ tool: "test_echo", args: { value: "APPLE" } },
 			undefined,
 			() => {},
 		);
 		const text = result.content.find((part) => part.type === "text")?.text ?? "";
 		expect(text).toContain("echo:APPLE");
-		expect((result.details as any).trace.operations).toEqual(
-			expect.arrayContaining([expect.objectContaining({ ref: "extensions.mcp", outcome: "succeeded" })]),
-		);
 
 		session.dispose();
 	}, 30_000);

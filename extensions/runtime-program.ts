@@ -1,22 +1,45 @@
-import { Worker } from "node:worker_threads";
-
-import { serializeJsonValue } from "./runtime-json.js";
+import { CollectString, Monty, MontyCrashedError, MontyRuntimeError, MontyTypingError } from "@pydantic/monty";
+import { corePythonStubs, CORE_GUEST_TOOL_NAMES } from "./runtime-api.js";
 import type { ProgramExecution, ProgramHostCall } from "./runtime-types.js";
 
-function serializeHostCallOutcome(ok: boolean, value: unknown): string {
-	if (!ok) return JSON.stringify({ ok: false, error: value instanceof Error ? value.message : String(value) });
-	if (value === undefined) return JSON.stringify({ ok: true, undefined: true });
+function jsonValue(value: unknown, seen = new Set<object>(), hostArguments = false): unknown {
+	if (
+		!hostArguments &&
+		typeof value === "string" &&
+		(/^<function .+ at 0x[0-9a-f]+>$/.test(value) || ["[...]", "{...}", "(...)"].includes(value))
+	)
+		throw new Error("pi_exec result is not JSON-serializable");
+	if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+	if (typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0)) return value;
+	if (typeof value !== "object" || !value) throw new Error("pi_exec result is not JSON-serializable");
+	if (seen.has(value)) throw new Error("pi_exec result contains a cycle");
+	seen.add(value);
 	try {
-		return serializeJsonValue({ ok: true, value }, "pi_exec host result");
-	} catch (error) {
-		return JSON.stringify({
-			ok: false,
-			error: `pi_exec host result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
-		});
+		if (Array.isArray(value)) return value.map((item) => jsonValue(item, seen, hostArguments));
+		if (
+			value instanceof Map ||
+			(hostArguments && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null))
+		) {
+			const result: Record<string, unknown> = Object.create(null);
+			for (const [key, item] of value instanceof Map ? value : Object.entries(value)) {
+				if (typeof key !== "string") throw new Error("pi_exec result has a non-string dictionary key");
+				result[key] = jsonValue(item, seen, hostArguments);
+			}
+			return result;
+		}
+		throw new Error("pi_exec result is not JSON-serializable");
+	} finally {
+		seen.delete(value);
 	}
 }
 
-/** Execute a JavaScript function body in a disposable worker and bridge host calls. */
+function keyboardInterrupt(): Error {
+	const error = new Error("pi_exec aborted");
+	error.name = "KeyboardInterrupt";
+	return error;
+}
+
+/** Run a Python snippet with the core Pi tools as capability-scoped host functions. */
 export async function executeProgram(
 	code: string,
 	inputs: Record<string, string>,
@@ -26,122 +49,100 @@ export async function executeProgram(
 	onLog?: (values: unknown[]) => void,
 	memoryMb = 128,
 	state: unknown = {},
+	callBudget = 128,
 ): Promise<ProgramExecution> {
 	if (signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted" };
-	let serializedState: string;
+	const pool = await Monty.create({ minProcesses: 0, maxProcesses: 1 });
+	let session: Awaited<ReturnType<typeof pool.checkout>>;
 	try {
-		serializedState = serializeJsonValue(state, "state");
+		session = await pool.checkout({
+			limits: {
+				maxMemory: memoryMb * 1024 * 1024,
+				maxTurnDurationSecs: timeoutMs / 1_000,
+				maxFeedDurationSecs: timeoutMs / 1_000,
+				maxTotalSleepSecs: timeoutMs / 1_000,
+				// A one-call gather suspends twice; reserve one rejected call for the host budget diagnostic.
+				maxSuspensions: (callBudget + 1) * 2,
+			},
+			typeCheck: true,
+			typeCheckStubs: corePythonStubs(),
+		});
 	} catch (error) {
-		return {
-			outcome: "failed",
-			error: `pi_exec state is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
-		};
+		await pool.close();
+		throw error;
 	}
 	const controller = new AbortController();
-	const worker = new Worker(new URL("./runtime-worker.mjs", import.meta.url), {
-		workerData: { code, inputs, state: JSON.parse(serializedState), timeoutMs },
-		resourceLimits: { maxOldGenerationSizeMb: memoryMb, stackSizeMb: 4 },
+	const pending = new Set<(reason: Error) => void>();
+	let timedOut = false;
+	let rejectStopped: (reason: Error) => void = () => {};
+	const stopped = new Promise<never>((_resolve, reject) => {
+		rejectStopped = reject;
 	});
-	const hostTasks = new Set<Promise<void>>();
-	const hostCallControllers = new Map<number, AbortController>();
-
-	return await new Promise((resolve) => {
-		let settled = false;
-		let timer: NodeJS.Timeout | undefined;
-		const finish = (result: ProgramExecution) => {
-			if (settled) return;
-			settled = true;
-			if (timer) clearTimeout(timer);
-			signal?.removeEventListener("abort", abort);
-			controller.abort(new Error(result.error ?? "pi_exec completed"));
-			void worker.terminate();
-			resolve(result);
+	const stop = () => {
+		if (controller.signal.aborted) return;
+		controller.abort();
+		for (const reject of pending) reject(keyboardInterrupt());
+		rejectStopped(keyboardInterrupt());
+	};
+	const timer = setTimeout(() => {
+		timedOut = true;
+		stop();
+	}, timeoutMs);
+	timer.unref?.();
+	signal?.addEventListener("abort", stop, { once: true });
+	if (signal?.aborted) stop();
+	const collector = new CollectString(20_000);
+	const externalLookup = Object.fromEntries(
+		CORE_GUEST_TOOL_NAMES.map((name) => [
+			name,
+			(args: Record<string, unknown> = {}) =>
+				new Promise<unknown>((resolve, reject) => {
+					if (controller.signal.aborted) return reject(keyboardInterrupt());
+					pending.add(reject);
+					void hostCall(`pi.${name}`, jsonValue(args, new Set(), true) as Record<string, unknown>, controller.signal)
+						.then((value) => {
+							if (value === undefined) resolve(null);
+							else resolve(value);
+						}, reject)
+						.finally(() => pending.delete(reject));
+				}),
+		]),
+	);
+	try {
+		const result = await Promise.race([
+			session.feedRun(code, { inputs: { inputs, state }, externalLookup, printCallback: collector }),
+			stopped,
+		]);
+		if (timedOut) return { outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms` };
+		if (controller.signal.aborted) return { outcome: "aborted", error: "pi_exec aborted" };
+		const value = jsonValue(result);
+		const nextState = jsonValue(await Promise.race([session.feedRun("state"), stopped]));
+		const stateChanged = JSON.stringify(nextState) !== JSON.stringify(state);
+		return { outcome: "succeeded", value, ...(stateChanged ? { state: nextState, stateChanged } : {}) };
+	} catch (error) {
+		if (timedOut) return { outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms` };
+		if (controller.signal.aborted || signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted" };
+		if (error instanceof MontyRuntimeError && error.exception.typeName === "TimeoutError")
+			return { outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms: ${error.display()}` };
+		if (error instanceof MontyCrashedError && error.timedOut) return { outcome: "timed_out", error: error.message };
+		return {
+			outcome: "failed",
+			error:
+				error instanceof MontyTypingError ? error.display() : error instanceof Error ? error.message : String(error),
 		};
-		const abort = () => finish({ outcome: "aborted", error: "pi_exec aborted" });
-		timer = setTimeout(
-			() => finish({ outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms` }),
-			timeoutMs,
-		);
-		timer.unref?.();
-		if (signal) {
-			signal.addEventListener("abort", abort, { once: true });
-			if (signal.aborted) abort();
+	} finally {
+		clearTimeout(timer);
+		signal?.removeEventListener("abort", stop);
+		const output = collector.output;
+		if (output) onLog?.([output.trimEnd()]);
+		if (controller.signal.aborted) {
+			void Promise.allSettled([session.close(), pool.close()]);
+		} else {
+			try {
+				await session.close();
+			} finally {
+				await pool.close();
+			}
 		}
-
-		worker.on("message", (message: any) => {
-			if (settled || !message) return;
-			if (message.type === "log") {
-				onLog?.(Array.isArray(message.values) ? message.values : []);
-				return;
-			}
-			if (message.type === "cancel") {
-				hostCallControllers.get(message.id)?.abort(new Error(message.reason || "pi_exec host call aborted"));
-				return;
-			}
-			if (message.type === "call") {
-				let args: Record<string, unknown>;
-				try {
-					args = JSON.parse(serializeJsonValue(message.args ?? {}, "pi_exec call arguments")) as Record<
-						string,
-						unknown
-					>;
-				} catch (error) {
-					worker.postMessage({
-						type: "call_result",
-						id: message.id,
-						outcome: serializeHostCallOutcome(
-							false,
-							`pi_exec call arguments are not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
-						),
-					});
-					return;
-				}
-				const callController = new AbortController();
-				const relayAbort = () => callController.abort(controller.signal.reason);
-				controller.signal.addEventListener("abort", relayAbort, { once: true });
-				hostCallControllers.set(message.id, callController);
-				const task = hostCall(message.ref, args, callController.signal)
-					.then((value) => {
-						if (!settled)
-							worker.postMessage({
-								type: "call_result",
-								id: message.id,
-								outcome: serializeHostCallOutcome(true, value),
-							});
-					})
-					.catch((error) => {
-						if (!settled)
-							worker.postMessage({
-								type: "call_result",
-								id: message.id,
-								outcome: serializeHostCallOutcome(false, error),
-							});
-					})
-					.finally(() => {
-						controller.signal.removeEventListener("abort", relayAbort);
-						hostCallControllers.delete(message.id);
-						hostTasks.delete(task);
-					});
-				hostTasks.add(task);
-				return;
-			}
-			if (message.type === "failed") {
-				finish({ outcome: "failed", error: message.error || "pi_exec program failed" });
-				return;
-			}
-			if (message.type === "done") {
-				void Promise.all([...hostTasks]).then(() => {
-					finish({
-						outcome: "succeeded",
-						value: message.value,
-						...(message.stateChanged ? { state: message.state, stateChanged: true } : {}),
-					});
-				});
-			}
-		});
-		worker.on("error", (error) => finish({ outcome: "failed", error: error.message }));
-		worker.on("exit", (code) => {
-			if (!settled) finish({ outcome: "failed", error: `pi_exec worker exited with code ${code}` });
-		});
-	});
+	}
 }

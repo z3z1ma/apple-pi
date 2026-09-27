@@ -43,14 +43,6 @@ import {
 	piExecToolDescription,
 } from "./runtime-api.js";
 import { serializeJsonValue } from "./runtime-json.js";
-import {
-	buildProgramParametersSchema,
-	listSavedPrograms,
-	paramsFrom,
-	readSavedProgram,
-	type SavedProgram,
-	savedProgramToolName,
-} from "./runtime-saved-programs.js";
 import { listSkills, readSkillBody } from "./runtime-skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
 import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
@@ -82,8 +74,8 @@ function clampLimit(value: number | undefined, fallback: number, min: number, ma
 
 /** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
 export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
-	const hasWorkers = /\bagent(?:\.run)?\s*\(|\bstd\.dev\b/.test(code);
-	const hasFanout = /\bPromise\.all\s*\(|\bparallel\s*\(|\bstd\.dev\b/.test(code);
+	const hasWorkers = /\bagent(?:_run)?\s*\(/.test(code);
+	const hasFanout = /\basyncio\.gather\s*\(/.test(code);
 	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
 	const derived: ProgramEnvelope = {
 		callBudget,
@@ -865,6 +857,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					(values) => logs.push(values.map(displayValue).join(" ")),
 					envelope.memoryMb,
 					initialState,
+					callBudget,
 				);
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
@@ -919,88 +912,4 @@ export default function runtime(pi: ExtensionAPI): void {
 		},
 	});
 	pi.registerTool(piExecTool);
-
-	function syncSavedProgramTools(cwd: string): void {
-		try {
-			const programs = listSavedPrograms(cwd);
-			for (const summary of programs) {
-				const toolName = savedProgramToolName(summary.name);
-				let program: SavedProgram;
-				try {
-					program = readSavedProgram(cwd, summary.name);
-				} catch {
-					continue;
-				}
-				const params = paramsFrom(program.code);
-				const parameters = buildProgramParametersSchema(
-					params,
-					piExecTool.parameters.properties.state,
-					piExecTool.parameters.properties.limits,
-				);
-				pi.registerTool({
-					name: toolName,
-					label: summary.description || summary.name,
-					executionMode: "sequential",
-					description: summary.description
-						? `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js): ${summary.description}`
-						: `Execute project-local pi_exec program '${summary.name}' (.pi/programs/${summary.name}.js).`,
-					promptSnippet: summary.description || `Run .pi/programs/${summary.name}.js`,
-					parameters,
-					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
-						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
-							throw new Error("pi_exec saved programs require a trusted project");
-						}
-						const current = readSavedProgram(ctx.cwd, summary.name);
-						const { state, limits, inputs: explicitInputs, ...rest } = (rawParams ?? {}) as Record<string, any>;
-						const inputs: Record<string, string> = {
-							...(explicitInputs && typeof explicitInputs === "object" ? explicitInputs : {}),
-						};
-						for (const [key, value] of Object.entries(rest)) {
-							if (value !== undefined) {
-								inputs[key] = typeof value === "string" ? value : String(value);
-							}
-						}
-						return piExecTool.execute(
-							toolCallId,
-							{
-								code: current.code,
-								inputs,
-								...(state ? { state } : {}),
-								...(limits ? { limits } : {}),
-								display: { name: current.name, description: current.description },
-							},
-							signal,
-							onUpdate,
-							ctx,
-						);
-					},
-				});
-			}
-		} catch {
-			// Directory missing, inaccessible, or unparseable.
-		}
-	}
-
-	function hasSessionMessages(ctx: { sessionManager?: { getBranch?: () => unknown[] } }): boolean {
-		try {
-			const branch = ctx.sessionManager?.getBranch?.() ?? [];
-			return branch.some((entry: any) => entry?.type === "message");
-		} catch {
-			return false;
-		}
-	}
-
-	pi.on("session_start", (_event, ctx) => {
-		syncSavedProgramTools(ctx.cwd);
-	});
-	pi.on("session_compact", (_event, ctx) => {
-		syncSavedProgramTools(ctx.cwd);
-	});
-	pi.on("before_agent_start", (_event, ctx) => {
-		if (!hasSessionMessages(ctx)) {
-			syncSavedProgramTools(ctx.cwd);
-		}
-	});
-
-	syncSavedProgramTools(process.cwd());
 }

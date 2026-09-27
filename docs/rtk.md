@@ -24,7 +24,7 @@
    Standard mutation-capable child sessions inherit the RTK extension and benefit from command output compression.
 
 6. **Raw execution boundaries**:
-   Inside `pi_exec`, `pi.bash` is isolated from both RTK rewriting and background tasks. Guest JavaScript programs require deterministic, unaltered command output for parsing. The root `monitor` tool also bypasses RTK because each stdout line is an agent event and rewriting would change that protocol. Pi Exec's `pi.bash` accepts `{ command, timeout?, stdin? }` without `verbatim` or `run_in_background`; `monitor` accepts its own command and optional event-delivery limit.
+   Inside `pi_exec`, `bash` is isolated from both RTK rewriting and background tasks. Monty programs receive deterministic, unaltered command output for parsing. The root `monitor` tool also bypasses RTK because each stdout line is an agent event and rewriting would change that protocol. Pi Exec's Python `bash` accepts `command`, `timeout`, and `stdin` keyword arguments without `verbatim` or `run_in_background`; `monitor` accepts its own command and optional event-delivery limit.
 
 ## The `verbatim` Parameter
 

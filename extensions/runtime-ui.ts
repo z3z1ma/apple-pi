@@ -120,7 +120,7 @@ export const renderExecCall = (args: ExecRenderArgs, theme: Theme, context: Exec
 	const title = [
 		theme.fg("toolTitle", theme.bold("pi_exec")),
 		name ? theme.fg("accent", name) : "",
-		theme.fg("dim", `JavaScript · ${codeLines.length} ${codeLines.length === 1 ? "line" : "lines"}`),
+		theme.fg("dim", `Python · ${codeLines.length} ${codeLines.length === 1 ? "line" : "lines"}`),
 	]
 		.filter(Boolean)
 		.join(" ");

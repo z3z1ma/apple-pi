@@ -251,16 +251,11 @@ try {
 		.find((tool) => tool.definition.name === "pi_exec");
 	assert(piExecTool, "missing pi_exec tool");
 	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
-	assert.match(piExecGuidance, /context-shaping boundary/);
-	for (const shape of ["collect→reduce", "gather→bind→judge", "map→agent.run→reconcile", "stage→stage"]) {
-		assert(piExecGuidance.includes(shape), `pi_exec always-on guidance omits ${shape}`);
-	}
-	assert.match(piExecGuidance, /Simple gather→bind→typed fan-out→reconcile example/);
-	assert.match(piExecGuidance, /context: row, outputSchema:/);
-	assert.match(piExecGuidance, /run\.status === "completed" \? run\.value/);
-	assert.match(piExecGuidance, /Simple semantic test-selection example/);
-	assert.match(piExecGuidance, /await pi\.find/);
-	assert.match(piExecGuidance, /xargs -0 npm test --/);
+	assert.match(piExecGuidance, /Python snippet/);
+	assert.match(piExecGuidance, /top-level await/);
+	assert.match(piExecGuidance, /asyncio\.gather/);
+	assert.match(piExecGuidance, /before any host call runs/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
 	assert.equal(limits.agentBudget.maximum, 128);
@@ -268,6 +263,7 @@ try {
 	assert.equal(limits.concurrency.maximum, 32);
 	assert.equal(limits.timeoutSeconds.maximum, 7200);
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+	assert.equal(manifest.dependencies["@pydantic/monty"], "1.0.0", "Monty must be a pinned runtime dependency");
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
 	assert(
@@ -409,11 +405,9 @@ try {
 	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
 	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);
 	assert.doesNotMatch(piExecTool.definition.description, /<inference-profiles>/);
-	assert.match(piExecCodeDescription, /<subagent-team>/);
-	assert.match(piExecCodeDescription, /callable teammates with name, inference profile, and description/);
-	assert.match(piExecCodeDescription, /<inference-profiles>/);
-	assert.match(piExecCodeDescription, /profile selects an inference profile/);
-	assert.match(piExecCodeDescription, /systemPrompt appends dynamic specialization/);
+	assert.doesNotMatch(piExecCodeDescription, /<subagent-team>/);
+	assert.doesNotMatch(piExecCodeDescription, /<inference-profiles>/);
+	assert.match(piExecCodeDescription, /type-checked before execution/);
 	const agentProperties = agentTool.definition.parameters.properties;
 	assert("profile" in agentProperties, "Agent schema omits the inference profile selector");
 	assert.deepEqual(

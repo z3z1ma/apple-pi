@@ -37,11 +37,11 @@ Apple Pi is architected around six core pillars that fundamentally alter how an 
                                   ▼                             ▼
                     ┌───────────────────────────┐  ┌───────────────────────────┐
                     │          PI EXEC          │  │        CONSULTANT         │
-                    │  Disposable Node Worker   │  │ (Senior Architect Review) │
-                    │  • Loops & Pipelines      │  └───────────────────────────┘
-                    │  • Fan-out subagents      │
-                    │  • State snapshots (<id>) │
-                    │  • Schema-filtered return │
+                    │  Monty Python Subprocess  │  │ (Senior Architect Review) │
+                    │  • Loops & asyncio.gather │  └───────────────────────────┘
+                    │  • Core Pi tool calls     │
+                    │  • JSON state IDs         │
+                    │  • JSON final expression  │
                     └─────────────┬─────────────┘
                                   │
          ┌────────────────────────┴────────────────────────┐
@@ -58,36 +58,16 @@ Apple Pi is architected around six core pillars that fundamentally alter how an 
 
 The prevailing agent pattern—chat-driven tool calling—is an architectural dead end for complex workflows. When an agent searches 40 files or tests 10 hypotheses, dragging each intermediate 10,000-token result through the primary LLM conversation pollutes context, triggers "lost in the middle" reasoning degradation, and incinerates money.
 
-[`pi_exec`](docs/exec.md) changes the game. It gives the agent a **bounded JavaScript async runtime** executed inside a disposable worker. Instead of babbling through tool calls, the model writes real code:
+[`pi_exec`](docs/exec.md) keeps intermediate tool output inside a bounded Python snippet, returning only its final expression to the conversation. Monty type-checks against the live core-tool signatures before execution and runs the snippet in a subprocess with resource limits. The host enforces call and concurrency budgets.
 
-- **True Control Flow**: Normal loops, conditionals, `parallel(items, mapper, concurrency)`, and `pipeline(...)`.
-- **In-Memory Filtering & Reduction**: Parse, grep, transform, and aggregate data inside the worker. Return *only the needle or the distilled summary* back to the conversation via a strict JSON Schema (`outputSchema`).
-- **Immutable State Snapshots (`state: <id>`)**: Inspired by `prime-agent`, programs can retain expensive serialized state across calls using explicit, immutable state IDs, without needing a persistent, fragile Python kernel or daemon.
-- **Code-as-Tools Harness (`.pi/programs/`)**: The model can author reusable async programs in `.pi/programs/<name>.js` with typed `@param` JSDoc annotations. Saved programs manifest directly as native, typed tools (`program_<name>`) at cache-safe session-start and compaction boundaries. The agent builds its own first-class tool abstractions.
-
-```javascript
-// Example: Bounded fan-out inspection without context pollution
-const files = (await pi.ls({ path: "components" }))
-  .split("\n")
-  .filter((f) => f.endsWith(".ts"));
-
-return parallel(
-  files,
-  async (file) => {
-    const result = await agent.run({
-      task: "Inspect this file for concurrency leaks or unhandled rejections.",
-      name: file,
-      context: { path: `components/${file}` },
-      outputSchema: std.schema({
-        risk: ["low", "medium", "high"],
-        evidence: "string",
-      }),
-    });
-    return { file, ...(result.value ?? {}) };
-  },
-  4,
-); // Max 4 concurrent workers
+```python
+import asyncio
+paths = ["README.md", "docs/exec.md"]
+texts = await asyncio.gather(*[read(path=path) for path in paths])
+{path: len(text) for path, text in zip(paths, texts)}
 ```
+
+The current slice exposes the core Pi tools. Model workers, extension tools, HTTP, the evidence library, saved Python programs, and branch-aligned session persistence follow in the governing ledger tickets.
 
 ### 2. Dual-Hemisphere Pairing & The Escalation Ladder
 
@@ -186,7 +166,7 @@ Apple Pi ships with a suite of battle-tested engineering skills in [`skills/`](s
 - [`/skill:research`](skills/research): Investigates externally verifiable engineering questions through primary sources and official documentation.
 
 ### Harness & Knowledge Authoring
-- `pi_exec` is a native harness capability whose core instructions and live schema teach bounded JavaScript composition and reusable `.pi/programs`; it does not require a separate skill.
+- `pi_exec` is a native harness capability whose core instructions and live schema teach bounded Python composition; it does not require a separate skill.
 - [`/skill:skill-authoring`](skills/skill-authoring): Author concise, testable Agent Skills with progressive disclosure.
 - [`/skill:llm-wiki`](skills/llm-wiki): Initialize, ingest, query, and maintain the project-local `.wiki/` knowledge graph.
 
@@ -197,7 +177,7 @@ Apple Pi ships with a suite of battle-tested engineering skills in [`skills/`](s
 Architecture is defined by what you choose *not* to build. Consult [`docs/boundaries.md`](docs/boundaries.md) for the full record of rejected ideas:
 
 - ❌ **No Vector Databases or Local Embedding Stores**: Lexical search, ripgrep, and derived Markdown graph traversal consistently outperform vector similarity on codebases while eliminating database corruptions and indexing lag.
-- ❌ **No Persistent Python Kernels or Background Daemons**: Stateful IPython runtimes leak memory, break determinism, and create ghost state. `pi_exec` uses disposable Node workers with immutable state snapshots.
+- ❌ **No IPython Kernel or Background Daemon**: `pi_exec` runs each Python snippet in a bounded Monty worker. Session-tree-aligned Monty state is planned separately.
 - ❌ **No Mid-Turn Context Rewriting**: Editing or shifting messages mid-thread destroys provider KV prompt caching. Context remains strictly append-only.
 - ❌ **No Git Worktree Circus for Subagents**: Subagents operate directly in the workspace or use ordinary git commands when needed. No fragile automated worktree management layers.
 - ❌ **No Monolithic Memory Files**: A single `MEMORY.md` file inevitably becomes a toxic dump of conflicting notes. Apple Pi separates operational task bundles (`.ledger/`) from durable knowledge (`.wiki/`).

@@ -1,6 +1,6 @@
 # Third-party notices
 
-apple-pi contains modified source imports and one pinned runtime dependency. apple-pi takes maintenance responsibility for copied sources; the MCP dependency retains upstream protocol/auth maintenance ownership.
+apple-pi contains modified source imports and pinned runtime dependencies. apple-pi takes maintenance responsibility for copied sources; the MCP dependency retains upstream protocol/auth maintenance ownership.
 
 ## pi-omplike-advisor → pair programmer
 
@@ -80,6 +80,14 @@ apple-pi contains modified source imports and one pinned runtime dependency. app
 - License: MIT
 - Original notice: `Copyright (c) 2026 Async23`
 - The extension code, scripts, and assets were adopted largely as-is. All Chinese user-facing strings were translated to English (notification bodies, subtitles, error/cancellation summaries, and the generic-heading skip list), the `agent_settled` delivery path was gated to macOS, and the test suite was ported from `node:test` to Vitest.
+
+## Monty (runtime dependency)
+
+- Source: <https://github.com/pydantic/monty>
+- Pinned npm version: `@pydantic/monty@1.0.0`
+- License: MIT
+- Integration: `pi_exec` executes type-checked Python snippets in Monty's local subprocess pool. The upstream package and platform-specific worker binaries remain normal npm dependencies; no Monty source is copied into apple-pi.
+- Monty supplies the Python subset, worker isolation, and resource limits. apple-pi owns the Pi tool bridge, tool-call policy, cancellation, result conversion, and traces. Monty's local worker is not an OS-level security boundary.
 
 ## pi-mcp-adapter (runtime dependency)
 

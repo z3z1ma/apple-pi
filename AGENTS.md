@@ -32,7 +32,7 @@ At a high level, the package adds six kinds of capability to Pi:
 1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, plus a structured user-question tool.
 2. **Context continuity** — xAI server-side or Pi default compaction, the pair programmer's sourced notebook, two complementary session-recall paths, and a project-local wiki for reusable knowledge.
 3. **Execution continuity** — root-session background work, one-shot scheduling, and reactive command monitoring, plus the ledger for durable operational memory.
-4. **Execution and team collaboration** — a bounded JavaScript composition runtime plus an interactive team of specialist agents.
+4. **Execution and team collaboration** — a bounded, type-checked Monty Python composition runtime plus an interactive team of specialist agents.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
 6. **Integration bridges** — MCP through an owned integration boundary and provider-specific hosted-tool injection for supported xAI requests.
 
@@ -46,7 +46,7 @@ There are three execution contexts to keep distinct:
 
 - **Root Pi session** — owns the normal extension surface, interactive subagent manager, and `pi_exec`.
 - **Interactive child session** — is a real Pi session with its own context and persistence. It does not discover package extensions. Mutation-capable children load vroom (fast mode), automatic-compaction failure safety, the search root guard, ledger, wiki, `search_session`, and MCP via explicit paths (`--no-extensions` plus `-e`); public read-only roles load the safety guards, wiki, and `search_session`. Either may load the pair programmer sidecar when `pair: true`. The internal `/btw` child loads only vroom (fast mode) and the mandatory safety guards. A child may inherit skills unless `isolated`. It must not create another top-level subagent manager or gain `pi_exec` as a way around nested-delegation limits.
-- **`pi_exec` guest/worker** — runs disposable JavaScript with an explicit bridge to selected Pi tools, captured extension tools, fetch, and model workers. It does not receive ambient Node filesystem or process authority. Root-only `schedule`, `monitor`, and `task` are excluded from captured extension tools. Nested model workers receive only explicitly granted core tools and bound context. They load vroom (fast mode), automatic-compaction failure safety, the search root guard, ledger, wiki, and `search_session` extensions the same `--no-extensions` plus `-e` way, and they do not load `pi_exec`, the subagent manager, or MCP.
+- **`pi_exec` guest/worker** — runs type-checked Python in Monty subprocesses with an explicit bridge to core Pi tools. It does not receive ambient Node filesystem or process authority. Model workers, captured extension tools, fetch, and saved programs are separate migration tickets. Root-only `schedule`, `monitor`, and `task` remain outside the guest.
 
 When debugging a missing tool or duplicated lifecycle effect, first establish which of these contexts is executing.
 
@@ -100,7 +100,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 ### Exec and subagents
 
-- `pi_exec` is a bounded composition bridge, not an unrestricted Node evaluator. Preserve call, concurrency, agent, memory, output, and time limits; preserve cancellation and durable nested-operation traces.
+- `pi_exec` is a bounded composition bridge, not an unrestricted Python interpreter. Preserve call, concurrency, memory, output, and time limits; preserve cancellation and durable nested-operation traces. The model-worker budget returns with the model-worker migration ticket.
 - Guest APIs take explicit serializable arguments. New capabilities should cross a deliberate host bridge and participate in budgeting, tracing, and cancellation.
 - Extension tools can be captured for composition, but provider-private behavior that is not represented as a Pi tool is not automatically available.
 - `agent` and `pi_exec` workers share agent-type discovery but serve different use cases: interactive collaboration versus programmatic composition.

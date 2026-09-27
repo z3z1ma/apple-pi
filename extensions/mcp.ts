@@ -7,7 +7,7 @@ export const MCP_EXTENSION_PATH = fileURLToPath(import.meta.url);
 /**
  * Install the full MCP adapter while keeping pi_exec as apple-pi's only
  * programmable tool runtime. The adapter's `mcp` gateway remains available to
- * ordinary model turns and is captured by pi_exec's extension-tool bridge.
+ * ordinary model turns; its pi_exec bridge is restored in a later Monty ticket.
  */
 export default function installMcp(pi: ExtensionAPI): void {
 	const api = new Proxy(pi, {

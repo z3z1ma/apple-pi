@@ -122,6 +122,7 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
+    "@pydantic/monty": "1.0.0",
     "pi-mcp-adapter": "2.34.0"
   }
 }
