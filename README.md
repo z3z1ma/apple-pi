@@ -109,9 +109,9 @@ Apple Pi splits memory cleanly by lifecycle:
 
 Instead of a generic agent doing everything poorly, the [subagent system](docs/subagents.md) provides focused specialist lanes mapped to semantic [model profiles](docs/model-profiles.md):
 
-- `explorer` (`quick`): Rapid local codebase reconnaissance (`read`, `grep`, `find`, `ls`).
+- `explorer` (`quick`): Rapid local codebase reconnaissance (all built-in tools except `edit` and `write`).
 - `planner` (`deep`): Implementation strategy and cross-module architectural design.
-- `researcher` (`quick`): External documentation and primary source investigation.
+- `researcher` (`quick`): External documentation and primary source investigation, including shell-based retrieval.
 - `consultant` (`deep`): Senior architect for root-cause analysis, YAGNI enforcement, and second opinions.
 - `builder` (`coding`): Bounded, specified write slices (paired with a sidecar by default).
 - `designer` (`visual-engineering`): User-facing layout, interaction design, and visual polish.

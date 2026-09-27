@@ -205,7 +205,9 @@ describe("pi_exec agent binding", () => {
 
 			const explore = await resolveExecWorker({ task: "where is X?", type: "explorer" }, options);
 			expect(explore.type).toBe("explorer");
-			expect(explore.tools).toEqual(["read", "grep", "find", "ls"]);
+			expect(explore.tools).toEqual(expect.arrayContaining(["read", "bash", "grep", "find", "ls"]));
+			expect(explore.tools).not.toContain("edit");
+			expect(explore.tools).not.toContain("write");
 			expect(explore.model).toBe("xai/fast");
 			expect(explore.thinking).toBe("medium");
 			expect(explore.systemPrompt).toContain("Agent type: explorer");
@@ -271,7 +273,9 @@ describe("pi_exec agent binding", () => {
 			);
 			expect(resolved.model).toBe("anthropic/route-advisor");
 			expect(resolved.thinking).toBe("high");
-			expect(resolved.tools).toEqual(["read", "grep", "find", "ls"]);
+			expect(resolved.tools).toContain("bash");
+			expect(resolved.tools).not.toContain("edit");
+			expect(resolved.tools).not.toContain("write");
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;

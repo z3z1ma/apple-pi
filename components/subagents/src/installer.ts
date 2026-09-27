@@ -326,6 +326,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			if (!configured) throw new Error('Unknown or disabled agent type: "consultant"');
 			const agentConfig = {
 				...configured,
+				builtinToolNames: ["read", "grep", "find", "ls"],
 				pair: false,
 				allowedSubagents: undefined,
 				persistSession: false,

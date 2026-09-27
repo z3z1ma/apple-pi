@@ -17,6 +17,7 @@ import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
 import { buildConsultationContext } from "../src/consultation.js";
+import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/index.js";
 import { getManagedSubagentService } from "../src/service.js";
 import type { AgentConfig } from "../src/types.js";
@@ -148,6 +149,44 @@ describe("subagent runner with Pi's real AgentSession", () => {
 		expect(result.responseText).toBe("SUBAGENT-OK");
 		expect(result.failure).toBeUndefined();
 		expectActiveTools(activeTools, ["read"]);
+		result.session.dispose();
+	}, 30_000);
+
+	it("gives a public advisory role shell and standard child extensions without direct editing tools", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-advisory-tools-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-advisory", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([() => fauxAssistantMessage([fauxText("SCOUT-OK")])]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		let activeTools: string[] = [];
+		const result = await runAgent(
+			{
+				cwd,
+				model,
+				modelRegistry: runtime.modelRegistry,
+				getSystemPrompt: () => "parent",
+				sessionManager: { getSessionFile: () => undefined },
+			} as any,
+			"explorer",
+			"map the code",
+			{
+				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+				model,
+				modelResolved: true,
+				isolated: true,
+				agentConfig: { ...DEFAULT_AGENTS.get("explorer")!, persistSession: false },
+				onSessionCreated: (session) => {
+					activeTools = session.getActiveToolNames();
+				},
+			},
+		);
+
+		expect(result.responseText).toBe("SCOUT-OK");
+		expectActiveTools(activeTools, ["read", "grep", "find", "ls", "bash", "wiki_lint", "wiki_references"]);
+		expect(activeTools).not.toContain("edit");
+		expect(activeTools).not.toContain("write");
 		result.session.dispose();
 	}, 30_000);
 
@@ -1061,6 +1100,8 @@ RELOADED ROLE MUST NOT RUN.
 			for (const forbidden of [
 				"agent",
 				"pi_exec",
+				"bash",
+				"powershell",
 				"edit",
 				"write",
 				"ledger_add",

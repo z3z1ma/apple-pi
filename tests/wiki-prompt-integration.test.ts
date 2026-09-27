@@ -5,7 +5,7 @@ import {
 	WIKI_SYSTEM_PROMPT,
 	WIKI_SYSTEM_PROMPT_TAG,
 } from "../components/wiki/src/system-prompt.js";
-import { childSessionExtensions, isStructurallyReadOnlyAgent } from "../components/subagents/src/agent-runner.js";
+import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { buildAgentPrompt } from "../components/subagents/src/prompts.js";
 import type { AgentConfig, EnvInfo } from "../components/subagents/src/types.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
@@ -91,24 +91,6 @@ describe("wiki workbench distribution", () => {
 				RTK_EXTENSION_PATH,
 			],
 		});
-	});
-
-	it("loads the read-only wiki surface for public read-only roles", () => {
-		for (const role of ["explorer", "planner", "researcher", "consultant"]) {
-			expect(isStructurallyReadOnlyAgent(role)).toBe(true);
-			const readOnly = isStructurallyReadOnlyAgent(role);
-			expect(childSessionExtensions(false, !readOnly, readOnly)).toEqual({
-				noExtensions: true,
-				additionalExtensionPaths: [
-					AUTO_COMPACT_EXTENSION_PATH,
-					VROOM_EXTENSION_PATH,
-					HOME_SEARCH_GUARD_EXTENSION_PATH,
-					WIKI_EXTENSION_PATH,
-					SESSION_SEARCH_EXTENSION_PATH,
-				],
-			});
-		}
-		expect(isStructurallyReadOnlyAgent("builder")).toBe(false);
 	});
 
 	it("keeps the internal child free of wiki guidance and tools", () => {

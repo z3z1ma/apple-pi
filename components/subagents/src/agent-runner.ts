@@ -70,17 +70,11 @@ export { SUBAGENT_TOOL_NAMES };
  * tools below.
  */
 const CHILD_DENIED_TOOL_NAMES: string[] = [...Object.values(SUBAGENT_TOOL_NAMES), "pi_exec"];
-const STRUCTURALLY_READ_ONLY_AGENT_NAMES = new Set(["explorer", "planner", "researcher", "consultant"]);
-
-export function isStructurallyReadOnlyAgent(name: string): boolean {
-	return STRUCTURALLY_READ_ONLY_AGENT_NAMES.has(name);
-}
 
 /** Child sessions: no discovery; explicit fast-mode/safety/context extensions, MCP, and optional pair. */
 export function childSessionExtensions(
 	pair = false,
 	standard = true,
-	readOnly = false,
 ): {
 	noExtensions: true;
 	additionalExtensionPaths: string[];
@@ -99,8 +93,6 @@ export function childSessionExtensions(
 			RTK_EXTENSION_PATH,
 		);
 		if (pair) additionalExtensionPaths.push(PAIR_EXTENSION_PATH);
-	} else if (readOnly) {
-		additionalExtensionPaths.push(WIKI_EXTENSION_PATH, SESSION_SEARCH_EXTENSION_PATH);
 	}
 	return { noExtensions: true, additionalExtensionPaths };
 }
@@ -437,15 +429,9 @@ export async function runAgent(
 	// re-appends both AFTER systemPromptOverride, which would defeat
 	// prompt_mode: replace. Parent context, when requested, is prepended to
 	// the task prompt below. Agent-definition `extensions:` is ignored.
-	// Read-only default roles receive only read-only wiki and session-search extensions:
-	// ledger and MCP can register mutation-capable tools independently of the built-in
-	// allowlist. This makes their policy structural, not prompt-based.
-	const structurallyReadOnly = isStructurallyReadOnlyAgent(agentConfig.name);
-	const loadContextExtensions = options.loadStandardChildExtensions !== false;
 	const { noExtensions, additionalExtensionPaths } = childSessionExtensions(
 		options.pair === true,
-		loadContextExtensions && !structurallyReadOnly,
-		loadContextExtensions && structurallyReadOnly,
+		options.loadStandardChildExtensions !== false,
 	);
 
 	const loader = new DefaultResourceLoader({

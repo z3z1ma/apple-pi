@@ -5,20 +5,11 @@
  * User agents override defaults with the same name. Disabled agents are kept but excluded from spawning.
  */
 
-import { createCodingTools, createPowerShellTool, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
+import { BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 import { DEFAULT_AGENTS } from "./default-agents.js";
 import type { AgentConfig } from "./types.js";
 
-/**
- * All known built-in tool names, derived from pi's own tool factories rather
- * than hardcoded so the set tracks pi-mono if it adds/renames a built-in.
- * PowerShell is registered by the SDK but absent from both default tool sets.
- * The `cwd` only binds operations we never invoke here — we read each tool's
- * `.name` and discard it.
- */
-export const BUILTIN_TOOL_NAMES: string[] = [
-	...new Set([...createCodingTools("."), ...createReadOnlyTools("."), createPowerShellTool(".")].map((t) => t.name)),
-];
+export { BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 
 /** Unified runtime registry of all agents (defaults + user-defined). */
 const agents = new Map<string, AgentConfig>();

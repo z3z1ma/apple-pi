@@ -163,7 +163,7 @@ Acknowledgment does not claim implementation or validation. The acknowledgment t
 
 ## Direct consultant use
 
-The main agent can invoke the consultant through `agent` as an ordinary read-only sub-agent. That public path uses the normal agent prompt and optional `inherit_context`; it does not expose the pair programmer's harness context or typed adjudication protocol.
+The main agent can invoke the consultant through `agent` as an ordinary advisory sub-agent. That public path has the standard child extensions and all built-in tools except `edit` and `write`, uses the normal agent prompt and optional `inherit_context`, and does not expose the pair programmer's harness context or typed adjudication protocol. The hidden consultation remains restricted to its own read-only tools.
 
 The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through `agent` parameters.
 

@@ -7,11 +7,7 @@ import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
 
 describe("search root guard integration", () => {
 	it("loads the guard in every repository-reading child-agent session", () => {
-		for (const extensions of [
-			childSessionExtensions(),
-			childSessionExtensions(false, true, true),
-			childSessionExtensions(false, false),
-		]) {
+		for (const extensions of [childSessionExtensions(), childSessionExtensions(false, false)]) {
 			expect(extensions.additionalExtensionPaths).toContain(HOME_SEARCH_GUARD_EXTENSION_PATH);
 		}
 	});

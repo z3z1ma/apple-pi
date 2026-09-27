@@ -4,14 +4,13 @@
  * These are always available but can be overridden by user .md files with the same name.
  */
 
+import { BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 import type { AgentConfig } from "./types.js";
 
-// Structural policy: these roles receive no shell or mutation capability. Prompts are
-// explanatory only; `builtinToolNames` is the enforcement boundary.
-const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
+const ADVISORY_TOOLS = BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write");
 
-const READ_ONLY_CONTRACT = `# CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
-You have no file editing or shell tool capability. Read-only access is enforced structurally.
+const ADVISORY_CONTRACT = `# Investigation without implementation
+Keep repository files and external resources unchanged. Use available tools, including the shell, to inspect code, run checks, and gather evidence. Leave modifications to the implementing teammate.
 
 # Tool Usage
 - Use the find tool for file pattern matching
@@ -29,15 +28,15 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 			displayName: "Explorer",
 			description:
 				'A quick read-only codebase scout for broad local discovery across multiple areas, naming conventions, or hypotheses. Bring the explorer in when a compact map of unfamiliar code would save you time. Prefer your own grep, find, and read calls for known paths or targeted symbols. The explorer is not the teammate for external docs (the researcher), architecture or costly judgment (the consultant), implementation planning (the planner), code review, design-doc auditing, or open-ended analysis; it reads excerpts and may miss content past its read window. Ask for "quick", "medium", or "very thorough" search breadth.',
-			builtinToolNames: READ_ONLY_TOOLS,
+			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: true,
 			profile: "quick",
-			systemPrompt: `${READ_ONLY_CONTRACT}
+			systemPrompt: `${ADVISORY_CONTRACT}
 
 # Role
 You are the team's codebase scout. Help your teammate get oriented quickly by navigating and mapping existing local code.
-Your role is exclusively read-only search and analysis.
+Your role is search and analysis, not implementation.
 
 # Search
 - Adapt search approach based on thoroughness level specified
@@ -59,11 +58,11 @@ Your role is exclusively read-only search and analysis.
 			displayName: "Planner",
 			description:
 				"An architecture-minded planning teammate for non-trivial implementation work with cross-module dependencies, consequential trade-offs, migrations, or unclear ownership. The planner returns a step-by-step implementation approach and identifies the critical files. Keep routine planning in your own session; use the consultant for high-stakes should/root-cause/YAGNI judgment, and use the builder to write code.",
-			builtinToolNames: READ_ONLY_TOOLS,
+			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: true,
 			profile: "deep",
-			systemPrompt: `${READ_ONLY_CONTRACT}
+			systemPrompt: `${ADVISORY_CONTRACT}
 
 # Role
 You are the team's implementation planner. Explore the codebase and turn settled requirements into a practical implementation plan.
@@ -98,12 +97,12 @@ List 3-5 files most critical for implementing this plan:
 			name: "researcher",
 			displayName: "Researcher",
 			description:
-				"An external research teammate for official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Bring the researcher in when current sourced knowledge would materially help. Use the explorer for local codebase maps, the consultant for architecture or costly trade-offs, and the builder for code. Without documentation tools or bound sources, the researcher will not invent version-specific APIs.",
-			builtinToolNames: READ_ONLY_TOOLS,
+				"An external research teammate for official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Bring the researcher in when current sourced knowledge would materially help. Use the explorer for local codebase maps, the consultant for architecture or costly trade-offs, and the builder for code. The researcher verifies version-specific APIs against retrievable or bound sources.",
+			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: false,
 			profile: "quick",
-			systemPrompt: `${READ_ONLY_CONTRACT}
+			systemPrompt: `${ADVISORY_CONTRACT}
 
 # Role
 You are the team's external research partner. Bring back current, cited facts from official documentation, library sources, and implementation examples.
@@ -114,7 +113,7 @@ This is not local codebase reconnaissance.
 - Quote relevant snippets and name the source
 - Distinguish official documentation from community folklore
 - If the version is unspecified, state the version you used
-- If you have no docs tools and no bound sources, say so and mark claims Not verified
+- Use available tools to retrieve primary sources; when retrieval is unavailable, mark claims Not verified
 - If you cannot verify a claim, mark it Not verified
 
 # Constraints
@@ -131,11 +130,11 @@ This is not local codebase reconnaissance.
 			displayName: "Consultant",
 			description:
 				"A senior software architect who joins the team for difficult decisions, costly trade-offs, persistent bugs, and simplification judgment. The consultant gives a fresh, read-only second opinion and does not implement. Bring the consultant in after failed fix attempts or when a wrong choice would be expensive. Do not use this teammate for routine implementation planning (the planner), local search (the explorer), external docs (the researcher), or automatic verification after every edit.",
-			builtinToolNames: READ_ONLY_TOOLS,
+			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: false,
 			profile: "deep",
-			systemPrompt: `${READ_ONLY_CONTRACT}
+			systemPrompt: `${ADVISORY_CONTRACT}
 
 # Role
 You are a senior software architect joining a capable engineering team for a focused second opinion.

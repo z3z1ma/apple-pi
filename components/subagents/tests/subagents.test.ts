@@ -244,13 +244,15 @@ describe("owned subagent surface", () => {
 		expect(DEFAULT_AGENTS.get("explorer")).toMatchObject({ profile: "quick" });
 	});
 
-	it("structurally withholds shell and write tools from every read-only default", () => {
+	it("gives advisory roles every built-in except direct file editing", () => {
 		for (const type of ["explorer", "planner", "researcher", "consultant"]) {
-			const tools = DEFAULT_AGENTS.get(type)?.builtinToolNames ?? [];
-			expect(tools).toEqual(["read", "grep", "find", "ls"]);
-			expect(tools).not.toContain("bash");
-			expect(tools).not.toContain("edit");
-			expect(tools).not.toContain("write");
+			const config = DEFAULT_AGENTS.get(type);
+			expect(config?.builtinToolNames).toEqual(
+				BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
+			);
+			expect(config?.builtinToolNames).toContain("bash");
+			expect(config?.systemPrompt).toContain("Keep repository files and external resources unchanged");
+			expect(config?.systemPrompt).not.toContain("Read-only access is enforced structurally");
 		}
 	});
 
@@ -373,14 +375,14 @@ describe("owned subagent surface", () => {
 		for (const retired of retiredCapitalizedNames) expect(DEFAULT_AGENTS.has(retired)).toBe(false);
 		expect(DEFAULT_AGENTS.get("researcher")).toMatchObject({
 			profile: "quick",
-			builtinToolNames: ["read", "grep", "find", "ls"],
+			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("consultant")).toMatchObject({
 			profile: "deep",
-			builtinToolNames: ["read", "grep", "find", "ls"],
+			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("builder")).toMatchObject({
@@ -398,7 +400,7 @@ describe("owned subagent surface", () => {
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/external research partner/);
-		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/no docs tools/);
+		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieve primary sources/);
 		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/external research teammate/);
 		expect(DEFAULT_AGENTS.get("consultant")?.systemPrompt).toMatch(/senior software architect/);
 		expect(DEFAULT_AGENTS.get("builder")?.systemPrompt).toMatch(/that is the designer's role/);
