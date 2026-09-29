@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
 	createEditToolDefinition,
@@ -413,7 +413,19 @@ function displayValue(value: unknown): string {
 
 export function isOwnedMontyWorker(pid: number | undefined): boolean {
 	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
-	if (process.platform === "win32") return true;
+	if (process.platform === "win32") {
+		try {
+			const tasklist = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tasklist.exe");
+			const output = execFileSync(tasklist, ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				timeout: 1_000,
+			}).trim();
+			return output.toLowerCase().includes("monty.exe");
+		} catch {
+			return false;
+		}
+	}
 	try {
 		const output = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,command="], {
 			encoding: "utf8",

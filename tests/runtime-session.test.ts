@@ -126,6 +126,28 @@ describe("pi_exec Monty session tree", () => {
 		}
 	});
 
+	it("aborts an in-flight runaway loop on AbortSignal and rolls back to the previous checkpoint", async () => {
+		const manager = SessionManager.inMemory(process.cwd());
+		const session = harness(manager);
+		await session.emit("session_start", { reason: "startup" });
+		try {
+			await session.run("first", "x: int = 1");
+			const controller = new AbortController();
+			const running = session.tool.execute(
+				"abort-runaway",
+				{ code: "x = 99\nwhile True:\n    pass" },
+				controller.signal,
+				undefined,
+				session.ctx,
+			);
+			setTimeout(() => controller.abort(), 150);
+			await expect(running).rejects.toThrow(/aborted.*rolled back/s);
+			expect((await session.run("after-abort", "x")).content[0].text).toBe("1");
+		} finally {
+			await session.emit("session_shutdown", { reason: "quit" });
+		}
+	});
+
 	it("rolls back after exceeding Monty's memory limit", async () => {
 		const manager = SessionManager.inMemory(process.cwd());
 		const session = harness(manager);
