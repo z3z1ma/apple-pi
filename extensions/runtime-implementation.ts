@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -411,6 +411,24 @@ function displayValue(value: unknown): string {
 	}
 }
 
+export function isOwnedMontyWorker(pid: number | undefined): boolean {
+	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
+	if (process.platform === "win32") return true;
+	try {
+		const output = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,command="], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 1_000,
+		}).trim();
+		const [ppidStr, ...rest] = output.split(/\s+/);
+		const ppid = Number(ppidStr);
+		const command = rest.join(" ");
+		return ppid === process.pid && command.includes("monty") && command.includes("subprocess");
+	} catch {
+		return false;
+	}
+}
+
 export default function runtime(pi: ExtensionAPI): void {
 	let captureError: string | undefined;
 	try {
@@ -429,6 +447,7 @@ export default function runtime(pi: ExtensionAPI): void {
 	let activeAbort: AbortController | undefined;
 	const stopWorker = (live: Awaited<ReturnType<typeof createProgramSession>>, pid: number | undefined) => {
 		if (pid === undefined || live.session.workerPid !== undefined) return;
+		if (!isOwnedMontyWorker(pid)) return;
 		try {
 			process.kill(pid, "SIGKILL");
 		} catch (error) {
