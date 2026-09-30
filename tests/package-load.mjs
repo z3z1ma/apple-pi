@@ -27,7 +27,6 @@ try {
 			"extensions/vroom.ts",
 			"extensions/home-search-guard.ts",
 			"extensions/runtime.ts",
-			"extensions/mcp.ts",
 			"extensions/work.ts",
 			"extensions/subagents.ts",
 			"extensions/ledger.ts",
@@ -47,7 +46,7 @@ try {
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 21);
+	assert.equal(result.extensions.length, 20);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -154,8 +153,6 @@ try {
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
 	for (const command of [
 		"pair",
-		"mcp",
-		"mcp-auth",
 		"work",
 		"agents",
 		"tasks",
@@ -183,7 +180,6 @@ try {
 		"search_session",
 		"revisit_note",
 		"pi_exec",
-		"mcp",
 		"agent",
 		"get_subagent_result",
 		"steer_subagent",
@@ -197,6 +193,7 @@ try {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
 	for (const name of [
+		"mcp",
 		"mcpScript",
 		"pi_exec_program",
 		"remind_me",
@@ -214,7 +211,8 @@ try {
 	]) {
 		assert(!tools.has(name), `default package must not expose ${name}`);
 	}
-	for (const name of ["backlog", "todos"]) assert(!commands.has(name), `default package must not expose /${name}`);
+	for (const name of ["backlog", "todos", "mcp", "mcp-auth"])
+		assert(!commands.has(name), `package must not register /${name}`);
 	const scheduleTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "schedule");
@@ -268,6 +266,8 @@ try {
 	assert.equal(limits.timeoutSeconds.maximum, 7200);
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.equal(manifest.dependencies["@pydantic/monty"], "1.0.0", "Monty must be a pinned runtime dependency");
+	assert.equal(manifest.dependencies["pi-mcp-adapter"], undefined, "MCP belongs to Pi");
+	assert(!existsSync("extensions/mcp.ts"), "removed MCP wrapper must be absent");
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
 	assert(
@@ -324,12 +324,13 @@ try {
 	assert(manifest.files.includes("skills/"), "package manifest omits skills");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
-	const promptTemplates = loadPromptTemplates({
+	const { templates: promptTemplates, diagnostics: promptDiagnostics } = loadPromptTemplates({
 		cwd: process.cwd(),
 		agentDir: temp,
 		promptPaths: manifest.pi.prompts,
 		includeDefaults: false,
 	});
+	assert.deepEqual(promptDiagnostics, []);
 	assert.deepEqual(
 		promptTemplates.map((template) => template.name),
 		["distill", "interrogate"],

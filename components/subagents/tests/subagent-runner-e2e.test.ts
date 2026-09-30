@@ -27,7 +27,7 @@ const fauxProviders: Array<{ unregister(): void }> = [];
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
-const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "search_session", "mcp"];
+const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "search_session"];
 const FORBIDDEN_CHILD_TOOLS = ["revisit_note", "pi_exec", "clarify", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {
@@ -51,6 +51,93 @@ afterAll(() => {
 });
 
 describe("subagent runner with Pi's real AgentSession", () => {
+	it.each([true, false])(
+		"uses native MCP only when project configuration is trusted (%s)",
+		async (trusted) => {
+			const cwd = mkdtempSync(join(tmpdir(), "apple-pi-child-mcp-"));
+			temporaryDirectories.push(cwd);
+			mkdirSync(join(cwd, ".pi"));
+			writeFileSync(
+				join(cwd, ".pi", "mcp.json"),
+				JSON.stringify({
+					mcpServers: {
+						test: {
+							command: process.execPath,
+							args: [join(process.cwd(), "tests", "fixtures", "mcp-echo-server.mjs")],
+						},
+					},
+				}),
+			);
+			const faux = registerFauxProvider({ provider: "faux", models: [{ id: "child-mcp", contextWindow: 200_000 }] });
+			fauxProviders.push(faux);
+			faux.setResponses([
+				(context) => {
+					const names = getCurrentTools(context.messages).map((tool) => tool.name);
+					expect(names).not.toContain("mcp");
+					if (!trusted) {
+						expect(names).not.toContain("codemode");
+						return fauxAssistantMessage([fauxText("NO-PROJECT-MCP")]);
+					}
+					expect(names).toContain("codemode");
+					return fauxAssistantMessage([
+						fauxToolCall("codemode", {
+							code: 'const result = await tools.mcp__test__echo({value: "CHILD"}); text(result);',
+						}),
+					]);
+				},
+				(context) => {
+					expect(JSON.stringify(context)).toContain("echo:CHILD");
+					return fauxAssistantMessage([fauxText("NATIVE-CHILD-MCP-OK")]);
+				},
+			]);
+			const model = faux.getModel();
+			const runtime = fauxModelBackend(model);
+			registerAgents(
+				new Map([
+					[
+						"mcp-child",
+						{
+							name: "mcp-child",
+							description: "test",
+							builtinToolNames: ["read"],
+							extensions: false,
+							skills: false,
+							persistSession: false,
+							systemPrompt: "Call MCP if available.",
+							promptMode: "replace",
+						} as AgentConfig,
+					],
+				]),
+			);
+			let registeredTools: string[] = [];
+			const result = await runAgent(
+				{
+					cwd,
+					model,
+					modelRegistry: runtime.modelRegistry,
+					isProjectTrusted: () => trusted,
+					getSystemPrompt: () => "parent",
+					sessionManager: { getSessionFile: () => undefined },
+				} as any,
+				"mcp-child",
+				"Call echo.",
+				{
+					pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+					model,
+					onSessionCreated: (session) => {
+						registeredTools = session.getAllTools().map((tool) => tool.name);
+					},
+				},
+			);
+			expect(result.failure).toBeUndefined();
+			expect(result.responseText).toBe(trusted ? "NATIVE-CHILD-MCP-OK" : "NO-PROJECT-MCP");
+			expect(registeredTools).toContain("codemode");
+			expect(registeredTools).toContain("tool_search");
+			expect(registeredTools).not.toContain("mcp");
+		},
+		30_000,
+	);
+
 	it("keeps untrusted project agents and settings out of the root roster", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-roster-trust-"));
 		temporaryDirectories.push(cwd);
@@ -1105,7 +1192,8 @@ RELOADED ROLE MUST NOT RUN.
 				"edit",
 				"write",
 				"ledger_add",
-				"mcp",
+				"codemode",
+				"tool_search",
 				"share_note",
 				"ask_consultant",
 			]) {

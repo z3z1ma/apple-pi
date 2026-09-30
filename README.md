@@ -132,7 +132,7 @@ A great harness must feel like an extension of your nervous system. Apple Pi inc
 - **[Input Editor (`input-editor`)](docs/input-editor.md)**: Keeps the custom left-rail editor and model metadata while removing the bottom rail and footer row, displaying muted pair, MCP, cache, active-agent, active-task, and context indicators right-justified on the bottom of the editor.
 - **[Search Root Guard (`home-search-guard`)](docs/home-search-guard.md)**: Fail-closed guardrails that stop the agent from accidentally running recursive greps across `/`, `~`, or workspace roots.
 - **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
-- **[MCP Gateway (`mcp`)](docs/mcp.md)**: Pinned `pi-mcp-adapter` gateway exposed as a token-efficient `mcp` tool (`/mcp`), bridging external tools and resources directly into interactive sessions and `pi_exec` composition.
+- **[Native MCP](docs/mcp.md)**: Pi owns server connections, OAuth, resources, `/mcp`, and tool discovery. Connected tools are available to native codemode and the existing `pi_exec` bridge; see the documented Pi Exec permission limitations.
 - **[Managed Tasks, Scheduling & Reactive Execution (`tasks`)](docs/tasks.md)**: Start quiet background commands, schedule one-shot prompts and commands, or run `monitor` event adapters whose completed stdout lines steer the agent immediately. Every task terminal outcome—including failure, cancellation, and external termination—also steers an XML notification to the main agent. Active work appears above the editor and in `tasks:N` metadata; the `/work` Tasks tab provides focused inspection and confirmed cancellation. Root-only `schedule`, `monitor`, and `task` stay outside `pi_exec`.
 - **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
 
@@ -189,7 +189,7 @@ Architecture is defined by what you choose *not* to build. Consult [`docs/bounda
 ### Requirements
 - **Host**: macOS recommended (for native notifications and Ghostty/tmux focus scripts).
 - **Node.js**: `>= 22.19.0`
-- **Pi**: `>= 0.86.0` (`npm install -g @earendil-works/pi-coding-agent`)
+- **Pi**: `>= 0.99.0` (`npm install -g @earendil-works/pi-coding-agent`)
 - **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`, [`rtk`](docs/rtk.md) (≥ 0.23.0 for token-efficient bash execution).
 
 ### Installation

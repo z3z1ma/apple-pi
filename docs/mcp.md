@@ -1,26 +1,70 @@
 # MCP
 
-apple-pi installs `pi-mcp-adapter` 2.34.0 and exposes its normal `mcp` tool, `/mcp` setup/status panel, `/mcp-auth`, lazy server lifecycle, metadata cache, stdio/HTTP/SSE/socket transports, OAuth/keyring integration, approvals, output guards, prompts/resources, and MCP UI support. It reads the adapter's standard `.mcp.json`, shared global, and Pi override locations.
+Apple Pi uses Pi 0.99's built-in MCP support. It no longer installs `pi-mcp-adapter` or registers an MCP gateway. Pi owns server connections, stdio and streamable HTTP transports, OAuth, resources, tool discovery, and the `/mcp` manager.
 
-Run `/mcp setup` for guided configuration or create `.mcp.json` directly. Single calls use the ordinary gateway:
+## Configure and connect
 
-```javascript
-await extensions.mcp({ search: "issues" });
-await extensions.mcp({ tool: "github_search_issues", args: { query: "is:open" } });
+Put personal servers in `~/.pi/agent/mcp.json` and project servers in `.pi/mcp.json`. Project configuration loads only after the project is trusted. Both use an `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://example.com/mcp"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}
 ```
 
-Inside `pi_exec`, the same gateway becomes a programmable capability:
+Use Pi's shell commands to add and check servers:
 
-```javascript
-const candidates = await extensions.mcp({ search: "fetch issue", server: "github" });
-const ids = [101, 102, 103];
-return Promise.all(ids.map(async (id) => {
-  const result = await extensions.mcp({
-    tool: "github_get_issue",
-    args: { owner: "acme", repo: "app", issue_number: id },
-  });
-  return { id, text: result.text };
-}));
+```bash
+pi mcp add docs --url https://example.com/mcp
+pi mcp list
+pi mcp login docs
 ```
 
-The adapter's separate `mcpScript` VM is intentionally filtered out: `pi_exec` is the one programmable runtime and can compose MCP with Pi core tools, extension tools, and model agents. Direct MCP tools configured by the adapter remain available to ordinary Pi turns and are also discoverable through `pi_exec`'s extension catalog.
+Run `/reload` after configuration changes. `/mcp` shows server state, tools, exposure, and sign-in actions. Keep credentials in environment variables or Pi's credential store, rather than in repository files.
+
+## Tool calls and composition
+
+Pi registers each server tool as `mcp__<server>__<tool>`. The default `codemode` exposure keeps these tools out of direct model declarations and activates Pi's `codemode` tool. `direct` exposes them to ordinary model calls; `deferred` activates `tool_search` for discovery. Server-level `exposure` and per-tool `toolExposure` control these choices. `hidden` makes a tool unreachable through Pi's native tool pipeline.
+
+Native codemode scripts call tools with `tools.<name>(args)`:
+
+```javascript
+const result = await tools.mcp__docs__search({ query: "sessions" });
+text(result);
+```
+
+The existing Python `pi_exec` bridge also captures connected native MCP tools. Use their registered names and schema-checked keyword arguments:
+
+```python
+result = await mcp__docs__search(query="sessions")
+result["text"]
+```
+
+Discover tools with `tools_search(query)`, inspect them with `tools_describe(name)`, and invoke dynamically with `tools_call(name, args)` inside Python. The old `mcp(tool=..., args=...)` gateway and adapter namespace proxies are gone. MCP tools become available after the server connects; Python signatures refresh at cache-safe boundaries.
+
+**Current Pi Exec limitation:** its existing bridge invokes captured definitions directly. It does not enforce Pi 0.99's exposure rules or dispatch nested `tool_call`/`tool_result` permission hooks. Use ordinary native calls or native codemode when those gates are required. Moving Pi Exec to `ctx.tools`/`ctx.executeTool()` is deferred while its future is evaluated; native MCP connectivity tests do not establish permission parity.
+
+## Children and SDK sessions
+
+Ordinary interactive children explicitly load Pi's native MCP, codemode, and tool-search factories alongside their Apple Pi extensions. Internal BTW, clarification, and consultation sessions remain limited to their existing tools and safety hooks. Pi Exec model workers retain their existing extension scope; they do not gain MCP discovery.
+
+SDK sessions do not discover built-in extensions automatically. Supply Pi's `createMcpExtension()`, `createCodemodeExtension()`, and `createToolSearchExtension()` through `DefaultResourceLoader.extensionFactories`, then bind the session extensions. The Pi CLI supplies these built-ins itself.
+
+## Migration from the adapter
+
+- Copy supported `mcpServers` entries from adapter configuration into `mcp.json` at the appropriate scope. Native Pi does not read the adapter's `.mcp.json` locations.
+- Use stdio or streamable HTTP. Legacy SSE and adapter-specific socket transports are not supported by native Pi.
+- Preserve pre-registered OAuth client IDs. Rename the adapter's `oauth.redirectUri` to native `oauth.callbackUrl`, keeping the registered address and port unchanged. Native HTTP OAuth does not require an adapter-specific `auth` field.
+- Sign in again with `pi mcp login <server>` or `/mcp login <server>`. Native OAuth uses `~/.pi/agent/mcp-auth.json`; adapter keyring credentials are not migrated automatically.
+- Replace gateway calls and `/mcp setup` or `/mcp-auth` workflows with native tool names and Pi's MCP commands.
+- Remove any separately installed MCP extension that registers `/mcp`, since it replaces the native built-in. Apple Pi no longer supplies such an extension.
+
+Installing the updated package does not migrate server configuration or credentials automatically. Configuration edits and browser sign-ins are separate operator-authorized steps; credentials remain outside the repository.

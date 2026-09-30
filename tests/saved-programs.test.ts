@@ -1,7 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	ExtensionToolContext,
+	ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import runtime from "../extensions/runtime.js";
 
@@ -34,7 +39,7 @@ function registeredRuntime(cwd: string) {
 			getBranch: () => branch,
 			getSessionFile: () => undefined,
 		},
-	} as unknown as ExtensionContext;
+	} as unknown as ExtensionToolContext;
 	runtime({
 		appendEntry() {},
 		registerTool(tool: ToolDefinition<any, any>) {

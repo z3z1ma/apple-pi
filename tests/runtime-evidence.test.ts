@@ -56,7 +56,7 @@ describe("public evidence library", () => {
 			},
 			undefined,
 			undefined,
-			{ cwd, sessionManager: manager, hasUI: false } as unknown as pi.ExtensionContext,
+			{ cwd, sessionManager: manager, hasUI: false } as unknown as pi.ExtensionToolContext,
 		);
 		if (result.content[0]?.type !== "text") throw new Error("Expected a text result");
 		expect(JSON.parse(result.content[0].text)).toEqual({

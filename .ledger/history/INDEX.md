@@ -91,3 +91,5 @@
 - `.ledger/history/202609200830-unify-active-work-manager/task.md` — done — Unify active-work management under /work — Replace separate /agents and /tasks entrypoints with one tabbed work modal opened by /work or Ctrl+W, while preserving domain-specific detail actions.
 
 - `.ledger/history/202609251319-monty-pi-exec/task.md` — done — Replace pi_exec JavaScript VM with Monty Python sandbox — Research and plan to rebuild pi_exec on @pydantic/monty: type-checked Python guest, host-function bridges, VM-enforced limits, optional branch-aligned persistent sessions.
+
+- `.ledger/history/202609291615-adopt-pi-0-99-native-mcp/task.md` — done — Adopt Pi 0.99 native MCP — Upgrade Pi dependencies, remove third-party MCP adapter, validate root and child native MCP; defer Pi Exec redesign pending runtime decision.

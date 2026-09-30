@@ -64,7 +64,6 @@
       "./extensions/vroom.ts",
       "./extensions/home-search-guard.ts",
       "./extensions/runtime.ts",
-      "./extensions/mcp.ts",
       "./extensions/work.ts",
       "./extensions/subagents.ts",
       "./extensions/ledger.ts",
@@ -100,18 +99,18 @@
     "audit:cache": "node scripts/cache-audit.mjs"
   },
   "peerDependencies": {
-    "@earendil-works/pi-agent-core": "*",
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
+    "@earendil-works/pi-agent-core": ">=0.99.0",
+    "@earendil-works/pi-ai": ">=0.99.0",
+    "@earendil-works/pi-coding-agent": ">=0.99.0",
+    "@earendil-works/pi-tui": ">=0.99.0",
     "typebox": "*"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
-    "@earendil-works/pi-agent-core": "0.86.0",
-    "@earendil-works/pi-ai": "0.86.0",
-    "@earendil-works/pi-coding-agent": "0.86.0",
-    "@earendil-works/pi-tui": "0.86.0",
+    "@earendil-works/pi-agent-core": "0.99.0",
+    "@earendil-works/pi-ai": "0.99.0",
+    "@earendil-works/pi-coding-agent": "0.99.0",
+    "@earendil-works/pi-tui": "0.99.0",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^24.0.0",
     "typebox": "^1.1.38",
@@ -122,7 +121,6 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
-    "@pydantic/monty": "1.0.0",
-    "pi-mcp-adapter": "2.34.0"
+    "@pydantic/monty": "1.0.0"
   }
 }

@@ -89,18 +89,6 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Integration: `pi_exec` executes type-checked Python snippets in Monty's local subprocess pool. The upstream package and platform-specific worker binaries remain normal npm dependencies; no Monty source is copied into apple-pi.
 - Monty supplies the Python subset, worker isolation, and resource limits. apple-pi owns the Pi tool bridge, tool-call policy, cancellation, result conversion, and traces. Monty's local worker is not an OS-level security boundary.
 
-## pi-mcp-adapter (runtime dependency)
-
-- Source: <https://github.com/nicobailon/pi-mcp-adapter>
-- Reviewed commit: `5ee81b47b571b3c4ac2e68a03812c64e3f95cb98` (2.26.0 integration)
-- Pinned npm version: `2.34.0`
-- Adapter source is not copied, and `mcpScript` remains filtered at registration. Version 2.34.0 declares Pi AI support through 0.85; this personal harness deliberately retains it with Pi 0.86 after its compile, loader, unit, and MCP integration checks pass.
-- Author named by the source package: Nico Bailon
-- Integration path: `extensions/mcp.ts`
-- License: MIT
-- Original notice: `Copyright (c) 2026 Nico Bailon`
-- Boundary: the upstream package is installed as a normal npm dependency; its source is not copied into apple-pi. apple-pi suppresses only the duplicate `mcpScript` tool at registration and exposes the adapter's `mcp` gateway to ordinary Pi turns and `pi_exec`. The dependency retains ownership of MCP transports, protocol negotiation, lifecycle, OAuth/keyring storage, approvals, output guarding, prompts/resources, and MCP UI behavior.
-
 ## tmux-claude-session-manager → Tmux sessions
 
 - Source: <https://github.com/craftzdog/tmux-claude-session-manager>

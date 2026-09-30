@@ -12,7 +12,6 @@ import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
-import { MCP_EXTENSION_PATH } from "../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
 import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
@@ -87,7 +86,6 @@ describe("wiki workbench distribution", () => {
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
-				MCP_EXTENSION_PATH,
 				RTK_EXTENSION_PATH,
 			],
 		});
@@ -110,7 +108,6 @@ describe("wiki workbench distribution", () => {
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
-				MCP_EXTENSION_PATH,
 				RTK_EXTENSION_PATH,
 				PAIR_EXTENSION_PATH,
 			],

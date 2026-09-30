@@ -10,6 +10,9 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	createAgentSession,
+	createCodemodeExtension,
+	createMcpExtension,
+	createToolSearchExtension,
 	DefaultResourceLoader,
 	type ExtensionAPI,
 	getAgentDir,
@@ -20,7 +23,6 @@ import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js
 import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
-import { MCP_EXTENSION_PATH } from "../../../extensions/mcp.js";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../../../extensions/rtk.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
@@ -89,7 +91,6 @@ export function childSessionExtensions(
 			LEDGER_EXTENSION_PATH,
 			WIKI_EXTENSION_PATH,
 			SESSION_SEARCH_EXTENSION_PATH,
-			MCP_EXTENSION_PATH,
 			RTK_EXTENSION_PATH,
 		);
 		if (pair) additionalExtensionPaths.push(PAIR_EXTENSION_PATH);
@@ -440,6 +441,10 @@ export async function runAgent(
 		settingsManager,
 		noExtensions,
 		additionalExtensionPaths,
+		extensionFactories:
+			options.loadStandardChildExtensions !== false
+				? [createMcpExtension(), createCodemodeExtension(), createToolSearchExtension()]
+				: [],
 		noSkills,
 		noPromptTemplates: true,
 		noThemes: true,
@@ -594,12 +599,19 @@ export async function runAgent(
 		throw error;
 	}
 
-	// Pi activates a small built-in default at turn 1. Promote every registered
-	// tool that excludeTools did not deny, including ledger_add / ledger_close.
+	// Promote the child's ordinary extension tools, while retaining native MCP's
+	// choice of discovery tools and keeping deferred tools out of declarations.
 	const denied = new Set(sessionExcludeTools);
+	const active = new Set(session.getActiveToolNames());
 	session.setActiveToolsByName(
 		session
 			.getAllTools()
+			.filter(
+				(tool) =>
+					active.has(tool.name) ||
+					((tool.exposure === "direct" || tool.exposure === "model-only") &&
+						session.getToolDefinition(tool.name)?.defaultActive !== false),
+			)
 			.map((tool) => tool.name)
 			.filter((name) => !denied.has(name)),
 	);

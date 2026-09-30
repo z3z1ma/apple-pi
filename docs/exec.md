@@ -38,7 +38,9 @@ Worker calls share the host call, concurrency, agent, and wall-clock budgets. Wo
 
 ## Extensions, fetch, and skills
 
-Each captured extension tool is callable by its registered name with schema-checked keyword arguments, for example `await mcp(tool="test_echo", args={"value": "hello"})`. Use `tools_list()`, `tools_search(query)`, `tools_describe(name)`, and `tools_call(name, args)` for dynamic discovery. The interactive subagent manager and root-only task tools remain unavailable inside Monty. The MCP gateway still owns MCP transport and authentication.
+Each captured extension tool is callable by its registered name with schema-checked keyword arguments, for example `await mcp__test__echo(value="hello")` for a connected native MCP server. Use `tools_list()`, `tools_search(query)`, `tools_describe(name)`, and `tools_call(name, args)` for dynamic discovery. The interactive subagent manager and root-only task tools remain unavailable inside Monty. Pi owns MCP transport and authentication; the adapter gateway is gone.
+
+The existing capture bridge invokes definitions directly, rather than through Pi 0.99's `ctx.executeTool()`. It does not enforce native exposure rules or nested permission hooks. Use native calls or codemode when those gates are required. See [MCP](mcp.md) for configuration, migration, and the deferred bridge update.
 
 `fetch(url, method=..., headers=..., body=...)` accepts a URL, optional string headers, and a text or byte request body. It returns status, headers, URL, and a text body for textual responses or bytes for binary responses. Convert bytes before returning a JSON result. Trace summaries omit header values, request bodies, credentials, and URL queries. `skills_list()` and `skills_body(name)` expose only model-invocable skills; bodies omit frontmatter.
 

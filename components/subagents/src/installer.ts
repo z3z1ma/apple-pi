@@ -106,7 +106,7 @@ function appendRequestedConversation(
 }
 
 export default function installSubagents(pi: ExtensionAPI): void {
-	// Child sessions load fast mode, both safety guards, ledger, search_session, and MCP via explicit `-e` and never
+	// Child sessions load explicit Apple Pi paths plus native MCP/discovery factories and never
 	// create a second manager. Nested tools are injected explicitly.
 	if (inChildSessionContext()) return;
 
