@@ -40,13 +40,14 @@ try {
 			"extensions/prompt-stash.ts",
 			"extensions/terse-tools.ts",
 			"extensions/rtk.ts",
+			"extensions/change-reflection.ts",
 		],
 		process.cwd(),
 		eventBus,
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 20);
+	assert.equal(result.extensions.length, 21);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -79,6 +80,14 @@ try {
 	assert(
 		result.extensions.some((extension) => extension.path.endsWith("terse-tools.ts")),
 		"missing terse tools extension",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("change-reflection.ts") &&
+				(extension.handlers.get("agent_before_settle")?.length ?? 0) > 0,
+		),
+		"missing change reflection settle hook",
 	);
 	assert(
 		result.extensions.some(
@@ -313,6 +322,14 @@ try {
 	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
 	assert(manifest.files.includes("components/tasks/src/"), "package manifest omits tasks source");
 	assert(manifest.files.includes("components/prompt-stash/src/"), "package manifest omits prompt-stash source");
+	assert(
+		manifest.pi.extensions.includes("./extensions/change-reflection.ts"),
+		"package manifest omits change reflection extension",
+	);
+	assert(
+		manifest.files.includes("components/change-reflection/src/"),
+		"package manifest omits change reflection source",
+	);
 	assert(
 		manifest.files.includes("optional-extensions/todos/index.ts"),
 		"package manifest omits optional todos entrypoint",

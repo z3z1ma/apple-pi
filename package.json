@@ -43,6 +43,7 @@
     "components/prompt-stash/src/",
     "components/terse-tools/src/",
     "components/rtk/src/",
+    "components/change-reflection/src/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -76,7 +77,8 @@
       "./extensions/tasks.ts",
       "./extensions/prompt-stash.ts",
       "./extensions/terse-tools.ts",
-      "./extensions/rtk.ts"
+      "./extensions/rtk.ts",
+      "./extensions/change-reflection.ts"
     ],
     "skills": [
       "./skills"

@@ -23,6 +23,7 @@ export default defineConfig({
 			"components/prompt-stash/tests/**/*.test.ts",
 			"components/terse-tools/tests/**/*.test.ts",
 			"components/rtk/tests/**/*.test.ts",
+			"components/change-reflection/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],
