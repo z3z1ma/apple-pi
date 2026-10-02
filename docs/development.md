@@ -23,6 +23,8 @@ Treat the harness as a small computational world rather than a catalog of unrela
 - Product documentation owns the complete human and maintainer contract. It is invisible to the running model and contributes no runtime guidance.
 - Skills own repeatable engineering procedures or optional progressive disclosure. A model should not need to discover a skill before it can use a native tool correctly.
 
+Extensions add system-prompt text as named sections on `event.systemPromptOptions.sections` through `setSystemPromptSection` in `components/shared/src/system-prompt-section.ts`. Returning `systemPrompt` from `before_agent_start` would force one opaque prompt for the whole run and discard Pi's section structure. A subagent with a custom preamble receives its tool summaries and usage rules as `<tools>` and `<rules>` sections, because Pi renders those only under its default preamble.
+
 Avoid duplicating the same manual across these layers. Put each fact at the narrowest layer that is always present when the model needs it. Before deleting a skill, classify its content and migrate every ordinary-use concept that would otherwise disappear from runtime instructions; tests should assert the retained prompt-bearing surface rather than pointing to documentation.
 
 ## Skill composition

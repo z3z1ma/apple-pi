@@ -1,13 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-	appendRtkSystemPrompt,
-	isRtkAvailable,
-	parseSemver,
-	probeRtk,
-	resetRtkCache,
-	rewriteCommand,
-	RTK_SYSTEM_PROMPT_SECTION,
-} from "../src/index.js";
+import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } from "../src/index.js";
 import { formatCollapsedLine, formatStatusBullet, stripAnsi } from "../../terse-tools/src/formatters.js";
 import { createBashToolDefinition, createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
 import installRtk from "../../../extensions/rtk.js";
@@ -123,28 +115,6 @@ describe("RTK rewriteCommand", () => {
 	it("returns null for commands without an RTK equivalent", async () => {
 		const rewritten = await rewriteCommand("echo hello world");
 		expect(rewritten).toBeNull();
-	});
-});
-
-describe("RTK system prompt injection", () => {
-	it("returns the RTK section when base prompt is empty", () => {
-		const result = appendRtkSystemPrompt("");
-		expect(result).toBe(RTK_SYSTEM_PROMPT_SECTION);
-		expect(result).toContain("Shell Optimization (RTK)");
-		expect(result).toContain("verbatim: true");
-	});
-
-	it("appends the RTK section to an existing system prompt", () => {
-		const base = "You are an assistant.";
-		const result = appendRtkSystemPrompt(base);
-		expect(result).toContain(base);
-		expect(result).toContain(RTK_SYSTEM_PROMPT_SECTION);
-	});
-
-	it("is idempotent when the RTK section is already present", () => {
-		const once = appendRtkSystemPrompt("You are an assistant.");
-		const twice = appendRtkSystemPrompt(once);
-		expect(twice).toBe(once);
 	});
 });
 

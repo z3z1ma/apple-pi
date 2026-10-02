@@ -73,7 +73,7 @@ describe("pi_exec skills", () => {
 			expect(names).not.toContain("review");
 			expect(names).toContain("tdd");
 			expect(names).toContain("resolving-merge-conflicts");
-			expect(names).toContain("ralph");
+			expect(names).not.toContain("ralph");
 			expect(names).not.toContain("implement");
 			expect(names).not.toContain("improve-codebase-architecture");
 			expect(names).not.toContain("interrogate-to-design");
@@ -754,7 +754,7 @@ describe("pi_exec tool", () => {
 		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 		try {
-			expect(tool.parameters.properties.code.description).toContain("schemas: mirror.");
+			expect(tool.parameters.properties.code.description).toContain("tools_describe");
 			expect(tool.parameters.properties.code.description).not.toContain("async def mirror(");
 			const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mirror" } };
 			await expect(

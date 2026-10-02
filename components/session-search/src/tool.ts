@@ -30,7 +30,7 @@ export const sessionSearchTool = defineTool({
 		"This looks through session history, not git history or the current repository. " +
 		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
 		"It follows the active lineage by default; scope:'all' includes other branches.",
-	promptSnippet: "search_session: recover earlier conversation, tool results, and file operations from this session.",
+	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
 	promptGuidelines: [
 		"Use search_session for earlier work or evidence missing from context, including after compaction. Use grep, find, or read for current repository files; use revisit_note for a known notebook id.",
 	],

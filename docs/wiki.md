@@ -67,9 +67,9 @@ Both tools are read-only, stay inside the project-local non-symlink `.wiki/` bou
 
 ## Prompt and skill boundary
 
-The wiki extension adds a compact workbench contract to root sessions, ordinary child sessions, and `pi_exec` workers, matching ledger distribution. The internal `/btw` child and pair programmer sidecar do not receive the wiki contract or tools.
+The wiki extension adds a compact `<wiki-workbench>` section to root sessions, ordinary child sessions, and `pi_exec` workers when the session's working directory contains `.wiki/`. A project without a wiki keeps the two tools but not the section; the `llm-wiki` skill covers initialization. The internal `/btw` child and pair programmer sidecar do not receive the wiki contract or tools.
 
-The compact prompt explains the directory, normal layout, link identity, and when to use the tools. The [`llm-wiki` skill](../skills/llm-wiki/) supplies the fuller on-demand procedures for:
+The compact prompt explains the directory, where local conventions live, link identity, and when to use the tools. The [`llm-wiki` skill](../skills/llm-wiki/) supplies the fuller on-demand procedures for:
 
 - initialization;
 - source-aware ingestion;

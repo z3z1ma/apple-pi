@@ -8,7 +8,6 @@ describe("runtime capability guidance", () => {
 		expect(guidance).toContain("Use direct tools for a single operation");
 		expect(guidance).toContain("Keep intermediate results inside the program");
 		expect(guidance).toContain("preserves the evidence");
-		expect(guidance).toContain("await dependent steps in order");
 		expect(guidance).toContain("Check tool and worker outcomes");
 		expect(guidance).toContain("Surface failures and missing evidence");
 	});
@@ -16,6 +15,8 @@ describe("runtime capability guidance", () => {
 	it("keeps invocation mechanics and helper discovery in the code contract", () => {
 		const contract = piExecGuestApiContract();
 		expect(contract).toContain("pass keyword arguments");
+		expect(contract).toContain("await dependent steps in order");
+		expect(contract).toContain("tools_describe");
 		expect(contract).toContain("tools_search/tools_call");
 		expect(contract).toContain("repo_change_neighborhood");
 		expect(contract).toContain("dev_find_relevant_tests/dev_run_relevant_tests");

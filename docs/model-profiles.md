@@ -56,13 +56,13 @@ The inference profiles have these intended inference characteristics:
 
 | Inference profile | Intended characteristics |
 | --- | --- |
-| `quick` | Latency-first inference intended for a fast, economical model with light-to-moderate reasoning effort. |
-| `balanced` | General-purpose inference intended for a broadly capable model with substantial but measured reasoning effort. |
-| `pair` | An economical, attentive pair programming partner that follows the work, keeps context, and occasionally asks for deeper architectural judgment. |
-| `deep` | Maximum-depth inference intended for the strongest reasoning model available with high reasoning effort. |
-| `coding` | Software-engineering inference intended for a code-strong model with high reasoning effort. |
-| `visual-engineering` | Visual-engineering inference intended for a model strong in UI, spatial, and multimodal reasoning with moderate-to-high effort. |
-| `background` | Low-cost asynchronous inference intended for an economical model with low reasoning effort. |
+| `quick` | Fast, economical model with light-to-moderate reasoning. |
+| `balanced` | Broadly capable model with measured reasoning. |
+| `pair` | Economical, attentive model that follows the work and notices concrete risk. |
+| `deep` | Strongest available model with high reasoning effort. |
+| `coding` | Code-strong model with high reasoning effort. |
+| `visual-engineering` | Model strong in UI, spatial, and multimodal reasoning, with moderate-to-high effort. |
+| `background` | Low-cost model with low reasoning effort for asynchronous work. |
 
 Built-in and custom Markdown teammates may select one of these known names with `profile:`. The interactive `agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agent_run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent pair programming partner always uses `pair`; the consultant uses `deep`.
 

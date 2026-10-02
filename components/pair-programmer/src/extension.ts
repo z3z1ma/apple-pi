@@ -1314,14 +1314,17 @@ function sessionIdFromCtx(ctx: unknown): string | undefined {
 // session_start). Must match HANDOFF_SESSION_REPLACED_CHANNEL in handoff.ts.
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
 
-import { appendPrimaryPairPrompt, loadEnabled, loadSystemPrompt, PAIR_MODEL_PROFILE, saveEnabled } from "./config.js";
-
-export {
-	appendPrimaryPairPrompt,
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
+import {
+	loadEnabled,
 	loadSystemPrompt,
 	PAIR_MODEL_PROFILE,
 	PRIMARY_PAIR_PROTOCOL,
+	PRIMARY_PAIR_PROTOCOL_TAG,
+	saveEnabled,
 } from "./config.js";
+
+export { loadSystemPrompt, PAIR_MODEL_PROFILE, PRIMARY_PAIR_PROTOCOL, PRIMARY_PAIR_PROTOCOL_TAG } from "./config.js";
 
 // Wraps an advisory card's body in a severity-colored left rule (one line prefix
 // per rendered row), matching the bordered-card convention read from richer
@@ -2155,14 +2158,14 @@ export default function (pi: ExtensionAPI) {
 
 	// User preflight happens before Pi starts streaming, so mark the turn running
 	// here as well as at turn_start. This closes the only real pre-turn window without
-	// consulting isIdle() or maintaining a second terminal flag. Also append the
-	// primary-agent protocol so weaker models actually handle steered pair notes.
+	// consulting isIdle() or maintaining a second terminal flag. Also add the
+	// primary-agent protocol section so weaker models actually handle steered pair notes.
 	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
 		turnState = "running";
 		reviewScheduler.setRunActive(true);
-		return { systemPrompt: appendPrimaryPairPrompt(event.systemPrompt ?? "") };
+		setSystemPromptSection(event.systemPromptOptions, PRIMARY_PAIR_PROTOCOL_TAG, PRIMARY_PAIR_PROTOCOL);
 	});
 
 	pi.on("message_end", (event) => {

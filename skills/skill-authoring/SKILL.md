@@ -1,6 +1,6 @@
 ---
 name: skill-authoring
-description: "Use when creating, editing, or verifying an Agent Skill for a reusable procedure, technique, pattern, or reference."
+description: "Write and verify Agent Skills. Use when creating, editing, or verifying a SKILL.md or its supporting files."
 ---
 
 # Author Agent Skills
@@ -27,13 +27,14 @@ skills/
 ```yaml
 ---
 name: lowercase-hyphen-name
-description: "Use when ..."
+description: "Does X. Use when ..."
 ---
 ```
 
 - `name` uses letters, numbers, and hyphens and matches the directory.
-- `description` states triggering conditions, not a compressed workflow.
-- Keep the description concrete and searchable.
+- `description` says in one short clause what the skill does, then states its narrowest real trigger. It is not a compressed workflow.
+- Keep the description short, concrete, and searchable. A broad trigger loads the skill for work it does not help, and an overlapping trigger makes two skills compete.
+- Set `disable-model-invocation: true` for workflows the operator starts explicitly with `/skill:<name>`.
 - Keep the skill concise enough to load economically.
 
 ## Write for frontier models
@@ -90,6 +91,8 @@ Add a supporting file only when:
 - removing it would make the skill materially less useful or correct.
 
 Fixtures, manifests, evidence modules, and scripts belong only when the production skill consumes them.
+
+For a skill with several workflows, keep `SKILL.md` a short router that points to each workflow's file, so a reader loads only the part the task needs.
 
 ## Discovery and maintenance
 

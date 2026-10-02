@@ -1,19 +1,9 @@
 export const LEDGER_SYSTEM_PROMPT_TAG = "ledger-workbench";
 
-export const LEDGER_SYSTEM_PROMPT = `<ledger-workbench>
-# The ledger
+export const LEDGER_SYSTEM_PROMPT = `The ledger is the project's task workbench. \`.ledger/\` holds one directory per undertaking, \`.ledger/INDEX.md\` lists live tasks, and closed tasks move to \`.ledger/history/\`. The repository owner decides whether it is committed or shared.
 
-The ledger is a simple project-local convention: \`.ledger/\` contains one open-ended directory per undertaking. It gives task work a stable, searchable home without imposing an artifact schema. The repository owner decides whether it is ignored, committed, or shared. \`.ledger/INDEX.md\` maps live tasks; closed bundles live under \`.ledger/history/\`.
+Use a task when work needs to be written down, resumed, handed off, or understood later; small, coherent work needs none. Before you add a task, check the index for one that already owns the work.
 
-Check the index for an existing task that owns the undertaking before creating one. Use the ledger when work needs to be written down, resumed, handed off, or understood later; small coherent work need not create a task.
+A task's \`task.md\` holds its intent, status, current state, and outcome. Keep the status current with \`ledger_status\`: \`planning\` until intent, approach, and acceptance criteria are settled, then \`ready\`, then \`in-progress\` once implementation starts. Add other files only when they serve the work; the workflow that creates a file owns its format. Keep \`retrospective.md\` to what mattered and the lessons worth retrieving later.
 
-Each task has \`task.md\` for its identity, status, intent, current state, and outcome. A live task is \`planning\` until its intent, approach, and acceptance criteria are settled, then \`ready\`, then \`in-progress\` once implementation starts. Move it with \`ledger_status\` at each change so \`.ledger/INDEX.md\` shows how much work is in planning and in progress. Add only useful artifacts at any paths that serve the work. The skill or workflow that creates an artifact owns its format; living under \`.ledger/\` does not make it a ledger-wide schema. Every new task also has \`retrospective.md\`: keep it concise and use it to distill what mattered and lessons worth retrieving without replaying operational context.
-
-\`ledger_add\` creates a task directory and index entry as \`planning\`. \`ledger_status\` sets a live status or archives the task as \`done\` or \`cancelled\`; it does not judge whether work is complete. Read and edit existing ledger files with ordinary repository tools. Repository documentation and tests retain durable product authority; task-specific execution context stays in the ledger.
-</ledger-workbench>`;
-
-export function appendLedgerSystemPrompt(systemPrompt: string): string {
-	if (systemPrompt.includes(`<${LEDGER_SYSTEM_PROMPT_TAG}>`)) return systemPrompt;
-	const base = systemPrompt.trim();
-	return base ? `${base}\n\n${LEDGER_SYSTEM_PROMPT}` : LEDGER_SYSTEM_PROMPT;
-}
+Repository documentation and tests stay authoritative for product behavior; the ledger holds task-specific context.`;

@@ -24,27 +24,31 @@ import { estimateStringTokens } from "./tokens.js";
 
 export const UPDATE_NOTEBOOK_TOOL_NAME = "update_notebook";
 
-const UpdateNotebookSchema = Type.Object({
-	reflections: Type.Array(
+const notebookReflections = (sourceDescription: string) =>
+	Type.Array(
 		Type.Object({
 			content: Type.String({ minLength: 1 }),
 			sourceEntryIds: Type.Optional(
-				Type.Array(Type.String({ minLength: 1 }), {
-					minItems: 1,
-					description:
-						"Primary source entry ids. The main agent may omit these to cite the current user turn; the pair supplies explicit ids.",
-				}),
+				Type.Array(Type.String({ minLength: 1 }), { minItems: 1, description: sourceDescription }),
 			),
 			supersedes: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })),
 		}),
-	),
+	);
+
+const UpdateNotebookSchema = Type.Object({
+	reflections: notebookReflections("Primary source entry ids for this conclusion."),
 	retireReflectionIds: Type.Array(Type.String({ minLength: 1 })),
 	retainReflectionIds: Type.Optional(
 		Type.Array(Type.String({ minLength: 1 }), {
 			description:
-				"Required for a full pair review: explicitly select existing conclusions to keep. An empty array deliberately retires all existing conclusions. Omit for targeted updates.",
+				"Required for a full review: explicitly select existing conclusions to keep. An empty array deliberately retires all existing conclusions. Omit for targeted updates.",
 		}),
 	),
+});
+
+const MainUpdateNotebookSchema = Type.Object({
+	reflections: notebookReflections("Primary source entry ids. Omit to cite the current user turn."),
+	retireReflectionIds: Type.Array(Type.String({ minLength: 1 })),
 });
 
 export type UpdateNotebookArgs = Static<typeof UpdateNotebookSchema>;
@@ -389,13 +393,12 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 			name: UPDATE_NOTEBOOK_TOOL_NAME,
 			label: "Update pair programmer notebook",
 			description:
-				"Add, supersede, or retire working conclusions in the shared session notebook. New conclusions cite source entry ids, or omit sourceEntryIds to cite the current user turn. These are revisable, scoped working conclusions. Ordinary calls ignore retainReflectionIds; use retireReflectionIds or supersedes to remove a conclusion. Changes take effect on the next context rebuild.",
-			promptSnippet:
-				"Use update_notebook to add, supersede, or retire a working conclusion that should still change later work.",
+				"Add, supersede, or retire working conclusions in the notebook you share with the pair programmer. Conclusions are revisable and scoped; each cites source entry ids, or the current user turn when sourceEntryIds is omitted. Remove a conclusion with retireReflectionIds or supersedes. Changes take effect on the next context rebuild.",
+			promptSnippet: "Add, supersede, or retire a working conclusion that should still change later work.",
 			promptGuidelines: [
 				"Use update_notebook for conclusions that should change later decisions beyond what compaction preserves. Supersede or retire them once evidence, resolved work, or a scope change makes them obsolete; an empty notebook is fine.",
 			],
-			parameters: UpdateNotebookSchema,
+			parameters: MainUpdateNotebookSchema,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				if (runtime.disposed) {
 					return {

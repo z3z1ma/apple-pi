@@ -6,7 +6,7 @@ Use Pi Exec when a task needs tool composition or computation over tool results;
 
 ## Core tool surface
 
-The `code` parameter shows live signatures for core tools and host functions, and lists captured extension tools by name; `tools_describe(name)` returns an extension tool's parameters. Monty's checker receives full signatures for every tool before execution, so a wrong keyword argument is reported before any tool call starts. Use keyword arguments and `await`:
+The `code` parameter shows live signatures for core tools and host functions. It does not list captured extension tools, so its text stays stable as MCP servers connect; find them with `tools_list()` or `tools_search(query)`, and `tools_describe(name)` returns an extension tool's parameters. Monty's checker receives full signatures for every tool before execution, so a wrong keyword argument is reported before any tool call starts. Use keyword arguments and `await`:
 
 ```python
 import asyncio

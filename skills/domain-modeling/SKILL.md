@@ -1,6 +1,6 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing domain-language pages in `.wiki/`, defining bounded contexts, or recording or editing an ADR.
+description: Build and sharpen a project's domain language. Use when defining or challenging terms or bounded contexts, editing domain-language pages, or recording an ADR.
 ---
 
 # Domain Modeling

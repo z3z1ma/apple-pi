@@ -34,7 +34,7 @@ export function createScheduleTool(taskManager: TaskManager) {
 			"Schedule one self-authored prompt or bash command after a relative delay. A due prompt steers the agent at once, entering an active run at its next safe boundary or starting a turn while idle; a due command starts silently and wakes the agent only when it finishes. Scheduled work is session-local and managed with the task tool.",
 		promptSnippet: "Schedule a one-shot prompt or bash command for later in this root session.",
 		promptGuidelines: [
-			"Use schedule prompt to wake yourself with deferred guidance and schedule command to start bash later without an inference turn at start time.",
+			"Use a schedule prompt to wake yourself with deferred guidance, and a schedule command to start bash later without an inference turn.",
 			"Scheduled work is cancelled on fork, tree navigation, session switch, or shutdown.",
 		],
 		parameters: scheduleParameters,

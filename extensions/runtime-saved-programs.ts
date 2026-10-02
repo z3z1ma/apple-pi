@@ -9,7 +9,7 @@ const MAX_PROGRAM_BYTES = 100_000;
 const MAX_DESCRIPTION_CHARS = 300;
 
 export const SAVED_PROGRAM_PROMPT_GUIDELINE =
-	"Save reusable Python snippets as .pi/programs/<name>.py with a leading Python docstring: a one-line description, then @param tags such as @param {str} message or @param {int} [count=2]. Use [name] for optional parameters. They register program_<name> tools at cache-safe boundaries and require a trusted project to run. Typed arguments and defaults reach inputs as strings; convert numbers with int()/float() and compare booleans to 'true'.";
+	"Save a reusable program as .pi/programs/<name>.py with a leading Python docstring: a one-line description, then @param tags such as @param {str} message or @param {int} [count=2], where [name] marks an optional parameter. It registers a program_<name> tool at the next cache-safe boundary and runs only in a trusted project. Arguments reach inputs as strings, so convert numbers with int()/float() and compare booleans to 'true'.";
 
 export interface ProgramParam {
 	name: string;

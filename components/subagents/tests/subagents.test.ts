@@ -431,11 +431,11 @@ describe("owned subagent surface", () => {
 			promptMode: "replace",
 		});
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/external research partner/);
-		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieve primary sources/);
+		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieved primary sources/);
 		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/Researches external sources/);
 		expect(DEFAULT_AGENTS.get("consultant")?.systemPrompt).toMatch(/senior software architect/);
-		expect(DEFAULT_AGENTS.get("builder")?.systemPrompt).toMatch(/that is the designer's role/);
-		expect(DEFAULT_AGENTS.get("designer")?.systemPrompt).toMatch(/refuse it/);
+		expect(DEFAULT_AGENTS.get("builder")?.systemPrompt).toMatch(/belong to the designer/);
+		expect(DEFAULT_AGENTS.get("designer")?.systemPrompt).toMatch(/belongs to the builder/);
 	});
 
 	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {

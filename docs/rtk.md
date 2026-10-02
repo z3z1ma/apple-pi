@@ -10,7 +10,7 @@
    - If RTK cannot optimize the command, execution falls back to the original command without errors (fail-open).
 
 2. **System Prompt Guidance**:
-   The `rtk` extension injects instructions into the system prompt during `before_agent_start`. The model is informed that commands may be rewritten or filtered to save tokens, and that the `verbatim: true` parameter on `bash` can bypass this when exact raw output is required.
+   The `rtk` extension adds a `<shell-output>` section to the system prompt during `before_agent_start`. The model is informed that commands may be rewritten or filtered to save tokens, and that the `verbatim: true` parameter on `bash` can bypass this when exact raw output is required.
 
 3. **Clean Terminal UI**:
    The TUI displays the original intended command (e.g. `Bash(git status)`) instead of the rewritten wrapper (e.g. `Bash(rtk git status)`). The underlying compression operates transparently.

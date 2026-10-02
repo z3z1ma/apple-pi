@@ -38,7 +38,7 @@ import {
 	type NestedAgentManager,
 	SUBAGENT_TOOL_NAMES,
 } from "./nested-tools.js";
-import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
+import { addToolGuidanceSections, buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { assistantMessageMarker } from "./response-marker.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
@@ -413,7 +413,7 @@ export async function runAgent(
 		: getToolNamesForType(type);
 
 	// Build system prompt from the validated agent config.
-	const systemPrompt = buildAgentPrompt(agentConfig, effectiveCwd, env, parentSystemPrompt, extras);
+	const systemPrompt = buildAgentPrompt(agentConfig, env, parentSystemPrompt, extras);
 
 	// When skills is string[], we've already preloaded them into the prompt.
 	// Still pass noSkills: true since we don't need the skill loader to load them again.
@@ -441,10 +441,18 @@ export async function runAgent(
 		settingsManager,
 		noExtensions,
 		additionalExtensionPaths,
-		extensionFactories:
-			options.loadStandardChildExtensions !== false
+		extensionFactories: [
+			{
+				name: "child-tool-guidance",
+				hidden: true,
+				factory: (pi: ExtensionAPI) => {
+					pi.on("before_agent_start", (event) => addToolGuidanceSections(event.systemPromptOptions));
+				},
+			},
+			...(options.loadStandardChildExtensions !== false
 				? [createMcpExtension(), createCodemodeExtension(), createToolSearchExtension()]
-				: [],
+				: []),
+		],
 		noSkills,
 		noPromptTemplates: true,
 		noThemes: true,

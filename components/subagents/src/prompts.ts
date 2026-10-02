@@ -2,6 +2,8 @@
  * prompts.ts — System prompt builder for agents.
  */
 
+import type { NormalizedBuildSystemPromptOptions } from "@earendil-works/pi-coding-agent";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import type { AgentConfig, EnvInfo } from "./types.js";
 
 /** Extra sections to inject into the system prompt. */
@@ -13,25 +15,21 @@ export interface PromptExtras {
 }
 
 /**
- * Build the system prompt for an agent from its config.
+ * Build the custom preamble for an agent from its config.
  *
- * - "replace" mode: env header + config.systemPrompt (full control, no parent identity)
- * - "append" mode: parent system prompt + sub-agent context + env header + config.systemPrompt
- * - "append" with empty systemPrompt: pure parent clone
+ * - "replace" mode: delegation header + environment + config.systemPrompt (no parent identity)
+ * - "append" mode: parent system prompt + delegation note + environment + config.systemPrompt
  *
  * Both modes include an `<active_agent name="${config.name}"/>` tag so downstream
  * extensions (e.g. permission/policy systems) can resolve per-agent policy
- * inside the child session by parsing the system prompt. In replace mode the tag
- * is prepended; in append mode it follows the shared inherited content so the
- * parent prompt forms an identical, cacheable byte prefix with the parent
- * session (the LLM's KV cache can then reuse those tokens across every spawn).
+ * inside the child session by parsing the system prompt. In append mode it follows
+ * the inherited parent prompt so that prompt stays a verbatim prefix.
  *
  * @param parentSystemPrompt  The parent agent's effective system prompt (for append mode).
  * @param extras  Optional preloaded skills.
  */
 export function buildAgentPrompt(
 	config: AgentConfig,
-	cwd: string,
 	env: EnvInfo,
 	parentSystemPrompt?: string,
 	extras?: PromptExtras,
@@ -39,11 +37,9 @@ export function buildAgentPrompt(
 	const activeAgentTag = `<active_agent name="${config.name}"/>\n\n`;
 
 	const envBlock = `# Environment
-Working directory: ${cwd}
 ${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : "Not a git repository"}
 Platform: ${env.platform}`;
 
-	// Build optional extras suffix.
 	const extraSections: string[] = [];
 	if (extras?.skillBlocks?.length) {
 		for (const skill of extras.skillBlocks) {
@@ -57,35 +53,16 @@ Platform: ${env.platform}`;
 
 	if (config.promptMode === "append") {
 		const identity = parentSystemPrompt || genericBase;
-
 		const bridge = `<sub_agent_context>
-You are operating as a sub-agent invoked to handle a specific task.
-- Use the read tool instead of cat/head/tail
-- Use the edit tool instead of sed/awk
-- Use the write tool instead of echo/heredoc
-- Use the find tool instead of bash find/ls for file search
-- Use the grep tool instead of bash grep/rg for content search
-- Make independent tool calls in parallel
-- Use absolute file paths
-- Do not use emojis
-- Be concise but complete
+You are now a sub-agent working on a task delegated by the agent described above. Your own tools define what you can do.
 </sub_agent_context>`;
-
 		const customSection = config.systemPrompt?.trim()
 			? `\n\n<agent_instructions>\n${config.systemPrompt}\n</agent_instructions>`
 			: "";
-
-		// Place shared/stable content first so the LLM's KV cache can reuse the
-		// inherited prefix across all subagent invocations. The parent prompt is
-		// placed verbatim (no wrapper tag) so it forms an identical byte prefix
-		// with the parent session, maximising KV cache hits. The <active_agent>
-		// tag and env block vary per call and are placed after the cached prefix.
 		return `${identity}\n\n${bridge}\n\n${activeAgentTag}${envBlock}${customSection}${extrasSuffix}${invocationSection}`;
 	}
 
-	// "replace" mode — env header + the config's full system prompt
-	const replaceHeader = `You are a pi coding agent sub-agent.
-You have been invoked to handle a specific task autonomously.
+	const replaceHeader = `You are a teammate in a Pi coding session, working on a task delegated by another agent. Carry the task to completion, then end with a report the delegating agent can act on.
 
 ${envBlock}`;
 
@@ -94,6 +71,22 @@ ${envBlock}`;
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */
 const genericBase = `# Role
-You are a coding agent handling a specific delegated task.
-You have full access to read, write, edit files, and execute commands.
-Do what has been asked; nothing more, nothing less.`;
+You are a coding agent handling a specific delegated task.`;
+
+/**
+ * Pi renders tool summaries and usage rules only for its default preamble. A child with a
+ * custom preamble gets them as sections; an append-mode child already inherits its parent's.
+ */
+export function addToolGuidanceSections(options: NormalizedBuildSystemPromptOptions): void {
+	if (options.customPrompt === undefined) return;
+	const tools = options.selectedTools
+		.filter((name) => options.toolSnippets[name])
+		.map((name) => `- ${name}: ${options.toolSnippets[name]}`);
+	const rules = new Set(
+		[...options.selectedTools.flatMap((name) => options.toolGuidelines[name] ?? []), ...options.promptGuidelines]
+			.map((rule) => rule.trim())
+			.filter(Boolean),
+	);
+	if (tools.length > 0) setSystemPromptSection(options, "tools", tools.join("\n"));
+	if (rules.size > 0) setSystemPromptSection(options, "rules", [...rules].map((rule) => `- ${rule}`).join("\n"));
+}

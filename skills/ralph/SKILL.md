@@ -1,6 +1,7 @@
 ---
 name: ralph
-description: "Use only when the operator explicitly asks to run or continue bounded fresh-context Ralph iterations over a goal or prepared ledger task."
+description: "Run or continue bounded fresh-context Ralph iterations over a goal or prepared ledger task."
+disable-model-invocation: true
 ---
 
 # Ralph

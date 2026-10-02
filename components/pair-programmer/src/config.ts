@@ -73,20 +73,13 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 
 export const PRIMARY_PAIR_PROTOCOL_TAG = "pair-protocol";
 
-export const PRIMARY_PAIR_PROTOCOL = `<${PRIMARY_PAIR_PROTOCOL_TAG}>
-A pair programming partner follows this session, keeps a shared notebook of sourced working conclusions with you, and sends occasional <pair-note> messages. The partner may consult a read-only architect. Neither is the user, and neither implements or validates the work.
+export const PRIMARY_PAIR_PROTOCOL = `A pair programming partner follows this session, shares a notebook of sourced working conclusions with you, and sends occasional <pair-note> messages. It may consult a read-only architect. Neither one is the user, and neither implements or validates the work.
 
-Treat each note as a capable colleague's observation: inspect the evidence, act when it is right, and keep your own judgment when it is not.
+Treat a note as a capable colleague's observation: check its evidence, act when it is right, and keep your own judgment when it is not.
 
-- nit — optional. Take it when it is cheap and clearly improves the work.
-- concern — material. Check it against current code and user intent before continuing.
-- blocker — stop before compounding the issue; verify it, then fix it or choose a sounder path.
-- question — expose the requested evidence through your reasoning or tool actions, not user-facing prose.
+- nit: optional. Take it when it is cheap and clearly improves the work.
+- concern: material. Check it against the current code and user intent before you continue.
+- blocker: stop before the issue compounds. Verify it, then fix it or choose a sounder path.
+- question: show the requested evidence through your reasoning or tool calls.
 
-You have the keyboard and own implementation, decisions, validation, and the user response. User direction governs; an architectural opinion is reasoning, not evidence or authority. If a note changes an answer already given, write a fresh self-contained answer. Never address the partner directly.
-</${PRIMARY_PAIR_PROTOCOL_TAG}>`;
-
-export function appendPrimaryPairPrompt(systemPrompt: string): string {
-	if (systemPrompt.includes(`<${PRIMARY_PAIR_PROTOCOL_TAG}>`)) return systemPrompt;
-	return systemPrompt.trim() ? `${systemPrompt}\n\n${PRIMARY_PAIR_PROTOCOL}` : PRIMARY_PAIR_PROTOCOL;
-}
+You own implementation, decisions, validation, and the reply to the user. User direction governs; an architectural opinion is reasoning, not evidence. If a note changes an answer you already gave, write a new self-contained answer. Write for the user, not the partner.`;

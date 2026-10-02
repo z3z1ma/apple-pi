@@ -158,15 +158,6 @@ test("parsePairTestArgs: rejects bad input", () => {
 	assert.equal(A.parsePairTestArgs("status"), null);
 });
 
-test("appendPrimaryPairPrompt: appends the protocol once and is idempotent", () => {
-	const once = A.appendPrimaryPairPrompt("You are the coding agent.");
-	assert.match(once, /^You are the coding agent\.\n\n/);
-	assert.match(once, /<pair-protocol>/);
-	assert.match(once, /<\/pair-protocol>/);
-	assert.equal(A.appendPrimaryPairPrompt(once), once);
-	assert.equal(A.appendPrimaryPairPrompt(""), A.PRIMARY_PAIR_PROTOCOL);
-});
-
 test("formatAdvisoryContent: wraps with finding id, severity + guidance, escapes XML", () => {
 	const c = A.formatAdvisoryContent([{ id: "pair-123", note: "use <T> & stuff", severity: "concern" }]);
 	assert.match(c, /<pair-note id="pair-123" severity="concern" guidance="pause, consider, then use your judgment">/);
@@ -3299,19 +3290,20 @@ async function lifecycleHarness() {
 	};
 }
 
-test("lifecycle: before_agent_start appends the primary protocol only while enabled", async () => {
+test("lifecycle: before_agent_start adds the primary protocol section only while enabled", async () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pair-prompt-"));
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	try {
 		const x = await lifecycleHarness();
-		const base = "You are the coding agent.";
-		const onResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
-		assert.deepEqual(onResult, { systemPrompt: A.appendPrimaryPairPrompt(base) });
+		const on = { sections: {} };
+		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: on }, x.uiCtx);
+		assert.deepEqual(on.sections, { [A.PRIMARY_PAIR_PROTOCOL_TAG]: A.PRIMARY_PAIR_PROTOCOL });
 
 		await x.cmd("off", x.uiCtx);
-		const offResult = x.h("before_agent_start")({ prompt: "go", systemPrompt: base }, x.uiCtx);
-		assert.equal(offResult, undefined);
+		const off = { sections: {} };
+		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: off }, x.uiCtx);
+		assert.deepEqual(off.sections, {});
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
@@ -3393,7 +3385,7 @@ async function withPairReviewDisabled(run) {
 test("lifecycle: a pair programmer nit steers the active run at the next assistant-turn boundary", async () => {
 	await withPairReviewDisabled(async () => {
 		const x = await lifecycleHarness();
-		x.h("before_agent_start")({ prompt: "go", systemPrompt: "base" }, x.uiCtx);
+		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: { sections: {} } }, x.uiCtx);
 		x.h("agent_start")();
 		x.h("turn_start")();
 		await x.cmd("test nit Stop before compounding this mistake.", x.uiCtx);
@@ -3420,7 +3412,7 @@ test("lifecycle: a pair programmer nit steers the active run at the next assista
 test("lifecycle: an aborted turn can receive advice without autonomously restarting", async () => {
 	await withPairReviewDisabled(async () => {
 		const x = await lifecycleHarness();
-		x.h("before_agent_start")({ prompt: "go", systemPrompt: "base" }, x.uiCtx);
+		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: { sections: {} } }, x.uiCtx);
 		x.h("turn_start")();
 		await x.cmd("test nit Preserve this note after abort.", x.uiCtx);
 

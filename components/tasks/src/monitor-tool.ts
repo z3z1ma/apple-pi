@@ -12,7 +12,6 @@ export function createMonitorTool(taskManager: TaskManager) {
 			"Start a managed shell event source immediately. Every newline-terminated stdout line steers the agent at Pi's next safe model boundary while the command keeps running. Stderr and unterminated stdout remain task output. max_events optionally stops event delivery after its final announced event without stopping the command. Monitor commands run verbatim and remain inspectable or cancellable with task.",
 		promptSnippet: "Monitor a command whose meaningful stdout lines should reactively steer the root agent.",
 		promptGuidelines: [
-			"Choose root execution by intent: use bash for immediate work, bash with run_in_background for finite work that should wake only on completion, schedule for a prompt or command that should start later, monitor for a continuing command whose stdout should steer the run, and task to inspect or cancel managed work.",
 			"Treat monitor commands as event programs: every newline-terminated stdout line immediately steers you. Make each line meaningful, redirect or suppress noise, and use line-buffered or unbuffered producers such as grep --line-buffered, awk with fflush(), or jq --unbuffered.",
 			"Set monitor max_events when the workflow has a natural notification limit. Its final event announces silent-until-completion mode; omit max_events when an open-ended event stream is appropriate.",
 		],

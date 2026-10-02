@@ -370,7 +370,7 @@ export function createBashToolDefinition(
 			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin and background execution via run_in_background: true.",
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports background execution and standard input.",
 		promptGuidelines: [
-			"Use bash with run_in_background: true for immediate commands that may run while you continue and should wake you only when they complete or fail.",
+			"Choose root execution by intent: use bash for immediate work, bash with run_in_background for finite work that should wake only on completion, schedule for a prompt or command that should start later, monitor for a continuing command whose stdout should steer the run, and task to inspect or cancel managed work.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
 		],
 		parameters: bashParameters,

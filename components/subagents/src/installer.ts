@@ -58,7 +58,15 @@ import { installManagedSubagentService, type ManagedSubagentService } from "./se
 import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
-import { appendTeamSystemPrompt, TEAM_SYSTEM_PROMPT_TAG, type TeamMember, toTeamMember } from "./team-system-prompt.js";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
+import {
+	buildInferenceProfilesSection,
+	buildTeamSection,
+	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
+	TEAM_SYSTEM_PROMPT_TAG,
+	type TeamMember,
+	toTeamMember,
+} from "./team-system-prompt.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
 import { AgentManagerComponent, type AgentTypeSummary } from "./ui/agent-manager.js";
 import {
@@ -684,16 +692,17 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		manager.dispose();
 	});
 
-	// Teach the root agent about its subagent team via the system prompt (mirrors
-	// the ledger prompt append). The roster is rebuilt per turn from the freshly
-	// bound registry so custom agent files and cwd changes are reflected; the tool
-	// descriptions no longer carry a competing static list.
+	// The roster is rebuilt per turn from the freshly bound registry so custom
+	// agent files and cwd changes are reflected.
 	pi.on("before_agent_start", (event, ctx) => {
 		bindSessionContext(ctx);
 		const members: TeamMember[] = getAvailableTypes().map((name) => toTeamMember(name, getAgentConfig(name)));
-		return {
-			systemPrompt: appendTeamSystemPrompt(event.systemPrompt ?? "", members, INFERENCE_PROFILE_CATALOG),
-		};
+		setSystemPromptSection(event.systemPromptOptions, TEAM_SYSTEM_PROMPT_TAG, buildTeamSection(members));
+		setSystemPromptSection(
+			event.systemPromptOptions,
+			INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
+			buildInferenceProfilesSection(INFERENCE_PROFILE_CATALOG),
+		);
 	});
 
 	const agentTool = defineTool({
@@ -706,11 +715,10 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"A teammate may bring in another teammate only when their definition explicitly allows it.",
 		].join(" "),
 		promptGuidelines: [
-			`Delegate when another perspective, a specialist skill, context isolation, or parallel work would materially help. Choose a teammate from <${TEAM_SYSTEM_PROMPT_TAG}> whose role genuinely fits, and normally keep their configured profile; otherwise keep the work in this session.`,
+			`Delegate when a specialist role, an independent view, context isolation, or parallel work would save time or improve quality. Choose the teammate in <${TEAM_SYSTEM_PROMPT_TAG}> whose role fits, and normally keep its configured profile.`,
 			"Give each file to one teammate at most. Change a rejected task before retrying it.",
-			"Use agent for interactive collaboration and pi_exec agent_run/agent for model workers in a program. agent's subagent_type and agent_run's type choose a teammate; profile chooses inference; system_prompt adds invocation-specific guidance without changing capabilities.",
-			"Your pair programming partner follows the root session. The builder pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
-			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
+			"Use agent for interactive collaboration and pi_exec agent_run/agent for model workers inside a program. subagent_type (type in pi_exec) chooses the teammate, profile chooses inference, and system_prompt adds guidance without changing capabilities.",
+			"The builder pairs by default; set pair false only when a new session gains nothing from a pair. Other teammates follow their own pair default.",
 		],
 		parameters: Type.Object({
 			prompt: Type.String({ description: "A self-contained task for your teammate." }),

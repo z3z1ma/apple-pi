@@ -152,21 +152,18 @@ export function guestPythonStubs(cwd = "."): string {
 	return [corePythonStubs(cwd), ...declarations, ...extensions, ...HOST_PYTHON_STUBS, evidencePythonStubs()].join("\n");
 }
 
-/** Model-facing stubs: full core and host signatures; extension tools by name, described on demand. */
+/** Model-facing stubs: full core and host signatures; extension tools are discovered on demand so this text stays stable. */
 function guestPromptStubs(cwd = "."): string {
-	const names = extensionPythonTools().map((tool) => tool.name);
 	return [
 		corePythonStubs(cwd),
 		...HOST_PYTHON_STUBS,
 		evidencePythonStubs(),
-		names.length
-			? `Captured extension tools, callable as async functions with keyword arguments and type-checked against their schemas: ${names.join(", ")}. Call await tools_describe(name="...") for parameters.`
-			: "No extension tools are captured.",
+		'Captured extension tools are async functions here too, with keyword arguments type-checked against their schemas. Find one with tools_list() or tools_search(query) and read its parameters with await tools_describe(name="...").',
 	].join("\n");
 }
 
 export const PI_EXEC_PROMPT_SNIPPET =
-	"pi_exec: compose tools and model workers in Python; compute over results before returning evidence";
+	"Compose tools and model workers in Python; compute over results before returning evidence";
 
 export const PI_EXEC_DESCRIPTION =
 	"Run type-checked Python in bounded Monty to compose tools, model workers, and HTTP requests, and compute over their results. Return a JSON-compatible trailing expression; printed output is also captured. See code for live signatures and runtime constraints.";
@@ -174,14 +171,13 @@ export const PI_EXEC_DESCRIPTION =
 export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec to compose tool calls or compute over their results. Use direct tools for a single operation that needs neither.",
 	"Keep intermediate results inside the program. Return the smallest result that preserves the evidence needed for the next decision: aggregate counts, select relevant excerpts, or report exceptions instead of dumping raw output.",
-	"Run independent calls concurrently with asyncio.gather; await dependent steps in order.",
 	"Check tool and worker outcomes before using their results. Surface failures and missing evidence explicitly.",
 ];
 
 export function piExecGuestApiContract(): string {
 	return [
 		"Python 3.14 subset (Monty). Snippets accept top-level await and return the trailing expression. All code is type-checked before execution.",
-		"Import asyncio and use asyncio.gather(*awaitables) for independent fan-out; no create_task or third-party imports.",
+		"Import asyncio and use asyncio.gather(*awaitables) for independent fan-out; await dependent steps in order. There is no create_task and no third-party import.",
 		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. Type-checking stubs:",
 		guestPromptStubs(),
 		"tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",

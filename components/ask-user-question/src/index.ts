@@ -69,10 +69,8 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 		description: `Ask the user one to ${MAX_QUESTIONS} related structured questions instead of guessing. Each question must offer ${MIN_OPTIONS}-${MAX_OPTIONS} authored choices with concise labels and descriptions. The UI automatically adds a custom free-text answer. Set multiSelect when more than one authored choice can apply.`,
 		promptSnippet: `Ask the user up to ${MAX_QUESTIONS} structured questions when a material decision cannot be inferred safely`,
 		promptGuidelines: [
-			`Use ask_user_question when the request is materially underspecified and proceeding requires a user decision; group up to ${MAX_QUESTIONS} related questions into one call.`,
-			`Give every ask_user_question question ${MIN_OPTIONS}-${MAX_OPTIONS} distinct options with a concise label and a description of its consequence or trade-off.`,
-			`Do not author ask_user_question options named ${RESERVED_OPTION_LABELS.map((label) => JSON.stringify(label)).join(", ")}; the UI supplies those interaction rows.`,
-			"Use ask_user_question multiSelect only when several authored choices may apply together.",
+			`Use ask_user_question when proceeding needs a user decision you cannot safely infer. First finish the work the answer does not affect, then group up to ${MAX_QUESTIONS} related questions in one call.`,
+			`Give each option a concise label and its consequence or trade-off. Author only real choices; the UI supplies the ${RESERVED_OPTION_LABELS.map((label) => JSON.stringify(label)).join(", ")} rows.`,
 		],
 		parameters: AskUserQuestionParamsSchema,
 		executionMode: "sequential",

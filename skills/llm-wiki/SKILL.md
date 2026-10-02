@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: "Maintain durable project-local knowledge in `.wiki/`. Use when asked to initialize a wiki, ingest sources, query or answer from wiki knowledge, file durable synthesis, or lint, audit, maintain, and repair wiki structure or claims."
+description: "Maintain project-local knowledge in `.wiki/`. Use when asked to initialize a wiki, ingest sources into it, answer from it, file durable synthesis, or lint and repair its structure or claims."
 ---
 
 # LLM Wiki

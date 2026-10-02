@@ -560,10 +560,9 @@ export const recallObservationTool = defineTool({
 		"Revisit one specific entry in the session notebook and recover the conversation, commands, or file changes behind it. " +
 		"Use the 12-character id shown beside a working conclusion or archived note when its summary is too compressed to rely on confidently. " +
 		"This follows a known note back to its sources; it does not search the transcript by topic.",
-	promptSnippet: "Use revisit_note({ id }) to see the original session evidence behind a specific notebook entry.",
+	promptSnippet: "See the original session evidence behind a notebook entry.",
 	promptGuidelines: [
 		"Use revisit_note when a decision or answer depends on the exact wording, rationale, or provenance behind a notebook entry; skip it when the summary is enough.",
-		"revisit_note follows a known 12-character id. Use search_session to search the transcript by topic.",
 	],
 	parameters: Type.Object({
 		id: Type.String({

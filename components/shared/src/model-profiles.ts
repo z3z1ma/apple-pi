@@ -31,39 +31,16 @@ export interface InferenceProfileCatalogEntry {
 }
 
 export const INFERENCE_PROFILE_CATALOG: readonly InferenceProfileCatalogEntry[] = [
-	{
-		profile: "quick",
-		description:
-			"Latency-first inference intended for a fast, economical model with light-to-moderate reasoning effort.",
-	},
-	{
-		profile: "balanced",
-		description:
-			"General-purpose inference intended for a broadly capable model with substantial but measured reasoning effort.",
-	},
-	{
-		profile: "pair",
-		description:
-			"An economical, attentive pair programming partner that follows the work, keeps context, notices concrete risk, and occasionally asks for deeper architectural judgment.",
-	},
-	{
-		profile: "deep",
-		description:
-			"Maximum-depth inference intended for the strongest reasoning model available with high reasoning effort.",
-	},
-	{
-		profile: "coding",
-		description: "Software-engineering inference intended for a code-strong model with high reasoning effort.",
-	},
+	{ profile: "quick", description: "Fast, economical model with light-to-moderate reasoning." },
+	{ profile: "balanced", description: "Broadly capable model with measured reasoning." },
+	{ profile: "pair", description: "Economical, attentive model that follows the work and notices concrete risk." },
+	{ profile: "deep", description: "Strongest available model with high reasoning effort." },
+	{ profile: "coding", description: "Code-strong model with high reasoning effort." },
 	{
 		profile: "visual-engineering",
-		description:
-			"Visual-engineering inference intended for a model strong in UI, spatial, and multimodal reasoning with moderate-to-high effort.",
+		description: "Model strong in UI, spatial, and multimodal reasoning, with moderate-to-high effort.",
 	},
-	{
-		profile: "background",
-		description: "Low-cost asynchronous inference intended for an economical model with low reasoning effort.",
-	},
+	{ profile: "background", description: "Low-cost model with low reasoning effort for asynchronous work." },
 ];
 
 const THINKING_LEVELS = new Set<string>(MODEL_PROFILE_THINKING_LEVELS);

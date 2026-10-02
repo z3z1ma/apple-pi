@@ -1,17 +1,5 @@
 export const WIKI_SYSTEM_PROMPT_TAG = "wiki-workbench";
 
-export const WIKI_SYSTEM_PROMPT = `<wiki-workbench>
-# The wiki
+export const WIKI_SYSTEM_PROMPT = `\`.wiki/\` is this project's knowledge workbench: reusable context that outlives single tasks. \`.ledger/\` owns bounded task work, and repository documentation and tests stay authoritative for product behavior.
 
-The wiki is a project-local knowledge workbench under \`.wiki/\`. It accumulates reusable LLM-oriented context across tasks. \`.ledger/\` owns bounded execution work, while repository documentation and tests remain authoritative for product behavior. The repository owner decides whether the wiki is ignored, committed, or shared.
-
-A usual wiki starts with \`README.md\`, \`INDEX.md\`, \`LOG.md\`, \`raw/\`, and \`pages/\`, but its organization may evolve through local conventions in \`.wiki/README.md\`. Markdown pages link with Obsidian syntax such as \`[[slug]]\` and \`[[slug#Heading|label]]\`. A page's slug is its filename stem, matched case-insensitively, and must be unique across the entire wiki regardless of nesting.
-
-Before wiki work, read its README and index, then use \`wiki_references\` when inbound, outbound, or nearby graph context matters. Use ordinary file tools for writes. Keep navigation accurate, append the log only after a coherent knowledge mutation, and run \`wiki_lint\` after link or structural changes. When the \`llm-wiki\` skill is available, load it for initialization, ingestion, querying, maintenance, provenance, and mutation discipline.
-</wiki-workbench>`;
-
-export function appendWikiSystemPrompt(systemPrompt: string): string {
-	if (systemPrompt.includes(`<${WIKI_SYSTEM_PROMPT_TAG}>`)) return systemPrompt;
-	const base = systemPrompt.trim();
-	return base ? `${base}\n\n${WIKI_SYSTEM_PROMPT}` : WIKI_SYSTEM_PROMPT;
-}
+Before wiki work, read \`.wiki/README.md\` for local conventions and \`.wiki/INDEX.md\` for navigation. Pages link with Obsidian syntax such as \`[[slug]]\` and \`[[slug#Heading|label]]\`; a slug is the filename stem, matched case-insensitively and unique across the wiki. Use \`wiki_references\` for nearby graph context, ordinary file tools for writes, and \`wiki_lint\` after link or structural changes. Load the \`llm-wiki\` skill for ingestion, maintenance, and mutation discipline.`;

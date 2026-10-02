@@ -7,7 +7,8 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { acquireExclusiveLease } from "../components/shared/src/exclusive-lease.js";
-import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system-prompt.js";
+import { LEDGER_SYSTEM_PROMPT, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
+import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -522,7 +523,9 @@ function createLedgerStatusTool() {
 }
 
 export default function installLedger(pi: ExtensionAPI): void {
-	pi.on("before_agent_start", (event) => ({ systemPrompt: appendLedgerSystemPrompt(event.systemPrompt ?? "") }));
+	pi.on("before_agent_start", (event) =>
+		setSystemPromptSection(event.systemPromptOptions, LEDGER_SYSTEM_PROMPT_TAG, LEDGER_SYSTEM_PROMPT),
+	);
 	pi.registerTool(createLedgerAddTool());
 	pi.registerTool(createLedgerStatusTool());
 }

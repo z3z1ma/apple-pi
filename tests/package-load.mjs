@@ -237,7 +237,6 @@ try {
 	assert(monitorTool, "missing monitor tool");
 	assert.deepEqual(Object.keys(monitorTool.definition.parameters.properties), ["command", "max_events"]);
 	assert.deepEqual(monitorTool.definition.parameters.required, ["command"]);
-	assert.match(monitorTool.definition.promptGuidelines.join("\n"), /Choose root execution by intent/);
 	assert.match(
 		monitorTool.definition.promptGuidelines.join("\n"),
 		/every newline-terminated stdout line immediately steers/,
@@ -260,9 +259,9 @@ try {
 	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
 	assert.match(piExecGuidance, /Keep intermediate results inside the program/);
 	assert.match(piExecGuidance, /preserves the evidence/);
-	assert.match(piExecGuidance, /asyncio\.gather/);
 	assert.match(piExecGuidance, /Check tool and worker outcomes/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /asyncio\.gather/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def git_change\(/);
@@ -378,6 +377,7 @@ try {
 		"to-spec",
 		"to-tickets",
 		"wayfinder",
+		"ralph",
 	];
 	const engineeringSkills = [
 		"prototype",
@@ -388,7 +388,7 @@ try {
 		"domain-modeling",
 		"codebase-design",
 	];
-	const fundamentalSkills = ["code-review", "ralph", "skill-authoring", "llm-wiki"];
+	const fundamentalSkills = ["code-review", "skill-authoring", "llm-wiki"];
 	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
@@ -421,8 +421,8 @@ try {
 	assert(agentTool, "missing agent tool definition");
 	const agentGuidance = agentTool.definition.promptGuidelines.join("\n");
 	assert.match(agentGuidance, /<subagent-team>/);
-	assert.match(agentGuidance, /agent_run's type choose a teammate/);
-	assert.match(agentGuidance, /system_prompt adds invocation-specific guidance/);
+	assert.match(agentGuidance, /type in pi_exec\) chooses the teammate/);
+	assert.match(agentGuidance, /system_prompt adds guidance without changing capabilities/);
 	assert.doesNotMatch(agentGuidance, /agent\.run/);
 	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
 	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);

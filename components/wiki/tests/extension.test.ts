@@ -41,10 +41,11 @@ describe("wiki extension", () => {
 		expect([...tools.keys()]).toEqual(["wiki_lint", "wiki_references"]);
 		expect([...handlers.keys()]).toEqual(["before_agent_start"]);
 
-		const prompt = handlers.get("before_agent_start")?.({ systemPrompt: "root" }) as { systemPrompt: string };
-		expect(prompt.systemPrompt).toContain(`<${WIKI_SYSTEM_PROMPT_TAG}>`);
-		expect(prompt.systemPrompt).toContain("wiki_lint");
-		expect(prompt.systemPrompt).toContain("wiki_references");
+		const root = createProject({ ".wiki/INDEX.md": "# Index\n" });
+		const systemPromptOptions = { sections: {} as Record<string, string> };
+		handlers.get("before_agent_start")?.({ systemPromptOptions }, { cwd: root });
+		expect(systemPromptOptions.sections[WIKI_SYSTEM_PROMPT_TAG]).toContain("wiki_lint");
+		expect(systemPromptOptions.sections[WIKI_SYSTEM_PROMPT_TAG]).toContain("wiki_references");
 
 		const references = tools.get("wiki_references");
 		expect(references.parameters.properties.depth.minimum).toBe(1);

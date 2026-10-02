@@ -79,15 +79,15 @@ describe("user-global model profiles", () => {
 
 	it("publishes the fixed inference profile catalog with profile-specific descriptions", () => {
 		expect(INFERENCE_PROFILE_CATALOG.map((entry) => entry.profile)).toEqual(INFERENCE_PROFILE_NAMES);
-		expect(INFERENCE_PROFILE_CATALOG.every((entry) => entry.description.length > 40)).toBe(true);
+		expect(INFERENCE_PROFILE_CATALOG.every((entry) => entry.description.length > 0)).toBe(true);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "quick")?.description).toMatch(
-			/fast, economical model.*reasoning effort/,
+			/Fast, economical model/,
 		);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "pair")?.description).toMatch(
-			/economical, attentive pair programming partner.*architectural judgment/,
+			/attentive model that follows the work/,
 		);
 		expect(INFERENCE_PROFILE_CATALOG.find((entry) => entry.profile === "deep")?.description).toMatch(
-			/strongest reasoning model.*high reasoning effort/,
+			/Strongest available model/,
 		);
 		expect(isInferenceProfileName("coding")).toBe(true);
 		expect(isInferenceProfileName("custom")).toBe(false);

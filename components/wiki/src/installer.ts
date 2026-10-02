@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +23,8 @@ import {
 	type WikiLintResult,
 	type WikiReferencesResult,
 } from "./graph.js";
-import { appendWikiSystemPrompt } from "./system-prompt.js";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
+import { WIKI_SYSTEM_PROMPT, WIKI_SYSTEM_PROMPT_TAG } from "./system-prompt.js";
 
 export const WIKI_LINT_TOOL_NAME = "wiki_lint";
 export const WIKI_REFERENCES_TOOL_NAME = "wiki_references";
@@ -200,7 +202,10 @@ function createWikiReferencesTool() {
 }
 
 export function installWiki(pi: ExtensionAPI): void {
-	pi.on("before_agent_start", (event) => ({ systemPrompt: appendWikiSystemPrompt(event.systemPrompt ?? "") }));
+	pi.on("before_agent_start", (event, ctx) => {
+		if (existsSync(join(ctx.cwd, ".wiki")))
+			setSystemPromptSection(event.systemPromptOptions, WIKI_SYSTEM_PROMPT_TAG, WIKI_SYSTEM_PROMPT);
+	});
 	pi.registerTool(createWikiLintTool());
 	pi.registerTool(createWikiReferencesTool());
 }
