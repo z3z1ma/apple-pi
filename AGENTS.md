@@ -7,7 +7,7 @@ This file applies to the entire repository. It is a durable map and operating gu
 Before changing anything:
 
 1. Run `git status --short --branch` and preserve all existing work. This repository is often developed through multi-file architectural changes; do not assume a dirty tree is disposable.
-2. Read `README.md` for the package catalog and install path, then the relevant `docs/` page for product behavior and feature boundaries.
+2. Read `README.md` for the package catalog and install path (`docs/setup.md` covers a from-scratch Pi setup), then the relevant `docs/` page for product behavior and feature boundaries.
 3. Read `docs/development.md` for module and formatting conventions.
 4. If the work is governed by `.ledger`, read `.ledger/INDEX.md`, the selected task's `task.md`, and every active record it references. Resolve closed dependencies through `.ledger/history/`. See `docs/ledger.md` for the workbench model.
 5. Inspect the manifest and test configuration before adding a new path. Packaging, TypeScript, Vitest, and the extension loader each have explicit inclusion boundaries.
@@ -27,14 +27,15 @@ Authority is split deliberately:
 
 `apple-pi` is one installable Pi package that composes Alex's coding-agent environment. It is not an application server and not a monorepo of separately published packages. The root manifest is the only package boundary; directories under `components/` are internal source organization.
 
-At a high level, the package adds six kinds of capability to Pi:
+At a high level, the package adds seven kinds of capability to Pi:
 
-1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, plus a structured user-question tool.
-2. **Context continuity** — xAI server-side or Pi default compaction, the pair programmer's sourced notebook, two complementary session-recall paths, and a project-local wiki for reusable knowledge.
+1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, a structured user-question tool, and one reflection on the agent's own edits before a run finishes.
+2. **Context continuity** — xAI server-side or Pi default compaction with a fail-closed automatic-compaction gate, the pair programmer's sourced notebook, two complementary session-recall paths, and a project-local wiki for reusable knowledge.
 3. **Execution continuity** — root-session background work, one-shot scheduling, and reactive command monitoring, plus the ledger for durable operational memory.
 4. **Execution and team collaboration** — a bounded, type-checked Monty Python composition runtime plus an interactive team of specialist agents.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first distillation.
-6. **Integration bridges** — Pi-native MCP in root and ordinary child sessions, plus provider-specific hosted-tool injection for supported xAI requests.
+6. **Integration bridges** — Pi-native MCP in root and ordinary child sessions, plus provider-specific hosted-tool injection for supported xAI requests and a priority service tier toggle.
+7. **Terminal and session ergonomics** — custom input editor, terse tool rendering, prompt stashing, RTK command rewriting, macOS completion notifications, and tmux session status.
 
 The design goal is an integrated Pi environment with one implementation of each responsibility. Features that are intentionally delegated to Pi or a dependency should not be copied locally.
 
@@ -71,6 +72,9 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/shared/` | Small primitives genuinely shared across subsystem boundaries, including the combined above-editor active-work renderer used by subagents and tasks | Do not turn this into a generic utility dumping ground. A helper belongs here only when multiple production consumers need the same semantics. |
 | `components/home-search-guard/` | Blocks agent searches from unsafe filesystem, home, and workspace collection roots | Covers root, repository-reading children, workers, and direct Pi Exec core-tool calls while forcing searches into a specific repository, worktree, or subdirectory. The trajectory-only pair has no search tools. |
 | `components/wiki/` | Derives the project-local `.wiki/` Obsidian page graph, validates slug/link/heading integrity, retrieves nearby references, and injects the compact wiki workbench contract | Markdown remains the source of truth; there is no stored graph, watcher, database, or mutation tool. Root, ordinary children, and workers load it; the pair and internal `/btw` do not. Full mutation procedures stay in `skills/llm-wiki/`. |
+| `components/vroom/` | `/fast` priority service tier for OpenAI Codex and xAI requests | Loaded in root sessions, ordinary children, `/btw`, and `pi_exec` workers. |
+| `components/notify/` | Native macOS completion notifications with Ghostty/tmux click-to-focus | macOS only; ships its own assets, scripts, and LICENSE, each listed in the published `files`. |
+| `extensions/auto-compact.ts`, `extensions/compaction-safety.ts` | Fail-closed automatic compaction: a failed or cancelled automatic compaction aborts the run before provider dispatch | No component; loaded in every execution context. Pi owns compaction itself. See `docs/context.md`. |
 | `components/xai-hosted-tools/` | Provider-request transformation for xAI hosted tools | Changes only eligible xAI Responses requests and avoids duplicate tool injection. |
 | `components/tmux-sessions/` | Publishes per-session `busy`/`idle`/`waiting` status to disk so bundled tmux scripts can list, preview, and jump across live Pi sessions | The extension (root `tui` sessions only) owns the on-disk record contract in `src/state.ts`; the bash scripts and `pi_session_manager.tmux` are the consumer. Adapted from tmux-claude-session-manager; the disk record replaces Claude's `agents --json`. |
 | ledger implementation | Add/status tools and `before_agent_start` wiring in `extensions/ledger.ts`; contract text in `components/shared/src/ledger-system-prompt.ts`; lifecycle procedures in the descriptively named packages under `skills/`; durable semantics in `docs/ledger.md` | Root, ordinary children (including advisory roles), and `pi_exec` workers learn the contract by loading the ledger extension. Ordinary children also receive wiki, `search_session`, and MCP; workers receive wiki and `search_session`. The pair programmer does not receive the contract. There is deliberately no ledger catalog, operations hub, active-task pointer, or `components/ledger/` domain. |
@@ -93,7 +97,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 ### Context and notebook
 
 - There is **one compaction hook owner**. On xAI Responses models that is server-side `/responses/compact`; otherwise Pi's default summarizer runs. The notebook does not register a compact hook; it appends one persisted packet of current conclusions after each compaction and never edits request context per turn.
-- Request context is append-only. A `context` hook that removes, reorders, or rebuilds a message on each request breaks provider prefix caching for the whole history; `tests/context-hooks.test.ts` allowlists the only hook that may filter.
+- Request context is append-only. A `context` hook that removes, reorders, or rebuilds a message on each request breaks provider prefix caching for the whole history; `tests/context-hooks.test.ts` allowlists the only hook that may filter. `npm run audit:cache` (`scripts/cache-audit.mjs`) reads real Pi session logs; run it after a context change to confirm that prefix caching still works.
 - Do not reintroduce a local structured compact compiler. Compaction is xAI `/responses/compact` or Pi's default summarizer; the notebook adds only jointly curated conclusions, not a second conversation summary.
 - `search_session`, `revisit_note`, and pair receipt expansion are intentionally separate: the first progressively searches transcript/file-operation history, the second follows a known notebook entry back to its source evidence, and receipts reveal only folded historical content already presented to the pair. The pair receives the latter two, not general session search.
 - The pair programmer's notebook is authoritative in Pi's append-only session JSONL. Receipt handles are ephemeral capabilities scoped to one pair store and the active primary lineage; expanded payloads preserve their original source-entry provenance. Do not add a project-local mirror without an explicit storage, privacy, merge, and migration design.
@@ -212,7 +216,7 @@ A file that works from the checkout but is absent from the package tarball is a 
 
 ## Configuration, trust, and state
 
-Several features read global Pi configuration and optionally trusted project-local configuration. Model profiles are the deliberate exception: provider/model/thinking policy is read only from user-global `model-profiles.json`; projects and agent definitions may reference profile names but cannot redefine their mappings. Other trusted project settings may override global settings; untrusted project content must not silently become model/system-prompt authority.
+Several features read global Pi configuration and optionally trusted project-local configuration. Model profiles are the deliberate exception: provider/model/thinking policy is read only from user-global `model-profiles.json`; projects and agent definitions may reference profile names but cannot redefine their mappings. The root `model-profiles.*.json` examples are what `docs/setup.md` copies from the checkout. They are not in the published `files` allowlist. Other trusted project settings may override global settings; untrusted project content must not silently become model/system-prompt authority.
 
 Preserve these categories:
 
