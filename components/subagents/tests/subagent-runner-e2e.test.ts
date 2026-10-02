@@ -432,6 +432,83 @@ describe("subagent runner with Pi's real AgentSession", () => {
 		result.session.dispose();
 	}, 30_000);
 
+	it("reports each invocation's edit and write calls in the agent result", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-changes-"));
+		temporaryDirectories.push(cwd);
+		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".pi", "agents", "editor.md"),
+			"---\nname: editor\ndescription: edits files\ntools: read, edit, write\nextensions: false\nskills: false\npersist_session: false\n---\nDo the task.\n",
+		);
+		writeFileSync(join(cwd, "existing.md"), "old\n");
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-changes", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		const toolUse = (calls: ReturnType<typeof fauxToolCall>[]) => () =>
+			fauxAssistantMessage(calls, { stopReason: "toolUse" });
+		faux.setResponses([
+			toolUse([fauxToolCall("write", { path: "src/new.ts", content: "one\ntwo\n" })]),
+			toolUse([
+				fauxToolCall("edit", { path: "src/new.ts", edits: [{ oldText: "two", newText: "2\nthree" }] }),
+				fauxToolCall("write", { path: "existing.md", content: "new\n" }),
+				fauxToolCall("edit", { path: "missing.ts", edits: [{ oldText: "x", newText: "y" }] }),
+			]),
+			() => fauxAssistantMessage([fauxText("EDITS-DONE")]),
+			() => fauxAssistantMessage([fauxText("NO-EDITS")]),
+		]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		const tools = new Map<string, any>();
+		const pi = {
+			registerMessageRenderer: () => {},
+			registerTool: (tool: any) => tools.set(tool.name, tool),
+			registerCommand: () => {},
+			registerShortcut: () => {},
+			on: () => {},
+			events: { emit: () => {}, on: () => () => {} },
+			sendMessage: () => {},
+			exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+		} as any;
+		const previousCwd = process.cwd();
+		process.chdir(cwd);
+		try {
+			installWorkManager(pi);
+			installSubagents(pi);
+			const ctx = {
+				cwd,
+				model,
+				modelRegistry: runtime.modelRegistry,
+				getSystemPrompt: () => "parent",
+				sessionManager: { getSessionFile: () => undefined },
+				isProjectTrusted: () => true,
+				hasUI: false,
+			} as any;
+			const run = (id: string, params: object) => tools.get("agent").execute(id, params, undefined, undefined, ctx);
+			const first = await run("changes", { prompt: "edit", description: "Edit", subagent_type: "editor" });
+			const text = first.content[0].text as string;
+			expect(text).toContain(
+				[
+					"EDITS-DONE",
+					"",
+					"Files touched via edit/write:",
+					"- src/new.ts: write 2 lines (created); edit +2 -1 (1 call)",
+					"- existing.md: write 1 line (overwrote)",
+					"- missing.ts: 1 failed call",
+				].join("\n"),
+			);
+			const agentId = /Agent ID: (\S+)/.exec(text)?.[1];
+			const resumed = await run("changes-resume", {
+				prompt: "again",
+				description: "Again",
+				subagent_type: "editor",
+				resume: agentId,
+			});
+			expect(resumed.content[0].text).toContain("NO-EDITS");
+			expect(resumed.content[0].text).not.toContain("Files touched");
+		} finally {
+			process.chdir(previousCwd);
+		}
+	}, 30_000);
+
 	it("resumes a completed public agent with its model-visible ID and prior context", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-tool-"));
 		temporaryDirectories.push(cwd);

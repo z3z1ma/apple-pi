@@ -240,6 +240,37 @@ describe("owned subagent surface", () => {
 		expect(notification).not.toContain(output);
 	});
 
+	it("keeps traced file changes outside the truncated notification preview", () => {
+		const change = {
+			path: "a.ts",
+			edits: 1,
+			added: 3,
+			removed: 1,
+			writes: 0,
+			writtenLines: 0,
+			created: false,
+			failed: 0,
+		};
+		const notification = formatNotification(
+			{
+				id: "agent-1",
+				type: "builder",
+				description: "edits",
+				status: "completed",
+				result: "x".repeat(750),
+				fileChanges: { changes: () => [change] } as any,
+				toolUses: 1,
+				startedAt: Date.now(),
+				lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+				compactionCount: 0,
+			},
+			500,
+		);
+		expect(notification).toContain(
+			"</result>\n<file-changes>\nFiles touched via edit/write:\n- a.ts: edit +3 -1 (1 call)\n</file-changes>",
+		);
+	});
+
 	it("uses the quick profile for the built-in read-only explorer", () => {
 		expect(DEFAULT_AGENTS.get("explorer")).toMatchObject({ profile: "quick" });
 	});
@@ -401,7 +432,7 @@ describe("owned subagent surface", () => {
 		});
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/external research partner/);
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieve primary sources/);
-		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/external research teammate/);
+		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/Researches external sources/);
 		expect(DEFAULT_AGENTS.get("consultant")?.systemPrompt).toMatch(/senior software architect/);
 		expect(DEFAULT_AGENTS.get("builder")?.systemPrompt).toMatch(/that is the designer's role/);
 		expect(DEFAULT_AGENTS.get("designer")?.systemPrompt).toMatch(/refuse it/);

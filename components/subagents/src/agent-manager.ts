@@ -12,6 +12,7 @@ import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createFileChangeTracker } from "../../shared/src/file-changes.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createClarifyTool } from "./clarify.js";
 import { persistAgentOutput } from "./output-file.js";
@@ -210,6 +211,7 @@ export class AgentManager {
 	private beginInvocation(record: AgentRecord): symbol {
 		const invocation = Symbol(record.id);
 		record.activeInvocation = invocation;
+		record.fileChanges?.reset();
 		return invocation;
 	}
 
@@ -398,6 +400,9 @@ export class AgentManager {
 			onSessionCreated: (session) => {
 				record.session = session;
 				record.sessionFile = session.sessionManager?.getSessionFile?.();
+				const fileChanges = createFileChangeTracker(customCwd ?? ctx.cwd, ctx.cwd);
+				record.fileChanges = fileChanges;
+				session.subscribe((event) => fileChanges.observe(event));
 				// Flush any steers that arrived before the session was ready
 				if (record.pendingSteers?.length) {
 					for (const msg of record.pendingSteers) {

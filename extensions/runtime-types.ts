@@ -1,4 +1,5 @@
 import type { Usage } from "@earendil-works/pi-ai";
+import type { FileChange } from "../components/shared/src/file-changes.js";
 
 export interface WorkerResult {
 	index: number;
@@ -10,6 +11,7 @@ export interface WorkerResult {
 	value?: unknown;
 	usage?: Usage;
 	operations: ExecutionOperation[];
+	fileChanges: FileChange[];
 }
 
 export type ExecutionOutcome = "succeeded" | "failed" | "aborted" | "timed_out";

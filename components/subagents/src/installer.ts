@@ -46,19 +46,19 @@ import { GroupJoinManager } from "./group-join.js";
 import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
-import { completionError, detailsFor, formatNotification, notificationDetails } from "./notifications.js";
+import {
+	completionError,
+	detailsFor,
+	formatNotification,
+	notificationDetails,
+	withFileChanges,
+} from "./notifications.js";
 import { formatAgentOutput, resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
-import {
-	appendTeamSystemPrompt,
-	INFERENCE_PROFILES_SYSTEM_PROMPT_TAG,
-	TEAM_SYSTEM_PROMPT_TAG,
-	type TeamMember,
-	toTeamMember,
-} from "./team-system-prompt.js";
+import { appendTeamSystemPrompt, TEAM_SYSTEM_PROMPT_TAG, type TeamMember, toTeamMember } from "./team-system-prompt.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
 import { AgentManagerComponent, type AgentTypeSummary } from "./ui/agent-manager.js";
 import {
@@ -703,14 +703,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			"Bring a teammate into an isolated Pi session to own a well-defined piece of work.",
 			"Use background mode when their work can proceed alongside yours, then get_subagent_result; use resume to continue with the same teammate and context.",
 			"Set output_path to have the host write the teammate's final response directly to a file instead of returning it inline.",
-			"Custom teammates are defined by Markdown files in .pi/agents, .agents/agents, or the Pi agent directory.",
 			"A teammate may bring in another teammate only when their definition explicitly allows it.",
-			`The live <${TEAM_SYSTEM_PROMPT_TAG}> block lists everyone available, including each teammate's configured inference profile and own description. The separate <${INFERENCE_PROFILES_SYSTEM_PROMPT_TAG}> block describes the inference profiles. Choose the teammate with subagent_type, optionally choose a profile, and use system_prompt only for invocation-specific guidance that does not change their capabilities.`,
 		].join(" "),
 		promptGuidelines: [
-			`You are the senior engineer integrating the work. Use the live <${TEAM_SYSTEM_PROMPT_TAG}> block to choose a teammate whose role genuinely fits, and normally keep their configured inference profile. If nobody fits or coordination would cost more than it saves, keep the work in this session.`,
-			"Do not ask multiple teammates to write the same files. Do not retry an unchanged rejected task.",
-			`Use the agent tool to collaborate with a teammate and pi_exec agent.run to compose model workers in a program graph. agent subagent_type and agent.run type choose a teammate; profile chooses an inference profile. The agent tool's system_prompt and agent.run's systemPrompt add focused guidance without changing capabilities.`,
+			`Delegate when another perspective, a specialist skill, context isolation, or parallel work would materially help. Choose a teammate from <${TEAM_SYSTEM_PROMPT_TAG}> whose role genuinely fits, and normally keep their configured profile; otherwise keep the work in this session.`,
+			"Give each file to one teammate at most. Change a rejected task before retrying it.",
+			"Use agent for interactive collaboration and pi_exec agent_run/agent for model workers in a program. agent's subagent_type and agent_run's type choose a teammate; profile chooses inference; system_prompt adds invocation-specific guidance without changing capabilities.",
 			"Your pair programming partner follows the root session. The builder pairs by default; set pair false only when that extra perspective is not useful for one new session. Other teammates follow their own pair programmer default.",
 			"Teammate definitions and trusted settings own safety ceilings. Use stop_subagent when a running teammate should be stopped.",
 		],
@@ -807,7 +805,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						detailsFor(resumed, activity.state, { status: "background" }),
 					);
 				return textResult(
-					`${formatAgentOutput(resumed, inlineAgentOutput(resumed, true))}${continuationSuffix(resumed)}`,
+					`${withFileChanges(resumed, formatAgentOutput(resumed, inlineAgentOutput(resumed, true)))}${continuationSuffix(resumed)}`,
 					detailsFor(resumed, activity.state),
 					resumed.status === "error" || resumed.outputWriteError !== undefined,
 				);
@@ -911,7 +909,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					signal,
 				);
 				const record = result.record;
-				const output = `${formatAgentOutput(record, inlineAgentOutput(record, true))}${continuationSuffix(record)}`;
+				const output = `${withFileChanges(record, formatAgentOutput(record, inlineAgentOutput(record, true)))}${continuationSuffix(record)}`;
 				return textResult(
 					output,
 					detailsFor(record, tracker.state),
@@ -1025,7 +1023,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				let output =
 					!settled || (params.transcript_tail !== undefined && !record.outputPath)
 						? `Agent ${record.id} is ${record.status}.`
-						: formatAgentOutput(record, inlineAgentOutput(record, false));
+						: withFileChanges(record, formatAgentOutput(record, inlineAgentOutput(record, false)));
 				if (yieldedSeconds !== undefined && !settled) {
 					output += ` Yield interval (${yieldedSeconds}s) reached; the agent is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.`;
 				}

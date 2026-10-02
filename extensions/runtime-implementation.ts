@@ -18,6 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { createFileChangeTracker } from "../components/shared/src/file-changes.js";
 import { loadSearchRootGuardConfig } from "../components/home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../components/home-search-guard/src/index.js";
 import {
@@ -244,6 +245,7 @@ async function runAgent(
 			const usages: Usage[] = [];
 			const operations: ExecutionOperation[] = [];
 			const operationByCallId = new Map<string, ExecutionOperation>();
+			const fileChanges = createFileChangeTracker(ctx.cwd);
 			let aborted = false;
 			let pendingReturn: unknown;
 			let acceptedReturn: unknown;
@@ -253,6 +255,7 @@ async function runAgent(
 				if (!line.trim()) return;
 				try {
 					const event = JSON.parse(line);
+					fileChanges.observe(event);
 					if (event.type === "tool_execution_start") {
 						onActivity?.(`using ${String(event.toolName ?? "tool")}`);
 						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
@@ -348,6 +351,7 @@ async function runAgent(
 					...(structured.value !== undefined && !error ? { value: structured.value } : {}),
 					...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
 					operations,
+					fileChanges: fileChanges.changes(),
 				});
 			});
 		});
@@ -838,6 +842,7 @@ export default function runtime(pi: ExtensionAPI): void {
 									error: result.error,
 									text: result.output,
 									toolCalls: result.operations.length,
+									changes: result.fileChanges,
 									...(result.usage ? { usage: result.usage } : {}),
 									...(context
 										? {
@@ -853,6 +858,7 @@ export default function runtime(pi: ExtensionAPI): void {
 									status: "completed",
 									text: result.output,
 									toolCalls: result.operations.length,
+									changes: result.fileChanges,
 									...(result.value !== undefined ? { value: result.value } : {}),
 									...(result.usage ? { usage: result.usage } : {}),
 									...(context

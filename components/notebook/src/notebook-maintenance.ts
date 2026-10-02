@@ -393,8 +393,7 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 			promptSnippet:
 				"Use update_notebook to add, supersede, or retire a working conclusion that should still change later work.",
 			promptGuidelines: [
-				"Use update_notebook for conclusions that change later decisions beyond what ordinary compaction preserves. Omit sourceEntryIds to cite the current user turn, or supply exact primary source ids recovered through revisit_note.",
-				"Use update_notebook to supersede or retire conclusions as soon as contrary evidence, resolved work, or a scope change makes them obsolete. An empty notebook is a successful outcome.",
+				"Use update_notebook for conclusions that should change later decisions beyond what compaction preserves. Supersede or retire them once evidence, resolved work, or a scope change makes them obsolete; an empty notebook is fine.",
 			],
 			parameters: UpdateNotebookSchema,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

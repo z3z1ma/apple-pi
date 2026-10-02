@@ -535,6 +535,36 @@ describe("pi_exec tool", () => {
 		}
 	});
 
+	it("reports the worker's edit and write calls per file", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"worker-edits",
+				{ code: 'await agent_run(task="edits")' },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() },
+			);
+			expect(JSON.parse(result.content[0].text).changes).toEqual([
+				{ path: "README.md", edits: 1, added: 2, removed: 1, writes: 0, writtenLines: 0, created: false, failed: 0 },
+				{
+					path: "not-a-file.txt",
+					edits: 0,
+					added: 0,
+					removed: 0,
+					writes: 0,
+					writtenLines: 0,
+					created: false,
+					failed: 1,
+				},
+			]);
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
 	it("rejects unknown worker options before starting a worker", async () => {
 		const { tool, resultHandler } = register();
 		await expect(
@@ -724,7 +754,8 @@ describe("pi_exec tool", () => {
 		];
 		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 		try {
-			expect(tool.parameters.properties.code.description).toContain("async def mirror(*, value: str)");
+			expect(tool.parameters.properties.code.description).toContain("schemas: mirror.");
+			expect(tool.parameters.properties.code.description).not.toContain("async def mirror(");
 			const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mirror" } };
 			await expect(
 				tool.execute(

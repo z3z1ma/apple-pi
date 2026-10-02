@@ -562,12 +562,8 @@ export const recallObservationTool = defineTool({
 		"This follows a known note back to its sources; it does not search the transcript by topic.",
 	promptSnippet: "Use revisit_note({ id }) to see the original session evidence behind a specific notebook entry.",
 	promptGuidelines: [
-		"Use revisit_note before making an important decision that depends on a notebook entry whose details are unclear.",
-		"Use revisit_note when you need the exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered point.",
-		"Use revisit_note when a working conclusion matters but you need to see its original sources before continuing.",
-		"Use revisit_note when the user asks why you believe something, what supports a notebook entry, or what was decided earlier.",
-		"Do not use revisit_note as semantic search or transcript browsing; you must already have a specific 12-character notebook id. Use search_session to search the session.",
-		"Do not revisit every note preemptively. Look one up only when the original context will materially improve the next action.",
+		"Use revisit_note when a decision or answer depends on the exact wording, rationale, or provenance behind a notebook entry; skip it when the summary is enough.",
+		"revisit_note follows a known 12-character id. Use search_session to search the transcript by topic.",
 	],
 	parameters: Type.Object({
 		id: Type.String({

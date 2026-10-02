@@ -1423,9 +1423,7 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet:
 			"Acknowledge delivered pair programmer concerns and blockers with a typed disposition and concise reason",
 		promptGuidelines: [
-			"Call acknowledge_pair_findings for each delivered pair programmer concern or blocker after checking it against current code and user intent.",
-			"Use address when acting on it, decline with evidence when it does not apply, or defer with a reason when it is valid but outside the current authorized work.",
-			"An acknowledgment records consideration only; it does not prove implementation or validation.",
+			"Call acknowledge_pair_findings for each delivered concern or blocker after checking it against current code and user intent. Nits and questions need no acknowledgment.",
 		],
 		parameters: pairAcknowledgmentSchema,
 		async execute(_toolCallId, params) {

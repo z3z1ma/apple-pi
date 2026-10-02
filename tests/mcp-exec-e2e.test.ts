@@ -103,7 +103,8 @@ describe("native MCP through Python pi_exec", () => {
 				const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
 				expect(exec).toBeDefined();
 				const codeDescription = String((exec?.parameters as any)?.properties.code.description ?? "");
-				expect(codeDescription).toContain("async def mcp__test__echo(");
+				expect(codeDescription).toContain("mcp__test__echo");
+				expect(codeDescription).not.toContain("async def mcp__test__echo(");
 				const composed = await exec!.execute(
 					"mcp-python-test",
 					{ code: 'response = await mcp__test__echo(value="APPLE")\nresponse["text"]' },

@@ -1,5 +1,6 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { FileChangeTracker } from "../../shared/src/file-changes.js";
 import type { LifetimeUsage } from "./usage.js";
 
 export type ThinkingLevel = ModelThinkingLevel;
@@ -60,6 +61,8 @@ export interface AgentRecord {
 	/** File-system failure from persisting the current invocation's final response. */
 	outputWriteError?: string;
 	toolUses: number;
+	/** edit/write calls made by the current invocation. */
+	fileChanges?: FileChangeTracker;
 	startedAt: number;
 	completedAt?: number;
 	session?: AgentSession;

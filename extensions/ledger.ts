@@ -400,9 +400,6 @@ function createLedgerAddTool() {
 		description:
 			"Create one new timestamped .ledger task bundle with task.md, retrospective.md, and a live index row. Add plans, specifications, notes, decisions, evidence, or assets later only when useful. Not for listing, inspecting, selecting, updating, closing, or executing existing tasks.",
 		promptSnippet: "Add a new .ledger task bundle when the user asks to create one",
-		promptGuidelines: [
-			"Use ledger_add only to create a new ledger task; read and edit existing .ledger files with ordinary repository tools.",
-		],
 		parameters: Type.Object({
 			title: Type.String({ description: "One-line task title, 1-160 characters." }),
 			description: Type.String({
@@ -438,9 +435,6 @@ function createLedgerCloseTool() {
 		description:
 			"Archive one live .ledger task into .ledger/history with a terminal status of done or cancelled. Updates Status in task.md when needed, moves the bundle, and transfers the index row including that status, title, and description. Not for creating, inspecting, shaping, executing, or judging completeness.",
 		promptSnippet: "Close or cancel a ledger task by archiving it into .ledger/history",
-		promptGuidelines: [
-			"Use ledger_close only to archive a live task as done or cancelled. It does not verify acceptance criteria or work items.",
-		],
 		parameters: Type.Object({
 			task: Type.String({
 				description: "Task id, .ledger/<id>, or .ledger/<id>/task.md of the live task to archive.",

@@ -1,3 +1,4 @@
+import { formatFileChanges } from "../../shared/src/file-changes.js";
 import { formatAgentOutput } from "./output-file.js";
 import { getStatusNote, partialOutputSuffix } from "./status-note.js";
 import type { AgentRecord, NotificationDetails } from "./types.js";
@@ -51,6 +52,12 @@ function escapeXml(text: string): string {
 	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** The caller-facing result: the agent's response followed by its traced file changes. */
+export function withFileChanges(record: Pick<AgentRecord, "fileChanges">, output: string): string {
+	const changes = formatFileChanges(record.fileChanges?.changes() ?? []);
+	return changes ? `${output}\n\n${changes}` : output;
+}
+
 export function formatNotification(record: AgentRecord, maxLength: number): string {
 	const inlineOutput =
 		record.status === "error"
@@ -61,6 +68,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		output.length > maxLength
 			? `${output.slice(0, maxLength)}\n...(truncated; use get_subagent_result for full output)`
 			: output;
+	const changes = formatFileChanges(record.fileChanges?.changes() ?? []);
 	return [
 		"<task-notification>",
 		`<task-id>${record.id}</task-id>`,
@@ -69,6 +77,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		`<status>${escapeXml(statusLabel(record))}</status>`,
 		`<summary>agent "${escapeXml(record.description)}" ${record.outputWriteError ? "failed to persist its output" : `${record.status}${getStatusNote(record.status)}`}</summary>`,
 		`<result>${escapeXml(preview)}</result>`,
+		changes ? `<file-changes>\n${escapeXml(changes)}\n</file-changes>` : undefined,
 		`<usage><total_tokens>${getLifetimeTotal(record.lifetimeUsage)}</total_tokens><tool_uses>${record.toolUses}</tool_uses><compactions>${record.compactionCount}</compactions></usage>`,
 		"</task-notification>",
 	]

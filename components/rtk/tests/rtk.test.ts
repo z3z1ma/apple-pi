@@ -152,7 +152,7 @@ describe("Bash tool verbatim parameter", () => {
 	it("includes verbatim in bash tool schema parameters", () => {
 		const bashDef = createBashToolDefinition();
 		expect(bashDef.parameters.properties).toHaveProperty("verbatim");
-		expect(bashDef.promptGuidelines?.some((g) => g.includes("verbatim: true"))).toBe(true);
+		expect(bashDef.promptGuidelines?.some((g) => g.includes("verbatim"))).toBe(false);
 	});
 
 	it("bypasses RTK rewriting when verbatim is true", async () => {
@@ -326,7 +326,6 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		const properties = (tool.parameters as any).properties;
 		expect(properties.verbatim).toBeDefined();
 		expect(properties.verbatim.description).toContain("RTK");
-		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim: true"))).toBe(true);
 	});
 
 	it("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {

@@ -6,7 +6,7 @@ Use Pi Exec when a task needs tool composition or computation over tool results;
 
 ## Core tool surface
 
-The `code` parameter lists live signatures generated from Pi's core and captured extension tool schemas. The **same signatures** are passed to Monty's checker before execution, so a wrong keyword argument is reported before any tool call starts. Use keyword arguments and `await`:
+The `code` parameter shows live signatures for core tools and host functions, and lists captured extension tools by name; `tools_describe(name)` returns an extension tool's parameters. Monty's checker receives full signatures for every tool before execution, so a wrong keyword argument is reported before any tool call starts. Use keyword arguments and `await`:
 
 ```python
 import asyncio
@@ -23,7 +23,7 @@ The program result must be JSON-compatible. Python dicts with string keys and li
 
 ## Model workers and schemas
 
-`agent_run(task=..., ...)` returns a status record rather than raising for a failed worker. `agent(task=..., ...)` returns text or the structured value from `output_schema`, and raises on failure. Worker options include `type`, `name`, `profile`, `tools`, `pair`, `system_prompt`, `context`, and `output_schema`. Context is attached to a child as a JSON file, never interpolated into the task. A strict schema can be built locally with `schema(shape)`:
+`agent_run(task=..., ...)` returns a status record rather than raising for a failed worker. Its `changes` list records each file the worker touched through `edit` or `write`, with the same counts as the subagent result summary. `agent(task=..., ...)` returns text or the structured value from `output_schema`, and raises on failure. Worker options include `type`, `name`, `profile`, `tools`, `pair`, `system_prompt`, `context`, and `output_schema`. Context is attached to a child as a JSON file, never interpolated into the task. A strict schema can be built locally with `schema(shape)`:
 
 ```python
 import asyncio
@@ -41,6 +41,8 @@ Worker calls share the host call, concurrency, agent, and wall-clock budgets. Wo
 ## Extensions, fetch, and skills
 
 Each captured extension tool is callable by its registered name with schema-checked keyword arguments, for example `await mcp__test__echo(value="hello")` for a connected native MCP server. Use `tools_list()`, `tools_search(query)`, `tools_describe(name)`, and `tools_call(name, args)` for dynamic discovery. The interactive subagent manager and root-only task tools remain unavailable inside Monty. Pi owns MCP transport and authentication; the adapter gateway is gone.
+
+The `code` description lists extension tools by name only, so it follows Pi's MCP exposure choice. With Pi's default `codemode` exposure, or with `deferred`, MCP schemas are absent from the model's direct tool declarations. A program must then call `tools_describe(name)` before first use, or Monty rejects arguments that do not match. Set a server's `exposure` to `direct` in `mcp.json` to show its schemas natively. Monty always type-checks against full signatures for every captured tool.
 
 The existing capture bridge invokes definitions directly, rather than through Pi 0.99's `ctx.executeTool()`. It does not enforce native exposure rules or nested permission hooks. Use native calls or codemode when those gates are required. See [MCP](mcp.md) for configuration, migration, and the deferred bridge update.
 

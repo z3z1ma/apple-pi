@@ -419,13 +419,11 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "agent");
 	assert(agentTool, "missing agent tool definition");
-	assert.match(agentTool.definition.description, /<subagent-team>/);
-	assert.match(
-		agentTool.definition.description,
-		/lists everyone available, including each teammate's configured inference profile and own description/,
-	);
-	assert.match(agentTool.definition.description, /<inference-profiles>/);
-	assert.match(agentTool.definition.description, /system_prompt only for invocation-specific guidance/);
+	const agentGuidance = agentTool.definition.promptGuidelines.join("\n");
+	assert.match(agentGuidance, /<subagent-team>/);
+	assert.match(agentGuidance, /agent_run's type choose a teammate/);
+	assert.match(agentGuidance, /system_prompt adds invocation-specific guidance/);
+	assert.doesNotMatch(agentGuidance, /agent\.run/);
 	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
 	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);
 	assert.doesNotMatch(piExecTool.definition.description, /<inference-profiles>/);

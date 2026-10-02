@@ -367,14 +367,11 @@ export function createBashToolDefinition(
 		name: "bash",
 		label: "bash",
 		description:
-			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin, background execution via run_in_background: true, or interactive detachment with Ctrl+B.",
+			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin and background execution via run_in_background: true.",
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports background execution and standard input.",
 		promptGuidelines: [
-			"You can inspect PI_* environment variables for current model and session details.",
 			"Use bash with run_in_background: true for immediate commands that may run while you continue and should wake you only when they complete or fail.",
-			"While a foreground command is executing, the operator can press Ctrl+B to background it.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
-			"Pass verbatim: true to run commands without RTK output compression when exact raw output is required.",
 		],
 		parameters: bashParameters,
 		async execute(_toolCallId, params: BashParameters, signal, onUpdate, ctx) {
@@ -401,7 +398,6 @@ export function createExecBashToolDefinition(
 			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin.",
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.). Supports standard input.",
 		promptGuidelines: [
-			"You can inspect PI_* environment variables for current model and session details.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
 		],
 		parameters: execBashParameters,

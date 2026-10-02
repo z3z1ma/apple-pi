@@ -130,26 +130,38 @@ export function extensionPythonTools(): ReturnType<typeof capturedTools> {
 	);
 }
 
+const HOST_PYTHON_STUBS = [
+	"def schema(shape: Any) -> dict[str, Any]: ...",
+	"async def agent_run(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> dict[str, Any]: ...",
+	"async def agent(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> Any: ...",
+	"async def tools_list() -> list[dict[str, Any]]: ...",
+	"async def tools_search(query: str) -> list[dict[str, Any]]: ...",
+	"async def tools_describe(name: str) -> dict[str, Any] | None: ...",
+	"async def tools_call(name: str, args: dict[str, Any] = ...) -> dict[str, Any]: ...",
+	"async def skills_list() -> list[dict[str, str]]: ...",
+	"async def skills_body(name: str) -> str: ...",
+	"async def fetch(url: str, *, method: str = ..., headers: dict[str, str] = ..., body: str | bytes = ...) -> dict[str, Any]: ...",
+];
+
+/** Complete type-checking stubs, including every captured extension tool signature. */
 export function guestPythonStubs(cwd = "."): string {
 	const declarations: string[] = [];
 	const extensions = extensionPythonTools().map((tool) =>
 		toolSignature(tool.name, tool.parameters as Schema, "dict[str, Any]", declarations),
 	);
+	return [corePythonStubs(cwd), ...declarations, ...extensions, ...HOST_PYTHON_STUBS, evidencePythonStubs()].join("\n");
+}
+
+/** Model-facing stubs: full core and host signatures; extension tools by name, described on demand. */
+function guestPromptStubs(cwd = "."): string {
+	const names = extensionPythonTools().map((tool) => tool.name);
 	return [
 		corePythonStubs(cwd),
-		...declarations,
-		...extensions,
-		"def schema(shape: Any) -> dict[str, Any]: ...",
-		"async def agent_run(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> dict[str, Any]: ...",
-		"async def agent(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> Any: ...",
-		"async def tools_list() -> list[dict[str, Any]]: ...",
-		"async def tools_search(query: str) -> list[dict[str, Any]]: ...",
-		"async def tools_describe(name: str) -> dict[str, Any] | None: ...",
-		"async def tools_call(name: str, args: dict[str, Any] = ...) -> dict[str, Any]: ...",
-		"async def skills_list() -> list[dict[str, str]]: ...",
-		"async def skills_body(name: str) -> str: ...",
-		"async def fetch(url: str, *, method: str = ..., headers: dict[str, str] = ..., body: str | bytes = ...) -> dict[str, Any]: ...",
+		...HOST_PYTHON_STUBS,
 		evidencePythonStubs(),
+		names.length
+			? `Captured extension tools, callable as async functions with keyword arguments and type-checked against their schemas: ${names.join(", ")}. Call await tools_describe(name="...") for parameters.`
+			: "No extension tools are captured.",
 	].join("\n");
 }
 
@@ -170,11 +182,11 @@ export function piExecGuestApiContract(): string {
 	return [
 		"Python 3.14 subset (Monty). Snippets accept top-level await and return the trailing expression. All code is type-checked before execution.",
 		"Import asyncio and use asyncio.gather(*awaitables) for independent fan-out; no create_task or third-party imports.",
-		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. The declarations below are the exact type-checking stubs:",
-		guestPythonStubs(),
-		"Captured extension tools use their declared Python names and keyword signatures; tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
+		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. Type-checking stubs:",
+		guestPromptStubs(),
+		"tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
 		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits worker context; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
-		'agent_run returns a status record (including errors); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
+		'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
 		"Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch; reset is a tool parameter that starts fresh. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.",
 	].join("\n");
 }

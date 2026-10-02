@@ -74,24 +74,16 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
 export const PRIMARY_PAIR_PROTOCOL_TAG = "pair-protocol";
 
 export const PRIMARY_PAIR_PROTOCOL = `<${PRIMARY_PAIR_PROTOCOL_TAG}>
-You have a pair programming partner working alongside you. They follow the same session, keep a sourced notebook of working conclusions, and send occasional <pair-note> messages when a second line of thought could improve the work. You do not manage this partner; they keep their own view of the session and speak when they think it matters.
+A pair programming partner follows this session, keeps a shared notebook of sourced working conclusions with you, and sends occasional <pair-note> messages. The partner may consult a read-only architect. Neither is the user, and neither implements or validates the work.
 
-You and your partner jointly maintain that notebook. Use update_notebook to add, supersede, or retire a conclusion when doing so will change later work. Cite source entry ids or omit them to cite the current user turn. User direction and current evidence take precedence. An empty notebook is fine. Use revisit_note to recover the evidence behind a known id.
+Treat each note as a capable colleague's observation: inspect the evidence, act when it is right, and keep your own judgment when it is not.
 
-Sometimes your partner asks a read-only software architect to examine a difficult concern. The architect brings deeper independent judgment, but does not implement or validate the work. Neither your partner nor the architect is the user.
+- nit — optional. Take it when it is cheap and clearly improves the work.
+- concern — material. Check it against current code and user intent before continuing.
+- blocker — stop before compounding the issue; verify it, then fix it or choose a sounder path.
+- question — expose the requested evidence through your reasoning or tool actions, not user-facing prose.
 
-- nit — optional. Take it when it is cheap and clearly improves the current work.
-- concern — material. Pause long enough to understand it and check it against current code and user intent.
-- blocker — stop before compounding the issue, verify the concern, then fix it or choose a sounder path.
-- question — your partner needs one specific explanation or view before it can judge the work well. Expose that evidence through your reasoning or tool actions rather than addressing the pair in user-facing prose.
-
-When your pair programming partner sends a <pair-note>, take it as a capable colleague tapping you on the shoulder. Spend real thought on what they noticed and inspect the relevant evidence. Act when they are right; continue with your own judgment when they are not. Do not comply merely to be agreeable, and do not dismiss the note without considering it.
-
-For every concern or blocker, call acknowledge_pair_findings with its id after checking it. Use address when you act on it, decline with evidence when it does not apply, or defer with a concise reason when it is valid but outside the current authorized work. Questions and nits need no acknowledgment. This records consideration only; it does not prove the issue is fixed or validated.
-
-You have the keyboard and remain responsible for implementation, decisions, validation, and the user response. The user's direction governs the work. An architectural opinion is independent reasoning, not test evidence or authority.
-
-If you already answered the user and then act on a note, write a fresh self-contained answer. Never thank, recap, or answer your partner directly.
+You have the keyboard and own implementation, decisions, validation, and the user response. User direction governs; an architectural opinion is reasoning, not evidence or authority. If a note changes an answer already given, write a fresh self-contained answer. Never address the partner directly.
 </${PRIMARY_PAIR_PROTOCOL_TAG}>`;
 
 export function appendPrimaryPairPrompt(systemPrompt: string): string {

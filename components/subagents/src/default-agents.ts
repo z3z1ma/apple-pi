@@ -27,7 +27,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 			name: "explorer",
 			displayName: "Explorer",
 			description:
-				'A quick read-only codebase scout for broad local discovery across multiple areas, naming conventions, or hypotheses. Bring the explorer in when a compact map of unfamiliar code would save you time. Prefer your own grep, find, and read calls for known paths or targeted symbols. The explorer is not the teammate for external docs (the researcher), architecture or costly judgment (the consultant), implementation planning (the planner), code review, design-doc auditing, or open-ended analysis; it reads excerpts and may miss content past its read window. Ask for "quick", "medium", or "very thorough" search breadth.',
+				'Quick read-only scout that maps unfamiliar local code across several areas or hypotheses. Use your own search for known paths or symbols. It reads excerpts, so it can miss detail. Ask for "quick", "medium", or "very thorough" breadth.',
 			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -57,7 +57,7 @@ Your role is search and analysis, not implementation.
 			name: "planner",
 			displayName: "Planner",
 			description:
-				"An architecture-minded planning teammate for non-trivial implementation work with cross-module dependencies, consequential trade-offs, migrations, or unclear ownership. The planner returns a step-by-step implementation approach and identifies the critical files. Keep routine planning in your own session; use the consultant for high-stakes should/root-cause/YAGNI judgment, and use the builder to write code.",
+				"Plans non-trivial implementation with cross-module dependencies, migrations, or unclear ownership. Returns a step-by-step approach and the critical files.",
 			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: true,
@@ -97,7 +97,7 @@ List 3-5 files most critical for implementing this plan:
 			name: "researcher",
 			displayName: "Researcher",
 			description:
-				"An external research teammate for official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Bring the researcher in when current sourced knowledge would materially help. Use the explorer for local codebase maps, the consultant for architecture or costly trade-offs, and the builder for code. The researcher verifies version-specific APIs against retrievable or bound sources.",
+				"Researches external sources: official documentation, version-specific APIs, GitHub examples, and unfamiliar libraries. Returns sourced findings.",
 			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -129,7 +129,7 @@ This is not local codebase reconnaissance.
 			name: "consultant",
 			displayName: "Consultant",
 			description:
-				"A senior software architect who joins the team for difficult decisions, costly trade-offs, persistent bugs, and simplification judgment. The consultant gives a fresh, read-only second opinion and does not implement. Bring the consultant in after failed fix attempts or when a wrong choice would be expensive. Do not use this teammate for routine implementation planning (the planner), local search (the explorer), external docs (the researcher), or automatic verification after every edit.",
+				"Senior architect who gives a read-only second opinion on costly decisions, persistent bugs after failed fixes, and simplification. Does not implement or routinely verify edits.",
 			builtinToolNames: ADVISORY_TOOLS,
 			extensions: false,
 			skills: false,
@@ -157,7 +157,7 @@ Bring independent judgment to architecture, costly trade-offs, persistent debugg
 			name: "builder",
 			displayName: "Builder",
 			description:
-				"An implementation teammate for an already-specified, bounded change. Give the builder a complete task, owned files, and assigned checks; it writes the code without redesigning the work or bringing in more teammates. Use it for substantial mechanical or headless work, not UI polish (the designer), discovery, unclear requirements, or one tiny edit that is simpler to make yourself.",
+				"Implements a specified, bounded change. Give it the complete task, owned files, and checks to run. Use it for substantial headless work, not discovery, unclear requirements, or a tiny edit you can make yourself.",
 			extensions: false,
 			skills: false,
 			profile: "coding",
@@ -188,7 +188,7 @@ Apply the agreed task without reopening planning, research, or design.
 			name: "designer",
 			displayName: "Designer",
 			description:
-				"A product-design engineer for user-visible UI/UX implementation and review: layout, hierarchy, spacing, motion, affordances, responsive behavior, and feel. Bring the designer in when visual judgment is central. Use the builder for backend or headless logic, and handle copy-only edits directly. Preserve the designer's intentional visual structure in later mechanical work.",
+				"Implements and reviews user-visible UI/UX where visual judgment is central: layout, hierarchy, spacing, motion, affordances, and responsiveness. Preserve its visual structure in later mechanical work.",
 			extensions: false,
 			skills: false,
 			profile: "visual-engineering",
