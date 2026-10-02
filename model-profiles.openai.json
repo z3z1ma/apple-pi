@@ -1,0 +1,32 @@
+{
+  "profiles": {
+    "quick": {
+      "model": "openai/gpt-6-luna",
+      "thinking": "high"
+    },
+    "pair": {
+      "model": "openai/gpt-6-luna",
+      "thinking": "xhigh"
+    },
+    "balanced": {
+      "model": "openai/gpt-6.1-sol",
+      "thinking": "low"
+    },
+    "deep": {
+      "model": "openai/gpt-6-astra",
+      "thinking": "xhigh"
+    },
+    "coding": {
+      "model": "openai/gpt-6.1-sol",
+      "thinking": "medium"
+    },
+    "visual-engineering": {
+      "model": "openai/gpt-6-astra",
+      "thinking": "low"
+    },
+    "background": {
+      "model": "openai/gpt-6-luna",
+      "thinking": "low"
+    }
+  }
+}
