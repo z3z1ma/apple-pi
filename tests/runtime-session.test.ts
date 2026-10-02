@@ -148,13 +148,30 @@ describe("pi_exec Monty session tree", () => {
 		}
 	});
 
+	it("captures print output above 20 KB and distinguishes output overflow from heap exhaustion", async () => {
+		const manager = SessionManager.inMemory(process.cwd());
+		const session = harness(manager);
+		await session.emit("session_start", { reason: "startup" });
+		try {
+			await session.run("first", "x: int = 1");
+			expect((await session.run("print", 'print("x" * 24_576)\n42')).content[0].text).toContain("42");
+			await expect(session.run("output-overflow", 'x = 99\nprint("x" * (10 * 1024 * 1024))')).rejects.toThrow(
+				/Captured print output limit exceeded \(10 MiB\).*rolled back/s,
+			);
+			expect((await session.run("after-output-overflow", "x")).content[0].text).toBe("1");
+		} finally {
+			await session.emit("session_shutdown", { reason: "quit" });
+		}
+	});
+
 	it("rolls back after exceeding Monty's memory limit", async () => {
 		const manager = SessionManager.inMemory(process.cwd());
 		const session = harness(manager);
 		await session.emit("session_start", { reason: "startup" });
 		try {
 			await session.run("first", "x: int = 1");
-			await expect(session.run("memory", 'data = "x" * 140_000_000')).rejects.toThrow(/rolled back/);
+			expect((await session.run("headroom", 'len("x" * 140_000_000)')).content[0].text).toBe("140000000");
+			await expect(session.run("memory", 'data = "x" * 540_000_000')).rejects.toThrow(/rolled back/);
 			expect((await session.run("after-memory", "x")).content[0].text).toBe("1");
 		} finally {
 			await session.emit("session_shutdown", { reason: "quit" });

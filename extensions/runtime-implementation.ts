@@ -20,12 +20,12 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { loadSearchRootGuardConfig } from "../components/home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../components/home-search-guard/src/index.js";
-import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
 import {
 	PROGRAM_ENVELOPE_MAXIMA,
 	type ProgramEnvelope,
 	type ProgramEnvelopeLimits,
 } from "../components/shared/src/runtime-envelope.js";
+import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
 import {
 	agentOperationArgs,
 	PI_EXEC_RETURN_TOOL,
@@ -43,8 +43,8 @@ import {
 	piExecGuestApiContract,
 	piExecToolDescription,
 } from "./runtime-api.js";
-import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./runtime-evidence.js";
 import { sealCheckpoint, verifyCheckpoint } from "./runtime-checkpoint.js";
+import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./runtime-evidence.js";
 import { serializeJsonValue } from "./runtime-json.js";
 import {
 	buildProgramParametersSchema,
@@ -91,7 +91,7 @@ export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimit
 		callBudget,
 		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
 		agentBudget: DEFAULT_AGENT_BUDGET,
-		memoryMb: 128,
+		memoryMb: PROGRAM_ENVELOPE_MAXIMA.memoryMb,
 		timeoutSeconds: hasWorkers ? 600 : 300,
 	};
 	return {

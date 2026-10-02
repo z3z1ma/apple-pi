@@ -7,10 +7,10 @@ import {
 	MontyTypingError,
 	ProtocolError,
 } from "@pydantic/monty";
+import { PROGRAM_ENVELOPE_MAXIMA } from "../components/shared/src/runtime-envelope.js";
 import { CORE_GUEST_TOOL_NAMES, extensionPythonTools } from "./runtime-api.js";
 import { EVIDENCE_FUNCTION_NAMES } from "./runtime-evidence.js";
 import { PYTHON_SCHEMA_PRELUDE } from "./runtime-python-schema.js";
-import { PROGRAM_ENVELOPE_MAXIMA } from "../components/shared/src/runtime-envelope.js";
 import type { ProgramExecution, ProgramHostCall } from "./runtime-types.js";
 
 function jsonValue(value: unknown, seen = new Set<object>(), hostArguments = false): unknown {
@@ -59,7 +59,7 @@ export async function createProgramSession(
 	try {
 		session = await pool.checkout({
 			limits: {
-				maxMemory: 128 * 1024 * 1024,
+				maxMemory: PROGRAM_ENVELOPE_MAXIMA.memoryMb * 1024 * 1024,
 				maxTurnDurationSecs: PROGRAM_ENVELOPE_MAXIMA.timeoutSeconds,
 				maxFeedDurationSecs: PROGRAM_ENVELOPE_MAXIMA.timeoutSeconds,
 				maxSuspensions: (PROGRAM_ENVELOPE_MAXIMA.callBudget + 1) * 2,
@@ -124,7 +124,17 @@ export async function executeProgram(
 	timer.unref?.();
 	signal?.addEventListener("abort", stop, { once: true });
 	if (signal?.aborted) stop();
-	const collector = new CollectString(20_000);
+	const collector = new (class extends CollectString {
+		override write(stream: "stdout" | "stderr", text: string) {
+			try {
+				super.write(stream, text);
+			} catch (error) {
+				if (error instanceof MontyRuntimeError && error.exception.typeName === "MemoryError")
+					throw new MontyRuntimeError("MemoryError", `Captured print output limit exceeded (10 MiB): ${error.message}`);
+				throw error;
+			}
+		}
+	})();
 	const invoke = (ref: string, args: Record<string, unknown> = {}) => {
 		const converted = jsonValue(args, new Set(), true) as Record<string, unknown>;
 		return new Promise<unknown>((resolve, reject) => {
