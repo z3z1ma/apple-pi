@@ -195,6 +195,8 @@ Architecture is defined by what you choose *not* to build. Consult [`docs/bounda
 
 ### Installation
 
+New machine? Follow the [setup guide](docs/setup.md) for the complete path: Ghostty, tmux, Node.js, Pi, apple-pi, model profiles, and notifications.
+
 Update Pi, install dependencies, and register the package:
 
 ```bash
