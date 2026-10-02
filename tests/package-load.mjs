@@ -193,7 +193,7 @@ try {
 		"get_subagent_result",
 		"steer_subagent",
 		"ledger_add",
-		"ledger_close",
+		"ledger_status",
 		"wiki_lint",
 		"wiki_references",
 		"task",

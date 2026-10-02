@@ -255,7 +255,7 @@ Apple Pi decouples semantic roles from specific provider models via `~/.pi/agent
 | `Alt+I` *(in BTW)* | Inject the latest BTW answer into the main conversation |
 | `/fast` | Toggle priority service tier (`⚡`) for OpenAI Codex and xAI |
 | `/distill [focus]` | Harvest durable lessons into `.wiki/`, `.ledger/`, or `AGENTS.md` |
-| `ledger_add` / `ledger_close` | Create or archive an operational task bundle in `.ledger/` |
+| `ledger_add` / `ledger_status` | Create an operational task bundle in `.ledger/`, move it through planning, ready, and in-progress, or archive it |
 | `prefix + y` *(in tmux)* | Launch or attach to a Pi session for the current directory in a popup |
 | `prefix + u` *(in tmux)* | Open the interactive fuzzy session picker |
 | `Ctrl+S` / `Alt+S` | Stash the current editor prompt into the prompt stash |

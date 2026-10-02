@@ -233,7 +233,7 @@ describe("terse tool formatters", () => {
 		expect(formatToolArgs("search_session", { mode: "touched" })).toBe("mode: touched");
 		expect(formatToolArgs("search_session", { expand: [1, 2] })).toBe("expand: 1, 2");
 
-		expect(formatToolArgs("ledger_close", { task: "20260901-task", status: "done" })).toBe("done 20260901-task");
+		expect(formatToolArgs("ledger_status", { task: "20260901-task", status: "done" })).toBe("done 20260901-task");
 		expect(formatToolArgs("wiki_references", { target: "my-page", depth: 1, direction: "both" })).toBe("my-page");
 		expect(formatToolArgs("wiki_references", { target: "my-page", depth: 2, direction: "inbound" })).toBe(
 			"my-page (inbound, depth 2)",

@@ -26,13 +26,26 @@ Every new task has `retrospective.md`. Keep it concise: it distills what mattere
   retrospective.md
 ```
 
-It also adds a searchable live-index row. It requires a one-line title and description; an optional lowercase kebab slug overrides the title-derived slug. Existing live and archived IDs are never overwritten. Index updates are atomic and add/close transactions use a project-scoped exclusive lease.
+It also adds a searchable live-index row. It requires a one-line title and description; an optional lowercase kebab slug overrides the title-derived slug. Existing live and archived IDs are never overwritten. Index updates are atomic and add/status transactions use a project-scoped exclusive lease.
 
 The initial files are deliberately small. `task.md` provides `Status`, `Created`, `Updated`, and intent/current-state/outcome sections. `retrospective.md` provides concise what-mattered, learnings, and improvements sections. Add anything else only when useful.
 
-### `ledger_close`
+## Lifecycle
 
-`ledger_close` archives a live task as `done` or `cancelled`. It updates `Status` in `task.md`, moves the complete bundle to `.ledger/history/`, removes the live-index row, and appends the history row. Source, destination, task, and both indexes are validated before mutation; failures roll back or report a rollback failure.
+A task has one status, kept in `task.md` and on its index row:
+
+| Status | Meaning |
+| --- | --- |
+| `planning` | Intent, approach, or acceptance criteria are not yet settled. `ledger_add` starts every task here. |
+| `ready` | Intent, approach, and acceptance criteria are settled; implementation has not started. |
+| `in-progress` | Implementation has started. |
+| `done` / `cancelled` | Terminal; the task is archived to `.ledger/history/`. |
+
+Live index rows read `` - `.ledger/<id>/task.md` — <status> — <title> — <description> ``, so `.ledger/INDEX.md` shows how much work is in planning and in progress. Count with `grep -c ' — planning — ' .ledger/INDEX.md`. Any live status may move to any other; the ledger does not enforce an order.
+
+### `ledger_status`
+
+`ledger_status` moves a live task to a new status. A live status (`planning`, `ready`, `in-progress`) updates `Status` in `task.md` and the status on the live-index row, adding it to a row that has none. `done` or `cancelled` archives the task: it updates `Status` in `task.md`, moves the complete bundle to `.ledger/history/`, removes the live-index row, and appends the history row. Source, destination, task, and both indexes are validated before mutation; failures roll back or report a rollback failure.
 
 It does not judge whether work is complete. Read and edit existing ledger files with ordinary repository tools.
 

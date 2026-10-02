@@ -2,12 +2,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, st
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { addLedgerTask, closeLedgerTask } from "../extensions/ledger.js";
+import { addLedgerTask, transitionLedgerTask } from "../extensions/ledger.js";
 
 const roots: string[] = [];
 
 function temporaryRoot(): string {
-	const root = mkdtempSync(join(tmpdir(), "apple-pi-ledger-close-"));
+	const root = mkdtempSync(join(tmpdir(), "apple-pi-ledger-status-"));
 	roots.push(root);
 	return root;
 }
@@ -16,7 +16,54 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("ledger close", () => {
+describe("ledger status", () => {
+	it("moves a live task through planning, ready, and in-progress in task.md and the index", async () => {
+		const root = temporaryRoot();
+		const created = await addLedgerTask(
+			root,
+			"Shape the work",
+			"Settle intent before implementation",
+			undefined,
+			new Date(2026, 7, 17, 9, 5),
+		);
+		const index = join(root, ".ledger/INDEX.md");
+		const row = (status: string) =>
+			`- \`${created.taskPath}\` — ${status} — Shape the work — Settle intent before implementation`;
+		expect(readFileSync(index, "utf8")).toContain(row("planning"));
+
+		for (const status of ["ready", "in-progress", "planning"] as const) {
+			const moved = await transitionLedgerTask(root, created.taskId, status);
+			expect(moved).toEqual({
+				taskId: created.taskId,
+				status,
+				bundlePath: created.bundlePath,
+				taskPath: created.taskPath,
+				indexPath: ".ledger/INDEX.md",
+			});
+			expect(readFileSync(join(root, created.taskPath), "utf8")).toMatch(new RegExp(`^Status: ${status}$`, "m"));
+			const live = readFileSync(index, "utf8");
+			expect(live).toContain(row(status));
+			expect(live.split(created.taskPath)).toHaveLength(2);
+		}
+	});
+
+	it("adds the status to a legacy index row without one", async () => {
+		const root = temporaryRoot();
+		const created = await addLedgerTask(root, "Legacy", "Row predates status", undefined, new Date(2026, 7, 17, 9, 5));
+		const index = join(root, ".ledger/INDEX.md");
+		writeFileSync(index, readFileSync(index, "utf8").replace(" — planning — ", " — "));
+
+		await transitionLedgerTask(root, created.taskId, "ready");
+
+		expect(readFileSync(index, "utf8")).toContain(`- \`${created.taskPath}\` — ready — Legacy — Row predates status`);
+	});
+
+	it("rejects an unknown status", async () => {
+		const root = temporaryRoot();
+		const created = await addLedgerTask(root, "Unknown", "Reject typos", undefined, new Date(2026, 7, 17, 9, 5));
+		await expect(transitionLedgerTask(root, created.taskId, "open")).rejects.toThrow("status must be one of");
+	});
+
 	it("archives a live task as done and records terminal status", async () => {
 		const root = temporaryRoot();
 		const created = await addLedgerTask(
@@ -27,7 +74,7 @@ describe("ledger close", () => {
 			new Date(2026, 7, 17, 9, 5),
 		);
 
-		const closed = await closeLedgerTask(root, created.taskId, "done");
+		const closed = await transitionLedgerTask(root, created.taskId, "done");
 
 		expect(closed).toEqual({
 			taskId: created.taskId,
@@ -53,7 +100,7 @@ describe("ledger close", () => {
 			undefined,
 			new Date(2026, 7, 17, 9, 5),
 		);
-		await closeLedgerTask(root, first.taskId, "done");
+		await transitionLedgerTask(root, first.taskId, "done");
 		const second = await addLedgerTask(
 			root,
 			"Second",
@@ -66,7 +113,7 @@ describe("ledger close", () => {
 		writeFileSync(liveIndex, readFileSync(liveIndex, "utf8").replace("# Task ledger", "# Task Ledger"));
 		writeFileSync(historyIndex, readFileSync(historyIndex, "utf8").replace("# Task history", "# Task History"));
 
-		const closed = await closeLedgerTask(root, second.taskId, "done");
+		const closed = await transitionLedgerTask(root, second.taskId, "done");
 		expect(readFileSync(historyIndex, "utf8")).toContain(closed.taskPath);
 	});
 
@@ -80,7 +127,7 @@ describe("ledger close", () => {
 			new Date(2026, 7, 17, 9, 5),
 		);
 		const [closed, added] = await Promise.all([
-			closeLedgerTask(root, existing.taskId, "done"),
+			transitionLedgerTask(root, existing.taskId, "done"),
 			addLedgerTask(root, "Add concurrently", "Keep this new task live", undefined, new Date(2026, 7, 17, 9, 6)),
 		]);
 		expect(existsSync(join(root, closed.taskPath))).toBe(true);
@@ -101,10 +148,10 @@ describe("ledger close", () => {
 		);
 		writeFileSync(
 			join(root, created.taskPath),
-			readFileSync(join(root, created.taskPath), "utf8").replace("Status: open", "Status: cancelled"),
+			readFileSync(join(root, created.taskPath), "utf8").replace("Status: planning", "Status: cancelled"),
 		);
 
-		const closed = await closeLedgerTask(root, created.taskPath, "cancelled");
+		const closed = await transitionLedgerTask(root, created.taskPath, "cancelled");
 
 		expect(closed.status).toBe("cancelled");
 		expect(readFileSync(join(root, closed.taskPath), "utf8")).toMatch(/^Status: cancelled$/m);
@@ -135,7 +182,7 @@ describe("ledger close", () => {
 		);
 		writeFileSync(join(root, dependent.taskPath), original);
 
-		await closeLedgerTask(root, dependency.taskId, "done");
+		await transitionLedgerTask(root, dependency.taskId, "done");
 
 		expect(readFileSync(join(root, dependent.taskPath), "utf8")).toContain(`Depends-On: ${dependency.taskPath}`);
 		expect(existsSync(join(root, ".ledger/history", dependency.taskId, "task.md"))).toBe(true);
@@ -154,7 +201,7 @@ describe("ledger close", () => {
 		const index = join(root, ".ledger/INDEX.md");
 		chmodSync(index, 0o600);
 
-		await closeLedgerTask(root, closing.taskId, "done");
+		await transitionLedgerTask(root, closing.taskId, "done");
 
 		expect(statSync(index).mode & 0o777).toBe(0o600);
 		const live = readFileSync(index, "utf8");
@@ -176,7 +223,7 @@ describe("ledger close", () => {
 		mkdirSync(join(root, ".ledger/history"), { recursive: true });
 		writeFileSync(join(root, ".ledger/history/INDEX.md"), "not a task history\n");
 
-		await expect(closeLedgerTask(root, created.taskId, "done")).rejects.toThrow("# Task history");
+		await expect(transitionLedgerTask(root, created.taskId, "done")).rejects.toThrow("# Task history");
 		expect(readFileSync(task, "utf8")).toBe(original);
 		expect(existsSync(join(root, ".ledger/history", created.taskId))).toBe(false);
 	});
@@ -190,11 +237,11 @@ describe("ledger close", () => {
 			undefined,
 			new Date(2026, 7, 17, 9, 5),
 		);
-		await closeLedgerTask(root, created.taskId, "done");
+		await transitionLedgerTask(root, created.taskId, "done");
 
-		await expect(closeLedgerTask(root, "202608170906-missing", "done")).rejects.toThrow("not found");
-		await expect(closeLedgerTask(root, created.taskId, "done")).rejects.toThrow("already archived");
-		await expect(closeLedgerTask(root, `.ledger/history/${created.taskId}`, "done")).rejects.toThrow(
+		await expect(transitionLedgerTask(root, "202608170906-missing", "done")).rejects.toThrow("not found");
+		await expect(transitionLedgerTask(root, created.taskId, "done")).rejects.toThrow("already archived");
+		await expect(transitionLedgerTask(root, `.ledger/history/${created.taskId}`, "done")).rejects.toThrow(
 			"already archived",
 		);
 	});
@@ -202,7 +249,7 @@ describe("ledger close", () => {
 	it("does not create a live task whose id is already in history", async () => {
 		const root = temporaryRoot();
 		const now = new Date(2026, 7, 17, 9, 5);
-		await closeLedgerTask(
+		await transitionLedgerTask(
 			root,
 			(await addLedgerTask(root, "Once", "History ids stay reserved", undefined, now)).taskId,
 			"cancelled",

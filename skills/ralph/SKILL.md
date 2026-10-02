@@ -107,4 +107,4 @@ Default Ralph supplies bounded fresh-context implementation increments. After a 
 
 Caller validation is the default. Ask the operator to invoke `/skill:code-review` after a coherent batch when they request independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing workers. Nits conclude in the root session.
 
-Ordinary Ralph uses the prepared goal or task artifacts directly. `ledger_add` creates task bundles and `ledger_close` archives them when the operator authorizes closure.
+Ordinary Ralph uses the prepared goal or task artifacts directly. `ledger_add` creates task bundles and `ledger_status` moves them through their lifecycle; it archives them as `done` or `cancelled` only when the operator authorizes closure.

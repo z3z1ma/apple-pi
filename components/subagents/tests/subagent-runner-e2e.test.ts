@@ -27,7 +27,7 @@ const fauxProviders: Array<{ unregister(): void }> = [];
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const isolatedAgentDir = mkdtempSync(join(tmpdir(), "apple-pi-e2e-agent-"));
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
-const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_close", "search_session"];
+const CHILD_EXTENSION_TOOLS = ["ledger_add", "ledger_status", "search_session"];
 const FORBIDDEN_CHILD_TOOLS = ["revisit_note", "pi_exec", "clarify", ...Object.values(SUBAGENT_TOOL_NAMES)];
 
 function expectActiveTools(actual: string[], expected: string[]): void {

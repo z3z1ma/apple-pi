@@ -11,14 +11,18 @@ import { appendLedgerSystemPrompt } from "../components/shared/src/ledger-system
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TASK_ID = /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LIVE_STATUSES = ["planning", "ready", "in-progress"] as const;
 const CLOSED_STATUSES = ["done", "cancelled"] as const;
+const STATUSES = [...LIVE_STATUSES, ...CLOSED_STATUSES] as const;
 const LIVE_INDEX = ".ledger/INDEX.md";
 const HISTORY_INDEX = ".ledger/history/INDEX.md";
 const LEDGER_LEASE_KIND = "ledger-transactions";
 
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
 
+export type LiveLedgerStatus = (typeof LIVE_STATUSES)[number];
 export type ClosedLedgerStatus = (typeof CLOSED_STATUSES)[number];
+export type LedgerStatus = (typeof STATUSES)[number];
 
 export interface AddedLedgerTask {
 	taskId: string;
@@ -27,9 +31,9 @@ export interface AddedLedgerTask {
 	indexPath: string;
 }
 
-export interface ClosedLedgerTask {
+export interface TransitionedLedgerTask {
 	taskId: string;
-	status: ClosedLedgerStatus;
+	status: LedgerStatus;
 	bundlePath: string;
 	taskPath: string;
 	indexPath: string;
@@ -107,7 +111,7 @@ function escapeRegExp(value: string): string {
 }
 
 function taskTemplate(title: string, date: string): string {
-	return `Status: open
+	return `Status: planning
 Created: ${date}
 Updated: ${date}
 
@@ -119,7 +123,7 @@ Pending shaping.
 
 ## Current State
 
-Open; pending shaping.
+Planning; pending shaping.
 
 ## Outcome
 
@@ -193,8 +197,13 @@ function acquireLedgerLease(root: string): () => void {
 	});
 }
 
+function indexRowPattern(taskPath: string): RegExp {
+	const liveStatus = LIVE_STATUSES.map(escapeRegExp).join("|");
+	return new RegExp(`^\\-\\s+\`${escapeRegExp(taskPath)}\`\\s+—\\s+(?:(?:${liveStatus})\\s+—\\s+)?(.+)$`, "m");
+}
+
 function removeIndexRow(content: string, taskPath: string): { next: string; summary?: string } {
-	const pattern = new RegExp(`^\\-\\s+\`${escapeRegExp(taskPath)}\`\\s+—\\s+(.+)$`, "m");
+	const pattern = indexRowPattern(taskPath);
 	const match = pattern.exec(content);
 	if (!match) return { next: content };
 	const next = content.replace(pattern, "").replace(/\n{3,}/g, "\n\n");
@@ -209,7 +218,7 @@ function writeTextFile(path: string, content: string): void {
 	writeAtomicTextFile(path, content);
 }
 
-function applyTaskStatus(taskMarkdown: string, status: ClosedLedgerStatus): string {
+function applyTaskStatus(taskMarkdown: string, status: LedgerStatus): string {
 	if (/^Status:\s+\S+\s*$/m.test(taskMarkdown)) {
 		return taskMarkdown.replace(/^Status:\s+\S+\s*$/m, `Status: ${status}`);
 	}
@@ -226,9 +235,13 @@ function parseTaskId(input: string): string {
 	return taskId;
 }
 
-function parseClosedStatus(value: string): ClosedLedgerStatus {
-	if ((CLOSED_STATUSES as readonly string[]).includes(value)) return value as ClosedLedgerStatus;
-	throw new Error("status must be done or cancelled");
+function parseStatus(value: string): LedgerStatus {
+	if ((STATUSES as readonly string[]).includes(value)) return value as LedgerStatus;
+	throw new Error(`status must be one of ${STATUSES.join(", ")}`);
+}
+
+function isLiveStatus(status: LedgerStatus): status is LiveLedgerStatus {
+	return (LIVE_STATUSES as readonly string[]).includes(status);
 }
 
 export async function addLedgerTask(
@@ -270,7 +283,7 @@ export async function addLedgerTask(
 			taskPath,
 			`The ledger index already contains ${taskPath}`,
 		);
-		const nextIndex = `${currentIndex.replace(/\n*$/, "\n")}\n- \`${taskPath}\` — ${title} — ${description}\n`;
+		const nextIndex = `${currentIndex.replace(/\n*$/, "\n")}\n- \`${taskPath}\` — planning — ${title} — ${description}\n`;
 
 		let createdBundle = false;
 		try {
@@ -289,14 +302,60 @@ export async function addLedgerTask(
 	}
 }
 
-export async function closeLedgerTask(
+export async function transitionLedgerTask(
 	rootInput: string,
 	taskInput: string,
 	statusInput: string,
-): Promise<ClosedLedgerTask> {
+): Promise<TransitionedLedgerTask> {
 	const root = realpathSync(rootInput);
 	const taskId = parseTaskId(taskInput);
-	const status = parseClosedStatus(statusInput);
+	const status = parseStatus(statusInput);
+	const release = acquireLedgerLease(root);
+	try {
+		return isLiveStatus(status) ? updateLiveTask(root, taskId, status) : archiveTask(root, taskId, status);
+	} finally {
+		release();
+	}
+}
+
+function updateLiveTask(root: string, taskId: string, status: LiveLedgerStatus): TransitionedLedgerTask {
+	const ledgerPath = join(root, ".ledger");
+	const indexAbsolute = join(ledgerPath, "INDEX.md");
+	const bundleAbsolute = join(ledgerPath, taskId);
+	const taskAbsolute = join(bundleAbsolute, "task.md");
+	const taskPath = `.ledger/${taskId}/task.md`;
+	assertDirectory(ledgerPath, ".ledger");
+	if (pathExists(join(ledgerPath, "history", taskId)))
+		throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
+	if (!pathExists(bundleAbsolute)) throw new Error(`Requested ledger task not found: .ledger/${taskId}`);
+	assertDirectory(bundleAbsolute, `.ledger/${taskId}`);
+	if (!pathExists(taskAbsolute)) throw new Error(`The ledger task is missing task.md: ${taskPath}`);
+	assertRegularFile(taskAbsolute, taskPath);
+
+	const task = readFileSync(taskAbsolute, "utf8");
+	const currentIndex = readIndex(
+		indexAbsolute,
+		"# Task ledger",
+		LIVE_INDEX,
+		`.ledger/history/${taskId}/task.md`,
+		"The ledger index has an invalid history row",
+	);
+	const removed = removeIndexRow(currentIndex, taskPath);
+	const row = `- \`${taskPath}\` — ${status} — ${removed.summary || titleFromTask(task, taskId)}`;
+	const nextIndex = removed.summary
+		? currentIndex.replace(indexRowPattern(taskPath), row)
+		: `${currentIndex.replace(/\n*$/, "\n")}\n${row}\n`;
+	writeTextFile(taskAbsolute, applyTaskStatus(task, status));
+	try {
+		writeAtomicTextFile(indexAbsolute, nextIndex);
+	} catch (error) {
+		writeTextFile(taskAbsolute, task);
+		throw error;
+	}
+	return { taskId, status, bundlePath: `.ledger/${taskId}`, taskPath, indexPath: LIVE_INDEX };
+}
+
+function archiveTask(root: string, taskId: string, status: ClosedLedgerStatus): TransitionedLedgerTask {
 	const ledgerPath = join(root, ".ledger");
 	const historyPath = join(ledgerPath, "history");
 	const liveIndexAbsolute = join(ledgerPath, "INDEX.md");
@@ -307,90 +366,85 @@ export async function closeLedgerTask(
 	const liveTaskPath = `.ledger/${taskId}/task.md`;
 	const historyTaskPath = `.ledger/history/${taskId}/task.md`;
 
-	const release = acquireLedgerLease(root);
+	assertDirectory(ledgerPath, ".ledger");
+	// Read and validate every source and destination before changing task.md.
+	if (pathExists(historyBundleAbsolute))
+		throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
+	if (!pathExists(liveBundleAbsolute)) throw new Error(`Requested ledger task not found: .ledger/${taskId}`);
+	assertDirectory(liveBundleAbsolute, `.ledger/${taskId}`);
+	if (!pathExists(liveTaskAbsolute)) throw new Error(`The ledger task is missing task.md: ${liveTaskPath}`);
+	assertRegularFile(liveTaskAbsolute, liveTaskPath);
+	if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
+
+	const liveTask = readFileSync(liveTaskAbsolute, "utf8");
+	const nextTask = applyTaskStatus(liveTask, status);
+	const currentLiveIndex = readIndex(
+		liveIndexAbsolute,
+		"# Task ledger",
+		LIVE_INDEX,
+		historyTaskPath,
+		"The ledger index has an invalid history row",
+	);
+	const currentHistoryIndex = readIndex(
+		historyIndexAbsolute,
+		"# Task history",
+		HISTORY_INDEX,
+		historyTaskPath,
+		`History index already contains ${historyTaskPath}`,
+	);
+	const removed = removeIndexRow(currentLiveIndex, liveTaskPath);
+	const summary = removed.summary || titleFromTask(nextTask, taskId);
+	const nextHistoryIndex = `${currentHistoryIndex.replace(/\n*$/, "\n")}\n- \`${historyTaskPath}\` — ${status} — ${summary}\n`;
+
+	const historyExisted = pathExists(historyPath);
+	const historyIndexExisted = pathExists(historyIndexAbsolute);
+	let taskChanged = false;
+	let moved = false;
+	let liveIndexChanged = false;
+	let historyIndexChanged = false;
+	let historyCreated = false;
 	try {
-		assertDirectory(ledgerPath, ".ledger");
-		// Read and validate every source and destination before changing task.md.
-		if (pathExists(historyBundleAbsolute))
-			throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
-		if (!pathExists(liveBundleAbsolute)) throw new Error(`Requested ledger task not found: .ledger/${taskId}`);
-		assertDirectory(liveBundleAbsolute, `.ledger/${taskId}`);
-		if (!pathExists(liveTaskAbsolute)) throw new Error(`The ledger task is missing task.md: ${liveTaskPath}`);
-		assertRegularFile(liveTaskAbsolute, liveTaskPath);
-		if (pathExists(historyPath)) assertDirectory(historyPath, ".ledger/history");
-
-		const liveTask = readFileSync(liveTaskAbsolute, "utf8");
-		const nextTask = applyTaskStatus(liveTask, status);
-		const currentLiveIndex = readIndex(
-			liveIndexAbsolute,
-			"# Task ledger",
-			LIVE_INDEX,
-			historyTaskPath,
-			"The ledger index has an invalid history row",
-		);
-		const currentHistoryIndex = readIndex(
-			historyIndexAbsolute,
-			"# Task history",
-			HISTORY_INDEX,
-			historyTaskPath,
-			`History index already contains ${historyTaskPath}`,
-		);
-		const removed = removeIndexRow(currentLiveIndex, liveTaskPath);
-		const summary = removed.summary || titleFromTask(nextTask, taskId);
-		const nextHistoryIndex = `${currentHistoryIndex.replace(/\n*$/, "\n")}\n- \`${historyTaskPath}\` — ${status} — ${summary}\n`;
-
-		const historyExisted = pathExists(historyPath);
-		const historyIndexExisted = pathExists(historyIndexAbsolute);
-		let taskChanged = false;
-		let moved = false;
-		let liveIndexChanged = false;
-		let historyIndexChanged = false;
-		let historyCreated = false;
-		try {
-			// Stage the destination path before changing task metadata.
-			mkdirIfNeeded(historyPath);
-			historyCreated = !historyExisted;
-			assertDirectory(historyPath, ".ledger/history");
-			if (nextTask !== liveTask) {
-				writeTextFile(liveTaskAbsolute, nextTask);
-				taskChanged = true;
-			}
-			fs.renameSync(liveBundleAbsolute, historyBundleAbsolute);
-			moved = true;
-			if (removed.next !== currentLiveIndex) {
-				writeAtomicTextFile(liveIndexAbsolute, removed.next);
-				liveIndexChanged = true;
-			}
-			writeAtomicTextFile(historyIndexAbsolute, nextHistoryIndex);
-			historyIndexChanged = true;
-		} catch (error) {
-			// Restore indexes first, then return the bundle and its original status.
-			try {
-				if (historyIndexChanged) {
-					if (historyIndexExisted) writeAtomicTextFile(historyIndexAbsolute, currentHistoryIndex);
-					else rmSync(historyIndexAbsolute, { force: true });
-				}
-				if (liveIndexChanged) writeAtomicTextFile(liveIndexAbsolute, currentLiveIndex);
-				if (moved) fs.renameSync(historyBundleAbsolute, liveBundleAbsolute);
-				if (taskChanged) writeTextFile(liveTaskAbsolute, liveTask);
-				if (historyCreated) rmSync(historyPath, { recursive: false, force: true });
-			} catch (rollbackError) {
-				throw new Error(`The ledger close failed and rollback failed: ${(rollbackError as Error).message}`, {
-					cause: error,
-				});
-			}
-			throw error;
+		// Stage the destination path before changing task metadata.
+		mkdirIfNeeded(historyPath);
+		historyCreated = !historyExisted;
+		assertDirectory(historyPath, ".ledger/history");
+		if (nextTask !== liveTask) {
+			writeTextFile(liveTaskAbsolute, nextTask);
+			taskChanged = true;
 		}
-		return {
-			taskId,
-			status,
-			bundlePath: `.ledger/history/${taskId}`,
-			taskPath: historyTaskPath,
-			indexPath: HISTORY_INDEX,
-		};
-	} finally {
-		release();
+		fs.renameSync(liveBundleAbsolute, historyBundleAbsolute);
+		moved = true;
+		if (removed.next !== currentLiveIndex) {
+			writeAtomicTextFile(liveIndexAbsolute, removed.next);
+			liveIndexChanged = true;
+		}
+		writeAtomicTextFile(historyIndexAbsolute, nextHistoryIndex);
+		historyIndexChanged = true;
+	} catch (error) {
+		// Restore indexes first, then return the bundle and its original status.
+		try {
+			if (historyIndexChanged) {
+				if (historyIndexExisted) writeAtomicTextFile(historyIndexAbsolute, currentHistoryIndex);
+				else rmSync(historyIndexAbsolute, { force: true });
+			}
+			if (liveIndexChanged) writeAtomicTextFile(liveIndexAbsolute, currentLiveIndex);
+			if (moved) fs.renameSync(historyBundleAbsolute, liveBundleAbsolute);
+			if (taskChanged) writeTextFile(liveTaskAbsolute, liveTask);
+			if (historyCreated) rmSync(historyPath, { recursive: false, force: true });
+		} catch (rollbackError) {
+			throw new Error(`The ledger archive failed and rollback failed: ${(rollbackError as Error).message}`, {
+				cause: error,
+			});
+		}
+		throw error;
 	}
+	return {
+		taskId,
+		status,
+		bundlePath: `.ledger/history/${taskId}`,
+		taskPath: historyTaskPath,
+		indexPath: HISTORY_INDEX,
+	};
 }
 
 function createLedgerAddTool() {
@@ -428,32 +482,34 @@ function createLedgerAddTool() {
 	});
 }
 
-function createLedgerCloseTool() {
+function createLedgerStatusTool() {
 	return defineTool({
-		name: "ledger_close",
-		label: "Close ledger task",
+		name: "ledger_status",
+		label: "Set ledger task status",
 		description:
-			"Archive one live .ledger task into .ledger/history with a terminal status of done or cancelled. Updates Status in task.md when needed, moves the bundle, and transfers the index row including that status, title, and description. Not for creating, inspecting, shaping, executing, or judging completeness.",
-		promptSnippet: "Close or cancel a ledger task by archiving it into .ledger/history",
+			"Move one live .ledger task to a new status. planning, ready, and in-progress update Status in task.md and on the live index row. done and cancelled archive the bundle into .ledger/history and move the row to the history index. Not for creating, inspecting, shaping, executing, or judging completeness.",
+		promptSnippet: "Move a ledger task between planning, ready, in-progress, done, and cancelled",
 		parameters: Type.Object({
 			task: Type.String({
-				description: "Task id, .ledger/<id>, or .ledger/<id>/task.md of the live task to archive.",
+				description: "Task id, .ledger/<id>, or .ledger/<id>/task.md of the live task.",
 			}),
-			status: Type.Union([Type.Literal("done"), Type.Literal("cancelled")], {
-				description: "Terminal status to record on the task and in the history index.",
-			}),
+			status: Type.Union(
+				STATUSES.map((status) => Type.Literal(status)),
+				{ description: "New status. done and cancelled archive the task." },
+			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			if (!ctx.isProjectTrusted()) throw new Error("Closing a ledger task requires a trusted session repository");
-			const result = await closeLedgerTask(ctx.cwd, params.task, params.status);
+			if (!ctx.isProjectTrusted()) throw new Error("Changing a ledger task requires a trusted session repository");
+			const result = await transitionLedgerTask(ctx.cwd, params.task, params.status);
+			const verb = isLiveStatus(result.status) ? "Moved" : "Archived";
 			return {
-				content: [{ type: "text" as const, text: `Archived ${result.taskPath} as ${result.status}` }],
+				content: [{ type: "text" as const, text: `${verb} ${result.taskPath} to ${result.status}` }],
 				details: result,
 			};
 		},
 		renderCall(args, theme) {
 			return new Text(
-				`${theme.fg("toolTitle", theme.bold("Close ledger task "))}${theme.fg("accent", `${args.status} ${args.task}`)}`,
+				`${theme.fg("toolTitle", theme.bold("Set ledger status "))}${theme.fg("accent", `${args.status} ${args.task}`)}`,
 				0,
 				0,
 			);
@@ -468,5 +524,5 @@ function createLedgerCloseTool() {
 export default function installLedger(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event) => ({ systemPrompt: appendLedgerSystemPrompt(event.systemPrompt ?? "") }));
 	pi.registerTool(createLedgerAddTool());
-	pi.registerTool(createLedgerCloseTool());
+	pi.registerTool(createLedgerStatusTool());
 }

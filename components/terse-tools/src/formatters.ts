@@ -363,7 +363,7 @@ function formatSearchSessionArgs(args: any): string {
 	return "";
 }
 
-function formatLedgerCloseArgs(args: any): string {
+function formatLedgerStatusArgs(args: any): string {
 	const task = args.task || "";
 	const status = args.status || "";
 	if (task && status) return `${status} ${task}`;
@@ -446,8 +446,8 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 			return formatSubagentArgs(args);
 		case "search_session":
 			return formatSearchSessionArgs(args);
-		case "ledger_close":
-			return formatLedgerCloseArgs(args);
+		case "ledger_status":
+			return formatLedgerStatusArgs(args);
 		case "wiki_references":
 			return formatWikiReferencesArgs(args);
 		case "mcp":

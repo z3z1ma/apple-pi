@@ -37,7 +37,7 @@ describe("ledger add", () => {
 		expect(statSync(join(root, result.taskPath)).isFile()).toBe(true);
 		expect(statSync(join(root, result.bundlePath, "retrospective.md")).isFile()).toBe(true);
 		const task = readFileSync(join(root, result.taskPath), "utf8");
-		expect(task).toBe(`Status: open
+		expect(task).toBe(`Status: planning
 Created: 2026-08-17
 Updated: 2026-08-17
 
@@ -49,7 +49,7 @@ Pending shaping.
 
 ## Current State
 
-Open; pending shaping.
+Planning; pending shaping.
 
 ## Outcome
 
@@ -74,7 +74,7 @@ Pending completion of the undertaking.
 Pending completion of the undertaking.
 `);
 		expect(readFileSync(join(root, result.indexPath), "utf8")).toContain(
-			"- `.ledger/202608170905-implement-bounded-behavior/task.md` — Implement bounded behavior — Keep one production owner for the requested outcome",
+			"- `.ledger/202608170905-implement-bounded-behavior/task.md` — planning — Implement bounded behavior — Keep one production owner for the requested outcome",
 		);
 	});
 
