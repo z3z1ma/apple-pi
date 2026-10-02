@@ -1,31 +1,31 @@
 {
   "profiles": {
     "quick": {
-      "model": "anthropic/sonnet-5-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "thinking": "low"
     },
     "pair": {
-      "model": "anthropic/sonnet-5-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "thinking": "medium"
     },
     "balanced": {
-      "model": "anthropic/sonnet-5-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "thinking": "medium"
     },
     "deep": {
-      "model": "anthropic/opus-5-5",
+      "model": "anthropic/claude-opus-5-5",
       "thinking": "high"
     },
     "coding": {
-      "model": "anthropic/opus-5-5",
+      "model": "anthropic/claude-opus-5-5",
       "thinking": "medium"
     },
     "visual-engineering": {
-      "model": "anthropic/opus-5-5",
+      "model": "anthropic/claude-opus-5-5",
       "thinking": "low"
     },
     "background": {
-      "model": "anthropic/sonnet-5-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "thinking": "low"
     }
   }
