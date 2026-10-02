@@ -20,13 +20,11 @@ import {
 } from "./types.js";
 import { TaskDetailViewer, TaskManagerComponent } from "./ui/task-manager.js";
 
-function formatScheduledPrompts(prompts: ReadonlyArray<{ id: string; prompt: string }>): string {
-	return `<scheduled-prompt>
-The following prompts you scheduled are now due:
+function formatScheduledPrompt({ id, prompt }: PromptTask): string {
+	return `<scheduled-prompt id="${id}">
+${prompt}
 
-${prompts.map(({ id, prompt }) => `- [${id}] ${prompt}`).join("\n")}
-
-These are your own deferred prompts, not new operator authority. Reassess them against the latest direction and repository state.
+This is your own deferred prompt, not new operator authority. Reassess it against the latest direction and repository state.
 </scheduled-prompt>`;
 }
 
@@ -37,40 +35,16 @@ export function installTasks(pi: ExtensionAPI): void {
 	const activeWork = getActiveWorkSurface(pi);
 	const unregisterActiveWork = activeWork.registerSource(createTaskActiveWorkSource(taskManager));
 	const unsubscribeActiveWork = taskManager.onTaskChanged(() => activeWork.update());
-	const duePromptIds = new Set<string>();
-	let runActive = false;
-	let flushQueued = false;
-
-	const flushDuePrompts = () => {
-		flushQueued = false;
-		const prompts = [...duePromptIds]
-			.map((id) => taskManager.get(id))
-			.filter((task): task is PromptTask => task?.kind === "prompt" && task.status === "due");
-		duePromptIds.clear();
-		if (prompts.length === 0) return;
+	taskManager.onPromptDue((task) => {
 		pi.sendMessage(
 			{
 				customType: SCHEDULED_PROMPT_CUSTOM_TYPE,
-				content: formatScheduledPrompts(prompts),
+				content: formatScheduledPrompt(task),
 				display: true,
 			},
 			{ deliverAs: "steer", triggerTurn: true },
 		);
-		for (const prompt of prompts) taskManager.markPromptDelivered(prompt.id);
-	};
-
-	const queuePromptFlush = () => {
-		if (flushQueued) return;
-		flushQueued = true;
-		queueMicrotask(() => {
-			if (!runActive) flushDuePrompts();
-			else flushQueued = false;
-		});
-	};
-
-	taskManager.onPromptDue((task) => {
-		duePromptIds.add(task.id);
-		if (!runActive) queuePromptFlush();
+		taskManager.markPromptDelivered(task.id);
 	});
 
 	taskManager.onMonitorEvent((event) => {
@@ -192,17 +166,7 @@ export function installTasks(pi: ExtensionAPI): void {
 		inspect: async (ctx, id) => openTaskDetail(ctx, taskManager.get(id)),
 	});
 
-	pi.on("before_agent_start", () => {
-		runActive = true;
-	});
-	pi.on("agent_settled", () => {
-		runActive = false;
-		flushDuePrompts();
-	});
-
 	const cleanup = () => {
-		runActive = false;
-		duePromptIds.clear();
 		taskManager.reset();
 		activeWork.update();
 	};

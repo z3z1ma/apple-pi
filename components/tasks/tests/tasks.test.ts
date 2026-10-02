@@ -24,8 +24,7 @@ describe("tasks component", () => {
 
 	afterEach(() => {
 		for (const manager of activeManagers) {
-			manager.cancelAll();
-			manager.cleanupAll();
+			manager.reset();
 		}
 		activeManagers.length = 0;
 	});
@@ -263,6 +262,7 @@ describe("tasks component", () => {
 				true,
 			);
 			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 30 * 24 * 60 * 60, prompt: "Next month." })).toBe(false);
 		});
 
 		it("does not schedule a command after its call was interrupted", async () => {
@@ -772,52 +772,99 @@ describe("tasks component", () => {
 			for (const handler of handlers.get("session_shutdown") ?? []) handler();
 		});
 
-		it("delivers due prompts once after the active run settles", async () => {
+		it("steers each prompt into an active run as soon as it is due", async () => {
 			const registeredTools: any[] = [];
 			const sentMessages: any[] = [];
-			const eventHandlers = new Map<string, any[]>();
-			const mockPi = {
+			const handlers = new Map<string, any[]>();
+			installTasks({
 				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
 				registerTool: (tool: any) => registeredTools.push(tool),
 				registerCommand: vi.fn(),
 				registerMessageRenderer: vi.fn(),
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
-				on: (event: string, handler: any) => {
-					const list = eventHandlers.get(event) ?? [];
-					list.push(handler);
-					eventHandlers.set(event, list);
-				},
-			};
-			installTasks(mockPi as any);
-
-			for (const handler of eventHandlers.get("before_agent_start") ?? []) handler();
+				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+			} as any);
+			for (const handler of handlers.get("agent_start") ?? []) handler();
 			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
-			const result = await scheduleTool.execute(
-				"schedule-prompt",
-				{ delay_seconds: 0, prompt: "Run the focused test." },
-				undefined,
-				undefined,
-				{ cwd: process.cwd() },
-			);
+			const taskTool = registeredTools.find((tool) => tool.name === "task");
+			const context = { cwd: process.cwd() };
 			await scheduleTool.execute(
-				"schedule-second-prompt",
-				{ delay_seconds: 0, prompt: "Then inspect the diff." },
+				"prompt",
+				{ delay_seconds: 0.02, prompt: "Run the focused test." },
 				undefined,
 				undefined,
-				{ cwd: process.cwd() },
+				context,
 			);
-			expect(getResultText(result)).toContain("task-1");
-			await new Promise((resolve) => setTimeout(resolve, 10));
-			expect(sentMessages).toHaveLength(0);
 
-			for (const handler of eventHandlers.get("agent_settled") ?? []) handler();
-			expect(sentMessages).toHaveLength(1);
+			await scheduleTool.execute(
+				"second-prompt",
+				{ delay_seconds: 0.02, prompt: "Then inspect the diff." },
+				undefined,
+				undefined,
+				context,
+			);
+
+			const statuses = await Promise.all(
+				["task-1", "task-2"].map((task_id) =>
+					taskTool.execute("wait", { action: "status", task_id, wait_seconds: 5 }, undefined, undefined, context),
+				),
+			);
+
+			expect(statuses.map((status) => status.details.status)).toEqual(["delivered", "delivered"]);
+			expect(sentMessages).toHaveLength(2);
+			expect(sentMessages[0].msg.content).toContain('<scheduled-prompt id="task-1">');
 			expect(sentMessages[0].msg.content).toContain("Run the focused test.");
-			expect(sentMessages[0].msg.content).toContain("Then inspect the diff.");
-			expect(sentMessages[0].msg.content).toMatch(/own deferred prompts/i);
+			expect(sentMessages[1].msg.content).toContain('<scheduled-prompt id="task-2">');
+			expect(sentMessages[1].msg.content).toContain("Then inspect the diff.");
+			expect(sentMessages[1].msg.content).not.toContain("Run the focused test.");
+			expect(sentMessages[0].msg.content).toMatch(/own deferred prompt/i);
 			expect(sentMessages[0].msg.content).toMatch(/not new operator authority/i);
 			expect(sentMessages[0].opts).toEqual({ deliverAs: "steer", triggerTurn: true });
-			expect(sentMessages.some((message) => message.msg.customType === TASK_NOTIFICATION_CUSTOM_TYPE)).toBe(false);
+		});
+
+		it("discards active work without notifications at a session boundary", async () => {
+			const registeredTools: any[] = [];
+			const sentMessages: any[] = [];
+			const handlers = new Map<string, any[]>();
+			installTasks({
+				events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
+				registerTool: (tool: any) => registeredTools.push(tool),
+				registerCommand: vi.fn(),
+				registerMessageRenderer: vi.fn(),
+				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
+				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+			} as any);
+			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const bashTool = registeredTools.find((tool) => tool.name === "bash");
+			const context = { cwd: process.cwd() };
+			await scheduleTool.execute("prompt", { delay_seconds: 60, prompt: "Later." }, undefined, undefined, context);
+			await bashTool.execute(
+				"background",
+				{ command: 'node -e "setInterval(() => {}, 1000);"', run_in_background: true },
+				undefined,
+				undefined,
+				context,
+			);
+
+			for (const handler of handlers.get("session_before_fork") ?? []) handler();
+			await new Promise((resolve) => setTimeout(resolve, 300));
+
+			expect(sentMessages).toEqual([]);
+			for (const handler of handlers.get("session_shutdown") ?? []) handler();
+		});
+
+		it("rejects delays beyond the platform timer range", async () => {
+			const manager = createManager();
+			await expect(
+				createScheduleTool(manager).execute(
+					"too-late",
+					{ delay_seconds: 30 * 24 * 60 * 60, prompt: "Next month." },
+					undefined,
+					undefined,
+					{ cwd: process.cwd() } as any,
+				),
+			).rejects.toThrow("delay_seconds");
+			expect(manager.list()).toEqual([]);
 		});
 
 		it("starts scheduled commands and wakes only after completion", async () => {

@@ -6,12 +6,12 @@
 
 ```json
 {
-  "delay_seconds": 0,
-  "prompt": "Inspect the focused test result and continue if appropriate."
+  "delay_seconds": 600,
+  "prompt": "Check whether the CI run finished and continue if appropriate."
 }
 ```
 
-A zero-delay prompt becomes due immediately. Due prompts use `deliverAs: "steer"`: during an active run they arrive at the next safe turn boundary, and while idle they start a turn. Prompts that become due together are delivered in one visible steering message. The injected message identifies them as the model's own deferred prompts rather than new operator authority and requires reassessment against current direction and repository state.
+When its delay ends, a prompt is sent at once as a visible steering message: during an active run it arrives at the next safe turn boundary, and while idle it starts a turn. The injected message identifies it as the model's own deferred prompt rather than new operator authority and requires reassessment against current direction and repository state.
 
 ## Commands
 
@@ -28,6 +28,6 @@ Every schedule returns a `task-*` ID and resolved due time. Use `task` to list, 
 
 ## Boundaries
 
-Scheduling is root-only, one-shot, relative, and in memory. Scheduled work is cancelled on session start, fork, tree navigation, switch, and shutdown. It does not survive Pi exit or execute while the owning session is closed. There are no absolute dates, recurrence, cron expressions, arbitrary delayed tool calls, ambient reminders, or persistent scheduler state.
+Scheduling is root-only, one-shot, relative, and in memory. `delay_seconds` is limited to the platform timer range (about 24.8 days). Session start, fork, tree navigation, switch, and shutdown discard scheduled work without notifications. It does not survive Pi exit or execute while the owning session is closed. There are no absolute dates, recurrence, cron expressions, arbitrary delayed tool calls, ambient reminders, or persistent scheduler state.
 
 `schedule`, `monitor`, and `task` are intentionally unavailable inside `pi_exec`; programs already have bounded timers and direct `pi.bash`, while root-session wake-up, steering, and managed-task ownership remain outside the guest runtime.

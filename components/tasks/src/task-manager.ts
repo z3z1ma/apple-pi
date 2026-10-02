@@ -128,18 +128,9 @@ export class TaskManager {
 			return { success: false, message: `Task '${taskId}' is not active (status: ${task.status}).` };
 		}
 
-		if (control.timer) {
-			clearTimeout(control.timer);
-			control.timer = undefined;
-		}
-		if (control.graceTimer) {
-			clearTimeout(control.graceTimer);
-			control.graceTimer = undefined;
-		}
-		control.settled = true;
+		this.stop(control);
 		task.status = "cancelled";
 		task.endedAt = Date.now();
-		if (control.child?.pid) killProcessTree(control.child.pid);
 		if (task.kind === "command") task.output.finish();
 		this.emitFinished(task);
 		return { success: true, message: `Task '${taskId}' was cancelled.` };
@@ -178,21 +169,14 @@ export class TaskManager {
 		});
 	}
 
-	cancelAll(): void {
-		for (const task of this.tasks.values()) {
-			if (isActiveTask(task)) this.cancel(task.id);
+	/** Discards every task without terminal notifications: the owning session is ending. */
+	reset(): void {
+		for (const control of this.controls.values()) {
+			if (!control.settled) this.stop(control);
 		}
-	}
-
-	cleanupAll(): void {
 		for (const task of this.tasks.values()) {
 			if (task.kind === "command") task.output.cleanup();
 		}
-	}
-
-	reset(): void {
-		this.cancelAll();
-		this.cleanupAll();
 		this.tasks.clear();
 		this.controls.clear();
 		this.nextId = 1;
@@ -224,6 +208,15 @@ export class TaskManager {
 		return () => {
 			this.monitorEventListeners.delete(listener);
 		};
+	}
+
+	private stop(control: TaskControl): void {
+		clearTimeout(control.timer);
+		clearTimeout(control.graceTimer);
+		control.timer = undefined;
+		control.graceTimer = undefined;
+		control.settled = true;
+		if (control.child?.pid) killProcessTree(control.child.pid);
 	}
 
 	private allocateId(): string {

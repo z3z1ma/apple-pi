@@ -131,11 +131,14 @@ export const execBashParameters = Type.Object({
 
 export type ExecBashParameters = Static<typeof execBashParameters>;
 
+export const MAX_SCHEDULE_DELAY_SECONDS = 2_147_483_647 / 1000;
+
 export const scheduleParameters = Type.Object(
 	{
 		delay_seconds: Type.Number({
 			minimum: 0,
-			description: "Seconds to wait. Zero delivers a prompt after the active run settles.",
+			maximum: MAX_SCHEDULE_DELAY_SECONDS,
+			description: "Seconds to wait before the prompt steers the agent or the command starts.",
 		}),
 		prompt: Type.Optional(Type.String({ minLength: 1, description: "Self-authored prompt to deliver when due." })),
 		command: Type.Optional(Type.String({ minLength: 1, description: "Bash command to start when due." })),

@@ -51,8 +51,8 @@ Schedule exactly one prompt or command:
 
 ```json
 {
-  "delay_seconds": 0,
-  "prompt": "Continue after the active run settles."
+  "delay_seconds": 300,
+  "prompt": "Check whether the deployment finished."
 }
 ```
 
@@ -63,7 +63,7 @@ Schedule exactly one prompt or command:
 }
 ```
 
-`delay_seconds` must be a finite non-negative number. A zero-delay prompt preserves next-turn continuation. Due prompts use `deliverAs: "steer"`: they enter an active run at its next safe turn boundary or start a turn while idle. A scheduled command uses the working directory and shell environment captured when it is created.
+`delay_seconds` must be a finite non-negative number. `delay_seconds` is also limited to the platform timer range (about 24.8 days). When its delay ends, a prompt steers at once with `deliverAs: "steer"`: it enters an active run at its next safe turn boundary or starts a turn while idle. A scheduled command uses the working directory and shell environment captured when it is created.
 
 ### `monitor`
 
@@ -128,7 +128,7 @@ Output:
 ## Lifecycle and safety
 
 - **Root session only**: Child sessions and subagents do not load the extension.
-- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown cancel active work and clear the prior session's task roster.
+- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
 - **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

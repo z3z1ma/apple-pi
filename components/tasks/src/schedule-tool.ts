@@ -2,7 +2,12 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { prepareShellCommand } from "./bash-tool.js";
 import type { TaskManager } from "./task-manager.js";
-import { type ScheduleParameters, type ScheduleToolDetails, scheduleParameters } from "./types.js";
+import {
+	MAX_SCHEDULE_DELAY_SECONDS,
+	type ScheduleParameters,
+	type ScheduleToolDetails,
+	scheduleParameters,
+} from "./types.js";
 
 function scheduledResult(taskId: string, kind: "prompt" | "command", dueAt: number, delaySeconds: number) {
 	return {
@@ -26,7 +31,7 @@ export function createScheduleTool(taskManager: TaskManager) {
 		name: "schedule",
 		label: "schedule",
 		description:
-			"Schedule one self-authored prompt or bash command after a relative delay. A due prompt wakes the agent; a due command starts silently and wakes the agent only when it finishes. A zero-delay prompt is delivered after the active run settles. Scheduled work is session-local and managed with the task tool.",
+			"Schedule one self-authored prompt or bash command after a relative delay. A due prompt steers the agent at once, entering an active run at its next safe boundary or starting a turn while idle; a due command starts silently and wakes the agent only when it finishes. Scheduled work is session-local and managed with the task tool.",
 		promptSnippet: "Schedule a one-shot prompt or bash command for later in this root session.",
 		promptGuidelines: [
 			"Use schedule prompt to wake yourself with deferred guidance and schedule command to start bash later without an inference turn at start time.",
@@ -37,6 +42,9 @@ export function createScheduleTool(taskManager: TaskManager) {
 		async execute(_toolCallId, params: ScheduleParameters, signal, _onUpdate, ctx) {
 			if (!Number.isFinite(params.delay_seconds) || params.delay_seconds < 0) {
 				throw new Error("delay_seconds must be a finite non-negative number");
+			}
+			if (params.delay_seconds > MAX_SCHEDULE_DELAY_SECONDS) {
+				throw new Error(`delay_seconds must be at most ${MAX_SCHEDULE_DELAY_SECONDS} (the platform timer limit)`);
 			}
 			const hasPrompt = typeof params.prompt === "string";
 			const hasCommand = typeof params.command === "string";
