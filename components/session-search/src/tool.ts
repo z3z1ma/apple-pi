@@ -30,22 +30,15 @@ export const sessionSearchTool = defineTool({
 		"This looks through session history, not git history or the current repository. " +
 		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
 		"It follows the active lineage by default; scope:'all' includes other branches.",
-	promptSnippet:
-		"search_session: Search earlier conversation and file operations from this session. " +
-		"Use mode:'touched' for a file inventory, mode:'file' for write/edit payloads, query:'#N:path[:offset[:limit]|:full]' for written content, query:'call:<toolCallId>' for an omitted tool result, scope:'all' for branches, and expand:[indices] for full entries.",
+	promptSnippet: "search_session: recover earlier conversation, tool results, and file operations from this session.",
 	promptGuidelines: [
-		"Use search_session after compaction when you need earlier work, decisions, tool output, or a file version that is no longer in context.",
-		"Use search_session with mode:'touched' to see which files were written or edited, and query:'#N:path' to recover a specific write/edit payload.",
-		"Use search_session query 'call:<toolCallId>' to recover an omitted tool-result body from the call address on pair-programming receipts.",
-		"Use search_session with text or a regex to find earlier conversation or tool results; multi-word queries are OR-ranked.",
-		"Do not use search_session to search the repository — use grep, find, or read for current files.",
-		"Do not use search_session to look up a notebook id. Use revisit_note for a known observation or reflection id.",
+		"Use search_session for earlier work or evidence missing from context, including after compaction. Use grep, find, or read for current repository files; use revisit_note for a known notebook id.",
 	],
 	parameters: Type.Object({
 		query: Type.Optional(
 			Type.String({
 				description:
-					"Search terms or regex pattern (e.g. 'hook|inject', 'fail.*build'). Multi-word = OR ranked by relevance.",
+					"Search text or regex (e.g. 'hook|inject'); multi-word terms are OR-ranked. Recover written content with '#N:path[:offset[:limit]|:full]', or an omitted tool result with 'call:<toolCallId>' from a pair receipt.",
 			}),
 		),
 		expand: Type.Optional(

@@ -249,10 +249,12 @@ try {
 		.find((tool) => tool.definition.name === "pi_exec");
 	assert(piExecTool, "missing pi_exec tool");
 	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
-	assert.match(piExecGuidance, /Python snippet/);
-	assert.match(piExecGuidance, /top-level await/);
+	assert.match(piExecGuidance, /Keep intermediate results inside the program/);
+	assert.match(piExecGuidance, /preserves the evidence/);
 	assert.match(piExecGuidance, /asyncio\.gather/);
-	assert.match(piExecGuidance, /before any host call runs/);
+	assert.match(piExecGuidance, /Check tool and worker outcomes/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
+	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def git_change\(/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def agent_run\(/);

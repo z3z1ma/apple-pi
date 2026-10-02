@@ -2,6 +2,8 @@
 
 `pi_exec` runs a type-checked Python snippet inside a Monty worker subprocess. Intermediate tool output stays inside the snippet; only its last expression (and captured `print` output) enters the main conversation. It is available only in the root Pi session.
 
+Use Pi Exec when a task needs tool composition or computation over tool results; use direct tools for a single operation that needs neither. Keep intermediate results in the program and return the smallest result that preserves the evidence for the next decision. Aggregate counts, select relevant excerpts, and report failures or missing evidence explicitly. Gather independent calls concurrently and await dependent steps in order. Captured `print` output also enters context, so apply the same reduction to logs.
+
 ## Core tool surface
 
 The `code` parameter lists live signatures generated from Pi's core and captured extension tool schemas. The **same signatures** are passed to Monty's checker before execution, so a wrong keyword argument is reported before any tool call starts. Use keyword arguments and `await`:

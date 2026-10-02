@@ -154,19 +154,16 @@ export function guestPythonStubs(cwd = "."): string {
 }
 
 export const PI_EXEC_PROMPT_SNIPPET =
-	"pi_exec: type-checked Python composition of core tools, model workers, extension tools, HTTP, and evidence with asyncio.gather";
+	"pi_exec: compose tools and model workers in Python; compute over results before returning evidence";
 
 export const PI_EXEC_DESCRIPTION =
-	"Run type-checked Python in bounded Monty. Compose core Pi tools, agent_run/agent model workers, captured extension tools (including mcp), fetch, and skill discovery. asyncio.gather fans out independent calls within host budgets. Live tool signatures appear in code's description; the trailing expression is the JSON-compatible result. Print is captured.";
+	"Run type-checked Python in bounded Monty to compose tools, model workers, and HTTP requests, and compute over their results. Return a JSON-compatible trailing expression; printed output is also captured. See code for live signatures and runtime constraints.";
 
 export const PI_EXEC_PROMPT_GUIDELINES = [
-	"Use pi_exec when Python control flow reduces intermediate context or coordinates core Pi tool calls; use direct tools for straightforward sequential work.",
-	"Write a Python snippet, not a JavaScript function. Use top-level await and a trailing expression for the result. Import asyncio for asyncio.gather fan-out.",
-	"The complete signature contract in the code parameter is checked before any host call runs. Call core tools with keyword arguments, e.g. await read(path='README.md').",
-	"Keep dependent search→read and edit→verify calls sequential; gather only independent calls. Host-side limits control fan-out.",
-	"For worker fan-out, use asyncio.gather(*[agent_run(task='Judge row', context=row, output_schema=schema({'verdict': 'str'})) for row in rows]); check each row's status before using value. Bound context goes to a file, not into task.",
-	"Call captured extension tools directly by their Python names and live keyword signatures, or use tools_search/tools_call to discover and invoke one dynamically. Use fetch(url, ...) for HTTP and skills_list/skills_body for model-invocable skills.",
-	"Use git_change/git_patch and repo_change_neighborhood for scoped evidence, context_* to fit marked worker context, and dev_find_relevant_tests/dev_run_relevant_tests for focused checks.",
+	"Use pi_exec to compose tool calls or compute over their results. Use direct tools for a single operation that needs neither.",
+	"Keep intermediate results inside the program. Return the smallest result that preserves the evidence needed for the next decision: aggregate counts, select relevant excerpts, or report exceptions instead of dumping raw output.",
+	"Run independent calls concurrently with asyncio.gather; await dependent steps in order.",
+	"Check tool and worker outcomes before using their results. Surface failures and missing evidence explicitly.",
 ];
 
 export function piExecGuestApiContract(): string {
@@ -175,6 +172,8 @@ export function piExecGuestApiContract(): string {
 		"Import asyncio and use asyncio.gather(*awaitables) for independent fan-out; no create_task or third-party imports.",
 		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. The declarations below are the exact type-checking stubs:",
 		guestPythonStubs(),
+		"Captured extension tools use their declared Python names and keyword signatures; tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
+		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits worker context; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
 		'agent_run returns a status record (including errors); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
 		"Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch; reset is a tool parameter that starts fresh. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.",
 	].join("\n");

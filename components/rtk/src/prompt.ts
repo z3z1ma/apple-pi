@@ -1,7 +1,5 @@
 export const RTK_SYSTEM_PROMPT_SECTION = `# Shell Optimization (RTK)
-Shell commands are automatically optimized using RTK to reduce token usage. Command output (such as git status, git diff, test runners, linters, and directory listings) will be filtered and summarized.
-
-When you require exact, unfiltered raw stdout/stderr (such as for precise diff inspections, full stack traces, or byte-for-byte stream verifications), pass verbatim: true in the bash tool call.`;
+RTK may rewrite bash commands and summarize their output. Pass verbatim: true when the next decision requires exact stdout/stderr, such as a precise diff or full stack trace.`;
 
 export function appendRtkSystemPrompt(systemPrompt: string): string {
 	if (!systemPrompt) return RTK_SYSTEM_PROMPT_SECTION;
