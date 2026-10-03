@@ -10,42 +10,10 @@ import {
 	ProtocolError,
 } from "@pydantic/monty";
 import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
-import { CORE_TOOL_NAMES } from "./core-tools.js";
-import { extensionPythonTools } from "./guest-api.js";
-import { EVIDENCE_FUNCTION_NAMES } from "./evidence.js";
+import { guestFunctions } from "./guest-functions.js";
+import { fromPythonValue } from "./json.js";
 import { PYTHON_SCHEMA_PRELUDE } from "./python-schema.js";
 import type { ProgramExecution, ProgramHostCall } from "./types.js";
-
-function jsonValue(value: unknown, seen = new Set<object>(), hostArguments = false): unknown {
-	if (
-		!hostArguments &&
-		typeof value === "string" &&
-		(/^<function .+ at 0x[0-9a-f]+>$/.test(value) || ["[...]", "{...}", "(...)"].includes(value))
-	)
-		throw new Error("pi_exec result is not JSON-serializable");
-	if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-	if (typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0)) return value;
-	if (typeof value !== "object" || !value) throw new Error("pi_exec result is not JSON-serializable");
-	if (seen.has(value)) throw new Error("pi_exec result contains a cycle");
-	seen.add(value);
-	try {
-		if (Array.isArray(value)) return value.map((item) => jsonValue(item, seen, hostArguments));
-		if (
-			value instanceof Map ||
-			(hostArguments && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null))
-		) {
-			const result: Record<string, unknown> = Object.create(null);
-			for (const [key, item] of value instanceof Map ? value : Object.entries(value)) {
-				if (typeof key !== "string") throw new Error("pi_exec result has a non-string dictionary key");
-				result[key] = jsonValue(item, seen, hostArguments);
-			}
-			return result;
-		}
-		throw new Error("pi_exec result is not JSON-serializable");
-	} finally {
-		seen.delete(value);
-	}
-}
 
 function keyboardInterrupt(): Error {
 	const error = new Error("pi_exec aborted");
@@ -139,7 +107,7 @@ export async function executeProgram(
 		}
 	})();
 	const invoke = (ref: string, args: Record<string, unknown> = {}) => {
-		const converted = jsonValue(args, new Set(), true) as Record<string, unknown>;
+		const converted = fromPythonValue(args, true) as Record<string, unknown>;
 		return new Promise<unknown>((resolve, reject) => {
 			if (controller.signal.aborted) return reject(keyboardInterrupt());
 			pending.add(reject);
@@ -148,88 +116,7 @@ export async function executeProgram(
 				.finally(() => pending.delete(reject));
 		});
 	};
-	const agentRun = async (args: Record<string, unknown> = {}): Promise<Record<string, unknown>> => {
-		const { system_prompt, output_schema, ...rest } = args;
-		try {
-			return (await invoke("agent.run", {
-				...rest,
-				...(system_prompt !== undefined ? { systemPrompt: system_prompt } : {}),
-				...(output_schema !== undefined ? { outputSchema: output_schema } : {}),
-			})) as Record<string, unknown>;
-		} catch (error) {
-			if (controller.signal.aborted) throw keyboardInterrupt();
-			return {
-				status: "failed",
-				error: error instanceof Error ? error.message : String(error),
-				text: "",
-				toolCalls: 0,
-			};
-		}
-	};
-	const fetchResource = async (input: string | Record<string, unknown>, kwargs: Record<string, unknown> = {}) => {
-		const options = typeof input === "string" ? kwargs : input;
-		const url = typeof input === "string" ? input : input.url;
-		const { method, headers, body } = options;
-		const pairs =
-			headers === undefined ? undefined : Object.entries(jsonValue(headers, new Set(), true) as Record<string, string>);
-		const encodedBody =
-			body === undefined ? undefined : Buffer.from(body instanceof Uint8Array ? body : String(body)).toString("base64");
-		const response = (await invoke("fetch", {
-			url,
-			...(method !== undefined ? { method } : {}),
-			...(pairs !== undefined ? { headers: pairs } : {}),
-			...(encodedBody !== undefined ? { body: encodedBody } : {}),
-		})) as Record<string, unknown>;
-		const bytes = Buffer.from(String(response.body ?? ""), "base64");
-		const headersMap = Object.fromEntries(response.headers as Array<[string, string]>);
-		const contentType = String(headersMap["content-type"] ?? "");
-		const text = /^text\/|json|xml|javascript/i.test(contentType);
-		return {
-			status: response.status,
-			headers: headersMap,
-			url: response.url,
-			body: text ? bytes.toString("utf8") : bytes,
-			...(text ? { text: bytes.toString("utf8") } : {}),
-		};
-	};
-	const named = (value: unknown, key: string) =>
-		value && typeof value === "object" && !(value instanceof Map) ? (value as Record<string, unknown>)[key] : value;
-	const externalLookup = {
-		fetch: fetchResource,
-		tools_list: () => invoke("tools.list"),
-		tools_search: (query: unknown) => invoke("tools.search", { query: named(query, "query") }),
-		tools_describe: (name: unknown) => invoke("tools.describe", { name: named(name, "name") }),
-		tools_call: (name: unknown, args: Record<string, unknown> = {}) => {
-			if (name && typeof name === "object" && !(name instanceof Map)) {
-				const params = name as Record<string, unknown>;
-				return invoke("tools.call", { name: params.name, args: params.args ?? {} });
-			}
-			return invoke("tools.call", { name, args });
-		},
-		skills_list: () => invoke("skills.list"),
-		skills_body: (name: unknown) => invoke("skills.body", { name: named(name, "name") }),
-		agent_run: agentRun,
-		agent: async (args: Record<string, unknown> = {}) => {
-			const result = await agentRun(args);
-			if (result.status !== "completed") throw new Error(String(result.error ?? "Agent failed"));
-			return result.value === undefined ? result.text : result.value;
-		},
-		...Object.fromEntries(
-			CORE_TOOL_NAMES.map((name) => [name, (args: Record<string, unknown> = {}) => invoke(`pi.${name}`, args)]),
-		),
-		...Object.fromEntries(
-			EVIDENCE_FUNCTION_NAMES.map((name) => [
-				name,
-				(args: Record<string, unknown> = {}) => invoke(`evidence.${name}`, args),
-			]),
-		),
-		...Object.fromEntries(
-			extensionPythonTools().map((tool) => [
-				tool.name,
-				(args: Record<string, unknown> = {}) => invoke("tools.call", { name: tool.name, args }),
-			]),
-		),
-	};
+	const externalLookup = guestFunctions(invoke, () => (controller.signal.aborted ? keyboardInterrupt() : undefined));
 	try {
 		if (controller.signal.aborted) throw keyboardInterrupt();
 		const feed = session.feedRun(code, { inputs: { inputs }, externalLookup, printCallback: collector });
@@ -246,7 +133,7 @@ export async function executeProgram(
 		if (timedOut)
 			return { outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms`, sessionUsable: false };
 		if (controller.signal.aborted) return { outcome: "aborted", error: "pi_exec aborted", sessionUsable: false };
-		return { outcome: "succeeded", value: jsonValue(result), sessionUsable: true };
+		return { outcome: "succeeded", value: fromPythonValue(result), sessionUsable: true };
 	} catch (error) {
 		if (timedOut)
 			return { outcome: "timed_out", error: `pi_exec timed out after ${timeoutMs}ms`, sessionUsable: false };

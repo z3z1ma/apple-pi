@@ -41,3 +41,35 @@ export function serializeJsonValue(value: unknown, subject: string): string {
 	validate(value);
 	return JSON.stringify(value);
 }
+
+/** Convert a value from Monty into plain JSON data. Host arguments may already be plain objects; program results may not. */
+export function fromPythonValue(value: unknown, hostArguments = false, seen = new Set<object>()): unknown {
+	if (
+		!hostArguments &&
+		typeof value === "string" &&
+		(/^<function .+ at 0x[0-9a-f]+>$/.test(value) || ["[...]", "{...}", "(...)"].includes(value))
+	)
+		throw new Error("pi_exec result is not JSON-serializable");
+	if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+	if (typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0)) return value;
+	if (typeof value !== "object" || !value) throw new Error("pi_exec result is not JSON-serializable");
+	if (seen.has(value)) throw new Error("pi_exec result contains a cycle");
+	seen.add(value);
+	try {
+		if (Array.isArray(value)) return value.map((item) => fromPythonValue(item, hostArguments, seen));
+		if (
+			value instanceof Map ||
+			(hostArguments && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null))
+		) {
+			const result: Record<string, unknown> = Object.create(null);
+			for (const [key, item] of value instanceof Map ? value : Object.entries(value)) {
+				if (typeof key !== "string") throw new Error("pi_exec result has a non-string dictionary key");
+				result[key] = fromPythonValue(item, hostArguments, seen);
+			}
+			return result;
+		}
+		throw new Error("pi_exec result is not JSON-serializable");
+	} finally {
+		seen.delete(value);
+	}
+}

@@ -1,6 +1,6 @@
 import { CORE_TOOL_NAMES, coreToolDefinition, ENVELOPE_TOOL_NAMES } from "./core-tools.js";
-import { EVIDENCE_FUNCTION_NAMES, evidencePythonStubs } from "./evidence.js";
-import { capturedTools } from "./tool-capture.js";
+import { evidencePythonStubs } from "./evidence.js";
+import { extensionPythonTools, HOST_FUNCTION_STUBS } from "./guest-functions.js";
 
 type Schema = {
 	type?: string | string[];
@@ -82,27 +82,7 @@ export function corePythonStubs(cwd = "."): string {
 	].join("\n");
 }
 
-export function extensionPythonTools(): ReturnType<typeof capturedTools> {
-	return capturedTools().filter(
-		(tool) =>
-			!CORE_TOOL_NAMES.includes(tool.name as (typeof CORE_TOOL_NAMES)[number]) &&
-			!EVIDENCE_FUNCTION_NAMES.includes(tool.name as (typeof EVIDENCE_FUNCTION_NAMES)[number]) &&
-			/^[A-Za-z_]\w*$/.test(tool.name),
-	);
-}
-
-const HOST_PYTHON_STUBS = [
-	"def schema(shape: Any) -> dict[str, Any]: ...",
-	"async def agent_run(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> dict[str, Any]: ...",
-	"async def agent(*, task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...) -> Any: ...",
-	"async def tools_list() -> list[dict[str, Any]]: ...",
-	"async def tools_search(query: str) -> list[dict[str, Any]]: ...",
-	"async def tools_describe(name: str) -> dict[str, Any] | None: ...",
-	"async def tools_call(name: str, args: dict[str, Any] = ...) -> dict[str, Any]: ...",
-	"async def skills_list() -> list[dict[str, str]]: ...",
-	"async def skills_body(name: str) -> str: ...",
-	"async def fetch(url: str, *, method: str = ..., headers: dict[str, str] = ..., body: str | bytes = ...) -> dict[str, Any]: ...",
-];
+const HOST_PYTHON_STUBS = ["def schema(shape: Any) -> dict[str, Any]: ...", ...HOST_FUNCTION_STUBS];
 
 /** Complete type-checking stubs, including every captured extension tool signature. */
 export function guestPythonStubs(cwd = "."): string {
