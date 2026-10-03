@@ -8,7 +8,7 @@ import json
 settings = json.dumps({"prompt": inputs["prompt"], "waitFor": inputs["wait_for"], "timeoutMs": int(inputs["timeout"]) * 1000})
 driver = """
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const settings = SETTINGS;
@@ -21,7 +21,7 @@ const finish = () => {
 	clearTimeout(timer);
 	pi.kill("SIGTERM");
 	setTimeout(() => {
-		for (const file of readdirSync(sessions).filter((name) => name.endsWith(".jsonl"))) {
+		for (const file of (existsSync(sessions) ? readdirSync(sessions) : []).filter((name) => name.endsWith(".jsonl"))) {
 			for (const line of readFileSync(join(sessions, file), "utf8").trim().split("\\n")) {
 				const entry = JSON.parse(line);
 				const usage = entry.type === "usage" ? entry.usage : entry.type === "message" && entry.message.role === "assistant" ? entry.message.usage : undefined;

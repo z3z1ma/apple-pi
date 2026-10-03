@@ -11,7 +11,7 @@ Updated: 2026-10-03
 
 ## Learnings
 
-- User correction: before the design question, I described the fork as a clarify-style snapshot with a different system prompt and tools, and asked the user to accept a cache miss. That was wrong and cost trust. Check fork or cache identity in Pi's code (see `.wiki/pages/pi-request-internals.md`) before presenting a cost trade-off.
+- User correction: while designing the fork, I assumed it would be a clarify-style snapshot with a different system prompt and tools, and asked the user whether to accept a prompt-cache miss. That was wrong and cost trust. Check fork or cache identity in Pi's code (see `.wiki/pages/pi-request-internals.md`) before presenting a cost trade-off.
 
 ## Improvements
 
