@@ -34,7 +34,7 @@
 import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, Container, Text, TruncatedText, truncateToWidth } from "@earendil-works/pi-tui";
+import { Container, TruncatedText } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
@@ -1329,23 +1329,6 @@ import {
 
 export { loadSystemPrompt, PAIR_MODEL_PROFILE, PRIMARY_PAIR_PROTOCOL, PRIMARY_PAIR_PROTOCOL_TAG } from "./config.js";
 
-// One left rule keeps the entire advisory batch visually grouped.
-class AdvisoryBorder implements Component {
-	constructor(
-		private readonly child: Component,
-		private readonly bar: string,
-	) {}
-
-	invalidate(): void {
-		this.child.invalidate();
-	}
-
-	render(width: number): string[] {
-		const inner = Math.max(1, width - 2);
-		return this.child.render(inner).map((line) => truncateToWidth(`${this.bar} ${line}`, width));
-	}
-}
-
 export default function (pi: ExtensionAPI) {
 	const rootNotebook = inChildSessionContext() ? undefined : new NotebookRuntime();
 	if (rootNotebook) {
@@ -2317,32 +2300,21 @@ export default function (pi: ExtensionAPI) {
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
 	});
 
-	// ---- advisory card rendering ----
-	// One card per dispatch, with severity-colored bullets and expandable note text.
-	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, options, theme) => {
+	// ---- advisory bullet rendering ----
+	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
 		const container = new Container();
-		container.addChild(new Text(theme.fg("accent", theme.bold("pair programmer")), 0, 0));
 		for (const n of notes) {
-			const color = isPairQuestion(n)
-				? "accent"
-				: n.severity === "blocker"
-					? "error"
-					: n.severity === "concern"
-						? "warning"
-						: "muted";
+			const color =
+				isPairQuestion(n) || n.severity === "concern" ? "accent" : n.severity === "blocker" ? "error" : "muted";
 			const tag = isPairQuestion(n) ? "QUESTION" : (n.severity ?? "nit").toUpperCase();
 			const source = n.source === "consultant" || n.source === "advisor" ? " (consultant)" : "";
 			const heading = `${theme.fg(color, "●")} ${theme.fg(color, tag)}${theme.fg("muted", source)}`;
-			if (!options.expanded) {
-				const summary = n.note.replace(/\s+/g, " ").trim();
-				container.addChild(new TruncatedText(`${heading} ${theme.fg("text", summary)}`, 0, 0));
-				continue;
-			}
-			container.addChild(new Text(`${heading} ${theme.fg("text", n.note)}`, 0, 0));
+			const summary = n.note.replace(/\s+/g, " ").trim();
+			container.addChild(new TruncatedText(`${heading} ${theme.fg("text", summary)}`, 0, 0));
 		}
-		return new AdvisoryBorder(container, theme.fg("accent", "│"));
+		return container;
 	});
 
 	// ---- /pair command ----

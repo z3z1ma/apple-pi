@@ -3497,88 +3497,83 @@ async function renderAdvisory(notes, expanded = false, width = 100) {
 	return strip(comp.render(width).join("\n"));
 }
 
-test("render: advisory card shows severity tag + note text", async () => {
-	const text = await renderAdvisory([{ note: "this divides by zero on empty input", severity: "blocker" }]);
-	assert.match(text, /pair/i);
-	assert.match(text, /BLOCKER/);
-	assert.match(text, /divides by zero/);
-});
-
-test("render: plain nit shows NIT tag", async () => {
-	const text = await renderAdvisory([{ note: "tidy this up" }]);
-	assert.match(text, /NIT/);
-	assert.match(text, /tidy this up/);
-});
-
-test("render: questions show QUESTION rather than a severity tag", async () => {
-	const text = await renderAdvisory([{ note: "Which screenshot is canonical?", kind: "question" }]);
-	assert.match(text, /QUESTION/);
-	assert.match(text, /Which screenshot is canonical\?/);
-	assert.doesNotMatch(text, /\bNIT\b/);
-});
-
-test("render: collapsed advisory shows each note on one line", async () => {
-	const text = await renderAdvisory([
-		{ note: `first line\nsecond line ${"long ".repeat(40)}`, severity: "concern" },
-		{ note: "Which screenshot is canonical?", kind: "question" },
-	]);
-	const lines = text.split("\n").filter((line) => line.trim().length > 0);
-	assert.equal(lines.length, 3, `expected one heading and one line per note, got: ${JSON.stringify(lines)}`);
-	assert.match(lines[0], /pair programmer/);
-	assert.match(lines[1], /● CONCERN first line second line/);
-	assert.match(lines[2], /● QUESTION Which screenshot is canonical\?/);
-});
-
-test("render: advisory card has a left border on both the heading and body lines", async () => {
-	const text = await renderAdvisory([{ note: "tidy this up", severity: "concern" }], true);
-	const lines = text.split("\n").filter((line) => line.trim().length > 0);
-	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
-	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
-	assert.match(lines[0], /pair programmer/);
-	assert.match(lines[1], /● CONCERN tidy this up/);
-});
-
-test("render: mixed advisory batches share one chrome in both expansion states", async () => {
+test("render: single findings and batches are plain bullet rows in both expansion states", async () => {
+	const notes = [
+		{ note: "first issue", severity: "nit" },
+		{ note: "second issue", severity: "blocker", source: "consultant" },
+		{ note: "third issue", severity: "concern" },
+		{ note: "Which evidence?", kind: "question" },
+	];
+	const expected = [
+		"● NIT first issue",
+		"● BLOCKER (consultant) second issue",
+		"● CONCERN third issue",
+		"● QUESTION Which evidence?",
+	];
 	for (const expanded of [false, true]) {
-		const text = await renderAdvisory(
-			[
-				{ note: "first issue", severity: "nit" },
-				{ note: "second issue", severity: "blocker", source: "consultant" },
-				{ note: "third issue", severity: "concern" },
-				{ note: "Which evidence?", kind: "question" },
-			],
-			expanded,
+		const text = await renderAdvisory(notes, expanded);
+		assert.deepEqual(
+			text
+				.split("\n")
+				.filter((line) => line.trim())
+				.map((line) => line.trimEnd()),
+			expected,
 		);
-		const rows = text.split("\n").filter((line) => line.trim());
-		assert.equal(rows.length, 5);
-		assert.equal((text.match(/pair programmer/g) ?? []).length, 1);
-		assert.match(rows[1], /● NIT first issue/);
-		assert.match(rows[2], /● BLOCKER \(consultant\) second issue/);
-		assert.match(rows[3], /● CONCERN third issue/);
-		assert.match(rows[4], /● QUESTION Which evidence\?/);
-		for (const row of rows) assert.match(row, /^│ /);
+		for (const [index, note] of notes.entries()) {
+			const single = await renderAdvisory([note], expanded);
+			assert.deepEqual(
+				single
+					.split("\n")
+					.filter((line) => line.trim())
+					.map((line) => line.trimEnd()),
+				[expected[index]],
+			);
+		}
+		const plainNit = await renderAdvisory([{ note: "tidy this up" }], expanded);
+		assert.deepEqual(
+			plainNit
+				.split("\n")
+				.filter((line) => line.trim())
+				.map((line) => line.trimEnd()),
+			["● NIT tidy this up"],
+		);
 	}
 });
 
-test("render: expanded batch keeps full multiline notes inside the shared border at narrow widths", async () => {
-	const text = await renderAdvisory(
-		[
-			{ note: "first line\nsecond line with more detail", severity: "concern" },
-			{ note: "final evidence", kind: "question" },
-		],
-		true,
-		24,
+test("render: concerns use accent rather than tool-call warning color", async () => {
+	const ext = await loadPairExtension();
+	const renderer = ext.messageRenderers.get("advisory");
+	const colors = [];
+	renderer(
+		{ details: { notes: [{ note: "check the lock", severity: "concern" }] } },
+		{ expanded: false },
+		{
+			fg: (color, text) => {
+				colors.push([color, text]);
+				return text;
+			},
+		},
 	);
-	const rows = text.split("\n").filter((line) => line.trim());
-	assert.equal((text.match(/pair programmer/g) ?? []).length, 1);
-	assert.match(text, /first line/);
-	assert.match(text, /second line/);
-	const content = rows.map((row) => row.slice(2).trim()).join(" ");
-	assert.match(content, /more detail/);
-	assert.match(content, /final evidence/);
-	for (const row of rows) {
-		assert.match(row, /^│ /);
-		assert.ok(row.length <= 24);
+	assert.ok(colors.some(([color, text]) => color === "accent" && text === "●"));
+	assert.ok(colors.some(([color, text]) => color === "accent" && text === "CONCERN"));
+	assert.ok(colors.every(([color]) => color !== "warning"));
+});
+
+test("render: multiline and long notes stay on one row in both expansion states", async () => {
+	const notes = [
+		{ note: `first line\nsecond line ${"long ".repeat(40)}`, severity: "concern" },
+		{ note: "Which screenshot is canonical?", kind: "question" },
+	];
+	for (const width of [24, 100]) {
+		const collapsed = await renderAdvisory(notes, false, width);
+		const expanded = await renderAdvisory(notes, true, width);
+		assert.equal(expanded, collapsed);
+		const rows = collapsed.split("\n").filter((line) => line.trim());
+		assert.equal(rows.length, notes.length);
+		assert.match(rows[0], /^● CONCERN first line/);
+		assert.match(rows[1], /^● QUESTION Which/);
+		if (width === 100) assert.match(rows[0], /first line second line/);
+		for (const row of rows) assert.ok(row.length <= width);
 	}
 });
 

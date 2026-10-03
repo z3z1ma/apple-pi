@@ -149,7 +149,7 @@ An advisory-triggered correction episode suppresses further outbound advice to a
 
 Asking the consultant is a request to investigate, not a finding. If the consultant fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
 
-In the TUI, each dispatched batch shares one bordered card and a single pair programmer heading. Each note has a severity-colored circle and a `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label; consultant findings also identify their source. Collapsed notes occupy one line each. Pi's expand toggle for tool output (`Ctrl+O` by default) shows the full text within the same card. The main agent always receives the full text.
+In the TUI, each note occupies one plain bullet row: `● TYPE text`, with a color-coded circle and `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label. Consultant findings also identify their source. Single notes and batches use the same rows, without a heading or border. Whitespace is flattened and long text is truncated to the terminal width. Pi's expand toggle for tool output leaves these rows unchanged. The main agent always receives the full text.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 
