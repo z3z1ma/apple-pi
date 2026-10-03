@@ -42,7 +42,7 @@ describe("change reflection", () => {
 		expect(fork.messages.slice(0, parent.messages.length)).toEqual(parent.messages);
 		expect(JSON.stringify(fork.messages[parent.messages.length]?.content)).toContain("implemented");
 		expect(lastText(fork)).toContain(JSON.stringify(reflectionPrompt(["README.md", "app.ts"], new Map())).slice(1, -1));
-		expect(reflections()[0]).toMatchObject({ content: "Change reflection: Kept the result; nothing simpler." });
+		expect(reflections()[0]).toMatchObject({ content: "Change review: Kept the result; nothing simpler." });
 		expect(session.messages.at(-1)).toBe(reflections()[0]);
 		expect(
 			session.sessionManager
@@ -68,7 +68,7 @@ describe("change reflection", () => {
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(requests).toHaveLength(5);
 		expect(reflections()).toHaveLength(1);
-		expect(JSON.stringify(requests[4]?.messages)).toContain("Change reflection: Tightened notes.md.");
+		expect(JSON.stringify(requests[4]?.messages)).toContain("Change review: Tightened notes.md.");
 	});
 
 	it("lists what ran after each code path's last change", async () => {

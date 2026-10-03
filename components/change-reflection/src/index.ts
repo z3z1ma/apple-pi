@@ -79,7 +79,7 @@ export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMa
 }
 
 export default function registerChangeReflection(pi: ExtensionAPI): void {
-	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change reflection");
+	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change review");
 	// Changed paths in first-change order, each with what ran after its last change.
 	const changed = new Map<string, string[]>();
 	let completed = false;

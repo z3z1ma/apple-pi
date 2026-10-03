@@ -35,7 +35,7 @@ function describeEvidence(event: ToolResultEvent): string | undefined {
  * `/reflect` asks the main agent in-band at any time.
  */
 export function registerLearningReflection(pi: ExtensionAPI): void {
-	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Learning reflection");
+	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Reflection");
 	let newTokens = 0;
 	let completed = false;
 	let evidence: string[] = [];

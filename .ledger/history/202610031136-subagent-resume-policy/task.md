@@ -29,13 +29,13 @@ Both test seams were freshly confirmed before test edits. Root and nested omissi
 
 Implementation validation passed: repository formatting, lint, typecheck, 106 Vitest files / 1,186 tests, 118 offline pair-harness checks, extension-loader smoke test, package dry-run, and diff whitespace checks. Scoped pre-commit checks also passed, including 13 subagent files / 191 tests. Independent Standards and Intent/Spec reviews of the six-file diff against `8dc824f` found no material findings. The reflected documentation cleanup was inspected in the actual commit.
 
-An earlier full validation encountered failures in concurrently edited Pi Exec code; the final rerun passed after that work settled. Subsequent commits have not changed the six implementation paths. No implementation defects, research, prototypes, or tickets remain.
+During implementation, repository-wide checks briefly failed in concurrently edited Pi Exec code; the implementation-phase rerun passed after that work settled. Subsequent commits have not changed the six implementation paths. No implementation defects, research, prototypes, or tickets remain.
 
 The first closeout rerun at `8555e2c` passed formatting, lint, typecheck, and package dry-run. Vitest passed 106 suites / 1,186 test cases but failed an additional suite because a concurrently removed temporary Pi Exec test disappeared between discovery and loading.
 
-After concurrent code edits settled, the latest full closeout run at `41b1443` again passed formatting, lint, typecheck, and package dry-run. Its unit stage failed 4 tests in 3 suites, with 1,182 passing: two standalone-extension registration tests reached their 5-second deadlines, and two task bash-tool tests failed detach/abort expectations. These are different failures from the earlier removed-file race. All four cases then passed in a focused current-tree rerun; they are not reproduced in isolation, but the full test command remains red. Neither closeout attempt reached the pair or loader stages because those follow the unit stage through `&&`.
+After concurrent code edits settled, the latest full closeout run at `41b1443` again passed formatting, lint, typecheck, and package dry-run. Its unit stage failed 4 tests in 3 suites, with 1,182 passing: two standalone-extension registration tests reached their 5-second deadlines, and two task bash-tool tests failed detach/abort expectations. These are different failures from the earlier removed-file race. All four cases then passed in a focused current-tree rerun; they were not reproduced in isolation, but that full closeout test run still failed. Neither closeout attempt reached the pair or loader stages because those follow the unit stage through `&&`.
 
-The selected six implementation paths remain unchanged. No source changes were made to address the out-of-scope test failures. Those results remain recorded without a claim that the latest full suite passed. No additional commit was performed. Live-provider/network E2E and installation from a packed tarball were not exercised; neither is an outstanding acceptance requirement for this bounded change.
+The selected six implementation paths remain unchanged. No source changes were made to address the out-of-scope test failures. Those results remain recorded without a claim that the latest full closeout suite passed. Live-provider/network E2E and installation from a packed tarball were not exercised; neither is an outstanding acceptance requirement for this bounded change.
 
 ### Closeout decision
 
@@ -43,4 +43,4 @@ The operator confirmed the scoped undertaking is complete and directed closure. 
 
 ## Outcome
 
-Completed the settled [specification](spec.md) in one context without creating horizontal tickets or a separate prefactor. Product documentation and model-visible guidance describe the corrected resume semantics. Implementation is committed; this workflow did not push. Closed on explicit operator confirmation. The operator authorized committing the archived ledger closeout. No push was requested.
+Completed the settled [specification](spec.md) in one context without creating horizontal tickets or a separate prefactor. Product documentation and model-visible guidance describe the corrected resume semantics. Implementation is committed; this workflow did not push. Closed on explicit operator confirmation. The archived ledger closeout was committed as `26b42ee` (`docs(ledger): close subagent resume policy task`) on the operator's request. No push was requested. No build or hand-off steps remain for this task.

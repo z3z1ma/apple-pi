@@ -64,7 +64,7 @@ describe("learning reflection", () => {
 			"Failed or surprising tool calls since the last reflection:\\n- bash: `exit 3`",
 		);
 		expect(learnings().map((learning) => learning.content)).toEqual(["exit 3 means the profile is missing."]);
-		expect(reflections()[0]).toMatchObject({ content: "Learning reflection: Recorded one learning." });
+		expect(reflections()[0]).toMatchObject({ content: "Reflection: Recorded one learning." });
 	});
 
 	it("waits until enough new tokens have passed", async () => {

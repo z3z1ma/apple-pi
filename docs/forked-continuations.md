@@ -1,6 +1,6 @@
 # Forked continuations
 
-A forked continuation is how the harness runs a passive, automatic prompt without continuing or steering the main run. Change reflection and the automatic learning reflection are its two consumers. Prompts and commands that the user starts, such as `/reflect` and `/distill`, stay in the main conversation.
+A forked continuation is how the harness runs a passive, automatic prompt without continuing or steering the main run. Change review and the automatic learning reflection, shown as `Change review:` and `Reflection:`, are its two consumers. Prompts and commands that the user starts, such as `/reflect` and `/distill`, stay in the main conversation.
 
 ## Behavior
 
