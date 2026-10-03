@@ -43,13 +43,14 @@ After about a week of real use:
 
 ## Current State
 
-In progress. First slice implemented, uncommitted (2026-10-02):
+In progress. All slices are implemented (2026-10-02):
 
-- Notebook guidance for the main agent, the pair, the maintenance pass, and the post-compaction packet now asks for learnings and leaves out status.
-- `components/notebook/src/hooks/learning-reflection.ts`: the run-end learning reflection, spaced by 500k new tokens, with deduplicated failed calls as evidence, plus `/reflect`. It is registered with the root notebook in the pair extension.
-- Docs: `docs/context.md`, `docs/pair-programmer.md`, `README.md`, `AGENTS.md`.
+- Notebook guidance asks for learnings and leaves out status (commit `3d32bbf`).
+- `components/notebook/src/hooks/learning-reflection.ts`: the run-end learning reflection, spaced by 500k new tokens, plus `/reflect` (commit `3d32bbf`).
+- `components/notebook/src/hooks/open-learnings.ts`: the `learnings:N` count in the input card, and the ledger-close sweep. The first `done` or `cancelled` call per task is held once while learnings are open.
+- `prompts/distill.md` reads open learnings first and retires what it places.
 
-Next: use it for about a week, then judge the acceptance criteria. Later slices: an open-learning count in the input editor, the ledger-close sweep, and pointing `/distill` at the notebook first.
+Next: use it for about a week, then judge the acceptance criteria and tune the 500k spacing.
 
 ## Outcome
 

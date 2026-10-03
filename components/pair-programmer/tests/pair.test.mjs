@@ -3270,10 +3270,15 @@ async function lifecycleHarness() {
 	const res = await loadExtensions(["index.ts"], SOURCE_DIR, createEventBus(), runtime);
 	assert.deepEqual(res.errors, []);
 	const ext = res.extensions[0];
-	const h = (name) => {
-		const v = ext.handlers.get(name);
-		return Array.isArray(v) ? v[0] : v;
-	};
+	// Several root extensions share lifecycle events; call each handler in order, like Pi does.
+	const h =
+		(name) =>
+		(...args) => {
+			const value = ext.handlers.get(name);
+			let result;
+			for (const handler of Array.isArray(value) ? value : [value]) result = handler?.(...args) ?? result;
+			return result;
+		};
 	const emit = async (name, ...args) => {
 		const value = ext.handlers.get(name);
 		for (const handler of Array.isArray(value) ? value : [value]) await handler?.(...args);

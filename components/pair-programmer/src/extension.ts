@@ -41,6 +41,7 @@ import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
 import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
 import { registerLearningReflection } from "../../notebook/src/hooks/learning-reflection.js";
+import { registerOpenLearnings, showOpenLearnings } from "../../notebook/src/hooks/open-learnings.js";
 import {
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
@@ -1354,6 +1355,7 @@ export default function (pi: ExtensionAPI) {
 		registerNotebookSourceTool(pi);
 		registerMainNotebookTool(pi, rootNotebook);
 		registerLearningReflection(pi);
+		registerOpenLearnings(pi);
 	}
 
 	let enabled = loadEnabled();
@@ -1892,6 +1894,7 @@ export default function (pi: ExtensionAPI) {
 		if (!persistNotebookUpdate(pi, rootNotebook, entries, update)) {
 			throw new Error("pair programmer notebook update was rejected");
 		}
+		showOpenLearnings(latestCtx);
 		if (update.reflections.length > 0) {
 			rootNotebook.notebookEmptyBackoff = undefined;
 		} else if (update.fullMaintenanceDue) {

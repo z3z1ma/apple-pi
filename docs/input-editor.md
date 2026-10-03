@@ -11,12 +11,13 @@ The bottom row of the editor displays:
   - `mcp:N`: shown when MCP servers are configured.
   - `agents:N`: shown for running and queued public top-level subagents.
   - `tasks:N`: shown for scheduled, due, and running managed tasks.
+  - `learnings:N`: shown for open notebook learnings, which last one session (see [context](context.md)).
 
-A typical status is `mcp:N · hit:X% · agents:N · tasks:N · ctx:X%`; active pair review prefixes it with `pair ·`. Cache hit rate is the session-wide cached prompt tokens divided by all session prompt tokens (uncached input, cache reads, and cache writes), including compaction and branch-summary model calls. It is initialized once from session history, then updated as new usage completes.
+A typical status is `mcp:N · hit:X% · agents:N · tasks:N · learnings:N · ctx:X%`; active pair review prefixes it with `pair ·`. Cache hit rate is the session-wide cached prompt tokens divided by all session prompt tokens (uncached input, cache reads, and cache writes), including compaction and branch-summary model calls. It is initialized once from session history, then updated as new usage completes.
 
 No bottom rail `─────────` or separate status footer is rendered below the editor; the editor component is the last visible element and touches the bottom of the terminal.
 
-At narrow terminal widths, optional items are dropped from left to right (`pair`, `mcp:N`, then `hit:X%`, `agents:N`, and `tasks:N`) before `ctx:X%`. All right-aligned status text is rendered in muted theme color.
+At narrow terminal widths, optional items are dropped from left to right (`pair`, `mcp:N`, then `hit:X%`, `agents:N`, `tasks:N`, and `learnings:N`) before `ctx:X%`. All right-aligned status text is rendered in muted theme color.
 
 ## Compatibility boundary
 

@@ -176,6 +176,7 @@ function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | 
 	for (const [key, label] of [
 		["subagents", "agents"],
 		["tasks", "tasks"],
+		["learnings", "learnings"],
 	] as const) {
 		const status = snapshot.statuses.find((candidate) => candidate.key === key);
 		const count = status

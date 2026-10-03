@@ -45,7 +45,7 @@ Live index rows read `` - `.ledger/<id>/task.md` — <status> — <title> — <d
 
 ### `ledger_status`
 
-`ledger_status` moves a live task to a new status. A live status (`planning`, `ready`, `in-progress`) updates `Status` in `task.md` and the status on the live-index row, adding it to a row that has none. `done` or `cancelled` archives the task: it updates `Status` in `task.md`, moves the complete bundle to `.ledger/history/`, removes the live-index row, and appends the history row. Source, destination, task, and both indexes are validated before mutation; failures roll back or report a rollback failure.
+`ledger_status` moves a live task to a new status. A live status (`planning`, `ready`, `in-progress`) updates `Status` in `task.md` and the status on the live-index row, adding it to a row that has none. `done` or `cancelled` archives the task: it updates `Status` in `task.md`, moves the complete bundle to `.ledger/history/`, removes the live-index row, and appends the history row. Source, destination, task, and both indexes are validated before mutation; failures roll back or report a rollback failure. In a root session with open notebook learnings, the first `done` or `cancelled` call for a task is held once so they can be placed while the retrospective is still live (see [context](context.md)).
 
 It does not judge whether work is complete. Read and edit existing ledger files with ordinary repository tools.
 

@@ -10,8 +10,8 @@ The goal is not to summarize the session. Identify lessons from completed or suf
 
 Use the smallest useful evidence set:
 
+- the open learnings in the notebook, first: each is something found out the hard way in this session and waiting for a home;
 - the current conversation and most recent meaningful work;
-- the pair programmer notebook and its newest relevant observations or reflections;
 - `revisit_note` when a known notebook ID needs exact wording, rationale, or provenance;
 - `search_session` when compacted transcript history or prior file operations need to be recovered;
 - relevant repository state, diffs, ledger records, documentation, and existing reusable artifacts when they help validate or place a lesson.
@@ -48,4 +48,4 @@ In this first response, do not create or modify artifacts. Present a concise set
 
 Call out interactions between candidates and recommend against low-value retention. Ask the user which proposals to approve, change, or reject.
 
-Only after the user confirms should you create the approved artifacts. At that point, re-check the existing destination, use the relevant wiki, skill-authoring, or `pi_exec` procedure when applicable, preserve local conventions and provenance, and validate each artifact proportionally. Do not broaden the approved mutation scope silently.
+Only after the user confirms should you create the approved artifacts. At that point, re-check the existing destination, use the relevant wiki, skill-authoring, or `pi_exec` procedure when applicable, preserve local conventions and provenance, and validate each artifact proportionally. Do not broaden the approved mutation scope silently. Then retire each placed or rejected learning with `update_notebook`.

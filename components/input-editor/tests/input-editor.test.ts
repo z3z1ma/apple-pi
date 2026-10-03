@@ -158,6 +158,16 @@ describe("input editor rendering", () => {
 		expect(idle.at(-1)).toContain("ctx:33%");
 	});
 
+	it("shows the open-learning count before context usage", () => {
+		const lines = renderInputCard(
+			{ context: { percent: 32.8 }, statuses: [{ key: "learnings", text: "learnings:2" }] },
+			theme,
+			40,
+			[""],
+		).map(stripTerminalSequences);
+		expect(lines.at(-1)).toContain("learnings:2 · ctx:33%");
+	});
+
 	it("shows pair only while it is reviewing", () => {
 		const idle = {
 			...completeSnapshot,
