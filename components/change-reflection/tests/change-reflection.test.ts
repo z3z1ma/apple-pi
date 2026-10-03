@@ -1,33 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Context, Model } from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import {
-	createAgentSession,
-	type ExtensionAPI,
-	DefaultResourceLoader,
-	SessionManager,
-	SettingsManager,
-} from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
-import { CHANGE_REFLECTION_EXTENSION_PATH } from "../../../extensions/change-reflection.js";
-import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerChangeReflection, { CHANGE_REFLECTION_MESSAGE_TYPE, reflectionPrompt } from "../src/index.js";
-
-type Reply = ReturnType<typeof fauxAssistantMessage>;
-
-const model = {
-	id: "reflection-model",
-	name: "Reflection model",
-	api: "test-reflection-api",
-	provider: "reflection-provider",
-	reasoning: false,
-	input: ["text"],
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-	contextWindow: 100_000,
-	maxTokens: 10_000,
-} as Model<string>;
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -39,102 +15,81 @@ function tool(name: string, args: Parameters<typeof fauxToolCall>[1], id: string
 }
 
 async function harness(replies: Reply[]) {
-	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-reflection-"));
-	mkdirSync(join(cwd, "agent"));
-	writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
-	const requests: Context[] = [];
-	const stream = (_model: Model<string>, context: Context) => {
-		requests.push(structuredClone(context));
-		const message = replies.shift() ?? fauxAssistantMessage("done");
-		const stream = createAssistantMessageEventStream();
-		stream.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });
-		stream.end(message);
-		return stream;
-	};
-	const { modelRuntime } = fauxModelBackend(model);
-	const loader = new DefaultResourceLoader({
-		cwd,
-		agentDir: join(cwd, "agent"),
-		additionalExtensionPaths: [CHANGE_REFLECTION_EXTENSION_PATH],
-		noSkills: true,
-		noPromptTemplates: true,
-		noThemes: true,
-		noContextFiles: true,
-		systemPromptOverride: () => "test",
-		appendSystemPromptOverride: () => [],
-	});
-	await loader.reload();
-	const { session } = await createAgentSession({
-		cwd,
-		model,
-		modelRuntime: { ...modelRuntime, stream, streamSimple: stream } as never,
-		resourceLoader: loader,
-		sessionManager: SessionManager.inMemory(cwd),
-		settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
-	});
-	await session.bindExtensions({});
-	session.setActiveToolsByName(["read", "edit", "write", "bash"]);
-	cleanup.push(() => {
-		session.dispose();
-		rmSync(cwd, { recursive: true, force: true });
-	});
-	const reflections = () =>
-		session.messages.filter(
-			(message) => message.role === "custom" && message.customType === CHANGE_REFLECTION_MESSAGE_TYPE,
-		);
-	return { session, requests, reflections };
+	const run = await fauxSession([registerChangeReflection], replies, ["read", "edit", "write", "bash"]);
+	cleanup.push(run.dispose);
+	const reflections = () => run.customMessages(CHANGE_REFLECTION_MESSAGE_TYPE);
+	return { ...run, reflections };
 }
 
+const lastText = (request: { messages: Array<{ content: unknown }> }) =>
+	JSON.stringify(request.messages.at(-1)?.content);
+
 describe("change reflection", () => {
-	it("asks once per settled run with lenses matched to the changed files", async () => {
+	it("reflects in an identical fork and adds its reply as one passive message", async () => {
 		const { session, requests, reflections } = await harness([
 			tool("write", { path: "README.md", content: "# App\n" }, "write-1"),
 			tool("edit", { path: "app.ts", edits: [{ oldText: "1", newText: "2" }] }, "edit-1"),
 			fauxAssistantMessage("implemented"),
-			tool("edit", { path: "app.ts", edits: [{ oldText: "2", newText: "3" }] }, "edit-2"),
-			fauxAssistantMessage("simplified"),
+			fauxAssistantMessage("Kept the result; nothing simpler."),
 		]);
 
 		await session.prompt("Implement it.");
+		await vi.waitFor(() => expect(reflections()).toHaveLength(1));
 
-		expect(requests).toHaveLength(5);
-		expect(reflections()).toHaveLength(1);
-		expect(reflections()[0]).toMatchObject({ content: reflectionPrompt(["README.md", "app.ts"], new Map()) });
-		const last = session.messages.at(-1);
-		expect(last?.role === "assistant" && JSON.stringify(last.content)).toContain("simplified");
+		expect(requests).toHaveLength(4);
+		const [parent, fork] = [requests[2]!, requests[3]!];
+		expect(parent.messages[0]).toMatchObject({ role: "system", toolsAdded: expect.any(Array) });
+		expect(fork.messages.slice(0, parent.messages.length)).toEqual(parent.messages);
+		expect(JSON.stringify(fork.messages[parent.messages.length]?.content)).toContain("implemented");
+		expect(lastText(fork)).toContain(JSON.stringify(reflectionPrompt(["README.md", "app.ts"], new Map())).slice(1, -1));
+		expect(reflections()[0]).toMatchObject({ content: "Change reflection: Kept the result; nothing simpler." });
+		expect(session.messages.at(-1)).toBe(reflections()[0]);
+		expect(
+			session.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "usage" && entry.kind === "forked_continuation"),
+		).toHaveLength(1);
 	});
 
-	it("asks again for edits made in a later user request", async () => {
-		const { session, reflections } = await harness([
+	it("keeps the fork's edits and does not reflect on them again", async () => {
+		const { cwd, session, requests, reflections } = await harness([
 			tool("write", { path: "notes.md", content: "a\n" }, "write-1"),
 			fauxAssistantMessage("first"),
-			fauxAssistantMessage("first reviewed"),
-			tool("write", { path: "notes.md", content: "b\n" }, "write-2"),
+			tool("edit", { path: "notes.md", edits: [{ oldText: "a", newText: "b" }] }, "fork-edit"),
+			fauxAssistantMessage("Tightened notes.md."),
 			fauxAssistantMessage("second"),
-			fauxAssistantMessage("second reviewed"),
 		]);
 
 		await session.prompt("First.");
-		await session.prompt("Second.");
+		await vi.waitFor(() => expect(reflections()).toHaveLength(1));
+		expect(readFileSync(join(cwd, "notes.md"), "utf8")).toBe("b\n");
 
-		expect(reflections()).toHaveLength(2);
+		await session.prompt("Second.");
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(requests).toHaveLength(5);
+		expect(reflections()).toHaveLength(1);
+		expect(JSON.stringify(requests[4]?.messages)).toContain("Change reflection: Tightened notes.md.");
 	});
 
 	it("lists what ran after each code path's last change", async () => {
-		const { session, reflections } = await harness([
+		const { session, requests, reflections } = await harness([
 			tool("write", { path: "lib.ts", content: "export {};\n" }, "write-1"),
 			tool("bash", { command: "true" }, "bash-1"),
 			tool("bash", { command: "false" }, "bash-2"),
+			tool("bash", { command: "true", run_in_background: true }, "bash-3"),
 			tool("edit", { path: "app.ts", edits: [{ oldText: "1", newText: "2" }] }, "edit-1"),
 			fauxAssistantMessage("implemented"),
 			fauxAssistantMessage("reviewed"),
 		]);
 
 		await session.prompt("Implement it.");
+		await vi.waitFor(() => expect(reflections()).toHaveLength(1));
 
-		const content = JSON.stringify(reflections()[0]);
-		expect(content).toContain("After your last change to `lib.ts`, these ran: `true`, `false` (failed).");
-		expect(content).toContain("Nothing ran after your last change to `app.ts`.");
+		const prompt = lastText(requests.at(-1)!);
+		expect(prompt).toContain(
+			"After your last change to `lib.ts`, these ran: `true`, `false` (failed), `true` (started in background).",
+		);
+		expect(prompt).toContain("Nothing ran after your last change to `app.ts`.");
 	});
 
 	it("stays quiet without a successful edit or write", async () => {
@@ -145,6 +100,7 @@ describe("change reflection", () => {
 		]);
 
 		await session.prompt("Look around.");
+		await new Promise((resolve) => setTimeout(resolve, 20));
 
 		expect(requests).toHaveLength(3);
 		expect(reflections()).toHaveLength(0);
@@ -169,23 +125,5 @@ describe("reflectionPrompt", () => {
 		expect(reflectionPrompt(["a.ts", "b.ts"], runs)).toContain(
 			"After your last change to `a.ts`, `b.ts`, these ran: `npm test`.",
 		);
-	});
-});
-
-describe("run timeline", () => {
-	it("marks a background launch as started, not finished", () => {
-		const handlers = new Map<string, (event: unknown, ctx?: unknown) => unknown>();
-		registerChangeReflection({
-			on: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => handlers.set(event, handler),
-		} as unknown as ExtensionAPI);
-		const result = (toolName: string, input: Record<string, unknown>) =>
-			handlers.get("tool_result")?.({ toolName, input, isError: false }, { cwd: "/repo" });
-		result("write", { path: "a.ts" });
-		result("bash", { command: "npm test", run_in_background: true });
-
-		const settled = handlers.get("agent_before_settle")?.({ outcome: "completed" }) as {
-			entries: Array<{ content: string }>;
-		};
-		expect(settled.entries[0]?.content).toContain("these ran: `npm test` (started in background).");
 	});
 });

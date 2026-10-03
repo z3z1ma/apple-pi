@@ -1,5 +1,7 @@
 import { extname, isAbsolute, relative, resolve } from "node:path";
-import type { ExtensionAPI, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+import { inForkedContinuation, registerForkedContinuation } from "../../shared/src/forked-continuation.js";
 
 export const CHANGE_REFLECTION_MESSAGE_TYPE = "change-reflection";
 
@@ -59,23 +61,20 @@ export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMa
 		);
 	return [
 		...lenses,
-		"Make a clear improvement if one exists and revalidate anything it affects; otherwise keep the result. Stay within the requested scope, then finish.",
+		"Make a clear improvement if one exists and revalidate anything it affects; otherwise keep the result. Stay within the requested scope.",
 	].join("\n\n");
 }
 
 export default function registerChangeReflection(pi: ExtensionAPI): void {
+	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change reflection");
 	// Changed paths in first-change order, each with what ran after its last change.
 	const changed = new Map<string, string[]>();
-	let reflecting = false;
+	let completed = false;
 
-	const reset = () => {
-		changed.clear();
-		reflecting = false;
-	};
-
-	pi.on("session_start", reset);
+	pi.on("session_start", () => changed.clear());
 
 	pi.on("tool_result", (event, ctx) => {
+		if (inForkedContinuation()) return;
 		if (EXECUTION_TOOLS.has(event.toolName)) {
 			const run = describeRun(event.toolName, event.input, event.isError);
 			for (const runs of changed.values()) if (!runs.includes(run)) runs.push(run);
@@ -86,23 +85,12 @@ export default function registerChangeReflection(pi: ExtensionAPI): void {
 		if (typeof path === "string" && path.length > 0) changed.set(displayPath(ctx.cwd, path), []);
 	});
 
-	// One reflection per settled run: edits made while reflecting do not start another.
 	pi.on("agent_before_settle", (event) => {
-		if (reflecting || event.outcome !== "completed" || changed.size === 0) {
-			reset();
-			return;
-		}
-		const paths = [...changed.keys()];
-		const content = reflectionPrompt(paths, changed);
+		completed = event.outcome === "completed";
+	});
+
+	pi.on("agent_settled", (_event, ctx) => {
+		if (completed && changed.size > 0) reflect(ctx, reflectionPrompt([...changed.keys()], changed));
 		changed.clear();
-		reflecting = true;
-		const entry: SessionBoundaryDraft = {
-			type: "custom_message",
-			customType: CHANGE_REFLECTION_MESSAGE_TYPE,
-			content,
-			display: true,
-			details: { paths },
-		};
-		return { entries: [entry], continue: true };
 	});
 }

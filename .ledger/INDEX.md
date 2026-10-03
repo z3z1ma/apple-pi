@@ -5,3 +5,5 @@
 - `.ledger/202610030109-context-ablation-experiment/task.md` — planning — Measure a learning's value by removing it from a fresh agent's context — Proposed experiment: run a fresh agent on a known-answer task with one curated learning removed, compare effort with a full-context baseline, and use the difference to keep or prune the learning.
 
 - `.ledger/202610030836-responsive-work-panel/task.md` — in-progress — Make the shared work panel the direct responsive control surface — Replace the centered work picker with one non-capturing Agents/Tasks panel; command aliases select tabs and narrow terminals use a top-center half-height layout.
+
+- `.ledger/202610030909-headless-fork-reflections/task.md` — in-progress — Run passive reflections in headless forks of the conversation — Change reflection and automatic learning reflection run as headless forks of the live conversation (identical request prefix) and return one passive message, instead of continuing the run in-band.

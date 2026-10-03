@@ -1,13 +1,14 @@
-import type { ExtensionAPI, SessionBoundaryDraft, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+
+import { inForkedContinuation, registerForkedContinuation } from "../../../shared/src/forked-continuation.js";
 
 export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
 
-/** New tokens between run-end reflections; chosen by the user, to be tuned from real use. */
+/** New tokens between automatic reflections; chosen by the user, to be tuned from real use. */
 export const LEARNING_REFLECTION_SPACING_TOKENS = 500_000;
 
 const REFLECTION =
-	"Reflect on what you learned since the last reflection. What surprised you? Which failures taught something, and what worked instead? Did you find how to reach an environment or service, a harness pitfall, or a user correction worth keeping? Record each learning with `update_notebook`, and skip ordinary failures that taught nothing.\n\n" +
-	"Then propose, in your reply, where each open learning in the notebook belongs: a wiki page, the governing task's retrospective, `AGENTS.md`, a skill, a saved program in `.pi/programs/`, or a test or doc. Write it there only after the user approves, then retire it. If nothing is worth keeping, say so in one line and finish.";
+	"Reflect on what you learned since the last reflection. What surprised you? Which failures taught something, and what worked instead? Did you find how to reach an environment or service, a harness pitfall, or a user correction worth keeping? Record each learning with `update_notebook`, and skip ordinary failures that taught nothing. If nothing is worth keeping, say so in one line.";
 
 export function learningReflectionPrompt(evidence: readonly string[]): string {
 	if (evidence.length === 0) return REFLECTION;
@@ -29,11 +30,14 @@ function describeEvidence(event: ToolResultEvent): string | undefined {
 }
 
 /**
- * Ask the main agent to reflect at run end once enough new tokens have passed,
- * with the failed or surprising tool calls of that stretch as evidence; `/reflect` asks on demand.
+ * Once enough new tokens have passed, reflect in a headless fork after a completed
+ * run, with the failed or surprising tool calls of that stretch as evidence.
+ * `/reflect` asks the main agent in-band at any time.
  */
 export function registerLearningReflection(pi: ExtensionAPI): void {
+	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Learning reflection");
 	let newTokens = 0;
+	let completed = false;
 	let evidence: string[] = [];
 
 	const reset = () => {
@@ -55,23 +59,21 @@ export function registerLearningReflection(pi: ExtensionAPI): void {
 	});
 
 	pi.on("tool_result", (event) => {
+		if (inForkedContinuation()) return;
 		const item = describeEvidence(event);
 		if (item && !evidence.includes(item)) evidence.push(item);
 	});
 
 	pi.on("agent_before_settle", (event) => {
-		if (event.outcome !== "completed" || newTokens < LEARNING_REFLECTION_SPACING_TOKENS) return;
-		const entry: SessionBoundaryDraft = {
-			type: "custom_message",
-			customType: LEARNING_REFLECTION_MESSAGE_TYPE,
-			content: takePrompt(),
-			display: true,
-		};
-		return { entries: [entry], continue: true };
+		completed = event.outcome === "completed";
+	});
+
+	pi.on("agent_settled", (_event, ctx) => {
+		if (completed && newTokens >= LEARNING_REFLECTION_SPACING_TOKENS) reflect(ctx, takePrompt());
 	});
 
 	pi.registerCommand("reflect", {
-		description: "Ask the agent to record what it learned and propose where each learning belongs",
+		description: "Ask the agent to record what it learned in the notebook",
 		handler: async () => {
 			pi.sendMessage(
 				{ customType: LEARNING_REFLECTION_MESSAGE_TYPE, content: takePrompt(), display: true },

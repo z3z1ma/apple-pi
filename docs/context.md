@@ -30,7 +30,7 @@ The notebook holds **learnings** from this session: things found out the hard wa
 
 Learnings last for one session. Each ends placed in a durable owner (a wiki page, a task retrospective, `AGENTS.md`, a skill, a saved program in `.pi/programs/`, or a test or doc) after the user approves, or deliberately dropped. The main agent records learnings when surprised, proposes where they belong, and retires them once placed. The pair coaches: it records learnings the main agent missed, merges duplicates, and reminds the main agent to capture a surprise.
 
-At run end, once 500,000 new tokens (input, cache write, and output) have passed since the last reflection, the main agent is asked to reflect: record what it learned, using the failed or surprising tool calls of that stretch as evidence, and propose a home for each open learning. A `bash` failure the agent predicted with [`expect: "failure"`](tasks.md#bash-extended) is left out; a success it predicted would fail is included. `/reflect` asks for the same reflection at any time and restarts the spacing. The spacing was chosen from the median run of about 144,000 new tokens and should be tuned from use.
+Once 500,000 new tokens (input, cache write, and output) have passed since the last reflection, the next completed run is followed by a learning reflection in a [forked continuation](forked-continuations.md). The fork records what it learned with `update_notebook`, using the failed or surprising tool calls of that stretch as evidence, and its one-line reply reaches the main conversation as one passive message. A `bash` failure the agent predicted with [`expect: "failure"`](tasks.md#bash-extended) is left out; a success it predicted would fail is included. `/reflect` asks the main agent for the same journaling in the conversation at any time and restarts the spacing. Placing learnings in their homes stays with `/distill` and the ledger-close reminder. The spacing was chosen from the median run of about 144,000 new tokens and should be tuned from use.
 
 The input card shows `learnings:N` while learnings are open, because they end with the session. When the main agent first moves a ledger task to `done` or `cancelled` while learnings are open, the call is held once with a reminder: propose a home for each (the task's `retrospective.md` by default), write what the user approves, retire the rest, then close again. `/distill` reads open learnings first and retires each one it places or the user rejects.
 
@@ -46,7 +46,7 @@ Commands and tools:
 
 - `/pair status` — pair programmer state, notebook coverage, and pair programmer and consultant usage
 - `/pair notebook [full]` — open learnings; `full` also shows archived evidence and retired learnings
-- `/reflect` — ask the main agent to record what it learned and propose where each learning belongs
+- `/reflect` — ask the main agent to record what it learned in the notebook
 - `update_notebook` — jointly record, supersede, or retire sourced learnings
 - `search_session` — progressive search of this session's transcript and file-operation history; regex-like queries use a bounded safe subset and reject ambiguous grouped or repeated patterns
 - `revisit_note` — exact source lookup by a known observation or reflection ID
