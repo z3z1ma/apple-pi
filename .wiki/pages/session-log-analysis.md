@@ -14,7 +14,9 @@ Each line is one entry with a `type`:
 - `custom` entries hold extension state, for example `notebook.*` records.
 - Assistant messages carry `usage` (input, cacheRead, cacheWrite, output).
 
-A practical unit is the **run**: the steps between one `user` message and the next. Extension continuations such as change reflection stay inside the run.
+Entries form a tree through `id` and `parentId`: tree navigation and branching append a new branch to the same file. Reading lines in file order, as `scripts/cache-audit.mjs` and the studies above do, mixes abandoned branches into the result. To follow one branch, walk `parentId` back from its leaf entry.
+
+A practical unit is the **run**: the steps between one `user` message and the next on the same branch. Extension continuations such as change reflection stay inside the run. In file order this is an approximation that holds only for sessions without branches.
 
 ## Traps
 
