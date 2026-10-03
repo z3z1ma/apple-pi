@@ -149,6 +149,8 @@ An advisory-triggered correction episode suppresses further outbound advice to a
 
 Asking the consultant is a request to investigate, not a finding. If the consultant fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
 
+In the TUI, each delivered note shows as one line colored by severity. Pi's expand toggle for tool output (`Ctrl+O` by default) shows the full note. The main agent always receives the full text.
+
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 
 ## Material-finding acknowledgment
@@ -168,8 +170,6 @@ The main agent can invoke the consultant through `agent` as an ordinary advisory
 The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through `agent` parameters.
 
 ## Status and accounting
-
-Delivered notes render as one severity-colored line each; expanding tool output shows the full bordered card. The main agent always receives the full note text.
 
 The footer uses `q-pair` and shows pair programmer review plus consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, consultant dispositions, suppressions, stale results, usage, cost, and duration.
 
