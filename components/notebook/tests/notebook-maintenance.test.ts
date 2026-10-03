@@ -272,14 +272,16 @@ describe("pair programmer notebook maintenance", () => {
 			} as never,
 			{ disposed: false, ensureConfig: () => {} } as never,
 		);
-		await tool.execute(
+		const result = await tool.execute(
 			"call",
 			{ reflections: [{ content: "Use one shared correction path." }], retireReflectionIds: [] },
 			undefined,
 			undefined,
 			{ cwd: "/tmp", sessionManager: { getBranch: () => entries } },
 		);
-		expect(foldLedger(entries).currentReflections[0].sourceEntryIds).toEqual(["source-user", "source-assistant"]);
+		const [recorded] = foldLedger(entries).currentReflections;
+		expect(recorded.sourceEntryIds).toEqual(["source-user", "source-assistant"]);
+		expect(result.content[0].text).toContain(recorded.id);
 	});
 
 	it("ignores retainReflectionIds on targeted updates", () => {

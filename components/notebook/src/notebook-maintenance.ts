@@ -443,7 +443,7 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 					content: [
 						{
 							type: "text" as const,
-							text: `Notebook updated: ${applied.reflections.length} conclusion${applied.reflections.length === 1 ? "" : "s"} and ${applied.retiredIds.length} retirement${applied.retiredIds.length === 1 ? "" : "s"}${applied.rejected > 0 ? `; rejected ${applied.rejected} invalid proposal${applied.rejected === 1 ? "" : "s"}` : ""}.`,
+							text: `Notebook updated: ${applied.reflections.length} conclusion${applied.reflections.length === 1 ? "" : "s"} and ${applied.retiredIds.length} retirement${applied.retiredIds.length === 1 ? "" : "s"}${applied.rejected > 0 ? `; rejected ${applied.rejected} invalid proposal${applied.rejected === 1 ? "" : "s"}` : ""}.${applied.reflections.map((reflection) => `\n- ${reflection.id}: ${reflection.content}`).join("")}`,
 						},
 					],
 					details: {
