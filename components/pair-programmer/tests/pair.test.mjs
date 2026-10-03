@@ -3512,31 +3512,13 @@ test("render: single findings and batches are plain bullet rows in both expansio
 	];
 	for (const expanded of [false, true]) {
 		const text = await renderAdvisory(notes, expanded);
-		assert.deepEqual(
-			text
-				.split("\n")
-				.filter((line) => line.trim())
-				.map((line) => line.trimEnd()),
-			expected,
-		);
+		assert.equal(text, expected.join("\n"));
 		for (const [index, note] of notes.entries()) {
 			const single = await renderAdvisory([note], expanded);
-			assert.deepEqual(
-				single
-					.split("\n")
-					.filter((line) => line.trim())
-					.map((line) => line.trimEnd()),
-				[expected[index]],
-			);
+			assert.equal(single, expected[index]);
 		}
 		const plainNit = await renderAdvisory([{ note: "tidy this up" }], expanded);
-		assert.deepEqual(
-			plainNit
-				.split("\n")
-				.filter((line) => line.trim())
-				.map((line) => line.trimEnd()),
-			["● NIT tidy this up"],
-		);
+		assert.equal(plainNit, "● NIT tidy this up");
 	}
 });
 
