@@ -9,8 +9,15 @@ const MUTATION_TOOLS = new Set(["edit", "write"]);
 const EXECUTION_TOOLS = new Set(["bash", "pi_exec", "agent", "get_subagent_result"]);
 const PROSE_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc"]);
 
+const TEST_DIRECTORY = /(^|\/)(tests?|__tests__)\//;
+const TEST_FILE = /(\.(test|spec)\.[^/]+|_test\.[^/]+|(^|\/)test_[^/]+\.py)$/;
+
 export function isProsePath(path: string): boolean {
 	return PROSE_EXTENSIONS.has(extname(path).toLowerCase());
+}
+
+export function isTestPath(path: string): boolean {
+	return !isProsePath(path) && (TEST_DIRECTORY.test(path) || TEST_FILE.test(path));
 }
 
 function displayPath(cwd: string, path: string): string {
@@ -48,8 +55,14 @@ function runsAfterChanges(code: readonly string[], runsAfter: ReadonlyMap<string
 
 export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMap<string, readonly string[]>): string {
 	const prose = paths.filter(isProsePath);
-	const code = paths.filter((path) => !isProsePath(path));
+	const tests = paths.filter(isTestPath);
+	const code = paths.filter((path) => !isProsePath(path) && !isTestPath(path));
 	const lenses: string[] = [];
+	if (tests.length > 0)
+		lenses.push(
+			`Review the tests you changed in ${pathList(tests)} as a maintainer who knows only the current goal. Does each test assert observable behavior the user wants now, through the public surface, and fail if that behavior broke? Rewrite or delete tests that assert an abandoned direction, an implementation detail, or the absence of something nobody would build. When the conversation leaves the wanted behavior unclear, name the mismatch and ask the user instead of changing the test.`,
+			runsAfterChanges(tests, runsAfter),
+		);
 	if (code.length > 0)
 		lenses.push(
 			`Review your changes in ${pathList(code)}. Is there a simpler way to preserve the required behavior and fit the surrounding code?`,

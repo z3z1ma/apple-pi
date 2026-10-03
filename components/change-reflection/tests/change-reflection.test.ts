@@ -115,6 +115,13 @@ describe("reflectionPrompt", () => {
 		expect(reflectionPrompt(["docs/a.md"], none)).toContain("intended reader");
 		expect(reflectionPrompt(["docs/a.md"], none)).not.toContain("simpler way");
 		expect(reflectionPrompt(["docs/a.md"], none)).not.toContain("ran");
+		for (const path of ["tests/a.ts", "src/__tests__/a.ts", "a.test.ts", "a.spec.tsx", "a_test.go", "pkg/test_a.py"]) {
+			expect(reflectionPrompt([path], none)).toContain("observable behavior the user wants now");
+			expect(reflectionPrompt([path], none)).toContain("Nothing ran after your last change");
+			expect(reflectionPrompt([path], none)).not.toContain("simpler way");
+		}
+		for (const path of ["src/contest.ts", "src/latest/a.ts", "tests/README.md"])
+			expect(reflectionPrompt([path], none)).not.toContain("observable behavior");
 	});
 
 	it("groups code paths that share the same runs", () => {
