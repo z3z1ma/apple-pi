@@ -35,8 +35,8 @@ import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../..
 const CHROME_LINES_BASE = 6;
 const MIN_VIEWPORT = 3;
 
-/** Height ceiling shared by the overlay's maxHeight and the viewer's viewport cap. */
-export const BTW_VIEWPORT_HEIGHT_PCT = 70;
+/** Short drop-down height shared by the overlay's maxHeight and the viewer's padded viewport. */
+export const BTW_VIEWPORT_HEIGHT_PCT = 50;
 
 export interface BtwViewerActions {
 	/** Submit a new question or follow-up to BTW. */

@@ -1,6 +1,7 @@
 import { copyToClipboard } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { registerBtwCommand } from "../src/btw.js";
+import { BTW_VIEWPORT_HEIGHT_PCT } from "../src/ui/btw-viewer.js";
 import type { AgentRecord } from "../src/types.js";
 
 vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => ({
@@ -122,6 +123,10 @@ describe("BTW command", () => {
 
 		registerBtwCommand(pi as any, manager as any);
 		await commands.get("btw").handler("Why is it recursive?", ctx);
+		expect(ctx.ui.custom).toHaveBeenCalledWith(expect.any(Function), {
+			overlay: true,
+			overlayOptions: { anchor: "top-center", width: "90%", maxHeight: `${BTW_VIEWPORT_HEIGHT_PCT}%` },
+		});
 		expect(prompts[0]).toContain("Implement the parser");
 		expect(prompts[0]).toContain("Why is it recursive?");
 		expect(spawnOptions).toMatchObject({

@@ -58,8 +58,8 @@ function assertAllLinesFit(lines: string[], width: number) {
 }
 
 describe("BtwViewer", () => {
-	it("exports BTW_VIEWPORT_HEIGHT_PCT as 70", () => {
-		expect(BTW_VIEWPORT_HEIGHT_PCT).toBe(70);
+	it("keeps the drop-down short: at most half the terminal height", () => {
+		expect(BTW_VIEWPORT_HEIGHT_PCT).toBeLessThanOrEqual(50);
 	});
 
 	describe("prompt formatting & parent context isolation", () => {

@@ -226,7 +226,7 @@ async function openConversation(
 			}),
 		{
 			overlay: true,
-			overlayOptions: { anchor: "center", width: "90%", maxHeight: `${BTW_VIEWPORT_HEIGHT_PCT}%` },
+			overlayOptions: { anchor: "top-center", width: "90%", maxHeight: `${BTW_VIEWPORT_HEIGHT_PCT}%` },
 		},
 	);
 }
