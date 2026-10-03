@@ -52,3 +52,17 @@ npm run pack:check
 ```
 
 Biome is the repository formatter and lint runner. It formats all TypeScript and JavaScript with tabs through one shared configuration. `format:check` is the no-write CI check; `lint` enables Biome's recommended correctness rules, high-signal debugger and loose-equality checks, and a function-level cognitive-complexity limit of 50. `noExplicitAny` remains off for the Pi API's intentionally untyped generic boundary, non-null assertions remain off in existing test setup, and control-character regex detection remains off because ANSI/control-character sanitizers are intentional. Any complexity suppression must document the specific cohesive state-machine or algorithm boundary it protects.
+
+## Manual TUI checks
+
+Unit tests use a fake `tui`; they cannot prove real focus routing, mouse dispatch, or overlay stacking. Check those in a real Pi driven through tmux:
+
+```bash
+tmux new-session -d -s check -x 160 -y 45 "pi -e path/to/extension.ts"
+tmux send-keys -t check '/command' Enter    # M-g sends Alt+G; also Escape, BSpace
+tmux capture-pane -t check -p | grep 'expected text'
+tmux resize-window -t check -x 90           # responsive overlays
+tmux kill-session -t check
+```
+
+The pane can be larger than the requested size when a client is attached; read it with `tmux display -t check -p '#{pane_width}'`. Fullscreen mouse input can be sent as SGR sequences, for example `tmux send-keys -t check -l $'\e[<64;COL;ROWM'` for wheel up.

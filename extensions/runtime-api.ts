@@ -183,7 +183,7 @@ export function piExecGuestApiContract(): string {
 		"tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
 		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits worker context; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
 		'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
-		"Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch; reset is a tool parameter that starts fresh. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.",
+		'Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch and keep their first type, so give each program\'s variables specific names; reset is a tool parameter that starts fresh. bash, edit, and write return {"ok": bool, "output": str}. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.',
 	].join("\n");
 }
 

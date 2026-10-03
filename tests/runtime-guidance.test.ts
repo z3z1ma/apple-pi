@@ -21,6 +21,8 @@ describe("runtime capability guidance", () => {
 		expect(contract).toContain("repo_change_neighborhood");
 		expect(contract).toContain("dev_find_relevant_tests/dev_run_relevant_tests");
 		expect(contract).toContain("agent_run returns a status record");
+		expect(contract).toContain("keep their first type");
+		expect(contract).toContain('bash, edit, and write return {"ok": bool, "output": str}');
 		expect(piExecToolDescription()).toContain("printed output is also captured");
 	});
 
