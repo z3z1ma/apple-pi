@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
 
 export const PROJECT_PROGRAMS_DIRECTORY = ".pi/programs";
@@ -197,4 +198,80 @@ export function buildProgramParametersSchema(params: ProgramParam[], resetSchema
 	properties.reset = resetSchema;
 	properties.limits = limitsSchema;
 	return Type.Object(properties);
+}
+
+interface ProgramRunnerTool {
+	parameters: { properties: { reset: TSchema; limits: TSchema } };
+	execute: ToolDefinition<any, any>["execute"];
+}
+
+/** Register one `program_<name>` tool per saved program, refreshed only where a schema change cannot break prompt caching. */
+export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRunnerTool): void {
+	function syncSavedProgramTools(cwd: string): void {
+		try {
+			for (const program of listSavedPrograms(cwd)) {
+				const parameters = buildProgramParametersSchema(
+					program.params,
+					piExecTool.parameters.properties.reset,
+					piExecTool.parameters.properties.limits,
+				);
+				pi.registerTool({
+					name: savedProgramToolName(program.name),
+					label: program.description,
+					executionMode: "sequential",
+					description: `Execute project-local Python program '${program.name}' (.pi/programs/${program.name}.py): ${program.description}`,
+					promptSnippet: program.description,
+					promptGuidelines: [SAVED_PROGRAM_PROMPT_GUIDELINE],
+					parameters,
+					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
+						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
+							throw new Error("pi_exec saved programs require a trusted project");
+						}
+						const current = readSavedProgram(ctx.cwd, program.name);
+						const { reset, limits, inputs: explicitInputs, ...rest } = rawParams as Record<string, any>;
+						// Defaults belong to the registered schema, not a mid-turn source edit.
+						const inputs: Record<string, string> = Object.create(null);
+						for (const param of program.params) {
+							if (param.default !== undefined) inputs[param.name] = String(param.default);
+						}
+						Object.assign(inputs, explicitInputs ?? {});
+						for (const [key, value] of Object.entries(rest)) {
+							if (value !== undefined) inputs[key] = String(value);
+						}
+						return piExecTool.execute(
+							toolCallId,
+							{
+								code: current.code,
+								inputs,
+								...(reset ? { reset } : {}),
+								...(limits ? { limits } : {}),
+								display: { name: current.name, description: current.description },
+							},
+							signal,
+							onUpdate,
+							ctx,
+						);
+					},
+				});
+			}
+		} catch {
+			// Missing, inaccessible, or unconfined programs directories expose no tools.
+		}
+	}
+
+	function hasSessionMessages(ctx: ExtensionContext): boolean {
+		try {
+			return (ctx.sessionManager.getBranch() ?? []).some((entry) => entry.type === "message");
+		} catch {
+			// If the cache state is unknown, do not risk a mid-turn schema mutation.
+			return true;
+		}
+	}
+
+	pi.on("session_start", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
+	pi.on("session_compact", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
+	pi.on("before_agent_start", (_event, ctx) => {
+		if (!hasSessionMessages(ctx)) syncSavedProgramTools(ctx.cwd);
+	});
+	syncSavedProgramTools(process.cwd());
 }

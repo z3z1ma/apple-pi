@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import {
 	CollectString,
 	Monty,
@@ -8,7 +10,8 @@ import {
 	ProtocolError,
 } from "@pydantic/monty";
 import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
-import { CORE_GUEST_TOOL_NAMES, extensionPythonTools } from "./guest-api.js";
+import { CORE_TOOL_NAMES } from "./core-tools.js";
+import { extensionPythonTools } from "./guest-api.js";
 import { EVIDENCE_FUNCTION_NAMES } from "./evidence.js";
 import { PYTHON_SCHEMA_PRELUDE } from "./python-schema.js";
 import type { ProgramExecution, ProgramHostCall } from "./types.js";
@@ -212,7 +215,7 @@ export async function executeProgram(
 			return result.value === undefined ? result.text : result.value;
 		},
 		...Object.fromEntries(
-			CORE_GUEST_TOOL_NAMES.map((name) => [name, (args: Record<string, unknown> = {}) => invoke(`pi.${name}`, args)]),
+			CORE_TOOL_NAMES.map((name) => [name, (args: Record<string, unknown> = {}) => invoke(`pi.${name}`, args)]),
 		),
 		...Object.fromEntries(
 			EVIDENCE_FUNCTION_NAMES.map((name) => [
@@ -274,5 +277,35 @@ export async function executeProgram(
 		signal?.removeEventListener("abort", stop);
 		const output = collector.output;
 		if (output) onLog?.([output.trimEnd()]);
+	}
+}
+
+export function isOwnedMontyWorker(pid: number | undefined): boolean {
+	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
+	if (process.platform === "win32") {
+		try {
+			const tasklist = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tasklist.exe");
+			const output = execFileSync(tasklist, ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				timeout: 1_000,
+			}).trim();
+			return output.toLowerCase().includes("monty.exe");
+		} catch {
+			return false;
+		}
+	}
+	try {
+		const output = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,command="], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 1_000,
+		}).trim();
+		const [ppidStr, ...rest] = output.split(/\s+/);
+		const ppid = Number(ppidStr);
+		const command = rest.join(" ");
+		return ppid === process.pid && command.includes("monty") && command.includes("subprocess");
+	} catch {
+		return false;
 	}
 }

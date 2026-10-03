@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sessionSearchTool } from "../../session-search/src/tool.js";
-import { PI_EXEC_PROMPT_GUIDELINES, piExecGuestApiContract, piExecToolDescription } from "../src/guest-api.js";
+import { PI_EXEC_PROMPT_GUIDELINES, piExecGuestApiContract, PI_EXEC_DESCRIPTION } from "../src/guest-api.js";
 
 describe("runtime capability guidance", () => {
 	it("teaches evidence reduction, dependency ordering, and outcome checks", () => {
@@ -23,7 +23,7 @@ describe("runtime capability guidance", () => {
 		expect(contract).toContain("agent_run returns a status record");
 		expect(contract).toContain("keep their first type");
 		expect(contract).toContain('bash, edit, and write return {"ok": bool, "output": str}');
-		expect(piExecToolDescription()).toContain("printed output is also captured");
+		expect(PI_EXEC_DESCRIPTION).toContain("printed output is also captured");
 	});
 
 	it("distinguishes transcript recall from current files and known notebook sources", () => {

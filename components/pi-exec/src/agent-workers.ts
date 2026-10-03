@@ -1,8 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Usage } from "@earendil-works/pi-ai";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
+import { createFileChangeTracker, type FileChange } from "../../shared/src/file-changes.js";
 import {
 	INFERENCE_PROFILE_NAMES,
 	type InferenceProfileName,
@@ -25,6 +29,10 @@ import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
+import { CORE_TOOL_NAMES, isCoreToolName, READ_ONLY_CORE_TOOL_NAMES } from "./core-tools.js";
+import { containsContextMarks, fitContext } from "./evidence.js";
+import { aggregateUsage, resultText, traceValue } from "./results.js";
+import type { ExecutionOperation } from "./types.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
@@ -125,9 +133,6 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	return request;
 }
 
-export const WORKER_TOOL_NAMES = new Set(["read", "grep", "find", "ls", "bash", "edit", "write"]);
-const READ_ONLY_WORKER_TOOLS = ["read", "grep", "find", "ls"];
-
 export function resolveExecAgentConfig(scope: SubagentConfigScope, type: string): AgentConfig {
 	const registry = buildAgentRegistry(loadCustomAgents(scope));
 	const key = resolveEnabledTypeIn(registry, type);
@@ -140,7 +145,7 @@ export function resolveExecAgentConfig(scope: SubagentConfigScope, type: string)
 }
 
 function defaultToolsFor(config: AgentConfig): string[] {
-	return (config.builtinToolNames ?? BUILTIN_TOOL_NAMES).filter((tool) => WORKER_TOOL_NAMES.has(tool));
+	return (config.builtinToolNames ?? BUILTIN_TOOL_NAMES).filter(isCoreToolName);
 }
 
 function typedSystemPrompt(config: AgentConfig, additional?: string): string {
@@ -161,7 +166,7 @@ export async function resolveExecWorker(
 	if (!request.type) {
 		if (!request.profile) {
 			return {
-				tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
+				tools: request.tools ?? [...READ_ONLY_CORE_TOOL_NAMES],
 				pair: resolveAgentPair(undefined, request.pair),
 				...(options.parentModel ? { model: options.parentModel } : {}),
 				...(options.parentThinking ? { thinking: options.parentThinking } : {}),
@@ -177,7 +182,7 @@ export async function resolveExecWorker(
 		});
 		if (resolved.error) throw new Error(resolved.error);
 		return {
-			tools: request.tools ?? [...READ_ONLY_WORKER_TOOLS],
+			tools: request.tools ?? [...READ_ONLY_CORE_TOOL_NAMES],
 			pair: resolveAgentPair(undefined, request.pair),
 			...(resolved.model ? { model: `${resolved.model.provider}/${resolved.model.id}` } : {}),
 			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
@@ -416,4 +421,250 @@ export function prepareAgentSpawn(
 		for (const next of cleanups) next();
 		throw error;
 	}
+}
+
+interface WorkerResult {
+	index: number;
+	task: string;
+	output: string;
+	exitCode: number;
+	stopReason?: string;
+	error?: string;
+	value?: unknown;
+	usage?: Usage;
+	operations: ExecutionOperation[];
+	fileChanges: FileChange[];
+}
+
+const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+
+function invocation(): { command: string; prefix: string[] } {
+	const script = process.argv[1];
+	if (script && !script.startsWith("/$bunfs/root/") && existsSync(script)) {
+		return { command: process.execPath, prefix: [script] };
+	}
+	const executable = basename(process.execPath).toLowerCase();
+	if (!/^(node|bun)(\.exe)?$/.test(executable)) {
+		return { command: process.execPath, prefix: [] };
+	}
+	return { command: "pi", prefix: [] };
+}
+
+function textFromAssistant(message: any): string {
+	if (message?.role !== "assistant" || !Array.isArray(message.content)) return "";
+	return message.content
+		.filter((part: any) => part?.type === "text" && typeof part.text === "string")
+		.map((part: any) => part.text)
+		.join("\n");
+}
+
+async function runWorkerProcess(
+	index: number,
+	request: AgentRequest,
+	ctx: ExtensionContext,
+	signal: AbortSignal | undefined,
+	onActivity?: (activity: string) => void,
+): Promise<WorkerResult> {
+	const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
+	const resolved = await resolveExecWorker(request, {
+		cwd: ctx.cwd,
+		parentModel: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+		parentThinking: ctx.thinkingLevel,
+		projectTrusted,
+		registry: ctx.modelRegistry,
+		parentModelObject: ctx.model,
+	});
+	if (resolved.tools.some((tool) => !isCoreToolName(tool))) {
+		throw new Error(`Agent tools must be selected from: ${CORE_TOOL_NAMES.join(", ")}`);
+	}
+	if (resolved.thinking && !THINKING_LEVELS.has(resolved.thinking)) {
+		throw new Error(`Agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
+	}
+	const prepared = prepareAgentSpawn(
+		{ ...request, ...(resolved.systemPrompt ? { systemPrompt: resolved.systemPrompt } : {}) },
+		{
+			tools: resolved.tools,
+			projectTrusted,
+			...(resolved.model ? { model: resolved.model } : {}),
+			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
+			...(resolved.pair ? { pair: true } : {}),
+		},
+	);
+
+	const pi = invocation();
+	try {
+		return await new Promise((resolve) => {
+			const child = spawn(pi.command, [...pi.prefix, ...prepared.args], {
+				cwd: ctx.cwd,
+				shell: false,
+				stdio: ["ignore", "pipe", "pipe"],
+				...(prepared.env ? { env: { ...process.env, ...prepared.env } } : {}),
+			});
+			let stdout = "";
+			let stderr = "";
+			let buffered = "";
+			let stopReason: string | undefined;
+			let error: string | undefined;
+			const usages: Usage[] = [];
+			const operations: ExecutionOperation[] = [];
+			const operationByCallId = new Map<string, ExecutionOperation>();
+			const fileChanges = createFileChangeTracker(ctx.cwd);
+			let aborted = false;
+			let pendingReturn: unknown;
+			let acceptedReturn: unknown;
+
+			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one JSON event decoder owns child-process operation correlation.
+			const consume = (line: string) => {
+				if (!line.trim()) return;
+				try {
+					const event = JSON.parse(line);
+					fileChanges.observe(event);
+					if (event.type === "tool_execution_start") {
+						onActivity?.(`using ${String(event.toolName ?? "tool")}`);
+						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
+						return;
+					}
+					if (event.type === "tool_execution_end") {
+						if (event.toolName === PI_EXEC_RETURN_TOOL) {
+							if (event.isError) pendingReturn = undefined;
+							else acceptedReturn = pendingReturn;
+						}
+						return;
+					}
+					if (event.type === "message_start" && event.message?.role === "assistant") {
+						onActivity?.("thinking");
+						return;
+					}
+					if (event.type !== "message_end" || !event.message) return;
+					const text = textFromAssistant(event.message);
+					if (text) stdout = text;
+					if (event.message.role === "assistant") {
+						stopReason = event.message.stopReason;
+						if (event.message.usage) usages.push(event.message.usage as Usage);
+						if (typeof event.message.errorMessage === "string") error = event.message.errorMessage;
+						if (Array.isArray(event.message.content)) {
+							for (const part of event.message.content) {
+								if (part?.type !== "toolCall" || typeof part.name !== "string") continue;
+								const operation: ExecutionOperation = {
+									sequence: operations.length,
+									ref: part.name === PI_EXEC_RETURN_TOOL ? PI_EXEC_RETURN_TOOL : `pi.${part.name}`,
+									args: part.arguments && typeof part.arguments === "object" ? part.arguments : {},
+									outcome: "aborted",
+								};
+								operations.push(operation);
+								if (typeof part.id === "string") operationByCallId.set(part.id, operation);
+							}
+						}
+						onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
+					} else if (event.message.role === "toolResult") {
+						const operation = operationByCallId.get(event.message.toolCallId);
+						if (operation) {
+							operation.outcome = event.message.isError ? "failed" : "succeeded";
+							operation.result = traceValue(resultText(event.message));
+							if (event.message.isError) operation.error = resultText(event.message).slice(0, 500);
+						}
+					}
+				} catch {
+					// Pi JSON mode is line-delimited; diagnostics remain on stderr.
+				}
+			};
+
+			child.stdout.on("data", (chunk) => {
+				buffered += chunk.toString();
+				const lines = buffered.split("\n");
+				buffered = lines.pop() ?? "";
+				for (const line of lines) consume(line);
+			});
+			child.stderr.on("data", (chunk) => {
+				stderr += chunk.toString();
+			});
+
+			const abort = () => {
+				aborted = true;
+				child.kill("SIGTERM");
+			};
+			if (signal?.aborted) abort();
+			else signal?.addEventListener("abort", abort, { once: true });
+
+			child.on("error", (cause) => {
+				error = cause.message;
+			});
+			child.on("close", (code) => {
+				signal?.removeEventListener("abort", abort);
+				if (buffered.trim()) consume(buffered);
+				const exitCode = code ?? 1;
+				if (aborted) error = "Agent aborted";
+				if (!error && exitCode !== 0) error = stderr.trim() || `Agent exited with code ${exitCode}`;
+				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
+					error = stderr.trim() || `Agent stopped with ${stopReason}`;
+				}
+				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
+				if (!error && structured.error) error = structured.error;
+				const output =
+					structured.value !== undefined && !error
+						? JSON.stringify(structured.value)
+						: stdout || error || "(agent returned no text)";
+				resolve({
+					index,
+					task: request.task,
+					output,
+					exitCode,
+					stopReason,
+					error,
+					...(structured.value !== undefined && !error ? { value: structured.value } : {}),
+					...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
+					operations,
+					fileChanges: fileChanges.changes(),
+				});
+			});
+		});
+	} finally {
+		prepared.cleanup();
+	}
+}
+
+export interface AgentRunOutcome {
+	/** The status record returned to the program by `agent_run`. */
+	record: Record<string, unknown>;
+	error?: string;
+	usage?: Usage;
+	operations: ExecutionOperation[];
+}
+
+/** Run one `agent.run` call as a headless Pi worker process and shape its result for the program. */
+export async function runAgentWorker(
+	index: number,
+	rawArgs: Record<string, unknown>,
+	ctx: ExtensionContext,
+	signal: AbortSignal,
+	onActivity: (activity: string) => void,
+): Promise<AgentRunOutcome> {
+	const request = parseAgentRequest(rawArgs);
+	const context = containsContextMarks(request.context) ? fitContext(request.context) : undefined;
+	if (context) request.context = context.value;
+	const result = await runWorkerProcess(index, request, ctx, signal, onActivity);
+	const record = {
+		status: result.error ? "failed" : "completed",
+		...(result.error ? { error: result.error } : {}),
+		text: result.output,
+		toolCalls: result.operations.length,
+		changes: result.fileChanges,
+		...(!result.error && result.value !== undefined ? { value: result.value } : {}),
+		...(result.usage ? { usage: result.usage } : {}),
+		...(context
+			? {
+					context: {
+						truncated: context.truncated,
+						dropped: context.dropped,
+						serializedChars: context.serializedChars,
+					},
+				}
+			: {}),
+	};
+	return {
+		record,
+		...(result.error ? { error: result.error } : {}),
+		...(result.usage ? { usage: result.usage } : {}),
+		operations: result.operations,
+	};
 }

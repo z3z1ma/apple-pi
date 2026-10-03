@@ -6,13 +6,10 @@ import { ExtensionRunner, SessionManager } from "@earendil-works/pi-coding-agent
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
-import runtime, {
-	aggregateUsage,
-	deriveProgramEnvelope,
-	listSkills,
-	PROGRAM_ENVELOPE_MAXIMA,
-	readSkillBody,
-} from "../src/index.js";
+import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "../src/envelope.js";
+import runtime from "../src/index.js";
+import { aggregateUsage } from "../src/results.js";
+import { listSkills, readSkillBody } from "../src/skills.js";
 import {
 	AUTO_COMPACT_EXTENSION_PATH,
 	agentOperationArgs,

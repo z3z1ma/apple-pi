@@ -5,7 +5,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import runtime from "../src/index.js";
 import { sealCheckpoint } from "../src/checkpoint.js";
-import { isOwnedMontyWorker } from "../src/index.js";
+import { isOwnedMontyWorker } from "../src/program.js";
 
 function harness(manager: SessionManager) {
 	const tools = new Map<string, any>();

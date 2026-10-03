@@ -1,16 +1,7 @@
-import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
-	createEditToolDefinition,
-	createFindToolDefinition,
-	createGrepToolDefinition,
-	createLsToolDefinition,
-	createReadToolDefinition,
-	createWriteToolDefinition,
 	defineTool,
 	type ExtensionAPI,
 	type ExtensionContext,
@@ -18,96 +9,34 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { createFileChangeTracker } from "../../shared/src/file-changes.js";
 import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
-import { PROGRAM_ENVELOPE_MAXIMA, type ProgramEnvelope, type ProgramEnvelopeLimits } from "./envelope.js";
-import { createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
-import {
-	agentOperationArgs,
-	PI_EXEC_RETURN_TOOL,
-	parseAgentRequest,
-	prepareAgentSpawn,
-	resolveExecWorker,
-	resolveStructuredOutput,
-	WORKER_TOOL_NAMES,
-} from "./agent-workers.js";
+import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
+import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
+import { coreToolDefinition, ENVELOPE_TOOL_NAMES, isCoreToolName } from "./core-tools.js";
+import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
+import { EVIDENCE_FUNCTION_NAMES, runEvidenceFunction } from "./evidence.js";
+import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import {
 	attachLiveDescription,
 	guestPythonStubs,
+	PI_EXEC_DESCRIPTION,
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
-	piExecToolDescription,
 } from "./guest-api.js";
-import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
-import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./evidence.js";
 import { serializeJsonValue } from "./json.js";
-import {
-	buildProgramParametersSchema,
-	listSavedPrograms,
-	readSavedProgram,
-	SAVED_PROGRAM_PROMPT_GUIDELINE,
-	savedProgramToolName,
-} from "./saved-programs.js";
+import { createProgramSession, executeProgram, isOwnedMontyWorker } from "./program.js";
+import { aggregateUsage, bounded, resultText, traceValue } from "./results.js";
+import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { listSkills, readSkillBody } from "./skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./tool-capture.js";
-import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./types.js";
+import type { ExecutionOperation, ProgramHostCall } from "./types.js";
 import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./ui.js";
 
-export {
-	PROGRAM_ENVELOPE_MAXIMA,
-	type ProgramEnvelope,
-	type ProgramEnvelopeLimits,
-} from "./envelope.js";
-export type {
-	ExecutionOperation,
-	ExecutionOutcome,
-	ProgramExecution,
-	ProgramHostCall,
-	WorkerResult,
-} from "./types.js";
-
 const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
-const MAX_TRACE_RESULT_CHARS = 4_000;
-const DEFAULT_CALL_BUDGET = 128;
-const DEFAULT_CONCURRENCY = 16;
-const DEFAULT_AGENT_BUDGET = 8;
-
-function clampLimit(value: number | undefined, fallback: number, min: number, max: number): number {
-	if (value === undefined || !Number.isFinite(value)) return fallback;
-	return Math.min(max, Math.max(min, Math.trunc(value)));
-}
-
-/** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
-export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
-	const hasWorkers = /\bagent(?:_run)?\s*\(/.test(code);
-	const hasFanout = /\basyncio\.gather\s*\(/.test(code);
-	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
-	const derived: ProgramEnvelope = {
-		callBudget,
-		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
-		agentBudget: DEFAULT_AGENT_BUDGET,
-		memoryMb: PROGRAM_ENVELOPE_MAXIMA.memoryMb,
-		timeoutSeconds: hasWorkers ? 600 : 300,
-	};
-	return {
-		callBudget: clampLimit(limits.callBudget, derived.callBudget, 1, PROGRAM_ENVELOPE_MAXIMA.callBudget),
-		concurrency: clampLimit(limits.concurrency, derived.concurrency, 1, PROGRAM_ENVELOPE_MAXIMA.concurrency),
-		agentBudget: clampLimit(limits.agentBudget, derived.agentBudget, 1, PROGRAM_ENVELOPE_MAXIMA.agentBudget),
-		memoryMb: derived.memoryMb,
-		timeoutSeconds: clampLimit(
-			limits.timeoutSeconds,
-			derived.timeoutSeconds,
-			1,
-			PROGRAM_ENVELOPE_MAXIMA.timeoutSeconds,
-		),
-	};
-}
-const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
-const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
 const MONTY_ENTRY_TYPE = "apple-pi:monty-session";
 const ROLLBACK_NOTICE =
 	"Monty state was rolled back to the last saved checkpoint. Completed tool, file, and process effects were not undone.";
@@ -119,267 +48,6 @@ function branchCheckpoint(ctx: ExtensionContext): { found: boolean; data?: unkno
 		if (entry.type === "custom" && entry.customType === MONTY_ENTRY_TYPE) return { found: true, data: entry.data };
 	}
 	return { found: false };
-}
-
-export const aggregateUsage = (usages: Usage[]): Usage => ({
-	input: usages.reduce((total, usage) => total + usage.input, 0),
-	output: usages.reduce((total, usage) => total + usage.output, 0),
-	cacheRead: usages.reduce((total, usage) => total + usage.cacheRead, 0),
-	cacheWrite: usages.reduce((total, usage) => total + usage.cacheWrite, 0),
-	...(usages.some((usage) => usage.cacheWrite1h !== undefined)
-		? { cacheWrite1h: usages.reduce((total, usage) => total + (usage.cacheWrite1h ?? 0), 0) }
-		: {}),
-	...(usages.some((usage) => usage.reasoning !== undefined)
-		? { reasoning: usages.reduce((total, usage) => total + (usage.reasoning ?? 0), 0) }
-		: {}),
-	totalTokens: usages.reduce((total, usage) => total + usage.totalTokens, 0),
-	cost: {
-		input: usages.reduce((total, usage) => total + usage.cost.input, 0),
-		output: usages.reduce((total, usage) => total + usage.cost.output, 0),
-		cacheRead: usages.reduce((total, usage) => total + usage.cost.cacheRead, 0),
-		cacheWrite: usages.reduce((total, usage) => total + usage.cost.cacheWrite, 0),
-		total: usages.reduce((total, usage) => total + usage.cost.total, 0),
-	},
-});
-
-type CoreDefinitions = Record<string, ToolDefinition<any, any>>;
-const toolDefinitions = new Map<string, CoreDefinitions>();
-
-function definitionsFor(cwd: string): CoreDefinitions {
-	let definitions = toolDefinitions.get(cwd);
-	if (!definitions) {
-		definitions = {
-			read: createReadToolDefinition(cwd),
-			grep: createGrepToolDefinition(cwd),
-			find: createFindToolDefinition(cwd),
-			ls: createLsToolDefinition(cwd),
-			bash: createExecBashToolDefinition(cwd),
-			edit: createEditToolDefinition(cwd),
-			write: createWriteToolDefinition(cwd),
-		};
-		toolDefinitions.set(cwd, definitions);
-	}
-	return definitions;
-}
-
-function invocation(): { command: string; prefix: string[] } {
-	const script = process.argv[1];
-	if (script && !script.startsWith("/$bunfs/root/") && existsSync(script)) {
-		return { command: process.execPath, prefix: [script] };
-	}
-	const executable = basename(process.execPath).toLowerCase();
-	if (!/^(node|bun)(\.exe)?$/.test(executable)) {
-		return { command: process.execPath, prefix: [] };
-	}
-	return { command: "pi", prefix: [] };
-}
-
-function textFromAssistant(message: any): string {
-	if (message?.role !== "assistant" || !Array.isArray(message.content)) return "";
-	return message.content
-		.filter((part: any) => part?.type === "text" && typeof part.text === "string")
-		.map((part: any) => part.text)
-		.join("\n");
-}
-
-function bounded(value: string, max: number, marker: string): { value: string; truncated: boolean } {
-	if (value.length <= max) return { value, truncated: false };
-	return {
-		value: `${value.slice(0, max)}\n\n[${marker}: truncated from ${value.length.toLocaleString()} characters]`,
-		truncated: true,
-	};
-}
-
-async function runAgent(
-	index: number,
-	request: ReturnType<typeof parseAgentRequest>,
-	ctx: ExtensionContext,
-	signal: AbortSignal | undefined,
-	onActivity?: (activity: string) => void,
-): Promise<WorkerResult> {
-	const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
-	const resolved = await resolveExecWorker(request, {
-		cwd: ctx.cwd,
-		parentModel: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
-		parentThinking: ctx.thinkingLevel,
-		projectTrusted,
-		registry: ctx.modelRegistry,
-		parentModelObject: ctx.model,
-	});
-	if (resolved.tools.some((tool) => !WORKER_TOOL_NAMES.has(tool))) {
-		throw new Error(`Agent tools must be selected from: ${[...WORKER_TOOL_NAMES].join(", ")}`);
-	}
-	if (resolved.thinking && !THINKING_LEVELS.has(resolved.thinking)) {
-		throw new Error(`Agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
-	}
-	const prepared = prepareAgentSpawn(
-		{ ...request, ...(resolved.systemPrompt ? { systemPrompt: resolved.systemPrompt } : {}) },
-		{
-			tools: resolved.tools,
-			projectTrusted,
-			...(resolved.model ? { model: resolved.model } : {}),
-			...(resolved.thinking ? { thinking: resolved.thinking } : {}),
-			...(resolved.pair ? { pair: true } : {}),
-		},
-	);
-
-	const pi = invocation();
-	try {
-		return await new Promise((resolve) => {
-			const child = spawn(pi.command, [...pi.prefix, ...prepared.args], {
-				cwd: ctx.cwd,
-				shell: false,
-				stdio: ["ignore", "pipe", "pipe"],
-				...(prepared.env ? { env: { ...process.env, ...prepared.env } } : {}),
-			});
-			let stdout = "";
-			let stderr = "";
-			let buffered = "";
-			let stopReason: string | undefined;
-			let error: string | undefined;
-			const usages: Usage[] = [];
-			const operations: ExecutionOperation[] = [];
-			const operationByCallId = new Map<string, ExecutionOperation>();
-			const fileChanges = createFileChangeTracker(ctx.cwd);
-			let aborted = false;
-			let pendingReturn: unknown;
-			let acceptedReturn: unknown;
-
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one JSON event decoder owns child-process operation correlation.
-			const consume = (line: string) => {
-				if (!line.trim()) return;
-				try {
-					const event = JSON.parse(line);
-					fileChanges.observe(event);
-					if (event.type === "tool_execution_start") {
-						onActivity?.(`using ${String(event.toolName ?? "tool")}`);
-						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
-						return;
-					}
-					if (event.type === "tool_execution_end") {
-						if (event.toolName === PI_EXEC_RETURN_TOOL) {
-							if (event.isError) pendingReturn = undefined;
-							else acceptedReturn = pendingReturn;
-						}
-						return;
-					}
-					if (event.type === "message_start" && event.message?.role === "assistant") {
-						onActivity?.("thinking");
-						return;
-					}
-					if (event.type !== "message_end" || !event.message) return;
-					const text = textFromAssistant(event.message);
-					if (text) stdout = text;
-					if (event.message.role === "assistant") {
-						stopReason = event.message.stopReason;
-						if (event.message.usage) usages.push(event.message.usage as Usage);
-						if (typeof event.message.errorMessage === "string") error = event.message.errorMessage;
-						if (Array.isArray(event.message.content)) {
-							for (const part of event.message.content) {
-								if (part?.type !== "toolCall" || typeof part.name !== "string") continue;
-								const operation: ExecutionOperation = {
-									sequence: operations.length,
-									ref: part.name === PI_EXEC_RETURN_TOOL ? PI_EXEC_RETURN_TOOL : `pi.${part.name}`,
-									args: part.arguments && typeof part.arguments === "object" ? part.arguments : {},
-									outcome: "aborted",
-								};
-								operations.push(operation);
-								if (typeof part.id === "string") operationByCallId.set(part.id, operation);
-							}
-						}
-						onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
-					} else if (event.message.role === "toolResult") {
-						const operation = operationByCallId.get(event.message.toolCallId);
-						if (operation) {
-							operation.outcome = event.message.isError ? "failed" : "succeeded";
-							operation.result = traceValue(resultText(event.message));
-							if (event.message.isError) operation.error = resultText(event.message).slice(0, 500);
-						}
-					}
-				} catch {
-					// Pi JSON mode is line-delimited; diagnostics remain on stderr.
-				}
-			};
-
-			child.stdout.on("data", (chunk) => {
-				buffered += chunk.toString();
-				const lines = buffered.split("\n");
-				buffered = lines.pop() ?? "";
-				for (const line of lines) consume(line);
-			});
-			child.stderr.on("data", (chunk) => {
-				stderr += chunk.toString();
-			});
-
-			const abort = () => {
-				aborted = true;
-				child.kill("SIGTERM");
-			};
-			if (signal?.aborted) abort();
-			else signal?.addEventListener("abort", abort, { once: true });
-
-			child.on("error", (cause) => {
-				error = cause.message;
-			});
-			child.on("close", (code) => {
-				signal?.removeEventListener("abort", abort);
-				if (buffered.trim()) consume(buffered);
-				const exitCode = code ?? 1;
-				if (aborted) error = "Agent aborted";
-				if (!error && exitCode !== 0) error = stderr.trim() || `Agent exited with code ${exitCode}`;
-				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
-					error = stderr.trim() || `Agent stopped with ${stopReason}`;
-				}
-				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
-				if (!error && structured.error) error = structured.error;
-				const output =
-					structured.value !== undefined && !error
-						? JSON.stringify(structured.value)
-						: stdout || error || "(agent returned no text)";
-				resolve({
-					index,
-					task: request.task,
-					output,
-					exitCode,
-					stopReason,
-					error,
-					...(structured.value !== undefined && !error ? { value: structured.value } : {}),
-					...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
-					operations,
-					fileChanges: fileChanges.changes(),
-				});
-			});
-		});
-	} finally {
-		prepared.cleanup();
-	}
-}
-
-import { createProgramSession, executeProgram } from "./program.js";
-
-export { executeProgram } from "./program.js";
-export { listSkills, packagedSkillPaths, readSkillBody } from "./skills.js";
-
-import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
-
-function resultText(result: any): string {
-	if (!Array.isArray(result?.content)) return "";
-	return result.content
-		.map((part: any) => (part?.type === "text" ? String(part.text ?? "") : `[${part?.mimeType ?? "image"}]`))
-		.join("\n");
-}
-
-function traceValue(value: unknown): unknown {
-	if (typeof value === "string") return bounded(value, MAX_TRACE_RESULT_CHARS, "trace result").value;
-	try {
-		const json = JSON.stringify(value);
-		if (json && json.length > MAX_TRACE_RESULT_CHARS) {
-			return bounded(json, MAX_TRACE_RESULT_CHARS, "trace result").value;
-		}
-		return value;
-	} catch {
-		return String(value);
-	}
 }
 
 function portableValue(value: unknown, maxChars = MAX_GUEST_TOOL_RESULT_CHARS): unknown {
@@ -407,36 +75,6 @@ function displayValue(value: unknown): string {
 		return JSON.stringify(value, null, 2);
 	} catch {
 		return String(value);
-	}
-}
-
-export function isOwnedMontyWorker(pid: number | undefined): boolean {
-	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
-	if (process.platform === "win32") {
-		try {
-			const tasklist = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tasklist.exe");
-			const output = execFileSync(tasklist, ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
-				encoding: "utf8",
-				stdio: ["ignore", "pipe", "ignore"],
-				timeout: 1_000,
-			}).trim();
-			return output.toLowerCase().includes("monty.exe");
-		} catch {
-			return false;
-		}
-	}
-	try {
-		const output = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,command="], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			timeout: 1_000,
-		}).trim();
-		const [ppidStr, ...rest] = output.split(/\s+/);
-		const ppid = Number(ppidStr);
-		const command = rest.join(" ");
-		return ppid === process.pid && command.includes("monty") && command.includes("subprocess");
-	} catch {
-		return false;
 	}
 }
 
@@ -533,9 +171,7 @@ export default function piExec(pi: ExtensionAPI): void {
 		name: "pi_exec",
 		label: "Pi Exec",
 		executionMode: "sequential",
-		get description() {
-			return piExecToolDescription();
-		},
+		description: PI_EXEC_DESCRIPTION,
 		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
 		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 		parameters: Type.Object({
@@ -822,50 +458,13 @@ export default function piExec(pi: ExtensionAPI): void {
 					} else if (ref === "agent.run") {
 						agentCalls++;
 						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);
-						const request = parseAgentRequest(rawArgs);
-						const context = containsContextMarks(request.context) ? fitContext(request.context) : undefined;
-						if (context) request.context = context.value;
-						const result = await runAgent(agentCalls - 1, request, ctx, runtimeSignal, (nextActivity) => {
+						const result = await runAgentWorker(agentCalls - 1, rawArgs, ctx, runtimeSignal, (nextActivity) => {
 							operation.activity = nextActivity;
 							emit();
 						});
 						if (result.usage) nestedUsages.push(result.usage);
 						operation.children = result.operations;
-						value = result.error
-							? {
-									status: "failed",
-									error: result.error,
-									text: result.output,
-									toolCalls: result.operations.length,
-									changes: result.fileChanges,
-									...(result.usage ? { usage: result.usage } : {}),
-									...(context
-										? {
-												context: {
-													truncated: context.truncated,
-													dropped: context.dropped,
-													serializedChars: context.serializedChars,
-												},
-											}
-										: {}),
-								}
-							: {
-									status: "completed",
-									text: result.output,
-									toolCalls: result.operations.length,
-									changes: result.fileChanges,
-									...(result.value !== undefined ? { value: result.value } : {}),
-									...(result.usage ? { usage: result.usage } : {}),
-									...(context
-										? {
-												context: {
-													truncated: context.truncated,
-													dropped: context.dropped,
-													serializedChars: context.serializedChars,
-												},
-											}
-										: {}),
-								};
+						value = result.record;
 						if (result.error) {
 							operation.outcome = "failed";
 							operation.error = result.error;
@@ -873,20 +472,17 @@ export default function piExec(pi: ExtensionAPI): void {
 					} else {
 						const match = /^pi\.(.+)$/.exec(ref);
 						const name = match?.[1];
-						if (!name || !WORKER_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
-						const definition =
-							name === "bash"
-								? definitionsFor(ctx.cwd).bash
-								: (capturedTool(name)?.definition ?? definitionsFor(ctx.cwd)[name]!);
+						if (!name || !isCoreToolName(name)) throw new Error(`pi_exec does not expose ${ref}`);
+						const definition = coreToolDefinition(name, ctx.cwd);
 						try {
 							const config = loadSearchRootGuardConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
 							const blocked = searchRootBlockReason(name, rawArgs, ctx.cwd, { home: homedir(), ...config });
 							if (blocked) throw new Error(blocked);
 							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
 							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
-							value = ENVELOPE_TOOLS.has(name) ? { ok: true, output: text } : text;
+							value = ENVELOPE_TOOL_NAMES.has(name) ? { ok: true, output: text } : text;
 						} catch (error) {
-							if (!ENVELOPE_TOOLS.has(name) || runtimeSignal.aborted) throw error;
+							if (!ENVELOPE_TOOL_NAMES.has(name) || runtimeSignal.aborted) throw error;
 							const output = error instanceof Error ? error.message : String(error);
 							operation.outcome = "failed";
 							operation.error = output;
@@ -1056,71 +652,5 @@ export default function piExec(pi: ExtensionAPI): void {
 	});
 	pi.registerTool(piExecTool);
 
-	function syncSavedProgramTools(cwd: string): void {
-		try {
-			for (const program of listSavedPrograms(cwd)) {
-				const parameters = buildProgramParametersSchema(
-					program.params,
-					piExecTool.parameters.properties.reset,
-					piExecTool.parameters.properties.limits,
-				);
-				pi.registerTool({
-					name: savedProgramToolName(program.name),
-					label: program.description,
-					executionMode: "sequential",
-					description: `Execute project-local Python program '${program.name}' (.pi/programs/${program.name}.py): ${program.description}`,
-					promptSnippet: program.description,
-					promptGuidelines: [SAVED_PROGRAM_PROMPT_GUIDELINE],
-					parameters,
-					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
-						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
-							throw new Error("pi_exec saved programs require a trusted project");
-						}
-						const current = readSavedProgram(ctx.cwd, program.name);
-						const { reset, limits, inputs: explicitInputs, ...rest } = rawParams as Record<string, any>;
-						// Defaults belong to the registered schema, not a mid-turn source edit.
-						const inputs: Record<string, string> = Object.create(null);
-						for (const param of program.params) {
-							if (param.default !== undefined) inputs[param.name] = String(param.default);
-						}
-						Object.assign(inputs, explicitInputs ?? {});
-						for (const [key, value] of Object.entries(rest)) {
-							if (value !== undefined) inputs[key] = String(value);
-						}
-						return piExecTool.execute(
-							toolCallId,
-							{
-								code: current.code,
-								inputs,
-								...(reset ? { reset } : {}),
-								...(limits ? { limits } : {}),
-								display: { name: current.name, description: current.description },
-							},
-							signal,
-							onUpdate,
-							ctx,
-						);
-					},
-				});
-			}
-		} catch {
-			// Missing, inaccessible, or unconfined programs directories expose no tools.
-		}
-	}
-
-	function hasSessionMessages(ctx: ExtensionContext): boolean {
-		try {
-			return (ctx.sessionManager.getBranch() ?? []).some((entry) => entry.type === "message");
-		} catch {
-			// If the cache state is unknown, do not risk a mid-turn schema mutation.
-			return true;
-		}
-	}
-
-	pi.on("session_start", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
-	pi.on("session_compact", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
-	pi.on("before_agent_start", (_event, ctx) => {
-		if (!hasSessionMessages(ctx)) syncSavedProgramTools(ctx.cwd);
-	});
-	syncSavedProgramTools(process.cwd());
+	installSavedProgramTools(pi, piExecTool);
 }

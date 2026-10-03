@@ -1,27 +1,6 @@
-import {
-	createEditToolDefinition,
-	createFindToolDefinition,
-	createGrepToolDefinition,
-	createLsToolDefinition,
-	createReadToolDefinition,
-	createWriteToolDefinition,
-	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
-import { createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
+import { CORE_TOOL_NAMES, coreToolDefinition, ENVELOPE_TOOL_NAMES } from "./core-tools.js";
 import { EVIDENCE_FUNCTION_NAMES, evidencePythonStubs } from "./evidence.js";
-import { capturedTool, capturedTools } from "./tool-capture.js";
-
-const CORE_TOOL_FACTORIES = {
-	read: createReadToolDefinition,
-	grep: createGrepToolDefinition,
-	find: createFindToolDefinition,
-	ls: createLsToolDefinition,
-	bash: createExecBashToolDefinition,
-	edit: createEditToolDefinition,
-	write: createWriteToolDefinition,
-} as const;
-
-export const CORE_GUEST_TOOL_NAMES = Object.keys(CORE_TOOL_FACTORIES) as Array<keyof typeof CORE_TOOL_FACTORIES>;
+import { capturedTools } from "./tool-capture.js";
 
 type Schema = {
 	type?: string | string[];
@@ -87,25 +66,13 @@ function toolSignature(name: string, schema: Schema, output: string, declaration
 	return `async def ${name}(${fields.length ? `*, ${fields.join(", ")}` : ""}) -> ${output}: ...`;
 }
 
-export function coreToolDefinitions(cwd = "."): Record<string, ToolDefinition<any, any>> {
-	return Object.fromEntries(
-		CORE_GUEST_TOOL_NAMES.map((name) => [
-			name,
-			name === "bash"
-				? CORE_TOOL_FACTORIES[name](cwd)
-				: (capturedTool(name)?.definition ?? CORE_TOOL_FACTORIES[name](cwd)),
-		]),
-	) as Record<string, ToolDefinition<any, any>>;
-}
-
 /** The same schema-derived signatures are supplied to ty and shown to the model. */
 export function corePythonStubs(cwd = "."): string {
-	const definitions = coreToolDefinitions(cwd);
 	const declarations: string[] = [];
 	const signatures: string[] = [];
-	for (const name of CORE_GUEST_TOOL_NAMES) {
-		const output = ["bash", "edit", "write"].includes(name) ? "dict[str, Any]" : "str";
-		signatures.push(toolSignature(name, definitions[name]!.parameters as Schema, output, declarations));
+	for (const name of CORE_TOOL_NAMES) {
+		const output = ENVELOPE_TOOL_NAMES.has(name) ? "dict[str, Any]" : "str";
+		signatures.push(toolSignature(name, coreToolDefinition(name, cwd).parameters as Schema, output, declarations));
 	}
 	return [
 		"from typing import Any, Literal, NotRequired, TypedDict",
@@ -115,16 +82,10 @@ export function corePythonStubs(cwd = "."): string {
 	].join("\n");
 }
 
-export function coreGuestSignatures(cwd = "."): string[] {
-	return corePythonStubs(cwd)
-		.split("\n")
-		.filter((line) => line.startsWith("async def "));
-}
-
 export function extensionPythonTools(): ReturnType<typeof capturedTools> {
 	return capturedTools().filter(
 		(tool) =>
-			!CORE_GUEST_TOOL_NAMES.includes(tool.name as (typeof CORE_GUEST_TOOL_NAMES)[number]) &&
+			!CORE_TOOL_NAMES.includes(tool.name as (typeof CORE_TOOL_NAMES)[number]) &&
 			!EVIDENCE_FUNCTION_NAMES.includes(tool.name as (typeof EVIDENCE_FUNCTION_NAMES)[number]) &&
 			/^[A-Za-z_]\w*$/.test(tool.name),
 	);
@@ -185,10 +146,6 @@ export function piExecGuestApiContract(): string {
 		'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
 		'Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch and keep their first type, so give each program\'s variables specific names; reset is a tool parameter that starts fresh. bash, edit, and write return {"ok": bool, "output": str}. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.',
 	].join("\n");
-}
-
-export function piExecToolDescription(): string {
-	return PI_EXEC_DESCRIPTION;
 }
 
 export const PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION =
