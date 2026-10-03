@@ -823,7 +823,7 @@ describe("owned subagent surface", () => {
 		expect(record.status).toBe("running");
 	});
 
-	it("requires explicit nested invocation choices and an optional uncapped yield interval", () => {
+	it("allows omitted invocation choices in root and nested tools with an optional uncapped yield interval", () => {
 		const tools = createNestedSubagentTools({
 			manager: {} as any,
 			pi: {} as any,
@@ -836,8 +836,28 @@ describe("owned subagent surface", () => {
 		});
 		const agentSchema = tools.find((tool) => tool.name === "agent")!.parameters as any;
 		const resultSchema = tools.find((tool) => tool.name === "get_subagent_result")!.parameters as any;
-		expect(agentSchema.required).toEqual(expect.arrayContaining(["run_in_background", "isolated", "inherit_context"]));
-		expect(agentSchema.required).not.toContain("pair");
+		const registerTool = vi.fn();
+		installSubagents({
+			events: { on: vi.fn(() => () => {}), emit: vi.fn() },
+			on: vi.fn(),
+			registerShortcut: vi.fn(),
+			registerCommand: vi.fn(),
+			registerMessageRenderer: vi.fn(),
+			registerTool,
+		} as any);
+		const rootSchema = registerTool.mock.calls.find(([tool]) => tool.name === "agent")![0].parameters;
+		for (const schema of [rootSchema, agentSchema]) {
+			for (const name of ["run_in_background", "isolated", "inherit_context"]) {
+				expect(schema.required).not.toContain(name);
+				expect(schema.properties[name].default).toBe(false);
+			}
+			expect(schema.required).not.toContain("pair");
+		}
+		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("explorer"), {})).toMatchObject({
+			runInBackground: false,
+			isolated: false,
+			inheritContext: false,
+		});
 		expect(agentSchema.properties.profile.anyOf.map((entry: any) => entry.const)).toEqual([
 			"quick",
 			"balanced",

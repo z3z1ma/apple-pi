@@ -65,7 +65,7 @@ Trusted agent definitions and settings control tool scope, skills, model-profile
 
 ### Context inheritance
 
-A root `agent` call is a normal sub-agent handoff. Its prompt is the complete task by default. Set `inherit_context: true` only when the child also needs the full parent conversation.
+A root `agent` call is a normal sub-agent handoff. Its prompt is the complete task by default. Root and nested calls may omit `run_in_background`, `isolated`, and `inherit_context`; each defaults to `false`. Set `inherit_context: true` only when the child also needs the full parent conversation.
 
 The consultant follows this same public contract when the main agent brings the architect in directly. The pair programming partner's hidden typed second-opinion path is an internal host operation, not an `agent` mode or parameter.
 

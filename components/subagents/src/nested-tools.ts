@@ -148,15 +148,21 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				}),
 			),
 			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
-			run_in_background: Type.Boolean({ default: false, description: "Run without waiting for completion." }),
-			isolated: Type.Boolean({
-				default: false,
-				description: "Disable skill inheritance for a new agent session.",
-			}),
-			inherit_context: Type.Boolean({
-				default: false,
-				description: "Include the full parent conversation before the initial task prompt.",
-			}),
+			run_in_background: Type.Optional(
+				Type.Boolean({ default: false, description: "Run without waiting for completion." }),
+			),
+			isolated: Type.Optional(
+				Type.Boolean({
+					default: false,
+					description: "Disable skill inheritance for a new agent session.",
+				}),
+			),
+			inherit_context: Type.Optional(
+				Type.Boolean({
+					default: false,
+					description: "Include the full parent conversation before the initial task prompt.",
+				}),
+			),
 			pair: Type.Optional(
 				Type.Boolean({
 					description:
