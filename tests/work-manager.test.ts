@@ -119,7 +119,7 @@ function managerWithSections(screen: FakeScreen) {
 }
 
 describe("work panel entrypoints", () => {
-	it("opens one shared non-capturing panel from /work, Ctrl+W, and the tab aliases without a picker", async () => {
+	it("reuses one non-capturing panel for /work and the tab aliases without a picker", async () => {
 		const { pi, commands, shortcuts, handlers } = fakePi();
 		installWorkManager(pi as any);
 		installSubagents(pi as any);
@@ -146,7 +146,7 @@ describe("work panel entrypoints", () => {
 
 		await commands.get("tasks")![0].handler("", ctx);
 		expect(text()).toContain("[Tasks");
-		await shortcuts.get("ctrl+w")![0].handler(ctx);
+		await commands.get("work")![0].handler("", ctx);
 		expect(text()).toContain("[Tasks");
 		await commands.get("agents")![0].handler("", ctx);
 		expect(text()).toContain("[Agents");
@@ -160,6 +160,28 @@ describe("work panel entrypoints", () => {
 
 		for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, ctx);
 		expect(entry!.handle.hide).toHaveBeenCalled();
+		expect(screen.stack).toHaveLength(0);
+	});
+
+	it("toggles with Ctrl+W and restores the last tab and selected record", async () => {
+		const screen = fakeTui(160, 40);
+		const { shortcuts, commands, ctx, focus, panel, text } = managerWithSections(screen);
+		const toggle = () => shortcuts.get("ctrl+w")![0].handler(ctx);
+		await toggle();
+		expect(screen.stack).toHaveLength(1);
+		await commands.get("tasks")![0].handler("", ctx);
+		focus();
+		panel()!.handleInput!("\t");
+		expect(text()).toContain("tasks-2");
+		await toggle();
+		expect(screen.stack).toHaveLength(0);
+		expect(screen.focused()).toBe(screen.editor);
+		await toggle();
+		expect(screen.stack).toHaveLength(1);
+		expect(text()).toContain("[Tasks");
+		expect(text()).toContain("tasks-2");
+		expect(screen.focused()).toBe(screen.editor);
+		await toggle();
 		expect(screen.stack).toHaveLength(0);
 	});
 

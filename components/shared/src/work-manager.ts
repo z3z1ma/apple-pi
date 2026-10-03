@@ -269,8 +269,11 @@ export class WorkManager {
 			handler: async (_args, ctx) => this.open(ctx, "tasks"),
 		});
 		this.pi.registerShortcut("ctrl+w", {
-			description: "Open the work panel",
-			handler: async (ctx) => this.open(ctx),
+			description: "Toggle the work panel",
+			handler: async (ctx) => {
+				if (this.mounted) this.close();
+				else await this.open(ctx);
+			},
 		});
 		this.pi.registerShortcut(WORK_PANEL_FOCUS_KEY, {
 			description: "Move focus between the editor and the work panel",

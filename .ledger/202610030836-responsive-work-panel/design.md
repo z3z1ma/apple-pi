@@ -6,7 +6,7 @@ The existing centered `/work` picker is not the intended primary experience. Rep
 
 “Non-capturing” means opening the panel leaves keyboard input in the main editor until focus is explicitly transferred. “Follow-tail” means the selected conversation or task output follows incoming content rather than staying at a manually chosen scroll position.
 
-- `/work` and Ctrl+W open the panel on its last-used tab.
+- `/work` opens the panel on its last-used tab. Ctrl+W toggles it closed or reopens it on that tab with its saved selection.
 - `/agents` and `/tasks` open the same panel directly on their respective tabs. Repeated commands reuse the panel rather than stack overlays.
 - At 120 or more terminal columns: top-right placement, 33% width, existing 70% maximum height.
 - Below 120 columns: top-center placement, 50% terminal height and 90% terminal width, matching `/btw`. The control panel never disappears because of width.

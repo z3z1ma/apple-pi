@@ -17,7 +17,7 @@ All command forms share the same `TaskManager`, `task-*` IDs, rolling output, pr
 
 Scheduled, due, and running tasks join public subagents in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
 
-`/tasks` opens the shared [work panel](subagents.md#work-panel) directly on its Tasks tab; `/work` or `Ctrl+W` opens it on its last-used tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. The panel's placement, focus, tab, and close keys are described there. The Tasks tab lists the session-local task roster, active work before settled outcomes, and shows the selected task's detail below the list. Use `Tab`/`Shift+Tab` to select a task. Task detail shows:
+`/tasks` opens the shared [work panel](subagents.md#work-panel) directly on its Tasks tab; `/work` opens it on its last-used tab. `Ctrl+W` toggles it closed or reopens it on that tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. The panel's placement, focus, tab, and close keys are described there. The Tasks tab lists the session-local task roster, active work before settled outcomes, and shows the selected task's detail below the list. Use `Tab`/`Shift+Tab` to select a task. Task detail shows:
 
 - complete prompt text, creation/due timing, and delivery state;
 - command text, working directory, timing, PID, exit state, and a live rolling output tail;

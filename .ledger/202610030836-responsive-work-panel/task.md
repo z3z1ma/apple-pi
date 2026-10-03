@@ -10,7 +10,7 @@ Replace the centered work picker with one responsive, non-capturing Agents/Tasks
 
 ## Current State
 
-Implemented; the operator authorized committing the responsive-panel changes. Independent Standards and Intent reviews are complete.
+Implemented and committed on `main` as `78e81fe` (`feat(work): open one responsive agents and tasks panel directly`). Independent Standards and Intent reviews are complete.
 
 - Review fixes preserve manual task scroll positions through resizing and keep short task views scrollable. Compact and full layouts share one viewport calculation; the resize test checks restored rendered content.
 - Automated checks passed after those fixes and simplification: format, lint, typecheck, full `npm test` (1153 Vitest tests plus offline pair harness and loader), package dry run, and `git diff --check`.
@@ -22,6 +22,6 @@ Implemented; the operator authorized committing the responsive-panel changes. In
 Pending final acceptance. Next:
 
 1. In fullscreen Pi, open `/agents`, focus the panel, and send a steering message to a running agent asking it to echo a unique marker. Confirm the marker appears in the agent's response, not just in the submitted message, and record the result here.
-2. Obtain operator acceptance after that check, and explicit authority before closing this task. Commit authority has been granted; closure authority has not.
+2. Obtain operator acceptance after that check and explicit authority before closing this task. The implementation is already committed; task closure is not yet authorized.
 
 The completed [glanceable-panel task](../history/202610030008-tui-glanceable-panels/task.md) remains unchanged as historical context.
