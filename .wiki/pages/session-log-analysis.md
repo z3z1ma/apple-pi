@@ -1,6 +1,6 @@
 # Session log analysis
 
-How to measure agent behavior from Pi session logs, and the traps that make such numbers mislead. Used for the learning-loop evidence (`.ledger/202610022036-notebook-learning-loop/`), the claim-versus-evidence study behind [[epistemic-grounding]], and prompt-cache audits (`scripts/cache-audit.mjs`).
+How to measure agent behavior from Pi session logs, and the traps that make such numbers mislead. Used for the learning-loop evidence (`.ledger/202610022036-notebook-learning-loop/`), a count of runs whose final "tests pass" claims had no later run behind them, which informed [[epistemic-grounding]], and prompt-cache audits (`scripts/cache-audit.mjs`).
 
 ## Layout
 
