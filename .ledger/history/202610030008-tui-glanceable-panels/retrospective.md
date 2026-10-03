@@ -7,7 +7,7 @@ Updated: 2026-10-03
 ## What Mattered
 
 - A throwaway prototype driven through tmux proved the overlay API (non-capturing panel, focus, stacked modals, resize) before any spec, so the design never rested on guesses.
-- Two independent reviewers (standards and intent) found eight real defects the builders' tests missed: cursor focus, hidden composer, stale activity, frozen streaming, armed abort, retention, `/btw` height, and missing real-terminal evidence.
+- Two independent reviewers (standards and intent) found what the builders' tests missed: five defects (cursor focus, hidden steering input, stale activity after resume, frozen streaming text, an abort confirmation surviving a focus change), two gaps between spec and code that the operator settled (agent retention, `/btw` height), and one missing real-terminal check.
 
 ## Learnings
 
