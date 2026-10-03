@@ -53,6 +53,7 @@ describe("child session disposal", () => {
 					completedAt: Date.now(),
 					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
 					compactionCount: 0,
+					resultConsumed: true,
 					session: { extensionRunner: { emit: vi.fn(async () => {}) }, dispose: vi.fn() },
 					...overrides,
 				}) as unknown as AgentRecord;
@@ -63,6 +64,14 @@ describe("child session disposal", () => {
 
 			expect(manager.getRecord("public")).toBeDefined();
 			expect(manager.getRecord("nested")).toBeUndefined();
+
+			// A new session keeps an unread public result only for the usual 10 minutes.
+			(manager as any).agents.set("unread", finished("unread", { resultConsumed: false }));
+			manager.clearCompleted(true);
+			expect(manager.getRecord("public")).toBeUndefined();
+			expect(manager.getRecord("unread")).toBeDefined();
+			vi.advanceTimersByTime(11 * 60_000);
+			expect(manager.getRecord("unread")).toBeUndefined();
 			manager.dispose();
 		} finally {
 			vi.useRealTimers();

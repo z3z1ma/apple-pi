@@ -86,6 +86,8 @@ export interface AgentRecord {
 	internalOwner?: string;
 	/** Keep a settled in-memory session until the owning root session is disposed. */
 	retainUntilSessionEnd?: boolean;
+	/** Kept past its session's end only so an unread result can be delivered; expires like nested records. */
+	carriedOver?: boolean;
 	/** Controller-owned termination attribution; absent for ordinary successful agents. */
 	terminationCause?: AgentTerminationCause;
 	/** Internal cleanup for a foreground caller signal when the run settles. */
