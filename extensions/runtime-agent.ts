@@ -125,6 +125,7 @@ export function parseAgentRequest(rawArgs: Record<string, unknown>): AgentReques
 	return request;
 }
 
+export const WORKER_TOOL_NAMES = new Set(["read", "grep", "find", "ls", "bash", "edit", "write"]);
 const READ_ONLY_WORKER_TOOLS = ["read", "grep", "find", "ls"];
 
 export function resolveExecAgentConfig(scope: SubagentConfigScope, type: string): AgentConfig {
@@ -139,7 +140,7 @@ export function resolveExecAgentConfig(scope: SubagentConfigScope, type: string)
 }
 
 function defaultToolsFor(config: AgentConfig): string[] {
-	return config.builtinToolNames ?? [...BUILTIN_TOOL_NAMES];
+	return (config.builtinToolNames ?? BUILTIN_TOOL_NAMES).filter((tool) => WORKER_TOOL_NAMES.has(tool));
 }
 
 function typedSystemPrompt(config: AgentConfig, additional?: string): string {

@@ -34,6 +34,7 @@ import {
 	prepareAgentSpawn,
 	resolveExecWorker,
 	resolveStructuredOutput,
+	WORKER_TOOL_NAMES,
 } from "./runtime-agent.js";
 import {
 	attachLiveDescription,
@@ -108,10 +109,8 @@ export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimit
 		),
 	};
 }
-const CORE_TOOL_LIST = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
-const CORE_TOOL_NAMES = new Set<string>(CORE_TOOL_LIST);
 const ENVELOPE_TOOLS = new Set(["bash", "edit", "write"]);
 const MONTY_ENTRY_TYPE = "apple-pi:monty-session";
 const ROLLBACK_NOTICE =
@@ -211,8 +210,8 @@ async function runAgent(
 		registry: ctx.modelRegistry,
 		parentModelObject: ctx.model,
 	});
-	if (resolved.tools.some((tool) => !CORE_TOOL_NAMES.has(tool))) {
-		throw new Error(`Agent tools must be selected from: ${CORE_TOOL_LIST.join(", ")}`);
+	if (resolved.tools.some((tool) => !WORKER_TOOL_NAMES.has(tool))) {
+		throw new Error(`Agent tools must be selected from: ${[...WORKER_TOOL_NAMES].join(", ")}`);
 	}
 	if (resolved.thinking && !THINKING_LEVELS.has(resolved.thinking)) {
 		throw new Error(`Agent thinking must be one of: ${[...THINKING_LEVELS].join(", ")}`);
@@ -878,7 +877,7 @@ export default function runtime(pi: ExtensionAPI): void {
 					} else {
 						const match = /^pi\.(.+)$/.exec(ref);
 						const name = match?.[1];
-						if (!name || !CORE_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
+						if (!name || !WORKER_TOOL_NAMES.has(name)) throw new Error(`pi_exec does not expose ${ref}`);
 						const definition =
 							name === "bash"
 								? definitionsFor(ctx.cwd).bash

@@ -206,9 +206,7 @@ describe("pi_exec agent binding", () => {
 
 			const explore = await resolveExecWorker({ task: "where is X?", type: "explorer" }, options);
 			expect(explore.type).toBe("explorer");
-			expect(explore.tools).toEqual(expect.arrayContaining(["read", "bash", "grep", "find", "ls"]));
-			expect(explore.tools).not.toContain("edit");
-			expect(explore.tools).not.toContain("write");
+			expect(explore.tools).toEqual(["read", "bash", "grep", "find", "ls"]);
 			expect(explore.model).toBe("xai/fast");
 			expect(explore.thinking).toBe("medium");
 			expect(explore.systemPrompt).toContain("Agent type: explorer");
@@ -222,7 +220,7 @@ describe("pi_exec agent binding", () => {
 			expect(guided.systemPrompt).toContain("Prefer src/ over tests/.");
 
 			const implement = await resolveExecWorker({ task: "apply the spec", type: "builder" }, options);
-			expect(implement.tools).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
+			expect(implement.tools).toEqual(["read", "bash", "edit", "write", "grep", "find", "ls"]);
 			expect(implement.pair).toBe(true);
 			expect(implement.model).toBe("xai/coder");
 			expect(implement.thinking).toBe("high");
