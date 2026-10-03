@@ -128,21 +128,16 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 };
 
 function evidenceFunction(name: string): HostFunction {
-	const bound = name.startsWith("context_");
+	const run: HostFunction["run"] = (args, scope) =>
+		runEvidenceFunction(name, args, { cwd: scope.ctx.cwd, signal: scope.signal });
+	if (!name.startsWith("context_")) return { run };
 	return {
-		...(bound
-			? {
-					traceArgs: (args: Args) =>
-						Object.fromEntries(
-							Object.entries(args).map(([key, value]) => [
-								key,
-								key === "value" || key === "items" ? { bound: true } : value,
-							]),
-						),
-					traceResult: () => ({ bound: true }),
-				}
-			: {}),
-		run: (args, scope) => runEvidenceFunction(name, args, { cwd: scope.ctx.cwd, signal: scope.signal }),
+		run,
+		traceArgs: (args) =>
+			Object.fromEntries(
+				Object.entries(args).map(([key, value]) => [key, key === "value" || key === "items" ? { bound: true } : value]),
+			),
+		traceResult: () => ({ bound: true }),
 	};
 }
 
@@ -170,10 +165,15 @@ function coreToolFunction(name: CoreToolName): HostFunction {
 
 function hostFunction(ref: string): HostFunction | undefined {
 	if (Object.hasOwn(HOST_FUNCTIONS, ref)) return HOST_FUNCTIONS[ref];
-	const [namespace, name = ""] = ref.split(/\.(.*)/s);
-	if (namespace === "evidence" && EVIDENCE_FUNCTION_NAMES.includes(name as (typeof EVIDENCE_FUNCTION_NAMES)[number]))
-		return evidenceFunction(name);
-	if (namespace === "pi" && isCoreToolName(name)) return coreToolFunction(name);
+	if (ref.startsWith("evidence.")) {
+		const name = ref.slice("evidence.".length);
+		if (EVIDENCE_FUNCTION_NAMES.includes(name as (typeof EVIDENCE_FUNCTION_NAMES)[number]))
+			return evidenceFunction(name);
+	}
+	if (ref.startsWith("pi.")) {
+		const name = ref.slice("pi.".length);
+		if (isCoreToolName(name)) return coreToolFunction(name);
+	}
 	return undefined;
 }
 
