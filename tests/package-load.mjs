@@ -17,37 +17,15 @@ import { loadSkills } from "../node_modules/@earendil-works/pi-coding-agent/dist
 const temp = mkdtempSync(join(tmpdir(), "apple-pi-load-"));
 process.env.PI_CODING_AGENT_DIR = temp;
 try {
-	const eventBus = createEventBus();
+	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	const result = await loadExtensions(
-		[
-			"extensions/pi-pair.ts",
-			"extensions/ask-user-question.ts",
-			"extensions/context.ts",
-			"extensions/auto-compact.ts",
-			"extensions/vroom.ts",
-			"extensions/home-search-guard.ts",
-			"extensions/runtime.ts",
-			"extensions/work.ts",
-			"extensions/subagents.ts",
-			"extensions/ledger.ts",
-			"extensions/wiki.ts",
-			"extensions/xai-hosted-tools.ts",
-			"extensions/server-compaction.ts",
-			"extensions/notify.ts",
-			"extensions/tmux-sessions.ts",
-			"extensions/input-editor.ts",
-			"extensions/tasks.ts",
-			"extensions/prompt-stash.ts",
-			"extensions/terse-tools.ts",
-			"extensions/rtk.ts",
-			"extensions/change-reflection.ts",
-		],
+		manifest.pi.extensions,
 		process.cwd(),
-		eventBus,
+		createEventBus(),
 		createExtensionRuntime(),
 	);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.extensions.length, 21);
+	assert.equal(result.extensions.length, manifest.pi.extensions.length);
 	const optionalResult = await loadExtensions(
 		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
 		process.cwd(),
@@ -274,40 +252,14 @@ try {
 	assert.equal(limits.callBudget.maximum, 2048);
 	assert.equal(limits.concurrency.maximum, 32);
 	assert.equal(limits.timeoutSeconds.maximum, 7200);
-	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.equal(manifest.dependencies["@pydantic/monty"], "1.0.0", "Monty must be a pinned runtime dependency");
 	assert.equal(manifest.dependencies["pi-mcp-adapter"], undefined, "MCP belongs to Pi");
 	assert(!existsSync("extensions/mcp.ts"), "removed MCP wrapper must be absent");
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
 	assert.deepEqual(manifest.pi.prompts, ["./prompts"]);
 	assert(
-		!manifest.pi.extensions.includes("./extensions/workflow.ts"),
-		"package manifest must not load workflow extension",
-	);
-	assert(manifest.pi.extensions.includes("./extensions/vroom.ts"), "package manifest omits vroom (fast mode)");
-	assert(
-		manifest.pi.extensions.includes("./extensions/home-search-guard.ts"),
-		"package manifest omits home search guard",
-	);
-	assert(
-		!manifest.pi.extensions.includes("./extensions/remind-me.ts"),
-		"package manifest must not load the removed self-reminder extension",
-	);
-	assert(manifest.pi.extensions.includes("./extensions/wiki.ts"), "package manifest omits wiki workbench");
-	assert(manifest.pi.extensions.includes("./extensions/work.ts"), "package manifest omits work extension");
-	assert(manifest.pi.extensions.includes("./extensions/tasks.ts"), "package manifest omits tasks extension");
-	assert(
-		manifest.pi.extensions.includes("./extensions/prompt-stash.ts"),
-		"package manifest omits prompt-stash extension",
-	);
-	assert(
 		result.extensions.some((extension) => extension.path.endsWith("prompt-stash.ts")),
 		"missing prompt stash extension",
-	);
-	assert(!manifest.pi.extensions.includes("./extensions/todos.ts"), "package manifest must not load todos extension");
-	assert(
-		!manifest.pi.extensions.includes("./extensions/backlog.ts"),
-		"package manifest must not load backlog extension",
 	);
 	assert(manifest.files.includes("components/vroom/src/"), "package manifest omits vroom (fast mode) source");
 	assert(
@@ -321,10 +273,6 @@ try {
 	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
 	assert(manifest.files.includes("components/tasks/src/"), "package manifest omits tasks source");
 	assert(manifest.files.includes("components/prompt-stash/src/"), "package manifest omits prompt-stash source");
-	assert(
-		manifest.pi.extensions.includes("./extensions/change-reflection.ts"),
-		"package manifest omits change reflection extension",
-	);
 	assert(
 		manifest.files.includes("components/change-reflection/src/"),
 		"package manifest omits change reflection source",

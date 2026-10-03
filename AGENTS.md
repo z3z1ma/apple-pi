@@ -92,7 +92,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - TypeScript uses NodeNext semantics, and relative TypeScript imports use `.js` suffixes because that is the runtime ESM path.
 - The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
 - Native harness capabilities teach their concise selection, mental model, and ordinary composition patterns through runtime prompt-bearing surfaces: tool names, schemas, prompt snippets/guidelines, or explicit system-prompt injection. Repository documentation is invisible to the running model and never satisfies this requirement. Skills own repeatable engineering procedures and optional progressive disclosure; they are not prerequisite manuals for calling native tools.
-- The package-load test is the executable smoke test for loading an explicit checkout entrypoint list and checking the expected tool/command boundary. It does not discover entries from the manifest or load the packed tarball, so keep its list aligned with `package.json` and inspect packaging separately.
+- The package-load test is the executable smoke test for loading the manifest's extension entrypoints from the checkout and checking the expected tool/command boundary. It does not load the packed tarball, so inspect packaging separately.
 
 ### Context and notebook
 
@@ -183,7 +183,7 @@ Useful narrower commands are defined in `package.json`:
 
 - `test:unit` runs Vitest suites for components and root integration.
 - `test:pair` runs the pair's offline Node harness and expects the `pi` executable on `PATH`; its networked E2E mode is opt-in.
-- `test:loader` loads an explicit list of checkout extension entrypoints and checks the exposed surface.
+- `test:loader` loads the manifest's extension entrypoints from the checkout and checks the exposed surface.
 - `pack:check` prints npm's dry-run package contents. Inspect that list for expected source; the command does not assert completeness or test the tarball in an installed environment.
 
 Run the cheapest falsifying check while iterating, then the full relevant suite before declaring completion. A passing unit suite does not prove package loading, and a successful package dry run does not prove behavior. Some session-search tests write temporary session JSONL; they must not touch real Pi session files.
