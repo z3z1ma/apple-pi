@@ -18,7 +18,7 @@ import {
 	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type TaskNotificationDetails,
 } from "./types.js";
-import { TaskDetailViewer, TaskManagerComponent } from "./ui/task-manager.js";
+import { type TaskDetailView, TaskDetailViewer, TaskManagerComponent } from "./ui/task-manager.js";
 
 function formatScheduledPrompt({ id, prompt }: PromptTask): string {
 	return `<scheduled-prompt id="${id}">
@@ -140,11 +140,15 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
+	// Where each task's detail viewer was left. Memory only: never written to the session,
+	// and cleared with the roster because task IDs restart per session.
+	const detailViews = new Map<string, TaskDetailView>();
 	const openTaskDetail = async (ctx: ExtensionContext, task: ReturnType<TaskManager["get"]>) => {
 		if (!ctx.hasUI || !task) return;
+		let viewer: TaskDetailViewer | undefined;
 		await ctx.ui.custom<undefined>(
-			(tui, theme, keybindings, done) =>
-				new TaskDetailViewer(
+			(tui, theme, keybindings, done) => {
+				viewer = new TaskDetailViewer(
 					tui,
 					task,
 					theme,
@@ -153,9 +157,13 @@ export function installTasks(pi: ExtensionAPI): void {
 						taskManager.cancel(task.id);
 					},
 					keybindings,
-				),
+					detailViews.get(task.id),
+				);
+				return viewer;
+			},
 			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
 		);
+		if (viewer) detailViews.set(task.id, viewer.view);
 	};
 
 	registerWorkSection(pi, {
@@ -168,6 +176,7 @@ export function installTasks(pi: ExtensionAPI): void {
 
 	const cleanup = () => {
 		taskManager.reset();
+		detailViews.clear();
 		activeWork.update();
 	};
 	pi.on("session_start", (_event, ctx) => {

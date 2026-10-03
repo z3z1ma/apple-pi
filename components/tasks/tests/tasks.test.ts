@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -925,6 +928,124 @@ describe("tasks component", () => {
 				details: { taskId: "task-1", kind: "prompt", status: "cancelled", prompt: "Do not run this." },
 			});
 			expect(sentMessages[0].opts).toEqual({ deliverAs: "steer", triggerTurn: true });
+		});
+
+		it("reopens task detail at its last scroll position or live tail without session persistence", async () => {
+			const release = join(mkdtempSync(join(tmpdir(), "apple-pi-tasks-")), "release");
+			const install = () => {
+				const registeredTools: any[] = [];
+				const commands = new Map<string, any>();
+				const handlers = new Map<string, any[]>();
+				const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
+				const pi = {
+					events: {
+						on: (channel: string, handler: (data: unknown) => void) => {
+							const listeners = eventHandlers.get(channel) ?? new Set();
+							listeners.add(handler);
+							eventHandlers.set(channel, listeners);
+							return () => listeners.delete(handler);
+						},
+						emit: (channel: string, data: unknown) => {
+							for (const listener of eventHandlers.get(channel) ?? []) listener(data);
+						},
+					},
+					registerTool: (tool: any) => registeredTools.push(tool),
+					registerShortcut: vi.fn(),
+					registerCommand: (name: string, command: any) => commands.set(name, command),
+					registerMessageRenderer: vi.fn(),
+					sendMessage: vi.fn(),
+					appendEntry: vi.fn(),
+					on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+				};
+				installWorkManager(pi as any);
+				installTasks(pi as any);
+				const detailRenders: string[] = [];
+				const detailScripts: string[][] = [];
+				// Each /tasks opening inspects task-1 once, then closes the work manager.
+				let workInput = "\r";
+				const custom = vi.fn(async (factory: any) => {
+					let result: any;
+					const component = factory(
+						{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
+						{ fg: (_color: string, text: string) => text, bg: (_c: string, t: string) => t, bold: (t: string) => t },
+						undefined,
+						(value: any) => {
+							result = value;
+						},
+					);
+					const first = component.render(100).join("\n");
+					if (!first.includes("Tab/←→ switch")) {
+						detailRenders.push(first);
+						for (const input of detailScripts.shift() ?? []) {
+							component.handleInput(input);
+							component.render(100);
+						}
+						component.handleInput("q");
+					} else {
+						component.handleInput(workInput);
+						workInput = workInput === "\r" ? "q" : "\r";
+					}
+					component.dispose();
+					return result;
+				});
+				const ctx = {
+					cwd: process.cwd(),
+					hasUI: true,
+					mode: "tui",
+					ui: { custom, setStatus: vi.fn(), setWidget: vi.fn() },
+				};
+				for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
+				const tool = (name: string) => registeredTools.find((candidate) => candidate.name === name);
+				const status = async () =>
+					getResultText(
+						await tool("task").execute("status", { action: "status", task_id: "task-1" }, undefined, undefined, ctx),
+					);
+				const shutdown = () => {
+					for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
+				};
+				return { pi, commands, ctx, tool, status, detailRenders, detailScripts, shutdown };
+			};
+			const script = `for (let i = 0; i < 60; i++) console.log("line " + i); const fs = require("fs"); const t = setInterval(() => { if (fs.existsSync(${JSON.stringify(release)})) { for (let j = 0; j < 5; j++) console.log("late" + " tail " + j); clearInterval(t); setInterval(() => {}, 1000); } }, 20);`;
+			const start = async (session: ReturnType<typeof install>) => {
+				await session
+					.tool("bash")
+					.execute(
+						"background",
+						{ command: `node -e ${JSON.stringify(script)}`, run_in_background: true },
+						undefined,
+						undefined,
+						session.ctx,
+					);
+				await vi.waitFor(async () => expect(await session.status()).toContain("line 59"), { timeout: 5000 });
+			};
+
+			const session = install();
+			await start(session);
+			// Scroll near the top and close; reopening restores that position.
+			session.detailScripts.push(["\x1b[H", "\x1b[B", "\x1b[B", "\x1b[B"]);
+			await session.commands.get("tasks").handler("", session.ctx);
+			expect(session.detailRenders[0]).toContain("line 59");
+			// Then return to the live tail before closing; reopening keeps following new output.
+			session.detailScripts.push(["\x1b[F"]);
+			await session.commands.get("tasks").handler("", session.ctx);
+			expect(session.detailRenders[1]).toContain("Command: node");
+			expect(session.detailRenders[1]).not.toContain("line 59");
+			writeFileSync(release, "");
+			await vi.waitFor(async () => expect(await session.status()).toContain("late tail 4"), { timeout: 5000 });
+			await session.commands.get("tasks").handler("", session.ctx);
+			expect(session.detailRenders[2]).toContain("late tail 4");
+			expect(session.pi.appendEntry).not.toHaveBeenCalled();
+			session.shutdown();
+
+			// A fresh install restores nothing: task-1 opens on the live tail.
+			rmSync(release);
+			const fresh = install();
+			await start(fresh);
+			await fresh.commands.get("tasks").handler("", fresh.ctx);
+			expect(fresh.detailRenders[0]).toContain("line 59");
+			expect(fresh.detailRenders[0]).not.toContain("Command: node");
+			expect(fresh.pi.appendEntry).not.toHaveBeenCalled();
+			fresh.shutdown();
 		});
 
 		it("skips installation in child sessions", () => {

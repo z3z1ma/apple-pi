@@ -196,6 +196,80 @@ describe("work manager entrypoints", () => {
 		expect(selectedIds).toEqual([undefined, "agent-2"]);
 	});
 
+	it("reopens on the last tab and selected row for the manager's lifetime without session persistence", async () => {
+		const section = (key: string, label: string): WorkSection => ({
+			key,
+			label,
+			create: (_tui, _theme, _keybindings, selectedId, done) => {
+				const ids = [`${key}-1`, `${key}-2`];
+				let selected = Math.max(0, ids.indexOf(selectedId ?? ids[0]!));
+				return {
+					render: () => [`${label} roster`, `> ${ids[selected]}`, "footer"],
+					handleInput: (data: string) => {
+						if (data === "j") selected = Math.min(ids.length - 1, selected + 1);
+						if (data === "q") done({ type: "close" });
+					},
+					getSelectedId: () => ids[selected],
+					invalidate: () => {},
+				};
+			},
+			inspect: async () => {},
+		});
+		const createManager = () => {
+			const pi = { registerCommand: vi.fn(), registerShortcut: vi.fn(), appendEntry: vi.fn() };
+			const manager = new WorkManager(pi as any);
+			manager.registerSection(section("agents", "Agents"));
+			manager.registerSection(section("tasks", "Tasks"));
+			return { manager, pi };
+		};
+		const firstRenders: string[] = [];
+		const scripts: string[][] = [];
+		const ctx = {
+			hasUI: true,
+			mode: "tui",
+			ui: {
+				custom: async (factory: any) => {
+					let result: any;
+					const component = factory(
+						{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
+						theme,
+						undefined,
+						(value: any) => {
+							result = value;
+						},
+					);
+					firstRenders.push(component.render(100).join("\n"));
+					for (const input of scripts.shift() ?? ["q"]) component.handleInput(input);
+					component.dispose();
+					return result;
+				},
+			},
+		} as any;
+
+		const { manager, pi } = createManager();
+		scripts.push(["\t", "j", "q"]);
+		await manager.open(ctx);
+		await manager.open(ctx);
+		expect(firstRenders[1]).toContain("[Tasks]");
+		expect(firstRenders[1]).toContain("> tasks-2");
+
+		await manager.open(ctx, "agents");
+		expect(firstRenders[2]).toContain("[Agents]");
+		await manager.open(ctx);
+		expect(firstRenders[3]).toContain("[Agents]");
+		scripts.push(["\t", "q"]);
+		await manager.open(ctx);
+		await manager.open(ctx);
+		expect(firstRenders[5]).toContain("> tasks-2");
+		expect(pi.appendEntry).not.toHaveBeenCalled();
+
+		const fresh = createManager();
+		await fresh.manager.open(ctx);
+		expect(firstRenders[6]).toContain("[Agents]");
+		expect(firstRenders[6]).toContain("> agents-1");
+		expect(fresh.pi.appendEntry).not.toHaveBeenCalled();
+	});
+
 	it("keeps the selected roster row visible while reserving height for the tab bar", () => {
 		const tui = { terminal: { rows: 20, columns: 100 }, requestRender: vi.fn() } as any;
 		const tasks: PromptTask[] = Array.from({ length: 30 }, (_, index) => ({

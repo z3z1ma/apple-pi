@@ -79,6 +79,18 @@ describe("TaskManagerComponent", () => {
 		expect(done).toHaveBeenCalledWith({ type: "inspect", id: "second" });
 		component.dispose();
 	});
+
+	it("reports its selected row so /work can reopen on it", () => {
+		const now = Date.now();
+		const tasks: ManagedTask[] = [command("first", "running", now + 20), prompt("second", "scheduled", now + 10)];
+		const tui = { terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any;
+		const component = new TaskManagerComponent(tui, theme, () => tasks, undefined, vi.fn());
+		component.render(100);
+		expect(component.getSelectedId()).toBe("first");
+		component.handleInput("\x1b[B");
+		expect(component.getSelectedId()).toBe("second");
+		component.dispose();
+	});
 });
 
 describe("TaskDetailViewer", () => {

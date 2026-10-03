@@ -17,14 +17,14 @@ All command forms share the same `TaskManager`, `task-*` IDs, rolling output, pr
 
 Scheduled, due, and running tasks join public subagents in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
 
-`/work` or `Ctrl+W` opens one active-work manager with Agents and Tasks tabs; `/tasks` remains an alias that opens the Tasks tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. Use `Tab`/`Shift+Tab` or left/right to switch tabs. The session-local task roster orders active work before settled outcomes and uses the configured selection keys: select a row and press `Enter` to inspect it, or use `Esc`/`q` to close. Task detail shows:
+`/work` or `Ctrl+W` opens one active-work manager with Agents and Tasks tabs; `/tasks` remains an alias that opens the Tasks tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. Use `Tab`/`Shift+Tab` or left/right to switch tabs. The session-local task roster orders active work before settled outcomes and uses the configured selection keys: select a row and press `Enter` to inspect it, or use `Esc`/`q` to close. Reopening `/work` returns to the last tab and each tab's selected row; `/agents` and `/tasks` still open their own tab. Task detail shows:
 
 - complete prompt text, creation/due timing, and delivery state;
 - command text, working directory, timing, PID, exit state, and a live rolling output tail;
 - monitor event delivery count, caller-owned limit, and active/silent/finished delivery state;
 - an explicit truncation notice and full-output path when the rolling output is incomplete.
 
-Use `x` twice in detail to confirm cancellation of scheduled, due, or running work. Settled tasks remain readable and offer no cancellation action. Detail scrolling follows the configured selection and page keys; `Home` and `End` move to the start or live tail.
+Use `x` twice in detail to confirm cancellation of scheduled, due, or running work. Settled tasks remain readable and offer no cancellation action. Detail scrolling follows the configured selection and page keys; `Home` and `End` move to the start or live tail. Reopening a task's detail returns to where you left it; if it was following the live tail, it keeps following new output. This restored state lives in memory for the Pi process only and is never written to the session, so a restart starts fresh. Task detail positions clear with the task roster at session start, switch, fork, tree navigation, and shutdown.
 
 ## Tools
 

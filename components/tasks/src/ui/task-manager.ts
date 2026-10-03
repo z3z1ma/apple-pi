@@ -76,6 +76,10 @@ export class TaskManagerComponent implements Component {
 		this.refreshTimer.unref();
 	}
 
+	getSelectedId(): string | undefined {
+		return this.selectedId;
+	}
+
 	handleInput(data: string): void {
 		if (isKeyRelease(data)) return;
 		if (matchesKey(data, "escape") || matchesKey(data, "q")) {
@@ -138,9 +142,15 @@ export class TaskManagerComponent implements Component {
 	}
 }
 
+/** Where a task detail viewer was left: a scroll offset, or following the live tail. */
+export interface TaskDetailView {
+	scrollOffset: number;
+	autoScroll: boolean;
+}
+
 export class TaskDetailViewer implements Component {
-	private scrollOffset = 0;
-	private autoScroll = true;
+	private scrollOffset: number;
+	private autoScroll: boolean;
 	private lastContentLines = 0;
 	private lastViewportHeight = 1;
 	private cancelArmed = false;
@@ -155,7 +165,10 @@ export class TaskDetailViewer implements Component {
 		private readonly done: () => void,
 		private readonly onCancel?: () => void,
 		keybindings?: ViewerKeybindings,
+		initialView: TaskDetailView = { scrollOffset: 0, autoScroll: true },
 	) {
+		this.scrollOffset = initialView.scrollOffset;
+		this.autoScroll = initialView.autoScroll;
 		this.keys = createViewerKeys(keybindings);
 		this.refreshTimer = setInterval(() => {
 			if (!this.closed) this.tui.requestRender();
@@ -252,6 +265,10 @@ export class TaskDetailViewer implements Component {
 			row(footer),
 			bottom,
 		];
+	}
+
+	get view(): TaskDetailView {
+		return { scrollOffset: this.scrollOffset, autoScroll: this.autoScroll };
 	}
 
 	invalidate(): void {}

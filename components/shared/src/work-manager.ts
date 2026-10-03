@@ -10,7 +10,10 @@ import {
 } from "@earendil-works/pi-tui";
 import type { ViewerKeybindings } from "./viewer-keys.js";
 
-type ManagedComponent = Component & { dispose?(): void };
+/** A section component may report its current row so `/work` can reopen on it. */
+export type WorkSectionComponent = Component & { dispose?(): void; getSelectedId?(): string | undefined };
+
+type ManagedComponent = WorkSectionComponent;
 
 export type WorkSectionAction = { type: "close" } | { type: "inspect"; id: string };
 
@@ -31,8 +34,10 @@ export interface WorkSection {
 		selectedId: string | undefined,
 		done: (action: WorkSectionAction) => void,
 		reservedLines: number,
-	): Component;
+	): WorkSectionComponent;
 	inspect(ctx: ExtensionContext, id: string): Promise<void>;
+	/** Leave /work closed after inspecting instead of returning to the list. */
+	closesOnInspect?: boolean;
 }
 
 export interface WorkManagerUI {
@@ -99,6 +104,20 @@ export class WorkManagerComponent implements Component {
 		this.children[this.activeIndex]?.handleInput?.(data);
 	}
 
+	get activeSection(): string | undefined {
+		return this.sections[this.activeIndex]?.key;
+	}
+
+	/** Current row per section, for sections whose component reports one. */
+	selectedIds(): Map<string, string> {
+		const selected = new Map<string, string>();
+		this.sections.forEach((section, index) => {
+			const id = this.children[index]?.getSelectedId?.();
+			if (id !== undefined) selected.set(section.key, id);
+		});
+		return selected;
+	}
+
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
 		const maxLines = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
@@ -157,6 +176,9 @@ export const WORK_SECTION_CHANNEL = "apple-pi:work:register-section";
 
 export class WorkManager {
 	private readonly sections = new Map<string, WorkSection>();
+	// Restored on reopen for this process only; never written to the session.
+	private lastSection: string | undefined;
+	private readonly selectedIds = new Map<string, string>();
 
 	constructor(private readonly pi: ExtensionAPI) {
 		this.pi.registerCommand("work", {
@@ -187,21 +209,43 @@ export class WorkManager {
 		if (sections.length === 0) return;
 		for (const section of sections) section.prepare?.(ctx);
 
-		let activeSection = sections.some((section) => section.key === initialSection) ? initialSection : sections[0]?.key;
-		const selectedIds = new Map<string, string>();
+		const known = (key: string | undefined) => sections.some((section) => section.key === key);
+		let activeSection = known(initialSection)
+			? initialSection
+			: known(this.lastSection)
+				? this.lastSection
+				: sections[0]?.key;
 		while (activeSection) {
+			let component: WorkManagerComponent | undefined;
 			const action = await (ctx.ui as WorkManagerUI).custom<
 				{ type: "close" } | { type: "inspect"; section: string; id: string }
 			>(
-				(tui, theme, keybindings, done) =>
-					new WorkManagerComponent(tui, theme, sections, activeSection, selectedIds, done, keybindings),
+				(tui, theme, keybindings, done) => {
+					component = new WorkManagerComponent(
+						tui,
+						theme,
+						sections,
+						activeSection,
+						this.selectedIds,
+						done,
+						keybindings,
+					);
+					return component;
+				},
 				{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
 			);
+			if (component) {
+				this.lastSection = component.activeSection;
+				for (const [key, id] of component.selectedIds()) this.selectedIds.set(key, id);
+			}
 			if (!action || action.type === "close") return;
 			activeSection = action.section;
-			selectedIds.set(action.section, action.id);
+			this.lastSection = action.section;
+			this.selectedIds.set(action.section, action.id);
 			const section = sections.find((candidate) => candidate.key === action.section);
-			if (section) await section.inspect(ctx, action.id);
+			if (!section) continue;
+			await section.inspect(ctx, action.id);
+			if (section.closesOnInspect) return;
 		}
 	}
 }
