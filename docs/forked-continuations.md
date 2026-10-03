@@ -18,6 +18,18 @@ A forked continuation is how the harness runs a passive, automatic prompt withou
 - The fork does not use the parent's request preparation. It does not compact automatically, does not route virtual models, and does not retry automatically. A fork request also replaces the parent's pending Pi cache-warming run until the parent's next request.
 - A fork that edits files runs at the same time as any new user run. Edits to the same file can conflict.
 
+## Worktree forks
+
+Branch search needs forks that work on their own copy of the repository. `startFork(session, request)` starts one fork and gives the caller control of it:
+
+- `messages` is the conversation the fork starts from: the parent's projection, an earlier fork's conversation, or the parent's projection that ends in a pending tool call.
+- `append` is the one message added after it: a custom prompt, or a tool result for that pending call. The request is the parent's request with only this message added, so it shares the parent's cached prefix.
+- `worktree: { root, parentRoot }` binds the fork to a worktree. Before the parent's hooks run, the fork's own tool hook resolves relative paths against the worktree, changes paths under the parent root to the worktree, gives `ls`, `grep`, and `find` the worktree when they have no path, and changes the parent root in bash commands to the worktree. Bash runs with the worktree as its working directory. A `write` or `edit` whose target, with symlinks resolved, lies in the parent workspace outside the worktree, or outside both the worktree and the temp directory, fails with `Branch search isolates this attempt to its own copy of the repository.` The fork's transcript keeps the model's original arguments. A shell command can still reach the parent workspace indirectly; this is a guard, not a sandbox.
+- `blockedTools` names tools that return `This tool is not available inside a branch search attempt.` The tool list in the request stays the same, so the prefix stays the same.
+- `label` names the fork's usage entries in the parent session.
+
+The returned handle has `result`, a promise of the fork's final messages and the usage of each reply, and `abort()`, which stops only that fork. An aborted or failed fork resolves with its messages; the caller reads the last stop reason.
+
 ## Adding a consumer
 
-The implementation is `components/shared/src/forked-continuation.ts`. Call `registerForkedContinuation(pi, customType, label)` once when the extension registers. It returns a function that starts a fork with a prompt, usually from an `agent_settled` handler. If the consumer tracks the main run's tool activity, skip events while `inForkedContinuation()` is true. Before you add a consumer, check that its prompt is safe with the shared tools and hooks described in Limits.
+The implementation is `components/shared/src/forked-continuation.ts`, with the fork scope in `components/shared/src/fork-context.ts`. Call `registerForkedContinuation(pi, customType, label)` once when the extension registers. It returns a function that starts a fork with a prompt, usually from an `agent_settled` handler. If the consumer tracks the main run's tool activity, skip events while `inForkedContinuation()` is true. Before you add a consumer, check that its prompt is safe with the shared tools and hooks described in Limits.

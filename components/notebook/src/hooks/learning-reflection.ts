@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 
-import { inForkedContinuation, registerForkedContinuation } from "../../../shared/src/forked-continuation.js";
+import { inForkedContinuation } from "../../../shared/src/fork-context.js";
+import { registerForkedContinuation } from "../../../shared/src/forked-continuation.js";
 
 export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
 

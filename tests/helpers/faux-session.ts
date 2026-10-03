@@ -26,16 +26,33 @@ const model = {
 	maxTokens: 10_000,
 } as Model<string>;
 
-/** A real AgentSession on a scripted model, with `app.ts` in a temporary cwd. Call `dispose` when done. */
-export async function fauxSession(extensionFactories: ExtensionFactory[], replies: Reply[], tools: string[]) {
+/**
+ * A real AgentSession on a scripted model, with `app.ts` in a temporary cwd. Call `dispose` when done.
+ * `replies` is a queue, or a function of the request for runs whose order is not fixed. A function may
+ * return `"until-aborted"` to hold the request open until its signal aborts.
+ */
+export async function fauxSession(
+	extensionFactories: ExtensionFactory[],
+	replies: Reply[] | ((context: Context) => Reply | "until-aborted"),
+	tools: string[],
+) {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
 	mkdirSync(join(cwd, "agent"));
 	writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
 	const requests: Context[] = [];
-	const stream = (_model: Model<string>, context: Context) => {
+	const stream = (_model: Model<string>, context: Context, options?: { signal?: AbortSignal }) => {
 		requests.push(structuredClone(context));
-		const message = replies.shift() ?? fauxAssistantMessage("done");
+		const message =
+			typeof replies === "function" ? replies(context) : (replies.shift() ?? fauxAssistantMessage("done"));
 		const events = createAssistantMessageEventStream();
+		if (message === "until-aborted") {
+			options?.signal?.addEventListener("abort", () => {
+				const error = { ...fauxAssistantMessage(""), stopReason: "aborted" as const, errorMessage: "aborted" };
+				events.push({ type: "error", reason: "aborted", error });
+				events.end(error);
+			});
+			return events;
+		}
 		events.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });
 		events.end(message);
 		return events;
