@@ -97,3 +97,5 @@
 - `.ledger/history/202610030008-tui-glanceable-panels/task.md` — done — Glanceable panels for the Apple Pi TUI — Move Apple Pi from all-modal overlays to non-capturing glanceable panels (subagents first), a /btw top drop-down, and restored overlay state, within the public Pi API.
 
 - `.ledger/history/202610021233-prompt-surface-tightening/task.md` — done — Tighten the system prompt surface across hooks, tools, children, and skills — Move prompt hooks to Pi sections, give child sessions real tool rules, remove duplicated/contradictory guidance, trim profiles, gate wiki prompt, fix skill triggers.
+
+- `.ledger/history/202610031016-subagent-outcome-framing/task.md` — done — Deepen subagent outcome framing — Concentrate shared outcome framing for root results, nested results, and notifications behind one interface while preserving observable behavior, persistence ownership, and delivery lifecycle.

@@ -6,7 +6,7 @@ Updated: 2026-10-03
 
 ## What Mattered
 
-Shared outcome meaning was repeated across root, nested, and notification callers. One framing interface now hides the composition decisions while callers retain delivery mechanics. Separating the resume handle from response text preserves the existing file-change ordering.
+Shared outcome meaning was repeated across root, nested, and notification callers. One framing interface now hides the composition decisions while callers retain delivery mechanics. Separating the resume handle—the agent ID and guidance for continuing a live session—from response text preserves the existing ordering: response, traced file changes, then resume handle.
 
 ## Learnings
 

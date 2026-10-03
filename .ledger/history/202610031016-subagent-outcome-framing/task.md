@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-03
 Updated: 2026-10-03
 
@@ -7,6 +7,8 @@ Updated: 2026-10-03
 ## Intent
 
 Deepen shared outcome framing for root subagent results, nested results, and notifications while preserving observable behavior. Concentrate result selection, partial-output framing, delivery wording, saved-output presentation, and resume eligibility behind one interface. Keep persistence, state machines, and delivery mechanics with their existing owners.
+
+Outcome framing selects response text and qualifies what it represents. Root results return to the main agent; nested results return to the subagent that delegated the work; notifications announce background outcomes.
 
 ## Approach and acceptance criteria
 
@@ -29,4 +31,4 @@ Implemented and validated on 2026-10-03. Ticket generation was skipped because t
 
 ## Outcome
 
-The behavior-preserving refactor is complete. The task remains in-progress pending operator acceptance and explicit closure authority; no tickets, push, or publication were created.
+The behavior-preserving refactor is committed as `8db4e9a` (`refactor(subagents): centralize outcome framing`). The specification was committed as `538adec`. The operator accepted the result and explicitly authorized closure on 2026-10-03. No tickets, push, or publication were created.
