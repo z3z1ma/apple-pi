@@ -99,3 +99,5 @@
 - `.ledger/history/202610021233-prompt-surface-tightening/task.md` — done — Tighten the system prompt surface across hooks, tools, children, and skills — Move prompt hooks to Pi sections, give child sessions real tool rules, remove duplicated/contradictory guidance, trim profiles, gate wiki prompt, fix skill triggers.
 
 - `.ledger/history/202610031016-subagent-outcome-framing/task.md` — done — Deepen subagent outcome framing — Concentrate shared outcome framing for root results, nested results, and notifications behind one interface while preserving observable behavior, persistence ownership, and delivery lifecycle.
+
+- `.ledger/history/202610031136-subagent-resume-policy/task.md` — done — Centralize public-subagent resume policy — Deepen invocation policy for root and nested public subagents: omitted fixed settings reuse stored choices, explicit changes are rejected, and caller-owned ownership and execution remain unchanged.
