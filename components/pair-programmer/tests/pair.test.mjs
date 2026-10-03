@@ -1098,7 +1098,7 @@ test("compact hook includes recent trajectory in the reseed", async () => {
 	assert.match(result.compaction.summary, /keep this skeleton/);
 });
 
-test("compact hook keeps the reseed and stores an xAI item when compact succeeds", async () => {
+test("compact hook keeps the reseed and stores the server result when compact succeeds", async () => {
 	const originalFetch = globalThis.fetch;
 	globalThis.fetch = async () => ({
 		ok: true,
@@ -1126,11 +1126,11 @@ test("compact hook keeps the reseed and stores an xAI item when compact succeeds
 		);
 		assert.equal(result.compaction.firstKeptEntryId, A.PAIR_RESEED_ENTRY_ID);
 		assert.match(result.compaction.summary, /ship it/);
-		assert.ok(!result.compaction.summary.includes("[xAI Server-Side Compaction"));
-		assert.deepEqual(result.compaction.details.xaiCompaction, {
-			type: "compaction",
-			id: "cmp_adv",
-			encrypted_content: "enc",
+		assert.ok(!result.compaction.summary.includes("[Server-side compaction"));
+		assert.deepEqual(result.compaction.details.serverCompaction, {
+			api: "openai-responses",
+			provider: "xai",
+			items: [{ type: "compaction", id: "cmp_adv", encrypted_content: "enc" }],
 		});
 	} finally {
 		globalThis.fetch = originalFetch;

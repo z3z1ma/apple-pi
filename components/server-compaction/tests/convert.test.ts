@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { convertMessagesForXaiCompaction, isXaiResponsesModel } from "../src/convert.js";
-import type { XaiCompactionItem } from "../src/types.js";
+import { convertMessagesForResponsesCompaction } from "../src/convert.js";
+import { serverCompactionMethod } from "../src/target.js";
+import type { ResponsesCompactionItem } from "../src/types.js";
 
-describe("xAI context compaction conversion", () => {
-	it("detects xAI Responses models accurately", () => {
-		expect(isXaiResponsesModel({ provider: "xai", api: "openai-responses" })).toBe(true);
-		expect(isXaiResponsesModel({ provider: "xai", api: "openai-completions" })).toBe(false);
-		expect(isXaiResponsesModel({ provider: "openai", api: "openai-responses" })).toBe(false);
-		expect(isXaiResponsesModel(undefined)).toBe(false);
+describe("server compaction targets and conversion", () => {
+	it("compacts OpenAI and Codex sign-in with the trigger, xAI with its endpoint, and Anthropic natively", () => {
+		expect(serverCompactionMethod({ provider: "openai", api: "openai-responses" })).toBe("trigger");
+		expect(serverCompactionMethod({ provider: "openai-codex", api: "openai-codex-responses" })).toBe("trigger");
+		expect(serverCompactionMethod({ provider: "xai", api: "openai-responses" })).toBe("endpoint");
+		expect(serverCompactionMethod({ provider: "anthropic", api: "anthropic-messages" })).toBe("anthropic");
+		expect(serverCompactionMethod({ provider: "xai", api: "openai-completions" })).toBeUndefined();
+		expect(serverCompactionMethod({ provider: "amazon-bedrock", api: "anthropic-messages" })).toBeUndefined();
+		expect(serverCompactionMethod({ provider: "amazon-bedrock", api: "openai-responses" })).toBeUndefined();
+		expect(serverCompactionMethod(undefined)).toBeUndefined();
 	});
 
 	it("keeps user text, assistant text, tool calls, and tool results", () => {
-		const converted = convertMessagesForXaiCompaction([
+		const converted = convertMessagesForResponsesCompaction([
 			{
 				role: "user",
 				content: [{ type: "text", text: "Read the file" }],
@@ -60,12 +65,12 @@ describe("xAI context compaction conversion", () => {
 	});
 
 	it("prepends the previous compaction item when chaining", () => {
-		const previousItem: XaiCompactionItem = {
+		const previousItem: ResponsesCompactionItem = {
 			type: "compaction",
 			id: "cmp_123",
 			encrypted_content: "enc_blob_123",
 		};
-		const converted = convertMessagesForXaiCompaction(
+		const converted = convertMessagesForResponsesCompaction(
 			[
 				{
 					role: "user",
@@ -73,7 +78,7 @@ describe("xAI context compaction conversion", () => {
 					timestamp: Date.now(),
 				},
 			],
-			previousItem,
+			[previousItem],
 		);
 
 		expect(converted[0]).toEqual(previousItem);

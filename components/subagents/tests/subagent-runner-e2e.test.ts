@@ -70,6 +70,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 						test: {
 							command: process.execPath,
 							args: [join(process.cwd(), "tests", "fixtures", "mcp-echo-server.mjs")],
+							exposure: "deferred",
 						},
 					},
 				}),
@@ -80,16 +81,15 @@ describe("subagent runner with Pi's real AgentSession", () => {
 				(context) => {
 					const names = getCurrentTools(context.messages).map((tool) => tool.name);
 					expect(names).not.toContain("mcp");
-					if (!trusted) {
-						expect(names).not.toContain("codemode");
-						return fauxAssistantMessage([fauxText("NO-PROJECT-MCP")]);
-					}
-					expect(names).toContain("codemode");
-					return fauxAssistantMessage([
-						fauxToolCall("codemode", {
-							code: 'const result = await tools.mcp__test__echo({value: "CHILD"}); text(result);',
-						}),
-					]);
+					expect(names).not.toContain("codemode");
+					expect(names).not.toContain("mcp__test__echo");
+					if (!trusted) return fauxAssistantMessage([fauxText("NO-PROJECT-MCP")]);
+					expect(names).toContain("tool_search");
+					return fauxAssistantMessage([fauxToolCall("tool_search", { query: "echo" })]);
+				},
+				(context) => {
+					expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("mcp__test__echo");
+					return fauxAssistantMessage([fauxToolCall("mcp__test__echo", { value: "CHILD" })]);
 				},
 				(context) => {
 					expect(JSON.stringify(context)).toContain("echo:CHILD");
@@ -137,7 +137,7 @@ describe("subagent runner with Pi's real AgentSession", () => {
 			);
 			expect(result.failure).toBeUndefined();
 			expect(result.responseText).toBe(trusted ? "NATIVE-CHILD-MCP-OK" : "NO-PROJECT-MCP");
-			expect(registeredTools).toContain("codemode");
+			expect(registeredTools).not.toContain("codemode");
 			expect(registeredTools).toContain("tool_search");
 			expect(registeredTools).not.toContain("mcp");
 		},

@@ -10,7 +10,6 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	createAgentSession,
-	createCodemodeExtension,
 	createMcpExtension,
 	createToolSearchExtension,
 	DefaultResourceLoader,
@@ -449,9 +448,7 @@ export async function runAgent(
 					pi.on("before_agent_start", (event) => addToolGuidanceSections(event.systemPromptOptions));
 				},
 			},
-			...(options.loadStandardChildExtensions !== false
-				? [createMcpExtension(), createCodemodeExtension(), createToolSearchExtension()]
-				: []),
+			...(options.loadStandardChildExtensions !== false ? [createMcpExtension(), createToolSearchExtension()] : []),
 		],
 		noSkills,
 		noPromptTemplates: true,

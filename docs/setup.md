@@ -143,7 +143,7 @@ Inside Pi:
 
 ## 7. Optional configuration
 
-- **MCP servers:** add them to `~/.pi/agent/mcp.json`, then run `/reload` and `/mcp`. See [MCP](mcp.md).
+- **MCP servers:** add them to `~/.pi/agent/mcp.json` with `"exposure": "deferred"`, add `"extensions": ["-builtin:codemode"]` to `~/.pi/agent/settings.json` so `pi_exec` is the only composition runtime, then run `/reload` and `/mcp`. See [MCP](mcp.md).
 - **Editor:** set `EDITOR` in your shell profile (for example `export EDITOR=nvim`) for `Ctrl+E` prompt editing.
 - **RTK:** set `RTK_DISABLED=1` to turn RTK off. See [RTK](rtk.md).
 

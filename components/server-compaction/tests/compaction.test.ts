@@ -3,13 +3,13 @@ import type { Model } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-	compactWithXai,
+	compactOnServer,
 	fallbackSummary,
-	findLatestXaiCompaction,
-	registerXaiCompactionHooks,
-	registerXaiCompactionReplayHooks,
+	findLatestServerCompaction,
+	registerServerCompactionHooks,
+	registerServerCompactionReplayHooks,
 } from "../src/hooks.js";
-import type { XaiCompactionItem } from "../src/types.js";
+import type { ResponsesCompactionItem } from "../src/types.js";
 
 const xaiResponsesModel = {
 	id: "grok-4.6",
@@ -23,6 +23,12 @@ const xaiResponsesModel = {
 	contextWindow: 128000,
 	maxTokens: 8000,
 } as Model<any>;
+
+const xaiServerCompaction = {
+	api: "openai-responses",
+	provider: "xai",
+	items: [{ type: "compaction", id: "cmp_abc", encrypted_content: "enc_xyz" }],
+};
 
 function assistantMessage(text: string): AgentMessage {
 	return {
@@ -46,26 +52,34 @@ function assistantMessage(text: string): AgentMessage {
 
 function captureHandlers() {
 	const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-	registerXaiCompactionHooks({
+	registerServerCompactionHooks({
 		on(event: string, handler: (event: unknown, ctx: unknown) => unknown) {
 			handlers.set(event, handler);
 		},
+		getActiveTools: () => [],
+		getAllTools: () => [],
 	} as never);
 	return handlers;
 }
 
-describe("registerXaiCompactionHooks", () => {
-	it("finds the newest persisted xAI compaction item", () => {
-		const item1: XaiCompactionItem = { type: "compaction", id: "cmp_1", encrypted_content: "enc_1" };
-		const item2: XaiCompactionItem = { type: "compaction", id: "cmp_2", encrypted_content: "enc_2" };
+describe("server compaction hooks", () => {
+	it("uses only the newest compaction entry", () => {
+		const item1: ResponsesCompactionItem = { type: "compaction", id: "cmp_1", encrypted_content: "enc_1" };
+		const item2: ResponsesCompactionItem = { type: "compaction", id: "cmp_2", encrypted_content: "enc_2" };
+		const server = (item: ResponsesCompactionItem) => ({ api: "openai-responses", provider: "xai", items: [item] });
 		expect(
-			findLatestXaiCompaction([
-				{ type: "compaction", details: { xaiCompaction: item1 } },
-				{ type: "message" },
-				{ type: "compaction", details: { xaiCompaction: item2 } },
+			findLatestServerCompaction([
+				{ type: "compaction", details: { serverCompaction: server(item1) } },
+				{ type: "compaction", summary: "S2", details: { serverCompaction: server(item2) } },
 				{ type: "message" },
 			]),
-		).toEqual(item2);
+		).toEqual({ compaction: server(item2), summary: "S2" });
+		expect(
+			findLatestServerCompaction([
+				{ type: "compaction", details: { serverCompaction: server(item1) } },
+				{ type: "compaction", summary: "Pi summary" },
+			]),
+		).toBeUndefined();
 	});
 
 	it("returns a compaction result with the opaque item and a text summary", async () => {
@@ -104,15 +118,16 @@ describe("registerXaiCompactionHooks", () => {
 			compaction: {
 				firstKeptEntryId: "entry-kept",
 				details: {
-					xaiCompaction: {
-						type: "compaction",
-						id: "cmp_live",
-						encrypted_content: "enc_live_data",
+					serverCompaction: {
+						api: "openai-responses",
+						provider: "xai",
+						items: [{ type: "compaction", id: "cmp_live", encrypted_content: "enc_live_data" }],
+						replacesSummary: true,
 					},
 				},
 			},
 		});
-		expect(result?.compaction.summary).toContain("[xAI Server-Side Compaction cmp_live]");
+		expect(result?.compaction.summary).toContain("[Server-side compaction cmp_live]");
 		expect(result?.compaction.summary).toContain("query");
 		expect(result?.compaction.summary).toContain("PI DEFAULT HISTORY: keep this decision");
 	});
@@ -129,7 +144,7 @@ describe("registerXaiCompactionHooks", () => {
 		expect(summary.length).toBeLessThanOrEqual(12_000);
 	});
 
-	it("carries a prior xAI fallback into a later compaction fallback", () => {
+	it("carries a prior fallback into a later compaction fallback", () => {
 		const prior = fallbackSummary("cmp_a", [
 			{ role: "user", content: [{ type: "text", text: "A: retain the original requirement" }], timestamp: 1 },
 		]);
@@ -141,7 +156,7 @@ describe("registerXaiCompactionHooks", () => {
 	});
 
 	it("returns undefined when the registry cannot resolve auth", async () => {
-		const result = await compactWithXai(
+		const result = await compactOnServer(
 			{
 				preparation: {
 					messagesToSummarize: [],
@@ -152,13 +167,14 @@ describe("registerXaiCompactionHooks", () => {
 				branchEntries: [],
 			} as never,
 			{ model: xaiResponsesModel } as never,
+			[],
 		);
 		expect(result).toBeUndefined();
 	});
 
 	it("replay hooks do not register a compact handler", () => {
 		const handlers = new Map<string, unknown>();
-		registerXaiCompactionReplayHooks({
+		registerServerCompactionReplayHooks({
 			on(event: string, handler: unknown) {
 				handlers.set(event, handler);
 			},
@@ -168,7 +184,7 @@ describe("registerXaiCompactionHooks", () => {
 		expect(handlers.has("after_provider_response")).toBe(true);
 	});
 
-	it("returns undefined for non-xAI models so Pi default compaction can run", async () => {
+	it("returns undefined for models without server-side compaction so Pi's summarizer runs", async () => {
 		const handlers = captureHandlers();
 		const result = await handlers.get("session_before_compact")!(
 			{
@@ -180,7 +196,7 @@ describe("registerXaiCompactionHooks", () => {
 				},
 				branchEntries: [],
 			},
-			{ model: { ...xaiResponsesModel, provider: "openai" } },
+			{ model: { ...xaiResponsesModel, provider: "amazon-bedrock" } },
 		);
 		expect(result).toBeUndefined();
 	});
@@ -195,7 +211,7 @@ describe("registerXaiCompactionHooks", () => {
 				getBranch: () => [
 					{
 						type: "compaction",
-						details: { xaiCompaction: { type: "compaction", id: "cmp_abc", encrypted_content: "enc_xyz" } },
+						details: { serverCompaction: xaiServerCompaction },
 					},
 				],
 			},
@@ -225,7 +241,7 @@ describe("registerXaiCompactionHooks", () => {
 				getBranch: () => [
 					{
 						type: "compaction",
-						details: { xaiCompaction: { type: "compaction", id: "cmp_abc", encrypted_content: "enc_xyz" } },
+						details: { serverCompaction: xaiServerCompaction },
 					},
 				],
 			},
@@ -267,7 +283,7 @@ describe("registerXaiCompactionHooks", () => {
 				getBranch: () => [
 					{
 						type: "compaction",
-						details: { xaiCompaction: { type: "compaction", id: "cmp_abc", encrypted_content: "enc_xyz" } },
+						details: { serverCompaction: xaiServerCompaction },
 					},
 				],
 			},
@@ -295,9 +311,7 @@ describe("registerXaiCompactionHooks", () => {
 				getBranch: () => [
 					{
 						type: "compaction",
-						details: {
-							xaiCompaction: { type: "compaction", id: "cmp_abc", encrypted_content: "enc_xyz" },
-						},
+						details: { serverCompaction: xaiServerCompaction },
 					},
 				],
 			},

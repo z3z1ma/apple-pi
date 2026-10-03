@@ -1,11 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { convertToLlm } from "@earendil-works/pi-coding-agent";
-import type { XaiCompactionItem } from "./types.js";
-
-/** Check if a model is an xAI model running on the openai-responses API. */
-export function isXaiResponsesModel(model: { provider?: unknown; api?: unknown } | null | undefined): boolean {
-	return model?.provider === "xai" && model.api === "openai-responses";
-}
+import type { ResponsesCompactionItem } from "./types.js";
 
 function userContent(content: unknown): unknown {
 	if (typeof content === "string") {
@@ -41,21 +36,14 @@ function toolOutput(content: unknown): string {
 }
 
 /**
- * Convert Pi messages into xAI Responses `input` items, keeping tool calls,
+ * Convert Pi messages into Responses `input` items, keeping tool calls,
  * tool results, reasoning signatures, and images.
  */
-export function convertMessagesForXaiCompaction(
+export function convertMessagesForResponsesCompaction(
 	messages: AgentMessage[],
-	previousCompactionItem?: XaiCompactionItem,
+	previousItems: ResponsesCompactionItem[] = [],
 ): Record<string, unknown>[] {
-	const input: Record<string, unknown>[] = [];
-	if (previousCompactionItem) {
-		input.push({
-			type: "compaction",
-			id: previousCompactionItem.id,
-			encrypted_content: previousCompactionItem.encrypted_content,
-		});
-	}
+	const input: Record<string, unknown>[] = [...previousItems];
 
 	for (const msg of convertToLlm(messages)) {
 		if (msg.role === "user") {

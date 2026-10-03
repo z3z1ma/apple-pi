@@ -1,24 +1,28 @@
 # Context and notebook
 
-Compaction has one hook owner. On an xAI model using `openai-responses`, [`extensions/xai-context-compaction.ts`](../extensions/xai-context-compaction.ts) handles `/compact`, automatic compaction, and overflow recovery by calling xAI's `POST /responses/compact`. Other models leave `session_before_compact` unset so Pi's default summarizer runs.
+Compaction has one hook owner, [`extensions/server-compaction.ts`](../extensions/server-compaction.ts). It handles `/compact`, automatic compaction, and overflow recovery on the server of every provider that offers it: OpenAI with an API key, Codex sign-in, xAI, and Anthropic. Every other route, including Amazon Bedrock, returns no result from the hook, so Pi's default summarizer (`generateSummaryWithUsage`) asks the session model to summarize the conversation. Pi has no server-side compaction of its own, and its provider requests do not ask for provider-side context management. Verify provider behavior against the installed Pi version and the provider's documentation before you change this. [`docs/research/server-side-compaction.md`](research/server-side-compaction.md) records the provider APIs and the evidence on quality.
 
 Pi checks context after tool results and compacts before the next assistant provider request in the same run, including when oversized trailing tool results require an older valid cut point. [`extensions/auto-compact.ts`](../extensions/auto-compact.ts) keeps that continuation fail-closed: a failed or cancelled automatic compaction aborts the active run before provider dispatch. It is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers. Pi's `compaction.enabled` setting controls compaction.
 
-The notebook lands one packet of working conclusions as a persisted custom message right after each compaction (`session_compact`). Nothing rewrites request context per turn: provider prompt caches match on an exact prefix, and a message that moves or changes between requests forces the whole history to be re-sent at cache-write prices. Ordinary compaction remains responsible for conversation history and task progress.
+Right after each compaction (`session_compact`), the notebook appends one packet of current working conclusions as a persisted custom message. It follows the compacted history directly, so it sits near the start of the new context, where the model is likely to notice and recall it. Nothing rewrites request context per turn: provider prompt caches match on an exact prefix, and a message that moves or changes between requests forces the whole history to be re-sent at cache-write prices. Ordinary compaction remains responsible for conversation history and task progress.
 
-## xAI server-side compaction
+## Server-side compaction
 
-When the active model is `provider === "xai"` and `api === "openai-responses"`:
+| Provider and API | How it compacts | What the compaction entry keeps |
+| --- | --- | --- |
+| xAI, `openai-responses` | `POST {baseUrl}/responses/compact` with the converted messages | The opaque output items, and a bounded text projection of the compacted history as the readable summary |
+| OpenAI API key (`openai`, `openai-responses`) and Codex sign-in (`openai-codex`, `openai-codex-responses`) | As Codex does: an ordinary Responses request through Pi's adapter with the session's instructions and tools and a `{"type": "compaction_trigger"}` item last. The server answers with one compaction item. Codex sign-in reaches `chatgpt.com/backend-api/codex/responses` through Pi's Codex adapter, which sets the account headers. | The opaque compaction item, and the same text projection |
+| Anthropic, `anthropic-messages` | An ordinary Messages request through Pi's adapter with `"compaction": {"type": "summarize"}` and the `compact-2026-09-04` beta. The request carries the session's system prompt and active tools, as the API requires. | The signed `compaction` block; its readable text is the summary |
 
-1. The hook converts the messages being summarized with pi-ai's Responses converter.
-2. A previous xAI compaction item is prepended so successive compact calls chain.
-3. Auth comes from `ctx.modelRegistry.getApiKeyAndHeaders(model)`. The endpoint is `{model.baseUrl || https://api.x.ai/v1}/responses/compact`.
-4. A successful response stores `{ type: "compaction", id, encrypted_content }` in `details.xaiCompaction` and keeps a bounded whole-history text projection, including prior compacted context, as a usable fallback.
-5. Later xAI Responses requests inject only that newest item after a leading system or developer prompt.
-6. Auth failure, HTTP errors, or a missing compaction item return `undefined` so Pi's default summarizer runs.
-7. Injection is disabled for the rest of the session only when a 4xx can be attributed to an isolated request where this extension injected the item. Pre-existing items and ambiguous concurrent requests do not disable replay.
+OpenAI, Codex, and Anthropic go through Pi's own adapters, so authentication, headers, and request shape match ordinary turns. The OpenAI subscription sign-in (`openai` provider with a ChatGPT login, recognized by a key without the `sk-` prefix) refused both `compaction_trigger` and `/responses/compact` on api.openai.com in October 2026, but accepted `context_management`. For that login the hook sends `context_management: [{ type: "compaction", compact_threshold: 1000 }]`, the documented minimum, keeps the newest compaction item, and discards the model's reply. A conversation shorter than the threshold produces no item, so Pi's summarizer runs. The refusal comes from that route's input-item allowlist, which also rejects `configuration_update` ([openai/codex#42996](https://github.com/openai/codex/issues/42996#issuecomment-5911395320)); compaction items are on the allowlist, so replay works, and `context_management` is a request field rather than an input item. OpenAI may add trigger support for subscription logins later: retest `compaction_trigger` with that login and drop the `context_management` branch when it is accepted. Anthropic's summarize request ends with stop reason `compaction`, which Pi's adapter reports as an error; the hook reads the block from the raw stream event instead.
 
-Completions-routed Grok is left to Pi default compaction.
+The result is stored in `details.serverCompaction` with its `provider` and `api`. The compaction input starts with the previous result from the same provider, so successive compactions chain. When the previous compaction came from another provider or from Pi, its text summary leads the input instead.
+
+On later requests to the same provider and API, the replay hook puts the stored result at the start of the context: Responses items after a leading system or developer prompt, and the Anthropic block as the first assistant message with the beta added. When the entry's text summary is only a copy of that result (`replacesSummary`), the summary message is left out, so the model reads the server result alone. Only the newest compaction entry counts; an older server result never outlives a later Pi summary. After a model switch to another provider, Pi's text summary is all that remains.
+
+Failures, refusals, and responses without a result notify the user and return no result, so Pi's summarizer runs. A `/compact` focus instruction is ignored on the server path. Replay is disabled for the rest of the session only when a 4xx can be attributed to an isolated request where this extension injected the result. Results already in the payload and ambiguous concurrent requests do not disable replay.
+
+The pair programmer's session keeps its own reseed summary and attaches the server result without `replacesSummary`, so both reach its model.
 
 ## Pair programmer notebook
 

@@ -14,7 +14,12 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
-import { compactWithXai, registerXaiCompactionReplayHooks } from "../../xai-context-compaction/src/index.js";
+import type { Tool } from "@earendil-works/pi-ai";
+import {
+	activeTools,
+	compactOnServer,
+	registerServerCompactionReplayHooks,
+} from "../../server-compaction/src/index.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
@@ -44,9 +49,9 @@ export async function pairCompactResult(
 	event: SessionBeforeCompactEvent,
 	source: PairSeedSource,
 	ctx?: ExtensionContext,
+	tools: Tool[] = [],
 ) {
-	const xai = ctx ? await compactWithXai(event, ctx) : undefined;
-	const xaiItem = xai?.compaction?.details?.xaiCompaction;
+	const server = ctx ? await compactOnServer(event, ctx, tools) : undefined;
 	const summary = buildPairSeed({
 		entries: source.entries(),
 		rollingAdvice: source.rollingAdvice(),
@@ -60,7 +65,7 @@ export async function pairCompactResult(
 			summary,
 			firstKeptEntryId: PAIR_RESEED_ENTRY_ID,
 			tokensBefore: event.preparation.tokensBefore,
-			...(xaiItem ? { details: { xaiCompaction: xaiItem } } : {}),
+			...(server ? { details: { serverCompaction: server.serverCompaction } } : {}),
 		},
 	};
 }
@@ -128,8 +133,10 @@ export async function createPairSession(opts: {
 					// Runtime, triggers, commands, or revisit_note here — those stay
 					// on the primary session. The reseed summary carries the current
 					// working conclusions; nothing rewrites request context per turn.
-					registerXaiCompactionReplayHooks(pi);
-					pi.on("session_before_compact", (event, ctx) => pairCompactResult(event, opts.seedSource, ctx));
+					registerServerCompactionReplayHooks(pi);
+					pi.on("session_before_compact", (event, ctx) =>
+						pairCompactResult(event, opts.seedSource, ctx, activeTools(pi)),
+					);
 				},
 			},
 		],

@@ -13,7 +13,7 @@ export default defineConfig({
 			"components/notebook/tests/**/*.test.ts",
 			"components/session-search/tests/**/*.test.ts",
 			"components/xai-hosted-tools/tests/**/*.test.ts",
-			"components/xai-context-compaction/tests/**/*.test.ts",
+			"components/server-compaction/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",

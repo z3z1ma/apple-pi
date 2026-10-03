@@ -32,7 +32,7 @@ try {
 			"extensions/ledger.ts",
 			"extensions/wiki.ts",
 			"extensions/xai-hosted-tools.ts",
-			"extensions/xai-context-compaction.ts",
+			"extensions/server-compaction.ts",
 			"extensions/notify.ts",
 			"extensions/tmux-sessions.ts",
 			"extensions/input-editor.ts",
@@ -122,11 +122,11 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.includes("xai-context-compaction") &&
+				extension.path.includes("server-compaction") &&
 				(extension.handlers.get("session_before_compact")?.length ?? 0) > 0 &&
 				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
 		),
-		"missing xAI context compaction hooks",
+		"missing server-side compaction hooks",
 	);
 	assert(
 		result.extensions.some(
