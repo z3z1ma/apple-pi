@@ -22,11 +22,11 @@ Every Apple Pi overlay (agent viewer, `/btw`, `/work`, task viewer) is a centere
 - **First glanceable content:** running subagents' live output.
 - **In scope from Duggan's article (see Source):** glanceable panels that do not take focus; layout that adapts to terminal width; a quake-style top drop-down for `/btw`; overlays that reopen with their selection and scroll position.
 - **Out of scope:** grouping views by task, and hiding private content during screen sharing.
-- **Overlay roles:** the agent viewer becomes the glanceable subagent panel. `/btw` becomes a top drop-down that takes focus while you type, closes on Esc, and keeps its answer in the `/btw` session. `/work` and the task viewer stay modal and gain restored selection and scroll position. Prompt stash is unchanged: its only overlay is a placeholder while `$EDITOR` runs, so it has nothing to restore. `ask_user_question` stays modal and unchanged, because each questionnaire is new.
+- **Overlay roles:** the agent viewer becomes the glanceable subagent panel. `/btw` becomes a top-center drop-down, half the terminal height, that takes focus while you type, closes on Esc, and keeps its answer in the `/btw` session. `/work` and the task viewer stay modal and gain restored selection and scroll position. Prompt stash is unchanged: its only overlay is a placeholder while `$EDITOR` runs, so it has nothing to restore. `ask_user_question` stays modal and unchanged, because each questionnaire is new.
 - **Opening:** the operator pins the subagent panel from `/work`; it never opens by itself.
 - **Unpinning:** `q` while the panel has focus, or an unpin action on the agent in `/work`.
 - **Panel actions:** with focus, the panel keeps the agent viewer's actions and keys: Enter steers the selected agent, `x` twice aborts it. Esc now returns focus instead of closing; `q` unpins.
-- **Idle panel:** with no agent running, the panel stays pinned and shows finished agents until unpinned.
+- **Idle panel:** with no agent running, the panel stays pinned and shows finished agents until unpinned. Finished public agents stay until the session ends (reload, switch, or shutdown); only nested and internal agents still expire after 10 minutes.
 - **Focus:** `Alt+G` moves focus between the editor and the panel; Esc in the panel returns it to the editor. The operator uses `Alt+O` elsewhere; Pi's defaults and Apple Pi do not bind `Alt+G`.
 - **Restored state:** in memory for the Pi process only, never in the session file.
 - **Placement:** top right, one third of the terminal width, up to 70% of its height.

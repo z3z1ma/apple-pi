@@ -8,3 +8,4 @@ Append-only. One entry per completed knowledge change.
 - 2026-10-03: Updated [[tui-interaction-model]] with placement, multi-agent, width, focus-key, mouse, and occlusion decisions plus the mouse prototype result.
 - 2026-10-03: Updated [[tui-interaction-model]] with unpinning, panel actions, idle-panel behavior, and ask_user_question left unchanged.
 - 2026-10-03: Corrected [[tui-interaction-model]]: prompt stash has no browsable overlay; linked the task spec.
+- 2026-10-03: Updated [[tui-interaction-model]]: finished public agents kept until session end; /btw drop-down at half height.

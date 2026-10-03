@@ -38,6 +38,37 @@ describe("child session disposal", () => {
 		expect(dispose).toHaveBeenCalledOnce();
 	});
 
+	it("keeps finished public agents until session end while expiring finished nested agents", () => {
+		vi.useFakeTimers();
+		try {
+			const manager = new AgentManager();
+			const finished = (id: string, overrides: Partial<AgentRecord>) =>
+				({
+					id,
+					type: "explorer",
+					description: id,
+					status: "completed",
+					toolUses: 0,
+					startedAt: Date.now(),
+					completedAt: Date.now(),
+					lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+					compactionCount: 0,
+					session: { extensionRunner: { emit: vi.fn(async () => {}) }, dispose: vi.fn() },
+					...overrides,
+				}) as unknown as AgentRecord;
+			(manager as any).agents.set("public", finished("public", {}));
+			(manager as any).agents.set("nested", finished("nested", { parentAgentId: "public" }));
+
+			vi.advanceTimersByTime(11 * 60_000);
+
+			expect(manager.getRecord("public")).toBeDefined();
+			expect(manager.getRecord("nested")).toBeUndefined();
+			manager.dispose();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("requires the internal owner capability to steer, resume, or discard a hidden session", async () => {
 		const owner = "apple-pi:btw";
 		const steer = vi.fn(async () => {});

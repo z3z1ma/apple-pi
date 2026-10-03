@@ -697,7 +697,84 @@ describe("ConversationViewer", () => {
 			expect(colorOf("[Tool: read]")).toBe("muted");
 			expect(colorOf("thinking...")).toBe("thinkingText");
 			expect(calls.find((call) => call.text === "───")?.color).toBe("dim");
-			expect(colorOf("Esc close")).toBe("dim");
+			expect(colorOf("Esc editor ")).toBe("dim");
+		});
+	});
+
+	describe("panel keys", () => {
+		it("Esc asks to return focus to the editor instead of closing, and q asks to unpin", () => {
+			const done = vi.fn();
+			const viewer = new ConversationViewer(mockTui(), mockSession(), mockRecord(), undefined, ansiTheme(), done);
+			expect(viewer.render(80).join("\n")).toContain("q unpin");
+
+			viewer.handleInput("\x1b");
+			expect(done).toHaveBeenLastCalledWith("unfocus");
+			viewer.handleInput("q");
+			expect(done).toHaveBeenLastCalledWith("unpin");
+			expect(done).toHaveBeenCalledTimes(2);
+			viewer.dispose();
+		});
+
+		it("Esc while composing cancels the steer without leaving the panel", () => {
+			const done = vi.fn();
+			const viewer = new ConversationViewer(
+				mockTui(),
+				mockSession(),
+				mockRecord({ status: "running" }),
+				undefined,
+				ansiTheme(),
+				done,
+				undefined,
+				undefined,
+				vi.fn(),
+			);
+			viewer.handleInput("\r");
+			viewer.handleInput("\x1b");
+			expect(done).not.toHaveBeenCalled();
+			viewer.dispose();
+		});
+	});
+
+	describe("streaming assistant message", () => {
+		const plainTheme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as any;
+		const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+		it("renders each streamed chunk live and does not duplicate the message once it completes", () => {
+			const session = mockSession([{ role: "user", content: "explain" }]);
+			session.state = {
+				streamingMessage: { role: "assistant", content: [{ type: "text", text: "FIRST-CHUNK line one" }] },
+			};
+			const viewer = new ConversationViewer(mockTui(), session, mockRecord(), undefined, plainTheme, vi.fn());
+			const first = viewer.render(80).join("\n");
+			expect(first).toContain("FIRST-CHUNK");
+			expect(first).not.toContain("SECOND-CHUNK");
+
+			// Pi replaces the streaming message with a longer one on every delta.
+			const grown = {
+				role: "assistant",
+				content: [{ type: "text", text: "FIRST-CHUNK line one\nSECOND-CHUNK line two" }],
+			};
+			session.state = { streamingMessage: grown };
+			const second = viewer.render(80).join("\n");
+			expect(second).toContain("FIRST-CHUNK");
+			expect(second).toContain("SECOND-CHUNK");
+
+			// message_end appends the same message while it can still be the streaming one.
+			session.messages.push(grown);
+			expect(count(viewer.render(80).join("\n"), "SECOND-CHUNK")).toBe(1);
+			session.state = {};
+			expect(count(viewer.render(80).join("\n"), "SECOND-CHUNK")).toBe(1);
+			viewer.dispose();
+		});
+
+		it("shows a streaming answer before any message is committed", () => {
+			const session = mockSession([]);
+			session.state = { streamingMessage: { role: "assistant", content: [{ type: "text", text: "EARLY" }] } };
+			const viewer = new ConversationViewer(mockTui(), session, mockRecord(), undefined, plainTheme, vi.fn());
+			const out = viewer.render(80).join("\n");
+			expect(out).toContain("EARLY");
+			expect(out).not.toContain("waiting for first message");
+			viewer.dispose();
 		});
 	});
 

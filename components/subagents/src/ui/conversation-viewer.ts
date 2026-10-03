@@ -1,8 +1,9 @@
 /**
- * conversation-viewer.ts — Live conversation overlay for viewing agent sessions.
+ * conversation-viewer.ts — Live conversation view of one agent session.
  *
- * Displays a scrollable, live-updating view of an agent's conversation.
- * Subscribes to session events for real-time streaming updates.
+ * Displays a scrollable, live-updating view of an agent's conversation inside
+ * the glanceable agent panel. Subscribes to session events for real-time
+ * streaming updates.
  */
 
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
@@ -41,7 +42,14 @@ const CHROME_LINES_BASE = 6;
 /** Height ceiling shared by the overlay's `maxHeight` and the viewer's internal viewport cap. */
 export const VIEWPORT_HEIGHT_PCT = 70;
 
+/** Esc returns keyboard focus to the editor; q unpins the panel. */
+export type ConversationViewerAction = "unfocus" | "unpin";
+
 export class ConversationViewer implements Component {
+	/** Rows the embedding panel draws above this view, deducted from the height ceiling. */
+	reservedRows = 0;
+	/** Draw a `├─┤` joint instead of a rounded top border so the view continues a panel box. */
+	joinTop = false;
 	private scrollOffset = 0;
 	private autoScroll = true;
 	private unsubscribe: (() => void) | undefined;
@@ -54,6 +62,22 @@ export class ConversationViewer implements Component {
 	private keys: ViewerKeys;
 	/** Steering composer — present while the user is typing a message to the agent. */
 	private composer: Input | undefined;
+	private hasFocus = false;
+
+	/**
+	 * Keyboard focus, set by the embedding panel. It reaches the composer so the
+	 * hardware cursor (and IME window) follows real focus; losing focus also
+	 * drops a pending stop confirmation.
+	 */
+	get focused(): boolean {
+		return this.hasFocus;
+	}
+
+	set focused(value: boolean) {
+		this.hasFocus = value;
+		if (this.composer) this.composer.focused = value;
+		if (!value) this.stopArmed = false;
+	}
 
 	constructor(
 		private tui: TUI,
@@ -61,7 +85,7 @@ export class ConversationViewer implements Component {
 		private record: AgentRecord,
 		private activity: AgentActivity | undefined,
 		private theme: Theme,
-		private done: (result: undefined) => void,
+		private done: (action: ConversationViewerAction) => void,
 		/** Abort the agent shown here. Omitted → no stop affordance (e.g. read-only history). */
 		private onStop?: () => void,
 		/** User keybindings from `ctx.ui.custom()`. Omitted → hardcoded defaults. */
@@ -102,9 +126,13 @@ export class ConversationViewer implements Component {
 			return;
 		}
 
-		if (matchesKey(data, "escape") || matchesKey(data, "q")) {
-			this.closed = true;
-			this.done(undefined);
+		if (matchesKey(data, "escape")) {
+			this.stopArmed = false;
+			this.done("unfocus");
+			return;
+		}
+		if (matchesKey(data, "q")) {
+			this.done("unpin");
 			return;
 		}
 
@@ -175,7 +203,9 @@ export class ConversationViewer implements Component {
 			truncateToWidth(pad(content, innerW), innerW, "...", true) +
 			" " +
 			th.fg("border", "│");
-		const hrTop = th.fg("border", `╭${"─".repeat(width - 2)}╮`);
+		const hrTop = this.joinTop
+			? th.fg("border", `├${"─".repeat(width - 2)}┤`)
+			: th.fg("border", `╭${"─".repeat(width - 2)}╮`);
 		const hrBot = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
 		const hrMid = row(th.fg("dim", "─".repeat(innerW)));
 
@@ -239,7 +269,7 @@ export class ConversationViewer implements Component {
 		} else {
 			// Actions on the left, navigation on the right. The scroll hint keeps its
 			// full key list so the less-obvious bindings stay discoverable; it leads
-			// the right group so "Esc close" is the only part that truncates first.
+			// the right group so the Esc/q hints are the part that truncates first.
 			const sep = th.fg("dim", " · ");
 			const actions: string[] = [];
 			if (this.canSteer()) actions.push(th.fg("dim", "Enter steer"));
@@ -248,7 +278,7 @@ export class ConversationViewer implements Component {
 			}
 			const footerRight = th.fg(
 				"dim",
-				`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} scroll · ${formatViewerKey(this.keys.pageUpKey)}/${formatViewerKey(this.keys.pageDownKey)} page · Esc close`,
+				`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} scroll · ${formatViewerKey(this.keys.pageUpKey)}/${formatViewerKey(this.keys.pageDownKey)} page · Esc editor · q unpin`,
 			);
 
 			// Prepend the line-count/scroll-% readout only when there's spare width —
@@ -267,12 +297,32 @@ export class ConversationViewer implements Component {
 		}
 		lines.push(hrBot);
 
-		const maxRows = Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100));
+		const maxRows = this.maxRows();
 		if (lines.length <= maxRows) return lines;
+		if (this.composer) {
+			// Never hide the input while it owns the keyboard: Enter would send an unseen draft.
+			const composerRow = lines.at(-3) as string;
+			return maxRows >= 2 ? [lines[1] as string, composerRow] : [composerRow];
+		}
 		const compact = [lines[1] ?? lines[0], lines.at(-2) ?? lines.at(-1)].filter(
 			(line): line is string => line !== undefined,
 		);
 		return compact.slice(0, maxRows);
+	}
+
+	/** Fewest rows that show the full chrome, any open composer, and one conversation row. */
+	minimumRows(): number {
+		return this.chromeLines() + 1;
+	}
+
+	/** Follow a replaced activity tracker (e.g. after a resume) without resetting view state. */
+	setActivity(activity: AgentActivity | undefined): void {
+		this.activity = activity;
+	}
+
+	/** True while the steering composer owns keyboard input. */
+	isComposing(): boolean {
+		return this.composer !== undefined;
 	}
 
 	/** Stoppable only when a stop handler exists and the agent is still active. */
@@ -288,7 +338,7 @@ export class ConversationViewer implements Component {
 	/** Open the inline steering composer and route subsequent input to it. */
 	private openComposer(): void {
 		const input = new Input();
-		input.focused = true;
+		input.focused = this.hasFocus;
 		input.onSubmit = (value: string) => {
 			const message = value.trim();
 			this.composer = undefined;
@@ -321,8 +371,11 @@ export class ConversationViewer implements Component {
 	private viewportHeight(): number {
 		// Cap mirrors the overlay's maxHeight — otherwise the viewer would render
 		// more lines than the overlay shows and clip the footer.
-		const maxRows = Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100));
-		return Math.max(0, maxRows - this.chromeLines());
+		return Math.max(0, this.maxRows() - this.chromeLines());
+	}
+
+	private maxRows(): number {
+		return Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - this.reservedRows);
 	}
 
 	private chromeLines(): number {
@@ -342,7 +395,14 @@ export class ConversationViewer implements Component {
 		if (width <= 0) return [];
 
 		const th = this.theme;
-		const messages = this.session?.messages ?? [];
+		const committed = this.session?.messages ?? [];
+		// Pi holds the in-progress assistant message outside `messages` until
+		// message_end; show it so long answers stream instead of appearing frozen.
+		const streaming = this.session?.state?.streamingMessage;
+		const messages =
+			streaming && streaming.role === "assistant" && committed.at(-1) !== streaming
+				? [...committed, streaming]
+				: committed;
 		const lines: string[] = [];
 
 		if (messages.length === 0) {

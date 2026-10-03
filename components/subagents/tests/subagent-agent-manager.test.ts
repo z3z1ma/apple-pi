@@ -90,6 +90,7 @@ describe("AgentManagerComponent", () => {
 
 		expect(component.render(80).join("\n")).toContain("ctrl+p/ctrl+n select");
 		component.handleInput("D");
+		expect(component.getSelectedId()).toBe("second");
 		component.handleInput("\r");
 
 		expect(done).toHaveBeenCalledWith({ type: "inspect", id: "second" });

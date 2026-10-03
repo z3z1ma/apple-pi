@@ -252,8 +252,8 @@ export class AgentManager {
 		this.onStart = onStart;
 		this.onCompact = onCompact;
 		this.maxConcurrent = maxConcurrent;
-		// Release completed in-process sessions after 10 minutes; persisted child
-		// session files remain on disk, but the current Agent resume API is in-memory.
+		// Release completed nested and internal sessions after 10 minutes. Public agents stay
+		// until session end so the agent panel, results, and resume keep them.
 		this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
 		this.cleanupInterval.unref();
 	}
@@ -869,6 +869,7 @@ export class AgentManager {
 		const cutoff = Date.now() - 10 * 60_000;
 		for (const [id, record] of this.agents) {
 			if (record.status === "running" || record.status === "queued" || record.retainUntilSessionEnd) continue;
+			if (!record.parentAgentId && !record.internalOwner) continue;
 			if ((record.completedAt ?? 0) >= cutoff) continue;
 			this.removeRecord(id, record);
 		}
@@ -878,7 +879,7 @@ export class AgentManager {
 	 * Remove all completed/stopped/errored records immediately.
 	 * Called on session start/switch so tasks from a prior session don't persist.
 	 * Pass skipUnconsumed=true to preserve records the LLM hasn't read yet
-	 * (resultConsumed=false) — they will be evicted by the 10-minute cleanup timer instead.
+	 * (resultConsumed=false); public ones stay until a later call clears them, nested and internal ones expire after 10 minutes.
 	 */
 	clearCompleted(skipUnconsumed = false): void {
 		for (const [id, record] of this.agents) {

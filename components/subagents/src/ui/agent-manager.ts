@@ -93,6 +93,10 @@ export class AgentManagerComponent implements Component {
 		return this.getRecords().filter(isPublic);
 	}
 
+	getSelectedId(): string | undefined {
+		return this.selectedId;
+	}
+
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
 		const line = (text: string) => truncateToWidth(text, renderWidth, "");
@@ -161,7 +165,7 @@ export class AgentManagerComponent implements Component {
 			line(
 				this.theme.fg(
 					"dim",
-					`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} select · Enter inspect · t types · Esc close`,
+					`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} select · Enter pin · t types · Esc close`,
 				),
 			),
 		);

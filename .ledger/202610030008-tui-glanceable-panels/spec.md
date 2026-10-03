@@ -64,7 +64,7 @@ Everything stays within the public Pi API. The panel draws over the transcript; 
 - **Pinning and unpinning.** In the work manager's Agents section, the inspect action pins the panel (when not pinned) and selects that agent in it. The Agents section offers an unpin action while the panel is pinned. Its key follows the section's existing configured keybindings and is chosen at implementation.
 - **Agent list.** The panel lists the session's public agents, running and finished, and shows the selected agent's live output below the list.
 - **Narrow terminals.** Below 120 terminal columns the panel's `visible` callback hides it; the shared active-work status line stays as it is today.
-- **`/btw`.** The `/btw` overlay anchors at the top center with a short fixed height. It keeps capturing focus, closes on `Esc`, and keeps its session behavior.
+- **`/btw`.** The `/btw` overlay anchors at the top center at half the terminal height (operator decision; a fixed row count was considered and rejected). It keeps capturing focus, closes on `Esc`, and keeps its session behavior.
 - **Restored state.** The work manager keeps the active tab and per-section selection for the process lifetime instead of per opening. The task viewer keeps scroll position per task for the process lifetime. Restored state lives in memory only and never calls session persistence.
 - **Unchanged.** `ask_user_question` and the prompt stash. Prompt stash has no browsable overlay: its only overlay is a placeholder while `$EDITOR` runs, so it has no selection or scroll to restore.
 - **Documentation.** `docs/subagents.md`, `docs/btw.md`, and `docs/tasks.md` describe the new panel, keys, `/btw` placement, and restored state. The README catalog changes only if the public surface summary changes.

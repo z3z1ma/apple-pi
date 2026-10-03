@@ -11,7 +11,7 @@ import {
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { installWorkManager } from "../../shared/src/work-manager.js";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
@@ -947,6 +947,22 @@ RELOADED ROLE MUST NOT RUN.
 			expect(queuedResumeSettled).toBe(false);
 
 			let modalCall = 0;
+			const panelHandle = {
+				hide: vi.fn(),
+				focus: vi.fn(),
+				unfocus: vi.fn(),
+				isFocused: () => false,
+				setHidden: vi.fn(),
+			};
+			const panels: any[] = [];
+			const modalTui = {
+				terminal: { rows: 30, columns: 160 },
+				requestRender: () => {},
+				showOverlay: (component: any) => {
+					panels.push(component);
+					return panelHandle;
+				},
+			};
 			const modalCtx = {
 				...extensionCtx,
 				hasUI: true,
@@ -956,7 +972,7 @@ RELOADED ROLE MUST NOT RUN.
 						modalCall++;
 						let action: any;
 						const component = factory(
-							{ terminal: { rows: 30, columns: 100 }, requestRender: () => {} },
+							modalTui,
 							{
 								fg: (_color: string, text: string) => text,
 								bg: (_color: string, text: string) => text,
@@ -967,7 +983,7 @@ RELOADED ROLE MUST NOT RUN.
 								action = result;
 							},
 						);
-						if (modalCall === 1) {
+						{
 							let selected = false;
 							for (let index = 0; index < 20; index++) {
 								selected = component
@@ -978,18 +994,20 @@ RELOADED ROLE MUST NOT RUN.
 							}
 							expect(selected).toBe(true);
 							component.handleInput("\r");
-						} else if (modalCall === 2) {
-							component.handleInput("x");
-							component.handleInput("x");
-							component.handleInput("q");
-						} else component.handleInput("q");
+						}
 						component.dispose?.();
 						return action;
 					},
 				},
 			};
 			await commands.get("agents").handler("", modalCtx);
-			expect(modalCall).toBe(3);
+			// Choosing the agent pinned the glanceable panel and closed /work; stop it from the panel.
+			expect(modalCall).toBe(1);
+			expect(panels).toHaveLength(1);
+			panels[0].handleInput("x");
+			panels[0].handleInput("x");
+			panels[0].handleInput("q");
+			expect(panelHandle.hide).toHaveBeenCalledOnce();
 			releaseStoppedResponse?.();
 			const queuedResumeResult = await queuedResumeWait;
 			expect(queuedResumeResult.content[0].text).toContain("QUEUED-RESUME-DONE");
