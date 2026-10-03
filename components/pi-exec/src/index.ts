@@ -1,25 +1,17 @@
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import type { Usage } from "@earendil-works/pi-ai";
-import {
-	defineTool,
-	type ExtensionAPI,
-	type ExtensionContext,
-	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
 import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
-import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
 import { coreToolDefinition, ENVELOPE_TOOL_NAMES, isCoreToolName } from "./core-tools.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import { EVIDENCE_FUNCTION_NAMES, runEvidenceFunction } from "./evidence.js";
 import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import {
 	attachLiveDescription,
-	guestPythonStubs,
 	PI_EXEC_DESCRIPTION,
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PROMPT_GUIDELINES,
@@ -27,8 +19,8 @@ import {
 	piExecGuestApiContract,
 } from "./guest-api.js";
 import { serializeJsonValue } from "./json.js";
-import { createProgramSession, executeProgram, isOwnedMontyWorker } from "./program.js";
 import { aggregateUsage, bounded, resultText, traceValue } from "./results.js";
+import { installProgramSession } from "./session.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { listSkills, readSkillBody } from "./skills.js";
 import { capturedTool, capturedTools, installRegisteredToolCapture } from "./tool-capture.js";
@@ -37,19 +29,6 @@ import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderEx
 
 const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
-const MONTY_ENTRY_TYPE = "apple-pi:monty-session";
-const ROLLBACK_NOTICE =
-	"Monty state was rolled back to the last saved checkpoint. Completed tool, file, and process effects were not undone.";
-
-function branchCheckpoint(ctx: ExtensionContext): { found: boolean; data?: unknown } {
-	const branch = ctx.sessionManager.getBranch();
-	for (let index = branch.length - 1; index >= 0; index--) {
-		const entry = branch[index]!;
-		if (entry.type === "custom" && entry.customType === MONTY_ENTRY_TYPE) return { found: true, data: entry.data };
-	}
-	return { found: false };
-}
-
 function portableValue(value: unknown, maxChars = MAX_GUEST_TOOL_RESULT_CHARS): unknown {
 	if (value === undefined) return undefined;
 	const json = serializeJsonValue(value, "pi_exec host result");
@@ -86,79 +65,8 @@ export default function piExec(pi: ExtensionAPI): void {
 		captureError = error instanceof Error ? error.message : String(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
-	let owner: Awaited<ReturnType<typeof createProgramSession>> | undefined;
-	let ownerHash: string | undefined;
-	let hostCalls = 0;
-	let selected: ReturnType<typeof branchCheckpoint> | undefined;
-	let notice: string | undefined;
-	let generation = 0;
 	let executing = false;
-	let activeAbort: AbortController | undefined;
-	const stopWorker = (live: Awaited<ReturnType<typeof createProgramSession>>, pid: number | undefined) => {
-		if (pid === undefined || live.session.workerPid !== undefined) return;
-		if (!isOwnedMontyWorker(pid)) return;
-		try {
-			process.kill(pid, "SIGKILL");
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ESRCH")
-				console.error("pi_exec could not stop Monty worker", error);
-		}
-	};
-	const discard = async () => {
-		generation++;
-		activeAbort?.abort();
-		const previous = owner;
-		owner = undefined;
-		ownerHash = undefined;
-		hostCalls = 0;
-		if (previous) await previous.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
-	};
-	const selectBranch = async (ctx: ExtensionContext) => {
-		await discard();
-		selected = branchCheckpoint(ctx);
-		notice = undefined;
-	};
-	pi.on("session_start", (_event, ctx) => selectBranch(ctx));
-	pi.on("session_tree", (_event, ctx) => selectBranch(ctx));
-	pi.on("session_shutdown", async () => {
-		await discard();
-		selected = undefined;
-	});
-	const ensureOwner = async (ctx: ExtensionContext) => {
-		if (owner) return owner;
-		const stubs = guestPythonStubs(ctx.cwd);
-		const hash = createHash("sha256").update(stubs).digest("hex");
-		const checkpoint = selected ?? branchCheckpoint(ctx);
-		selected = undefined;
-		if (checkpoint.found) {
-			const dump = await verifyCheckpoint(ctx.sessionManager, checkpoint.data, hash);
-			if (dump) {
-				try {
-					owner = await createProgramSession(stubs, dump);
-					ownerHash = hash;
-					return owner;
-				} catch (error) {
-					notice = `Monty checkpoint could not be loaded; started an empty session: ${error instanceof Error ? error.message : String(error)}`;
-				}
-			} else {
-				notice = "Monty checkpoint is incompatible or unverifiable; started an empty session.";
-			}
-		}
-		owner = await createProgramSession(stubs);
-		ownerHash = hash;
-		return owner;
-	};
-	const appendCheckpoint = async (
-		ctx: ExtensionContext,
-		live: Awaited<ReturnType<typeof createProgramSession>>,
-		expectedGeneration: number,
-	) => {
-		const dump = await live.session.dump();
-		const checkpoint = await sealCheckpoint(ctx.sessionManager, dump, ownerHash!);
-		if (generation !== expectedGeneration || owner !== live)
-			throw new Error("pi_exec session changed during checkpoint");
-		pi.appendEntry(MONTY_ENTRY_TYPE, checkpoint);
-	};
+	const programSession = installProgramSession(pi);
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && !event.toolName.startsWith("program_")) || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
@@ -515,77 +423,16 @@ export default function piExec(pi: ExtensionAPI): void {
 			};
 
 			try {
-				if (params.reset) {
-					await discard();
-					selected = { found: false };
-					notice = undefined;
-				}
-				// Monty counts suspensions across a checkout; rebase from the last checkpoint before the next call could exhaust it.
-				if (owner && hostCalls + callBudget > PROGRAM_ENVELOPE_MAXIMA.callBudget) {
-					await discard();
-					selected = branchCheckpoint(ctx);
-				}
-				const currentGeneration = generation;
-				const live = await ensureOwner(ctx);
-				if (currentGeneration !== generation) {
-					if (owner === live) {
-						owner = undefined;
-						await live.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
-					}
-					throw new Error("pi_exec session changed during checkout");
-				}
-				if (params.reset) {
-					try {
-						await appendCheckpoint(ctx, live, currentGeneration);
-					} catch (error) {
-						if (owner === live) {
-							owner = undefined;
-							await live.close().catch((cleanupError) => console.error("pi_exec Monty cleanup failed", cleanupError));
-						}
-						throw error;
-					}
-				}
-				const callNotice = notice;
-				notice = undefined;
-				activeAbort = new AbortController();
-				const workerPid = live.session.workerPid;
-				const runtimeSignal = signal ? AbortSignal.any([signal, activeAbort.signal]) : activeAbort.signal;
-				let result = await executeProgram(
-					live.session,
-					params.code,
-					params.inputs ?? {},
-					envelope.timeoutSeconds * 1_000,
+				const { execution: result, notice: callNotice } = await programSession.run(ctx, {
+					code: params.code,
+					inputs: params.inputs ?? {},
+					timeoutMs: envelope.timeoutSeconds * 1_000,
+					callBudget,
+					reset: params.reset === true,
 					hostCall,
-					runtimeSignal,
-					(values) => logs.push(values.map(displayValue).join(" ")),
-					() => stopWorker(live, workerPid),
-				);
-				hostCalls += calls;
-				if (result.sessionUsable && currentGeneration === generation && owner === live) {
-					try {
-						await appendCheckpoint(ctx, live, currentGeneration);
-					} catch (error) {
-						result = {
-							outcome: "failed",
-							error: `pi_exec could not save Monty state: ${error instanceof Error ? error.message : String(error)}`,
-							sessionUsable: false,
-						};
-					}
-				}
-				if (!result.sessionUsable || currentGeneration !== generation) {
-					if (owner === live) {
-						owner = undefined;
-						ownerHash = undefined;
-						hostCalls = 0;
-					}
-					await live.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
-					result = {
-						...result,
-						outcome: result.outcome === "succeeded" ? "aborted" : result.outcome,
-						error: `${result.error ?? "pi_exec session changed"} ${ROLLBACK_NOTICE}`,
-						sessionUsable: false,
-					};
-				}
+					signal,
+					onLog: (values) => logs.push(values.map(displayValue).join(" ")),
+				});
 				finishedAt = Date.now();
 				if (result.outcome !== "succeeded") {
 					for (const operation of pendingOperations) {
@@ -635,7 +482,6 @@ export default function piExec(pi: ExtensionAPI): void {
 				};
 			} finally {
 				executing = false;
-				activeAbort = undefined;
 				widget?.dispose();
 				if (widgetMounted) {
 					try {
