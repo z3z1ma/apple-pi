@@ -1,10 +1,14 @@
 # Session log analysis
 
-How to measure agent behavior from Pi session logs, and the traps that make such numbers mislead. Used for the learning-loop evidence (`.ledger/202610022036-notebook-learning-loop/`), a count of runs whose final "tests pass" claims had no later run behind them, which informed [[epistemic-grounding]], and prompt-cache audits (`scripts/cache-audit.mjs`).
+How to measure agent behavior from Pi session logs, and the traps that make such numbers mislead. Earlier uses:
+
+- the learning-loop evidence in `.ledger/202610022036-notebook-learning-loop/`;
+- a count of runs whose final "tests pass" claim had no later run behind it, which informed [[epistemic-grounding]];
+- prompt-cache audits with `scripts/cache-audit.mjs`.
 
 ## Layout
 
-Session files are JSONL under `~/.pi/agent/sessions/--<cwd with / as ->--/*.jsonl`. Directory names start with `--`, so pass `--` before globs to `ls`.
+Session files are JSONL under `~/.pi/agent/sessions/<project>/*.jsonl`. Each `<project>` directory is the working directory with `/` replaced by `-`, wrapped in `--`, for example `--Users-alex-code-app--`. Because the names start with `--`, pass `--` before globs to `ls`.
 
 Each line is one entry with a `type`:
 
