@@ -34,7 +34,7 @@
 import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, Container, Spacer, Text, TruncatedText, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
@@ -187,7 +187,8 @@ const adviseSchema = Type.Object({
 	),
 	severity: Type.Optional(
 		Type.Union([Type.Literal("nit"), Type.Literal("concern"), Type.Literal("blocker")], {
-			description: "How strongly to weigh a finding. Omit for a plain nit. Must be omitted for questions.",
+			description:
+				"The lowest fitting weight. blocker: the current path will produce a wrong or harmful result. concern: a material risk not yet addressed. Omit for a nit. Must be omitted for questions.",
 		}),
 	),
 	finding_id: Type.Optional(
@@ -2319,18 +2320,14 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory card rendering ----
-	// Bordered card (severity-colored left rule, bold "pair programmer <SEVERITY>" heading,
-	// body in the default readable `text` color) replacing the single dim inline
-	// line, matching the visual clarity of richer third-party pair UIs surveyed
-	// during UX research. `text` (not `muted`/`dim`) for the body follows the same
-	// contrast rationale as the conversation-viewer fix: dim is nearly invisible in
-	// the dark theme and this is content the user is meant to read.
-	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
+	// Collapsed: one severity-colored line per note. Expanded: a bordered card with the
+	// full note in the readable `text` color (dim is nearly invisible in the dark theme).
+	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
 		const container = new Container();
 		for (const [index, n] of notes.entries()) {
-			if (index > 0) container.addChild(new Spacer(1));
+			if (index > 0 && options.expanded) container.addChild(new Spacer(1));
 			const color = isPairQuestion(n)
 				? "accent"
 				: n.severity === "blocker"
@@ -2340,8 +2337,14 @@ export default function (pi: ExtensionAPI) {
 						: "accent";
 			const tag = isPairQuestion(n) ? "QUESTION" : (n.severity ?? "nit").toUpperCase();
 			const role = n.source === "consultant" || n.source === "advisor" ? "consultant" : "pair programmer";
+			const heading = `${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`;
+			if (!options.expanded) {
+				const summary = n.note.replace(/\s+/g, " ").trim();
+				container.addChild(new TruncatedText(`${theme.fg(color, "●")} ${heading} ${theme.fg("text", summary)}`, 0, 0));
+				continue;
+			}
 			const card = new Container();
-			card.addChild(new Text(`${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`, 0, 0));
+			card.addChild(new Text(heading, 0, 0));
 			card.addChild(new Spacer(1));
 			card.addChild(new Text(theme.fg("text", n.note), 0, 0));
 			container.addChild(new AdvisoryBorder(card, theme.fg(color, "│")));

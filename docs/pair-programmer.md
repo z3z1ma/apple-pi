@@ -76,7 +76,7 @@ A review attempt commits its staged notes, consultant requests, and notebook upd
 
 The partner can curate the notebook but cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate repository state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
 
-Free-form prose does not start a consultant consultation. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A question is appropriate only when the absent evidence could materially change that judgment; ordinary uncertainty, progress narration, praise, and an all-clear remain silent.
+Free-form prose does not start a consultant consultation. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A note is appropriate only when, without it, the main agent would likely deliver a wrong result or waste significant effort. A question is appropriate only when the absent evidence could materially change that judgment and no shown receipt answers it. The prompt asks for the lowest fitting severity, one or two sentences per note, and each issue raised once. Ordinary uncertainty, progress narration, praise, resolved issues, and an all-clear remain silent.
 
 One conservative repeated-failure gate may also ask the consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
 
@@ -168,6 +168,8 @@ The main agent can invoke the consultant through `agent` as an ordinary advisory
 The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through `agent` parameters.
 
 ## Status and accounting
+
+Delivered notes render as one severity-colored line each; expanding tool output shows the full bordered card. The main agent always receives the full note text.
 
 The footer uses `q-pair` and shows pair programmer review plus consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, consultant dispositions, suppressions, stale results, usage, cost, and duration.
 

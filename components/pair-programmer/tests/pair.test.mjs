@@ -3481,7 +3481,7 @@ test("lifecycle: a typed material-finding acknowledgment is persisted and preven
 // 3. render path
 // ===========================================================================
 
-async function renderAdvisory(notes) {
+async function renderAdvisory(notes, expanded = false) {
 	const ext = await loadPairExtension();
 	const renderer = ext.messageRenderers.get("advisory");
 	const message = {
@@ -3493,7 +3493,7 @@ async function renderAdvisory(notes) {
 		timestamp: Date.now(),
 	};
 	const comp = new CustomMessageComponent(message, renderer);
-	comp.setExpanded(false);
+	comp.setExpanded(expanded);
 	return strip(comp.render(100).join("\n"));
 }
 
@@ -3517,8 +3517,19 @@ test("render: questions show QUESTION rather than a severity tag", async () => {
 	assert.doesNotMatch(text, /\bNIT\b/);
 });
 
+test("render: collapsed advisory shows each note on one line", async () => {
+	const text = await renderAdvisory([
+		{ note: `first line\nsecond line ${"long ".repeat(40)}`, severity: "concern" },
+		{ note: "Which screenshot is canonical?", kind: "question" },
+	]);
+	const lines = text.split("\n").filter((line) => line.trim().length > 0);
+	assert.equal(lines.length, 2, `expected one line per note, got: ${JSON.stringify(lines)}`);
+	assert.match(lines[0], /pair programmer CONCERN first line second line/);
+	assert.match(lines[1], /QUESTION Which screenshot is canonical\?/);
+});
+
 test("render: advisory card has a left border on both the heading and body lines", async () => {
-	const text = await renderAdvisory([{ note: "tidy this up", severity: "concern" }]);
+	const text = await renderAdvisory([{ note: "tidy this up", severity: "concern" }], true);
 	const lines = text.split("\n").filter((line) => line.trim().length > 0);
 	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
 	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
