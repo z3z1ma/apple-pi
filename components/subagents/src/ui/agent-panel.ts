@@ -1,14 +1,13 @@
 /**
- * agent-panel.ts — Glanceable subagent panel.
+ * agent-panel.ts — Agents tab of the shared work panel.
  *
- * A compact list of the session's public agents, running and finished, with
- * the selected agent's live conversation below it. The installer mounts it as
- * a non-capturing overlay, so the editor keeps keyboard input until the
- * operator focuses the panel.
+ * A compact roster of the session's public agents, running and finished, with
+ * the selected agent's live conversation below it, plus an inline view of the
+ * discovered agent types. The shared work panel owns mounting, focus, tabs,
+ * Esc, and q; this tab owns agent selection, steering, stopping, and scroll.
  */
 
 import {
-	type Component,
 	isKeyRelease,
 	Key,
 	matchesKey,
@@ -18,23 +17,34 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import type { ViewerKeybindings } from "../../../shared/src/viewer-keys.js";
+import { createViewerKeys, formatViewerKey, type ViewerKeybindings } from "../../../shared/src/viewer-keys.js";
+import type { WorkSectionComponent } from "../../../shared/src/work-manager.js";
 import { renderAgentName } from "../agent-color.js";
 import type { AgentRecord } from "../types.js";
-import { type AgentActivity, firstNonEmptyLine, type Theme } from "./agent-widget.js";
-import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
+import { getLifetimeTotal } from "../usage.js";
+import {
+	type AgentActivity,
+	describeActivity,
+	firstNonEmptyLine,
+	formatDuration,
+	formatMs,
+	formatSessionTokens,
+	formatTurns,
+	type Theme,
+} from "./agent-widget.js";
+import { ConversationViewer } from "./conversation-viewer.js";
 
-/** Key that moves focus between the editor and the panel. */
-export const AGENT_PANEL_FOCUS_KEY = "alt+g";
-/** The panel hides on terminals narrower than this many columns. */
-export const AGENT_PANEL_MIN_COLUMNS = 120;
 /**
  * Most agent rows shown above the conversation; longer lists scroll around the
  * selection. Short terminals get fewer rows, so the conversation keeps its chrome.
  */
 const MAX_LIST_ROWS = 5;
-/** Panel rows above the agent list: top border and title. */
-const PANEL_HEADER_ROWS = 2;
+
+export interface AgentTypeSummary {
+	name: string;
+	description: string;
+	sourcePath?: string;
+}
 
 export interface AgentPanelDeps {
 	tui: TUI;
@@ -45,21 +55,24 @@ export interface AgentPanelDeps {
 	getActivity(id: string): AgentActivity | undefined;
 	stop(id: string): void;
 	steer(id: string, message: string): void;
-	/** Return keyboard focus to the editor. */
-	unfocus(): void;
-	/** Remove the panel. */
-	unpin(): void;
+	/** Discovered agent types for the inline types view. */
+	types?: readonly AgentTypeSummary[];
 }
 
-export class AgentPanel implements Component {
+export class AgentPanel implements WorkSectionComponent {
+	rowBudget = 0;
 	private hasFocus = false;
 	private selectedId: string | undefined;
 	private viewer: ConversationViewer | undefined;
 	private viewerId: string | undefined;
+	private mode: "agents" | "types" = "agents";
+	private selectedType = 0;
 
-	constructor(private readonly deps: AgentPanelDeps) {}
+	constructor(private readonly deps: AgentPanelDeps) {
+		this.rowBudget = Math.floor(deps.tui.terminal.rows * 0.7);
+	}
 
-	/** Set by the TUI when the panel gains or loses keyboard focus; forwarded to the conversation. */
+	/** Set by the work panel while this tab is active and focused; forwarded to the conversation. */
 	get focused(): boolean {
 		return this.hasFocus;
 	}
@@ -74,23 +87,43 @@ export class AgentPanel implements Component {
 		this.syncViewer();
 	}
 
+	getSelectedId(): string | undefined {
+		return this.selectedId;
+	}
+
+	title(): string {
+		return `Agents · ${this.deps.listAgents().length}`;
+	}
+
+	hints(): string[] {
+		return [this.mode === "agents" ? "t types" : "t agents"];
+	}
+
+	isComposing(): boolean {
+		return this.viewer?.isComposing() ?? false;
+	}
+
 	handleInput(data: string): void {
 		if (isKeyRelease(data)) return;
-		if (matchesKey(data, AGENT_PANEL_FOCUS_KEY)) {
-			this.deps.unfocus();
+		const viewer = this.mode === "agents" ? this.syncViewer() : undefined;
+		if (viewer?.isComposing()) {
+			viewer.handleInput(data);
+			this.deps.tui.requestRender();
 			return;
 		}
-		const viewer = this.syncViewer();
-		if (!viewer?.isComposing()) {
-			if (matchesKey(data, Key.tab) || matchesKey(data, Key.shift("tab"))) {
-				this.cycle(matchesKey(data, Key.tab) ? 1 : -1);
-				return;
-			}
-			if (!viewer) {
-				if (matchesKey(data, "escape")) this.deps.unfocus();
-				else if (matchesKey(data, "q")) this.deps.unpin();
-				return;
-			}
+		if (matchesKey(data, "t")) {
+			this.mode = this.mode === "agents" ? "types" : "agents";
+			if (this.viewer) this.viewer.focused = this.mode === "agents" && this.hasFocus;
+			this.deps.tui.requestRender();
+			return;
+		}
+		if (this.mode === "types") {
+			this.handleTypesInput(data);
+			return;
+		}
+		if (matchesKey(data, Key.tab) || matchesKey(data, Key.shift("tab"))) {
+			this.cycle(matchesKey(data, Key.tab) ? 1 : -1);
+			return;
 		}
 		viewer?.handleInput(data);
 		this.deps.tui.requestRender();
@@ -98,10 +131,9 @@ export class AgentPanel implements Component {
 
 	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
 		if (event.type === "wheel") {
-			this.viewer?.scrollBy(event.wheelDelta ?? 0);
+			if (this.mode === "agents") this.viewer?.scrollBy(event.wheelDelta ?? 0);
 			return { handled: true };
 		}
-		if (event.type === "press" && event.button === "left") return { focus: true };
 		return undefined;
 	}
 
@@ -114,39 +146,23 @@ export class AgentPanel implements Component {
 			const pad = " ".repeat(Math.max(0, innerW - visibleWidth(clipped)));
 			return `${th.fg("border", "│")} ${clipped}${pad} ${th.fg("border", "│")}`;
 		};
+		const bottom = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
+		if (this.mode === "types") return [...this.renderTypes(row), bottom];
+
 		const records = this.deps.listAgents();
 		const viewer = this.syncViewer();
-
-		const title = th.fg("accent", th.bold(`Agents · ${records.length}`));
-		const hint = th.fg("dim", this.focused ? "Tab next · Esc editor" : "Alt+G focus");
-		const gap = Math.max(1, innerW - visibleWidth(title) - visibleWidth(hint));
-		const lines = [th.fg("border", `╭${"─".repeat(width - 2)}╮`), row(title + " ".repeat(gap) + hint)];
+		if (!viewer) return [row(th.fg("muted", "(no agents)")), row(th.fg("dim", "t types")), bottom];
 
 		const selectedIndex = Math.max(
 			0,
 			records.findIndex((record) => record.id === this.selectedId),
 		);
-		// The list gets what the height ceiling leaves after the conversation's chrome,
+		// The roster gets what the row budget leaves after the conversation's chrome,
 		// any open composer, and one conversation row.
-		const ceiling = Math.floor((this.deps.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100);
-		const listRows = viewer
-			? Math.max(0, Math.min(MAX_LIST_ROWS, ceiling - PANEL_HEADER_ROWS - viewer.minimumRows()))
-			: MAX_LIST_ROWS;
+		const listRows = Math.max(0, Math.min(MAX_LIST_ROWS, this.rowBudget - viewer.minimumRows()));
 		const start = Math.max(0, Math.min(selectedIndex - Math.floor(listRows / 2), records.length - listRows));
-		for (const record of records.slice(start, start + listRows)) {
-			const marker = record.id === this.selectedId ? th.fg("accent", "›") : " ";
-			lines.push(
-				row(
-					`${marker} ${statusIcon(record, th)} ${renderAgentName(record.type, th)} ${th.fg("text", firstNonEmptyLine(record.description))} ${th.fg("dim", `· ${record.status}`)}`,
-				),
-			);
-		}
-
-		if (!viewer) {
-			lines.push(row(th.fg("muted", "(no agents)")));
-			lines.push(th.fg("border", `╰${"─".repeat(width - 2)}╯`));
-			return lines;
-		}
+		const lines = records.slice(start, start + listRows).map((record) => row(this.rosterLine(record)));
+		viewer.rowBudget = this.rowBudget;
 		viewer.reservedRows = lines.length;
 		return [...lines, ...viewer.render(width)];
 	}
@@ -159,6 +175,63 @@ export class AgentPanel implements Component {
 		this.viewer?.dispose();
 		this.viewer = undefined;
 		this.viewerId = undefined;
+	}
+
+	private rosterLine(record: AgentRecord): string {
+		const th = this.deps.theme;
+		const marker = record.id === this.selectedId ? th.fg("accent", "›") : " ";
+		const activity = this.deps.getActivity(record.id);
+		const tokens = getLifetimeTotal(activity?.lifetimeUsage ?? record.lifetimeUsage);
+		const stats = [
+			record.status,
+			record.status === "running" && activity ? describeActivity(activity.activeTools, activity.responseText) : "",
+			activity ? formatTurns(activity.turnCount, activity.maxTurns) : "",
+			record.toolUses > 0 ? `${record.toolUses} tools` : "",
+			tokens > 0 ? formatSessionTokens(tokens, null, th) : "",
+			record.status === "queued"
+				? formatMs(Date.now() - record.startedAt)
+				: formatDuration(record.startedAt, record.completedAt),
+		]
+			.filter(Boolean)
+			.join(" · ");
+		return `${marker} ${statusIcon(record, th)} ${renderAgentName(record.type, th)} ${th.fg("text", firstNonEmptyLine(record.description))} ${th.fg("dim", `· ${stats}`)}`;
+	}
+
+	private renderTypes(row: (content: string) => string): string[] {
+		const th = this.deps.theme;
+		const types = this.deps.types ?? [];
+		const keys = createViewerKeys(this.deps.keybindings);
+		const budget = Math.max(1, this.rowBudget - 1);
+		const header = row(th.fg("accent", th.bold(`Agent types · ${types.length}`)));
+		if (budget === 1) return [header];
+		const selected = types[this.selectedType];
+		const details = selected
+			? [
+					row(th.fg("muted", firstNonEmptyLine(selected.description))),
+					...(selected.sourcePath ? [row(th.fg("dim", selected.sourcePath))] : []),
+				]
+			: [];
+		const shownDetails = details.slice(0, Math.max(0, budget - 3));
+		const slots = Math.max(0, budget - 2 - shownDetails.length);
+		const start = Math.max(0, Math.min(this.selectedType - Math.floor(slots / 2), types.length - slots));
+		return [
+			header,
+			...types.slice(start, start + slots).map((type) => row(`${type === selected ? ">" : " "} ${type.name}`)),
+			...shownDetails,
+			row(th.fg("dim", `${formatViewerKey(keys.upKey)}/${formatViewerKey(keys.downKey)} select · t agents`)),
+		];
+	}
+
+	private handleTypesInput(data: string): void {
+		const types = this.deps.types ?? [];
+		if (types.length === 0) return;
+		const keys = createViewerKeys(this.deps.keybindings);
+		if (keys.scrollUp(data) || matchesKey(data, Key.shift("tab"))) {
+			this.selectedType = Math.max(0, this.selectedType - 1);
+		} else if (keys.scrollDown(data) || matchesKey(data, Key.tab)) {
+			this.selectedType = Math.min(types.length - 1, this.selectedType + 1);
+		} else return;
+		this.deps.tui.requestRender();
 	}
 
 	private cycle(step: number): void {
@@ -190,13 +263,14 @@ export class AgentPanel implements Component {
 			record,
 			this.deps.getActivity(record.id),
 			theme,
-			(action) => (action === "unpin" ? this.deps.unpin() : this.deps.unfocus()),
+			// The work panel handles Esc and q before keys reach this view.
+			() => {},
 			() => this.deps.stop(record.id),
 			keybindings,
 			(message) => this.deps.steer(record.id, message),
 		);
 		this.viewer.joinTop = true;
-		this.viewer.focused = this.hasFocus;
+		this.viewer.focused = this.hasFocus && this.mode === "agents";
 		return this.viewer;
 	}
 }

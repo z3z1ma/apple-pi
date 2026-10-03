@@ -1,14 +1,26 @@
 # Engineering team
 
-The `agent` tool brings a named teammate into a foreground or background Pi session. `get_subagent_result` waits for or checks background work, `steer_subagent` gives a running teammate more guidance after their current tool, and `stop_subagent` ends queued or running work. `/work` or `Ctrl+W` opens one active-work manager with Agents and Tasks tabs; `/agents` remains an alias that opens the Agents tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. In TUI mode, running and queued public agents appear in the shared passive above-editor active-work widget, and the input card shows a terse non-zero `agents:N` count. Every unconsumed public-background terminal outcome, including an operator stop from the agent panel, sends one XML notification through `deliverAs: "steer"`; foreground and explicitly consumed outcomes already return inline and do not duplicate that message. Nested and internal outcomes remain with their owner. Terminal outcomes leave the passive surface.
+The `agent` tool brings a named teammate into a foreground or background Pi session. `get_subagent_result` waits for or checks background work, `steer_subagent` gives a running teammate more guidance after their current tool, and `stop_subagent` ends queued or running work. `/work` or `Ctrl+W` opens the work panel with Agents and Tasks tabs on its last-used tab; `/agents` opens the same panel directly on the Agents tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. In TUI mode, running and queued public agents appear in the shared passive above-editor active-work widget, and the input card shows a terse non-zero `agents:N` count. Every unconsumed public-background terminal outcome, including an operator stop from the work panel, sends one XML notification through `deliverAs: "steer"`; foreground and explicitly consumed outcomes already return inline and do not duplicate that message. Nested and internal outcomes remain with their owner. Terminal outcomes leave the passive surface.
 
-The Agents tab orders and labels live and recently settled records, preserves selection by agent ID after you choose one, and follows configured selection keybindings. Use `Tab`/`Shift+Tab` or left/right to switch work tabs. Press `Enter` to pin the selected agent in the agent panel and close `/work`, `t` to switch between the roster and discovered agent types, and `Esc` or `q` to close. `/work` reopens on the last tab and selected agent for the life of the Pi process; this state is never written to the session. Nested and internally owned agents are excluded from this flow.
+### Work panel
 
-### Agent panel
+The work panel is one glanceable overlay shared by agents and [tasks](tasks.md). `/work`, `Ctrl+W`, `/agents`, and `/tasks` open it directly, with no picker or pin step; repeating any of them while it is open reuses the same panel and only selects the tab. It never opens by itself and does not take keyboard focus, so you keep typing to the main agent. It stays open when no agent is running, and a modal can open above it and close without removing it.
 
-The agent panel is a glanceable view pinned at the top right of the terminal, one third of its width and at most 70% of its height. It never opens by itself: choosing an agent in `/work` pins it, or selects that agent if the panel is already pinned. The panel lists the session's public agents, running and finished, and shows the selected agent's live conversation below the list. It draws over the transcript without taking keyboard focus, so you keep typing to the main agent. It stays pinned when no agent is running and keeps listing finished agents. A modal such as `/work` can open above it and close without removing it.
+Placement follows the terminal width. At 120 columns or more the panel sits at the top right, one third of the width and at most 70% of the height. On narrower terminals it drops down from the top center like [`/btw`](btw.md), 90% of the width and at most half the height; it never hides because of width. Resizing keeps the same panel, so the tab, selected agent or task, scroll position, follow-tail state, and any steering draft survive in both directions.
 
-`Alt+G` moves keyboard focus into the panel; `Alt+G` again or `Esc` returns it to the editor with your draft unchanged. With focus, the panel keeps the former agent viewer's keys:
+`Alt+G` moves keyboard focus into the panel; `Alt+G` again or `Esc` returns it to the editor with your draft unchanged. With focus, these keys apply on either tab while no steering message is being composed:
+
+| Key | Action |
+| --- | --- |
+| `←` / `→` | Switch between the Agents and Tasks tabs |
+| `Esc` or `Alt+G` | Return focus to the editor |
+| `q` | Close the panel |
+
+In fullscreen mode, a left click on the panel focuses it, a click on a tab label selects that tab, and the mouse wheel scrolls the active tab's conversation or task detail, focused or not. Closing and reopening the panel returns to the last tab and each tab's selected record for the life of the Pi process; this state is never written to the session. Session shutdown closes the panel.
+
+### Agents tab
+
+The Agents tab lists the session's public agents, running and finished, with each agent's status, current activity, turns, tool uses, tokens, and duration, and shows the selected agent's live conversation below the list. Nested and internally owned agents are excluded. With focus:
 
 | Key | Action |
 | --- | --- |
@@ -16,12 +28,9 @@ The agent panel is a glanceable view pinned at the top right of the terminal, on
 | Configured scroll keys, `k`/`j`, page keys, `Home`/`End` | Scroll the selected conversation |
 | `Enter` | Compose a steering message for a running or queued agent; `Enter` sends, `Esc` cancels |
 | `x` twice | Stop the selected running or queued agent |
-| `Esc` or `Alt+G` | Return focus to the editor |
-| `q` | Unpin the panel |
+| `t` | Switch between the roster and the discovered agent types |
 
-In fullscreen mode, a left click on the panel focuses it and the mouse wheel scrolls the selected conversation, focused or not. While the panel is pinned, the Agents tab in `/work` also offers `u` to unpin it without focusing it.
-
-Settled conversations remain readable without steer or stop actions. Below 120 terminal columns the panel hides and the one-line active-work status remains; it returns with the same selection when the terminal widens. Session shutdown unpins it.
+While a steering message is being composed, every key, including arrows, `Tab`, and `q`, goes to the message. A pending stop confirmation is dropped when focus leaves the panel, the tab changes, or another agent is selected. Settled conversations remain readable without steer or stop actions.
 
 `agent` and `pi_exec` `agent_run` share the same team catalog but support different kinds of collaboration. Use `agent` when a teammate should own a piece of work with their own session, context, and ability to check back in. Use `pi_exec` when model workers belong inside a program graph that fans out, binds MCP or tool results as `context`, and reduces to a compact value. The interactive `agent`, result, steer, and stop tools are not exposed through Pi Exec's generic extension bridge; programs use the runtime-owned `agent()` / `agent_run()` lifecycle instead. [`/btw`](btw.md) is the small human-facing exception: one hidden, ephemeral, read-only child conversation that reuses the same manager with a focused answer-first overlay, without joining the public team roster. The root prompt uses separate `<subagent-team>` and `<inference-profiles>` blocks. The first introduces every available teammate with their `name`, configured inference `profile`, and own `description`; the second lists each fixed inference profile with a one-line description of its intended model and reasoning effort. Inference profiles select inference policy, not capabilities.
 

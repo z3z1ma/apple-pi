@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
@@ -18,7 +18,7 @@ import {
 	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type TaskNotificationDetails,
 } from "./types.js";
-import { type TaskDetailView, TaskDetailViewer, TaskManagerComponent } from "./ui/task-manager.js";
+import { type TaskDetailView, TaskPanel } from "./ui/task-manager.js";
 
 function formatScheduledPrompt({ id, prompt }: PromptTask): string {
 	return `<scheduled-prompt id="${id}">
@@ -140,38 +140,24 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
-	// Where each task's detail viewer was left. Memory only: never written to the session,
+	// Where each task's detail was left. Memory only: never written to the session,
 	// and cleared with the roster because task IDs restart per session.
 	const detailViews = new Map<string, TaskDetailView>();
-	const openTaskDetail = async (ctx: ExtensionContext, task: ReturnType<TaskManager["get"]>) => {
-		if (!ctx.hasUI || !task) return;
-		let viewer: TaskDetailViewer | undefined;
-		await ctx.ui.custom<undefined>(
-			(tui, theme, keybindings, done) => {
-				viewer = new TaskDetailViewer(
-					tui,
-					task,
-					theme,
-					() => done(undefined),
-					() => {
-						taskManager.cancel(task.id);
-					},
-					keybindings,
-					detailViews.get(task.id),
-				);
-				return viewer;
-			},
-			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } },
-		);
-		if (viewer) detailViews.set(task.id, viewer.view);
-	};
-
 	registerWorkSection(pi, {
 		key: "tasks",
 		label: "Tasks",
-		create: (tui, theme, keybindings, selectedId, done, reservedLines) =>
-			new TaskManagerComponent(tui, theme, () => taskManager.list(), selectedId, done, keybindings, reservedLines),
-		inspect: async (ctx, id) => openTaskDetail(ctx, taskManager.get(id)),
+		create: ({ tui, theme, keybindings }, selectedId) =>
+			new TaskPanel(
+				tui,
+				theme,
+				() => taskManager.list(),
+				selectedId,
+				(id) => {
+					taskManager.cancel(id);
+				},
+				keybindings,
+				detailViews,
+			),
 	});
 
 	const cleanup = () => {

@@ -971,7 +971,8 @@ RELOADED ROLE MUST NOT RUN.
 					custom: async (factory: any) => {
 						modalCall++;
 						let action: any;
-						const component = factory(
+						// The work panel's bootstrap completes synchronously and mounts through showOverlay.
+						factory(
 							modalTui,
 							{
 								fg: (_color: string, text: string) => text,
@@ -983,27 +984,21 @@ RELOADED ROLE MUST NOT RUN.
 								action = result;
 							},
 						);
-						{
-							let selected = false;
-							for (let index = 0; index < 20; index++) {
-								selected = component
-									.render(100)
-									.some((line: string) => line.includes(">") && line.includes("Model stop test"));
-								if (selected) break;
-								component.handleInput("j");
-							}
-							expect(selected).toBe(true);
-							component.handleInput("\r");
-						}
-						component.dispose?.();
 						return action;
 					},
 				},
 			};
 			await commands.get("agents").handler("", modalCtx);
-			// Choosing the agent pinned the glanceable panel and closed /work; stop it from the panel.
+			// /agents opened the work panel directly; select the agent and stop it from there.
 			expect(modalCall).toBe(1);
 			expect(panels).toHaveLength(1);
+			let selected = false;
+			for (let index = 0; index < 20; index++) {
+				selected = panels[0].render(100).some((line: string) => line.includes("›") && line.includes("Model stop test"));
+				if (selected) break;
+				panels[0].handleInput("\t");
+			}
+			expect(selected).toBe(true);
 			panels[0].handleInput("x");
 			panels[0].handleInput("x");
 			panels[0].handleInput("q");

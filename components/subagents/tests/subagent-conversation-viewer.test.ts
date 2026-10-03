@@ -702,15 +702,15 @@ describe("ConversationViewer", () => {
 	});
 
 	describe("panel keys", () => {
-		it("Esc asks to return focus to the editor instead of closing, and q asks to unpin", () => {
+		it("Esc asks to return focus to the editor instead of closing, and q asks to close the panel", () => {
 			const done = vi.fn();
 			const viewer = new ConversationViewer(mockTui(), mockSession(), mockRecord(), undefined, ansiTheme(), done);
-			expect(viewer.render(80).join("\n")).toContain("q unpin");
+			expect(viewer.render(80).join("\n")).toContain("q close");
 
 			viewer.handleInput("\x1b");
 			expect(done).toHaveBeenLastCalledWith("unfocus");
 			viewer.handleInput("q");
-			expect(done).toHaveBeenLastCalledWith("unpin");
+			expect(done).toHaveBeenLastCalledWith("close");
 			expect(done).toHaveBeenCalledTimes(2);
 			viewer.dispose();
 		});

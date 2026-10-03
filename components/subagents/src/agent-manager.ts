@@ -253,7 +253,7 @@ export class AgentManager {
 		this.onCompact = onCompact;
 		this.maxConcurrent = maxConcurrent;
 		// Release completed nested and internal sessions after 10 minutes. Public agents stay
-		// until session end so the agent panel, results, and resume keep them.
+		// until session end so the work panel, results, and resume keep them.
 		this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
 		this.cleanupInterval.unref();
 	}

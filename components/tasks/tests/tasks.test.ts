@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { installWorkManager } from "../../shared/src/work-manager.js";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "../src/active-work.js";
@@ -632,7 +633,7 @@ describe("tasks component", () => {
 	});
 
 	describe("extension installation & reactive wake-up", () => {
-		it("publishes active task UI and steers the main agent when the modal cancels work", async () => {
+		it("publishes active task UI and steers the main agent when the work panel cancels work", async () => {
 			const registeredTools: any[] = [];
 			const commands = new Map<string, any>();
 			const handlers = new Map<string, any[]>();
@@ -662,27 +663,8 @@ describe("tasks component", () => {
 			};
 			installWorkManager(pi as any);
 			installTasks(pi as any);
-			let overlayCall = 0;
-			const custom = vi.fn(async (factory: any) => {
-				overlayCall++;
-				let result: any;
-				const component = factory(
-					{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
-					{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
-					undefined,
-					(value: any) => {
-						result = value;
-					},
-				);
-				if (overlayCall === 1) component.handleInput("\r");
-				else if (overlayCall === 2) {
-					component.handleInput("x");
-					component.handleInput("x");
-					component.handleInput("q");
-				} else component.handleInput("q");
-				component.dispose();
-				return result;
-			});
+			const screen = fakeTui(160, 40);
+			const { custom } = fakeCustom(screen);
 			const ctx = {
 				cwd: process.cwd(),
 				hasUI: true,
@@ -703,7 +685,17 @@ describe("tasks component", () => {
 			expect(setWidget).toHaveBeenCalledWith("active-work", expect.any(Function), { placement: "aboveEditor" });
 			expect(terminalInput).not.toHaveBeenCalled();
 			await commands.get("tasks").handler("", ctx);
-			expect(custom).toHaveBeenCalledTimes(3);
+			// The panel opens directly on the Tasks tab with the task's detail inline.
+			const panel = screen.stack[0]!.component;
+			const rendered = () => screen.layout(screen.stack[0]!).lines.join("\n");
+			expect(rendered()).toContain("[Tasks · 1]");
+			expect(rendered()).toContain("Command: node");
+			expect(rendered()).toContain("x cancel");
+			panel.handleInput("x");
+			panel.handleInput("x");
+			panel.handleInput("q");
+			expect(screen.stack).toHaveLength(0);
+			expect(custom).toHaveBeenCalledTimes(1);
 			expect(terminalInput).not.toHaveBeenCalled();
 			expect(setStatus).toHaveBeenLastCalledWith("tasks", undefined);
 			expect(sendMessage).toHaveBeenCalledWith(
@@ -990,33 +982,19 @@ describe("tasks component", () => {
 				installTasks(pi as any);
 				const detailRenders: string[] = [];
 				const detailScripts: string[][] = [];
-				// Each /tasks opening inspects task-1 once, then closes the work manager.
-				let workInput = "\r";
-				const custom = vi.fn(async (factory: any) => {
-					let result: any;
-					const component = factory(
-						{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
-						{ fg: (_color: string, text: string) => text, bg: (_c: string, t: string) => t, bold: (t: string) => t },
-						undefined,
-						(value: any) => {
-							result = value;
-						},
-					);
-					const first = component.render(100).join("\n");
-					if (!first.includes("Tab/←→ switch")) {
-						detailRenders.push(first);
-						for (const input of detailScripts.shift() ?? []) {
-							component.handleInput(input);
-							component.render(100);
-						}
-						component.handleInput("q");
-					} else {
-						component.handleInput(workInput);
-						workInput = workInput === "\r" ? "q" : "\r";
+				const screen = fakeTui(160, 40);
+				const { custom } = fakeCustom(screen);
+				// Each /tasks opening renders task-1's inline detail, runs one script, then closes the panel.
+				const openTasks = async () => {
+					await commands.get("tasks").handler("", ctx);
+					const entry = screen.stack[0]!;
+					detailRenders.push(screen.layout(entry).lines.join("\n"));
+					for (const input of detailScripts.shift() ?? []) {
+						entry.component.handleInput(input);
+						screen.layout(entry);
 					}
-					component.dispose();
-					return result;
-				});
+					entry.component.handleInput("q");
+				};
 				const ctx = {
 					cwd: process.cwd(),
 					hasUI: true,
@@ -1032,7 +1010,7 @@ describe("tasks component", () => {
 				const shutdown = () => {
 					for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
 				};
-				return { pi, commands, ctx, tool, status, detailRenders, detailScripts, shutdown };
+				return { pi, commands, ctx, tool, status, detailRenders, detailScripts, shutdown, openTasks };
 			};
 			const script = `for (let i = 0; i < 60; i++) console.log("line " + i); const fs = require("fs"); const t = setInterval(() => { if (fs.existsSync(${JSON.stringify(release)})) { for (let j = 0; j < 5; j++) console.log("late" + " tail " + j); clearInterval(t); setInterval(() => {}, 1000); } }, 20);`;
 			const start = async (session: ReturnType<typeof install>) => {
@@ -1052,16 +1030,16 @@ describe("tasks component", () => {
 			await start(session);
 			// Scroll near the top and close; reopening restores that position.
 			session.detailScripts.push(["\x1b[H", "\x1b[B", "\x1b[B", "\x1b[B"]);
-			await session.commands.get("tasks").handler("", session.ctx);
+			await session.openTasks();
 			expect(session.detailRenders[0]).toContain("line 59");
 			// Then return to the live tail before closing; reopening keeps following new output.
 			session.detailScripts.push(["\x1b[F"]);
-			await session.commands.get("tasks").handler("", session.ctx);
+			await session.openTasks();
 			expect(session.detailRenders[1]).toContain("Command: node");
 			expect(session.detailRenders[1]).not.toContain("line 59");
 			writeFileSync(release, "");
 			await vi.waitFor(async () => expect(await session.status()).toContain("late tail 4"), { timeout: 5000 });
-			await session.commands.get("tasks").handler("", session.ctx);
+			await session.openTasks();
 			expect(session.detailRenders[2]).toContain("late tail 4");
 			expect(session.pi.appendEntry).not.toHaveBeenCalled();
 			session.shutdown();
@@ -1070,7 +1048,7 @@ describe("tasks component", () => {
 			rmSync(release);
 			const fresh = install();
 			await start(fresh);
-			await fresh.commands.get("tasks").handler("", fresh.ctx);
+			await fresh.openTasks();
 			expect(fresh.detailRenders[0]).toContain("line 59");
 			expect(fresh.detailRenders[0]).not.toContain("Command: node");
 			expect(fresh.pi.appendEntry).not.toHaveBeenCalled();

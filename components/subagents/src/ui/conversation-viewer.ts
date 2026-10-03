@@ -2,7 +2,7 @@
  * conversation-viewer.ts — Live conversation view of one agent session.
  *
  * Displays a scrollable, live-updating view of an agent's conversation inside
- * the glanceable agent panel. Subscribes to session events for real-time
+ * the work panel's Agents tab. Subscribes to session events for real-time
  * streaming updates.
  */
 
@@ -42,12 +42,14 @@ const CHROME_LINES_BASE = 6;
 /** Height ceiling shared by the overlay's `maxHeight` and the viewer's internal viewport cap. */
 export const VIEWPORT_HEIGHT_PCT = 70;
 
-/** Esc returns keyboard focus to the editor; q unpins the panel. */
-export type ConversationViewerAction = "unfocus" | "unpin";
+/** Esc returns keyboard focus to the editor; q closes the panel. */
+export type ConversationViewerAction = "unfocus" | "close";
 
 export class ConversationViewer implements Component {
 	/** Rows the embedding panel draws above this view, deducted from the height ceiling. */
 	reservedRows = 0;
+	/** Rows the embedding panel allows; omitted → the shared percentage of the terminal height. */
+	rowBudget: number | undefined;
 	/** Draw a `├─┤` joint instead of a rounded top border so the view continues a panel box. */
 	joinTop = false;
 	private scrollOffset = 0;
@@ -132,7 +134,7 @@ export class ConversationViewer implements Component {
 			return;
 		}
 		if (matchesKey(data, "q")) {
-			this.done("unpin");
+			this.done("close");
 			return;
 		}
 
@@ -282,7 +284,7 @@ export class ConversationViewer implements Component {
 			}
 			const footerRight = th.fg(
 				"dim",
-				`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} scroll · ${formatViewerKey(this.keys.pageUpKey)}/${formatViewerKey(this.keys.pageDownKey)} page · Esc editor · q unpin`,
+				`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} scroll · ${formatViewerKey(this.keys.pageUpKey)}/${formatViewerKey(this.keys.pageDownKey)} page · Esc editor · q close`,
 			);
 
 			// Prepend the line-count/scroll-% readout only when there's spare width —
@@ -379,7 +381,8 @@ export class ConversationViewer implements Component {
 	}
 
 	private maxRows(): number {
-		return Math.max(1, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - this.reservedRows);
+		const budget = this.rowBudget ?? Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100);
+		return Math.max(1, budget - this.reservedRows);
 	}
 
 	private chromeLines(): number {

@@ -1,5 +1,5 @@
 import { defineTool, type ExtensionAPI, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
-import { Container, Markdown, type OverlayHandle, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
@@ -63,7 +63,6 @@ import {
 	toTeamMember,
 } from "./team-system-prompt.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
-import { AgentManagerComponent, type AgentTypeSummary } from "./ui/agent-manager.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -75,11 +74,8 @@ import {
 	formatTurns,
 	renderRunningAgentStatus,
 	SPINNER,
-	type Theme,
 } from "./ui/agent-widget.js";
-import type { ViewerKeybindings } from "../../shared/src/viewer-keys.js";
-import { AGENT_PANEL_FOCUS_KEY, AGENT_PANEL_MIN_COLUMNS, AgentPanel } from "./ui/agent-panel.js";
-import { VIEWPORT_HEIGHT_PCT } from "./ui/conversation-viewer.js";
+import { AgentPanel, type AgentTypeSummary } from "./ui/agent-panel.js";
 import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
@@ -679,7 +675,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		widget.update();
 	});
 	pi.on("session_shutdown", async () => {
-		unpinPanel();
 		prepareSessionNavigation();
 		uninstallManagedService();
 		for (const timer of pendingNotifications.values()) clearTimeout(timer);
@@ -1094,91 +1089,29 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		}),
 	);
 
-	// The glanceable panel. It is mounted with tui.showOverlay and removed only
-	// through its own handle: closing a ctx.ui.custom() overlay pops the topmost
-	// overlay, which could be this panel. The TUI, theme, and keybindings come
-	// from the /work factory, which always runs before an agent can be chosen.
-	let panelUi: { tui: TUI; theme: Theme; keybindings: ViewerKeybindings | undefined } | undefined;
-	let pinned: { handle: OverlayHandle; panel: AgentPanel } | undefined;
-
-	function unpinPanel(): void {
-		const current = pinned;
-		pinned = undefined;
-		if (!current) return;
-		current.handle.hide();
-		current.panel.dispose();
-	}
-
-	function pinPanel(record: AgentRecord): void {
-		if (pinned) {
-			pinned.panel.select(record.id);
-			panelUi?.tui.requestRender();
-			return;
-		}
-		if (!panelUi) return;
-		const { tui, theme, keybindings } = panelUi;
-		const panel = new AgentPanel({
-			tui,
-			theme,
-			keybindings,
-			listAgents: () => manager.listAgents().filter((agent) => !agent.parentAgentId && !agent.internalOwner),
-			getActivity: (id) => activityById.get(id),
-			stop: (id) => manager.abort(id),
-			steer: (id, message) => manager.steer(id, message),
-			unfocus: () => pinned?.handle.unfocus(),
-			unpin: unpinPanel,
-		});
-		panel.select(record.id);
-		const handle = tui.showOverlay(panel, {
-			nonCapturing: true,
-			anchor: "top-right",
-			width: "33%",
-			maxHeight: `${VIEWPORT_HEIGHT_PCT}%`,
-			visible: (termWidth) => termWidth >= AGENT_PANEL_MIN_COLUMNS,
-		});
-		pinned = { handle, panel };
-	}
-
-	pi.registerShortcut(AGENT_PANEL_FOCUS_KEY, {
-		description: "Move focus between the editor and the pinned agent panel",
-		handler: () => {
-			if (!pinned) return;
-			if (pinned.handle.isFocused()) pinned.handle.unfocus();
-			else pinned.handle.focus();
-			panelUi?.tui.requestRender();
-		},
-	});
-
+	// The Agents tab of the shared work panel. The work manager mounts, focuses,
+	// and closes the panel; this tab only reads the roster and drives agents.
 	registerWorkSection(pi, {
 		key: "agents",
 		label: "Agents",
 		prepare: (ctx) => bindSessionContext(ctx),
-		create: (tui, theme, keybindings, selectedId, done, reservedLines) => {
-			panelUi = { tui, theme, keybindings };
+		create: ({ tui, theme, keybindings }, selectedId) => {
 			const types: AgentTypeSummary[] = getAvailableTypes().map((name) => {
 				const config = getAgentConfig(name);
 				return { name, description: config?.description ?? name, sourcePath: config?.sourcePath };
 			});
-			return new AgentManagerComponent(
+			const panel = new AgentPanel({
 				tui,
 				theme,
-				() => manager.listAgents(),
-				(id) => activityById.get(id),
-				types,
-				selectedId,
-				done,
 				keybindings,
-				reservedLines,
-				() => (pinned ? unpinPanel : undefined),
-			);
+				listAgents: () => manager.listAgents().filter((agent) => !agent.parentAgentId && !agent.internalOwner),
+				getActivity: (id) => activityById.get(id),
+				stop: (id) => manager.abort(id),
+				steer: (id, message) => manager.steer(id, message),
+				types,
+			});
+			if (selectedId) panel.select(selectedId);
+			return panel;
 		},
-		inspect: async (ctx, id) => {
-			if (!ctx.hasUI) return;
-			const record = manager
-				.listAgents()
-				.find((candidate) => !candidate.parentAgentId && !candidate.internalOwner && candidate.id === id);
-			if (record) pinPanel(record);
-		},
-		closesOnInspect: true,
 	});
 }

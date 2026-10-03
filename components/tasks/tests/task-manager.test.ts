@@ -2,7 +2,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { OutputBuffer } from "../src/output-buffer.js";
 import type { CommandTask, ManagedTask, PromptTask } from "../src/types.js";
-import { TaskDetailViewer, TaskManagerComponent } from "../src/ui/task-manager.js";
+import { TaskDetailViewer, TaskPanel } from "../src/ui/task-manager.js";
 
 const theme = {
 	fg: (_color: string, text: string) => text,
@@ -29,7 +29,9 @@ function command(id: string, status: CommandTask["status"], createdAt: number, m
 	};
 }
 
-describe("TaskManagerComponent", () => {
+describe("TaskPanel", () => {
+	const panelTui = (rows = 30, columns = 100) => ({ terminal: { rows, columns }, requestRender: vi.fn() }) as any;
+
 	it("orders active work before settled outcomes and renders every task kind within bounds", () => {
 		const now = Date.now();
 		const tasks: ManagedTask[] = [
@@ -37,59 +39,109 @@ describe("TaskManagerComponent", () => {
 			{ ...prompt("scheduled", "scheduled", now + 10), prompt: "scheduled full prompt\nsecond line" },
 			command("monitor", "running", now + 20, true),
 		];
-		const tui = { terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any;
-		const component = new TaskManagerComponent(tui, theme, () => tasks, undefined, vi.fn());
+		const panel = new TaskPanel(panelTui(), theme, () => tasks, undefined, vi.fn());
+		panel.rowBudget = 20;
 
-		const lines = component.render(100);
+		const lines = panel.render(100);
 		const text = lines.join("\n");
 		expect(text.indexOf("scheduled full prompt")).toBeLessThan(text.indexOf("completed command"));
 		expect(text).toContain("Prompt");
 		expect(text).toContain("Monitor");
 		expect(text).toContain("Command");
 		expect(text).toContain("events 2/4");
+		expect(panel.title()).toBe("Tasks · 3");
+		expect(lines.length).toBeLessThanOrEqual(20);
+		expect(lines.at(-1)).toMatch(/^╰─+╯$/);
 		for (const line of lines) {
 			expect(line).not.toContain("\n");
 			expect(visibleWidth(line)).toBeLessThanOrEqual(100);
 		}
-		tui.terminal.rows = 4;
-		expect(component.render(100).length).toBeLessThanOrEqual(3);
-		component.dispose();
+		panel.rowBudget = 3;
+		expect(panel.render(100).length).toBeLessThanOrEqual(3);
+		panel.dispose();
 	});
 
-	it("uses configured navigation", () => {
+	it("selects tasks with Tab, shows the selected detail inline, and confirms cancellation", () => {
 		const now = Date.now();
 		const tasks: ManagedTask[] = [command("first", "running", now + 20), prompt("second", "scheduled", now + 10)];
-		const done = vi.fn();
-		const component = new TaskManagerComponent(
-			{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any,
-			theme,
-			() => tasks,
-			undefined,
-			done,
-			{
-				matches: (data: string, binding: string) => data === "D" && binding === "tui.select.down",
-				getKeys: (binding: string) =>
-					binding === "tui.select.up" ? ["ctrl+p"] : binding === "tui.select.down" ? ["ctrl+n"] : [],
-			},
-		);
+		const cancel = vi.fn();
+		const panel = new TaskPanel(panelTui(), theme, () => tasks, undefined, cancel);
+		panel.rowBudget = 20;
+		panel.focused = true;
+		expect(panel.render(100).join("\n")).toContain("Command: first command");
+		expect(panel.getSelectedId()).toBe("first");
 
-		expect(component.render(100).join("\n")).toContain("ctrl+p/ctrl+n select");
-		component.handleInput("D");
-		component.handleInput("\r");
-		expect(done).toHaveBeenCalledWith({ type: "inspect", id: "second" });
-		component.dispose();
+		panel.handleInput("\t");
+		expect(panel.getSelectedId()).toBe("second");
+		expect(panel.render(100).join("\n")).toContain("second full prompt");
+		panel.handleInput("\x1b[Z");
+		expect(panel.getSelectedId()).toBe("first");
+
+		// An armed cancel drops when focus leaves or the selection changes.
+		panel.handleInput("x");
+		expect(panel.render(100).join("\n")).toContain("x again to CANCEL");
+		panel.focused = false;
+		panel.focused = true;
+		expect(panel.render(100).join("\n")).not.toContain("x again to CANCEL");
+		panel.handleInput("x");
+		panel.handleInput("\t");
+		panel.handleInput("\x1b[Z");
+		expect(panel.render(100).join("\n")).not.toContain("x again to CANCEL");
+		panel.handleInput("x");
+		panel.handleInput("x");
+		expect(cancel).toHaveBeenCalledWith("first");
+		panel.dispose();
 	});
 
-	it("reports its selected row so /work can reopen on it", () => {
-		const now = Date.now();
-		const tasks: ManagedTask[] = [command("first", "running", now + 20), prompt("second", "scheduled", now + 10)];
-		const tui = { terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() } as any;
-		const component = new TaskManagerComponent(tui, theme, () => tasks, undefined, vi.fn());
-		component.render(100);
-		expect(component.getSelectedId()).toBe("first");
-		component.handleInput("\x1b[B");
-		expect(component.getSelectedId()).toBe("second");
-		component.dispose();
+	it("keeps each task's scroll and follow-tail position in the shared view map", () => {
+		const task = command("long", "running", Date.now());
+		for (let index = 0; index < 60; index++) task.output.append(`line ${index}\n`);
+		const other = prompt("other", "scheduled", Date.now() - 10);
+		const views = new Map();
+		const panel = new TaskPanel(panelTui(), theme, () => [task, other], undefined, vi.fn(), undefined, views);
+		panel.rowBudget = 20;
+		expect(panel.render(100).join("\n")).toContain("line 59");
+		panel.handleInput("\x1b[H");
+		expect(panel.render(100).join("\n")).toContain("Command: long command");
+
+		panel.handleInput("\t");
+		panel.render(100);
+		panel.handleInput("\x1b[Z");
+		expect(panel.render(100).join("\n")).toContain("Command: long command");
+
+		// Wheel scrolling reaches the detail; scrolling back to the end resumes following.
+		panel.handleMouse({ type: "wheel", button: "none", x: 1, y: 1, wheelDelta: 200 } as any);
+		task.output.append("fresh tail\n");
+		expect(panel.render(100).join("\n")).toContain("fresh tail");
+		panel.dispose();
+		expect(views.get("long")).toMatchObject({ autoScroll: true });
+
+		const reopened = new TaskPanel(panelTui(), theme, () => [task, other], "long", vi.fn(), undefined, views);
+		reopened.rowBudget = 20;
+		expect(reopened.render(100).join("\n")).toContain("fresh tail");
+		reopened.dispose();
+	});
+
+	it("does not carry a position onto a new task that reuses an ID after the roster resets", () => {
+		const old = command("task-1", "running", Date.now());
+		for (let index = 0; index < 60; index++) old.output.append(`old ${index}\n`);
+		let roster: ManagedTask[] = [old];
+		const views = new Map();
+		const panel = new TaskPanel(panelTui(), theme, () => roster, undefined, vi.fn(), undefined, views);
+		panel.rowBudget = 20;
+		panel.render(100);
+		panel.handleInput("\x1b[H");
+		expect(panel.render(100).join("\n")).toContain("Command: task-1 command");
+
+		// The session resets: the owner clears its view map and task IDs restart.
+		views.clear();
+		const fresh = command("task-1", "running", Date.now());
+		for (let index = 0; index < 60; index++) fresh.output.append(`new ${index}\n`);
+		roster = [fresh];
+		expect(panel.render(100).join("\n")).toContain("new 59");
+		expect(views.size).toBe(0);
+		panel.dispose();
+		expect(views.get("task-1")).toMatchObject({ autoScroll: true });
 	});
 });
 
@@ -162,6 +214,52 @@ describe("TaskDetailViewer", () => {
 		);
 
 		expect(viewer.render(80).join("\n")).toContain("line 39");
+		viewer.dispose();
+	});
+
+	it("preserves manual scroll across responsive width and height changes", () => {
+		const task = command("resize", "running", Date.now());
+		for (let index = 0; index < 35; index++) task.output.append(`OUTPUT-${index} ${"detail ".repeat(10)}\n`);
+		const viewer = new TaskDetailViewer(
+			{ terminal: { rows: 40, columns: 160 }, requestRender: vi.fn() } as any,
+			task,
+			theme,
+			vi.fn(),
+			vi.fn(),
+		);
+		viewer.rowBudget = 20;
+		viewer.render(50);
+		viewer.handleInput("\u001b[A");
+		const before = viewer.view;
+		const originalContent = viewer.render(50);
+		viewer.rowBudget = 10;
+		viewer.render(90);
+		expect(viewer.view).toEqual(before);
+		viewer.rowBudget = 20;
+		expect(viewer.render(50)).toEqual(originalContent);
+		expect(viewer.view).toEqual(before);
+		viewer.dispose();
+	});
+
+	it.each([5, 6])("keeps task content scrollable with a %i-row budget", (rows) => {
+		const task = {
+			...prompt("compact", "scheduled", Date.now()),
+			prompt: Array.from({ length: 20 }, (_, i) => `PROMPT-LINE-${i}`).join("\n"),
+		};
+		const viewer = new TaskDetailViewer(
+			{ terminal: { rows: 16, columns: 100 }, requestRender: vi.fn() } as any,
+			task,
+			theme,
+			vi.fn(),
+			vi.fn(),
+		);
+		viewer.rowBudget = rows;
+		expect(viewer.render(90).join("\n")).toContain("PROMPT-LINE-19");
+		viewer.handleInput("\u001b[H");
+		const atHome = viewer.render(90).join("\n");
+		expect(atHome).not.toContain("PROMPT-LINE-19");
+		viewer.handleInput("\u001b[F");
+		expect(viewer.render(90).join("\n")).toContain("PROMPT-LINE-19");
 		viewer.dispose();
 	});
 

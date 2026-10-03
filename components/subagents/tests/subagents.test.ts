@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { installWorkManager } from "../../shared/src/work-manager.js";
 import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
 import { AgentManager } from "../src/agent-manager.js";
@@ -82,24 +83,12 @@ describe("owned subagent surface", () => {
 		}
 	});
 
-	it("opens /agents as a focused custom overlay rather than a prompt-level selector", async () => {
+	it("opens /agents directly as the non-capturing work panel rather than a prompt-level selector", async () => {
 		const commands = new Map<string, any>();
 		const handlers = new Map<string, Array<(event: unknown, ctx: any) => unknown>>();
 		const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
-		const custom = vi.fn(async (factory: any) => {
-			let action: any;
-			const component = factory(
-				{ terminal: { rows: 30, columns: 100 }, requestRender: vi.fn() },
-				{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
-				undefined,
-				(result: any) => {
-					action = result;
-				},
-			);
-			component.handleInput("q");
-			component.dispose();
-			return action;
-		});
+		const screen = fakeTui(160, 40);
+		const { custom } = fakeCustom(screen);
 		const pi = {
 			events: {
 				on: (channel: string, handler: (data: unknown) => void) => {
@@ -133,10 +122,10 @@ describe("owned subagent surface", () => {
 
 		try {
 			await commands.get("agents").handler("", ctx);
-			expect(custom).toHaveBeenCalledWith(expect.any(Function), {
-				overlay: true,
-				overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" },
-			});
+			expect(screen.stack).toHaveLength(1);
+			expect(screen.stack[0]!.options.nonCapturing).toBe(true);
+			expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("[Agents · 0]");
+			expect(screen.focused()).toBe(screen.editor);
 			expect(ctx.ui.select).not.toHaveBeenCalled();
 		} finally {
 			for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, ctx);
