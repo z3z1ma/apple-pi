@@ -34,7 +34,7 @@
 import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, Container, Spacer, Text, TruncatedText, truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, Container, Text, TruncatedText, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
@@ -1329,9 +1329,7 @@ import {
 
 export { loadSystemPrompt, PAIR_MODEL_PROFILE, PRIMARY_PAIR_PROTOCOL, PRIMARY_PAIR_PROTOCOL_TAG } from "./config.js";
 
-// Wraps an advisory card's body in a severity-colored left rule (one line prefix
-// per rendered row), matching the bordered-card convention read from richer
-// third-party pair UIs during UX research. Pure layout: no state of its own.
+// One left rule keeps the entire advisory batch visually grouped.
 class AdvisoryBorder implements Component {
 	constructor(
 		private readonly child: Component,
@@ -2320,36 +2318,31 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory card rendering ----
-	// Collapsed: one severity-colored line per note. Expanded: a bordered card with the
-	// full note in the readable `text` color (dim is nearly invisible in the dark theme).
+	// One card per dispatch, with severity-colored bullets and expandable note text.
 	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
 		const container = new Container();
-		for (const [index, n] of notes.entries()) {
-			if (index > 0 && options.expanded) container.addChild(new Spacer(1));
+		container.addChild(new Text(theme.fg("accent", theme.bold("pair programmer")), 0, 0));
+		for (const n of notes) {
 			const color = isPairQuestion(n)
 				? "accent"
 				: n.severity === "blocker"
 					? "error"
 					: n.severity === "concern"
 						? "warning"
-						: "accent";
+						: "muted";
 			const tag = isPairQuestion(n) ? "QUESTION" : (n.severity ?? "nit").toUpperCase();
-			const role = n.source === "consultant" || n.source === "advisor" ? "consultant" : "pair programmer";
-			const heading = `${theme.fg(color, theme.bold(role))} ${theme.fg(color, tag)}`;
+			const source = n.source === "consultant" || n.source === "advisor" ? " (consultant)" : "";
+			const heading = `${theme.fg(color, "●")} ${theme.fg(color, tag)}${theme.fg("muted", source)}`;
 			if (!options.expanded) {
 				const summary = n.note.replace(/\s+/g, " ").trim();
-				container.addChild(new TruncatedText(`${theme.fg(color, "●")} ${heading} ${theme.fg("text", summary)}`, 0, 0));
+				container.addChild(new TruncatedText(`${heading} ${theme.fg("text", summary)}`, 0, 0));
 				continue;
 			}
-			const card = new Container();
-			card.addChild(new Text(heading, 0, 0));
-			card.addChild(new Spacer(1));
-			card.addChild(new Text(theme.fg("text", n.note), 0, 0));
-			container.addChild(new AdvisoryBorder(card, theme.fg(color, "│")));
+			container.addChild(new Text(`${heading} ${theme.fg("text", n.note)}`, 0, 0));
 		}
-		return container;
+		return new AdvisoryBorder(container, theme.fg("accent", "│"));
 	});
 
 	// ---- /pair command ----

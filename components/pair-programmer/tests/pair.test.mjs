@@ -3481,7 +3481,7 @@ test("lifecycle: a typed material-finding acknowledgment is persisted and preven
 // 3. render path
 // ===========================================================================
 
-async function renderAdvisory(notes, expanded = false) {
+async function renderAdvisory(notes, expanded = false, width = 100) {
 	const ext = await loadPairExtension();
 	const renderer = ext.messageRenderers.get("advisory");
 	const message = {
@@ -3494,7 +3494,7 @@ async function renderAdvisory(notes, expanded = false) {
 	};
 	const comp = new CustomMessageComponent(message, renderer);
 	comp.setExpanded(expanded);
-	return strip(comp.render(100).join("\n"));
+	return strip(comp.render(width).join("\n"));
 }
 
 test("render: advisory card shows severity tag + note text", async () => {
@@ -3523,9 +3523,10 @@ test("render: collapsed advisory shows each note on one line", async () => {
 		{ note: "Which screenshot is canonical?", kind: "question" },
 	]);
 	const lines = text.split("\n").filter((line) => line.trim().length > 0);
-	assert.equal(lines.length, 2, `expected one line per note, got: ${JSON.stringify(lines)}`);
-	assert.match(lines[0], /pair programmer CONCERN first line second line/);
-	assert.match(lines[1], /QUESTION Which screenshot is canonical\?/);
+	assert.equal(lines.length, 3, `expected one heading and one line per note, got: ${JSON.stringify(lines)}`);
+	assert.match(lines[0], /pair programmer/);
+	assert.match(lines[1], /● CONCERN first line second line/);
+	assert.match(lines[2], /● QUESTION Which screenshot is canonical\?/);
 });
 
 test("render: advisory card has a left border on both the heading and body lines", async () => {
@@ -3533,27 +3534,52 @@ test("render: advisory card has a left border on both the heading and body lines
 	const lines = text.split("\n").filter((line) => line.trim().length > 0);
 	assert.ok(lines.length >= 2, `expected a heading + body line, got: ${JSON.stringify(lines)}`);
 	for (const line of lines) assert.match(line, /^\u2502 /, `line missing border prefix: ${JSON.stringify(line)}`);
-	assert.ok(
-		lines.some((line) => /pair programmer/.test(line) && /CONCERN/.test(line)),
-		"heading line carries both the pair programmer label and severity tag",
-	);
+	assert.match(lines[0], /pair programmer/);
+	assert.match(lines[1], /● CONCERN tidy this up/);
 });
 
-test("render: multiple advisory notes in one message render as separate bordered cards", async () => {
-	const text = await renderAdvisory([
-		{ note: "first issue", severity: "nit" },
-		{ note: "second issue", severity: "blocker" },
-	]);
-	assert.match(text, /first issue/);
-	assert.match(text, /second issue/);
-	assert.match(text, /NIT/);
-	assert.match(text, /BLOCKER/);
-	// A blank (border-less) line separates the two cards.
-	const rows = text.split("\n");
-	assert.ok(
-		rows.some((line) => line.trim() === ""),
-		"expected a spacer row between the two cards",
+test("render: mixed advisory batches share one chrome in both expansion states", async () => {
+	for (const expanded of [false, true]) {
+		const text = await renderAdvisory(
+			[
+				{ note: "first issue", severity: "nit" },
+				{ note: "second issue", severity: "blocker", source: "consultant" },
+				{ note: "third issue", severity: "concern" },
+				{ note: "Which evidence?", kind: "question" },
+			],
+			expanded,
+		);
+		const rows = text.split("\n").filter((line) => line.trim());
+		assert.equal(rows.length, 5);
+		assert.equal((text.match(/pair programmer/g) ?? []).length, 1);
+		assert.match(rows[1], /● NIT first issue/);
+		assert.match(rows[2], /● BLOCKER \(consultant\) second issue/);
+		assert.match(rows[3], /● CONCERN third issue/);
+		assert.match(rows[4], /● QUESTION Which evidence\?/);
+		for (const row of rows) assert.match(row, /^│ /);
+	}
+});
+
+test("render: expanded batch keeps full multiline notes inside the shared border at narrow widths", async () => {
+	const text = await renderAdvisory(
+		[
+			{ note: "first line\nsecond line with more detail", severity: "concern" },
+			{ note: "final evidence", kind: "question" },
+		],
+		true,
+		24,
 	);
+	const rows = text.split("\n").filter((line) => line.trim());
+	assert.equal((text.match(/pair programmer/g) ?? []).length, 1);
+	assert.match(text, /first line/);
+	assert.match(text, /second line/);
+	const content = rows.map((row) => row.slice(2).trim()).join(" ");
+	assert.match(content, /more detail/);
+	assert.match(content, /final evidence/);
+	for (const row of rows) {
+		assert.match(row, /^│ /);
+		assert.ok(row.length <= 24);
+	}
 });
 
 // ===========================================================================
