@@ -7,6 +7,7 @@ import {
 	fauxToolCall,
 	getCurrentSystemPrompt,
 	getCurrentTools,
+	validateToolArguments,
 } from "@earendil-works/pi-ai";
 import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
@@ -14,11 +15,13 @@ import { Type } from "typebox";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { installWorkManager } from "../../shared/src/work-manager.js";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
+import { AgentManager } from "../src/agent-manager.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
 import { buildConsultationContext } from "../src/consultation.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/index.js";
+import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { getManagedSubagentService } from "../src/service.js";
 import type { AgentConfig } from "../src/types.js";
 
@@ -621,6 +624,8 @@ Answer the task.
 					description: "Answer test",
 					subagent_type: "tool-test",
 					system_prompt: "Use the invocation-specific answer format.",
+					inherit_context: true,
+					isolated: true,
 					output_path: "artifacts/foreground.md",
 				},
 				undefined,
@@ -641,37 +646,52 @@ Answer the task.
 				initialSystemPrompt.indexOf("Answer the task."),
 			);
 
-			const incompatibleResume = await tool.execute(
-				"public-agent-incompatible-resume",
-				{
-					prompt: "continue",
-					description: "Incompatible continuation",
-					subagent_type: "tool-test",
-					resume: agentId,
-					pair: true,
-					inherit_context: false,
-					isolated: false,
-					run_in_background: false,
-				},
-				undefined,
-				undefined,
-				extensionCtx,
-			);
-			expect(incompatibleResume.isError).toBe(true);
-			expect(incompatibleResume.content[0].text).toContain("fixed when an agent session starts");
+			const conflictingChoices: Array<Record<string, string | boolean>> = [
+				{ inherit_context: false },
+				{ isolated: false },
+				{ pair: true },
+				{ profile: "quick" },
+				{ system_prompt: "Replace the invocation guidance." },
+			];
+			for (const choice of conflictingChoices) {
+				const args = validateToolArguments(tool, {
+					type: "toolCall",
+					id: "public-agent-incompatible-resume",
+					name: "agent",
+					arguments: {
+						prompt: "must not run",
+						description: "Incompatible continuation",
+						subagent_type: "tool-test",
+						resume: agentId!,
+						...choice,
+					},
+				});
+				expect(args).toMatchObject(choice);
+				const incompatibleResume = await tool.execute(
+					"public-agent-incompatible-resume",
+					args,
+					undefined,
+					undefined,
+					extensionCtx,
+				);
+				expect(incompatibleResume.isError).toBe(true);
+				expect(incompatibleResume.content[0].text).toContain("fixed when an agent session starts");
+			}
 
-			const resumed = await tool.execute(
-				"public-agent-resume",
-				{
+			const resumeArgs = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "public-agent-resume",
+				name: "agent",
+				arguments: {
 					prompt: "follow up using existing context",
 					description: "Continue answer test",
 					subagent_type: "tool-test",
-					resume: agentId,
+					resume: agentId!,
 				},
-				undefined,
-				undefined,
-				extensionCtx,
-			);
+			});
+			expect(resumeArgs).not.toHaveProperty("inherit_context");
+			expect(resumeArgs).not.toHaveProperty("isolated");
+			const resumed = await tool.execute("public-agent-resume", resumeArgs, undefined, undefined, extensionCtx);
 			expect(resumed.content[0].text).toContain("AGENT-RESUME-OK");
 			expect(resumed.content[0].text).toContain(`Agent ID: ${agentId}`);
 			expect(resumed.details).toMatchObject({ agentId, status: "completed" });
@@ -697,6 +717,42 @@ Answer the task.
 			expect(snapshotText.match(/AGENT-RESUME-OK/g)).toHaveLength(1);
 			expect(snapshotText).not.toContain("answer now");
 			expect(snapshotText).not.toContain("AGENT-TOOL-OK");
+
+			faux.appendResponses([
+				() => fauxAssistantMessage([fauxText("MATCHED-RESUME-OK")]),
+				(context) => {
+					expect(getCurrentSystemPrompt(context.messages)).toContain("Use the invocation-specific answer format.");
+					return fauxAssistantMessage([fauxText("BLANK-GUIDANCE-RESUME-OK")]);
+				},
+			]);
+			for (const [choice, answer] of [
+				[
+					{
+						inherit_context: true,
+						isolated: true,
+						pair: false,
+						system_prompt: "  Use the invocation-specific answer format.  ",
+					},
+					"MATCHED-RESUME-OK",
+				],
+				[{ system_prompt: " \n\t " }, "BLANK-GUIDANCE-RESUME-OK"],
+			] as const) {
+				const args = validateToolArguments(tool, {
+					type: "toolCall",
+					id: "public-agent-matching-resume",
+					name: "agent",
+					arguments: {
+						prompt: "continue with the original choices",
+						description: "Matching continuation",
+						subagent_type: "tool-test",
+						resume: agentId!,
+						...choice,
+					},
+				});
+				const continued = await tool.execute("public-agent-matching-resume", args, undefined, undefined, extensionCtx);
+				expect(continued.isError).toBe(false);
+				expect(continued.content[0].text).toContain(answer);
+			}
 
 			const conflictingSnapshot = await checkResult.execute(
 				"public-agent-conflicting-check",
@@ -1071,6 +1127,166 @@ RELOADED ROLE MUST NOT RUN.
 		} finally {
 			await lifecycle.get("session_shutdown")?.();
 			process.chdir(previousCwd);
+		}
+	}, 30_000);
+
+	it("resumes an owned nested teammate with omitted fixed settings", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-nested-resume-"));
+		temporaryDirectories.push(cwd);
+		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".pi", "agents", "resume-test.md"),
+			`---
+name: resume-test
+description: nested resume test
+tools: read
+skills: false
+pair: false
+persist_session: false
+---
+Answer the task.
+`,
+		);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "nested-resume", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([
+			() => fauxAssistantMessage([fauxText("NESTED-INITIAL")]),
+			() => fauxAssistantMessage([fauxText("NESTED-RESUMED")]),
+		]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		const manager = new AgentManager();
+		const pi = { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any;
+		const nestedContext = {
+			manager,
+			pi,
+			parentAgentId: "parent",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all" as const,
+			configCwd: cwd,
+			projectTrusted: true,
+		};
+		const tools = createNestedSubagentTools(nestedContext);
+		const tool = tools.find((candidate) => candidate.name === "agent")!;
+		const ctx = {
+			cwd,
+			model,
+			modelRegistry: runtime.modelRegistry,
+			getSystemPrompt: () => "parent",
+			sessionManager: { getSessionFile: () => undefined },
+			isProjectTrusted: () => true,
+		} as any;
+		try {
+			const initial = await tool.execute(
+				"nested-launch",
+				{
+					prompt: "answer",
+					description: "Nested resume test",
+					subagent_type: "resume-test",
+					inherit_context: true,
+					isolated: true,
+					system_prompt: "Keep the answer short.",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(initial.content[0]).toMatchObject({ text: expect.stringContaining("NESTED-INITIAL") });
+			const id = (initial.content[0] as { text: string }).text.match(/Agent ID: ([^\s]+)/)?.[1];
+			expect(id).toBeTruthy();
+			const resumeRequest = { prompt: "continue", description: "Continue", subagent_type: "resume-test", resume: id! };
+			const otherTool = createNestedSubagentTools({ ...nestedContext, parentAgentId: "other-parent" }).find(
+				(candidate) => candidate.name === "agent",
+			)!;
+			const unowned = await otherTool.execute(
+				"unowned-resume",
+				{ ...resumeRequest, inherit_context: false },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(unowned.isError).toBe(true);
+			expect(unowned.content[0]).toMatchObject({ text: expect.stringContaining("not owned by this session") });
+
+			const conflictingChoices: Array<Record<string, string | boolean>> = [
+				{ inherit_context: false },
+				{ isolated: false },
+				{ pair: true },
+				{ profile: "quick" },
+				{ system_prompt: "Replace the original guidance." },
+			];
+			for (const choice of conflictingChoices) {
+				const args = validateToolArguments(tool, {
+					type: "toolCall",
+					id: "nested-conflicting-resume",
+					name: "agent",
+					arguments: { ...resumeRequest, ...choice },
+				});
+				expect(args).toMatchObject(choice);
+				const rejected = await tool.execute("nested-conflicting-resume", args, undefined, undefined, ctx);
+				expect(rejected.isError).toBe(true);
+				expect(rejected.content[0]).toMatchObject({
+					text: expect.stringContaining("fixed when an agent session starts"),
+				});
+			}
+
+			const args = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "nested-resume",
+				name: "agent",
+				arguments: { prompt: "continue", description: "Continue", subagent_type: "resume-test", resume: id! },
+			});
+			expect(args).not.toHaveProperty("inherit_context");
+			expect(args).not.toHaveProperty("isolated");
+			const resumed = await tool.execute("nested-resume", args, undefined, undefined, ctx);
+			expect(resumed.content[0]).toMatchObject({ text: expect.stringContaining("NESTED-RESUMED") });
+			faux.appendResponses([
+				() => fauxAssistantMessage([fauxText("NESTED-MATCHED")]),
+				(context) => {
+					expect(getCurrentSystemPrompt(context.messages)).toContain("Keep the answer short.");
+					return fauxAssistantMessage([fauxText("NESTED-BACKGROUND")]);
+				},
+				() => fauxAssistantMessage([fauxText("NESTED-FOREGROUND")]),
+			]);
+			const matchingArgs = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "nested-matching-resume",
+				name: "agent",
+				arguments: {
+					...resumeRequest,
+					inherit_context: true,
+					isolated: true,
+					pair: false,
+					system_prompt: "  Keep the answer short.  ",
+				},
+			});
+			const matched = await tool.execute("nested-matching-resume", matchingArgs, undefined, undefined, ctx);
+			expect(matched.isError).toBe(false);
+			expect(matched.content[0]).toMatchObject({ text: expect.stringContaining("NESTED-MATCHED") });
+			const backgroundArgs = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "nested-background-resume",
+				name: "agent",
+				arguments: { ...resumeRequest, run_in_background: true, system_prompt: " \n\t " },
+			});
+			const background = await tool.execute("nested-background-resume", backgroundArgs, undefined, undefined, ctx);
+			expect(background.isError).toBe(false);
+			expect(background.content[0]).toMatchObject({ text: expect.stringContaining("resumed in the background") });
+			const resultTool = tools.find((candidate) => candidate.name === "get_subagent_result")!;
+			const settled = await resultTool.execute("nested-result", { agent_id: id! }, undefined, undefined, ctx);
+			expect(settled.content[0]).toMatchObject({ text: expect.stringContaining("NESTED-BACKGROUND") });
+			const foreground = await tool.execute(
+				"nested-foreground-resume",
+				{ ...resumeRequest, run_in_background: false },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(foreground.isError).toBe(false);
+			expect(foreground.content[0]).toMatchObject({ text: expect.stringContaining("NESTED-FOREGROUND") });
+		} finally {
+			manager.dispose();
 		}
 	}, 30_000);
 

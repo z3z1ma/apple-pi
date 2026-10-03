@@ -1,4 +1,4 @@
-import type { AgentConfig, JoinMode } from "./types.js";
+import type { AgentConfig, AgentInvocation, JoinMode } from "./types.js";
 
 interface AgentInvocationParams {
 	run_in_background?: boolean;
@@ -34,6 +34,25 @@ export function resolveAgentInvocationConfig(
 		runInBackground: params.run_in_background === true,
 		isolated: params.isolated === true,
 	};
+}
+
+export function getAgentResumeError(
+	invocation: AgentInvocation | undefined,
+	params: AgentInvocationParams & { profile?: string },
+): string | undefined {
+	const inheritContext = invocation?.inheritContext === true;
+	const pair = invocation?.pair === true;
+	const isolated = invocation?.isolated === true;
+	if (
+		(params.inherit_context ?? inheritContext) !== inheritContext ||
+		(params.pair ?? pair) !== pair ||
+		(params.isolated ?? isolated) !== isolated ||
+		(params.profile ?? invocation?.profile) !== invocation?.profile ||
+		(params.system_prompt?.trim() || invocation?.systemPrompt) !== invocation?.systemPrompt
+	) {
+		return "profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.";
+	}
+	return undefined;
 }
 
 export function resolveJoinMode(defaultJoinMode: JoinMode, runInBackground: boolean): JoinMode | undefined {

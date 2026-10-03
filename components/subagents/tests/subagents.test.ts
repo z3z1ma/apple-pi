@@ -21,7 +21,7 @@ import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversa
 import { loadCustomAgents } from "../src/custom-agents.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/installer.js";
-import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
+import { getAgentResumeError, resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
 import { formatNotification, notificationDetails, statusLabel } from "../src/notifications.js";
@@ -29,7 +29,7 @@ import { frameOutcome } from "../src/outcome-framing.js";
 import { persistAgentOutput } from "../src/output-file.js";
 import { assistantMessageMarker } from "../src/response-marker.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
-import type { AgentConfig } from "../src/types.js";
+import type { AgentConfig, AgentInvocation } from "../src/types.js";
 import { DEFAULT_AGENT_NAMES } from "../src/types.js";
 
 const roots: string[] = [];
@@ -676,6 +676,64 @@ describe("owned subagent surface", () => {
 		).toThrow("invalid configured model");
 	});
 
+	describe("agent resume policy", () => {
+		const invocation = Object.freeze({
+			inheritContext: true,
+			isolated: true,
+			pair: true,
+			profile: "deep",
+			systemPrompt: "Keep the answer short.",
+		}) satisfies AgentInvocation;
+
+		it("reuses every stored choice when fixed settings are omitted", () => {
+			expect(getAgentResumeError(invocation, {})).toBeUndefined();
+		});
+
+		it.each([
+			{ inherit_context: true },
+			{ isolated: true },
+			{ pair: true },
+			{ profile: "deep" },
+			{ system_prompt: "  Keep the answer short.  " },
+			{ system_prompt: "" },
+			{ system_prompt: " \n\t " },
+			{ run_in_background: true },
+			{ run_in_background: false },
+		])("accepts matching choices or retained normalization: %j", (params) => {
+			expect(getAgentResumeError(invocation, params)).toBeUndefined();
+		});
+
+		it.each([
+			{ inherit_context: false },
+			{ isolated: false },
+			{ pair: false },
+			{ profile: "quick" },
+			{ system_prompt: "Replace the original guidance." },
+		])("rejects an explicit conflicting choice: %j", (params) => {
+			expect(getAgentResumeError(invocation, params)).toContain("fixed when an agent session starts");
+		});
+
+		it("accepts matching false values and absent optional choices", () => {
+			const defaults = Object.freeze({ inheritContext: false, isolated: false, pair: false });
+			expect(getAgentResumeError(defaults, {})).toBeUndefined();
+			expect(getAgentResumeError(defaults, { inherit_context: false, isolated: false, pair: false })).toBeUndefined();
+			expect(getAgentResumeError(defaults, { system_prompt: " \t " })).toBeUndefined();
+			expect(getAgentResumeError(undefined, {})).toBeUndefined();
+		});
+
+		it.each([
+			{ inherit_context: true },
+			{ isolated: true },
+			{ pair: true },
+			{ profile: "quick" },
+			{ system_prompt: "New guidance." },
+		])("rejects a new choice when the stored setting is false or absent: %j", (params) => {
+			expect(getAgentResumeError({ inheritContext: false, isolated: false, pair: false }, params)).toContain(
+				"fixed when an agent session starts",
+			);
+		});
+	});
+
 	it("keeps inference selection out of invocation lifecycle normalization", () => {
 		const config = {
 			name: "reviewer",
@@ -975,6 +1033,11 @@ describe("owned subagent surface", () => {
 				expect(schema.properties[name].default).toBe(false);
 			}
 			expect(schema.required).not.toContain("pair");
+			expect(schema.properties.resume.description).toContain(
+				"Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices",
+			);
+			expect(schema.properties.resume.description).toContain("explicit changes are rejected");
+			expect(schema.properties.resume.description).toContain("Whitespace-only system_prompt reuses stored guidance");
 		}
 		expect(resolveAgentInvocationConfig(DEFAULT_AGENTS.get("explorer"), {})).toMatchObject({
 			runInBackground: false,

@@ -38,7 +38,7 @@ import {
 } from "./consultation.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
-import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
+import { getAgentResumeError, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
 import {
@@ -726,7 +726,12 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						"Invocation-specific system guidance appended after the selected definition and preloaded skills. It cannot change capabilities and is fixed for the session.",
 				}),
 			),
-			resume: Type.Optional(Type.String({ description: "Existing agent ID to continue." })),
+			resume: Type.Optional(
+				Type.String({
+					description:
+						"Existing agent ID to continue. Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices; explicit changes are rejected. Whitespace-only system_prompt reuses stored guidance.",
+				}),
+			),
 			run_in_background: Type.Optional(
 				Type.Boolean({ default: false, description: "Run without waiting for completion." }),
 			),
@@ -745,7 +750,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's pair programmer default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's pair programmer default for a new session. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 			output_path: Type.Optional(
@@ -770,24 +775,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				const existing = manager.getRecord(params.resume);
 				if (!existing || existing.parentAgentId || existing.internalOwner)
 					return textResult(`Agent not found: ${params.resume}`, undefined, true);
-				const requestedInheritance = params.inherit_context === true;
-				const requestedPair = params.pair ?? existing.invocation?.pair === true;
-				const requestedIsolation = params.isolated === true;
-				const requestedProfile = params.profile ?? existing.invocation?.profile;
-				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
-				if (
-					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
-					requestedPair !== (existing.invocation?.pair === true) ||
-					requestedIsolation !== (existing.invocation?.isolated === true) ||
-					requestedProfile !== existing.invocation?.profile ||
-					requestedSystemPrompt !== existing.invocation?.systemPrompt
-				) {
-					return textResult(
-						"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
-						undefined,
-						true,
-					);
-				}
+				const resumeError = getAgentResumeError(existing.invocation, params);
+				if (resumeError) return textResult(resumeError, undefined, true);
 				const background = params.run_in_background === true;
 				const activity = createActivityTracker(
 					normalizeMaxTurns(existing.invocation?.maxTurns ?? getDefaultMaxTurns()),

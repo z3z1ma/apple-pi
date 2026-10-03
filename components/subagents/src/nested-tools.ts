@@ -18,7 +18,7 @@ import {
 } from "./agent-types.js";
 import { getAgentConversation } from "./conversation.js";
 import { loadCustomAgents } from "./custom-agents.js";
-import { resolveAgentInvocationConfig } from "./invocation-config.js";
+import { getAgentResumeError, resolveAgentInvocationConfig } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
 import { frameOutcome } from "./outcome-framing.js";
 import type { AgentConfig, AgentInvocation, AgentRecord, ThinkingLevel } from "./types.js";
@@ -144,7 +144,12 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 						"Invocation-specific system guidance appended after the selected definition and preloaded skills. It cannot change capabilities and is fixed for the session.",
 				}),
 			),
-			resume: Type.Optional(Type.String({ description: "Owned child agent ID to resume." })),
+			resume: Type.Optional(
+				Type.String({
+					description:
+						"Owned child agent ID to resume. Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices; explicit changes are rejected. Whitespace-only system_prompt reuses stored guidance.",
+				}),
+			),
 			run_in_background: Type.Optional(
 				Type.Boolean({ default: false, description: "Run without waiting for completion." }),
 			),
@@ -163,7 +168,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			pair: Type.Optional(
 				Type.Boolean({
 					description:
-						"Override the agent definition's pair programmer default. Omit to use the definition; false disables it when the definition enables it.",
+						"Override the agent definition's pair programmer default for a new session. Omit to use the definition; false disables it when the definition enables it.",
 				}),
 			),
 		}),
@@ -173,23 +178,8 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 				if (!ownsRecord(existing, context.parentAgentId)) {
 					return textResult(`Teammate not found or not owned by this session: "${params.resume}".`, true);
 				}
-				const requestedInheritance = params.inherit_context === true;
-				const requestedPair = params.pair ?? existing.invocation?.pair === true;
-				const requestedIsolation = params.isolated === true;
-				const requestedProfile = params.profile ?? existing.invocation?.profile;
-				const requestedSystemPrompt = params.system_prompt?.trim() || existing.invocation?.systemPrompt;
-				if (
-					requestedInheritance !== (existing.invocation?.inheritContext === true) ||
-					requestedPair !== (existing.invocation?.pair === true) ||
-					requestedIsolation !== (existing.invocation?.isolated === true) ||
-					requestedProfile !== existing.invocation?.profile ||
-					requestedSystemPrompt !== existing.invocation?.systemPrompt
-				) {
-					return textResult(
-						"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.",
-						true,
-					);
-				}
+				const resumeError = getAgentResumeError(existing.invocation, params);
+				if (resumeError) return textResult(resumeError, true);
 				const background = params.run_in_background === true;
 				const resumed = await context.manager.resume(params.resume, params.prompt, background ? undefined : signal, {
 					isBackground: background,
