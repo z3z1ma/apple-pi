@@ -38,7 +38,7 @@ describe("child session disposal", () => {
 		expect(dispose).toHaveBeenCalledOnce();
 	});
 
-	it("keeps finished public agents until session end while expiring finished nested agents", () => {
+	it("keeps finished public agents for the session; nested agents and unread results carried into a new session expire", () => {
 		vi.useFakeTimers();
 		try {
 			const manager = new AgentManager();
