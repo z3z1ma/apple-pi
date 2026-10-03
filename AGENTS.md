@@ -186,10 +186,11 @@ Useful narrower commands are defined in `package.json`:
 - `test:pair` runs the pair's offline Node harness and expects the `pi` executable on `PATH`; its networked E2E mode is opt-in.
 - `test:loader` loads the manifest's extension entrypoints from the checkout and checks the exposed surface.
 - `pack:check` prints npm's dry-run package contents. Inspect that list for expected source; the command does not assert completeness or test the tarball in an installed environment.
+- `program_rpc_smoke` (`.pi/programs/rpc_smoke.py`) sends one prompt through the real installed Pi in RPC mode in a temporary directory and reports custom messages and usage. Use it to check root-session behavior that the faux-model tests cannot, such as prompt caching. It calls the real default model.
 
 Run the cheapest falsifying check while iterating, then the full relevant suite before declaring completion. A passing unit suite does not prove package loading, and a successful package dry run does not prove behavior. Some session-search tests write temporary session JSONL; they must not touch real Pi session files.
 
-`npm run format` writes across broad repository paths. In a dirty working tree, prefer formatting only files you changed (for example with Biome's path arguments), then run the non-writing repository check. Never use a blanket formatter as accidental cleanup of someone else's work.
+`npm run format` writes across broad repository paths. In a dirty working tree, prefer formatting only files you changed (for example with Biome's path arguments), then run the non-writing repository check. Never use a blanket formatter as accidental cleanup of someone else's work. RTK rewrites `npx biome format --write <paths>` into a command that reports success but writes nothing; run formatters that write files with `verbatim: true`.
 
 When adding a new source or test area, inspect all of these inclusion points:
 

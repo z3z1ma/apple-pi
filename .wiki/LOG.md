@@ -10,3 +10,4 @@ Append-only. One entry per completed knowledge change.
 - 2026-10-03: Corrected [[tui-interaction-model]]: prompt stash has no browsable overlay; linked the task spec.
 - 2026-10-03: Updated [[tui-interaction-model]]: finished public agents kept until session end; /btw drop-down at half height.
 - 2026-10-03: Added [[epistemic-grounding]] from Thore Graepel's "Don't be fooled—LLMs don't reason" (MIT Technology Review) and the bash-expectations work, and [[session-log-analysis]] from the session-log studies.
+- 2026-10-03: Added [[pi-request-internals]] from reading the Pi 0.99/1.0 SDK while building forked continuations.

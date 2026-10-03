@@ -8,3 +8,7 @@
 ## Method
 
 - [[session-log-analysis]]: measuring agent behavior from Pi session JSONL, and the traps.
+
+## Pi internals
+
+- [[pi-request-internals]]: how Pi builds a provider request, and how to continue a conversation with an identical one.
