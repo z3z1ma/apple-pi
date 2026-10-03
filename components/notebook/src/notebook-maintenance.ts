@@ -48,7 +48,7 @@ const UpdateNotebookSchema = Type.Object({
 
 const MainUpdateNotebookSchema = Type.Object({
 	reflections: notebookReflections("Primary source entry ids. Omit to cite the current user turn."),
-	retireReflectionIds: Type.Array(Type.String({ minLength: 1 })),
+	retireReflectionIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 });
 
 export type UpdateNotebookArgs = Static<typeof UpdateNotebookSchema>;
@@ -408,7 +408,11 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 				}
 				const entries = ctx.sessionManager.getBranch() as Entry[];
 				runtime.ensureConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
-				const applied = applyLiveNotebookUpdate(entries, params as UpdateNotebookArgs, false);
+				const applied = applyLiveNotebookUpdate(
+					entries,
+					{ ...params, retireReflectionIds: params.retireReflectionIds ?? [] },
+					false,
+				);
 				if (!applied) {
 					return {
 						content: [{ type: "text" as const, text: "No session entries to attach notebook changes to." }],

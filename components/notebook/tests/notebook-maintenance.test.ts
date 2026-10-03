@@ -259,7 +259,7 @@ describe("pair programmer notebook maintenance", () => {
 		expect(foldLedger(entries).currentReflections[0].id).not.toBe(old.id);
 	});
 
-	it("lets the main agent cite its current user turn without opaque ids", async () => {
+	it("lets the main agent cite its current user turn without opaque ids or retirements", async () => {
 		const entries = sourceEntries();
 		let tool: any;
 		registerMainNotebookTool(
@@ -274,7 +274,7 @@ describe("pair programmer notebook maintenance", () => {
 		);
 		const result = await tool.execute(
 			"call",
-			{ reflections: [{ content: "Use one shared correction path." }], retireReflectionIds: [] },
+			{ reflections: [{ content: "Use one shared correction path." }] },
 			undefined,
 			undefined,
 			{ cwd: "/tmp", sessionManager: { getBranch: () => entries } },
