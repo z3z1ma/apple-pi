@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as pi from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import runtime from "../extensions/runtime.js";
+import runtime from "../src/index.js";
 import {
 	containsContextMarks,
 	EVIDENCE_FUNCTION_NAMES,
 	evidencePythonStubs,
 	fitContext,
 	runEvidenceFunction,
-} from "../extensions/runtime-evidence.js";
+} from "../src/evidence.js";
 
 vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
 	const actual = await importOriginal<typeof pi>();

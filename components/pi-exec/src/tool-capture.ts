@@ -1,6 +1,6 @@
 import { ExtensionRunner, type RegisteredTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { inChildSessionContext } from "../components/subagents/src/child-context.js";
-import { SUBAGENT_TOOL_NAMES } from "../components/subagents/src/nested-tools.js";
+import { inChildSessionContext } from "../../subagents/src/child-context.js";
+import { SUBAGENT_TOOL_NAMES } from "../../subagents/src/nested-tools.js";
 
 interface ToolCaptureHub {
 	children: WeakSet<ExtensionRunner>;

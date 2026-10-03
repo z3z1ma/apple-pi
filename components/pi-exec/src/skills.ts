@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, loadSkills, stripFrontmatter } from "@earendil-works/pi-coding-agent";
 
-const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export interface SkillListItem {
 	name: string;

@@ -8,7 +8,7 @@ import type {
 	ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
-import runtime from "../extensions/runtime.js";
+import runtime from "../src/index.js";
 
 const temporaryDirectories: string[] = [];
 

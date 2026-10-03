@@ -7,29 +7,29 @@ import {
 	INFERENCE_PROFILE_NAMES,
 	type InferenceProfileName,
 	isInferenceProfileName,
-} from "../components/shared/src/model-profiles.js";
+} from "../../shared/src/model-profiles.js";
 import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
 	getAgentConfigIn,
 	getAvailableTypesIn,
 	resolveEnabledTypeIn,
-} from "../components/subagents/src/agent-types.js";
-import { loadCustomAgents } from "../components/subagents/src/custom-agents.js";
-import { resolveAgentPair } from "../components/subagents/src/invocation-config.js";
-import { resolveAgentProfile } from "../components/subagents/src/model-routing.js";
-import type { AgentConfig, SubagentConfigScope } from "../components/subagents/src/types.js";
+} from "../../subagents/src/agent-types.js";
+import { loadCustomAgents } from "../../subagents/src/custom-agents.js";
+import { resolveAgentPair } from "../../subagents/src/invocation-config.js";
+import { resolveAgentProfile } from "../../subagents/src/model-routing.js";
+import type { AgentConfig, SubagentConfigScope } from "../../subagents/src/types.js";
 
-import { AUTO_COMPACT_EXTENSION_PATH } from "./auto-compact.js";
-import { VROOM_EXTENSION_PATH } from "./vroom.js";
-import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "./home-search-guard.js";
-import { LEDGER_EXTENSION_PATH } from "./ledger.js";
-import { PAIR_EXTENSION_PATH } from "./pi-pair.js";
-import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
-import { SESSION_SEARCH_EXTENSION_PATH } from "./session-search.js";
-import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "./wiki.js";
+import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
+import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
+import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
+import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
+import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
+import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
+import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
+import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
 
-export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./runtime-worker-return.js";
+export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 
 export const WORKER_GUIDANCE =
 	"You are a worker inside a pi_exec program. Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Do not ask follow-up questions.";
@@ -39,7 +39,7 @@ export const CONTEXT_GUIDANCE =
 
 export const OUTPUT_SCHEMA_GUIDANCE = `You must finish by calling ${PI_EXEC_RETURN_TOOL} with arguments that match its parameter schema. That call is this worker's return value. Do not put the result in assistant text.`;
 
-export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./runtime-worker-return.ts", import.meta.url));
+export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./worker-return.ts", import.meta.url));
 export {
 	AUTO_COMPACT_EXTENSION_PATH,
 	VROOM_EXTENSION_PATH,

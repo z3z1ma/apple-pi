@@ -5,14 +5,14 @@ import { join } from "node:path";
 import { ExtensionRunner, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
+import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import runtime, {
 	aggregateUsage,
 	deriveProgramEnvelope,
 	listSkills,
 	PROGRAM_ENVELOPE_MAXIMA,
 	readSkillBody,
-} from "../extensions/runtime.js";
+} from "../src/index.js";
 import {
 	AUTO_COMPACT_EXTENSION_PATH,
 	agentOperationArgs,
@@ -32,13 +32,13 @@ import {
 	WIKI_EXTENSION_PATH,
 	WIKI_TOOL_NAMES,
 	WORKER_RETURN_EXTENSION_PATH,
-} from "../extensions/runtime-agent.js";
-import { renderExecCall, renderExecResult } from "../extensions/runtime-ui.js";
-import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
+} from "../src/agent-workers.js";
+import { renderExecCall, renderExecResult } from "../src/ui.js";
+import { createEventBus } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
 	createExtensionRuntime,
 	loadExtensions,
-} from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
+} from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
 const theme = {
 	fg: (_color: string, value: string) => value,

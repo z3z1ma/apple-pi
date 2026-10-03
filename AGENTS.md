@@ -41,7 +41,7 @@ The design goal is an integrated Pi environment with one implementation of each 
 
 ## Runtime mental model
 
-Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. The composition-heavy exec runtime stays in named `extensions/runtime-*` modules because those modules share one extension lifecycle and worker protocol. ledger is another deliberate exception: its small add/close/prompt integration lives in `extensions/ledger.ts`, while the shared contract text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
+Pi discovers the package through the `pi` section of `package.json`. Each configured extension entrypoint installs tools, commands, event hooks, renderers, or provider hooks into Pi. Most files under `extensions/` are thin integration wrappers over cohesive code in `components/`. ledger is a deliberate exception: its small add/close/prompt integration lives in `extensions/ledger.ts`, while the shared contract text and lifecycle procedures live with their actual consumers rather than behind a ledger domain component.
 
 There are three execution contexts to keep distinct:
 
@@ -55,7 +55,8 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 | Area | Responsibility | Important relationships |
 | --- | --- | --- |
-| `extensions/` | Pi-facing installers and the exec guest/worker implementation | Entries are selected by `package.json`. Keep ordinary wrappers thin; `extensions/work.ts` owns the cross-domain `/work` commands and shortcut while agent/task sections register through the shared event bus. Shared-lifecycle runtime modules may remain cohesive here. |
+| `extensions/` | Pi-facing installers | Entries are selected by `package.json`. Keep wrappers thin; `extensions/work.ts` owns the cross-domain `/work` commands and shortcut while agent/task sections register through the shared event bus. |
+| `components/pi-exec/` | `pi_exec`: type-checked Monty Python programs that compose core tools, captured extension tools, model workers, fetch, evidence helpers, skills, and saved `.pi/programs` | Root sessions only. Each model worker loads `src/worker-return.ts` (the `pi_exec_return` tool) by path, plus the worker extensions listed under Exec and subagents; no worker loads `pi_exec` itself. |
 | `components/pair-programmer/` | Gives the main agent a persistent shared-screen pair programming partner | Uses the user-global `pair` model profile, follows only the presented trajectory, expands host-issued receipts for folded text or user images, keeps the shared notebook, shares concise findings or restrained evidence questions, and can ask the consultant teammate for an independent architectural opinion using the `deep` profile; neither role may implement. |
 | `components/ask-user-question/` | Structured questionnaire schema, TUI, RPC fallback, and tool registration | Interactive and RPC behavior should preserve the same question semantics. |
 | `components/tasks/` | Process backgrounding, one-shot prompt/command scheduling, stdout-driven command monitoring, managed-task inspection and cancellation, passive task activity, the `/work` Tasks section, and reactive delivery | Root sessions only. Monitor lines, due prompts, and every task terminal outcome dispatch steer messages to the main agent. Overrides the built-in bash tool; `schedule`, `monitor`, and `task` stay outside Pi Exec. |

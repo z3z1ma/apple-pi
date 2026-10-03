@@ -64,7 +64,7 @@ describe("native MCP through Python pi_exec", () => {
 					{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension() },
 				],
 				additionalExtensionPaths: [
-					join(process.cwd(), "extensions", "runtime.ts"),
+					join(process.cwd(), "extensions", "pi-exec.ts"),
 					"builtin:mcp",
 					"builtin:codemode",
 					"builtin:tool-search",

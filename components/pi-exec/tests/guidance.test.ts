@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { sessionSearchTool } from "../components/session-search/src/tool.js";
-import { PI_EXEC_PROMPT_GUIDELINES, piExecGuestApiContract, piExecToolDescription } from "../extensions/runtime-api.js";
+import { sessionSearchTool } from "../../session-search/src/tool.js";
+import { PI_EXEC_PROMPT_GUIDELINES, piExecGuestApiContract, piExecToolDescription } from "../src/guest-api.js";
 
 describe("runtime capability guidance", () => {
 	it("teaches evidence reduction, dependency ordering, and outcome checks", () => {

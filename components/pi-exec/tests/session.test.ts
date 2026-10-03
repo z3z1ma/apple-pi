@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import runtime from "../extensions/runtime.js";
-import { sealCheckpoint } from "../extensions/runtime-checkpoint.js";
-import { isOwnedMontyWorker } from "../extensions/runtime-implementation.js";
+import runtime from "../src/index.js";
+import { sealCheckpoint } from "../src/checkpoint.js";
+import { isOwnedMontyWorker } from "../src/index.js";
 
 function harness(manager: SessionManager) {
 	const tools = new Map<string, any>();

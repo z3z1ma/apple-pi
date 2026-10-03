@@ -18,15 +18,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { createFileChangeTracker } from "../components/shared/src/file-changes.js";
-import { loadSearchRootGuardConfig } from "../components/home-search-guard/src/config.js";
-import { searchRootBlockReason } from "../components/home-search-guard/src/index.js";
-import {
-	PROGRAM_ENVELOPE_MAXIMA,
-	type ProgramEnvelope,
-	type ProgramEnvelopeLimits,
-} from "../components/shared/src/runtime-envelope.js";
-import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
+import { createFileChangeTracker } from "../../shared/src/file-changes.js";
+import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
+import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
+import { PROGRAM_ENVELOPE_MAXIMA, type ProgramEnvelope, type ProgramEnvelopeLimits } from "./envelope.js";
+import { createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
 import {
 	agentOperationArgs,
 	PI_EXEC_RETURN_TOOL,
@@ -35,7 +31,7 @@ import {
 	resolveExecWorker,
 	resolveStructuredOutput,
 	WORKER_TOOL_NAMES,
-} from "./runtime-agent.js";
+} from "./agent-workers.js";
 import {
 	attachLiveDescription,
 	guestPythonStubs,
@@ -44,34 +40,34 @@ import {
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 	piExecToolDescription,
-} from "./runtime-api.js";
-import { sealCheckpoint, verifyCheckpoint } from "./runtime-checkpoint.js";
-import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./runtime-evidence.js";
-import { serializeJsonValue } from "./runtime-json.js";
+} from "./guest-api.js";
+import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
+import { containsContextMarks, EVIDENCE_FUNCTION_NAMES, fitContext, runEvidenceFunction } from "./evidence.js";
+import { serializeJsonValue } from "./json.js";
 import {
 	buildProgramParametersSchema,
 	listSavedPrograms,
 	readSavedProgram,
 	SAVED_PROGRAM_PROMPT_GUIDELINE,
 	savedProgramToolName,
-} from "./runtime-saved-programs.js";
-import { listSkills, readSkillBody } from "./runtime-skills.js";
-import { capturedTool, capturedTools, installRegisteredToolCapture } from "./runtime-tools.js";
-import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./runtime-types.js";
-import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./runtime-ui.js";
+} from "./saved-programs.js";
+import { listSkills, readSkillBody } from "./skills.js";
+import { capturedTool, capturedTools, installRegisteredToolCapture } from "./tool-capture.js";
+import type { ExecutionOperation, ProgramHostCall, WorkerResult } from "./types.js";
+import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./ui.js";
 
 export {
 	PROGRAM_ENVELOPE_MAXIMA,
 	type ProgramEnvelope,
 	type ProgramEnvelopeLimits,
-} from "../components/shared/src/runtime-envelope.js";
+} from "./envelope.js";
 export type {
 	ExecutionOperation,
 	ExecutionOutcome,
 	ProgramExecution,
 	ProgramHostCall,
 	WorkerResult,
-} from "./runtime-types.js";
+} from "./types.js";
 
 const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 const MAX_TRACE_RESULT_CHARS = 4_000;
@@ -359,12 +355,12 @@ async function runAgent(
 	}
 }
 
-import { createProgramSession, executeProgram } from "./runtime-program.js";
+import { createProgramSession, executeProgram } from "./program.js";
 
-export { executeProgram } from "./runtime-program.js";
-export { listSkills, packagedSkillPaths, readSkillBody } from "./runtime-skills.js";
+export { executeProgram } from "./program.js";
+export { listSkills, packagedSkillPaths, readSkillBody } from "./skills.js";
 
-import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./runtime-fetch.js";
+import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 
 function resultText(result: any): string {
 	if (!Array.isArray(result?.content)) return "";
@@ -444,7 +440,7 @@ export function isOwnedMontyWorker(pid: number | undefined): boolean {
 	}
 }
 
-export default function runtime(pi: ExtensionAPI): void {
+export default function piExec(pi: ExtensionAPI): void {
 	let captureError: string | undefined;
 	try {
 		installRegisteredToolCapture();

@@ -8,7 +8,7 @@ import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guar
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
-import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
+import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
 

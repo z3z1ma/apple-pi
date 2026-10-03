@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PAIR_SESSION_EXTENSION_PATHS } from "../components/pair-programmer/src/session.js";
 import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
-import { buildAgentCliArgs } from "../extensions/runtime-agent.js";
+import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 
 describe("search root guard integration", () => {
 	it("loads the guard in every repository-reading child-agent session", () => {

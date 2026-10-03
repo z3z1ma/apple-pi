@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
-import { killProcessTree } from "../components/tasks/src/process-killer.js";
+import { killProcessTree } from "../../tasks/src/process-killer.js";
 
 type RecordValue = Record<string, any>;
 export interface EvidenceEnvironment {

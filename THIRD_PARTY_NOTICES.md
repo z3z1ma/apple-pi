@@ -35,7 +35,7 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
 - Upstream version at import: `0.1.9`
 - Author named by the source package: Thomas Mustier
-- Local paths: `extensions/compaction-safety.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `extensions/runtime-agent.ts`
+- Local paths: `extensions/compaction-safety.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `components/pi-exec/src/agent-workers.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Thomas Mustier`
 - apple-pi retains the upstream fail-closed goal, but no longer replaces provider streams, produces a synthetic assistant response, or supplies a cut-point fallback. Pi owns automatic compaction and oversized-result cut-point selection; Apple Pi aborts the active continuation when automatic compaction fails or is cancelled. The implementation omits upstream's provider interception, separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.

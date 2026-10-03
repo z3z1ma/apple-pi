@@ -5,9 +5,13 @@ import { join } from "node:path";
 import { getShellConfig, loadSkills } from "@earendil-works/pi-coding-agent";
 import { Monty, MontyTypingError } from "@pydantic/monty";
 import { describe, expect, it } from "vitest";
-import { guestPythonStubs } from "../extensions/runtime-api.js";
-import { EVIDENCE_FUNCTION_NAMES, evidencePythonStubs, runEvidenceFunction } from "../extensions/runtime-evidence.js";
-import { PYTHON_SCHEMA_PRELUDE } from "../extensions/runtime-python-schema.js";
+import { guestPythonStubs } from "../components/pi-exec/src/guest-api.js";
+import {
+	EVIDENCE_FUNCTION_NAMES,
+	evidencePythonStubs,
+	runEvidenceFunction,
+} from "../components/pi-exec/src/evidence.js";
+import { PYTHON_SCHEMA_PRELUDE } from "../components/pi-exec/src/python-schema.js";
 
 const PROGRAMS = ["plan-review-verify.py", "multi-lens-review.py", "residual-review-loop.py"];
 const source = (name: string, skill = "code-review") => readFileSync(join("skills", skill, "references", name), "utf8");

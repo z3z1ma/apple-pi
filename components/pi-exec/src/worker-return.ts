@@ -5,7 +5,7 @@ export const PI_EXEC_RETURN_TOOL = "pi_exec_return";
 export const PI_EXEC_OUTPUT_SCHEMA_ENV = "PI_EXEC_OUTPUT_SCHEMA";
 
 /** Worker-only structured return. Loaded with `pi -e` under `--no-extensions`. */
-export default function runtimeWorkerReturn(pi: ExtensionAPI): void {
+export default function workerReturn(pi: ExtensionAPI): void {
 	const schemaPath = process.env[PI_EXEC_OUTPUT_SCHEMA_ENV];
 	if (!schemaPath) {
 		throw new Error(`${PI_EXEC_RETURN_TOOL} requires ${PI_EXEC_OUTPUT_SCHEMA_ENV}`);

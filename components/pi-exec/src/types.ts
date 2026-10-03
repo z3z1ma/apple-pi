@@ -1,5 +1,5 @@
 import type { Usage } from "@earendil-works/pi-ai";
-import type { FileChange } from "../components/shared/src/file-changes.js";
+import type { FileChange } from "../../shared/src/file-changes.js";
 
 export interface WorkerResult {
 	index: number;
@@ -36,4 +36,4 @@ export interface ProgramExecution {
 
 export type ProgramHostCall = (ref: string, args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
 
-export type { ProgramEnvelope } from "../components/shared/src/runtime-envelope.js";
+export type { ProgramEnvelope } from "./envelope.js";

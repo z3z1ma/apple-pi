@@ -7,9 +7,9 @@ import {
 	createWriteToolDefinition,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { createExecBashToolDefinition } from "../components/tasks/src/bash-tool.js";
-import { EVIDENCE_FUNCTION_NAMES, evidencePythonStubs } from "./runtime-evidence.js";
-import { capturedTool, capturedTools } from "./runtime-tools.js";
+import { createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
+import { EVIDENCE_FUNCTION_NAMES, evidencePythonStubs } from "./evidence.js";
+import { capturedTool, capturedTools } from "./tool-capture.js";
 
 const CORE_TOOL_FACTORIES = {
 	read: createReadToolDefinition,

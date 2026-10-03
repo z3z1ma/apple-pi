@@ -7,11 +7,11 @@ import {
 	MontyTypingError,
 	ProtocolError,
 } from "@pydantic/monty";
-import { PROGRAM_ENVELOPE_MAXIMA } from "../components/shared/src/runtime-envelope.js";
-import { CORE_GUEST_TOOL_NAMES, extensionPythonTools } from "./runtime-api.js";
-import { EVIDENCE_FUNCTION_NAMES } from "./runtime-evidence.js";
-import { PYTHON_SCHEMA_PRELUDE } from "./runtime-python-schema.js";
-import type { ProgramExecution, ProgramHostCall } from "./runtime-types.js";
+import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
+import { CORE_GUEST_TOOL_NAMES, extensionPythonTools } from "./guest-api.js";
+import { EVIDENCE_FUNCTION_NAMES } from "./evidence.js";
+import { PYTHON_SCHEMA_PRELUDE } from "./python-schema.js";
+import type { ProgramExecution, ProgramHostCall } from "./types.js";
 
 function jsonValue(value: unknown, seen = new Set<object>(), hostArguments = false): unknown {
 	if (
