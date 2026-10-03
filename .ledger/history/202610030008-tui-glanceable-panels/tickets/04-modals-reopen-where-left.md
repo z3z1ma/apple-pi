@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] After `/work` closes and reopens, it shows the last tab and selected row.
-- [ ] After the task viewer closes and reopens on the same task, it keeps its scroll position, or keeps following the live output if it was.
-- [ ] Freshly installed extensions (a restart) start with no restored state.
-- [ ] Restoring state never calls `pi.appendEntry` or other session persistence.
+- [x] After `/work` closes and reopens, it shows the last tab and selected row.
+- [x] After the task viewer closes and reopens on the same task, it keeps its scroll position, or keeps following the live output if it was.
+- [x] Freshly installed extensions (a restart) start with no restored state.
+- [x] Restoring state never calls `pi.appendEntry` or other session persistence.

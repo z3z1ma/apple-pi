@@ -93,3 +93,5 @@
 - `.ledger/history/202609251319-monty-pi-exec/task.md` — done — Replace pi_exec JavaScript VM with Monty Python sandbox — Research and plan to rebuild pi_exec on @pydantic/monty: type-checked Python guest, host-function bridges, VM-enforced limits, optional branch-aligned persistent sessions.
 
 - `.ledger/history/202609291615-adopt-pi-0-99-native-mcp/task.md` — done — Adopt Pi 0.99 native MCP — Upgrade Pi dependencies, remove third-party MCP adapter, validate root and child native MCP; defer Pi Exec redesign pending runtime decision.
+
+- `.ledger/history/202610030008-tui-glanceable-panels/task.md` — done — Glanceable panels for the Apple Pi TUI — Move Apple Pi from all-modal overlays to non-capturing glanceable panels (subagents first), a /btw top drop-down, and restored overlay state, within the public Pi API.

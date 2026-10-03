@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (Pin a glanceable subagent panel from `/work`).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A left press on the panel focuses it.
-- [ ] A wheel event over the panel changes its scroll position.
-- [ ] The unpin action in `/work`'s Agents tab removes the pinned panel without focusing it, and is not offered when no panel is pinned.
-- [ ] Manual check in a real fullscreen Pi through tmux: click to focus, wheel to scroll, unpin from `/work`.
+- [x] A left press on the panel focuses it.
+- [x] A wheel event over the panel changes its scroll position.
+- [x] The unpin action in `/work`'s Agents tab removes the pinned panel without focusing it, and is not offered when no panel is pinned.
+- [x] Manual check in a real fullscreen Pi through tmux: click to focus, wheel to scroll, unpin from `/work`.
