@@ -7,3 +7,5 @@
 - `.ledger/202610030836-responsive-work-panel/task.md` — in-progress — Make the shared work panel the direct responsive control surface — Replace the centered work picker with one non-capturing Agents/Tasks panel; command aliases select tabs and narrow terminals use a top-center half-height layout.
 
 - `.ledger/202610030909-headless-fork-reflections/task.md` — in-progress — Run passive reflections in headless forks of the conversation — Change reflection and automatic learning reflection run as headless forks of the live conversation (identical request prefix) and return one passive message, instead of continuing the run in-band.
+
+- `.ledger/202610031016-subagent-outcome-framing/task.md` — ready — Deepen subagent outcome framing — Concentrate shared outcome framing for root results, nested results, and notifications behind one interface while preserving observable behavior, persistence ownership, and delivery lifecycle.
