@@ -3,28 +3,16 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getShellConfig, loadSkills } from "@earendil-works/pi-coding-agent";
-import { Monty, MontyTypingError } from "@pydantic/monty";
 import { describe, expect, it } from "vitest";
 import { guestPythonStubs } from "../components/pi-exec/src/guest-api.js";
-import {
-	EVIDENCE_FUNCTION_NAMES,
-	evidencePythonStubs,
-	runEvidenceFunction,
-} from "../components/pi-exec/src/evidence.js";
-import { PYTHON_SCHEMA_PRELUDE } from "../components/pi-exec/src/python-schema.js";
+import { runEvidenceFunction } from "../components/pi-exec/src/evidence.js";
+import { createProgramSession, executeProgram } from "../components/pi-exec/src/program.js";
 
 const PROGRAMS = ["plan-review-verify.py", "multi-lens-review.py", "residual-review-loop.py"];
 const source = (name: string, skill = "code-review") => readFileSync(join("skills", skill, "references", name), "utf8");
-function plain(value: any): any {
-	if (value instanceof Map) return Object.fromEntries([...value].map(([key, item]) => [key, plain(item)]));
-	if (Array.isArray(value)) return value.map(plain);
-	if (value && typeof value === "object")
-		return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)]));
-	return value;
-}
-type Host = (name: string, args: any) => Promise<any>;
-/** Runs the actual packaged Python in Monty with live stubs and the public evidence dispatcher.
- * Model answers are deterministic fixtures; registered-tool routing belongs to runtime integration tests.
+type Host = (ref: string, args: any) => Promise<any>;
+/** Runs the actual packaged Python in Monty through pi_exec's real stubs, bindings, and evidence functions.
+ * Model and core-tool answers are deterministic fixtures keyed by host ref; any fixture error fails the test.
  */
 async function run(
 	name: string,
@@ -33,43 +21,30 @@ async function run(
 	cwd = process.cwd(),
 	skill = "code-review",
 ): Promise<any> {
-	const pool = await Monty.create({ minProcesses: 0, maxProcesses: 1 });
-	const live = guestPythonStubs();
-	const stubs = live.includes("async def git_change(") ? live : `${live}\n${evidencePythonStubs()}`;
-	const session = await pool.checkout({
-		typeCheck: true,
-		typeCheckStubs: stubs,
-		limits: { maxSuspensions: 3000, maxTurnDurationSecs: 10, maxFeedDurationSecs: 30 },
-	});
+	const live = await createProgramSession(guestPythonStubs(cwd));
+	let hostError: unknown;
 	try {
-		await session.feedRun(PYTHON_SCHEMA_PRELUDE);
-		return plain(
-			await session.feedRun(source(name, skill), {
-				inputs: { inputs, state: {} },
-				externalLookup: {
-					...Object.fromEntries(
-						EVIDENCE_FUNCTION_NAMES.map((fn) => [
-							fn,
-							(args: any) => runEvidenceFunction(fn, plain(args ?? {}), { cwd }),
-						]),
-					),
-					agent_run: (args: any) => host("agent_run", plain(args)),
-					agent: async (args: any) => {
-						const result = await host("agent_run", plain(args));
-						if (result.status !== "completed") throw new Error(result.error);
-						return result.value ?? result.text;
-					},
-					bash: (args: any) => host("bash", plain(args)),
-					read: (args: any) => host("read", plain(args)),
-				},
-			}),
+		const execution = await executeProgram(
+			live.session,
+			source(name, skill),
+			inputs,
+			30_000,
+			async (ref, args, signal) => {
+				if (ref.startsWith("evidence."))
+					return runEvidenceFunction(ref.slice("evidence.".length), args, { cwd, signal });
+				try {
+					return await host(ref, args);
+				} catch (error) {
+					hostError ??= error;
+					throw error;
+				}
+			},
 		);
-	} catch (error) {
-		if (error instanceof MontyTypingError) throw new Error(error.display());
-		throw error;
+		if (hostError) throw hostError;
+		if (execution.outcome !== "succeeded") throw new Error(execution.error);
+		return execution.value;
 	} finally {
-		await session.close();
-		await pool.close();
+		await live.close();
 	}
 }
 function fixtureBash(command: string, cwd: string): string {
@@ -135,9 +110,9 @@ function verdict(candidates: any[]): any {
 }
 function fixtureHost(tweak?: (args: any, value: any) => any): Host {
 	return async (name, args) => {
-		if (name !== "agent_run") throw new Error(`Unexpected host call ${name}`);
+		if (name !== "agent.run") throw new Error(`Unexpected host call ${name}`);
 		expect(args.tools).toEqual(["read", "grep", "find", "ls"]);
-		expect(args.system_prompt).toContain("do not invoke code-review");
+		expect(args.systemPrompt).toContain("do not invoke code-review");
 		let value: any;
 		if (args.name === "review-planner") {
 			value = {
@@ -388,12 +363,12 @@ describe("Ralph Python programs", () => {
 						stack: "README.md\n.ledger/task/task.md",
 					},
 					async (name, args) => {
-						if (name === "read") return "Status: open\n";
-						expect(name).toBe("agent_run");
+						if (name === "pi.read") return "Status: open\n";
+						expect(name).toBe("agent.run");
 						expect(args.profile).toBe("coding");
 						expect(args.type).toBeUndefined();
-						expect(args.output_schema).toBeUndefined();
-						expect(args.system_prompt).toContain("Never commit");
+						expect(args.outputSchema).toBeUndefined();
+						expect(args.systemPrompt).toContain("Never commit");
 						expect(args.tools).toEqual(["read", "grep", "find", "ls", "bash", "edit", "write"]);
 						if (program === "ralph-ledger.py")
 							expect(args.context.stack).toEqual([".ledger/task/task.md", "README.md"]);
@@ -425,7 +400,7 @@ describe("Ralph Python programs", () => {
 				"ralph-simple.py",
 				{ goal: "increment", iterations: "3" },
 				async (name, args) => {
-					if (name === "bash") return { ok: true, output: fixtureBash(args.command, cwd) };
+					if (name === "pi.bash") return { ok: true, output: fixtureBash(args.command, cwd) };
 					calls++;
 					writeFileSync(path, `increment ${calls}`);
 					return { status: "completed", text: "increment done" };
@@ -471,7 +446,7 @@ describe("Ralph Python programs", () => {
 				"ralph-ledger.py",
 				inputs,
 				async (name) => {
-					expect(name).toBe("read");
+					expect(name).toBe("pi.read");
 					return "Status: blocked\n";
 				},
 				cwd,
