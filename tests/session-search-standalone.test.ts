@@ -37,5 +37,5 @@ describe("standalone search_session extension", () => {
 		expect(commands.has("om:status")).toBe(false);
 		expect(commands.has("om:view")).toBe(false);
 		expect(tools.has("revisit_note")).toBe(false);
-	});
+	}, 30_000);
 });

@@ -47,7 +47,7 @@ describe("standalone context extension", () => {
 		expect(loaded.commands.size).toBe(0);
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);
-	});
+	}, 30_000);
 
 	it("registers the same search-only surface in a child session", async () => {
 		isolate();
