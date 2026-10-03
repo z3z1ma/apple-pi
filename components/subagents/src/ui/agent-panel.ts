@@ -13,6 +13,8 @@ import {
 	Key,
 	matchesKey,
 	type TUI,
+	type TuiMouseEvent,
+	type TuiMouseEventResult,
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
@@ -92,6 +94,15 @@ export class AgentPanel implements Component {
 		}
 		viewer?.handleInput(data);
 		this.deps.tui.requestRender();
+	}
+
+	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		if (event.type === "wheel") {
+			this.viewer?.scrollBy(event.wheelDelta ?? 0);
+			return { handled: true };
+		}
+		if (event.type === "press" && event.button === "left") return { focus: true };
+		return undefined;
 	}
 
 	render(width: number): string[] {

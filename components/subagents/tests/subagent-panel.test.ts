@@ -198,7 +198,19 @@ function harness(cwd: string, model: any, modelRegistry: any) {
 	const shutdown = async () => {
 		for (const handler of lifecycle.get("session_shutdown") ?? []) await handler({}, ctx);
 	};
-	return { tools, commands, shortcuts, ctx, custom, screen, modalRenders, launch, chooseInWork, shutdown };
+	return {
+		tools,
+		commands,
+		shortcuts,
+		ctx,
+		custom,
+		screen,
+		modalRenders,
+		modalScripts,
+		launch,
+		chooseInWork,
+		shutdown,
+	};
 }
 
 function setupProject(): string {
@@ -367,7 +379,26 @@ describe("glanceable subagent panel", () => {
 			expect(h.screen.stack).toHaveLength(1);
 			const repinned = h.screen.stack[0]!;
 			expect(repinned.options.nonCapturing).toBe(true);
+
+			// /work offers unpin while a panel is pinned; u removes it without focusing it.
+			h.modalScripts.push((modal) => {
+				modal.handleInput("u");
+				modal.handleInput("q");
+			});
+			await h.commands.get("work").handler("", h.ctx);
+			expect(h.modalRenders.at(-1)).toContain("u unpin");
+			expect(repinned.handle.hide).toHaveBeenCalled();
+			expect(repinned.handle.focus).not.toHaveBeenCalled();
+			expect(h.screen.stack).toHaveLength(0);
+			expect(h.screen.focused()).toBe(h.screen.editor);
+			// Without a pinned panel, /work neither offers nor acts on unpin.
+			await h.commands.get("work").handler("", h.ctx);
+			expect(h.modalRenders.at(-1)).not.toContain("u unpin");
+
+			await h.chooseInWork("Finished task");
+			const pinnedAgain = h.screen.stack[0]!;
 			await h.shutdown();
+			expect(pinnedAgain.handle.hide).toHaveBeenCalled();
 			expect(repinned.handle.hide).toHaveBeenCalled();
 			expect(h.screen.stack).toHaveLength(0);
 		} finally {
@@ -433,6 +464,43 @@ describe("AgentPanel component", () => {
 	const type = (panel: AgentPanel, text: string) => {
 		for (const ch of text) panel.handleInput(ch);
 	};
+
+	it("focuses on a left press and scrolls the conversation with the mouse wheel", () => {
+		const lines = Array.from({ length: 80 }, (_, index) => `LINE-${index}`).join("\n");
+		const record = panelRecord("a", {
+			session: panelSession([
+				{ role: "user", content: "HELLO-a" },
+				{ role: "assistant", content: [{ type: "text", text: lines }] },
+			]),
+		});
+		const { panel } = makePanel([record]);
+		const mouse = (type: string, extra: object = {}) =>
+			panel.handleMouse({
+				type,
+				button: "left",
+				x: 1,
+				y: 1,
+				screenX: 1,
+				screenY: 1,
+				width: PANEL_WIDTH,
+				height: 20,
+				shift: false,
+				alt: false,
+				ctrl: false,
+				...extra,
+			} as any);
+
+		expect(mouse("press")).toMatchObject({ focus: true });
+		expect(panel.render(PANEL_WIDTH).join("\n")).toContain("LINE-79");
+
+		expect(mouse("wheel", { button: "none", wheelDelta: -40 })).toMatchObject({ handled: true });
+		const scrolled = panel.render(PANEL_WIDTH).join("\n");
+		expect(scrolled).not.toContain("LINE-79");
+
+		mouse("wheel", { button: "none", wheelDelta: 40 });
+		expect(panel.render(PANEL_WIDTH).join("\n")).toContain("LINE-79");
+		panel.dispose();
+	});
 
 	it("emits the composer cursor only while the panel holds focus", () => {
 		const { panel } = makePanel([panelRecord("a"), panelRecord("b")]);

@@ -1163,6 +1163,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				done,
 				keybindings,
 				reservedLines,
+				() => (pinned ? unpinPanel : undefined),
 			);
 		},
 		inspect: async (ctx, id) => {

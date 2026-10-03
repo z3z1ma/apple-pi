@@ -46,6 +46,8 @@ export class AgentManagerComponent implements Component {
 		private readonly done: (action: AgentManagerAction) => void,
 		keybindings?: ViewerKeybindings,
 		private readonly reservedLines = 0,
+		/** Present while the agent panel is pinned; removes it. */
+		private readonly getUnpin: () => (() => void) | undefined = () => undefined,
 	) {
 		this.selectedId = selectedId;
 		this.keys = createViewerKeys(keybindings);
@@ -57,6 +59,12 @@ export class AgentManagerComponent implements Component {
 		if (isKeyRelease(data)) return;
 		if (matchesKey(data, "escape") || matchesKey(data, "q")) {
 			this.done({ type: "close" });
+			return;
+		}
+		const unpin = this.getUnpin();
+		if (unpin && matchesKey(data, "u")) {
+			unpin();
+			this.tui.requestRender();
 			return;
 		}
 		if (matchesKey(data, "t")) {
@@ -165,7 +173,7 @@ export class AgentManagerComponent implements Component {
 			line(
 				this.theme.fg(
 					"dim",
-					`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} select · Enter pin · t types · Esc close`,
+					`${formatViewerKey(this.keys.upKey)}/${formatViewerKey(this.keys.downKey)} select · Enter pin${this.getUnpin() ? " · u unpin" : ""} · t types · Esc close`,
 				),
 			),
 		);

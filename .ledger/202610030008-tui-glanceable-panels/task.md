@@ -10,7 +10,7 @@ Stop every Apple Pi overlay from blocking typing and covering the transcript. Pi
 
 ## Current State
 
-Design is settled in the wiki page. `spec.md` holds the specification with confirmed test seams. Tickets are in `tickets/` (01 blocks 02; 01, 03, 04 can start now). Next: move to `ready`, then `/skill:implement`.
+Design is settled in the wiki page; `spec.md` holds the specification. All four tickets are implemented and committed, each with unit seams; tickets 01 and 02 were also checked in a real fullscreen Pi through tmux. Ticket status files are unchanged pending operator sign-off. Implementation decisions taken with the operator: finished public agents stay until session end; `/btw` drops down at half the terminal height.
 
 Prototype `prototype-glanceable-panel.ts` answered whether a non-capturing overlay can serve as a persistent panel without blocking the editor. Run it with `pi -e .ledger/202610030008-tui-glanceable-panels/prototype-glanceable-panel.ts`, then `/proto-pin`, `Alt+G` to focus, `Esc` to return, `/proto-modal`, `/proto-min <cols>`.
 

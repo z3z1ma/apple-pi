@@ -166,17 +166,13 @@ export class ConversationViewer implements Component {
 		const maxScroll = Math.max(0, totalLines - viewportHeight);
 
 		if (this.keys.scrollUp(data)) {
-			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
-			this.autoScroll = this.scrollOffset >= maxScroll;
+			this.scrollBy(-1);
 		} else if (this.keys.scrollDown(data)) {
-			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
-			this.autoScroll = this.scrollOffset >= maxScroll;
+			this.scrollBy(1);
 		} else if (this.keys.pageUp(data)) {
-			this.scrollOffset = Math.max(0, this.scrollOffset - viewportHeight);
-			this.autoScroll = false;
+			this.scrollBy(-viewportHeight);
 		} else if (this.keys.pageDown(data)) {
-			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + viewportHeight);
-			this.autoScroll = this.scrollOffset >= maxScroll;
+			this.scrollBy(viewportHeight);
 		} else if (matchesKey(data, "home")) {
 			this.scrollOffset = 0;
 			this.autoScroll = false;
@@ -184,6 +180,14 @@ export class ConversationViewer implements Component {
 			this.scrollOffset = maxScroll;
 			this.autoScroll = true;
 		}
+	}
+
+	/** Scroll the conversation by lines; negative moves up. Reaching the end resumes following new output. */
+	scrollBy(lines: number): void {
+		const maxScroll = Math.max(0, this.buildContentLines(this.lastInnerW).length - this.viewportHeight());
+		this.scrollOffset = Math.min(maxScroll, Math.max(0, this.scrollOffset + lines));
+		this.autoScroll = this.scrollOffset >= maxScroll;
+		this.tui.requestRender();
 	}
 
 	render(width: number): string[] {
