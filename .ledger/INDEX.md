@@ -7,3 +7,5 @@
 - `.ledger/202610030836-responsive-work-panel/task.md` — in-progress — Make the shared work panel the direct responsive control surface — Replace the centered work picker with one non-capturing Agents/Tasks panel; command aliases select tabs and narrow terminals use a top-center half-height layout.
 
 - `.ledger/202610030909-headless-fork-reflections/task.md` — in-progress — Run passive reflections in headless forks of the conversation — Change reflection and automatic learning reflection run as headless forks of the live conversation (identical request prefix) and return one passive message, instead of continuing the run in-band.
+
+- `.ledger/202610031403-branch-search/task.md` — ready — Branch search: externally drawn parallel attempts scored by hidden checks — Design and build branch search: pre-registered hidden scorer, enumerated approaches drawn by seeded RNG, forked continuations in isolated git worktrees sharing the parent cache prefix, objective selection and apply. Starts with Pi integration spikes V1-V3.
