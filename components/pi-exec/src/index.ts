@@ -1,15 +1,7 @@
-import { homedir } from "node:os";
 import type { Usage } from "@earendil-works/pi-ai";
-import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
-import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
-import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
-import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
-import { coreToolDefinition, ENVELOPE_TOOL_NAMES, isCoreToolName } from "./core-tools.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
-import { EVIDENCE_FUNCTION_NAMES, runEvidenceFunction } from "./evidence.js";
-import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import {
 	attachLiveDescription,
 	PI_EXEC_DESCRIPTION,
@@ -18,34 +10,13 @@ import {
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 } from "./guest-api.js";
-import { serializeJsonValue } from "./json.js";
-import { aggregateUsage, bounded, resultText, traceValue } from "./results.js";
-import { installProgramSession } from "./session.js";
+import { createHostCalls } from "./host-calls.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
-import { listSkills, readSkillBody } from "./skills.js";
-import { capturedTool, capturedTools, installRegisteredToolCapture } from "./tool-capture.js";
-import type { ExecutionOperation, ProgramHostCall } from "./types.js";
+import { installProgramSession } from "./session.js";
+import { installRegisteredToolCapture } from "./tool-capture.js";
 import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./ui.js";
 
-const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
-function portableValue(value: unknown, maxChars = MAX_GUEST_TOOL_RESULT_CHARS): unknown {
-	if (value === undefined) return undefined;
-	const json = serializeJsonValue(value, "pi_exec host result");
-	if (json.length <= maxChars) return JSON.parse(json) as unknown;
-	return {
-		truncated: true,
-		originalChars: json.length,
-		preview: json.slice(0, maxChars),
-	};
-}
-
-/** TypeBox schemas carry runtime metadata; the guest receives their JSON Schema projection. */
-function portableSchema(value: unknown): unknown {
-	const json = JSON.stringify(value);
-	if (json === undefined) return undefined;
-	return JSON.parse(json) as unknown;
-}
 
 function displayValue(value: unknown): string {
 	if (typeof value === "string") return value;
@@ -148,82 +119,36 @@ export default function piExec(pi: ExtensionAPI): void {
 		renderResult(result, options, theme, context) {
 			return renderExecResult(result as any, options, theme, context);
 		},
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: invocation-local Monty ownership shares budgets, cancellation, rollback, traces, and activity lifecycle.
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			if (executing) throw new Error("pi_exec already has a running program in this session");
 			executing = true;
 			const startedAt = Date.now();
 			const envelope = deriveProgramEnvelope(params.code, params.limits);
-			const { callBudget, concurrency, agentBudget } = envelope;
 			const programName = params.display?.name?.trim() || "Program";
-			const operations: ExecutionOperation[] = [];
-			const pendingOperations = new Set<ExecutionOperation>();
-			const activeOperations = new Set<ExecutionOperation>();
 			const logs: string[] = [];
-			const nestedUsages: Usage[] = [];
-			let calls = 0;
-			let active = 0;
-			let agentCalls = 0;
 			let finishedAt: number | undefined;
 			let widget: ExecActivityWidget | undefined;
 			let widgetMounted = false;
-			const waiters: Array<() => void> = [];
-			const acquire = async (runtimeSignal: AbortSignal): Promise<void> => {
-				if (active < concurrency) {
-					active++;
-					return;
-				}
-				await new Promise<void>((resolve, reject) => {
-					const grant = () => {
-						runtimeSignal.removeEventListener("abort", abort);
-						active++;
-						resolve();
-					};
-					const abort = () => {
-						const index = waiters.indexOf(grant);
-						if (index >= 0) waiters.splice(index, 1);
-						reject(new Error("pi_exec aborted while waiting for a call slot"));
-					};
-					waiters.push(grant);
-					runtimeSignal.addEventListener("abort", abort, { once: true });
-					if (runtimeSignal.aborted) abort();
-				});
-			};
-			const release = () => {
-				active--;
-				waiters.shift()?.();
-			};
 			const activity = (): ExecActivitySnapshot => ({
 				name: programName,
 				...(params.display?.description ? { description: params.display.description } : {}),
 				startedAt,
 				...(finishedAt !== undefined ? { finishedAt } : {}),
-				calls: operations.map((operation) => ({
-					sequence: operation.sequence,
-					ref: operation.ref,
-					args: operation.args,
-					status: activeOperations.has(operation)
-						? "running"
-						: pendingOperations.has(operation)
-							? "queued"
-							: operation.outcome,
-					...(operation.activity ? { activity: operation.activity } : {}),
-					...(operation.result !== undefined ? { result: operation.result } : {}),
-					...(operation.error ? { error: operation.error } : {}),
-				})),
+				calls: host.activityCalls(),
 			});
 			const emit = () => {
 				if (finishedAt !== undefined) return;
-				const completed = operations.filter((operation) => !pendingOperations.has(operation));
+				const completed = host.completedOperations();
 				widget?.refresh();
 				onUpdate?.({
-					content: [{ type: "text", text: `pi_exec: ${completed.length} of ${calls} calls completed` }],
+					content: [{ type: "text", text: `pi_exec: ${completed.length} of ${host.attempted()} calls completed` }],
 					details: {
 						trace: { kind: "apple-pi.execution", version: 1, outcome: "succeeded", operations: completed },
 						activity: activity(),
 					},
 				});
 			};
+			const host = createHostCalls({ ctx, toolCallId, envelope, captureError, onChange: emit });
 
 			if (ctx.hasUI && ctx.mode === "tui") {
 				try {
@@ -244,211 +169,26 @@ export default function piExec(pi: ExtensionAPI): void {
 				}
 			}
 
-			const availableExtensionTools = () => {
-				if (captureError) throw new Error(`extension tools unavailable: ${captureError}`);
-				const tools = capturedTools();
-				if (tools.length === 0) {
-					throw new Error("extension tools unavailable: Pi's registered-tool catalog was not captured");
-				}
-				return tools;
-			};
-			const invokeDefinition = async (
-				definition: ToolDefinition<any, any>,
-				args: Record<string, unknown>,
-				operation: ExecutionOperation,
-				runtimeSignal: AbortSignal,
-			) => {
-				const prepared = definition.prepareArguments ? definition.prepareArguments(args) : args;
-				if (!Value.Check(definition.parameters, prepared)) {
-					const issues = [...Value.Errors(definition.parameters, prepared)]
-						.slice(0, 3)
-						.map((issue) => `${issue.instancePath || "/"}: ${issue.message}`)
-						.join("; ");
-					throw new Error(`Invalid ${operation.ref} arguments: ${issues}`);
-				}
-				const result = await definition.execute(
-					`${toolCallId}_nested_${operation.sequence + 1}`,
-					prepared as any,
-					runtimeSignal,
-					(partial) => {
-						const progress = resultText(partial).split("\n").find(Boolean);
-						operation.activity = progress?.slice(0, 120) || "running";
-						emit();
-					},
-					ctx,
-				);
-				if (result.usage) nestedUsages.push(result.usage);
-				return result;
-			};
-
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: invocation-local dispatch shares limits, cancellation, traces, usage, and widget cleanup.
-			const hostCall: ProgramHostCall = async (ref, rawArgs, runtimeSignal) => {
-				calls++;
-				if (calls > callBudget) throw new Error(`pi_exec call budget exhausted (${callBudget})`);
-				const operation: ExecutionOperation = {
-					sequence: calls - 1,
-					ref,
-					args:
-						ref === "fetch"
-							? fetchOperationArgs(rawArgs)
-							: ref === "agent.run"
-								? agentOperationArgs(rawArgs)
-								: ref.startsWith("evidence.context_")
-									? Object.fromEntries(
-											Object.entries(rawArgs).map(([key, value]) => [
-												key,
-												key === "value" || key === "items" ? { bound: true } : value,
-											]),
-										)
-									: rawArgs,
-					outcome: "succeeded",
-				};
-				operations.push(operation);
-				operations.sort((left, right) => left.sequence - right.sequence);
-				pendingOperations.add(operation);
-				emit();
-				let acquired = false;
-				try {
-					await acquire(runtimeSignal);
-					acquired = true;
-					activeOperations.add(operation);
-					emit();
-					let value: unknown;
-					if (ref === "fetch") {
-						value = await executeFetch(rawArgs, runtimeSignal);
-					} else if (
-						ref.startsWith("evidence.") &&
-						EVIDENCE_FUNCTION_NAMES.includes(ref.slice(9) as (typeof EVIDENCE_FUNCTION_NAMES)[number])
-					) {
-						value = await runEvidenceFunction(ref.slice(9), rawArgs, { cwd: ctx.cwd, signal: runtimeSignal });
-					} else if (ref === "tools.list" || ref === "tools.search" || ref === "tools.describe") {
-						const tools = availableExtensionTools();
-						const query = typeof rawArgs.query === "string" ? rawArgs.query.toLowerCase() : "";
-						const name = typeof rawArgs.name === "string" ? rawArgs.name : "";
-						const descriptors = tools.map((tool) => ({
-							name: tool.name,
-							description: tool.description,
-							...(ref === "tools.describe" ? { parameters: portableSchema(tool.parameters) } : {}),
-						}));
-						value =
-							ref === "tools.search"
-								? descriptors.filter((tool) => `${tool.name} ${tool.description}`.toLowerCase().includes(query))
-								: ref === "tools.describe"
-									? descriptors.find((tool) => tool.name === name)
-									: descriptors;
-					} else if (ref === "tools.call") {
-						availableExtensionTools();
-						const name = typeof rawArgs.name === "string" ? rawArgs.name : "";
-						const args =
-							rawArgs.args && typeof rawArgs.args === "object" && !Array.isArray(rawArgs.args)
-								? (rawArgs.args as Record<string, unknown>)
-								: {};
-						const tool = capturedTool(name);
-						if (!tool) throw new Error(`Unknown extension tool: ${name || "(missing name)"}`);
-						operation.ref = `extensions.${name}`;
-						operation.args = args;
-						emit();
-						const result = await invokeDefinition(tool.definition, args, operation, runtimeSignal);
-						const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${operation.ref} output`).value;
-						const content = portableValue(result.content);
-						const details = portableValue(result.details);
-						value = {
-							text,
-							...(content !== undefined ? { content } : {}),
-							...(details !== undefined ? { details } : {}),
-							...(result.usage ? { usage: result.usage } : {}),
-						};
-					} else if (ref === "skills.list") {
-						value = listSkills({ cwd: ctx.cwd });
-					} else if (ref === "skills.body") {
-						const name = typeof rawArgs.name === "string" ? rawArgs.name : "";
-						value = readSkillBody(name, { cwd: ctx.cwd });
-					} else if (ref === "agent.run") {
-						agentCalls++;
-						if (agentCalls > agentBudget) throw new Error(`pi_exec agent budget exhausted (${agentBudget})`);
-						const result = await runAgentWorker(agentCalls - 1, rawArgs, ctx, runtimeSignal, (nextActivity) => {
-							operation.activity = nextActivity;
-							emit();
-						});
-						if (result.usage) nestedUsages.push(result.usage);
-						operation.children = result.operations;
-						value = result.record;
-						if (result.error) {
-							operation.outcome = "failed";
-							operation.error = result.error;
-						}
-					} else {
-						const match = /^pi\.(.+)$/.exec(ref);
-						const name = match?.[1];
-						if (!name || !isCoreToolName(name)) throw new Error(`pi_exec does not expose ${ref}`);
-						const definition = coreToolDefinition(name, ctx.cwd);
-						try {
-							const config = loadSearchRootGuardConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
-							const blocked = searchRootBlockReason(name, rawArgs, ctx.cwd, { home: homedir(), ...config });
-							if (blocked) throw new Error(blocked);
-							const result = await invokeDefinition(definition, rawArgs, operation, runtimeSignal);
-							const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
-							value = ENVELOPE_TOOL_NAMES.has(name) ? { ok: true, output: text } : text;
-						} catch (error) {
-							if (!ENVELOPE_TOOL_NAMES.has(name) || runtimeSignal.aborted) throw error;
-							const output = error instanceof Error ? error.message : String(error);
-							operation.outcome = "failed";
-							operation.error = output;
-							value = { ok: false, output: bounded(output, MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value };
-						}
-					}
-					if (value !== undefined) serializeJsonValue({ value }, "pi_exec host result");
-					operation.result =
-						ref === "fetch" && value && typeof value === "object"
-							? {
-									status: (value as Record<string, unknown>).status,
-									url: traceFetchUrl((value as Record<string, unknown>).url),
-									bodyBytes: (value as Record<string, unknown>).bodyBytes,
-								}
-							: ref.startsWith("evidence.context_")
-								? { bound: true }
-								: traceValue(value);
-					return value;
-				} catch (error) {
-					operation.outcome = runtimeSignal.aborted ? "aborted" : "failed";
-					operation.error = error instanceof Error ? error.message : String(error);
-					throw error;
-				} finally {
-					activeOperations.delete(operation);
-					if (acquired) release();
-					pendingOperations.delete(operation);
-					delete operation.activity;
-					emit();
-				}
-			};
-
 			try {
 				const { execution: result, notice: callNotice } = await programSession.run(ctx, {
 					code: params.code,
 					inputs: params.inputs ?? {},
 					timeoutMs: envelope.timeoutSeconds * 1_000,
-					callBudget,
+					callBudget: envelope.callBudget,
 					reset: params.reset === true,
-					hostCall,
+					hostCall: host.hostCall,
 					signal,
 					onLog: (values) => logs.push(values.map(displayValue).join(" ")),
 				});
 				finishedAt = Date.now();
-				if (result.outcome !== "succeeded") {
-					for (const operation of pendingOperations) {
-						operation.outcome = result.outcome === "failed" ? "aborted" : result.outcome;
-						operation.error = `pi_exec ${result.outcome}`;
-					}
-					pendingOperations.clear();
-					activeOperations.clear();
-				}
 				const trace = {
 					kind: "apple-pi.execution" as const,
 					version: 1 as const,
 					outcome: result.outcome,
-					operations: structuredClone(operations),
+					operations: host.finish(result.outcome),
 				};
 				const finalActivity = activity();
+				const usage = host.usage();
 				if (result.outcome !== "succeeded") {
 					failedDetails.set(toolCallId, {
 						details: {
@@ -458,7 +198,7 @@ export default function piExec(pi: ExtensionAPI): void {
 							policy: envelope,
 							...(callNotice ? { notice: callNotice } : {}),
 						},
-						...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
+						...(usage ? { usage } : {}),
 					});
 					throw new Error(`${result.error ?? `pi_exec ${result.outcome}`}${callNotice ? `\n${callNotice}` : ""}`);
 				}
@@ -478,7 +218,7 @@ export default function piExec(pi: ExtensionAPI): void {
 						policy: envelope,
 						...(callNotice ? { notice: callNotice } : {}),
 					},
-					...(nestedUsages.length > 0 ? { usage: aggregateUsage(nestedUsages) } : {}),
+					...(usage ? { usage } : {}),
 				};
 			} finally {
 				executing = false;
