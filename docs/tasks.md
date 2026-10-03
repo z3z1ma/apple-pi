@@ -36,13 +36,15 @@ Use `x` twice in detail to confirm cancellation of scheduled, due, or running wo
   "timeout": 60,
   "stdin": "optional text piped to process standard input",
   "run_in_background": true,
-  "verbatim": false
+  "verbatim": false,
+  "expect": "success"
 }
 ```
 
 - `stdin`: Optional process standard input.
 - `run_in_background`: Start immediately and return a managed task descriptor. Completion, failure, cancellation, or process termination sends an XML task notification through `deliverAs: "steer"` so the main agent sees the terminal transition.
 - `verbatim`: Bypass RTK command rewriting when exact raw execution is required.
+- `expect`: The exit status the agent predicts for a foreground command, `success` (exit 0) or `failure`. When the prediction misses, the result ends with a `Surprise:` line. The prediction is recorded before the result, so it cannot be rewritten afterwards. A predicted failure, such as a red test, is not evidence for the learning reflection; a success that was predicted to fail is. Background commands ignore it.
 - While a foreground command executes, the operator can press `Ctrl+B` to detach it into the same managed-task lifecycle.
 
 ### `schedule`

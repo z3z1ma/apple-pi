@@ -119,6 +119,12 @@ export const bashParameters = Type.Object({
 				"Run command verbatim without RTK output compression or rewriting. Use when exact raw output or unfiltered flags are required.",
 		}),
 	),
+	expect: Type.Optional(
+		Type.Union([Type.Literal("success"), Type.Literal("failure")], {
+			description:
+				"The exit status you predict for a foreground command: success (exit 0) or failure. The result reports a surprise when the prediction misses.",
+		}),
+	),
 });
 
 export type BashParameters = Static<typeof bashParameters>;

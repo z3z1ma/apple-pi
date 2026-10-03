@@ -20,12 +20,14 @@ function captureExtension() {
 	const emit = (event: string, payload: unknown) => handlers.get(event)?.(payload);
 	const spend = (tokens: number) =>
 		emit("message_end", { message: { role: "assistant", usage: { input: tokens, cacheWrite: 0, output: 0 } } });
-	const fail = (command: string) => emit("tool_result", { isError: true, toolName: "bash", input: { command } });
+	const run = (command: string, isError: boolean, expect?: "success" | "failure", surprise?: boolean) =>
+		emit("tool_result", { isError, toolName: "bash", input: { command, expect }, details: { surprise } });
+	const fail = (command: string) => run(command, true);
 	const settle = () =>
 		emit("agent_before_settle", { outcome: "completed" }) as
 			| { entries: Array<{ customType: string; content: string }>; continue: boolean }
 			| undefined;
-	return { commands, sent, spend, fail, settle };
+	return { commands, sent, spend, run, fail, settle };
 }
 
 describe("learning reflection", () => {
@@ -40,7 +42,9 @@ describe("learning reflection", () => {
 		const result = settle();
 		expect(result?.continue).toBe(true);
 		expect(result?.entries[0]?.customType).toBe(LEARNING_REFLECTION_MESSAGE_TYPE);
-		expect(result?.entries[0]?.content).toContain("Failed tool calls since the last reflection:\n- bash: `aws s3 ls`");
+		expect(result?.entries[0]?.content).toContain(
+			"Failed or surprising tool calls since the last reflection:\n- bash: `aws s3 ls`",
+		);
 		expect(result?.entries[0]?.content.match(/aws s3 ls/g)).toHaveLength(1);
 
 		expect(settle()).toBeUndefined();
@@ -51,8 +55,22 @@ describe("learning reflection", () => {
 		spend(LEARNING_REFLECTION_SPACING_TOKENS);
 		await commands.get("reflect")?.handler();
 		expect(sent[0]?.message.content).toContain("Reflect on what you learned");
-		expect(sent[0]?.message.content).not.toContain("Failed tool calls");
+		expect(sent[0]?.message.content).not.toContain("Failed or surprising");
 		expect(sent[0]?.options).toEqual({ deliverAs: "steer", triggerTurn: true });
 		expect(settle()).toBeUndefined();
+	});
+
+	it("drops predicted failures and keeps unpredicted successes as evidence", () => {
+		const { spend, run, settle } = captureExtension();
+		run("npm test -- red", true, "failure");
+		run("npm test -- green", false, "failure", true);
+		run("npm run watch", false, "failure");
+		run("npm run build", true, "success");
+		spend(LEARNING_REFLECTION_SPACING_TOKENS);
+		const content = settle()?.entries[0]?.content ?? "";
+		expect(content).not.toContain("-- red");
+		expect(content).toContain("- bash: `npm test -- green` succeeded; you predicted failure");
+		expect(content).toContain("- bash: `npm run build`");
+		expect(content).not.toContain("watch");
 	});
 });

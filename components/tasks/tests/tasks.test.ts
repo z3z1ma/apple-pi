@@ -465,6 +465,35 @@ describe("tasks component", () => {
 
 			await expect(executePromise).rejects.toThrow("Command aborted");
 		});
+
+		it("reports a surprise only when the predicted exit status misses", async () => {
+			const bashTool = createBackgroundTaskBashTool(createManager());
+			const run = (command: string, expect: "success" | "failure") =>
+				bashTool.execute("call-expect", { command, expect }, undefined, undefined, { cwd: process.cwd() } as any);
+			const pass = "node -e \"console.log('ran')\"";
+			const fail = 'node -e "process.exit(3)"';
+
+			expect(getResultText(await run(pass, "success"))).not.toContain("Surprise");
+			await expect(run(fail, "failure")).rejects.toThrow(/exited with code 3$/);
+			expect(getResultText(await run(pass, "failure"))).toMatch(
+				/ran\n+Surprise: you predicted this command would fail\.$/,
+			);
+			await expect(run(fail, "success")).rejects.toThrow(
+				/exited with code 3\n\nSurprise: you predicted this command would succeed\.$/,
+			);
+
+			const passed = await run(pass, "failure");
+			expect(passed.details?.surprise).toBe(true);
+			const background = await bashTool.execute(
+				"call-expect-bg",
+				{ command: pass, expect: "failure", run_in_background: true },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+			expect(getResultText(background)).not.toContain("Surprise");
+			expect(background.details?.surprise).toBeUndefined();
+		});
 	});
 
 	describe("task management tool", () => {

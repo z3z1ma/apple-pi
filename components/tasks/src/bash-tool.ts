@@ -130,6 +130,12 @@ function renderBashResult(result: any, options: any, theme: any, context: any, d
 	return defaultBashDef.renderResult?.(result, options, theme, context) ?? new Text(fallbackText, 0, 0);
 }
 
+function surpriseNote(expected: BashParameters["expect"], failed: boolean): string | undefined {
+	if (expected === "success" && failed) return "Surprise: you predicted this command would succeed.";
+	if (expected === "failure" && !failed) return "Surprise: you predicted this command would fail.";
+	return undefined;
+}
+
 async function executeBashImpl(
 	cwd: string,
 	params: BashParameters | ExecBashParameters,
@@ -338,9 +344,11 @@ async function executeBashImpl(
 		}
 
 		const exitCode = (processResult as { exitCode: number | null }).exitCode;
-		if (exitCode !== 0 && exitCode !== null) {
-			throw new Error(`${outputText ? `${outputText}\n\n` : ""}Command exited with code ${exitCode}`);
-		}
+		const failed = exitCode !== 0 && exitCode !== null;
+		if (failed) outputText = `${outputText ? `${outputText}\n\n` : ""}Command exited with code ${exitCode}`;
+		const surprise = surpriseNote((params as BashParameters).expect, failed);
+		if (surprise) outputText += `\n\n${surprise}`;
+		if (failed) throw new Error(outputText);
 
 		return {
 			content: [{ type: "text", text: outputText }],
@@ -349,6 +357,7 @@ async function executeBashImpl(
 				fullOutputPath: snapshot.fullOutputPath,
 				rtk: isRtk,
 				originalCommand: (params as any)._rawCommand || command,
+				...(surprise ? { surprise: true } : {}),
 			},
 		};
 	} finally {
@@ -372,6 +381,7 @@ export function createBashToolDefinition(
 		promptGuidelines: [
 			"Choose root execution by intent: use bash for immediate work, bash with run_in_background for finite work that should wake only on completion, schedule for a prompt or command that should start later, monitor for a continuing command whose stdout should steer the run, and task to inspect or cancel managed work.",
 			"Pass text to standard input using stdin to pipe data into commands without shell escaping issues.",
+			"Set expect on bash when the result tests a belief, such as a test you expect to fail or a fix you expect to pass. A surprise means the belief was wrong: revise it before you continue.",
 		],
 		parameters: bashParameters,
 		async execute(_toolCallId, params: BashParameters, signal, onUpdate, ctx) {

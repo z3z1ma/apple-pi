@@ -40,6 +40,7 @@ After about a week of real use:
 
 - Learning reflections are spaced by 500k new tokens (user, 2026-10-02). Tune after a week of real use.
 - `/reflect` triggers the same reflection on demand (user, 2026-10-02).
+- Predictions turn failures into surprises (user, 2026-10-03; branch `feat/bash-expectations`). Bash takes an optional `expect`; a missed prediction is a surprise, and a predicted failure stops being reflection evidence. Change reflection lists what ran after each file's last change. The pair treats reasoning and its own notes as claims. Source: Graepel, "Don't be fooled—LLMs don't reason" (MIT Technology Review, 2026-10-02).
 
 ## Current State
 
@@ -50,7 +51,7 @@ In progress. All slices are implemented (2026-10-02):
 - `components/notebook/src/hooks/open-learnings.ts`: the `learnings:N` count in the input card, and the ledger-close sweep. The first `done` or `cancelled` call per task is held once while learnings are open.
 - `prompts/distill.md` reads open learnings first and retires what it places.
 
-Next: use it for about a week, then judge the acceptance criteria and tune the 500k spacing.
+Next: merge `feat/bash-expectations`. Over the same week, count how often the main agent sets `expect` and how many surprises it reports. Then use it for about a week, then judge the acceptance criteria and tune the 500k spacing.
 
 ## Outcome
 

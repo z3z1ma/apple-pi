@@ -72,7 +72,7 @@ async function harness(replies: Reply[]) {
 		settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
 	});
 	await session.bindExtensions({});
-	session.setActiveToolsByName(["read", "edit", "write"]);
+	session.setActiveToolsByName(["read", "edit", "write", "bash"]);
 	cleanup.push(() => {
 		session.dispose();
 		rmSync(cwd, { recursive: true, force: true });
@@ -98,7 +98,7 @@ describe("change reflection", () => {
 
 		expect(requests).toHaveLength(5);
 		expect(reflections()).toHaveLength(1);
-		expect(reflections()[0]).toMatchObject({ content: reflectionPrompt(["README.md", "app.ts"]) });
+		expect(reflections()[0]).toMatchObject({ content: reflectionPrompt(["README.md", "app.ts"], new Map()) });
 		const last = session.messages.at(-1);
 		expect(last?.role === "assistant" && JSON.stringify(last.content)).toContain("simplified");
 	});
@@ -119,6 +119,23 @@ describe("change reflection", () => {
 		expect(reflections()).toHaveLength(2);
 	});
 
+	it("lists what ran after each code path's last change", async () => {
+		const { session, reflections } = await harness([
+			tool("write", { path: "lib.ts", content: "export {};\n" }, "write-1"),
+			tool("bash", { command: "true" }, "bash-1"),
+			tool("bash", { command: "false" }, "bash-2"),
+			tool("edit", { path: "app.ts", edits: [{ oldText: "1", newText: "2" }] }, "edit-1"),
+			fauxAssistantMessage("implemented"),
+			fauxAssistantMessage("reviewed"),
+		]);
+
+		await session.prompt("Implement it.");
+
+		const content = JSON.stringify(reflections()[0]);
+		expect(content).toContain("After your last change to `lib.ts`, these ran: `true`, `false` (failed).");
+		expect(content).toContain("Nothing ran after your last change to `app.ts`.");
+	});
+
 	it("stays quiet without a successful edit or write", async () => {
 		const { session, requests, reflections } = await harness([
 			tool("read", { path: "app.ts" }, "read-1"),
@@ -135,9 +152,21 @@ describe("change reflection", () => {
 
 describe("reflectionPrompt", () => {
 	it("uses only the lens that applies", () => {
-		expect(reflectionPrompt(["src/a.ts"])).toContain("simpler way");
-		expect(reflectionPrompt(["src/a.ts"])).not.toContain("intended reader");
-		expect(reflectionPrompt(["docs/a.md"])).toContain("intended reader");
-		expect(reflectionPrompt(["docs/a.md"])).not.toContain("simpler way");
+		const none = new Map<string, string[]>();
+		expect(reflectionPrompt(["src/a.ts"], none)).toContain("simpler way");
+		expect(reflectionPrompt(["src/a.ts"], none)).not.toContain("intended reader");
+		expect(reflectionPrompt(["docs/a.md"], none)).toContain("intended reader");
+		expect(reflectionPrompt(["docs/a.md"], none)).not.toContain("simpler way");
+		expect(reflectionPrompt(["docs/a.md"], none)).not.toContain("ran");
+	});
+
+	it("groups code paths that share the same runs", () => {
+		const runs = new Map([
+			["a.ts", ["`npm test`"]],
+			["b.ts", ["`npm test`"]],
+		]);
+		expect(reflectionPrompt(["a.ts", "b.ts"], runs)).toContain(
+			"After your last change to `a.ts`, `b.ts`, these ran: `npm test`.",
+		);
 	});
 });
