@@ -54,7 +54,7 @@ The pair programming partner shares the main agent's screen rather than operatin
 - recent user requests from the main session;
 - the main agent's reasoning, text, tool calls, successful write previews, edit diffs, failures, and compact work receipts;
 - active task and assumption context;
-- the current shared working conclusions, refreshed before each model request;
+- the current shared learnings, refreshed before each model request;
 - optional global or trusted-project `PAIR.md` guidance.
 
 `PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask the consultant.
@@ -63,7 +63,7 @@ The partner has a deliberately narrow typed toolset:
 
 - `share_note` stages one useful intervention for frontier confirmation: either a current, actionable `nit`, `concern`, or `blocker`, or a precise `question` that asks the driver to explain something or expose specific missing evidence;
 - `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
-- `update_notebook` adds, supersedes, or retires sourced working conclusions; full reviews explicitly select which existing conclusions to retain;
+- `update_notebook` records learnings the driver missed and merges duplicates; full reviews list every open learning to retain;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence;
 - `set_pair_attention` optionally chooses the next useful semantic checkpoint and attention level. It is a terminating, transactionally staged disposition rather than a navigation or execution capability.

@@ -88,7 +88,7 @@ Prompt caching (KV caching) is the single most critical performance and economic
 Apple Pi enforces **strict append-only context**:
 - **Single Compaction Hook Owner**: On OpenAI, xAI, and Anthropic, [`server-compaction`](docs/context.md) compacts on the provider's server and replays the result on later requests. On other routes, including Bedrock, native Pi summarization handles the boundary.
 - **Fail-Closed Compaction Safety (`auto-compact`)**: Pi owns automatic compaction and oversized-result cut-point selection. `auto-compact.ts` aborts the active continuation when automatic compaction fails or is cancelled, so an uncompacted request is never dispatched silently.
-- **The Sourced Notebook (`update_notebook`)**: The driver and pair continuously curate high-leverage working conclusions backed by exact session citations (`revisit_note`). Only active conclusions are injected—as a single message packet *immediately after compaction*. The harness never rewrites turns mid-flight.
+- **The Learning Notebook (`update_notebook`, `/reflect`)**: The driver records what it learns the hard way during a session, with exact session citations (`revisit_note`); the pair records what the driver missed. Token-spaced run-end reflections and `/reflect` turn open learnings into proposals for wiki pages, retrospectives, `AGENTS.md`, skills, or saved programs. Open learnings are injected only as a single message packet *immediately after compaction*.
 
 ### 4. Bifurcated Memory: The Ledger vs. The Wiki
 

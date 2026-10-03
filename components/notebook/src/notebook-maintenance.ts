@@ -219,11 +219,11 @@ export function preparePairNotebookBatch(args: {
 	const prompt = args.fullMaintenanceDue
 		? [
 				"### Time to update the shared notebook",
-				"Review this sourced span and call `update_notebook` exactly once. Keep only working conclusions that should still change how we proceed. Each conclusion needs source entry ids. These are revisable, scoped working conclusions. Explicitly select retainReflectionIds: omitted current conclusions will be retired; [] deliberately retires all existing conclusions. Keep only conclusions that add value beyond ordinary compaction. Review scope, contrary evidence, and resolved work before selecting.",
+				"Review this sourced span and call `update_notebook` exactly once. Record learnings from this span that the notebook lacks: surprises, failures and what worked instead, ways to reach an environment or service, harness pitfalls, and user corrections. Each needs source entry ids. Leave out status, progress, plans, and decisions. Merge duplicates with supersedes. List every open learning in retainReflectionIds; omitted learnings are retired, so omit only duplicates you merged.",
 				`Current local time: ${nowTimestamp()}`,
 				`Source entry ids in this review span, oldest to newest: ${serialized.sourceEntryIds.join(", ")}. Earlier ids are usable when recovered through revisit_note or already present in your trajectory.`,
 				`Coverage endpoint: ${coversUpToId}`,
-				`Current working conclusions:\n${joinOrEmpty(folded.currentReflections.map(reflectionToSummaryLine))}`,
+				`Current learnings:\n${joinOrEmpty(folded.currentReflections.map(reflectionToSummaryLine))}`,
 			].join("\n\n")
 		: "";
 
@@ -274,7 +274,7 @@ export class UpdateNotebookTool {
 	readonly name = UPDATE_NOTEBOOK_TOOL_NAME;
 	readonly label = "Update pair programmer notebook";
 	readonly description =
-		"Update the shared notebook of working conclusions for this pair programming session. Add or supersede conclusions that should still change how you proceed, citing source entry ids. Retire conclusions that no longer apply. During a full update, current conclusions omitted from retainReflectionIds are retired. This never edits repository files. When a full notebook update is requested, call exactly once even if every array is empty.";
+		"Update the shared notebook of learnings for this session. Record learnings your partner experienced but missed, citing source entry ids, and merge duplicates with supersedes. During a full update, list every open learning in retainReflectionIds; omitted ones are retired. This never edits repository files. When a full notebook update is requested, call exactly once even if every array is empty.";
 	readonly parameters = UpdateNotebookSchema as any;
 
 	#batch: PairNotebookBatch | undefined;
@@ -393,10 +393,10 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 			name: UPDATE_NOTEBOOK_TOOL_NAME,
 			label: "Update pair programmer notebook",
 			description:
-				"Add, supersede, or retire working conclusions in the notebook you share with the pair programmer. Conclusions are revisable and scoped; each cites source entry ids, or the current user turn when sourceEntryIds is omitted. Remove a conclusion with retireReflectionIds or supersedes. Changes take effect on the next context rebuild.",
-			promptSnippet: "Add, supersede, or retire a working conclusion that should still change later work.",
+				"Record, supersede, or retire learnings in the notebook you share with the pair programmer. A learning is something found out the hard way and what to do differently now. Each cites source entry ids, or the current user turn when sourceEntryIds is omitted. Retire a learning with retireReflectionIds once its durable owner holds it or it is not worth keeping.",
+			promptSnippet: "Record a learning from this session, or retire one that is placed or dropped.",
 			promptGuidelines: [
-				"Use update_notebook for conclusions that should change later decisions beyond what compaction preserves. Supersede or retire them once evidence, resolved work, or a scope change makes them obsolete; an empty notebook is fine.",
+				"When something surprises you, record the learning with update_notebook and what you now do differently: a tool call or pattern that failed and what worked instead, a way to reach an environment or service, a harness pitfall, or a user correction. Leave status, plans, and decisions to the ledger, docs, and git.",
 			],
 			parameters: MainUpdateNotebookSchema,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

@@ -13,14 +13,14 @@ describe("notebook summary rendering", () => {
 
 		const summary = renderSummary([ref]);
 
-		expect(summary).toContain("User direction and current evidence take precedence");
-		expect(summary).toContain("revisable, scoped understandings");
+		expect(summary).toContain("Learnings last for this session only");
+		expect(summary).toContain("retire it with update_notebook");
 		expect(summary).toContain("use revisit_note");
 		expect(summary).toContain("search_session");
 		expect(summary).not.toContain("Current law");
 	});
 
-	it("renders working conclusions with ids and omits observations", () => {
+	it("renders learnings with ids and omits observations", () => {
 		const ref = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"], { content: "User prefers source-backed notes." });
 		const obs = observation("aaaaaaaaaaaa", {
 			content: "User confirmed recall should use exact source entry ids.",
@@ -30,7 +30,7 @@ describe("notebook summary rendering", () => {
 
 		const summary = renderSummary([ref]);
 
-		expect(summary).toContain("## Working conclusions\n[eeeeeeeeeeee] User prefers source-backed notes.");
+		expect(summary).toContain("## Learnings\n[eeeeeeeeeeee] User prefers source-backed notes.");
 		expect(summary).not.toContain(obs.content);
 		expect(summary).not.toContain("## Observations");
 	});

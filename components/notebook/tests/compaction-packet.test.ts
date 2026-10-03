@@ -58,16 +58,16 @@ function contextFor(branch: Entry[]): ExtensionContext {
 }
 
 describe("pair programmer notebook compaction packet", () => {
-	it("builds a packet of current working conclusions and omits observations", () => {
+	it("builds a packet of current learnings and omits observations", () => {
 		const packet = buildNotebookPacket(entries);
 		expect(packet?.customType).toBe(NOTEBOOK_PACKET_CUSTOM_TYPE);
 		expect(packet?.content[0]?.text).toContain(NOTEBOOK_PACKET_HEADER);
 		expect(packet?.content[0]?.text).toContain("[abc123abc123]");
-		expect(packet?.content[0]?.text).toContain("Working conclusions");
+		expect(packet?.content[0]?.text).toContain("## Learnings");
 		expect(packet?.content[0]?.text).not.toContain("## Observations");
 	});
 
-	it("keeps working conclusions after compaction removes the covered source", () => {
+	it("keeps learnings after compaction removes the covered source", () => {
 		const packet = buildNotebookPacket(entries.slice(2));
 		expect(packet?.content[0]?.text).toContain("[abc123abc123]");
 	});

@@ -4,7 +4,7 @@ Compaction has one hook owner, [`extensions/server-compaction.ts`](../extensions
 
 Pi checks context after tool results and compacts before the next assistant provider request in the same run, including when oversized trailing tool results require an older valid cut point. [`extensions/auto-compact.ts`](../extensions/auto-compact.ts) keeps that continuation fail-closed: a failed or cancelled automatic compaction aborts the active run before provider dispatch. It is loaded in root sessions, ordinary subagents, the internal BTW child, and `pi_exec` workers. Pi's `compaction.enabled` setting controls compaction.
 
-Right after each compaction (`session_compact`), the notebook appends one packet of current working conclusions as a persisted custom message. It follows the compacted history directly, so it sits near the start of the new context, where the model is likely to notice and recall it. Nothing rewrites request context per turn: provider prompt caches match on an exact prefix, and a message that moves or changes between requests forces the whole history to be re-sent at cache-write prices. Ordinary compaction remains responsible for conversation history and task progress.
+Right after each compaction (`session_compact`), the notebook appends one packet of open learnings as a persisted custom message. It follows the compacted history directly, so it sits near the start of the new context, where the model is likely to notice and recall it. Nothing rewrites request context per turn: provider prompt caches match on an exact prefix, and a message that moves or changes between requests forces the whole history to be re-sent at cache-write prices. Ordinary compaction remains responsible for conversation history and task progress.
 
 ## Server-side compaction
 
@@ -26,21 +26,26 @@ The pair programmer's session keeps its own reseed summary and attaches the serv
 
 ## Pair programmer notebook
 
-The main and pair programmers jointly curate a small set of sourced **working conclusions** through `update_notebook`. A conclusion earns live context when it changes a later decision beyond what ordinary compaction preserves. It is a revisable, scoped understanding; user direction and current evidence take precedence. An empty notebook is a successful outcome.
+The notebook holds **learnings** from this session: things found out the hard way and what to do differently now. Examples are a tool call or pattern that failed and what worked instead, a working way to reach an environment or service, a harness pitfall, and a user correction. Status, plans, and decisions belong to the ledger, docs, and git.
 
-The tool adds conclusions, supersedes existing conclusions, or retires them immediately. New conclusions cite primary source entry IDs. The main agent may omit those IDs to cite the current user turn; the pair supplies IDs from its sourced trajectory or recall. Both use the same validation and append path. Main changes commit immediately; pair changes commit only after a successful review, and a stale pair update is rejected if the shared conclusions changed meanwhile.
+Learnings last for one session. Each ends placed in a durable owner (a wiki page, a task retrospective, `AGENTS.md`, a skill, a saved program in `.pi/programs/`, or a test or doc) after the user approves, or deliberately dropped. The main agent records learnings when surprised, proposes where they belong, and retires them once placed. The pair coaches: it records learnings the main agent missed, merges duplicates, and reminds the main agent to capture a surprise.
 
-Full pair maintenance becomes due at `notebookAfterTokens` (default 20,000 uncovered source tokens). The pair explicitly selects `retainReflectionIds`; existing conclusions not selected are retired. This field is required for a full review, and `[]` deliberately retires all existing conclusions. Targeted updates leave other conclusions alone. Completed reviews advance coverage even when there is nothing to add. Reviews without new conclusions use the existing bounded retry backoff. If the pair is disabled or unavailable, automatic maintenance pauses; the main agent can still curate the notebook.
+At run end, once 500,000 new tokens (input, cache write, and output) have passed since the last reflection, the main agent is asked to reflect: record what it learned, using the failed tool calls of that stretch as evidence, and propose a home for each open learning. `/reflect` asks for the same reflection at any time and restarts the spacing. The spacing was chosen from the median run of about 144,000 new tokens and should be tuned from use.
 
-Only current conclusions enter the post-compaction packet, pair reseed, and maintenance prompt. New conclusions link directly to source entries; exhaustive observation recording and observation-pool pruning are gone. Earlier observations and retired conclusions remain retrievable through `revisit_note`, but are not live guidance. The append-only session archive can grow; active retention is an explicit model decision rather than a token quota or age-based eviction policy.
+The tool adds learnings, supersedes existing learnings, or retires them immediately. New learnings cite primary source entry IDs. The main agent may omit those IDs to cite the current user turn; the pair supplies IDs from its sourced trajectory or recall. Both use the same validation and append path. Main changes commit immediately; pair changes commit only after a successful review, and a stale pair update is rejected if the shared learnings changed meanwhile.
 
-`registerNotebookCompactionPacket` appends the typed `notebook.packet` once after each compaction and skips it when the notebook is empty. Conclusions curated between compactions reach the main context at the next compaction; the pair receives them through its reseed summary. The `notebook.*` names are persistent session-record formats, not separate actors.
+Full pair maintenance becomes due at `notebookAfterTokens` (default 20,000 uncovered source tokens). The pair lists every open learning in `retainReflectionIds`; existing learnings not listed are retired, so it omits only duplicates it merged. This field is required for a full review. Targeted updates leave other learnings alone. Completed reviews advance coverage even when there is nothing to add. Reviews without new learnings use the existing bounded retry backoff. If the pair is disabled or unavailable, automatic maintenance pauses; the main agent can still curate the notebook.
+
+Only open learnings enter the post-compaction packet, pair reseed, and maintenance prompt. New learnings link directly to source entries. Earlier observations and retired learnings remain retrievable through `revisit_note`, but are not live guidance. The append-only session archive can grow; active retention is an explicit model decision rather than a token quota or age-based eviction policy.
+
+`registerNotebookCompactionPacket` appends the typed `notebook.packet` once after each compaction and skips it when the notebook is empty. Learnings recorded between compactions reach the main context at the next compaction; the pair receives them through its reseed summary. The `notebook.*` names are persistent session-record formats, not separate actors.
 
 Commands and tools:
 
 - `/pair status` — pair programmer state, notebook coverage, and pair programmer and consultant usage
-- `/pair notebook [full]` — current conclusions; `full` also shows archived evidence and retired conclusions
-- `update_notebook` — jointly add, supersede, or retire sourced working conclusions
+- `/pair notebook [full]` — open learnings; `full` also shows archived evidence and retired learnings
+- `/reflect` — ask the main agent to record what it learned and propose where each learning belongs
+- `update_notebook` — jointly record, supersede, or retire sourced learnings
 - `search_session` — progressive search of this session's transcript and file-operation history; regex-like queries use a bounded safe subset and reject ambiguous grouped or repeated patterns
 - `revisit_note` — exact source lookup by a known observation or reflection ID
 

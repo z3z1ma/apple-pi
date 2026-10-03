@@ -40,6 +40,7 @@ import { Type } from "typebox";
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
 import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
+import { registerLearningReflection } from "../../notebook/src/hooks/learning-reflection.js";
 import {
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
@@ -1352,6 +1353,7 @@ export default function (pi: ExtensionAPI) {
 		registerNotebookCompactionPacket(pi);
 		registerNotebookSourceTool(pi);
 		registerMainNotebookTool(pi, rootNotebook);
+		registerLearningReflection(pi);
 	}
 
 	let enabled = loadEnabled();

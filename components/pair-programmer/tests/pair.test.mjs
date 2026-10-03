@@ -3446,7 +3446,7 @@ test("lifecycle: a typed material-finding acknowledgment is persisted and preven
 			},
 			ui: { setStatus: () => {} },
 		};
-		x.h("session_start")({}, ctx);
+		await x.emit("session_start", {}, ctx);
 
 		const result = await x.ack.execute("ack-1", {
 			findings: [{ id: finding.id, disposition: "address", reason: "Move the acknowledgment after commit." }],
