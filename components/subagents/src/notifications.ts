@@ -1,6 +1,5 @@
 import { formatFileChanges } from "../../shared/src/file-changes.js";
-import { formatAgentOutput } from "./output-file.js";
-import { getStatusNote, partialOutputSuffix } from "./status-note.js";
+import { frameOutcome } from "./outcome-framing.js";
 import type { AgentRecord, NotificationDetails } from "./types.js";
 import {
 	type AgentActivity,
@@ -59,11 +58,7 @@ export function withFileChanges(record: Pick<AgentRecord, "fileChanges">, output
 }
 
 export function formatNotification(record: AgentRecord, maxLength: number): string {
-	const inlineOutput =
-		record.status === "error"
-			? `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`
-			: record.result || record.error || "No output.";
-	const output = formatAgentOutput(record, inlineOutput);
+	const { text: output, summary } = frameOutcome(record, "notification");
 	const preview =
 		output.length > maxLength
 			? `${output.slice(0, maxLength)}\n...(truncated; use get_subagent_result for full output)`
@@ -75,7 +70,7 @@ export function formatNotification(record: AgentRecord, maxLength: number): stri
 		record.toolCallId ? `<tool-use-id>${escapeXml(record.toolCallId)}</tool-use-id>` : undefined,
 		record.sessionFile ? `<session-file>${escapeXml(record.sessionFile)}</session-file>` : undefined,
 		`<status>${escapeXml(statusLabel(record))}</status>`,
-		`<summary>agent "${escapeXml(record.description)}" ${record.outputWriteError ? "failed to persist its output" : `${record.status}${getStatusNote(record.status)}`}</summary>`,
+		`<summary>agent "${escapeXml(record.description)}" ${summary}</summary>`,
 		`<result>${escapeXml(preview)}</result>`,
 		changes ? `<file-changes>\n${escapeXml(changes)}\n</file-changes>` : undefined,
 		`<usage><total_tokens>${getLifetimeTotal(record.lifetimeUsage)}</total_tokens><tool_uses>${record.toolUses}</tool_uses><compactions>${record.compactionCount}</compactions></usage>`,
@@ -90,11 +85,7 @@ export function notificationDetails(
 	maxLength: number,
 	activity?: AgentActivity,
 ): NotificationDetails {
-	const inlineOutput =
-		record.status === "error"
-			? `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`
-			: record.result || record.error || "No output.";
-	const output = formatAgentOutput(record, inlineOutput);
+	const output = frameOutcome(record, "notification").text;
 	return {
 		id: record.id,
 		description: record.description,

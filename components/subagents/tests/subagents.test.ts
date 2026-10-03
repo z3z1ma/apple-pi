@@ -24,8 +24,9 @@ import installSubagents from "../src/installer.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
-import { formatNotification, statusLabel } from "../src/notifications.js";
-import { formatAgentOutput, persistAgentOutput } from "../src/output-file.js";
+import { formatNotification, notificationDetails, statusLabel } from "../src/notifications.js";
+import { frameOutcome } from "../src/outcome-framing.js";
+import { persistAgentOutput } from "../src/output-file.js";
 import { assistantMessageMarker } from "../src/response-marker.js";
 import { applySettings, loadSettings, saveSettings } from "../src/settings.js";
 import type { AgentConfig } from "../src/types.js";
@@ -257,6 +258,139 @@ describe("owned subagent surface", () => {
 		);
 		expect(notification).toContain(
 			"</result>\n<file-changes>\nFiles touched via edit/write:\n- a.ts: edit +3 -1 (1 call)\n</file-changes>",
+		);
+	});
+
+	it("frames notification results, summaries, and details for each settled outcome", () => {
+		const notify = (overrides: Record<string, unknown>) => {
+			const record = {
+				id: "agent-1",
+				type: "builder",
+				description: "work",
+				status: "completed",
+				toolUses: 0,
+				startedAt: Date.now(),
+				lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+				compactionCount: 0,
+				...overrides,
+			} as any;
+			return { content: formatNotification(record, 500), details: notificationDetails(record, 500) };
+		};
+
+		const empty = notify({});
+		expect(empty.content).toContain('<summary>agent "work" completed</summary>\n<result>No output.</result>');
+		expect(empty.details.resultPreview).toBe("No output.");
+
+		const stopped = notify({ status: "stopped", result: "PARTIAL", session: {} });
+		expect(stopped.content).toContain(
+			'<summary>agent "work" stopped (STOPPED BY THE USER before completion — output is partial; the task was NOT finished)</summary>\n<result>PARTIAL</result>',
+		);
+		expect(stopped.content).not.toContain("Agent ID:");
+
+		const failed = notify({ status: "error", error: "boom", result: "  PARTIAL  " });
+		expect(failed.content).toContain(
+			"<result>Agent failed: boom\n\nPartial output before the failure:\nPARTIAL</result>",
+		);
+		expect(failed.details).toMatchObject({ status: "error", error: "Agent failed: boom" });
+
+		const saved = notify({
+			status: "aborted",
+			result: "SAVED",
+			outputPath: "/tmp/out.md",
+			outputWritten: true,
+		});
+		expect(saved.content).toContain(
+			"<result>Agent output written to /tmp/out.md. (aborted — hit the turn limit before completion; output may be incomplete)</result>",
+		);
+		expect(saved.details.resultPreview).not.toContain("SAVED");
+
+		const savedFailure = notify({
+			status: "error",
+			error: "boom",
+			result: "PARTIAL",
+			outputPath: "/tmp/out.md",
+			outputWritten: true,
+		});
+		expect(savedFailure.details.resultPreview).toBe("Agent failed: boom\n\nAgent output written to /tmp/out.md.");
+
+		const writeFailure = notify({
+			status: "error",
+			error: "boom",
+			result: "PARTIAL",
+			outputPath: "/tmp/out.md",
+			outputWritten: false,
+			outputWriteError: "disk full",
+		});
+		expect(writeFailure.content).toContain(
+			'<summary>agent "work" failed to persist its output</summary>\n<result>Failed to write agent output to /tmp/out.md: disk full\n\nAgent failed: boom\n\nPartial output before the failure:\nPARTIAL</result>',
+		);
+		expect(writeFailure.details).toMatchObject({
+			status: "error",
+			error: "Agent failed: boom; Output write failed: disk full",
+		});
+	});
+
+	it("frames settled nested results for the delegating teammate", async () => {
+		const handle = (id: string) => `\n\nAgent ID: ${id} (resume with the agent tool's resume parameter)`;
+		const records = new Map<string, any>();
+		const manager = {
+			getRecord: (id: string) => records.get(id),
+			resume: async (id: string) => records.get(id),
+		};
+		const tools = createNestedSubagentTools({
+			manager: manager as any,
+			pi: {} as any,
+			parentAgentId: "parent-1",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: process.cwd(),
+			projectTrusted: false,
+		});
+		const agentTool = tools.find((tool) => tool.name === "agent") as any;
+		const resultTool = tools.find((tool) => tool.name === "get_subagent_result") as any;
+		const settle = (record: Record<string, unknown>) => {
+			records.set(record.id as string, { parentAgentId: "parent-1", ...record });
+			return resultTool.execute("get", { agent_id: record.id }, undefined);
+		};
+
+		const clean = await settle({ id: "clean", status: "completed", result: "  REPORT \n", session: {} });
+		expect(clean.content[0].text).toBe(`REPORT${handle("clean")}`);
+		expect(clean.isError).toBe(false);
+
+		const fallback = await settle({ id: "fallback", status: "completed", result: "  ", error: " note " });
+		expect(fallback.content[0].text).toBe("note");
+
+		const stopped = await settle({ id: "stopped", status: "stopped", result: "PARTIAL", session: {} });
+		expect(stopped.content[0].text).toBe(
+			`Nested agent (STOPPED BY THE USER before completion — output is partial; the task was NOT finished).\n\nPARTIAL${handle("stopped")}`,
+		);
+
+		const failed = await settle({ id: "failed", status: "error", result: "PARTIAL", session: {} });
+		expect(failed.content[0].text).toBe(
+			`Agent failed: unknown error\n\nPartial output before the failure:\nPARTIAL${handle("failed")}`,
+		);
+		expect(failed.isError).toBe(true);
+
+		const startupFailure = await settle({ id: "startup", status: "error", error: "no session" });
+		expect(startupFailure.content[0].text).toBe("Agent failed: no session");
+
+		records.set("steered", {
+			id: "steered",
+			parentAgentId: "parent-1",
+			status: "steered",
+			result: "WRAPPED",
+			session: {},
+		});
+		const resumed = await agentTool.execute(
+			"resume",
+			{ prompt: "continue", description: "continue", subagent_type: "builder", resume: "steered" },
+			undefined,
+			undefined,
+			{} as any,
+		);
+		expect(resumed.content[0].text).toBe(
+			`Nested agent (wrapped up at the turn limit — everything the agent produced is above; the task may be unfinished).\n\nWRAPPED${handle("steered")}`,
 		);
 	});
 
@@ -956,7 +1090,7 @@ describe("owned subagent surface", () => {
 		expect(
 			statusLabel({ status: "error", error: "provider unavailable", outputWriteError: "disk unavailable" }),
 		).toContain("Agent failed: provider unavailable; Output write failed: disk unavailable");
-		const output = formatAgentOutput(record, record.result);
+		const output = frameOutcome(record, "retrieved").text;
 		expect(output).toContain(`Failed to write agent output to ${root}`);
 		expect(output).toContain("RECOVERABLE-FINAL-REPORT");
 	});

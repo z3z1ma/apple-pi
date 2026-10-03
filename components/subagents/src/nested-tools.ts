@@ -20,7 +20,7 @@ import { getAgentConversation } from "./conversation.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { resolveAgentInvocationConfig } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
-import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
+import { frameOutcome } from "./outcome-framing.js";
 import type { AgentConfig, AgentInvocation, AgentRecord, ThinkingLevel } from "./types.js";
 import { addUsage } from "./usage.js";
 
@@ -107,12 +107,9 @@ function ownsRecord(record: AgentRecord | undefined, parentAgentId: string): rec
 }
 
 function formatRecord(record: AgentRecord, inline: boolean): string {
-	if (record.status === "error")
-		return `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}${continuationSuffix(record)}`;
 	if (record.status === "queued" || record.status === "running") return `Agent ${record.id} is ${record.status}.`;
-	const text = record.result?.trim() || record.error?.trim() || "No output.";
-	const note = inline ? getForegroundOutcomeNote(record.status) : getStatusNote(record.status);
-	return `${note ? `Nested agent${note}.\n\n${text}` : text}${continuationSuffix(record)}`;
+	const framed = frameOutcome(record, inline ? "nested-foreground" : "nested-retrieved");
+	return `${framed.text}${framed.resumeHandle}`;
 }
 
 /** Child-safe orchestration tools scoped to the parent that owns them. */

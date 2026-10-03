@@ -48,11 +48,11 @@ import {
 	notificationDetails,
 	withFileChanges,
 } from "./notifications.js";
-import { formatAgentOutput, resolveAgentOutputPath } from "./output-file.js";
+import { frameOutcome } from "./outcome-framing.js";
+import { resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
-import { continuationSuffix, getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import {
 	buildInferenceProfilesSection,
@@ -82,12 +82,10 @@ function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
 }
 
-function inlineAgentOutput(record: AgentRecord, foreground: boolean): string {
-	if (record.status === "error") {
-		return `Agent failed: ${record.error ?? "unknown error"}${partialOutputSuffix(record)}`;
-	}
-	const note = foreground ? getForegroundOutcomeNote(record.status) : getStatusNote(record.status);
-	return `${record.result || record.error || "No output."}${note}`;
+/** An awaited root result: the framed response, its traced file changes, then the continuation handle. */
+function foregroundResult(record: AgentRecord): string {
+	const framed = frameOutcome(record, "foreground");
+	return `${withFileChanges(record, framed.text)}${framed.resumeHandle}`;
 }
 
 function appendRequestedConversation(
@@ -813,7 +811,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 						detailsFor(resumed, activity.state, { status: "background" }),
 					);
 				return textResult(
-					`${withFileChanges(resumed, formatAgentOutput(resumed, inlineAgentOutput(resumed, true)))}${continuationSuffix(resumed)}`,
+					foregroundResult(resumed),
 					detailsFor(resumed, activity.state),
 					resumed.status === "error" || resumed.outputWriteError !== undefined,
 				);
@@ -917,9 +915,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 					signal,
 				);
 				const record = result.record;
-				const output = `${withFileChanges(record, formatAgentOutput(record, inlineAgentOutput(record, true)))}${continuationSuffix(record)}`;
 				return textResult(
-					output,
+					foregroundResult(record),
 					detailsFor(record, tracker.state),
 					record.status === "error" || record.outputWriteError !== undefined,
 				);
@@ -1031,7 +1028,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				let output =
 					!settled || (params.transcript_tail !== undefined && !record.outputPath)
 						? `Agent ${record.id} is ${record.status}.`
-						: withFileChanges(record, formatAgentOutput(record, inlineAgentOutput(record, false)));
+						: withFileChanges(record, frameOutcome(record, "retrieved").text);
 				if (yieldedSeconds !== undefined && !settled) {
 					output += ` Yield interval (${yieldedSeconds}s) reached; the agent is still working in the background and was not stopped. Call get_subagent_result again only when you need another check-in.`;
 				}

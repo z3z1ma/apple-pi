@@ -1,6 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { getStatusNote } from "./status-note.js";
 import type { AgentRecord } from "./types.js";
 
 /** Resolve caller-facing paths against the root session's working directory. */
@@ -28,15 +27,4 @@ export function persistAgentOutput(record: AgentRecord, responseMessageMarker?: 
 		record.outputWritten = false;
 		record.outputWriteError = error instanceof Error ? error.message : String(error);
 	}
-}
-
-/** Keep successfully persisted responses out of the parent transcript. */
-export function formatAgentOutput(record: AgentRecord, inlineOutput: string): string {
-	if (!record.outputPath) return inlineOutput;
-	if (record.outputWriteError) {
-		return `Failed to write agent output to ${record.outputPath}: ${record.outputWriteError}\n\n${inlineOutput}`;
-	}
-	if (!record.outputWritten) return inlineOutput;
-	const failure = record.status === "error" ? `Agent failed: ${record.error ?? "unknown error"}\n\n` : "";
-	return `${failure}Agent output written to ${record.outputPath}.${getStatusNote(record.status)}`;
 }

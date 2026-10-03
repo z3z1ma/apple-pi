@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-03
 Updated: 2026-10-03
 
@@ -19,8 +19,14 @@ The governing task snapshot is [spec.md](spec.md). The operator confirmed the fr
 
 ## Current State
 
-Specification written. Intent, scope, acceptance criteria, and test seams are settled. No implementation or tickets have started; no research or prototype blockers remain. Ready for `/skill:to-tickets` if the operator chooses that workflow.
+Implemented and validated on 2026-10-03. Ticket generation was skipped because the change fits one context. The operator freshly confirmed the framing-interface, tool/notification delivery, and persistence test seams before implementation.
+
+- One `frameOutcome` interface now supplies shared framing to root results, nested results, and notifications. The old status-note module and output-file presentation helper are absorbed; file persistence remains unchanged.
+- Characterization tests passed against the original callers before migration. A temporary mutation of notification wording and nested resume eligibility caused four tests to fail; restoring the implementation made them pass.
+- Focused subagent suite: 169 tests passed. Full validation: format check, lint, typecheck, 1164 Vitest tests, 122 offline pair checks, extension loader, package dry run, and diff whitespace check passed. The dry-run package includes the new framing module.
+- Independent Standards and Intent/Spec reviews against the implementation working tree at `b6d2bb4` found no actionable findings. Root inspection confirmed output ordering, caller bypasses, and persistence-failure recovery coverage.
+- Live-provider behavior and installed-tarball loading were not exercised; this refactor changes no tool surface or provider behavior.
 
 ## Outcome
 
-Pending implementation and validation.
+The behavior-preserving refactor is complete. The task remains in-progress pending operator acceptance and explicit closure authority; no tickets, push, or publication were created.
