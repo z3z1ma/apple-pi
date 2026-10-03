@@ -95,3 +95,5 @@
 - `.ledger/history/202609291615-adopt-pi-0-99-native-mcp/task.md` — done — Adopt Pi 0.99 native MCP — Upgrade Pi dependencies, remove third-party MCP adapter, validate root and child native MCP; defer Pi Exec redesign pending runtime decision.
 
 - `.ledger/history/202610030008-tui-glanceable-panels/task.md` — done — Glanceable panels for the Apple Pi TUI — Move Apple Pi from all-modal overlays to non-capturing glanceable panels (subagents first), a /btw top drop-down, and restored overlay state, within the public Pi API.
+
+- `.ledger/history/202610021233-prompt-surface-tightening/task.md` — done — Tighten the system prompt surface across hooks, tools, children, and skills — Move prompt hooks to Pi sections, give child sessions real tool rules, remove duplicated/contradictory guidance, trim profiles, gate wiki prompt, fix skill triggers.

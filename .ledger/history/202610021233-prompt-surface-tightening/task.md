@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-02
 Updated: 2026-10-02
 
@@ -15,7 +15,7 @@ Acceptance:
 
 ## Current State
 
-Implemented and validated (`npm test` 1116 unit + 120 pair + loader, lint, format, typecheck, pack). Awaiting operator review.
+Complete. Closure review confirmed the prompt-section and child-guidance acceptance criteria in current code and tests. Validation passed again: `npm test` (1,150 unit tests, 121 pair tests, loader), `npm run check` (format, lint, typecheck), and `npm run pack:check`. Archived under the operator's ledger-cleanup authorization.
 
 Deferred: the pair session uses a custom preamble, so the `promptSnippet`/`promptGuidelines` on pair-only tools (`expand_receipt`, `set_pair_attention`, pair `revisit_note`/`search_session`) never render; the pair prompt already covers them.
 

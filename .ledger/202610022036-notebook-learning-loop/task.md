@@ -51,8 +51,10 @@ In progress. All slices are implemented (2026-10-02):
 - `components/notebook/src/hooks/open-learnings.ts`: the `learnings:N` count in the input card, and the ledger-close sweep. The first `done` or `cancelled` call per task is held once while learnings are open.
 - `prompts/distill.md` reads open learnings first and retires what it places.
 
-Next: merge `feat/bash-expectations`. Over the same week, count how often the main agent sets `expect` and how many surprises it reports. Then use it for about a week, then judge the acceptance criteria and tune the 500k spacing.
+`feat/bash-expectations` is merged into main (`35949a9`). Bash accepts `expect: "success"` or `expect: "failure"`; a result that differs from the prediction is reported as a surprise. Expected failures are excluded from learning-reflection evidence.
+
+Implementation is complete; real-use acceptance remains open. Next: use the harness for about a week, record how often the main agent sets `expect` and reports surprises, and assess the acceptance criteria above. “User keeps the promoted artifacts” means the user retains the proposed documentation, skills, or other durable updates after placement. Use those observations to decide whether the task can close and whether the 500k-new-token reflection spacing needs adjustment.
 
 ## Outcome
 
-Pending.
+Implementation delivered. Closure awaits the real-use evaluation described above.
