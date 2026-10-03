@@ -285,7 +285,10 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 	},
 };
 
-/** Type stubs of the hand-written Python functions, in a stable order. */
+/**
+ * Type stubs of the hand-written Python functions, in a stable order. The session hashes the full stub text to
+ * identify Monty checkpoints, so any change to a stub's text or order makes every saved checkpoint incompatible.
+ */
 export const HOST_FUNCTION_STUBS: readonly string[] = Object.values(HOST_FUNCTIONS).flatMap((fn) =>
 	(fn.python ?? []).map((python) => python.stub),
 );
