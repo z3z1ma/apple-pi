@@ -23,7 +23,8 @@ function pathList(paths: readonly string[]): string {
 
 function describeRun(toolName: string, input: Record<string, unknown>, isError: boolean): string {
 	const label = toolName === "bash" && typeof input.command === "string" ? input.command.split("\n")[0] : toolName;
-	return `\`${label}\`${isError ? " (failed)" : ""}`;
+	const status = isError ? " (failed)" : input.run_in_background === true ? " (started in background)" : "";
+	return `\`${label}\`${status}`;
 }
 
 /** What ran after each code path's last change, so claims can be checked against it. */

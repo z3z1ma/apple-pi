@@ -5,6 +5,7 @@ import type { Context, Model } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import {
 	createAgentSession,
+	type ExtensionAPI,
 	DefaultResourceLoader,
 	SessionManager,
 	SettingsManager,
@@ -12,7 +13,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANGE_REFLECTION_EXTENSION_PATH } from "../../../extensions/change-reflection.js";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
-import { CHANGE_REFLECTION_MESSAGE_TYPE, reflectionPrompt } from "../src/index.js";
+import registerChangeReflection, { CHANGE_REFLECTION_MESSAGE_TYPE, reflectionPrompt } from "../src/index.js";
 
 type Reply = ReturnType<typeof fauxAssistantMessage>;
 
@@ -168,5 +169,23 @@ describe("reflectionPrompt", () => {
 		expect(reflectionPrompt(["a.ts", "b.ts"], runs)).toContain(
 			"After your last change to `a.ts`, `b.ts`, these ran: `npm test`.",
 		);
+	});
+});
+
+describe("run timeline", () => {
+	it("marks a background launch as started, not finished", () => {
+		const handlers = new Map<string, (event: unknown, ctx?: unknown) => unknown>();
+		registerChangeReflection({
+			on: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => handlers.set(event, handler),
+		} as unknown as ExtensionAPI);
+		const result = (toolName: string, input: Record<string, unknown>) =>
+			handlers.get("tool_result")?.({ toolName, input, isError: false }, { cwd: "/repo" });
+		result("write", { path: "a.ts" });
+		result("bash", { command: "npm test", run_in_background: true });
+
+		const settled = handlers.get("agent_before_settle")?.({ outcome: "completed" }) as {
+			entries: Array<{ content: string }>;
+		};
+		expect(settled.entries[0]?.content).toContain("these ran: `npm test` (started in background).");
 	});
 });
