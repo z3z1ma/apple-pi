@@ -146,6 +146,13 @@ Inside Pi:
 - **MCP servers:** add them to `~/.pi/agent/mcp.json` with `"exposure": "deferred"`, add `"extensions": ["-builtin:codemode"]` to `~/.pi/agent/settings.json` so `pi_exec` is the only composition runtime, then run `/reload` and `/mcp`. See [MCP](mcp.md).
 - **Editor:** set `EDITOR` in your shell profile (for example `export EDITOR=nvim`) for `Ctrl+E` prompt editing.
 - **RTK:** set `RTK_DISABLED=1` to turn RTK off. See [RTK](rtk.md).
+- **Branch search:** `/branch-search` and the `search_branches` tool stay off until a configuration exists. Copy the example, then run `/reload`:
+
+  ```bash
+  cp "$APPLE_PI/branch-search.example.json" ~/.pi/agent/branch-search.json
+  ```
+
+  The example runs 3 attempts in parallel, then one more round (2 continuations of the best failed attempt and 1 fresh approach) if none passes, at most 6 attempts of up to 15 minutes each. It applies the winner when your workspace did not change during the search, and it leaves passive activation off. A trusted project can override single keys in `.pi/branch-search.json`. See [Branch search](branch-search.md) for every key.
 
 ## 8. Verify
 
