@@ -35,14 +35,36 @@ const MAX_LINES = 12;
 const TICK_MS = 500;
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+const OWNER_REQUEST = "apple-pi:active-work-owner:request";
+
+interface ActiveWorkEvents {
+	on(channel: string, handler: (data: unknown) => void): () => void;
+	emit(channel: string, data: unknown): void;
+}
+
 const surfaces = new WeakMap<object, ActiveWorkSurface>();
 
-export function getActiveWorkSurface(owner: object): ActiveWorkSurface {
-	let surface = surfaces.get(owner);
+/**
+ * The one active-work surface for a Pi runtime. Pi gives each extension its own API object and
+ * event facade over a shared bus, so the first installer answers a synchronous owner request on
+ * that bus and later installers join its surface. The answering subscription belongs to the
+ * installer's runtime and ends with it, so a reloaded runtime creates a fresh owner.
+ */
+export function getActiveWorkSurface(owner: { events?: ActiveWorkEvents }): ActiveWorkSurface {
+	const known = surfaces.get(owner);
+	if (known) return known;
+	let surface: ActiveWorkSurface | undefined;
+	owner.events?.emit(OWNER_REQUEST, (value: ActiveWorkSurface) => {
+		surface ??= value;
+	});
 	if (!surface) {
-		surface = new ActiveWorkSurface();
-		surfaces.set(owner, surface);
+		const created = new ActiveWorkSurface();
+		owner.events?.on(OWNER_REQUEST, (reply) => {
+			if (typeof reply === "function") (reply as (value: ActiveWorkSurface) => void)(created);
+		});
+		surface = created;
 	}
+	surfaces.set(owner, surface);
 	return surface;
 }
 

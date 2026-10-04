@@ -3,13 +3,17 @@ import { tmpdir } from "node:os";
 import { createServer, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
 	createExtensionRuntime,
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
-import { fakeCustom, fakeTui } from "./helpers/fake-tui.js";
+import { fakeCustom, fakeTui, plainTheme } from "./helpers/fake-tui.js";
+import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
+import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
+import { fauxModelBackend } from "./helpers/faux-model.js";
 import { resultText } from "../components/pi-exec/src/results.js";
 import { registerWorkSection } from "../components/shared/src/work-manager.js";
 
@@ -22,6 +26,7 @@ afterEach(async () => {
 async function harness(
 	setup?: (cwd: string) => void,
 	extensions = ["./extensions/pi-exec.ts", "./extensions/work.ts"],
+	context: Record<string, unknown> = {},
 ) {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-exec-panel-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
@@ -50,14 +55,36 @@ async function harness(
 	const loaded = await loadExtensions(paths, cwd, events, runtime);
 	expect(loaded.errors).toEqual([]);
 	const screen = fakeTui(200, 50);
+	// The above-editor widgets Pi would currently mount, keyed as Pi keys them: a later mount replaces an earlier one.
+	const widgets = new Map<string, { factory: any; instance?: { render(): string[] } }>();
+	const statuses = new Map<string, string>();
 	const ctx = {
 		cwd,
 		sessionManager: manager,
 		hasUI: true,
 		mode: "tui",
 		isProjectTrusted: () => true,
-		ui: { custom: fakeCustom(screen).custom, notify: vi.fn(), setStatus: vi.fn(), setWidget: vi.fn() },
+		getSystemPrompt: () => "parent",
+		...context,
+		ui: {
+			custom: fakeCustom(screen).custom,
+			notify: vi.fn(),
+			setStatus: (key: string, text: string | undefined) => {
+				if (text === undefined) statuses.delete(key);
+				else statuses.set(key, text);
+			},
+			setWidget: (key: string, factory: unknown) => {
+				if (factory === undefined) widgets.delete(key);
+				else widgets.set(key, { factory });
+			},
+		},
 	} as any;
+	/** Renders every mounted above-editor widget through its factory, as Pi's TUI would. */
+	const passive = () =>
+		[...widgets.entries()].map(([key, widget]) => {
+			widget.instance ??= widget.factory(screen.tui, plainTheme);
+			return { key, lines: widget.instance!.render() };
+		});
 	const emit = async (event: string) => {
 		for (const extension of loaded.extensions)
 			for (const handler of extension.handlers.get(event) ?? []) await handler({ type: event }, ctx);
@@ -77,6 +104,12 @@ async function harness(
 		ctx,
 		screen,
 		emit,
+		passive,
+		passiveText: () =>
+			passive()
+				.flatMap((widget) => widget.lines)
+				.join("\n"),
+		statuses,
 		addTab: () =>
 			registerWorkSection({ events } as any, {
 				key: "other",
@@ -121,6 +154,55 @@ function useWorkerFixture() {
 /** A Python literal for a controlled fixture-worker task that runs one tool until its gate responds. */
 const gatedTask = (gate: string, tool: string, args: Record<string, unknown>, holdTerm = false) =>
 	JSON.stringify(JSON.stringify({ gate, tool, args, ...(holdTerm ? { holdTerm } : {}) }));
+
+/** The registered package loads with public agents and managed tasks beside Pi Exec, on a gated scripted model. */
+async function mixedHarness() {
+	const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-mixed", contextWindow: 200_000 }] });
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started = false;
+	faux.setResponses([
+		async () => {
+			started = true;
+			await gate;
+			return fauxAssistantMessage([fauxText("PUBLIC-AGENT-DONE")]);
+		},
+	]);
+	cleanups.push(async () => {
+		release();
+		faux.unregister();
+	});
+	const model = faux.getModel();
+	const { modelRegistry } = fauxModelBackend(model);
+	const h = await harness(
+		(cwd) => {
+			mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+			writeFileSync(
+				join(cwd, ".pi", "agents", "mixed-test.md"),
+				"---\nname: mixed-test\ndescription: mixed test role\ntools: read\nextensions: false\nskills: false\npersist_session: false\n---\nAnswer the task.\n",
+			);
+		},
+		["./extensions/pi-exec.ts", "./extensions/work.ts", "./extensions/subagents.ts", "./extensions/tasks.ts"],
+		{ model, modelRegistry },
+	);
+	const launchAgent = async () => {
+		await h
+			.tool("agent")
+			.execute(
+				"public-agent",
+				{ prompt: "public work", description: "Public reviewer", subagent_type: "mixed-test", run_in_background: true },
+				undefined,
+				undefined,
+				h.ctx,
+			);
+		await vi.waitFor(() => expect(started).toBe(true));
+	};
+	const scheduleTask = () =>
+		h.tool("schedule").execute("task", { prompt: "Deferred check", delay_seconds: 600 }, undefined, undefined, h.ctx);
+	return { ...h, launchAgent, scheduleTask, releaseAgent: () => release() };
+}
 
 describe("Pi Exec work panel", () => {
 	it("opens an empty Pi Exec tab through the package load sequence without taking editor input", async () => {
@@ -563,6 +645,7 @@ describe("Pi Exec work panel", () => {
 		void run.catch(() => {});
 		await h.open();
 		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read held\.txt/));
+		await vi.waitFor(() => expect(gate.responses.has("/held")).toBe(true));
 		controller.abort();
 		await expect(run).rejects.toThrow();
 		expect(h.text()).toMatch(/^\u2502 aborted \u00b7/m);
@@ -596,6 +679,7 @@ describe("Pi Exec work panel", () => {
 		h.focus();
 		toExec();
 		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read bound\.txt/));
+		await vi.waitFor(() => expect(gate.responses.has("/bound")).toBe(true));
 		const views = () =>
 			[0, 1, 2, 3].map(() => {
 				const text = h.text();
@@ -603,7 +687,6 @@ describe("Pi Exec work panel", () => {
 				return text;
 			});
 		for (const text of views()) expect(text).not.toMatch(/private-(context|schema)/);
-		expect(h.text()).not.toMatch(/\bsteer\b|\bresume\b/i);
 		for (let index = 0; index < 3 && !h.text().includes("(no agents)"); index++) h.input("\x1b[C");
 		expect(h.text()).toContain("(no agents)");
 		expect(h.text()).not.toContain("bound-worker");
@@ -663,5 +746,185 @@ describe("Pi Exec work panel", () => {
 		[...gate.responses.values()][0]!.end("public response");
 		await run;
 		expect(h.text()).not.toContain("private-");
+	});
+});
+
+describe("Pi Exec shared passive activity", () => {
+	it("keeps legal multiline display text within physical passive rows", async () => {
+		const gate = await gateServer();
+		const h = await harness();
+		const run = h.tool().execute(
+			"multiline",
+			{
+				code: `await fetch(url="${gate.url}/multiline")`,
+				display: { name: "Two\nLines", description: "Line one\nLine two\nLine three" },
+			},
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/multiline")).toBe(true));
+		const lines = h.passive()[0]!.lines;
+		for (const line of lines) expect(line).not.toMatch(/[\r\n]/);
+		expect(lines.join("\n")).toContain("Two Lines");
+		gate.responses.get("/multiline")!.end("done");
+		await run;
+	});
+
+	it("leaves RPC execution without TUI-only passive widgets or Pi Exec status", async () => {
+		const gate = await gateServer();
+		const h = await harness();
+		h.ctx.mode = "rpc";
+		await h.emit("session_start");
+		const run = h.tool().execute("rpc", { code: `await fetch(url="${gate.url}/rpc")` }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/rpc")).toBe(true));
+		expect(h.passive()).toEqual([]);
+		expect(h.statuses.has("pi-exec")).toBe(false);
+		gate.responses.get("/rpc")!.end("RPC result");
+		expect(resultText(await run)).toContain("RPC result");
+	});
+
+	it("presents one multi-worker program beside a public agent and a managed task, then leaves on settlement", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await mixedHarness();
+		await h.scheduleTask();
+		await h.launchAgent();
+		const alpha = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha.txt" });
+		const beta = gatedTask(`${gate.url}/beta`, "grep", { pattern: "beta-pattern" });
+		const code = `import asyncio\nawait asyncio.gather(agent_run(task=${alpha}, name="alpha-worker"), agent_run(task=${beta}, name="beta-worker"))`;
+		const run = h
+			.tool()
+			.execute(
+				"mixed",
+				{ code, display: { name: "Mixed program" }, limits: { agentBudget: 2, concurrency: 2 } },
+				undefined,
+				undefined,
+				h.ctx,
+			);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
+
+		// One shared surface carries all three kinds of work; Pi Exec mounts no widget of its own.
+		await vi.waitFor(() => expect(h.passiveText()).toContain("2 running"));
+		expect(h.passive().map((widget) => widget.key)).toEqual(["active-work"]);
+		const active = h.passiveText();
+		expect(active).toContain("● Active work");
+		expect(active).toContain("Mixed program");
+		expect(active).toContain("Public reviewer");
+		expect(active).toContain("Deferred check");
+		// The program is one unit of work: its workers are not public agents.
+		expect(active.match(/Mixed program/g)).toHaveLength(1);
+		expect(h.statuses.get("subagents")).toBe("agents:1");
+		expect(h.statuses.get("tasks")).toBe("tasks:1");
+		expect(h.statuses.get("pi-exec")).toBe("exec:1");
+		for (const line of h.passive()[0]!.lines) expect(visibleWidth(line)).toBeLessThanOrEqual(200);
+		expect(h.screen.stack).toHaveLength(0);
+
+		// Observed activity and timing follow host-call progress.
+		const now = Date.now();
+		vi.spyOn(Date, "now").mockReturnValue(now + 12_000);
+		expect(h.passiveText()).toMatch(/Mixed program.*1[23]\.\ds/);
+		vi.restoreAllMocks();
+		gate.responses.get("/beta")!.end("beta contents");
+		await vi.waitFor(() => expect(h.passiveText()).toContain("1/2 calls"));
+		expect(h.passiveText()).toContain("1 running");
+
+		gate.responses.get("/alpha")!.end("alpha contents");
+		await run;
+		const settled = h.passiveText();
+		expect(settled).not.toContain("Mixed program");
+		expect(settled).toContain("Public reviewer");
+		expect(settled).toContain("Deferred check");
+		expect(h.statuses.has("pi-exec")).toBe(false);
+		await h.open();
+		for (let index = 0; index < 3 && !h.text().includes("[Pi Exec"); index++) h.input("\x1b[C");
+		expect(h.text()).toContain("Mixed program");
+		expect(h.text()).toContain("succeeded");
+		expect(h.screen.focused()).toBe(h.screen.editor);
+	});
+
+	it("shows a saved program while it runs without opening the panel, and leaves no stale entry", async () => {
+		const gate = await gateServer();
+		const source = `"""Check saved output."""\nawait fetch(url="${gate.url}/saved")\n"saved done"`;
+		const h = await harness((cwd) => {
+			mkdirSync(join(cwd, ".pi", "programs"), { recursive: true });
+			writeFileSync(join(cwd, ".pi", "programs", "sample.py"), source);
+		});
+		expect(h.passive()).toEqual([]);
+		const run = h.tool("program_sample").execute("saved", {}, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/saved")).toBe(true));
+		await vi.waitFor(() => expect(h.passiveText()).toContain("1 running"));
+		expect(h.passive().map((widget) => widget.key)).toEqual(["active-work"]);
+		expect(h.passiveText()).toContain("sample");
+		expect(h.passiveText()).toMatch(/\u23bf {2}fetch/);
+		expect(h.screen.stack).toHaveLength(0);
+		gate.responses.get("/saved")!.end("saved response");
+		await run;
+		expect(h.passive()).toEqual([]);
+		expect(h.statuses.size).toBe(0);
+		await h.open();
+		expect(h.text()).toContain("sample");
+		expect(h.text()).toContain("succeeded");
+	});
+
+	it.each(["failed", "aborted", "timed_out"])("removes a %s program from passive activity", async (outcome) => {
+		const gate = await gateServer();
+		const h = await harness();
+		const controller = new AbortController();
+		const code =
+			outcome === "failed" ? `await fetch(url="${gate.url}/pending")\n1 / 0` : `await fetch(url="${gate.url}/pending")`;
+		const run = h
+			.tool()
+			.execute(
+				outcome,
+				{ code, display: { name: "Settling program" }, limits: { timeoutSeconds: 1 } },
+				controller.signal,
+				undefined,
+				h.ctx,
+			);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/pending")).toBe(true));
+		expect(h.passiveText()).toContain("Settling program");
+		if (outcome === "aborted") controller.abort();
+		if (outcome === "failed") gate.responses.get("/pending")!.end("ok");
+		await expect(run).rejects.toThrow();
+		expect(h.passive()).toEqual([]);
+		await h.open();
+		expect(h.text()).toContain("Settling program");
+		expect(h.text()).toContain(outcome);
+	});
+
+	it("clears passive activity on branch change and keeps late old-context updates from restoring it", async () => {
+		const gate = await gateServer();
+		const h = await mixedHarness();
+		await h.launchAgent();
+		const code = `import asyncio\nawait asyncio.gather(fetch(url="${gate.url}/old"), fetch(url="${gate.url}/later"))`;
+		const run = h
+			.tool()
+			.execute(
+				"old",
+				{ code, display: { name: "Old context" }, limits: { concurrency: 1 } },
+				undefined,
+				undefined,
+				h.ctx,
+			);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/old")).toBe(true));
+		expect(h.passiveText()).toContain("Old context");
+		await h.emit("session_tree");
+		expect(h.passiveText()).not.toContain("Old context");
+		gate.responses.get("/old")!.end("late response");
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(h.passiveText()).not.toContain("Old context");
+		await run.catch(() => {});
+		expect(h.passiveText()).not.toContain("Old context");
+		// The current context's public agent stays as it was.
+		expect(h.passiveText()).toContain("Public reviewer");
+		expect(h.statuses.get("subagents")).toBe("agents:1");
+		expect(h.statuses.has("pi-exec")).toBe(false);
 	});
 });

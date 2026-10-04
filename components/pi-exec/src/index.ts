@@ -1,7 +1,9 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
+import { createExecActiveWorkSource } from "./active-work.js";
 import { ExecPanel, type ExecInvocation } from "./work-panel.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import {
@@ -16,9 +18,7 @@ import { createHostCalls } from "./host-calls.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { installProgramSession } from "./session.js";
 import { installRegisteredToolCapture } from "./tool-capture.js";
-import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderExecResult } from "./ui.js";
-
-const EXEC_WIDGET_ID = "apple-pi:exec-activity";
+import { type ExecActivitySnapshot, renderExecCall, renderExecResult } from "./ui.js";
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -50,21 +50,33 @@ export default function piExec(pi: ExtensionAPI): void {
 	let executing = false;
 	const programSession = installProgramSession(pi);
 	const invocations = new Map<string, ExecInvocation>();
+	// Running programs share the above-editor surface with public agents and managed tasks.
+	const activeWork = getActiveWorkSurface(pi);
+	let tuiMode = false;
+	const unregisterActiveWork = activeWork.registerSource(
+		createExecActiveWorkSource(() => (tuiMode ? invocations.values() : [])),
+	);
+	const clearInvocations = () => {
+		invocations.clear();
+		activeWork.update();
+	};
 	// All extension installers have finished before session_start; work loads after Pi Exec.
 	pi.on("session_start", (_event, ctx) => {
-		invocations.clear();
-		if (!ctx.hasUI || ctx.mode !== "tui") return;
+		tuiMode = ctx.hasUI && ctx.mode === "tui";
+		clearInvocations();
+		if (!tuiMode) return;
+		activeWork.setUICtx(ctx.ui);
 		registerWorkSection(pi, {
 			key: "exec",
 			label: "Pi Exec",
 			create: (ui, selectedId) => new ExecPanel(ui, () => [...invocations.values()].reverse(), selectedId),
 		});
 	});
-	pi.on("session_tree", () => {
-		invocations.clear();
-	});
+	pi.on("session_tree", clearInvocations);
 	pi.on("session_shutdown", () => {
 		invocations.clear();
+		unregisterActiveWork();
+		activeWork.clearUI();
 	});
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && !event.toolName.startsWith("program_")) || !event.isError) return;
@@ -162,8 +174,6 @@ export default function piExec(pi: ExtensionAPI): void {
 			};
 			invocations.set(toolCallId, invocation);
 			let finishedAt: number | undefined;
-			let widget: ExecActivityWidget | undefined;
-			let widgetMounted = false;
 			const activity = (): ExecActivitySnapshot => ({
 				name: programName,
 				...(params.display?.description ? { description: params.display.description } : {}),
@@ -175,7 +185,7 @@ export default function piExec(pi: ExtensionAPI): void {
 				if (finishedAt !== undefined) return;
 				const completed = host.completedOperations();
 				invocation.activity = activity();
-				widget?.refresh();
+				activeWork.update();
 				onUpdate?.({
 					content: [{ type: "text", text: `pi_exec: ${completed.length} of ${host.attempted()} calls completed` }],
 					details: {
@@ -185,22 +195,7 @@ export default function piExec(pi: ExtensionAPI): void {
 				});
 			};
 			const host = createHostCalls({ ctx, toolCallId, envelope, captureError, onChange: emit });
-
-			if (ctx.hasUI && ctx.mode === "tui") {
-				try {
-					ctx.ui.setWidget(
-						EXEC_WIDGET_ID,
-						(tui, theme) => {
-							widget = new ExecActivityWidget(theme, activity, () => tui.requestRender());
-							return widget;
-						},
-						{ placement: "aboveEditor" },
-					);
-					widgetMounted = true;
-				} catch (error) {
-					ctx.ui.notify(`pi_exec activity widget unavailable: ${errorText(error)}`, "warning");
-				}
-			}
+			activeWork.update();
 
 			try {
 				const { execution: result, notice: callNotice } = await programSession.run(ctx, {
@@ -269,14 +264,8 @@ export default function piExec(pi: ExtensionAPI): void {
 				throw error;
 			} finally {
 				executing = false;
-				widget?.dispose();
-				if (widgetMounted) {
-					try {
-						ctx.ui.setWidget(EXEC_WIDGET_ID, undefined);
-					} catch (error) {
-						ctx.ui.notify(`pi_exec activity widget cleanup failed: ${errorText(error)}`, "warning");
-					}
-				}
+				// The settled program leaves passive activity; its detail stays in the work panel.
+				activeWork.update();
 			}
 		},
 	});

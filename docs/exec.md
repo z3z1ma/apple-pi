@@ -71,7 +71,7 @@ Parameters are typed tool arguments and arrive as strings in `inputs`; convert n
 
 `limits` can adjust call budget, concurrency, agent budget, and timeout within package maxima. The host queues gathered calls above the concurrency limit. Monty enforces a fixed 512 MiB memory limit, feed/turn execution time, recursion, and a session-wide suspension ceiling; the host enforces the per-call wall deadline and call budget. On cancellation, pending host calls are rejected and new calls are refused. Terminal failures discard the worker and restore the preceding checkpoint on the next call. Completed tool, file, and process effects are **not** undone by that rollback.
 
-Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. The existing above-editor Pi Exec activity widget remains available while a program runs.
+Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. While a program runs, including a saved `program_*` execution, it appears as one entry in the shared above-editor active-work surface beside public agents and managed tasks, with its name, observed call progress, and elapsed time, and the input card shows `exec:1`. Its model workers belong to that entry rather than counting as public agents. The entry does not open or focus the work panel, and it leaves the surface when the program settles; its outcome and trace stay inspectable in `Ctrl+W`.
 
 ## Work-panel inspection
 
