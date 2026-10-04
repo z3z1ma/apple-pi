@@ -11,3 +11,5 @@
 - `.ledger/202610032128-coding-child-reflections/task.md` — ready — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
 
 - `.ledger/202610040726-branch-search-challenger-benchmark/task.md` — ready — Branch search: adversarial scorer and trap benchmark — Add a challenger pass that attacks authored checks with plausible wrong implementations, and a fast staged-trap benchmark (agent alone vs search vs search with challengers, repeated runs) to measure whether search beats one trajectory.
+
+- `.ledger/202610040735-pi-exec-work-panel/task.md` — ready — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
