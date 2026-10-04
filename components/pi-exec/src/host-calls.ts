@@ -28,6 +28,7 @@ export function createHostCalls(options: HostCallsOptions) {
 	const pending = new Set<ExecutionOperation>();
 	const running = new Set<ExecutionOperation>();
 	const timings = new Map<ExecutionOperation, { queuedAt: number; startedAt?: number; finishedAt?: number }>();
+	const children = new Map<ExecutionOperation, ExecActivityCall[]>();
 	const usages: Usage[] = [];
 	const waiters: Array<() => void> = [];
 	let attempted = 0;
@@ -71,6 +72,12 @@ export function createHostCalls(options: HostCallsOptions) {
 		signal,
 		operation,
 		changed: onChange,
+		setChildren(next) {
+			// A settled call's worker detail is final; a late child-process update cannot reopen it.
+			if (!pending.has(operation)) return;
+			children.set(operation, next);
+			onChange();
+		},
 		extensionTools,
 		addUsage: (usage) => usages.push(usage),
 		claimAgent: () => {
@@ -160,6 +167,7 @@ export function createHostCalls(options: HostCallsOptions) {
 				...(operation.activity ? { activity: operation.activity } : {}),
 				...(operation.result !== undefined ? { result: operation.result } : {}),
 				...(operation.error ? { error: operation.error } : {}),
+				...(children.has(operation) ? { children: structuredClone(children.get(operation)) } : {}),
 			})),
 		/** Settle calls still in flight after the program ended and return a detached copy of the trace. */
 		finish(outcome: ExecutionOutcome): ExecutionOperation[] {
@@ -169,6 +177,11 @@ export function createHostCalls(options: HostCallsOptions) {
 					operation.error = `pi_exec ${outcome}`;
 					timings.get(operation)!.finishedAt = Date.now();
 					delete operation.activity;
+					for (const child of children.get(operation) ?? []) {
+						if (child.status !== "queued" && child.status !== "running") continue;
+						child.status = operation.outcome;
+						child.finishedAt = Date.now();
+					}
 				}
 				pending.clear();
 				running.clear();

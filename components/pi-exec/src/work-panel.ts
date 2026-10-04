@@ -11,7 +11,7 @@ import {
 import { createViewerKeys, type ViewerKeys } from "../../shared/src/viewer-keys.js";
 import type { WorkSectionComponent, WorkSectionUI } from "../../shared/src/work-manager.js";
 import type { ExecutionOperation, ExecutionOutcome } from "./types.js";
-import { callLabel, formatDuration, safeText, type ExecActivitySnapshot } from "./ui.js";
+import { callLabel, type ExecActivityCall, formatDuration, safeText, type ExecActivitySnapshot } from "./ui.js";
 
 const VIEWS = ["calls", "source", "result", "trace"] as const;
 type View = (typeof VIEWS)[number];
@@ -200,17 +200,7 @@ export class ExecPanel implements WorkSectionComponent {
 			);
 			view!.call = Math.min(view!.call, Math.max(0, calls.length - 1));
 			const selected = calls[view!.call];
-			if (selected) {
-				add(`Selected call ${selected.sequence + 1}: ${callLabel(selected)}`);
-				const now = selected.finishedAt ?? activity.finishedAt ?? Date.now();
-				add(`Status: ${selected.status}`);
-				if (selected.queuedAt !== undefined)
-					add(`Queued: ${formatDuration((selected.startedAt ?? now) - selected.queuedAt)}`);
-				if (selected.startedAt !== undefined) add(`Execution: ${formatDuration(now - selected.startedAt)}`);
-				add(`Arguments: ${JSON.stringify(selected.args, null, 2)}`);
-				if (selected.error) add(`Error: ${selected.error}`);
-				if (selected.result !== undefined) add(`Result: ${JSON.stringify(selected.result, null, 2)}`);
-			}
+			if (selected) callDetail(selected, activity.finishedAt, add);
 			add("Calls:");
 			for (const [index, call] of calls.entries())
 				add(`${index === view!.call ? "›" : " "} ${call.sequence + 1} ${call.status} · ${callLabel(call)}`);
@@ -218,4 +208,34 @@ export class ExecPanel implements WorkSectionComponent {
 		}
 		return lines;
 	}
+}
+
+/** Detail for the selected host call, including a model worker's identity and its live or settled child tools. */
+function callDetail(
+	selected: ExecActivityCall,
+	programFinishedAt: number | undefined,
+	add: (text: string) => void,
+): void {
+	add(`Selected call ${selected.sequence + 1}: ${callLabel(selected)}`);
+	const now = selected.finishedAt ?? programFinishedAt ?? Date.now();
+	add(`Status: ${selected.status}`);
+	if (selected.ref === "agent.run") {
+		if (typeof selected.args.name === "string") add(`Worker: ${selected.args.name}`);
+		if (typeof selected.args.task === "string") add(`Task: ${selected.args.task}`);
+	}
+	if (selected.activity) add(`Activity: ${selected.activity}`);
+	if (selected.queuedAt !== undefined)
+		add(`Queued: ${formatDuration((selected.startedAt ?? now) - selected.queuedAt)}`);
+	if (selected.startedAt !== undefined) add(`Execution: ${formatDuration(now - selected.startedAt)}`);
+	add(`Arguments: ${JSON.stringify(selected.args, null, 2)}`);
+	if (selected.error) add(`Error: ${selected.error}`);
+	if (selected.children) {
+		add("Worker tools:");
+		for (const child of selected.children) {
+			add(`  ${child.sequence + 1} ${child.status} · ${callLabel(child)}`);
+			if (child.error) add(`    Error: ${child.error}`);
+		}
+		if (selected.children.length === 0) add("  No worker tools started.");
+	}
+	if (selected.result !== undefined) add(`Result: ${JSON.stringify(selected.result, null, 2)}`);
 }

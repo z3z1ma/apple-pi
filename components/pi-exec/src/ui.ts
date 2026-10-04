@@ -14,6 +14,8 @@ export interface ExecActivityCall {
 	queuedAt?: number;
 	startedAt?: number;
 	finishedAt?: number;
+	/** A model worker's child tools, published live while the worker runs. */
+	children?: ExecActivityCall[];
 }
 
 export interface ExecActivitySnapshot {

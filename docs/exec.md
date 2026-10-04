@@ -90,7 +90,9 @@ The [shared work-panel controls](subagents.md#work-panel) handle tabs, focus, cl
 
 Successful, failed, aborted, and timed-out programs remain inspectable after settlement, with their available result, error, captured output, and operation trace. A failed call remains visible even if the script handles it and succeeds. This inspection history is in memory for the current session/branch only; session replacement, reload, tree navigation, and shutdown clear it. It is not rebuilt from checkpoint or transcript entries.
 
-Inspection adds no steering or cancellation controls and leaves execution semantics unchanged. Model workers appear as program-owned host calls with their existing coarse activity; live child-tool drill-down is not part of this version. Source displays the executed script; call and trace views retain their existing redaction boundaries and omit deliberately excluded payloads.
+Model workers appear as program-owned host calls. Selecting a worker call shows its supplied name and task, its current thinking or tool activity, and its child tools while the worker is still running. Each child tool shows its status, tool name, and trace-safe target, and its result or error once it finishes. During parallel execution a child tool appears only under the worker that issued it. A failed worker status record stays visible even when the script handles it and the program succeeds. When a program is aborted or times out, unfinished child tools settle as aborted or timed out, and later events from the stopped worker do not change them. Workers stay under their program, never join the public Agents roster, and offer no resume, steer, or stop actions.
+
+Inspection adds no steering or cancellation controls and leaves execution semantics unchanged. Source displays the executed script; call and trace views retain their existing redaction boundaries and omit deliberately excluded payloads.
 
 ## Session checkpoints
 

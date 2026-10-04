@@ -18,6 +18,7 @@ import { bounded, resultText, traceValue } from "./results.js";
 import { listSkills, readSkillBody } from "./skills.js";
 import { capturedTool, capturedTools } from "./tool-capture.js";
 import type { ExecutionOperation } from "./types.js";
+import type { ExecActivityCall } from "./ui.js";
 
 const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 
@@ -30,6 +31,8 @@ export interface HostCallScope {
 	operation: ExecutionOperation;
 	/** Publish a change to the operation's trace or activity. */
 	changed(): void;
+	/** Publish a detached live snapshot of a model worker's child tools for inspection. */
+	setChildren(children: ExecActivityCall[]): void;
 	runTool(definition: ToolDefinition<any, any>, args: Args): Promise<any>;
 	claimAgent(): number;
 	addUsage(usage: Usage): void;
@@ -168,10 +171,17 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 		],
 		traceArgs: agentOperationArgs,
 		async run(args, scope) {
-			const result = await runAgentWorker(scope.claimAgent(), args, scope.ctx, scope.signal, (activity) => {
-				scope.operation.activity = activity;
-				scope.changed();
-			});
+			const result = await runAgentWorker(
+				scope.claimAgent(),
+				args,
+				scope.ctx,
+				scope.signal,
+				(activity) => {
+					scope.operation.activity = activity;
+					scope.changed();
+				},
+				(children) => scope.setChildren(children),
+			);
 			if (result.usage) scope.addUsage(result.usage);
 			scope.operation.children = result.operations;
 			if (result.error) {

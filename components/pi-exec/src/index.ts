@@ -24,6 +24,11 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+/** Tool details keep their existing shape; live worker children belong to the in-memory inspection record only. */
+function detailsActivity(snapshot: ExecActivitySnapshot): ExecActivitySnapshot {
+	return { ...snapshot, calls: snapshot.calls.map(({ children: _children, ...call }) => call) };
+}
+
 function displayValue(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (value === undefined) return "(program returned no value)";
@@ -175,7 +180,7 @@ export default function piExec(pi: ExtensionAPI): void {
 					content: [{ type: "text", text: `pi_exec: ${completed.length} of ${host.attempted()} calls completed` }],
 					details: {
 						trace: { kind: "apple-pi.execution", version: 1, outcome: "succeeded", operations: completed },
-						activity: activity(),
+						activity: detailsActivity(invocation.activity),
 					},
 				});
 			};
@@ -226,7 +231,7 @@ export default function piExec(pi: ExtensionAPI): void {
 						details: {
 							trace,
 							logs,
-							activity: finalActivity,
+							activity: detailsActivity(finalActivity),
 							policy: envelope,
 							...(callNotice ? { notice: callNotice } : {}),
 						},
@@ -247,7 +252,7 @@ export default function piExec(pi: ExtensionAPI): void {
 					details: {
 						trace,
 						logs,
-						activity: finalActivity,
+						activity: detailsActivity(finalActivity),
 						policy: envelope,
 						...(callNotice ? { notice: callNotice } : {}),
 					},

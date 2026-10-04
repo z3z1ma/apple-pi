@@ -19,7 +19,10 @@ afterEach(async () => {
 	vi.restoreAllMocks();
 });
 
-async function harness(setup?: (cwd: string) => void) {
+async function harness(
+	setup?: (cwd: string) => void,
+	extensions = ["./extensions/pi-exec.ts", "./extensions/work.ts"],
+) {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-exec-panel-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = cwd;
@@ -41,7 +44,7 @@ async function harness(setup?: (cwd: string) => void) {
 	};
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	const paths = manifest.pi.extensions
-		.filter((path: string) => ["./extensions/pi-exec.ts", "./extensions/work.ts"].includes(path))
+		.filter((path: string) => extensions.includes(path))
 		.map((path: string) => join(process.cwd(), path));
 	const events = createEventBus();
 	const loaded = await loadExtensions(paths, cwd, events, runtime);
@@ -106,6 +109,18 @@ async function gateServer() {
 	const address = server.address() as { port: number };
 	return { url: `http://127.0.0.1:${address.port}`, responses };
 }
+
+function useWorkerFixture() {
+	const previous = process.argv[1];
+	process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+	cleanups.push(async () => {
+		process.argv[1] = previous;
+	});
+}
+
+/** A Python literal for a controlled fixture-worker task that runs one tool until its gate responds. */
+const gatedTask = (gate: string, tool: string, args: Record<string, unknown>, holdTerm = false) =>
+	JSON.stringify(JSON.stringify({ gate, tool, args, ...(holdTerm ? { holdTerm } : {}) }));
 
 describe("Pi Exec work panel", () => {
 	it("opens an empty Pi Exec tab through the package load sequence without taking editor input", async () => {
@@ -389,6 +404,240 @@ describe("Pi Exec work panel", () => {
 		h.input("\x1b[F");
 		expect(h.text()).toContain("long-output-finished");
 	}, 30_000);
+
+	it("shows a worker's active child tool before the worker returns", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		await h.open();
+		const task = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha-target.txt" });
+		const run = h
+			.tool()
+			.execute("live-worker", { code: `await agent_run(task=${task}, name="alpha")` }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.has("/alpha")).toBe(true));
+		await vi.waitFor(() => expect(h.text()).toContain("Worker tools:"));
+		expect(h.text()).toMatch(/running · read alpha-target\.txt/);
+		expect(h.text()).toContain("alpha");
+		gate.responses.get("/alpha")!.end("alpha contents");
+		await run;
+		expect(h.text()).toMatch(/succeeded · read alpha-target\.txt/);
+		expect(h.text()).not.toMatch(/running · read/);
+	});
+
+	it("keeps interleaved parallel worker tools under the worker that issued them", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		await h.open();
+		const alpha = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha.txt" });
+		const beta = gatedTask(`${gate.url}/beta`, "grep", { pattern: "beta-pattern" });
+		const code = `import asyncio\nawait asyncio.gather(agent_run(task=${alpha}, name="alpha"), agent_run(task=${beta}, name="beta"))`;
+		const run = h
+			.tool()
+			.execute("parallel", { code, limits: { agentBudget: 2, concurrency: 2 } }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
+		const select = (name: string) => {
+			if (!h.text().includes(`Worker: ${name}`)) h.input("]");
+			expect(h.text()).toContain(`Worker: ${name}`);
+			return h.text();
+		};
+		await vi.waitFor(() => expect(select("alpha")).toMatch(/running \u00b7 read alpha\.txt/));
+		await vi.waitFor(() => expect(select("beta")).toMatch(/running \u00b7 grep beta-pattern/));
+		gate.responses.get("/beta")!.end("error: beta denied");
+		await vi.waitFor(() => expect(select("beta")).toMatch(/failed \u00b7 grep beta-pattern/));
+		expect(h.text()).toContain("Error: error: beta denied");
+		expect(h.text()).not.toContain("alpha.txt");
+		expect(h.text()).toMatch(/^\u2502 running \u00b7/m);
+		const alphaLive = select("alpha");
+		expect(alphaLive).toMatch(/running \u00b7 read alpha\.txt/);
+		expect(alphaLive).not.toContain("beta-pattern");
+		gate.responses.get("/alpha")!.end("alpha contents");
+		await run;
+		const alphaSettled = select("alpha");
+		expect(alphaSettled).toMatch(/succeeded \u00b7 read alpha\.txt/);
+		expect(alphaSettled).not.toContain("beta-pattern");
+		const betaSettled = select("beta");
+		expect(betaSettled).toMatch(/failed \u00b7 grep beta-pattern/);
+		expect(betaSettled).not.toContain("alpha.txt");
+	});
+
+	it("shows a finished child tool before its same-worker sibling settles", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		const task = JSON.stringify(
+			JSON.stringify({
+				tools: [
+					{ gate: `${gate.url}/fast`, tool: "read", args: { path: "fast.txt" } },
+					{ gate: `${gate.url}/slow`, tool: "bash", args: { command: "wait-for-slow" } },
+				],
+			}),
+		);
+		const run = h
+			.tool()
+			.execute("batch", { code: `await agent_run(name="Batch worker", task=${task})` }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
+		await h.open();
+		h.text();
+		h.input("\x1b[F");
+		gate.responses.get("/fast")!.end("error: fast denied");
+		await vi.waitFor(() => expect(h.text()).toMatch(/failed · read fast.txt/));
+		expect(h.text()).toContain("Error: error: fast denied");
+		expect(h.text()).toMatch(/running · bash wait-for-slow/);
+		gate.responses.get("/slow")!.end("slow finished");
+		await run;
+		expect(h.text()).toMatch(/succeeded · bash wait-for-slow/);
+	});
+
+	it("keeps a failed worker status visible when the script handles it and succeeds", async () => {
+		useWorkerFixture();
+		const h = await harness();
+		const result = await h
+			.tool()
+			.execute(
+				"failed-worker",
+				{ code: 'row = await agent_run(task="bad", name="broken")\n"handled " + row["status"]' },
+				undefined,
+				undefined,
+				h.ctx,
+			);
+		expect(resultText(result)).toBe("handled failed");
+		await h.open();
+		expect(h.text()).toMatch(/^\u2502 succeeded \u00b7/m);
+		expect(h.text()).toContain("Worker: broken");
+		expect(h.text()).toContain("Status: failed");
+		expect(h.text()).toContain("Error: worker failed");
+		expect(h.text()).toContain("1 failed");
+		h.input("v");
+		h.input("v");
+		expect(h.text()).toContain("handled failed");
+	});
+
+	it.each(["aborted", "timed_out"])(
+		"leaves terminal worker tool detail when a worker program is %s",
+		async (outcome) => {
+			useWorkerFixture();
+			const gate = await gateServer();
+			const h = await harness();
+			const controller = new AbortController();
+			const task = gatedTask(`${gate.url}/stuck`, "read", { path: "stuck.txt" });
+			const run = h
+				.tool()
+				.execute(
+					outcome,
+					{ code: `await agent_run(task=${task}, name="stuck")`, limits: { timeoutSeconds: 1 } },
+					controller.signal,
+					undefined,
+					h.ctx,
+				);
+			void run.catch(() => {});
+			await h.open();
+			await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read stuck\.txt/));
+			if (outcome === "aborted") controller.abort();
+			await expect(run).rejects.toThrow();
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			gate.responses.get("/stuck")?.end("late contents");
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			expect(h.text()).toMatch(/^\u2502 (aborted|timed_out) \u00b7/m);
+			expect(h.text()).toContain("Worker tools:");
+			// The killed worker's unfinished tool is aborted under either program outcome.
+			expect(h.text()).toMatch(/aborted \u00b7 read stuck\.txt/);
+			expect(h.text()).toContain("0 running");
+			expect(h.text()).not.toMatch(/running \u00b7 read/);
+			expect(h.text()).not.toContain("late contents");
+		},
+	);
+
+	it("settles a cancelled worker's tools even when the worker reports after the program ends", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		const controller = new AbortController();
+		const task = gatedTask(`${gate.url}/held`, "read", { path: "held.txt" }, true);
+		const run = h
+			.tool()
+			.execute("held", { code: `await agent_run(task=${task}, name="held")` }, controller.signal, undefined, h.ctx);
+		void run.catch(() => {});
+		await h.open();
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read held\.txt/));
+		controller.abort();
+		await expect(run).rejects.toThrow();
+		expect(h.text()).toMatch(/^\u2502 aborted \u00b7/m);
+		expect(h.text()).toMatch(/aborted \u00b7 read held\.txt/);
+		gate.responses.get("/held")!.end("late contents");
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		expect(h.text()).toMatch(/aborted \u00b7 read held\.txt/);
+		expect(h.text()).not.toContain("late contents");
+		expect(h.text()).not.toMatch(/succeeded \u00b7 read held/);
+	});
+
+	it("keeps bound worker payloads out of live and settled detail and workers out of the Agents roster", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness(undefined, [
+			"./extensions/pi-exec.ts",
+			"./extensions/work.ts",
+			"./extensions/subagents.ts",
+		]);
+		const task = gatedTask(`${gate.url}/bound`, "read", { path: "bound.txt" });
+		// Private values arrive through inputs so the inspectable source does not contain them.
+		const schema = '{"type": "object", "properties": {"id": {"type": "string", "description": inputs["note"]}}}';
+		const code = `await agent_run(task=${task}, name="bound-worker", context={"id": "public-id", "secret": inputs["secret"]}, output_schema=${schema})`;
+		const inputs = { secret: "private-context", note: "private-schema" };
+		const run = h.tool().execute("bound", { code, inputs }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await h.open();
+		const toExec = () => {
+			for (let index = 0; index < 3 && !h.text().includes("[Pi Exec"); index++) h.input("\x1b[C");
+		};
+		h.focus();
+		toExec();
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read bound\.txt/));
+		const views = () =>
+			[0, 1, 2, 3].map(() => {
+				const text = h.text();
+				h.input("v");
+				return text;
+			});
+		for (const text of views()) expect(text).not.toMatch(/private-(context|schema)/);
+		expect(h.text()).not.toMatch(/\bsteer\b|\bresume\b/i);
+		for (let index = 0; index < 3 && !h.text().includes("(no agents)"); index++) h.input("\x1b[C");
+		expect(h.text()).toContain("(no agents)");
+		expect(h.text()).not.toContain("bound-worker");
+		toExec();
+		gate.responses.get("/bound")!.end("bound contents");
+		const result = await run;
+		expect(JSON.parse(resultText(result))).toMatchObject({ status: "completed", value: { id: "public-id" } });
+		expect(resultText(result)).not.toMatch(/private-(context|schema)/);
+		const settled = views();
+		expect(settled.join("\n")).toContain("bound-worker");
+		expect(settled.join("\n")).toMatch(/succeeded \u00b7 read bound\.txt/);
+		expect(settled.join("\n")).toContain('"bound": true');
+		expect(settled.join("\n")).toMatch(/succeeded \u00b7 pi_exec_return/);
+		for (const text of settled) expect(text).not.toMatch(/private-(context|schema)/);
+	});
+
+	it("does not recreate old worker detail after a branch change", async () => {
+		useWorkerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		const task = gatedTask(`${gate.url}/old`, "read", { path: "old-worker.txt" });
+		const run = h
+			.tool()
+			.execute("old-worker", { code: `await agent_run(task=${task}, name="old-worker")` }, undefined, undefined, h.ctx);
+		void run.catch(() => {});
+		await h.open();
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read old-worker\.txt/));
+		await h.emit("session_tree");
+		gate.responses.get("/old")?.end("late contents");
+		await expect(run).rejects.toThrow();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(h.text()).toContain("no programs");
+		expect(h.text()).not.toContain("old-worker");
+	});
 
 	it("uses redacted host-call arguments in detail and trace views", async () => {
 		const gate = await gateServer();

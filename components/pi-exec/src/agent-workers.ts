@@ -33,6 +33,7 @@ import { CORE_TOOL_NAMES, isCoreToolName, READ_ONLY_CORE_TOOL_NAMES } from "./co
 import { containsContextMarks, fitContext } from "./evidence.js";
 import { aggregateUsage, resultText, traceValue } from "./results.js";
 import type { ExecutionOperation } from "./types.js";
+import type { ExecActivityCall } from "./ui.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
@@ -464,6 +465,7 @@ async function runWorkerProcess(
 	ctx: ExtensionContext,
 	signal: AbortSignal | undefined,
 	onActivity?: (activity: string) => void,
+	onChildren?: (children: ExecActivityCall[]) => void,
 ): Promise<WorkerResult> {
 	const projectTrusted = typeof ctx.isProjectTrusted === "function" ? ctx.isProjectTrusted() : false;
 	const resolved = await resolveExecWorker(request, {
@@ -508,6 +510,32 @@ async function runWorkerProcess(
 			const usages: Usage[] = [];
 			const operations: ExecutionOperation[] = [];
 			const operationByCallId = new Map<string, ExecutionOperation>();
+			const childTimes = new Map<ExecutionOperation, { startedAt: number; finishedAt?: number }>();
+			let closed = false;
+			/** Publish a detached snapshot of the worker's child tools; unfinished tools are running until close. */
+			const publishChildren = () =>
+				onChildren?.(
+					operations.map((operation) => {
+						const times = childTimes.get(operation)!;
+						const running = !closed && times.finishedAt === undefined;
+						return {
+							sequence: operation.sequence,
+							ref: operation.ref,
+							args: structuredClone(operation.args),
+							status: running ? "running" : operation.outcome,
+							...times,
+							...(operation.result !== undefined ? { result: structuredClone(operation.result) } : {}),
+							...(operation.error ? { error: operation.error } : {}),
+						};
+					}),
+				);
+			const finishChild = (operation: ExecutionOperation, isError: boolean, result: unknown) => {
+				operation.outcome = isError ? "failed" : "succeeded";
+				operation.result = traceValue(resultText(result));
+				if (isError) operation.error = resultText(result).slice(0, 500);
+				childTimes.get(operation)!.finishedAt ??= Date.now();
+				publishChildren();
+			};
 			const fileChanges = createFileChangeTracker(ctx.cwd);
 			let aborted = false;
 			let pendingReturn: unknown;
@@ -525,6 +553,8 @@ async function runWorkerProcess(
 						return;
 					}
 					if (event.type === "tool_execution_end") {
+						const operation = operationByCallId.get(event.toolCallId);
+						if (operation) finishChild(operation, event.isError, event.result);
 						if (event.toolName === PI_EXEC_RETURN_TOOL) {
 							if (event.isError) pendingReturn = undefined;
 							else acceptedReturn = pendingReturn;
@@ -552,17 +582,15 @@ async function runWorkerProcess(
 									outcome: "aborted",
 								};
 								operations.push(operation);
+								childTimes.set(operation, { startedAt: Date.now() });
 								if (typeof part.id === "string") operationByCallId.set(part.id, operation);
 							}
+							publishChildren();
 						}
 						onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
 					} else if (event.message.role === "toolResult") {
 						const operation = operationByCallId.get(event.message.toolCallId);
-						if (operation) {
-							operation.outcome = event.message.isError ? "failed" : "succeeded";
-							operation.result = traceValue(resultText(event.message));
-							if (event.message.isError) operation.error = resultText(event.message).slice(0, 500);
-						}
+						if (operation) finishChild(operation, event.message.isError, event.message);
 					}
 				} catch {
 					// Pi JSON mode is line-delimited; diagnostics remain on stderr.
@@ -592,6 +620,10 @@ async function runWorkerProcess(
 			child.on("close", (code) => {
 				signal?.removeEventListener("abort", abort);
 				if (buffered.trim()) consume(buffered);
+				const closedAt = Date.now();
+				for (const times of childTimes.values()) times.finishedAt ??= closedAt;
+				closed = true;
+				if (operations.length > 0) publishChildren();
 				const exitCode = code ?? 1;
 				if (aborted) error = "Agent aborted";
 				if (!error && exitCode !== 0) error = stderr.trim() || `Agent exited with code ${exitCode}`;
@@ -638,11 +670,12 @@ export async function runAgentWorker(
 	ctx: ExtensionContext,
 	signal: AbortSignal,
 	onActivity: (activity: string) => void,
+	onChildren?: (children: ExecActivityCall[]) => void,
 ): Promise<AgentRunOutcome> {
 	const request = parseAgentRequest(rawArgs);
 	const context = containsContextMarks(request.context) ? fitContext(request.context) : undefined;
 	if (context) request.context = context.value;
-	const result = await runWorkerProcess(index, request, ctx, signal, onActivity);
+	const result = await runWorkerProcess(index, request, ctx, signal, onActivity, onChildren);
 	const record = {
 		status: result.error ? "failed" : "completed",
 		...(result.error ? { error: result.error } : {}),
