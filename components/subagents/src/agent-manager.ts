@@ -13,6 +13,7 @@ import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { createFileChangeTracker } from "../../shared/src/file-changes.js";
+import { trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createClarifyTool } from "./clarify.js";
 import { persistAgentOutput } from "./output-file.js";
@@ -248,6 +249,7 @@ export class AgentManager {
 		onStart?: OnAgentStart,
 		onCompact?: OnAgentCompact,
 	) {
+		trackLiveSessions();
 		this.onComplete = onComplete;
 		this.onStart = onStart;
 		this.onCompact = onCompact;
@@ -366,7 +368,7 @@ export class AgentManager {
 			agentConfig: options.agentConfig,
 			systemPrompt: options.systemPrompt,
 			toolPolicy: options.toolPolicy,
-			customTools: [...(options.customTools ?? []), ...(options.enableClarify ? [createClarifyTool(pi, ctx)] : [])],
+			customTools: [...(options.customTools ?? []), ...(options.enableClarify ? [createClarifyTool(ctx)] : [])],
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,

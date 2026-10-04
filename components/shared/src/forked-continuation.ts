@@ -12,7 +12,7 @@ import { canonical, within } from "./real-path.js";
 const FORK_FRAME =
 	"You are a headless fork of this conversation. No user is present, and your messages stay in the fork. When you finish, reply with one line for the main conversation: what you did and how you checked it, or that nothing needed to change.";
 const NO_USER = "No user is present in a headless fork. Decide, or name the open question in your reply.";
-const BLOCKED = "This tool is not available inside a branch search attempt.";
+const BLOCKED = "This tool is not available in this fork.";
 const ISOLATED = "Branch search isolates this attempt to its own copy of the repository.";
 const NO_BACKGROUND = "Background commands are not available inside a branch search attempt.";
 
@@ -55,6 +55,8 @@ export interface ForkRequest {
 	append: AgentMessage;
 	/** Names the fork's usage entries in the parent session. */
 	label: string;
+	/** Tool consumers return usage to their caller instead of recording it in the parent. */
+	recordUsage?: boolean;
 	worktree?: ForkWorktree;
 	blockedTools?: ReadonlySet<string>;
 	/** Called with each assistant reply's usage as it ends, so a caller can enforce a token limit. */
@@ -258,13 +260,14 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 		const { provider, responseModel, model } = event.message;
 		usage.push(event.message.usage);
 		request.onUsage?.(event.message.usage);
-		session.sessionManager.appendUsage(
-			"forked_continuation",
-			provider,
-			responseModel ?? model,
-			event.message.usage,
-			request.label,
-		);
+		if (request.recordUsage !== false)
+			session.sessionManager.appendUsage(
+				"forked_continuation",
+				provider,
+				responseModel ?? model,
+				event.message.usage,
+				request.label,
+			);
 	});
 	const processGroups = worktree && new Set<number>();
 	if (worktree) mkdirSync(worktree.tmp, { recursive: true, mode: 0o700 });

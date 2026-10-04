@@ -821,7 +821,7 @@ describe("search_branches", { timeout: 30_000 }, () => {
 			.flatMap((r) => r.messages)
 			.find((m) => m.role === "toolResult" && m.toolCallId === "nested-1");
 		expect(blocked).toMatchObject({ isError: true });
-		expect(text(blocked)).toBe("This tool is not available in this fork.");
+		expect(text(blocked)).toContain("not available");
 		expect(readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"))).toHaveLength(1);
 
 		// A fork outside branch search (a reflection) reaches the tool, which refuses it.

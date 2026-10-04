@@ -252,7 +252,7 @@ describe("worktree forks", () => {
 
 		expect(toolResult(messages, "ls-1")).toEqual({
 			isError: true,
-			text: expect.stringContaining("This tool is not available inside a branch search attempt."),
+			text: expect.stringContaining("not available"),
 		});
 		const forkRequests = requests.slice(requests.indexOf(parentRequest as Context) + 1);
 		expect(forkRequests.length).toBeGreaterThan(0);

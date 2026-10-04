@@ -1,35 +1,71 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-	fauxAssistantMessage,
-	fauxText,
-	fauxToolCall,
-	getCurrentSystemPrompt,
-	getCurrentTools,
-} from "@earendil-works/pi-ai";
-import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
-import { type AgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
+import type { Context } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import type {
+	AgentSession,
+	ExtensionContext,
+	ExtensionFactory,
+	ExtensionToolContext,
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { inForkedContinuation } from "../../shared/src/fork-context.js";
+import * as forks from "../../shared/src/forked-continuation.js";
 import { AgentManager } from "../src/agent-manager.js";
-import * as runner from "../src/agent-runner.js";
-import { captureClarifyContext, createClarifyTool } from "../src/clarify.js";
+import { createClarifyTool } from "../src/clarify.js";
 import type { AgentConfig } from "../src/types.js";
 
-const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-clarify-agent-"));
-const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-process.env.PI_CODING_AGENT_DIR = agentDir;
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
 	for (const fn of cleanup.splice(0).reverse()) await fn();
 	vi.restoreAllMocks();
 });
-afterAll(() => {
-	if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-	rmSync(agentDir, { recursive: true, force: true });
-});
+
+function lastText(context: Context): string {
+	return JSON.stringify(context.messages.at(-1));
+}
+
+async function setup(extensions: ExtensionFactory[] = []) {
+	const manager = new AgentManager();
+	cleanup.push(() => manager.dispose());
+	let parent!: ExtensionContext;
+	let reply: (context: Context) => Reply | "until-aborted" = () => fauxAssistantMessage("settled");
+	const run = await fauxSession(
+		[
+			(pi) => {
+				pi.on("session_start", (_event, ctx) => {
+					parent = ctx;
+				});
+			},
+			...extensions,
+		],
+		(context) => reply(context),
+		["read", "write", "edit", "bash", "ls", "grep", "find"],
+	);
+	cleanup.push(run.dispose);
+	const stream = run.session.agent.streamFunction;
+	const optionsSeen: Array<{ sessionId?: string; reasoning?: string; model: string }> = [];
+	run.session.agent.streamFunction = (model, context, options) => {
+		optionsSeen.push({ sessionId: options?.sessionId, reasoning: options?.reasoning, model: model.id });
+		return stream(model, context, options);
+	};
+	await run.session.prompt("Original parent request");
+	return {
+		...run,
+		manager,
+		parent,
+		optionsSeen,
+		respond: (next: typeof reply) => {
+			reply = next;
+		},
+	};
+}
+
+function execute(parent: ExtensionContext, question: string, signal?: AbortSignal) {
+	return createClarifyTool(parent).execute("question", { question }, signal, undefined, parent as ExtensionToolContext);
+}
 
 const config: AgentConfig = {
 	name: "clarify-test-child",
@@ -42,57 +78,113 @@ const config: AgentConfig = {
 	systemPrompt: "Do your assigned task.",
 };
 
-function setup() {
-	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-clarify-"));
-	cleanup.push(() => rmSync(cwd, { recursive: true, force: true }));
-	const faux = registerFauxProvider({
-		provider: "faux",
-		models: [
-			{ id: "parent", contextWindow: 200_000, reasoning: true },
-			{ id: "child", contextWindow: 200_000 },
-		],
-	});
-	cleanup.push(() => faux.unregister());
-	const model = faux.getModel("parent")!;
-	const parent = {
-		cwd,
-		model,
-		thinkingLevel: "high" as const,
-		modelRegistry: fauxModelBackend(model).modelRegistry,
-		sessionManager: SessionManager.inMemory(cwd),
-		getSystemPrompt: () => "Parent instruction: respect the agreed scope.",
-		isProjectTrusted: () => false,
-		isIdle: vi.fn(() => false),
-		abort: vi.fn(),
-	} as any;
-	const pi = { exec: vi.fn(async () => ({ code: 1, stdout: "", stderr: "" })) } as any;
-	parent.sessionManager.appendMessage({ role: "user", content: "Original parent request", timestamp: 1 });
-	return { cwd, faux, parent, pi };
-}
-
-function observeForks() {
-	const original = runner.runAgent;
-	const sessions: AgentSession[] = [];
-	const disposals: ReturnType<typeof vi.spyOn>[] = [];
-	vi.spyOn(runner, "runAgent").mockImplementation((ctx, type, prompt, options) =>
-		original(ctx, type, prompt, {
-			...options,
-			onSessionCreated: (session) => {
-				if (type === "parent-clarification") {
-					sessions.push(session);
-					disposals.push(vi.spyOn(session, "dispose"));
-				}
-				options.onSessionCreated?.(session);
+describe("clarify live parent forks", () => {
+	it("answers at pool capacity and returns usage only to the calling child", async () => {
+		const run = await setup();
+		const previousDir = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = join(run.cwd, "agent");
+		cleanup.push(() => {
+			if (previousDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previousDir;
+		});
+		const manager = run.manager;
+		manager.setMaxConcurrent(1);
+		const before = structuredClone(run.session.sessionManager.getEntries());
+		run.respond(() => ({
+			...fauxAssistantMessage("Parent advice"),
+			usage: { ...fauxAssistantMessage("").usage, input: 100, output: 10, totalTokens: 110 },
+		}));
+		let turn = 0;
+		const id = manager.spawn(
+			{ exec: vi.fn(async () => ({ code: 1, stdout: "", stderr: "" })) } as any,
+			run.parent,
+			config.name,
+			"Ask the parent",
+			{
+				description: "test",
+				agentConfig: config,
+				isBackground: true,
+				enableClarify: true,
+				loadStandardChildExtensions: false,
+				onSessionCreated: (child) => {
+					child.agent.streamFunction = (_model, context) => {
+						const message =
+							turn++ === 0
+								? fauxAssistantMessage(fauxToolCall("clarify", { question: "What was decided?" }), {
+										stopReason: "toolUse",
+									})
+								: fauxAssistantMessage("CHILD-DONE");
+						if (turn > 1) expect(JSON.stringify(context.messages)).toContain("Parent advice");
+						const events = createAssistantMessageEventStream();
+						events.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });
+						events.end(message);
+						return events;
+					};
+				},
 			},
-		}),
-	);
-	return { sessions, disposals };
-}
+		);
+		const record = manager.getRecord(id)!;
+		await record.promise;
+		expect(record.error).toBeUndefined();
+		expect(record.result).toBe("CHILD-DONE");
+		const result = record.session!.messages.find(
+			(message) => message.role === "toolResult" && message.toolName === "clarify",
+		);
+		expect(result).toMatchObject({ usage: { input: 100, output: 10, totalTokens: 110 } });
+		expect(record.lifetimeUsage).toMatchObject({ input: 100, output: 10 });
+		expect(run.session.sessionManager.getEntries()).toEqual(before);
+	}, 30_000);
 
-describe("clarify parent snapshots", () => {
-	it("copies the active compaction-aware branch, images, tool evidence, and pending-call placeholders", () => {
-		const { parent } = setup();
-		const sm: SessionManager = parent.sessionManager;
+	it("preserves the request prefix, model, reasoning, tools, and cache identity", async () => {
+		const run = await setup();
+		const before = structuredClone(run.session.sessionManager.getEntries());
+		const parentRequest = run.requests.at(-1)!;
+		run.respond(() => ({
+			...fauxAssistantMessage("Stay in the agreed scope."),
+			usage: { ...fauxAssistantMessage("").usage, input: 100, output: 10, totalTokens: 110 },
+		}));
+		const result = await execute(run.parent, "What is the scope?");
+		const request = run.requests.at(-1)!;
+		expect(request.systemPrompt).toEqual(parentRequest.systemPrompt);
+		expect(request.tools).toEqual(parentRequest.tools);
+		expect(request.messages.slice(0, parentRequest.messages.length)).toEqual(parentRequest.messages);
+		expect(request.messages.slice(parentRequest.messages.length).map((message) => message.role)).toEqual([
+			"assistant",
+			"user",
+		]);
+		expect(lastText(request)).toContain("What is the scope?");
+		expect(run.optionsSeen.at(-1)).toEqual(run.optionsSeen[0]);
+		expect(result.content).toEqual([{ type: "text", text: "Stay in the agreed scope." }]);
+		expect(result.usage).toMatchObject({ input: 100, output: 10, totalTokens: 110 });
+		expect(run.session.sessionManager.getEntries()).toEqual(before);
+	});
+
+	it("takes a fresh independent projection and the current parent model for every invocation", async () => {
+		const run = await setup();
+		run.respond(() => fauxAssistantMessage("answer-1"));
+		await execute(run.parent, "first question");
+		run.respond(() => fauxAssistantMessage("New settled decision"));
+		await run.session.prompt("New parent decision");
+		const current = { ...run.session.agent.state.model, id: "current-parent-model" };
+		run.session.agent.state.model = current;
+		run.session.agent.state.thinkingLevel = "high";
+		run.respond(() => fauxAssistantMessage("answer-2"));
+		const second = await execute(run.parent, "second question");
+		const request = run.requests.at(-1)!;
+		expect(JSON.stringify(request.messages)).toContain("New parent decision");
+		expect(JSON.stringify(request.messages)).not.toContain("answer-1");
+		expect(JSON.stringify(request.messages)).not.toContain("first question");
+		expect(run.optionsSeen.at(-1)).toMatchObject({
+			model: current.id,
+			reasoning: "high",
+			sessionId: run.session.agent.sessionId,
+		});
+		expect(second.details.model).toBe(current.id);
+	});
+
+	it("uses the compacted active branch, images, and tool evidence without modifying parent messages", async () => {
+		const run = await setup();
+		const sm = run.session.sessionManager;
 		const abandoned = sm.appendMessage({ role: "user", content: "abandoned branch", timestamp: 2 });
 		sm.branch(sm.getEntry(abandoned)!.parentId!);
 		const kept = sm.appendMessage({
@@ -102,13 +194,7 @@ describe("clarify parent snapshots", () => {
 		});
 		sm.appendCompaction("Earlier decisions", kept, 1000);
 		sm.appendMessage(
-			fauxAssistantMessage(
-				[
-					fauxToolCall("read", { path: "done" }, { id: "read-done" }),
-					fauxToolCall("agent", {}, { id: "agent-pending" }),
-				],
-				{ stopReason: "toolUse" },
-			),
+			fauxAssistantMessage([fauxToolCall("read", { path: "done" }, { id: "read-done" })], { stopReason: "toolUse" }),
 		);
 		sm.appendMessage({
 			role: "toolResult",
@@ -119,235 +205,213 @@ describe("clarify parent snapshots", () => {
 			timestamp: 4,
 		});
 		const before = structuredClone(sm.getEntries());
-		const fork = captureClarifyContext(parent);
-		const messages = fork.sessionManager.buildSessionContext().messages;
-		expect(JSON.stringify(messages)).toContain("Earlier decisions");
-		expect(JSON.stringify(messages)).not.toContain("abandoned branch");
-		expect(JSON.stringify(messages)).not.toContain("Original parent request");
-		expect(messages).toContainEqual(
-			expect.objectContaining({ role: "user", content: [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }] }),
-		);
-		expect(messages).toContainEqual(
-			expect.objectContaining({ role: "toolResult", toolCallId: "read-done", isError: false }),
-		);
-		expect(messages.at(-1)).toMatchObject({ role: "toolResult", toolCallId: "agent-pending", isError: true });
-		expect(JSON.stringify(messages.at(-1))).toContain("unavailable at clarification snapshot time");
-		expect(fork.sessionManager.isPersisted()).toBe(false);
-		messages.find((message) => message.role === "toolResult")!.content = [];
+		run.respond(() => fauxAssistantMessage("answer"));
+		await execute(run.parent, "What is known?");
+		const messages = JSON.stringify(run.requests.at(-1)!.messages);
+		expect(messages).toContain("Earlier decisions");
+		expect(messages).toContain("image/png");
+		expect(messages).toContain("observed evidence");
+		expect(messages).not.toContain("abandoned branch");
+		expect(messages).not.toContain("Original parent request");
 		expect(sm.getEntries()).toEqual(before);
-		parent.getSystemPrompt = () => "changed later";
-		expect(fork.getSystemPrompt()).toContain("respect the agreed scope");
 	});
-});
 
-describe("clarify with real Pi sessions", () => {
-	it("answers independently at pool capacity, uses fresh parent context/model, and returns usage to the child", async () => {
-		const { cwd, faux, parent, pi } = setup();
-		writeFileSync(join(cwd, "evidence.txt"), "verified locally");
-		const { sessions, disposals } = observeForks();
-		const manager = new AgentManager();
-		manager.setMaxConcurrent(1);
-		cleanup.push(() => manager.dispose());
-		faux.setResponses([
-			(context, _options, _state, model) => {
-				expect(model.id).toBe("child");
-				expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("clarify");
-				expect(JSON.stringify(context.messages)).not.toContain("Original parent request");
-				parent.sessionManager.appendMessage({
-					role: "user",
-					content: "Latest decision: keep it read-only",
-					timestamp: 5,
-				});
-				return fauxAssistantMessage([fauxToolCall("clarify", { question: "What was decided? Check evidence.txt." })], {
-					stopReason: "toolUse",
-				});
-			},
-			(context, options, _state, model) => {
-				expect(model.id).toBe("parent");
-				expect(options?.reasoning).toBe("high");
-				const toolNames = getCurrentTools(context.messages).map((tool) => tool.name);
-				expect(toolNames.sort(), JSON.stringify(toolNames)).toEqual(["find", "grep", "ls", "read"]);
-				expect(getCurrentSystemPrompt(context.messages)).toContain("respect the agreed scope");
-				expect(JSON.stringify(context.messages)).toContain("Latest decision: keep it read-only");
-				return fauxAssistantMessage([fauxToolCall("read", { path: "evidence.txt" })], { stopReason: "toolUse" });
-			},
+	it("appends placeholders for unfinished parent tools without executing them or changing the prefix", async () => {
+		let session!: AgentSession;
+		let parent!: ExtensionContext;
+		let answer: unknown;
+		const pending: ExtensionFactory = (pi) => {
+			pi.on("session_start", (_event, ctx) => {
+				parent = ctx;
+			});
+			pi.registerTool({
+				name: "pending",
+				label: "Pending",
+				description: "A live parent tool",
+				parameters: Type.Object({}),
+				async execute() {
+					const before = structuredClone(session.sessionManager.buildSessionProjection().messages);
+					answer = await execute(parent, "Explain while the parent is working");
+					expect(session.sessionManager.buildSessionProjection().messages).toEqual(before);
+					return { content: [{ type: "text", text: "real parent result" }], details: {} };
+				},
+			});
+		};
+		forks.trackLiveSessions();
+		const run = await fauxSession(
+			[pending],
 			(context) => {
-				expect(JSON.stringify(context.messages), JSON.stringify(context.messages)).toContain("verified locally");
-				return fauxAssistantMessage([fauxText("Keep it read-only; evidence verified.")]);
+				if (lastText(context).includes("Explain while")) return fauxAssistantMessage("fork answer");
+				if (context.messages.at(-1)?.role === "toolResult") return fauxAssistantMessage("parent done");
+				return fauxAssistantMessage(fauxToolCall("pending", {}, { id: "pending-parent" }), { stopReason: "toolUse" });
 			},
-			(context) => {
-				expect(JSON.stringify(context.messages)).toContain("Keep it read-only; evidence verified.");
-				return fauxAssistantMessage([fauxText("CHILD-DONE")]);
+			["pending"],
+		);
+		cleanup.push(run.dispose);
+		session = run.session;
+		await session.prompt("go");
+		const forkRequest = run.requests.find((request) => lastText(request).includes("Explain while"))!;
+		const parentNext = run.requests.at(-1)!;
+		const placeholder = forkRequest.messages.at(-2);
+		expect(placeholder).toMatchObject({ role: "toolResult", toolCallId: "pending-parent", isError: true });
+		expect(JSON.stringify(placeholder)).toContain("unavailable at clarification snapshot time");
+		expect(forkRequest.messages.slice(0, -2)).toEqual(parentNext.messages.slice(0, -1));
+		expect(forkRequest.tools).toEqual(parentNext.tools);
+		expect(answer).toMatchObject({ content: [{ text: "fork answer" }] });
+	});
+
+	it("executes read-only tools through the parent hooks and blocks mutations, delegation, and further clarification", async () => {
+		const seen: string[] = [];
+		const run = await setup([
+			(pi) => {
+				pi.on("tool_call", (event) => {
+					expect(inForkedContinuation()).toBe(true);
+					seen.push(event.toolName);
+				});
+				for (const name of ["agent", "clarify"])
+					pi.registerTool({
+						name,
+						label: name,
+						description: "blocked",
+						parameters: Type.Object({}),
+						execute: async () => {
+							throw new Error("must not execute");
+						},
+					});
 			},
 		]);
-		const id = manager.spawn(pi, parent, config.name, "Perform your task", {
-			description: "test",
-			agentConfig: config,
-			model: faux.getModel("child"),
-			modelResolved: true,
-			isBackground: true,
-			isolated: true,
-			enableClarify: true,
-			loadStandardChildExtensions: false,
+		run.session.setActiveToolsByName([...run.session.getActiveToolNames(), "agent", "clarify"]);
+		writeFileSync(join(run.cwd, "evidence.txt"), "verified locally");
+		let turn = 0;
+		run.respond((context) => {
+			if (turn++ === 0)
+				return fauxAssistantMessage(
+					[
+						fauxToolCall("read", { path: "evidence.txt" }, { id: "read" }),
+						fauxToolCall("write", { path: "escaped.txt", content: "bad" }, { id: "write" }),
+						fauxToolCall("bash", { command: "touch escaped.txt" }, { id: "bash" }),
+						fauxToolCall("agent", {}, { id: "agent" }),
+						fauxToolCall("clarify", {}, { id: "clarify" }),
+					],
+					{ stopReason: "toolUse" },
+				);
+			expect(JSON.stringify(context.messages)).toContain("verified locally");
+			for (const tool of ["write", "bash", "agent", "clarify"])
+				expect(
+					context.messages.find((message) => message.role === "toolResult" && message.toolCallId === tool),
+				).toMatchObject({ isError: true });
+			return fauxAssistantMessage("Keep it read-only; evidence verified.");
 		});
-		const record = manager.getRecord(id)!;
-		await record.promise;
-		expect(record.error).toBeUndefined();
-		expect(record.status).toBe("completed");
-		expect(record.result).toBe("CHILD-DONE");
-		expect(sessions).toHaveLength(1);
-		expect(sessions[0].sessionFile).toBeUndefined();
-		expect(disposals[0]).toHaveBeenCalledTimes(1);
-		const result = record.session!.messages.find(
-			(message) => message.role === "toolResult" && message.toolName === "clarify",
-		);
-		expect(result).toMatchObject({ usage: { input: expect.any(Number), totalTokens: expect.any(Number) } });
-		expect(parent.isIdle).not.toHaveBeenCalled();
-		expect(parent.abort).not.toHaveBeenCalled();
-		expect(JSON.stringify(parent.sessionManager.getEntries())).not.toContain("Keep it read-only; evidence verified.");
-	}, 30_000);
+		const result = await execute(run.parent, "Check the evidence");
+		expect(result.content[0]).toMatchObject({ text: "Keep it read-only; evidence verified." });
+		expect(seen).toEqual(["read"]);
+		expect(existsSync(join(run.cwd, "escaped.txt"))).toBe(false);
+		expect(inForkedContinuation()).toBe(false);
+	});
 
-	it("takes a new independent snapshot for each call", async () => {
-		const { faux, parent, pi } = setup();
-		const tool = createClarifyTool(pi, parent);
-		const { sessions, disposals } = observeForks();
-		const seen: string[] = [];
-		faux.setResponses(
-			[1, 2].map((n) => (context) => {
-				seen.push(JSON.stringify(context.messages));
-				return fauxAssistantMessage([fauxText(`answer-${n}`)]);
-			}),
-		);
-		await tool.execute("first", { question: "first question" }, undefined, undefined, parent);
-		parent.sessionManager.appendMessage({ role: "user", content: "New parent decision", timestamp: 7 });
-		await tool.execute("second", { question: "second question" }, undefined, undefined, parent);
-		expect(seen[0]).not.toContain("New parent decision");
-		expect(seen[1]).toContain("New parent decision");
-		expect(seen[1]).not.toContain("answer-1");
-		expect(sessions[0].sessionId).not.toBe(sessions[1].sessionId);
-		for (const dispose of disposals) expect(dispose).toHaveBeenCalledTimes(1);
-	}, 30_000);
-
-	it("cancels the ephemeral fork when its child is stopped and disposes it", async () => {
-		const { faux, parent, pi } = setup();
-		const { disposals } = observeForks();
-		const manager = new AgentManager();
-		cleanup.push(() => manager.dispose());
+	it("cancels clarification when its calling child is stopped", async () => {
+		const run = await setup();
+		const previousDir = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = join(run.cwd, "agent");
+		cleanup.push(() => {
+			if (previousDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previousDir;
+		});
+		const manager = run.manager;
 		let entered!: () => void;
-		const enteredFork = new Promise<void>((resolve) => {
+		const pending = new Promise<void>((resolve) => {
 			entered = resolve;
 		});
-		faux.setResponses([
-			() => fauxAssistantMessage([fauxToolCall("clarify", { question: "Help?" })], { stopReason: "toolUse" }),
-			async (_context, options) => {
-				entered();
-				await new Promise<void>((resolve) =>
-					options!.signal!.addEventListener("abort", () => resolve(), { once: true }),
-				);
-				return fauxAssistantMessage([], { stopReason: "aborted" });
-			},
-		]);
-		const id = manager.spawn(pi, parent, config.name, "ask", {
-			description: "test",
-			agentConfig: config,
-			enableClarify: true,
-			loadStandardChildExtensions: false,
+		run.respond(() => {
+			entered();
+			return "until-aborted";
 		});
-		await enteredFork;
+		let forkSignal: AbortSignal | undefined;
+		const original = run.session.agent.streamFunction;
+		run.session.agent.streamFunction = (model, context, options) => {
+			forkSignal = options?.signal;
+			return original(model, context, options);
+		};
+		const id = manager.spawn(
+			{ exec: vi.fn(async () => ({ code: 1, stdout: "", stderr: "" })) } as any,
+			run.parent,
+			config.name,
+			"Ask the parent",
+			{
+				description: "test",
+				agentConfig: config,
+				enableClarify: true,
+				loadStandardChildExtensions: false,
+				onSessionCreated: (child) => {
+					child.agent.streamFunction = (_model, _context, options) => {
+						const message = options?.signal?.aborted
+							? fauxAssistantMessage("", { stopReason: "aborted" })
+							: fauxAssistantMessage(fauxToolCall("clarify", { question: "Help?" }), { stopReason: "toolUse" });
+						const events = createAssistantMessageEventStream();
+						if (message.stopReason === "aborted") events.push({ type: "error", reason: "aborted", error: message });
+						else events.push({ type: "done", reason: "toolUse", message });
+						events.end(message);
+						return events;
+					};
+				},
+			},
+		);
+		await pending;
 		manager.abort(id);
 		await manager.getRecord(id)!.promise;
 		expect(manager.getRecord(id)!.status).toBe("stopped");
-		expect(disposals[0]).toHaveBeenCalledTimes(1);
-		expect(parent.abort).not.toHaveBeenCalled();
+		expect(forkSignal?.aborted).toBe(true);
+		run.respond(() => fauxAssistantMessage("parent still works"));
+		await run.session.prompt("Continue the parent task");
+		expect(run.session.getLastAssistantText()).toBe("parent still works");
 	}, 30_000);
 
-	it("reports provider failures rather than inherited parent answers, and always disposes", async () => {
-		const { faux, parent, pi } = setup();
-		parent.sessionManager.appendMessage(fauxAssistantMessage([fauxText("old parent answer")]));
-		const { disposals } = observeForks();
-		faux.setResponses([() => fauxAssistantMessage([], { stopReason: "error", errorMessage: "request rejected" })]);
-		await expect(
-			createClarifyTool(pi, parent).execute("failure", { question: "Help?" }, undefined, undefined, parent),
-		).rejects.toThrow("request rejected");
-		expect(disposals[0]).toHaveBeenCalledTimes(1);
-	}, 30_000);
-
-	it("releases a cancelled clarification while its fork is still settling", async () => {
-		const { parent, pi } = setup();
-		const dispose = vi.fn();
-		const session = {
-			extensionRunner: { emit: vi.fn() },
-			dispose,
-			subscribe: vi.fn(() => () => {}),
-		} as unknown as AgentSession;
-		let finish!: () => void;
-		const pending = new Promise<never>((_resolve, reject) => {
-			finish = () => reject(new Error("fork aborted"));
-		});
-		vi.spyOn(runner, "runAgent").mockImplementation((_ctx, _type, _prompt, options) => {
-			options.onSessionCreated?.(session);
-			return pending;
-		});
-		const controller = new AbortController();
-		const call = createClarifyTool(pi, parent).execute(
-			"pending",
-			{ question: "What happened?" },
-			controller.signal,
-			undefined,
-			parent,
-		);
-		try {
-			controller.abort();
-			const outcome = call.then(
-				() => "completed",
-				() => "aborted",
-			);
-			expect(await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))])).toBe(
-				"aborted",
-			);
-			expect(dispose).not.toHaveBeenCalled();
-		} finally {
-			finish();
-		}
-		await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
-	});
-
-	it("releases clarification interrupted during fork startup", async () => {
-		const { parent, pi } = setup();
+	it("cancels only the ephemeral fork and releases a call while the provider is still settling", async () => {
+		const run = await setup();
 		let release!: () => void;
-		const git = new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-			release = () => resolve({ code: 1, stdout: "", stderr: "" });
+		let entered!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			entered = resolve;
 		});
-		pi.exec.mockImplementation(() => git);
+		const original = run.session.agent.streamFunction;
+		let forkSignal: AbortSignal | undefined;
+		run.session.agent.streamFunction = async (model, context, options) => {
+			forkSignal = options?.signal;
+			entered();
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return original(model, context, options);
+		};
+		run.respond(() => "until-aborted");
 		const controller = new AbortController();
-		const call = createClarifyTool(pi, parent).execute(
-			"start",
-			{ question: "What was decided?" },
-			controller.signal,
-			undefined,
-			parent,
-		);
-		try {
-			controller.abort();
-			const outcome = call.then(
-				() => "completed",
-				() => "aborted",
-			);
-			expect(await Promise.race([outcome, new Promise((resolve) => setTimeout(() => resolve("waiting"), 50))])).toBe(
-				"aborted",
-			);
-		} finally {
-			release();
-		}
+		const call = execute(run.parent, "Help?", controller.signal);
+		await pending;
+		controller.abort();
+		await expect(call).rejects.toThrow();
+		expect(forkSignal?.aborted).toBe(true);
+		release();
+		run.session.agent.streamFunction = original;
+		run.respond(() => fauxAssistantMessage("parent still works"));
+		await run.session.prompt("Continue the parent task");
+		expect(run.session.getLastAssistantText()).toBe("parent still works");
 	});
 
-	it("avoids creating a fork for a blank question or an already cancelled call", async () => {
-		const { parent, pi } = setup();
-		const tool = createClarifyTool(pi, parent);
-		await expect(tool.execute("blank", { question: " " }, undefined, undefined, parent)).rejects.toThrow("blank");
-		await expect(
-			tool.execute("cancelled", { question: "Help?" }, AbortSignal.abort(), undefined, parent),
-		).rejects.toThrow();
-		expect(pi.exec).not.toHaveBeenCalled();
+	it("reports failed or empty replies instead of returning an inherited parent answer", async () => {
+		const run = await setup();
+		run.respond(() => fauxAssistantMessage([], { stopReason: "error", errorMessage: "request rejected" }));
+		await expect(execute(run.parent, "Help?")).rejects.toThrow("request rejected");
+		run.respond(() => fauxAssistantMessage(""));
+		await expect(execute(run.parent, "Help?")).rejects.toThrow("without a reply");
+	});
+
+	it("fails closed for an unavailable live parent, blank question, or cancelled caller", async () => {
+		const run = await setup();
+		const requestCount = run.requests.length;
+		await expect(execute(run.parent, " ")).rejects.toThrow("blank");
+		await expect(execute(run.parent, "Help?", AbortSignal.abort())).rejects.toThrow();
+		const missing = { ...run.parent, sessionManager: {} } as ExtensionContext;
+		await expect(execute(missing, "Help?")).rejects.toThrow("live parent session is not available");
+		expect(run.requests).toHaveLength(requestCount);
 	});
 });

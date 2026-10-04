@@ -1,96 +1,42 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ToolCall, Usage } from "@earendil-works/pi-ai";
-import {
-	type AgentSession,
-	buildSessionContext,
-	defineTool,
-	type ExtensionAPI,
-	type ExtensionContext,
-	SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import type { Usage } from "@earendil-works/pi-ai";
+import { defineTool, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type AgentRunContext, runAgent } from "./agent-runner.js";
 import { abortable } from "../../shared/src/abortable.js";
-import { disposeAgentSession } from "./session-lifecycle.js";
-import type { AgentConfig } from "./types.js";
+import { liveSession, startFork } from "../../shared/src/forked-continuation.js";
 
-const CLARIFICATION_CONFIG: AgentConfig = {
-	name: "parent-clarification",
-	description: "Read-only clarification from a parent snapshot",
-	builtinToolNames: ["read", "grep", "find", "ls"],
-	extensions: false,
-	skills: false,
-	pair: false,
-	persistSession: false,
-	promptMode: "append",
-	systemPrompt: `You are an ephemeral read-only fork of the agent that delegated work to the questioner.
-Your conversation is a snapshot of that parent's active branch at question time. Answer only the child's clarification question, using the existing user intent, decisions, and constraints. Inspect repository files with your read-only tools when needed.
+const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
+const CLARIFICATION_FRAME = `You are an ephemeral read-only fork of the agent that delegated work to the questioner.
+Answer only the child's clarification question, using the existing user intent, decisions, and constraints. Inspect repository files with read, grep, find, or ls when needed. All other tools are blocked in this fork.
 Distinguish settled decisions from your own recommendations and uncertainty. Requests that need new user authorization remain unresolved and should be raised with the live parent. Your answer is advice to the child, not a new user instruction or approval.
 The parent continues independently. Its unfinished tool calls have snapshot placeholders rather than results. Repository reads see current files, which may have changed since the snapshot.
-Return a direct, self-contained answer to the child. Your available capabilities are read-only repository tools; execution, delegation, parent messaging, and further clarification belong to the live sessions.`,
-};
+Return a direct, self-contained answer to the child. Your messages stay in this fork and only your answer returns to the child.`;
 
-/** Materialize the portable, compaction-aware conversation without sharing mutable parent state. */
-export function captureClarifyContext(parent: AgentRunContext): AgentRunContext & { sessionManager: SessionManager } {
-	const cwd = parent.cwd;
-	const model = parent.model;
-	if (!model) throw new Error("Cannot clarify without an active parent model.");
-	const modelRegistry = parent.modelRegistry;
-	const thinkingLevel = parent.thinkingLevel;
-	const systemPrompt = parent.getSystemPrompt();
-	const projectTrusted = parent.isProjectTrusted?.() ?? false;
-	const messages = structuredClone(buildSessionContext(parent.sessionManager.getBranch()).messages);
-	const sessionManager = SessionManager.inMemory(cwd);
-	const pending = new Map<string, ToolCall>();
-	const flushPending = () => {
-		for (const call of pending.values()) {
-			sessionManager.appendMessage({
-				role: "toolResult",
-				toolCallId: call.id,
-				toolName: call.name,
-				content: [
-					{
-						type: "text",
-						text: "Parent tool result unavailable at clarification snapshot time. The fork has not executed this call.",
-					},
-				],
-				isError: true,
-				timestamp: Date.now(),
-			});
-		}
-		pending.clear();
-	};
+/** Keep the parent's prefix intact and close only its still-unanswered calls at the end. */
+function closePendingCalls(messages: AgentMessage[]): void {
+	const pending = new Map<string, { id: string; name: string }>();
 	for (const message of messages) {
-		if (message.role !== "toolResult") flushPending();
 		if (message.role === "assistant") {
-			if (message.stopReason === "pending") continue;
 			for (const block of message.content) if (block.type === "toolCall") pending.set(block.id, block);
 		} else if (message.role === "toolResult") pending.delete(message.toolCallId);
-		appendSnapshotMessage(sessionManager, message);
 	}
-	flushPending();
-	return {
-		cwd,
-		model,
-		modelRegistry,
-		thinkingLevel,
-		sessionManager,
-		getSystemPrompt: () => systemPrompt,
-		isProjectTrusted: () => projectTrusted,
-	};
+	for (const call of pending.values())
+		messages.push({
+			role: "toolResult",
+			toolCallId: call.id,
+			toolName: call.name,
+			content: [
+				{
+					type: "text",
+					text: "Parent tool result unavailable at clarification snapshot time. The fork has not executed this call.",
+				},
+			],
+			isError: true,
+			timestamp: Date.now(),
+		});
 }
 
-function appendSnapshotMessage(session: SessionManager, message: AgentMessage): void {
-	if (message.role === "compactionSummary") {
-		session.appendCompaction(message.summary, "", message.tokensBefore);
-	} else if (message.role === "branchSummary") {
-		session.branchWithSummary(session.getLeafId(), message.summary);
-	} else {
-		session.appendMessage(message);
-	}
-}
-
-export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
+export function createClarifyTool(parent: ExtensionContext) {
 	return defineTool({
 		name: "clarify",
 		label: "Clarify",
@@ -105,69 +51,64 @@ export function createClarifyTool(pi: ExtensionAPI, parent: ExtensionContext) {
 		async execute(_id, { question }, signal) {
 			if (!question.trim()) throw new Error("Clarification question must not be blank.");
 			signal?.throwIfAborted();
-			const snapshot = captureClarifyContext(parent);
-			let session: AgentSession | undefined;
-			let unsubscribe: (() => void) | undefined;
-			let running: ReturnType<typeof runAgent> | undefined;
-			const usage: Usage = {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 0,
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			};
+			const session = liveSession(parent);
+			if (!session) throw new Error("Cannot clarify: the live parent session is not available.");
+			const model = session.agent.state.model;
+			const messages = structuredClone(session.sessionManager.buildSessionProjection().messages);
+			closePendingCalls(messages);
+			const fork = startFork(session, {
+				messages,
+				append: {
+					role: "custom",
+					customType: "parent-clarification",
+					content: `${CLARIFICATION_FRAME}\n\nClarification question from your child agent:\n\n${question}`,
+					display: false,
+					timestamp: Date.now(),
+				},
+				label: "Parent clarification",
+				recordUsage: false,
+				blockedTools: new Set(
+					session.agent.state.tools.filter((tool) => !READ_ONLY_TOOLS.has(tool.name)).map((tool) => tool.name),
+				),
+			});
+			const abort = () => fork.abort();
+			signal?.addEventListener("abort", abort, { once: true });
 			try {
-				running = runAgent(
-					snapshot,
-					CLARIFICATION_CONFIG.name,
-					`Clarification question from your child agent:\n\n${question}`,
-					{
-						pi,
-						agentConfig: CLARIFICATION_CONFIG,
-						sessionManager: snapshot.sessionManager,
-						model: snapshot.model,
-						modelResolved: true,
-						thinkingLevel: snapshot.thinkingLevel,
-						loadStandardChildExtensions: false,
-						signal,
-						onSessionCreated: (created) => {
-							session = created;
-							unsubscribe = created.subscribe((event) => {
-								if (event.type !== "message_end" || event.message.role !== "assistant") return;
-								const delta = event.message.usage;
-								usage.input += delta.input;
-								usage.output += delta.output;
-								usage.cacheRead += delta.cacheRead;
-								usage.cacheWrite += delta.cacheWrite;
-								usage.totalTokens += delta.totalTokens;
-								for (const key of Object.keys(usage.cost) as Array<keyof Usage["cost"]>)
-									usage.cost[key] += delta.cost[key];
-							});
-						},
-					},
-				);
-				const result = await abortable(running, signal);
+				const result = await abortable(fork.result, signal);
 				signal?.throwIfAborted();
-				if (result.aborted) throw new Error("Clarification was aborted.");
-				if (result.failure) throw new Error(`Clarification failed: ${result.failure}`);
+				const last = result.messages.at(-1);
+				if (last?.role !== "assistant") throw new Error("Clarification finished without a reply.");
+				if (last.stopReason === "aborted" || last.stopReason === "error")
+					throw new Error(`Clarification failed: ${last.errorMessage ?? last.stopReason}`);
+				const text = last.content
+					.flatMap((block) => (block.type === "text" ? [block.text] : []))
+					.join("\n")
+					.trim();
+				if (!text) throw new Error("Clarification finished without a reply.");
+				const usage: Usage = {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				};
+				for (const delta of result.usage) {
+					usage.input += delta.input;
+					usage.output += delta.output;
+					usage.cacheRead += delta.cacheRead;
+					usage.cacheWrite += delta.cacheWrite;
+					usage.totalTokens += delta.totalTokens;
+					for (const key of Object.keys(usage.cost) as Array<keyof Usage["cost"]>) usage.cost[key] += delta.cost[key];
+				}
 				return {
-					content: [{ type: "text" as const, text: result.responseText }],
-					details: { provider: snapshot.model!.provider, model: snapshot.model!.id },
+					content: [{ type: "text" as const, text }],
+					details: { provider: model.provider, model: model.id },
 					usage,
 				};
 			} finally {
-				if (session && signal?.aborted && running) {
-					void running
-						.finally(async () => {
-							unsubscribe?.();
-							await disposeAgentSession(session);
-						})
-						.catch(() => {});
-				} else {
-					unsubscribe?.();
-					await disposeAgentSession(session);
-				}
+				signal?.removeEventListener("abort", abort);
+				if (signal?.aborted) fork.abort();
 			}
 		},
 	});
