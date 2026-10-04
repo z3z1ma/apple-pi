@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	existsSync,
 	mkdirSync,
@@ -11,18 +12,28 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Context } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
-import { runBranchSearch, type SearchResult } from "../src/orchestrator.js";
+import { runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
 import type { ScorerSpec } from "../src/scorer.js";
-import { gitOut, initRepo, validConfig } from "./fixtures.js";
-
-type Behavior = (Reply | "until-aborted")[];
+import {
+	type Behavior,
+	FIX,
+	finish,
+	gitOut,
+	initFixtureRepo,
+	scriptedModel,
+	text,
+	validConfig,
+	WRONG,
+	withOutput,
+	write,
+} from "./fixtures.js";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -30,48 +41,6 @@ afterEach(() => {
 });
 
 const SEED = new Uint8Array(32).fill(42);
-
-function text(message: Context["messages"][number] | undefined): string {
-	if (!message) return "";
-	if (typeof message.content === "string") return message.content;
-	return message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
-}
-
-function write(path: string, content: string, id: string): Reply {
-	return fauxAssistantMessage(fauxToolCall("write", { path, content }, { id }), { stopReason: "toolUse" });
-}
-
-function finish(result: "done" | "abandoned", learned: string): Reply {
-	return fauxAssistantMessage(`Finished.\nresult: ${result}\nlearned: ${learned}`);
-}
-
-function withOutput(reply: Reply, output: number): Reply {
-	return { ...reply, usage: { ...reply.usage, output } };
-}
-
-const FIX = write("app.ts", "export const value = 2;\n", "fix");
-const WRONG = write("app.ts", "export const value = 3;\n", "wrong");
-
-/**
- * The scripted model: the enumerator prompt gets the candidate list; each branch replies by its
- * approach, one scripted reply per model turn after its directive.
- */
-function scriptedModel(behaviors: Record<string, Behavior>, enumerator?: () => Reply | "until-aborted") {
-	const candidates = Object.keys(behaviors).map((id) => ({
-		id,
-		approach: `approach ${id}`,
-		firstStep: `open app.ts for ${id}`,
-	}));
-	return (context: Context): Reply | "until-aborted" => {
-		if (text(context.messages.at(-1)).includes("Branch search: approach list."))
-			return enumerator?.() ?? fauxAssistantMessage(JSON.stringify({ candidates, preferred: "c1" }));
-		const directive = context.messages.findLastIndex((message) => text(message).includes("Branch search: attempt"));
-		if (directive < 0) return fauxAssistantMessage("Understood.");
-		const approach = /Approach: approach (\S+)/.exec(text(context.messages[directive]))?.[1] as string;
-		const turn = context.messages.slice(directive + 1).filter((message) => message.role === "assistant").length;
-		return behaviors[approach]?.[turn] ?? fauxAssistantMessage("result: done\nlearned: nothing more to do");
-	};
-}
 
 const SCORER: ScorerSpec = {
 	version: 1,
@@ -84,23 +53,20 @@ const SCORER: ScorerSpec = {
 
 async function fixture(
 	behaviors: Record<string, Behavior>,
-	options: { git?: "none" | "empty"; enumerator?: () => Reply | "until-aborted" } = {},
+	options: {
+		git?: "none" | "empty";
+		enumerator?: () => Reply | "until-aborted";
+		author?: Reply[];
+		parentPrompt?: string;
+	} = {},
 ) {
-	const model = scriptedModel(behaviors, options.enumerator);
+	const model = scriptedModel(behaviors, options.enumerator, options.author);
 	const run = await fauxSession([registerTasks], (context) => model(context), ["read", "write", "edit", "ls", "bash"]);
 	cleanup.push(run.dispose);
 	const cwd = realpathSync(run.cwd);
 	if (options.git === "empty") gitOut(cwd, "init", "-q");
-	if (options.git === undefined) {
-		initRepo(cwd, {
-			".gitignore": "agent/\nnode_modules/\n",
-			"check.sh": "grep -q 'value = 2' app.ts\n",
-			"src/keep.txt": "keep\n",
-		});
-		mkdirSync(join(cwd, "node_modules"));
-		writeFileSync(join(cwd, "node_modules", "dep.js"), "dep\n");
-	}
-	await run.session.prompt("Make value equal 2.");
+	if (options.git === undefined) initFixtureRepo(cwd);
+	await run.session.prompt(options.parentPrompt ?? "Make value equal 2.");
 	return { ...run, cwd };
 }
 
@@ -112,15 +78,20 @@ interface SearchRun {
 
 async function search(
 	run: Awaited<ReturnType<typeof fixture>>,
-	overrides: { config?: Record<string, unknown>; scorer?: ScorerSpec; signal?: AbortSignal } = {},
+	overrides: { config?: Record<string, unknown>; signal?: AbortSignal } & Partial<
+		Pick<SearchOptions, "scorer" | "review" | "exclusive">
+	> & { authored?: boolean } = {},
 	onStatus?: (status: string | undefined) => void,
 ): Promise<SearchRun> {
 	const statuses: (string | undefined)[] = [];
 	const result = await runBranchSearch({
+		mode: "human",
 		session: run.session,
 		cwd: run.cwd,
 		config: { ...validConfig(), ...overrides.config },
-		scorer: overrides.scorer ?? SCORER,
+		scorer: overrides.authored ? undefined : (overrides.scorer ?? SCORER),
+		review: overrides.review,
+		exclusive: overrides.exclusive ?? (async () => () => {}),
 		goal: "Make value equal 2.",
 		signal: overrides.signal ?? new AbortController().signal,
 		onStatus: (status) => {
@@ -574,10 +545,12 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 		delete config.apply;
 		delete config.enumerate;
 		const result = await runBranchSearch({
+			mode: "human",
 			session: run.session,
 			cwd: run.cwd,
 			config,
 			scorer: SCORER,
+			exclusive: async () => () => {},
 			signal: new AbortController().signal,
 			onStatus: () => {},
 		});
@@ -589,5 +562,365 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 		expect(run.requests.length).toBe(before);
 		expect(searchRefs(run.cwd)).toEqual([]);
 		expect(existsSync(join(run.cwd, ".git", "apple-pi"))).toBe(false);
+	});
+});
+
+/** A scorer whose file content and gate command carry markers a branch could search for (spec 8.4, A2). */
+const MARKER = "scorer-marker-7f3a";
+const AUTHORED: ScorerSpec = {
+	version: 1,
+	goal: "value is 2",
+	files: [{ path: "hidden/gate-7f3a.sh", content: `# ${MARKER}\nbash check.sh\n` }],
+	protect: ["check.sh"],
+	gates: [{ id: "value", run: "bash hidden/gate-7f3a.sh", onBase: "fail", timeoutSec: 30 }],
+	objectives: [],
+};
+
+function authorReply(spec: unknown): Reply {
+	return fauxAssistantMessage(`\`\`\`json\n${JSON.stringify(spec)}\n\`\`\``);
+}
+
+const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
+
+function stateDir(cwd: string, record: SearchRecord): string {
+	return join(cwd, ".git", "apple-pi", "branch-search", record.id);
+}
+
+function isAuthorRequest(request: Context): boolean {
+	return request.messages.some((message) => text(message).includes("Branch search: acceptance checks."));
+}
+
+describe("authored scorer", { timeout: 30_000 }, () => {
+	it("authors the scorer in a fork, freezes it before the enumerator, and stores exactly the frozen bytes", async () => {
+		const run = await fixture(
+			{ c1: [WRONG, finish("done", "three")], c2: [FIX, finish("done", "two")] },
+			{ author: [authorReply(AUTHORED)] },
+		);
+		const atEnumerate: { record?: SearchRecord; enumeratorRequests?: number; specOnDisk?: boolean } = {};
+		const { result, record } = await search(run, { authored: true }, (status) => {
+			if (status !== "branching enumerate 0/0") return;
+			const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+			const dir = join(run.cwd, ".git", "apple-pi", "branch-search", id as string);
+			atEnumerate.record = JSON.parse(readFileSync(join(dir, "record.json"), "utf8"));
+			atEnumerate.specOnDisk = existsSync(join(dir, "spec.json"));
+			atEnumerate.enumeratorRequests = run.requests.filter((r) =>
+				text(r.messages.at(-1)).includes("approach list"),
+			).length;
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(record.mode).toBe("human");
+		const stored = readFileSync(join(stateDir(run.cwd, record), "spec.json"));
+		expect(JSON.parse(stored.toString("utf8"))).toEqual(AUTHORED);
+		expect(record.spec?.sha256).toBe(sha256(stored));
+		// Recorded before any enumerator request, without scorer content on disk.
+		expect(atEnumerate.enumeratorRequests).toBe(0);
+		expect(atEnumerate.record?.spec?.sha256).toBe(record.spec?.sha256);
+		expect(atEnumerate.specOnDisk).toBe(false);
+		expect(JSON.stringify(atEnumerate.record)).not.toContain(MARKER);
+		// The author is a fork of the parent with the goal and the schema in its prompt.
+		const authorRequest = run.requests.find(isAuthorRequest) as Context;
+		const prompt = text(authorRequest.messages.at(-1));
+		expect(prompt).toContain("Goal: Make value equal 2.");
+		expect(prompt).toContain('onBase: "fail" | "pass"');
+		expect(record.spec?.validation).toEqual([expect.objectContaining({ attempt: 0, ok: true })]);
+		expect(record.cost.author?.outputTokens).toBeTypeOf("number");
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("sends an unusable or invalid spec back to the author with the report, then accepts the correction", async () => {
+		const passesOnBase = { ...AUTHORED, gates: [{ id: "value", run: "true", onBase: "fail", timeoutSec: 30 }] };
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{
+				author: [fauxAssistantMessage("Here are my checks."), authorReply(passesOnBase), authorReply(AUTHORED)],
+			},
+		);
+		const { result, record } = await search(run, { authored: true, config: { scorer: { validationRetries: 2 } } });
+
+		expect(result.outcome).toBe("ready");
+		expect(record.spec?.validation.map((entry) => entry.ok)).toEqual([false, false, true]);
+		const authorRequests = run.requests.filter(isAuthorRequest);
+		expect(authorRequests).toHaveLength(3);
+		// Each correction continues the same author conversation, with the report as a new message.
+		const [first, second, third] = authorRequests as [Context, Context, Context];
+		expect(second.messages.slice(0, first.messages.length)).toEqual(first.messages);
+		expect(text(second.messages.at(-1))).toContain("not valid JSON");
+		expect(third.messages.slice(0, second.messages.length)).toEqual(second.messages);
+		expect(text(third.messages.at(-1))).toContain('gate value: declared onBase "fail" but passed on the base');
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(AUTHORED);
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("ends aborted: scorer invalid after the configured retries, before any enumerator runs", async () => {
+		const passesOnBase = { ...AUTHORED, gates: [{ id: "value", run: "true", onBase: "fail", timeoutSec: 30 }] };
+		const run = await fixture(
+			{ c1: [FIX], c2: [FIX] },
+			{ author: [authorReply(passesOnBase), authorReply({ ...passesOnBase, gates: [] })] },
+		);
+		const { result, record } = await search(run, { authored: true, config: { scorer: { validationRetries: 1 } } });
+
+		expect(result.outcome).toBe("aborted: scorer invalid");
+		expect(run.requests.filter(isAuthorRequest)).toHaveLength(2);
+		expect(record.spec?.validation).toEqual([
+			expect.objectContaining({ attempt: 0, ok: false }),
+			expect.objectContaining({ attempt: 1, ok: false, report: expect.stringContaining("at least one gate") }),
+		]);
+		expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+		expect(record.enumerations).toEqual([]);
+		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("skips the author when a scorer is supplied, and still reviews it with a review profile", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const prompts: string[] = [];
+		const { result, record } = await search(run, {
+			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
+			review: async (_profile, prompt) => {
+				prompts.push(prompt);
+				return '{"verdict":"confirm"}';
+			},
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(run.requests.some(isAuthorRequest)).toBe(false);
+		expect(prompts).toHaveLength(1);
+		expect(prompts[0]).toContain(JSON.stringify(SCORER));
+		expect(record.spec?.review).toEqual(expect.objectContaining({ verdict: "confirm", applied: false }));
+	});
+
+	it("sends one review request with a review profile, and a refine verdict replaces the scorer once", async () => {
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ author: [authorReply(AUTHORED)] },
+		);
+		writeFileSync(join(run.cwd, "app.ts"), "export const value = 1; // edited\n");
+		const refined: ScorerSpec = {
+			...AUTHORED,
+			gates: [...AUTHORED.gates, { id: "keep", run: "test -f src/keep.txt", onBase: "pass", timeoutSec: 30 }],
+		};
+		const reviews: { profile: string; prompt: string }[] = [];
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
+			review: async (profile, prompt) => {
+				reviews.push({ profile, prompt });
+				return JSON.stringify({ verdict: "refine", reason: "protect src/keep.txt", spec: refined });
+			},
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(reviews).toHaveLength(1);
+		const [{ profile, prompt }] = reviews as [{ profile: string; prompt: string }];
+		expect(profile).toBe("deep");
+		expect(prompt).toContain("Goal: Make value equal 2.");
+		expect(prompt).toContain("Seed gate: none");
+		expect(prompt).toMatch(/app\.ts \| 2 \+-/);
+		expect(prompt).toContain(JSON.stringify(AUTHORED));
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(refined);
+		expect(record.spec?.review).toEqual(expect.objectContaining({ verdict: "refine", applied: true }));
+		expect(record.spec?.validation.map((entry) => entry.ok)).toEqual([true, true]);
+		expect(branchOf(record, "c1").gates).toEqual({ value: "pass", keep: "pass" });
+	});
+
+	it("sends no review request without a review profile", async () => {
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ author: [authorReply(AUTHORED)] },
+		);
+		let reviews = 0;
+		const { result, record } = await search(run, {
+			authored: true,
+			review: async () => {
+				reviews++;
+				return JSON.stringify({ verdict: "confirm" });
+			},
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(reviews).toBe(0);
+		expect(record.spec?.review).toBeNull();
+	});
+
+	it("keeps the scorer out of reach of a branch that searches the disk for it (A2)", async () => {
+		const hunt = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{
+					// Reaches the parent's git directory and workspace without naming the parent path.
+					command: `d=$(git rev-parse --git-common-dir); top=$(cd "$d/.." && pwd -P); find "$top" "$d" -name spec.json -o -name 'gate-7f3a.sh'; grep -rl -e '${MARKER}' -e 'bash hidden/gate-7f3a' "$top" "$d"; echo searched`,
+					verbatim: true,
+				},
+				{ id: "hunt" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const run = await fixture(
+			{ c1: [hunt, FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ author: [authorReply(AUTHORED)] },
+		);
+		const { result, record } = await search(run, { authored: true });
+
+		expect(result.outcome).toBe("ready");
+		const found = run.requests
+			.flatMap((request) => request.messages)
+			.find((message) => message.role === "toolResult" && message.toolCallId === "hunt");
+		// Neither find nor grep printed a hit; only the closing echo remains.
+		expect(text(found).trim()).toBe("searched");
+		// The same search after the search ended finds the stored spec, so it could have found it.
+		const after = execFileSync("bash", ["-c", `grep -rl -e '${MARKER}' .git`], { cwd: run.cwd, encoding: "utf8" });
+		expect(after).toContain(join(record.id, "spec.json"));
+	});
+
+	it("kills every process a branch started before scoring its generation", async () => {
+		const daemon = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{ command: "nohup sleep 30 >/dev/null 2>&1 & echo $! > daemon.pid", verbatim: true },
+				{ id: "daemon" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const run = await fixture({ c1: [daemon, FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const alive: boolean[] = [];
+		const { record } = await search(run, {}, (status) => {
+			if (!status?.startsWith("branching score g0") || alive.length > 0) return;
+			const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+			const wt = join(run.cwd, ".git", "apple-pi", "branch-search", id as string, "wt");
+			for (const key of readdirSync(wt)) {
+				const pidFile = join(wt, key, "daemon.pid");
+				if (!existsSync(pidFile)) continue;
+				const pid = Number(readFileSync(pidFile, "utf8"));
+				try {
+					process.kill(pid, 0);
+					alive.push(true);
+				} catch {
+					alive.push(false);
+				}
+			}
+		});
+
+		expect(alive).toEqual([false]);
+		expect(record.outcome).toBe("ready");
+	});
+
+	it("holds the root session for the whole apply, and cancels while it waits", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		let grant: () => void = () => {};
+		const order: string[] = [];
+		const applied = search(run, {
+			config: { apply: "auto" },
+			exclusive: () => {
+				order.push("wait");
+				return new Promise<() => void>((done) => {
+					grant = () => {
+						order.push("held");
+						done(() => order.push(`released with ${readFileSync(join(run.cwd, "app.ts"), "utf8").trim()}`));
+					};
+				});
+			},
+		});
+		await vi.waitFor(() => expect(order).toEqual(["wait"]));
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 1;\n");
+		grant();
+		const { result } = await applied;
+		expect(result.outcome).toBe("applied");
+		expect(order).toEqual(["wait", "held", "released with export const value = 2;"]);
+
+		const again = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const controller = new AbortController();
+		let late: () => void = () => {};
+		let releasedLate = false;
+		const cancelled = await search(again, {
+			config: { apply: "auto" },
+			signal: controller.signal,
+			exclusive: () => {
+				setTimeout(() => controller.abort(), 20);
+				return new Promise<() => void>((done) => {
+					late = () =>
+						done(() => {
+							releasedLate = true;
+						});
+				});
+			},
+		});
+		expect(cancelled.result.outcome).toBe("aborted: cancelled");
+		expect(readFileSync(join(again.cwd, "app.ts"), "utf8")).toBe("export const value = 1;\n");
+		expectCleanedUp(again.cwd, cancelled.record, ["base"]);
+		// A hold granted after the cancel is released at once.
+		late();
+		await vi.waitFor(() => expect(releasedLate).toBe(true));
+	});
+
+	it("keeps the author's temporary files and spilled output out of reach of later branches (I2)", async () => {
+		// Unique per run, so files an earlier run left behind cannot match.
+		const marker = `${MARKER}-${process.pid}-${Date.now()}`;
+		const spill = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{
+					command: `for i in $(seq 1 4000); do echo ${marker}-$i; done; echo ${marker} > "$TMPDIR/scratch-${marker}.txt"; echo "tmp=$TMPDIR"`,
+					verbatim: true,
+				},
+				{ id: "spill" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const osTmp = realpathSync(tmpdir());
+		const hunt = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{
+					command: `S="$(git rev-parse --git-common-dir)/apple-pi"; find '${osTmp}' -maxdepth 1 \\( -name 'pi-bash-*.log' -o -name 'scratch-${marker}.txt' \\) -exec grep -l -e '${marker}' {} +; grep -rl -e '${marker}' "$S" "$TMPDIR"; echo searched`,
+					verbatim: true,
+				},
+				{ id: "hunt" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const run = await fixture(
+			{ c1: [hunt, FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{
+				author: [
+					spill,
+					authorReply({
+						...AUTHORED,
+						files: [{ path: "hidden/gate-7f3a.sh", content: `# ${marker}\nbash check.sh\n` }],
+					}),
+				],
+			},
+		);
+		const { result, record } = await search(run, { authored: true });
+
+		expect(result.outcome).toBe("ready");
+		const results = run.requests.flatMap((request) => request.messages);
+		const authorOutput = text(results.find((m) => m.role === "toolResult" && m.toolCallId === "spill"));
+		// The author's output spilled to a file in its private temporary directory, which is gone.
+		const full = /Full output: (\S+)/.exec(authorOutput)?.[1] as string;
+		const privateTmp = /tmp=(\S+)/.exec(authorOutput)?.[1] as string;
+		expect(full.startsWith(join(stateDir(run.cwd, record), "tmp"))).toBe(true);
+		expect(dirname(full)).toBe(privateTmp);
+		expect(existsSync(full)).toBe(false);
+		expect(existsSync(privateTmp)).toBe(false);
+		const found = results.find((m) => m.role === "toolResult" && m.toolCallId === "hunt");
+		expect(text(found).trim()).toBe("searched");
+	});
+
+	it("states the command's goal in the enumerator prompt and every branch directive", async () => {
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ parentPrompt: "Say hello." },
+		);
+		const { result } = await search(run);
+
+		expect(result.outcome).toBe("ready");
+		const lasts = run.requests.map((request) => text(request.messages.at(-1)));
+		const enumerator = lasts.find((last) => last.includes("Branch search: approach list."));
+		expect(enumerator).toContain("Goal: Make value equal 2.");
+		const directives = run.requests.flatMap((request) =>
+			request.messages.map(text).filter((t) => t.startsWith("Branch search: attempt")),
+		);
+		expect(directives.length).toBeGreaterThan(0);
+		for (const directive of directives) expect(directive).toContain("Goal: Make value equal 2.");
 	});
 });

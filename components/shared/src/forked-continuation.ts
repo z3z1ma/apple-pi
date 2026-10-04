@@ -1,4 +1,4 @@
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
@@ -75,16 +75,41 @@ export function liveSession(ctx: ExtensionContext): AgentSession | undefined {
 	return liveSessions().get(ctx.sessionManager);
 }
 
-/** Writes stay in the worktree or the temp directory, and never reach the parent workspace (spec I5). */
-function writesOutside(path: string, { root, parentRoot }: ForkWorktree): boolean {
-	const target = canonical(path);
-	if (within(target, canonical(root))) return false;
-	return within(target, canonical(parentRoot)) || !within(target, canonical(tmpdir()));
+/** Start remembering sessions as they prompt; call while installing, so `liveSession` finds the session later. */
+export function trackLiveSessions(): void {
+	liveSessions();
 }
 
-function remapPath(path: string, { root, parentRoot }: ForkWorktree, cwd: string): string {
+/** Render a passive message as its first line, collapsed, and its whole text, expanded. */
+export function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
+	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {
+		const text =
+			typeof message.content === "string"
+				? message.content
+				: message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
+		const shown = theme.fg("muted", `↳ ${expanded ? text : (text.split("\n")[0] ?? "")}`);
+		return {
+			render: (width: number) => (expanded ? wrapTextWithAnsi(shown, width) : [truncateToWidth(shown, width)]),
+			invalidate: () => {},
+		};
+	});
+}
+
+/** Writes stay in the worktree or the fork's private temporary directory (spec I5). */
+function writesOutside(path: string, { root, tmp }: ForkWorktree): boolean {
+	let target: string;
+	try {
+		target = canonical(path);
+	} catch {
+		// A path that cannot be resolved cannot be shown to stay in the worktree.
+		return true;
+	}
+	return !within(target, canonical(root)) && !within(target, canonical(tmp));
+}
+
+function remapPath(path: string, { root, parentRoot, tmp }: ForkWorktree, cwd: string): string {
 	if (!isAbsolute(path)) return resolve(cwd, path);
-	if (within(path, root) || !within(path, parentRoot)) return path;
+	if (within(path, root) || within(path, tmp) || !within(path, parentRoot)) return path;
 	return join(root, relative(parentRoot, path));
 }
 
@@ -93,14 +118,20 @@ function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): s
 	return within(cwd, repository) ? join(root, relative(repository, cwd)) : root;
 }
 
-function remapCommand(command: string, { root, parentRoot }: ForkWorktree): string {
+function remapCommand(command: string, { root, parentRoot, tmp }: ForkWorktree): string {
 	const escaped = parentRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	const parentPath = new RegExp(`${escaped}(?![\\w.-])`, "g");
-	// The worktree may live under the parent root (in its git directory), so leave its own paths alone.
-	return command
-		.split(root)
-		.map((part) => part.replace(parentPath, root))
-		.join(root);
+	// The worktree and the temporary directory may live under the parent root (in its git
+	// directory), so leave their own paths alone.
+	const keep = (text: string, kept: string[]): string => {
+		const [first, ...rest] = kept;
+		if (first === undefined) return text.replace(parentPath, root);
+		return text
+			.split(first)
+			.map((part) => keep(part, rest))
+			.join(first);
+	};
+	return keep(command, [root, tmp]);
 }
 
 /** Point a tool call at the worktree in place; return a refusal when it would write outside it. */
@@ -122,13 +153,46 @@ function isolate(tool: string, args: Record<string, unknown>, worktree: ForkWork
 	return undefined;
 }
 
+function groupAlive(pgid: number): boolean {
+	try {
+		process.kill(-pgid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+/**
+ * Kill each process group and wait, up to `waitMs`, until none of its members exists, so a
+ * caller that runs next (branch scoring) cannot be watched by a process the fork left behind.
+ * A group that outlives the wait fails the fork's result rather than letting the caller go on.
+ * A process that left its group (setsid) escapes; branch search accepts that residual risk.
+ */
+async function killProcessGroups(groups: Iterable<number>, waitMs = 2000): Promise<void> {
+	const pending = [...groups];
+	for (const pgid of pending) {
+		try {
+			process.kill(-pgid, "SIGKILL");
+		} catch {
+			// The group already exited.
+		}
+	}
+	const deadline = Date.now() + waitMs;
+	while (pending.some(groupAlive) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 10));
+	const alive = pending.filter(groupAlive);
+	if (alive.length > 0)
+		throw new Error(`Processes of the fork survived SIGKILL in process groups ${alive.join(", ")}.`);
+}
+
 /**
  * Continue an identical copy of a conversation: same system prompt, tool loadout,
  * model, and provider session id, starting from `messages` with `append` added.
  * The session-bound request and turn hooks stay with the parent, so the fork never
  * writes to the parent transcript; its tools still run through the parent's hooks.
  * With a worktree, the fork's own tool hook points paths and shell commands at it
- * before those hooks run, and the shell runs there.
+ * before those hooks run, and the shell runs there with the fork's private temporary
+ * directory; every process the shell started is killed, and that directory deleted,
+ * before the result resolves.
  */
 export function startFork(session: AgentSession, request: ForkRequest): ForkHandle {
 	const parent = session.agent;
@@ -179,9 +243,20 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			request.label,
 		);
 	});
-	const result = runInFork({ cwd }, () => fork.prompt(request.append))
-		.then(() => ({ messages: fork.state.messages, usage }))
-		.finally(unsubscribe);
+	const processGroups = worktree && new Set<number>();
+	if (worktree) mkdirSync(worktree.tmp, { recursive: true, mode: 0o700 });
+	const result = runInFork({ cwd, processGroups, tmp: worktree?.tmp }, () => fork.prompt(request.append))
+		.finally(async () => {
+			unsubscribe();
+			if (!worktree) return;
+			// Nothing may write the temporary directory once it is gone, so the processes go first.
+			try {
+				await killProcessGroups(processGroups as Set<number>);
+			} finally {
+				rmSync(worktree.tmp, { recursive: true, force: true });
+			}
+		})
+		.then(() => ({ messages: fork.state.messages, usage }));
 	return { result, abort: () => fork.abort() };
 }
 
@@ -206,17 +281,7 @@ export function registerForkedContinuation(
 	pi.on("session_tree", cancelAll);
 	pi.on("session_shutdown", cancelAll);
 
-	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {
-		const text =
-			typeof message.content === "string"
-				? message.content
-				: message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
-		const shown = theme.fg("muted", `↳ ${expanded ? text : (text.split("\n")[0] ?? "")}`);
-		return {
-			render: (width: number) => (expanded ? wrapTextWithAnsi(shown, width) : [truncateToWidth(shown, width)]),
-			invalidate: () => {},
-		};
-	});
+	registerPassiveMessageRenderer(pi, customType);
 
 	return (ctx, prompt) => {
 		const session = liveSession(ctx);

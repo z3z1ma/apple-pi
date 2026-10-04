@@ -29,6 +29,56 @@ function insideWorktree(path: string): boolean {
 	return clean !== ".." && !clean.startsWith(`..${sep}`) && !path.split(/[\\/]/).includes("..");
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function listOf(value: unknown, name: string, problems: string[]): Record<string, unknown>[] {
+	if (!Array.isArray(value)) {
+		problems.push(`"${name}" must be a list`);
+		return [];
+	}
+	if (!value.every(isObject)) problems.push(`every entry of "${name}" must be an object`);
+	return value.filter(isObject);
+}
+
+const positive = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/**
+ * A model-written value as a scorer spec: the types of spec 7.1, then its structural rules.
+ * Returns the problems when it is not one, in words the author can act on.
+ */
+export function parseScorerSpec(value: unknown): ScorerSpec | string[] {
+	if (!isObject(value)) return ["the spec must be a JSON object"];
+	const problems: string[] = [];
+	if (value.version !== 1) problems.push(`"version" must be 1`);
+	if (typeof value.goal !== "string") problems.push(`"goal" must be a string`);
+	for (const file of listOf(value.files, "files", problems))
+		if (typeof file.path !== "string" || typeof file.content !== "string")
+			problems.push("every file needs a string path and a string content");
+	if (!Array.isArray(value.protect) || !value.protect.every((path) => typeof path === "string"))
+		problems.push(`"protect" must be a list of paths`);
+	for (const gate of listOf(value.gates, "gates", problems)) {
+		if (typeof gate.run !== "string") problems.push(`gate "${gate.id}" needs a string run`);
+		if (gate.onBase !== "fail" && gate.onBase !== "pass")
+			problems.push(`gate "${gate.id}" onBase must be "fail" or "pass"`);
+		if (!positive(gate.timeoutSec)) problems.push(`gate "${gate.id}" timeoutSec must be a positive number`);
+	}
+	for (const objective of listOf(value.objectives, "objectives", problems)) {
+		if (typeof objective.run !== "string") problems.push(`objective "${objective.id}" needs a string run`);
+		if (objective.better !== "lower" && objective.better !== "higher")
+			problems.push(`objective "${objective.id}" better must be "lower" or "higher"`);
+		if (!positive(objective.timeoutSec))
+			problems.push(`objective "${objective.id}" timeoutSec must be a positive number`);
+		if (objective.serial !== undefined && typeof objective.serial !== "boolean")
+			problems.push(`objective "${objective.id}" serial must be true or false`);
+	}
+	if (problems.length > 0) return problems;
+	const spec = value as unknown as ScorerSpec;
+	const structural = checkScorerSpec(spec);
+	return structural.length > 0 ? structural : spec;
+}
+
 /** The structural rules of spec 7.1; an empty list means the spec is well formed. */
 export function checkScorerSpec(spec: ScorerSpec): string[] {
 	const problems: string[] = [];
@@ -57,10 +107,21 @@ export function checkScorerSpec(spec: ScorerSpec): string[] {
  */
 export async function installScorer(worktree: string, base: string, spec: ScorerSpec): Promise<string | undefined> {
 	const root = canonical(worktree);
-	const outside = (path: string) => !within(canonical(join(worktree, path)), root);
-	for (const path of spec.protect) if (outside(path)) return `protected path ${path} leads outside the worktree`;
+	/** Why the destination is refused, or undefined when it stays inside the worktree. */
+	const refusal = (path: string): string | undefined => {
+		try {
+			return within(canonical(join(worktree, path)), root) ? undefined : "leads outside the worktree";
+		} catch (error) {
+			return `cannot be resolved (${error instanceof Error ? error.message : String(error)})`;
+		}
+	};
+	for (const path of spec.protect) {
+		const refused = refusal(path);
+		if (refused) return `protected path ${path} ${refused}`;
+	}
 	for (const file of spec.files) {
-		if (outside(file.path)) return `scorer file ${file.path} leads outside the worktree`;
+		const refused = refusal(file.path);
+		if (refused) return `scorer file ${file.path} ${refused}`;
 		const target = join(worktree, file.path);
 		mkdirSync(dirname(target), { recursive: true });
 		writeFileSync(target, file.content);

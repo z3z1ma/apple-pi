@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { canonical } from "../../shared/src/real-path.js";
@@ -188,7 +188,7 @@ export interface ApplyResult {
  * base tree (spec 6.9). The binary diff from base to winner goes to `patchPath`, which outlives
  * cleanup, and `git apply` lands it in the working tree without touching the user's index. `git apply`
  * checks the patch before writing but does not undo a write that fails partway, so a failure
- * restores every path the patch touches to base (see `restoreBase`).
+ * restores to base every path the patch wrote that still holds what it wrote (see `restoreOwned`).
  */
 export async function applyWinner(
 	root: string,
@@ -214,8 +214,11 @@ export async function applyWinner(
 		await git(root, ["apply", "--whitespace=nowarn", patchPath]);
 	} catch (error) {
 		const failure = error instanceof Error ? error.message : String(error);
-		const restored = await restoreBase(root, base.commit, winner).then(
-			() => "the workspace was restored to the base",
+		const restored = await restoreOwned(root, base.commit, winner).then(
+			(left) =>
+				left.length === 0
+					? "the workspace was restored to the base"
+					: `the workspace was restored to the base, except paths changed meanwhile by someone else: ${left.join(", ")}`,
 			(rollback: Error) =>
 				`restoring the base also failed, so the workspace may hold part of the winner: ${rollback.message}`,
 		);
@@ -224,32 +227,61 @@ export async function applyWinner(
 	return { applied: true, workspaceTree };
 }
 
-/**
- * Put every path that differs between base and winner back to its base content, and remove the
- * paths only the winner has. Valid only while the workspace held the base tree before the patch.
- * A temporary index holding just the base entries of those paths finds which files differ and
- * checks them out; the user's index is never read or written.
- */
-async function restoreBase(root: string, base: string, winner: string): Promise<void> {
-	const split = (output: string) => output.split("\0").filter(Boolean);
-	const touched = new Set(
-		split(await git(root, ["diff", ...PLAIN_DIFF, "--no-renames", "--name-only", "-z", base, winner])),
-	);
-	const entries = split(await git(root, ["ls-tree", "-r", "-z", base])).filter((entry) =>
-		touched.has(entry.slice(entry.indexOf("\t") + 1)),
-	);
-	const dir = mkdtempSync(join(tmpdir(), "apple-pi-branch-restore-"));
-	const env = { GIT_INDEX_FILE: join(dir, "index") };
+/** What a path holds in the working tree: its blob id, or undefined when it is absent. */
+async function workingBlob(root: string, path: string): Promise<string | undefined> {
+	const target = join(root, path);
+	let stat: ReturnType<typeof lstatSync>;
 	try {
-		await git(root, ["update-index", "-z", "--index-info"], { env, input: entries.map((e) => `${e}\0`).join("") });
-		// Exits non-zero when entries need an update; diff-files then names them.
-		await git(root, ["update-index", "-q", "--refresh"], { env }).catch(() => undefined);
-		const changed = split(await git(root, ["diff-files", "--name-only", "-z"], { env }));
-		if (changed.length > 0)
-			await git(root, ["checkout-index", "-f", "-z", "--stdin"], { env, input: changed.map((p) => `${p}\0`).join("") });
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
+		stat = lstatSync(target);
+	} catch {
+		return undefined;
 	}
-	const inBase = new Set(entries.map((entry) => entry.slice(entry.indexOf("\t") + 1)));
-	for (const path of touched) if (!inBase.has(path)) rmSync(join(root, path), { force: true });
+	if (stat.isSymbolicLink()) return git(root, ["hash-object", "--stdin"], { input: readlinkSync(target) });
+	if (!stat.isFile()) return undefined;
+	return git(root, ["hash-object", "--", path]);
+}
+
+/**
+ * Roll back a failed apply: put back to base only the paths the apply still owns, those that hold
+ * exactly what the winner has (its content, or absence for a path the winner deletes). A path that
+ * holds anything else was changed by someone else meanwhile and is left alone; so is a path that
+ * already holds its base content. Returns the paths left alone because someone else changed them.
+ * A temporary index holding the base entries of the owned paths checks them out; the user's index
+ * is never read or written.
+ */
+export async function restoreOwned(root: string, base: string, winner: string): Promise<string[]> {
+	const split = (output: string) => output.split("\0").filter(Boolean);
+	const touched = split(await git(root, ["diff", ...PLAIN_DIFF, "--no-renames", "--name-only", "-z", base, winner]));
+	const blobs = async (commit: string) => {
+		const entries = new Map<string, { entry: string; oid: string }>();
+		for (const entry of split(await git(root, ["ls-tree", "-r", "-z", commit]))) {
+			const tab = entry.indexOf("\t");
+			entries.set(entry.slice(tab + 1), { entry, oid: entry.slice(0, tab).split(" ")[2] as string });
+		}
+		return entries;
+	};
+	const [inBase, inWinner] = [await blobs(base), await blobs(winner)];
+	const restore: string[] = [];
+	const remove: string[] = [];
+	const left: string[] = [];
+	for (const path of touched) {
+		const current = await workingBlob(root, path);
+		if (current === inBase.get(path)?.oid) continue;
+		if (current !== inWinner.get(path)?.oid) left.push(path);
+		else if (inBase.has(path)) restore.push(path);
+		else remove.push(path);
+	}
+	if (restore.length > 0) {
+		const dir = mkdtempSync(join(tmpdir(), "apple-pi-branch-restore-"));
+		const env = { GIT_INDEX_FILE: join(dir, "index") };
+		try {
+			const entries = restore.map((path) => `${inBase.get(path)?.entry}\0`).join("");
+			await git(root, ["update-index", "-z", "--index-info"], { env, input: entries });
+			await git(root, ["checkout-index", "-f", "-z", "--stdin"], { env, input: restore.map((p) => `${p}\0`).join("") });
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	}
+	for (const path of remove) rmSync(join(root, path), { force: true });
+	return left;
 }

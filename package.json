@@ -80,7 +80,8 @@
       "./extensions/prompt-stash.ts",
       "./extensions/terse-tools.ts",
       "./extensions/rtk.ts",
-      "./extensions/change-reflection.ts"
+      "./extensions/change-reflection.ts",
+      "./extensions/branch-search.ts"
     ],
     "skills": [
       "./skills"

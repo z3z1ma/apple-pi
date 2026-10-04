@@ -58,22 +58,42 @@ export interface ValidationRecord {
 	ms: number;
 }
 
+/** The optional scorer review (spec 6.2, 10.5). */
+export interface ReviewRecord {
+	profile: string;
+	/** `error` when the request failed or its reply could not be used; the author's spec then stands. */
+	verdict: "confirm" | "refine" | "error";
+	reason: string | null;
+	/** Whether a refined spec passed validation and replaced the author's. */
+	applied: boolean;
+	ms: number;
+}
+
+export type SearchMode = "human" | "agent" | "passive";
+
 export interface SearchRecord {
 	id: string;
+	mode: SearchMode;
 	goal: string | null;
 	seed: string;
 	startedAt: string;
 	endedAt: string | null;
 	config: BranchSearchConfig;
 	base: { commit: string; tree: string } | null;
+	/**
+	 * Written with only the frozen spec's `sha256` and `path` before the enumerator starts (spec I1).
+	 * The rest is scorer content and joins when the last branch has stopped (spec 8.4). A search
+	 * that never froze a spec stores the last spec it validated, if any, with that spec's hash.
+	 */
 	spec: {
-		sha256: string;
-		path: string;
+		sha256: string | null;
+		path: string | null;
 		validation: ValidationRecord[];
+		review: ReviewRecord | null;
 		/** Median base value of each objective (spec 6.3 step 3). */
 		baseValues: Record<string, number>;
 	} | null;
-	cost: { total: TokenCost; ms: number };
+	cost: { total: TokenCost; author: (TokenCost & { ms: number }) | null; ms: number };
 	enumerations: EnumerationRecord[];
 	steps: { seq: number; step: Step }[];
 	branches: (BranchRecord & Partial<BranchScore>)[];

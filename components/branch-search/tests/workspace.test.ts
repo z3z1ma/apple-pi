@@ -29,6 +29,7 @@ import {
 	gitCommonDir,
 	hasHead,
 	removeWorktrees,
+	restoreOwned,
 	snapshotBase,
 	snapshotTree,
 } from "../src/workspace.js";
@@ -201,6 +202,33 @@ describe("apply", { timeout: 30_000 }, () => {
 		expect(readFileSync(join(dir, ".git", "index"))).toEqual(index);
 	});
 
+	it("rolls back only the paths that still hold what the patch wrote", async () => {
+		const dir = repo({ "a.txt": "a base\n", "b.txt": "b base\n", "z.txt": "z base\n" });
+		const base = await snapshotBase(dir, "bs-test");
+		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
+		await addWorktree(dir, wt, base.commit, []);
+		for (const name of ["a", "b"]) writeFileSync(join(wt, `${name}.txt`), `${name} winner\n`);
+		writeFileSync(join(wt, "added.txt"), "added\n");
+		writeFileSync(join(wt, "mine.txt"), "winner adds\n");
+		rmSync(join(wt, "z.txt"));
+		const winner = await commitWorktree(dir, wt, "bs-test", "r0");
+		await removeWorktrees(dir, [wt]);
+		// The patch wrote a.txt and added.txt; someone else then changed b.txt, recreated z.txt, and wrote mine.txt.
+		writeFileSync(join(dir, "a.txt"), "a winner\n");
+		writeFileSync(join(dir, "added.txt"), "added\n");
+		writeFileSync(join(dir, "b.txt"), "b edited by the user\n");
+		writeFileSync(join(dir, "z.txt"), "z edited by the user\n");
+		writeFileSync(join(dir, "mine.txt"), "user's own file\n");
+		const left = await restoreOwned(dir, base.commit, winner);
+
+		expect(readFileSync(join(dir, "a.txt"), "utf8")).toBe("a base\n");
+		expect(existsSync(join(dir, "added.txt"))).toBe(false);
+		expect(readFileSync(join(dir, "b.txt"), "utf8")).toBe("b edited by the user\n");
+		expect(readFileSync(join(dir, "z.txt"), "utf8")).toBe("z edited by the user\n");
+		expect(readFileSync(join(dir, "mine.txt"), "utf8")).toBe("user's own file\n");
+		expect(left.sort()).toEqual(["b.txt", "mine.txt", "z.txt"]);
+	});
+
 	it("leaves a workspace that changed during the search untouched", async () => {
 		const { dir, base, winner, patchPath } = await searched();
 		writeFileSync(join(dir, "keep.txt"), "edited during the search\n");
@@ -353,6 +381,24 @@ describe("scorer file destinations through dangling links", { timeout: 30_000 },
 		expect(existsSync(join(outside, "missing-dir"))).toBe(false);
 		await removeWorktrees(dir, [wt]);
 	});
+	it("refuses a scorer file whose destination cannot be resolved", async () => {
+		const dir = repo({ "app.ts": "x\n" });
+		const base = await snapshotBase(dir, "bs-test");
+		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
+		await addWorktree(dir, wt, base.commit, []);
+		symlinkSync("loop-b", join(wt, "loop-a"));
+		symlinkSync("loop-a", join(wt, "loop-b"));
+
+		const refused = await installScorer(
+			wt,
+			base.commit,
+			spec({ files: [{ path: "loop-a/gate.sh", content: "x\n" }], protect: [] }),
+		);
+
+		expect(refused).toMatch(/scorer file loop-a\/gate.sh cannot be resolved/);
+		await removeWorktrees(dir, [wt]);
+	});
+
 	it("refuses a scorer file behind a link whose target climbs out through another link", async () => {
 		const dir = repo({ "app.ts": "x\n" });
 		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));

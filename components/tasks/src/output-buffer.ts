@@ -16,6 +16,8 @@ export interface OutputBufferOptions {
 	maxLines?: number;
 	maxBytes?: number;
 	tempFilePrefix?: string;
+	/** Where the full-output file goes; the OS temporary directory by default. */
+	tempDir?: string;
 	initialText?: string;
 }
 
@@ -23,6 +25,7 @@ export class OutputBuffer {
 	private readonly maxLines: number;
 	private readonly maxBytes: number;
 	private readonly tempFilePrefix: string;
+	private readonly tempDir: string;
 	private readonly decoder = new TextDecoder();
 	private tailText = "";
 	private totalLines = 0;
@@ -35,6 +38,7 @@ export class OutputBuffer {
 		this.maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
 		this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 		this.tempFilePrefix = options.tempFilePrefix ?? "pi-task";
+		this.tempDir = options.tempDir ?? tmpdir();
 		if (options.initialText) {
 			this.append(options.initialText);
 		}
@@ -89,7 +93,7 @@ export class OutputBuffer {
 	private ensureTempFile(): void {
 		if (this.tempFilePath && this.tempWriteStream) return;
 		const id = randomBytes(8).toString("hex");
-		this.tempFilePath = join(tmpdir(), `${this.tempFilePrefix}-${id}.log`);
+		this.tempFilePath = join(this.tempDir, `${this.tempFilePrefix}-${id}.log`);
 		this.tempWriteStream = createWriteStream(this.tempFilePath, { flags: "a" });
 		// Write what we have accumulated so far
 		if (this.tailText.length > 0) {

@@ -135,6 +135,15 @@ try {
 		result.extensions.some((extension) => extension.path.endsWith("rtk.ts")),
 		"missing rtk extension",
 	);
+	assert(
+		result.extensions.some(
+			(extension) =>
+				extension.path.endsWith("branch-search.ts") &&
+				(extension.handlers.get("agent_settled")?.length ?? 0) > 0 &&
+				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+		),
+		"missing branch search settle and shutdown hooks",
+	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
@@ -150,6 +159,7 @@ try {
 		"pi-sessions",
 		"stash",
 		"edit-prompt",
+		"branch-search",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}

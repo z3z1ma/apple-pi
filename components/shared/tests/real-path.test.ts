@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -42,10 +42,21 @@ describe("canonical", () => {
 		expect(canonical(`${dir}/missing/deeper/../file`)).toBe(join(dir, "missing", "file"));
 	});
 
-	it("stops following a symlink loop", () => {
+	it("throws on a symlink loop instead of returning a path that looks resolved", () => {
 		const dir = tempDir();
 		symlinkSync("b", join(dir, "a"));
 		symlinkSync("a", join(dir, "b"));
-		expect(() => canonical(join(dir, "a", "x"))).not.toThrow();
+		expect(() => canonical(join(dir, "a", "x"))).toThrow(/ELOOP|too many symbolic links/i);
+	});
+
+	it("throws when a component cannot be inspected, rather than treating it as missing", () => {
+		const dir = tempDir();
+		mkdirSync(join(dir, "locked"));
+		chmodSync(join(dir, "locked"), 0o000);
+		try {
+			expect(() => canonical(join(dir, "locked", "link", "x"))).toThrow(/EACCES/);
+		} finally {
+			chmodSync(join(dir, "locked"), 0o755);
+		}
 	});
 });

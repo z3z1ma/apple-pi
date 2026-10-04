@@ -18,7 +18,7 @@ import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
-import { inForkedContinuation } from "../src/fork-context.js";
+import { type ForkWorktree, inForkedContinuation } from "../src/fork-context.js";
 import { type ForkRequest, startFork } from "../src/forked-continuation.js";
 
 const cleanup: (() => void)[] = [];
@@ -76,6 +76,11 @@ function worktree(): string {
 	return root;
 }
 
+/** A worktree binding with its own private temporary directory. */
+function bind(root: string, parentRoot: string): ForkWorktree {
+	return { root, parentRoot, tmp: join(worktree(), "tmp") };
+}
+
 function prompt(text: string): AgentMessage {
 	return { role: "custom", customType: "fork-test", content: text, display: false, timestamp: Date.now() };
 }
@@ -85,7 +90,7 @@ function fork(session: AgentSession, cwd: string, text: string, request: Partial
 		messages: session.sessionManager.buildSessionProjection().messages,
 		append: prompt(text),
 		label: "fork test",
-		worktree: { root: worktree(), parentRoot: cwd },
+		worktree: bind(worktree(), cwd),
 		...request,
 	});
 }
@@ -98,8 +103,8 @@ describe("worktree forks", () => {
 		});
 		const [a, b] = [worktree(), worktree()];
 		const results = await Promise.all([
-			fork(session, cwd, "fork A", { worktree: { root: a, parentRoot: cwd } }).result,
-			fork(session, cwd, "fork B", { worktree: { root: b, parentRoot: cwd } }).result,
+			fork(session, cwd, "fork A", { worktree: bind(a, cwd) }).result,
+			fork(session, cwd, "fork B", { worktree: bind(b, cwd) }).result,
 		]);
 
 		expect(readFileSync(join(a, "notes.md"), "utf8")).toBe("A\n");
@@ -122,7 +127,7 @@ describe("worktree forks", () => {
 		// Branch search keeps worktrees inside the parent's git directory.
 		const root = join(cwd, ".git", "wt");
 		mkdirSync(root, { recursive: true });
-		await fork(session, cwd, "fork shell", { worktree: { root, parentRoot: cwd } }).result;
+		await fork(session, cwd, "fork shell", { worktree: bind(root, cwd) }).result;
 
 		expect(readFileSync(join(root, "where.txt"), "utf8").trim()).toBe(realpathSync(root));
 		expect(readFileSync(join(root, "absolute.txt"), "utf8")).toBe("absolute\n");
@@ -143,6 +148,51 @@ describe("worktree forks", () => {
 			isError: true,
 			text: expect.stringContaining("Background commands are not available inside a branch search attempt."),
 		});
+	});
+
+	it("kills every process its shell started before the fork's result resolves", async () => {
+		const { session, cwd } = await settledSession({
+			"fork daemon": call(
+				"bash",
+				{ command: "nohup sleep 30 >/dev/null 2>&1 & echo $! > daemon.pid", verbatim: true },
+				"bash-daemon",
+			),
+		});
+		const root = worktree();
+		await fork(session, cwd, "fork daemon", { worktree: bind(root, cwd) }).result;
+
+		const pid = Number(readFileSync(join(root, "daemon.pid"), "utf8"));
+		expect(pid).toBeGreaterThan(0);
+		expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+	});
+
+	it("gives the fork a private temporary directory, allows writes only there and in the worktree, and deletes it on settle", async () => {
+		const binding = bind(worktree(), "");
+		const { session, cwd } = await settledSession({
+			"fork tmp": call(
+				"bash",
+				{ command: 'echo "$TMPDIR $TMP $TEMP" > where.txt; echo scratch > "$TMPDIR/scratch.txt"', verbatim: true },
+				"bash-tmp",
+			),
+			"fork os tmp": call("write", { path: join(tmpdir(), "apple-pi-fork-os-tmp.txt"), content: "x" }, "write-os"),
+			"fork own tmp": call("write", { path: join(binding.tmp, "own.txt"), content: "x" }, "write-own"),
+		});
+		const worktreeBinding = { ...binding, parentRoot: cwd };
+		let seen = "";
+		await fork(session, cwd, "fork tmp", { worktree: worktreeBinding }).result.then(() => {
+			seen = readFileSync(join(binding.root, "where.txt"), "utf8").trim();
+		});
+		expect(seen).toBe(`${binding.tmp} ${binding.tmp} ${binding.tmp}`);
+		expect(existsSync(binding.tmp)).toBe(false);
+
+		const os = await fork(session, cwd, "fork os tmp", { worktree: worktreeBinding }).result;
+		expect(toolResult(os.messages, "write-os")).toEqual({
+			isError: true,
+			text: expect.stringContaining("Branch search isolates this attempt to its own copy of the repository."),
+		});
+		const own = await fork(session, cwd, "fork own tmp", { worktree: worktreeBinding }).result;
+		expect(toolResult(own.messages, "write-own").isError).toBe(false);
+		expect(existsSync(binding.tmp)).toBe(false);
 	});
 
 	it("refuses writes and edits outside the worktree", async () => {
@@ -295,7 +345,7 @@ describe("worktree forks", () => {
 		const root = worktree();
 		mkdirSync(join(root, "..cache"));
 		writeFileSync(join(root, "..cache", "data.txt"), "worktree copy\n");
-		const { messages } = await fork(session, cwd, "fork read", { worktree: { root, parentRoot: cwd } }).result;
+		const { messages } = await fork(session, cwd, "fork read", { worktree: bind(root, cwd) }).result;
 
 		expect(toolResult(messages, "read-1").text).toContain("worktree copy");
 	});
@@ -307,7 +357,7 @@ describe("worktree forks", () => {
 		const root = join(cwd, ".git", "wt");
 		mkdirSync(root, { recursive: true });
 		symlinkSync(cwd, join(root, "link"));
-		const { messages } = await fork(session, cwd, "fork symlink", { worktree: { root, parentRoot: cwd } }).result;
+		const { messages } = await fork(session, cwd, "fork symlink", { worktree: bind(root, cwd) }).result;
 
 		expect(toolResult(messages, "write-link")).toEqual({
 			isError: true,
@@ -326,13 +376,28 @@ describe("worktree forks", () => {
 		// pivot leads into the parent workspace; gate.sh's .. applies after following it.
 		symlinkSync(join(cwd, "child"), join(root, "pivot"));
 		symlinkSync("pivot/../hidden.sh", join(root, "gate.sh"));
-		const { messages } = await fork(session, cwd, "fork pivot", { worktree: { root, parentRoot: cwd } }).result;
+		const { messages } = await fork(session, cwd, "fork pivot", { worktree: bind(root, cwd) }).result;
 
 		expect(toolResult(messages, "write-pivot")).toEqual({
 			isError: true,
 			text: expect.stringContaining("Branch search isolates this attempt to its own copy of the repository."),
 		});
 		expect(existsSync(join(cwd, "hidden.sh"))).toBe(false);
+	});
+
+	it("refuses a write whose path cannot be resolved", async () => {
+		const { session, cwd } = await settledSession({
+			"fork loop": call("write", { path: "loop-a/x.md", content: "x" }, "write-loop"),
+		});
+		const root = worktree();
+		symlinkSync("loop-b", join(root, "loop-a"));
+		symlinkSync("loop-a", join(root, "loop-b"));
+		const { messages } = await fork(session, cwd, "fork loop", { worktree: bind(root, cwd) }).result;
+
+		expect(toolResult(messages, "write-loop")).toEqual({
+			isError: true,
+			text: expect.stringContaining("Branch search isolates this attempt to its own copy of the repository."),
+		});
 	});
 
 	it("works in the worktree's copy of the parent's subdirectory", async () => {
@@ -343,7 +408,7 @@ describe("worktree forks", () => {
 		const repository = dirname(cwd);
 		const root = worktree();
 		mkdirSync(join(root, basename(cwd)));
-		await fork(session, cwd, "fork subdir", { worktree: { root, parentRoot: repository } }).result;
+		await fork(session, cwd, "fork subdir", { worktree: bind(root, repository) }).result;
 
 		const copy = join(root, basename(cwd));
 		expect(readFileSync(join(copy, "where.txt"), "utf8").trim()).toBe(realpathSync(copy));

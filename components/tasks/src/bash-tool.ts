@@ -21,7 +21,7 @@ import {
 	execBashParameters,
 } from "./types.js";
 import { rewriteCommand } from "../../rtk/src/index.js";
-import { forkCwd } from "../../shared/src/fork-context.js";
+import { forkCwd, forkTmpDir, trackForkProcessGroup } from "../../shared/src/fork-context.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -46,6 +46,9 @@ function resolveShellEnv(ctx?: ExtensionContext): NodeJS.ProcessEnv {
 			env.PI_REASONING_LEVEL = ctx.thinkingLevel;
 		}
 	}
+	// A worktree fork keeps its temporary files in its own directory, which is deleted when it settles.
+	const tmp = forkTmpDir();
+	if (tmp) env.TMPDIR = env.TMP = env.TEMP = tmp;
 	return env;
 }
 
@@ -102,6 +105,11 @@ export async function prepareShellCommand(
 					windowsHide: true,
 				},
 			);
+			// Detached, so the child leads its own process group; a fork kills it, and anything it left behind, on settle.
+			if (process.platform !== "win32") {
+				const release = trackForkProcessGroup(child.pid);
+				child.once("close", release);
+			}
 			if (commandFromStdin) {
 				child.stdin?.on("error", () => {});
 				child.stdin?.end(executionCommand);
@@ -178,7 +186,7 @@ async function executeBashImpl(
 	}
 
 	const child = prepared.start();
-	const output = new OutputBuffer({ tempFilePrefix: "pi-bash" });
+	const output = new OutputBuffer({ tempFilePrefix: "pi-bash", tempDir: forkTmpDir() });
 	let acceptingOutput = true;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let updateDirty = false;

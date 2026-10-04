@@ -19,7 +19,8 @@ function components(path: string): string[] {
  * target's components (from the root when the target is absolute). Resolving `..` lexically
  * first would let `pivot/../x` stay inside a directory while `pivot` leads out of it. Once a
  * component does not exist, the rest resolves lexically, since writing creates it there; a
- * dangling symlink therefore resolves to the target a write would create.
+ * dangling symlink therefore resolves to the target a write would create. Any other failure to
+ * inspect a component, and more than MAX_LINKS links, throws, as the kernel would fail the write.
  */
 export function canonical(path: string): string {
 	const absolute = isAbsolute(path) ? path : `${process.cwd()}${sep}${path}`;
@@ -42,11 +43,15 @@ export function canonical(path: string): string {
 		let link: string | undefined;
 		try {
 			link = lstatSync(next).isSymbolicLink() ? readlinkSync(next) : undefined;
-		} catch {
+		} catch (error) {
+			// Only absence resolves lexically; any other failure leaves the path unknown.
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
 			missing = true;
 		}
-		if (link !== undefined && links < MAX_LINKS) {
-			links++;
+		if (link !== undefined) {
+			if (++links > MAX_LINKS)
+				throw Object.assign(new Error(`ELOOP: too many symbolic links in ${path}`), { code: "ELOOP" });
 			queue.unshift(...components(link));
 			if (isAbsolute(link)) current = parse(link).root;
 			continue;
