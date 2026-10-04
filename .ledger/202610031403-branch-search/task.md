@@ -33,6 +33,7 @@ Progress:
 
 - 01 committed (`ccd4f5f`). Criterion 9 still needs one live fork on the new code.
 - 02 committed. Deviations: a missing or invalid configuration returns outcome `not configured`; the scorer schema check runs before git work and returns `aborted: scorer invalid`; generation 0 is capped at `branches.maxTotal`; the report adds `Merge:` and `Reason:` lines; the record adds `cleanupErrors`. The fork's working directory follows the session's subdirectory, and the repository root keeps the session's spelling of the path. Worktree forks refuse background bash. Scorer files are refused when a symlink leads them outside the worktree, and the branch dies.
+- 03 committed. Deviations: a failed `git apply` restores the base and ends `ready` with the reason; a winner with the base tree counts as `applied` with nothing to change; a scorer whose files cannot be installed on the base is invalid; diffs ignore user diff drivers (`--no-ext-diff --no-textconv`), so the merge command text differs slightly from spec 6.9. Real-path resolution follows links component by component, like the kernel. Waiting for the root session to settle before apply (spec 6.9 step 1) moves to ticket 04.
 
 ## Outcome
 
