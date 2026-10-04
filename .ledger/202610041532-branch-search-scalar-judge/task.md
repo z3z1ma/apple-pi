@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-04
 Updated: 2026-10-04
 
@@ -10,7 +10,7 @@ Branch search earns its keep only with a real, user-supplied judge (conclusion i
 
 ## Target behavior (approved 2026-10-04)
 
-- `/branch-search <goal>` and the `search_branches` tool start a search. The user supplies a **judge**: one or more commands that each print a number on their last stdout line, each with a direction (lower or higher), plus optional pass/fail gate commands (for example the existing tests). Commands come from configuration or the command/tool arguments; settle the exact surface during implementation and keep it minimal.
+- `/branch-search <goal>` and the `search_branches` tool start a search. The user supplies a **judge**: one or more commands that each print a number on their last stdout line, each with a direction (lower or higher), plus optional pass/fail gate commands (for example the existing tests). Decision (operator, 2026-10-04): judges and gates come only with each search, as command or tool arguments; configuration holds no judges or gates. The `search_branches` tool takes `judges` (each a command and a direction) and optional `gates` (commands); the `/branch-search` command takes the same through flags after the goal.
 - The model enumerates distinct approaches; attempts run in parallel as forks in isolated worktrees that share the parent's prompt cache (existing fork isolation).
 - Every attempt is scored. Among attempts that pass every gate, the best judge number wins (judges in declared order, then smaller diff). The winner is applied when the workspace did not change during the search; otherwise the report gives the merge command.
 - Optional `judge.profile`: a separate model compares the top attempts qualitatively when the user asks for it.
