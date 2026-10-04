@@ -27,6 +27,7 @@ export function createHostCalls(options: HostCallsOptions) {
 	const operations: ExecutionOperation[] = [];
 	const pending = new Set<ExecutionOperation>();
 	const running = new Set<ExecutionOperation>();
+	const timings = new Map<ExecutionOperation, { queuedAt: number; startedAt?: number; finishedAt?: number }>();
 	const usages: Usage[] = [];
 	const waiters: Array<() => void> = [];
 	let attempted = 0;
@@ -116,12 +117,14 @@ export function createHostCalls(options: HostCallsOptions) {
 		operations.push(operation);
 		operations.sort((left, right) => left.sequence - right.sequence);
 		pending.add(operation);
+		timings.set(operation, { queuedAt: Date.now() });
 		onChange();
 		let acquired = false;
 		try {
 			await acquire(signal);
 			acquired = true;
 			running.add(operation);
+			timings.get(operation)!.startedAt = Date.now();
 			onChange();
 			if (!fn) throw new Error(`pi_exec does not expose ${ref}`);
 			const value = await fn.run(args, scopeFor(operation, signal));
@@ -133,6 +136,7 @@ export function createHostCalls(options: HostCallsOptions) {
 			operation.error = error instanceof Error ? error.message : String(error);
 			throw error;
 		} finally {
+			timings.get(operation)!.finishedAt = Date.now();
 			running.delete(operation);
 			if (acquired) release();
 			pending.delete(operation);
@@ -152,6 +156,7 @@ export function createHostCalls(options: HostCallsOptions) {
 				ref: operation.ref,
 				args: operation.args,
 				status: running.has(operation) ? "running" : pending.has(operation) ? "queued" : operation.outcome,
+				...timings.get(operation),
 				...(operation.activity ? { activity: operation.activity } : {}),
 				...(operation.result !== undefined ? { result: operation.result } : {}),
 				...(operation.error ? { error: operation.error } : {}),
@@ -162,6 +167,8 @@ export function createHostCalls(options: HostCallsOptions) {
 				for (const operation of pending) {
 					operation.outcome = outcome === "failed" ? "aborted" : outcome;
 					operation.error = `pi_exec ${outcome}`;
+					timings.get(operation)!.finishedAt = Date.now();
+					delete operation.activity;
 				}
 				pending.clear();
 				running.clear();

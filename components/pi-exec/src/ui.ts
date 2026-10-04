@@ -11,6 +11,9 @@ export interface ExecActivityCall {
 	activity?: string;
 	result?: unknown;
 	error?: string;
+	queuedAt?: number;
+	startedAt?: number;
+	finishedAt?: number;
 }
 
 export interface ExecActivitySnapshot {
@@ -35,7 +38,7 @@ interface ExecRenderArgs {
 	display?: { name?: string; description?: string };
 }
 
-const safeText = (value: string): string => value.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, " ");
+export const safeText = (value: string): string => value.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, " ");
 
 const oneLine = (value: unknown, max = 80): string => {
 	if (typeof value !== "string") return "";
@@ -43,7 +46,7 @@ const oneLine = (value: unknown, max = 80): string => {
 	return clean.length <= max ? clean : `${clean.slice(0, Math.max(1, max - 1))}…`;
 };
 
-const formatDuration = (milliseconds: number): string => {
+export const formatDuration = (milliseconds: number): string => {
 	const ms = Math.max(0, Math.round(milliseconds));
 	if (ms < 1_000) return `${ms}ms`;
 	if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
@@ -85,7 +88,7 @@ const resultSummary = (value: unknown): string => {
 	return [text, tokens].filter(Boolean).join(" · ");
 };
 
-const callLabel = (call: ExecActivityCall): string => {
+export const callLabel = (call: ExecActivityCall): string => {
 	const ref = call.ref === "agent.run" ? "agent" : call.ref.replace(/^pi\./, "");
 	const target = callTarget(call);
 	const detail = call.activity || resultSummary(call.result);

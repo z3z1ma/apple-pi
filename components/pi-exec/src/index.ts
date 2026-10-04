@@ -1,6 +1,8 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { registerWorkSection } from "../../shared/src/work-manager.js";
+import { ExecPanel, type ExecInvocation } from "./work-panel.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import {
 	attachLiveDescription,
@@ -18,6 +20,10 @@ import { type ExecActivitySnapshot, ExecActivityWidget, renderExecCall, renderEx
 
 const EXEC_WIDGET_ID = "apple-pi:exec-activity";
 
+function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 function displayValue(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (value === undefined) return "(program returned no value)";
@@ -33,11 +39,28 @@ export default function piExec(pi: ExtensionAPI): void {
 	try {
 		installRegisteredToolCapture();
 	} catch (error) {
-		captureError = error instanceof Error ? error.message : String(error);
+		captureError = errorText(error);
 	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
 	let executing = false;
 	const programSession = installProgramSession(pi);
+	const invocations = new Map<string, ExecInvocation>();
+	// All extension installers have finished before session_start; work loads after Pi Exec.
+	pi.on("session_start", (_event, ctx) => {
+		invocations.clear();
+		if (!ctx.hasUI || ctx.mode !== "tui") return;
+		registerWorkSection(pi, {
+			key: "exec",
+			label: "Pi Exec",
+			create: (ui, selectedId) => new ExecPanel(ui, () => [...invocations.values()].reverse(), selectedId),
+		});
+	});
+	pi.on("session_tree", () => {
+		invocations.clear();
+	});
+	pi.on("session_shutdown", () => {
+		invocations.clear();
+	});
 	pi.on("tool_result", (event) => {
 		if ((event.toolName !== "pi_exec" && !event.toolName.startsWith("program_")) || !event.isError) return;
 		const failure = failedDetails.get(event.toolCallId);
@@ -126,6 +149,13 @@ export default function piExec(pi: ExtensionAPI): void {
 			const envelope = deriveProgramEnvelope(params.code, params.limits);
 			const programName = params.display?.name?.trim() || "Program";
 			const logs: string[] = [];
+			const invocation: ExecInvocation = {
+				id: toolCallId,
+				code: params.code,
+				status: "running",
+				activity: { name: programName, description: params.display?.description, startedAt, calls: [] },
+			};
+			invocations.set(toolCallId, invocation);
 			let finishedAt: number | undefined;
 			let widget: ExecActivityWidget | undefined;
 			let widgetMounted = false;
@@ -139,6 +169,7 @@ export default function piExec(pi: ExtensionAPI): void {
 			const emit = () => {
 				if (finishedAt !== undefined) return;
 				const completed = host.completedOperations();
+				invocation.activity = activity();
 				widget?.refresh();
 				onUpdate?.({
 					content: [{ type: "text", text: `pi_exec: ${completed.length} of ${host.attempted()} calls completed` }],
@@ -162,10 +193,7 @@ export default function piExec(pi: ExtensionAPI): void {
 					);
 					widgetMounted = true;
 				} catch (error) {
-					ctx.ui.notify(
-						`pi_exec activity widget unavailable: ${error instanceof Error ? error.message : String(error)}`,
-						"warning",
-					);
+					ctx.ui.notify(`pi_exec activity widget unavailable: ${errorText(error)}`, "warning");
 				}
 			}
 
@@ -188,8 +216,12 @@ export default function piExec(pi: ExtensionAPI): void {
 					operations: host.finish(result.outcome),
 				};
 				const finalActivity = activity();
+				invocation.activity = finalActivity;
+				invocation.status = result.outcome;
+				invocation.trace = trace.operations;
 				const usage = host.usage();
 				if (result.outcome !== "succeeded") {
+					if (logs.length > 0) invocation.output = `Logs:\n${logs.join("\n")}`;
 					failedDetails.set(toolCallId, {
 						details: {
 							trace,
@@ -209,6 +241,7 @@ export default function piExec(pi: ExtensionAPI): void {
 				]
 					.filter(Boolean)
 					.join("\n\n");
+				invocation.output = output;
 				return {
 					content: [{ type: "text" as const, text: output }],
 					details: {
@@ -220,6 +253,15 @@ export default function piExec(pi: ExtensionAPI): void {
 					},
 					...(usage ? { usage } : {}),
 				};
+			} catch (error) {
+				invocation.error = errorText(error);
+				if (invocation.status === "running") {
+					finishedAt = Date.now();
+					invocation.status = "failed";
+					invocation.trace = host.finish("failed");
+					invocation.activity = activity();
+				}
+				throw error;
 			} finally {
 				executing = false;
 				widget?.dispose();
@@ -227,10 +269,7 @@ export default function piExec(pi: ExtensionAPI): void {
 					try {
 						ctx.ui.setWidget(EXEC_WIDGET_ID, undefined);
 					} catch (error) {
-						ctx.ui.notify(
-							`pi_exec activity widget cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
-							"warning",
-						);
+						ctx.ui.notify(`pi_exec activity widget cleanup failed: ${errorText(error)}`, "warning");
 					}
 				}
 			}

@@ -71,7 +71,26 @@ Parameters are typed tool arguments and arrive as strings in `inputs`; convert n
 
 `limits` can adjust call budget, concurrency, agent budget, and timeout within package maxima. The host queues gathered calls above the concurrency limit. Monty enforces a fixed 512 MiB memory limit, feed/turn execution time, recursion, and a session-wide suspension ceiling; the host enforces the per-call wall deadline and call budget. On cancellation, pending host calls are rejected and new calls are refused. Terminal failures discard the worker and restore the preceding checkpoint on the next call. Completed tool, file, and process effects are **not** undone by that rollback.
 
-Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time.
+Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. The existing above-editor Pi Exec activity widget remains available while a program runs.
+
+## Work-panel inspection
+
+Open `/work` or Ctrl+W and select **Pi Exec** to inspect direct snippets and saved `program_*` executions. The tab shows the selected program's name, supplied objective, execution state, elapsed time, and host calls. A host call is work the script asks the harness to perform, such as a file read, shell command, HTTP request, or model-worker run. Queued calls are waiting for a concurrency slot; running calls have acquired one. Call detail separates queue time from execution time and includes the existing trace-safe arguments, activity, result, and error. Counts describe calls already issued, not a percentage of the script's eventual work.
+
+With focus in the panel:
+
+| Key | Action |
+| --- | --- |
+| `Tab` / `Shift+Tab` | Select the next or previous program |
+| `v` | Cycle Calls, Source, Result, and Trace views |
+| `[` / `]` | Select the previous or next host call and return to Calls |
+| Configured scroll keys, `k`/`j`, page keys, `Home`/`End` | Scroll detail; `End` follows the live tail |
+
+The [shared work-panel controls](subagents.md#work-panel) handle tabs, focus, closing, and responsive placement. Keyboard inspection and fullscreen mouse-wheel scrolling preserve the main editor draft. Each invocation retains its view and scroll position through tab changes, resizing, and panel reopening.
+
+Successful, failed, aborted, and timed-out programs remain inspectable after settlement, with their available result, error, captured output, and operation trace. A failed call remains visible even if the script handles it and succeeds. This inspection history is in memory for the current session/branch only; session replacement, reload, tree navigation, and shutdown clear it. It is not rebuilt from checkpoint or transcript entries.
+
+Inspection adds no steering or cancellation controls and leaves execution semantics unchanged. Model workers appear as program-owned host calls with their existing coarse activity; live child-tool drill-down is not part of this version. Source displays the executed script; call and trace views retain their existing redaction boundaries and omit deliberately excluded payloads.
 
 ## Session checkpoints
 

@@ -116,7 +116,7 @@ Instead of a generic agent doing everything poorly, the [subagent system](docs/s
 - `builder` (`coding`): Bounded, specified write slices (paired with a sidecar by default).
 - `designer` (`visual-engineering`): User-facing layout, interaction design, and visual polish.
 
-**Active Work (`/work`, `Ctrl+W`)**: Open one tabbed manager for public subagents and managed tasks. The retained `/agents` and `/tasks` aliases open their matching tabs directly. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut.
+**Active Work (`/work`, `Ctrl+W`)**: Open one tabbed manager for public subagents, managed tasks, and [Pi Exec programs](docs/exec.md#work-panel-inspection). The retained `/agents` and `/tasks` aliases open their matching tabs directly. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut.
 
 **The Child `clarify` Superpower**: Subagents often get stuck on ambiguous instructions. In traditional systems, they either hallucinate or spam the user. In Apple Pi, every public child subagent receives a child-only `clarify` tool. It takes an in-memory, read-only snapshot of the parent's conversation and answers the child's question *without interrupting the parent or cluttering the parent's context*.
 

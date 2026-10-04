@@ -80,7 +80,7 @@ export interface WorkPanelCallbacks {
 	onTabChange(key: string): void;
 }
 
-/** The one non-capturing Agents/Tasks panel. Tabs keep their components, and so their state, until it closes. */
+/** The shared non-capturing work panel. Tabs keep their components, and so their state, until it closes. */
 export class WorkPanel implements Component {
 	private activeIndex: number;
 	private readonly children: WorkSectionComponent[];
@@ -257,7 +257,7 @@ export class WorkManager {
 
 	constructor(private readonly pi: ExtensionAPI) {
 		this.pi.registerCommand("work", {
-			description: "Open the Agents and Tasks work panel",
+			description: "Open the Agents, Tasks, and Pi Exec work panel",
 			handler: async (_args, ctx) => this.open(ctx),
 		});
 		this.pi.registerCommand("agents", {
