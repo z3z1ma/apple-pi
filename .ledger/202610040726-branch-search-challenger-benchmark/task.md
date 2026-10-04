@@ -31,7 +31,12 @@ Prior work: `.ledger/history/202610031403-branch-search/` (spec, tickets, pilot 
 
 ## Current State
 
-Shaped. Next: break into tickets (challenger pass; traps and their reference implementations; benchmark runner and report; first run).
+Tickets 01-03 committed; ticket 04 (the real run) waits for operator go-ahead.
+
+- 01 `fbe4e45` (+ `586b270`): challenger pass. Decisions in review: an open gap after the repair rounds ends `aborted: scorer invalid`; the author may dismiss a claimed defect with a recorded reason; author and challenger forks write git objects to a private store; scorer-phase refs are restored except changes whose objects the shared store holds (user work). A ref deleted during the phase is recreated. Documented residuals: a fork that deliberately bypasses the private store; a user stash pushed on top of a challenger stash in the same phase leaves the challenger's entry.
+- 02 `ecebfa0` (+ `edf6af1`): traps slugify-diacritics (input coverage), config-deep-merge (regression), tags-case-dedupe (performance).
+- 03 `7137f2c`: `npm run eval:traps` with `BRANCH_SEARCH_TRAPS_CONFIG` and `BRANCH_SEARCH_TRAPS_OUT`; example `components/branch-search/eval/traps.example.json`. A shared launcher (`scripts/eval-run.mjs`) owns cancellation for both evaluation commands.
+- Cost: the builder estimates about 1,800 requests for 45 runs, roughly $40-150 on an Opus-class profile, well above the planned $10-20.
 
 ## Outcome
 
