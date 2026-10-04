@@ -1,0 +1,310 @@
+{
+  "id": "bs-20261004-052038-0d55",
+  "mode": "human",
+  "goal": "Status: done\nCreated: 2026-10-03\nUpdated: 2026-10-03\n\n# Centralize public-subagent resume policy\n\n## Intent\n\nResuming a public subagent previously treated omitted `inherit_context` and `isolated` as `false`, rejecting sessions whose stored choices were `true`. The five settings fixed at session start are `inherit_context`, `isolated`, `pair`, `profile`, and `system_prompt`.\n\nDeepen the existing invocation-policy module so the main session's root `agent` tool and a public child's ownership-scoped nested `agent` tool share one resume-compatibility decision. All omitted fixed settings reuse the stored choices; explicitly changed settings remain rejected. Preserve caller-owned ownership checks, execution, new-session defaults, and the cohesive runner/manager state machines.\n\nThe settled behavior and confirmed test seams are in [spec.md](spec.md).\n\n## Acceptance criteria\n\n- Root and nested public resumes accept omitted fixed settings, including stored `true` for context inheritance and isolation.\n- Explicit matching settings succeed; conflicting settings fail before resume and leave stored choices unchanged.\n- Blank guidance retains its current treatment as omission; foreground/background selection remains changeable per invocation.\n- Both callers use the shared policy interface; new-session defaults and ownership checks remain unchanged.\n- Policy-interface and public-tool integration tests cover these outcomes, including Pi's omission-versus-explicit-false validation path.\n- Runtime guidance and product documentation describe the corrected semantics; relevant automated checks pass.\n\n## Current State\n\nImplemented and committed as `69ef926` (`fix(subagents): preserve stored settings on resume`). The selected behavior and its scoped acceptance criteria are satisfied. The operator confirmed that the work is done and explicitly requested task closure. Root and nested callers share the existing invocation-policy module; omitted fixed settings reuse stored choices, while explicit changes remain rejected before continuation.\n\nBoth test seams were freshly confirmed before test edits. Root and nested omission regressions each failed with the intended original policy error, then passed after shared-policy integration. Tests exercise the actual Pi argument validator, matching and conflicting choices, prompt normalization, ownership, and foreground/background continuation. New-session defaults remain unchanged.\n\nImplementation validation passed: repository formatting, lint, typecheck, 106 Vitest files / 1,186 tests, 118 offline pair-harness checks, extension-loader smoke test, package dry-run, and diff whitespace checks. Scoped pre-commit checks also passed, including 13 subagent files / 191 tests. Independent Standards and Intent/Spec reviews of the six-file diff against `8dc824f` found no material findings. The reflected documentation cleanup was inspected in the actual commit.\n\nDuring implementation, repository-wide checks briefly failed in concurrently edited Pi Exec code; the implementation-phase rerun passed after that work settled. Subsequent commits have not changed the six implementation paths. No implementation defects, research, prototypes, or tickets remain.\n\nThe first closeout rerun at `8555e2c` passed formatting, lint, typecheck, and package dry-run. Vitest passed 106 suites / 1,186 test cases but failed an additional suite because a concurrently removed temporary Pi Exec test disappeared between discovery and loading.\n\nAfter concurrent code edits settled, the latest full closeout run at `41b1443` again passed formatting, lint, typecheck, and package dry-run. Its unit stage failed 4 tests in 3 suites, with 1,182 passing: two standalone-extension registration tests reached their 5-second deadlines, and two task bash-tool tests failed detach/abort expectations. These are different failures from the earlier removed-file race. All four cases then passed in a focused current-tree rerun; they were not reproduced in isolation, but that full closeout test run still failed. Neither closeout attempt reached the pair or loader stages because those follow the unit stage through `&&`.\n\nThe selected six implementation paths remain unchanged. No source changes were made to address the out-of-scope test failures. Those results remain recorded without a claim that the latest full closeout suite passed. Live-provider/network E2E and installation from a packed tarball were not exercised; neither is an outstanding acceptance requirement for this bounded change.\n\n### Closeout decision\n\nThe operator confirmed the scoped undertaking is complete and directed closure. The implementation-time validation and later closeout attempts are retained above as separate evidence. The later repository-wide failures do not create another implementation or validation hand-off owned by this completed task. Archived as `done`. The operator separately authorized committing the ledger closeout.\n\n## Outcome\n\nCompleted the settled [specification](spec.md) in one context without creating horizontal tickets or a separate prefactor. Product documentation and model-visible guidance describe the corrected resume semantics. Implementation is committed; this workflow did not push. Closed on explicit operator confirmation. The archived ledger closeout was committed as `26b42ee` (`docs(ledger): close subagent resume policy task`) on the operator's request. No push was requested. No build or hand-off steps remain for this task.\n",
+  "seedGate": null,
+  "seed": "3dfdb632533f092388a456062b9fe3a7aa44f5bde05153a2de66e1e82f31b614",
+  "startedAt": "2026-10-04T05:20:38.023Z",
+  "endedAt": "2026-10-04T05:28:59.602Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 5
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 3
+    },
+    "generations": {
+      "maxDepth": 0,
+      "rootsPerGeneration": 0,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 1
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 1800,
+        "outputTokens": 60000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": [
+        "node_modules"
+      ]
+    },
+    "apply": "report",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "725c111d4a5f7841be4035c3947e5f1e1af4edfa",
+    "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+  },
+  "spec": {
+    "sha256": "340cbeb9a5c56df8db342886e645072b4b76b59adaa2cb7de7d6661e29079fdf",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate oracle-1: fails on the base twice, as declared\ngate oracle-2: fails on the base twice, as declared",
+        "ms": 35737
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 154,
+      "cacheReadTokens": 1961713,
+      "cacheWriteTokens": 103553,
+      "outputTokens": 33177
+    },
+    "author": null,
+    "review": null,
+    "ms": 501579
+  },
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Treat the task as closed and only verify that. The ledger says the task is done, the implementation is committed as 69ef926 and the closeout as 26b42ee. Check that the ledger file is archived with Status: done, that the six implementation paths have not changed since 69ef926, and that the wiki links still resolve. Do not change any source code.",
+          "firstStep": "Run `git log --oneline -5 -- <the six implementation paths>` and `git show --stat 26b42ee` to confirm nothing has changed since closeout, then run wiki_lint."
+        },
+        {
+          "id": "c2",
+          "approach": "Rerun the whole closeout suite on a quiet tree. The latest full run at 41b1443 failed 4 unrelated tests, and the pair-harness and loader stages never ran. Run format, lint, typecheck, unit, pair, loader and the package dry-run in one go while no concurrent edits are happening, then add the result to the ledger as new evidence.",
+          "firstStep": "Check `git status` for a clean tree, then run the full closeout check command (format/lint/typecheck/vitest/pair/loader/pack) and capture its output."
+        },
+        {
+          "id": "c3",
+          "approach": "Look into the flaky out-of-scope failures as a separate follow-up: the standalone-extension registration timeouts and the task bash-tool detach/abort expectations. Reproduce them under load or running alongside the full suite, find the cause (timing deadlines or shared state), and open a separate ticket or fix rather than reopening this task.",
+          "firstStep": "Run the standalone-extension registration and bash-tool test files repeatedly within the full vitest run (e.g. `vitest run --sequence.shuffle` several times) to reproduce the 5-second timeouts."
+        },
+        {
+          "id": "c4",
+          "approach": "Check that the shipped behavior matches spec.md end to end. Read the shared invocation-policy module and its root and nested callers, and confirm that omitted fixed settings reuse stored choices and explicit conflicts are rejected. Then run only the 13 subagent test files plus the extension-loader smoke test and the offline pair harness, which never ran during closeout.",
+          "firstStep": "Read spec.md and the invocation-policy module diff from `git show 69ef926`, then run the subagent vitest files and the pair harness."
+        },
+        {
+          "id": "c5",
+          "approach": "Exercise the parts that were never tested. Install from a packed tarball and run a live-provider resume of a public subagent, both root and nested, with omitted inherit_context/isolated stored as true. Record the result as optional extra evidence on the archived ledger.",
+          "firstStep": "Run `npm pack`, install the tarball into a scratch project, and script a root agent session that creates and then resumes a public subagent with inherit_context=true while omitting the flag on resume."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 4,
+        "cacheReadTokens": 2712,
+        "cacheWriteTokens": 2027,
+        "outputTokens": 939,
+        "ms": 12032
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "Change as few files as possible."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Change as few files as possible."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Delete or simplify existing code before you add code."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "no survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 0,
+      "endSeq": 3,
+      "startCommit": "725c111d4a5f7841be4035c3947e5f1e1af4edfa",
+      "commit": "759f9ce3525c4277d2a39e9cdb4672584070f53e",
+      "selfReport": "abandoned",
+      "learned": "The ledger's \"done\" claim doesn't hold in this copy: neither commit exists and the source still treats omitted resume settings as `false`, so the task needs to be implemented rather than verified.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 14,
+        "cacheReadTokens": 33503,
+        "cacheWriteTokens": 5853,
+        "outputTokens": 1414,
+        "runMs": 58405,
+        "scoreMs": 14888
+      },
+      "gates": {
+        "oracle-1": "fail",
+        "oracle-2": "fail"
+      },
+      "gateOutput": {
+        "oracle-1": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r0\n\n ❯ components/subagents/tests/subagent-runner-e2e.test.ts (17 tests | 2 failed) 2729ms\n     × resumes a completed public agent with its model-visible ID and prior context 139ms\n     × resumes an owned nested teammate with omitted fixed settings 118ms\n\n Test Files  1 failed (1)\n      Tests  2 failed | 15 passed (17)\n   Start at  22:28:25\n   Duration  11.42s (transform 490ms, setup 0ms, import 8.44s, tests 2.73s, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/subagent-runner-e2e.test.ts > subagent runner with Pi's real AgentSession > resumes a completed public agent with its model-visible ID and prior context\nAssertionError: expected 'profile, system_prompt, inherit_conte…' to contain 'AGENT-RESUME-OK'\n\nExpected: \"AGENT-RESUME-OK\"\nReceived: \"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.\"\n\n ❯ components/subagents/tests/subagent-runner-e2e.test.ts:695:36\n    693|    expect(resumeArgs).not.toHaveProperty(\"isolated\");\n    694|    const resumed = await tool.execute(\"public-agent-resume\", resumeArg…\n    695|    expect(resumed.content[0].text).toContain(\"AGENT-RESUME-OK\");\n       |                                    ^\n    696|    expect(resumed.content[0].text).toContain(`Agent ID: ${agentId}`);\n    697|    expect(resumed.details).toMatchObject({ agentId, status: \"completed…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯\n\n FAIL  components/subagents/tests/subagent-runner-e2e.test.ts > subagent runner with Pi's real AgentSession > resumes an owned nested teammate with omitted fixed settings\nAssertionError: expected { type: 'text', …(1) } to match object { text: StringContaining{…} }\n(1 matching property omitted from actual)\n\n- Expected\n+ Received\n\n  {\n-   \"text\": StringContaining \"NESTED-RESUMED\",\n+   \"text\": \"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.\",\n  }\n\n ❯ components/subagents/tests/subagent-runner-e2e.test.ts:1243:31\n    1241|    expect(args).not.toHaveProperty(\"isolated\");\n    1242|    const resumed = await tool.execute(\"nested-resume\", args, undefined…\n    1243|    expect(resumed.content[0]).toMatchObject({ text: expect.stringConta…\n       |                               ^\n    1244|    faux.appendResponses([\n    1245|     () => fauxAssistantMessage([fauxText(\"NESTED-MATCHED\")]),\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯\n\n",
+          "ms": 13123
+        },
+        "oracle-2": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r0\n\n ❯ components/subagents/tests/subagents.test.ts (64 tests | 22 failed) 63ms\n       × reuses every stored choice when fixed settings are omitted 2ms\n       × accepts matching choices or retained normalization: {\"inherit_context\":true} 0ms\n       × accepts matching choices or retained normalization: {\"isolated\":true} 0ms\n       × accepts matching choices or retained normalization: {\"pair\":true} 0ms\n       × accepts matching choices or retained normalization: {\"profile\":\"deep\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":true} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":false} 0ms\n       × rejects an explicit conflicting choice: {\"inherit_context\":false} 0ms\n       × rejects an explicit conflicting choice: {\"isolated\":false} 0ms\n       × rejects an explicit conflicting choice: {\"pair\":false} 0ms\n       × rejects an explicit conflicting choice: {\"profile\":\"quick\"} 0ms\n       × rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"} 0ms\n       × accepts matching false values and absent optional choices 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"isolated\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"pair\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"} 0ms\n     × allows omitted invocation choices in root and nested tools with an optional uncapped yield interval 2ms\n\n Test Files  1 failed (1)\n      Tests  22 failed | 42 passed (64)\n   Start at  22:28:36\n   Duration  1.57s (transform 360ms, setup 0ms, import 1.41s, tests 63ms, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > reuses every stored choice when fixed settings are omitted\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:689:11\n    687|\n    688|   it(\"reuses every stored choice when fixed settings are omitted\", () …\n    689|    expect(getAgentResumeError(invocation, {})).toBeUndefined();\n       |           ^\n    690|   });\n    691|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"profile\":\"deep\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":false}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:703:11\n    701|    { run_in_background: false },\n    702|   ])(\"accepts matching choices or retained normalization: %j\", (params…\n    703|    expect(getAgentResumeError(invocation, params)).toBeUndefined();\n       |           ^\n    704|   });\n    705|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"inherit_context\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"isolated\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"pair\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:713:11\n    711|    { system_prompt: \"Replace the original guidance.\" },\n    712|   ])(\"rejects an explicit conflicting choice: %j\", (params) => {\n    713|    expect(getAgentResumeError(invocation, params)).toContain(\"fixed wh…\n       |           ^\n    714|   });\n    715|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching false values and absent optional choices\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:718:11\n    716|   it(\"accepts matching false values and absent optional choices\", () =…\n    717|    const defaults = Object.freeze({ inheritContext: false, isolated: f…\n    718|    expect(getAgentResumeError(defaults, {})).toBeUndefined();\n       |           ^\n    719|    expect(getAgentResumeError(defaults, { inherit_context: false, isol…\n    720|    expect(getAgentResumeError(defaults, { system_prompt: \" \\t \" })).to…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:731:11\n    729|    { system_prompt: \"New guidance.\" },\n    730|   ])(\"rejects a new choice when the stored setting is false or absent:…\n    731|    expect(getAgentResumeError({ inheritContext: false, isolated: false…\n       |           ^\n    732|     \"fixed when an agent session starts\",\n    733|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > allows omitted invocation choices in root and nested tools with an optional uncapped yield interval\nAssertionError: expected 'Existing agent ID to continue.' to contain 'Omitted profile, system_prompt, inher…'\n\nExpected: \"Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices\"\nReceived: \"Existing agent ID to continue.\"\n\n ❯ components/subagents/tests/subagents.test.ts:1036:49\n    1034|    }\n    1035|    expect(schema.required).not.toContain(\"pair\");\n    1036|    expect(schema.properties.resume.description).toContain(\n       |                                                 ^\n    1037|     \"Omitted profile, system_prompt, inherit_context, pair, and isolat…\n    1038|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯\n\n",
+          "ms": 1765
+        }
+      },
+      "gatesPassed": 0,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 0
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 1,
+      "endSeq": 4,
+      "startCommit": "725c111d4a5f7841be4035c3947e5f1e1af4edfa",
+      "commit": "6b319738b536891860322b1cd93aa52528c18cbf",
+      "selfReport": "done",
+      "learned": "The task record described commit `69ef926` and a `spec.md` that didn't exist in this repository, so \"verify the shipped fix\" turned into implementing it.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 56,
+        "cacheReadTokens": 686132,
+        "cacheWriteTokens": 41315,
+        "outputTokens": 11743,
+        "runMs": 204643,
+        "scoreMs": 7958
+      },
+      "gates": {
+        "oracle-1": "pass",
+        "oracle-2": "fail"
+      },
+      "gateOutput": {
+        "oracle-1": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r1\n\n\n Test Files  1 passed (1)\n      Tests  17 passed (17)\n   Start at  22:28:23\n   Duration  5.82s (transform 384ms, setup 0ms, import 1.86s, tests 3.88s, environment 0ms)\n\n",
+          "stderr": "",
+          "ms": 6068
+        },
+        "oracle-2": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r1\n\n ❯ components/subagents/tests/subagents.test.ts (64 tests | 22 failed) 61ms\n       × reuses every stored choice when fixed settings are omitted 2ms\n       × accepts matching choices or retained normalization: {\"inherit_context\":true} 0ms\n       × accepts matching choices or retained normalization: {\"isolated\":true} 0ms\n       × accepts matching choices or retained normalization: {\"pair\":true} 0ms\n       × accepts matching choices or retained normalization: {\"profile\":\"deep\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":true} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":false} 0ms\n       × rejects an explicit conflicting choice: {\"inherit_context\":false} 0ms\n       × rejects an explicit conflicting choice: {\"isolated\":false} 0ms\n       × rejects an explicit conflicting choice: {\"pair\":false} 0ms\n       × rejects an explicit conflicting choice: {\"profile\":\"quick\"} 0ms\n       × rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"} 0ms\n       × accepts matching false values and absent optional choices 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"isolated\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"pair\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"} 0ms\n     × allows omitted invocation choices in root and nested tools with an optional uncapped yield interval 2ms\n\n Test Files  1 failed (1)\n      Tests  22 failed | 42 passed (64)\n   Start at  22:28:29\n   Duration  1.68s (transform 357ms, setup 0ms, import 1.53s, tests 61ms, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > reuses every stored choice when fixed settings are omitted\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:689:11\n    687|\n    688|   it(\"reuses every stored choice when fixed settings are omitted\", () …\n    689|    expect(getAgentResumeError(invocation, {})).toBeUndefined();\n       |           ^\n    690|   });\n    691|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"profile\":\"deep\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":false}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:703:11\n    701|    { run_in_background: false },\n    702|   ])(\"accepts matching choices or retained normalization: %j\", (params…\n    703|    expect(getAgentResumeError(invocation, params)).toBeUndefined();\n       |           ^\n    704|   });\n    705|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"inherit_context\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"isolated\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"pair\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:713:11\n    711|    { system_prompt: \"Replace the original guidance.\" },\n    712|   ])(\"rejects an explicit conflicting choice: %j\", (params) => {\n    713|    expect(getAgentResumeError(invocation, params)).toContain(\"fixed wh…\n       |           ^\n    714|   });\n    715|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching false values and absent optional choices\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:718:11\n    716|   it(\"accepts matching false values and absent optional choices\", () =…\n    717|    const defaults = Object.freeze({ inheritContext: false, isolated: f…\n    718|    expect(getAgentResumeError(defaults, {})).toBeUndefined();\n       |           ^\n    719|    expect(getAgentResumeError(defaults, { inherit_context: false, isol…\n    720|    expect(getAgentResumeError(defaults, { system_prompt: \" \\t \" })).to…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:731:11\n    729|    { system_prompt: \"New guidance.\" },\n    730|   ])(\"rejects a new choice when the stored setting is false or absent:…\n    731|    expect(getAgentResumeError({ inheritContext: false, isolated: false…\n       |           ^\n    732|     \"fixed when an agent session starts\",\n    733|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > allows omitted invocation choices in root and nested tools with an optional uncapped yield interval\nAssertionError: expected 'Existing agent ID to continue. Omit p…' to contain 'Omitted profile, system_prompt, inher…'\n\nExpected: \"Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices\"\nReceived: \"Existing agent ID to continue. Omit profile, system_prompt, inherit_context, isolated, and pair to keep the session's stored choices; explicit different values are rejected.\"\n\n ❯ components/subagents/tests/subagents.test.ts:1036:49\n    1034|    }\n    1035|    expect(schema.required).not.toContain(\"pair\");\n    1036|    expect(schema.properties.resume.description).toContain(\n       |                                                 ^\n    1037|     \"Omitted profile, system_prompt, inherit_context, pair, and isolat…\n    1038|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯\n\n",
+          "ms": 1890
+        }
+      },
+      "gatesPassed": 1,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 264
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "725c111d4a5f7841be4035c3947e5f1e1af4edfa",
+      "commit": "955746c188f610036657a3daba2f1bcd6c802fb5",
+      "selfReport": "done",
+      "learned": "Even with no concurrent edits, the full closeout suite can fail two load-sensitive tasks bash-tool tests (the unmodified base fails the abort test the same way), so one full-suite failure isn't evidence of a defect, and this copy needed the implementation itself before any closeout evidence meant anything.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 80,
+        "cacheReadTokens": 1239366,
+        "cacheWriteTokens": 54358,
+        "outputTokens": 19081,
+        "runMs": 363468,
+        "scoreMs": 7313
+      },
+      "gates": {
+        "oracle-1": "pass",
+        "oracle-2": "fail"
+      },
+      "gateOutput": {
+        "oracle-1": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r2\n\n\n Test Files  1 passed (1)\n      Tests  17 passed (17)\n   Start at  22:28:23\n   Duration  5.24s (transform 350ms, setup 0ms, import 1.47s, tests 3.69s, environment 0ms)\n\n",
+          "stderr": "",
+          "ms": 5474
+        },
+        "oracle-2": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-23gkAt/.git/apple-pi/branch-search/bs-20261004-052038-0d55/wt/r2\n\n ❯ components/subagents/tests/subagents.test.ts (64 tests | 22 failed) 67ms\n       × reuses every stored choice when fixed settings are omitted 2ms\n       × accepts matching choices or retained normalization: {\"inherit_context\":true} 0ms\n       × accepts matching choices or retained normalization: {\"isolated\":true} 0ms\n       × accepts matching choices or retained normalization: {\"pair\":true} 0ms\n       × accepts matching choices or retained normalization: {\"profile\":\"deep\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\"\"} 0ms\n       × accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":true} 0ms\n       × accepts matching choices or retained normalization: {\"run_in_background\":false} 0ms\n       × rejects an explicit conflicting choice: {\"inherit_context\":false} 0ms\n       × rejects an explicit conflicting choice: {\"isolated\":false} 0ms\n       × rejects an explicit conflicting choice: {\"pair\":false} 0ms\n       × rejects an explicit conflicting choice: {\"profile\":\"quick\"} 0ms\n       × rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"} 0ms\n       × accepts matching false values and absent optional choices 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"isolated\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"pair\":true} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"} 0ms\n       × rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"} 0ms\n     × allows omitted invocation choices in root and nested tools with an optional uncapped yield interval 2ms\n\n Test Files  1 failed (1)\n      Tests  22 failed | 42 passed (64)\n   Start at  22:28:29\n   Duration  1.63s (transform 344ms, setup 0ms, import 1.42s, tests 67ms, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > reuses every stored choice when fixed settings are omitted\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:689:11\n    687|\n    688|   it(\"reuses every stored choice when fixed settings are omitted\", () …\n    689|    expect(getAgentResumeError(invocation, {})).toBeUndefined();\n       |           ^\n    690|   });\n    691|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"profile\":\"deep\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"  Keep the answer short.  \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\"\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"system_prompt\":\" \\n\\t \"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching choices or retained normalization: {\"run_in_background\":false}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:703:11\n    701|    { run_in_background: false },\n    702|   ])(\"accepts matching choices or retained normalization: %j\", (params…\n    703|    expect(getAgentResumeError(invocation, params)).toBeUndefined();\n       |           ^\n    704|   });\n    705|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"inherit_context\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"isolated\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"pair\":false}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects an explicit conflicting choice: {\"system_prompt\":\"Replace the original guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:713:11\n    711|    { system_prompt: \"Replace the original guidance.\" },\n    712|   ])(\"rejects an explicit conflicting choice: %j\", (params) => {\n    713|    expect(getAgentResumeError(invocation, params)).toContain(\"fixed wh…\n       |           ^\n    714|   });\n    715|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > accepts matching false values and absent optional choices\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:718:11\n    716|   it(\"accepts matching false values and absent optional choices\", () =…\n    717|    const defaults = Object.freeze({ inheritContext: false, isolated: f…\n    718|    expect(getAgentResumeError(defaults, {})).toBeUndefined();\n       |           ^\n    719|    expect(getAgentResumeError(defaults, { inherit_context: false, isol…\n    720|    expect(getAgentResumeError(defaults, { system_prompt: \" \\t \" })).to…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"inherit_context\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"isolated\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"pair\":true}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"profile\":\"quick\"}\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > agent resume policy > rejects a new choice when the stored setting is false or absent: {\"system_prompt\":\"New guidance.\"}\nTypeError: getAgentResumeError is not a function\n ❯ components/subagents/tests/subagents.test.ts:731:11\n    729|    { system_prompt: \"New guidance.\" },\n    730|   ])(\"rejects a new choice when the stored setting is false or absent:…\n    731|    expect(getAgentResumeError({ inheritContext: false, isolated: false…\n       |           ^\n    732|     \"fixed when an agent session starts\",\n    733|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯\n\n FAIL  components/subagents/tests/subagents.test.ts > owned subagent surface > allows omitted invocation choices in root and nested tools with an optional uncapped yield interval\nAssertionError: expected 'Existing agent ID to continue. Omitte…' to contain 'Omitted profile, system_prompt, inher…'\n\nExpected: \"Omitted profile, system_prompt, inherit_context, pair, and isolated reuse stored choices\"\nReceived: \"Existing agent ID to continue. Omitted profile, system_prompt, inherit_context, isolated, and pair reuse the session's stored choices; explicit values must match them.\"\n\n ❯ components/subagents/tests/subagents.test.ts:1036:49\n    1034|    }\n    1035|    expect(schema.required).not.toContain(\"pair\");\n    1036|    expect(schema.properties.resume.description).toContain(\n       |                                                 ^\n    1037|     \"Omitted profile, system_prompt, inherit_context, pair, and isolat…\n    1038|    );\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯\n\n",
+          "ms": 1839
+        }
+      },
+      "gatesPassed": 1,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 379
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+    },
+    {
+      "phase": "after g0",
+      "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+    }
+  ],
+  "winner": null,
+  "apply": null,
+  "outcome": "no survivor",
+  "abortReason": null,
+  "cleanupErrors": []
+}

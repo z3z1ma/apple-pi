@@ -1,0 +1,28 @@
+{
+  "model": "coding",
+  "tasks": ["202610031136-subagent-resume-policy"],
+  "oracle": { "timeoutSec": 900 },
+  "overrides": {
+    "202610031136-subagent-resume-policy": {
+      "base": "69ef926^",
+      "final": "69ef926",
+      "tests": ["components/subagents/tests/subagent-runner-e2e.test.ts", "components/subagents/tests/subagents.test.ts"]
+    }
+  },
+  "search": {
+    "passive": { "enabled": false, "repeatThreshold": 3 },
+    "enumerate": { "count": 5 },
+    "branches": { "perGeneration": 3, "maxTotal": 3 },
+    "generations": { "maxDepth": 0, "rootsPerGeneration": 0, "parentsPerGeneration": 1, "childrenPerParent": 1 },
+    "branch": { "limits": { "wallClockSec": 1800, "outputTokens": 60000 } },
+    "scorer": { "validationRetries": 1 },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": { "cloneIgnored": ["node_modules"] },
+    "apply": "report"
+  }
+}

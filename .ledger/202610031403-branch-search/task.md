@@ -1,6 +1,6 @@
 Status: in-progress
 Created: 2026-10-03
-Updated: 2026-10-03
+Updated: 2026-10-04
 
 # Branch search: externally drawn parallel attempts scored by hidden checks
 
@@ -42,4 +42,16 @@ Progress:
 
 ## Outcome
 
-Pending.
+All nine tickets are built, reviewed, and committed (`ccd4f5f` to `d3c5435`). Branch search ships as `/branch-search`, the `search_branches` tool, passive activation, `/branch-search replay`, and the `eval:branch-search` harness; `docs/branch-search.md` owns the behavior.
+
+First evaluation (one-task pilot, 2026-10-04, `evaluation/branch-search-evaluation-20261004-044425.md`): task `202610031136-subagent-resume-policy`, claude-opus-5-5, `maxDepth` 0, 3 roots. No arm solved it. A (single trajectory) passed 0 of 2 oracle gates in 17 s; both oracle-scorer searches ended `no survivor`; both authored-scorer searches ended `ready` with winners passing 1 of 2 oracle gates. Estimated cost about $8 at main-model rates.
+
+Live evidence for A4: every search arm's branches read 2.0M to 2.9M tokens from cache against about 200 uncached input tokens.
+
+Not proven / open:
+
+- One task is no evidence for or against the success criteria.
+- Arm A ran 17 s: it gets only the goal, while search branches get a directive to work until done. The arms are not framed alike; fix before a larger run.
+- File-level oracle gates on large e2e files likely test interfaces the task introduced (spec 7.5), which no attempt can know; the authored scorer did better against them than the oracle scorer did as a search signal.
+- Isolation residual risks are documented in `docs/branch-search.md`.
+- Spec 8.5's blocked-tool message is changed to "…in this fork." in another lane's uncommitted work; one branch-search extension test expects the spec text.

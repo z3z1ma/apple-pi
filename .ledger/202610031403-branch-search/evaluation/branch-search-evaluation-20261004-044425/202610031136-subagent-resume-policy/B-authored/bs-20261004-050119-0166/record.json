@@ -1,0 +1,362 @@
+{
+  "id": "bs-20261004-050119-0166",
+  "mode": "human",
+  "goal": "Status: done\nCreated: 2026-10-03\nUpdated: 2026-10-03\n\n# Centralize public-subagent resume policy\n\n## Intent\n\nResuming a public subagent previously treated omitted `inherit_context` and `isolated` as `false`, rejecting sessions whose stored choices were `true`. The five settings fixed at session start are `inherit_context`, `isolated`, `pair`, `profile`, and `system_prompt`.\n\nDeepen the existing invocation-policy module so the main session's root `agent` tool and a public child's ownership-scoped nested `agent` tool share one resume-compatibility decision. All omitted fixed settings reuse the stored choices; explicitly changed settings remain rejected. Preserve caller-owned ownership checks, execution, new-session defaults, and the cohesive runner/manager state machines.\n\nThe settled behavior and confirmed test seams are in [spec.md](spec.md).\n\n## Acceptance criteria\n\n- Root and nested public resumes accept omitted fixed settings, including stored `true` for context inheritance and isolation.\n- Explicit matching settings succeed; conflicting settings fail before resume and leave stored choices unchanged.\n- Blank guidance retains its current treatment as omission; foreground/background selection remains changeable per invocation.\n- Both callers use the shared policy interface; new-session defaults and ownership checks remain unchanged.\n- Policy-interface and public-tool integration tests cover these outcomes, including Pi's omission-versus-explicit-false validation path.\n- Runtime guidance and product documentation describe the corrected semantics; relevant automated checks pass.\n\n## Current State\n\nImplemented and committed as `69ef926` (`fix(subagents): preserve stored settings on resume`). The selected behavior and its scoped acceptance criteria are satisfied. The operator confirmed that the work is done and explicitly requested task closure. Root and nested callers share the existing invocation-policy module; omitted fixed settings reuse stored choices, while explicit changes remain rejected before continuation.\n\nBoth test seams were freshly confirmed before test edits. Root and nested omission regressions each failed with the intended original policy error, then passed after shared-policy integration. Tests exercise the actual Pi argument validator, matching and conflicting choices, prompt normalization, ownership, and foreground/background continuation. New-session defaults remain unchanged.\n\nImplementation validation passed: repository formatting, lint, typecheck, 106 Vitest files / 1,186 tests, 118 offline pair-harness checks, extension-loader smoke test, package dry-run, and diff whitespace checks. Scoped pre-commit checks also passed, including 13 subagent files / 191 tests. Independent Standards and Intent/Spec reviews of the six-file diff against `8dc824f` found no material findings. The reflected documentation cleanup was inspected in the actual commit.\n\nDuring implementation, repository-wide checks briefly failed in concurrently edited Pi Exec code; the implementation-phase rerun passed after that work settled. Subsequent commits have not changed the six implementation paths. No implementation defects, research, prototypes, or tickets remain.\n\nThe first closeout rerun at `8555e2c` passed formatting, lint, typecheck, and package dry-run. Vitest passed 106 suites / 1,186 test cases but failed an additional suite because a concurrently removed temporary Pi Exec test disappeared between discovery and loading.\n\nAfter concurrent code edits settled, the latest full closeout run at `41b1443` again passed formatting, lint, typecheck, and package dry-run. Its unit stage failed 4 tests in 3 suites, with 1,182 passing: two standalone-extension registration tests reached their 5-second deadlines, and two task bash-tool tests failed detach/abort expectations. These are different failures from the earlier removed-file race. All four cases then passed in a focused current-tree rerun; they were not reproduced in isolation, but that full closeout test run still failed. Neither closeout attempt reached the pair or loader stages because those follow the unit stage through `&&`.\n\nThe selected six implementation paths remain unchanged. No source changes were made to address the out-of-scope test failures. Those results remain recorded without a claim that the latest full closeout suite passed. Live-provider/network E2E and installation from a packed tarball were not exercised; neither is an outstanding acceptance requirement for this bounded change.\n\n### Closeout decision\n\nThe operator confirmed the scoped undertaking is complete and directed closure. The implementation-time validation and later closeout attempts are retained above as separate evidence. The later repository-wide failures do not create another implementation or validation hand-off owned by this completed task. Archived as `done`. The operator separately authorized committing the ledger closeout.\n\n## Outcome\n\nCompleted the settled [specification](spec.md) in one context without creating horizontal tickets or a separate prefactor. Product documentation and model-visible guidance describe the corrected resume semantics. Implementation is committed; this workflow did not push. Closed on explicit operator confirmation. The archived ledger closeout was committed as `26b42ee` (`docs(ledger): close subagent resume policy task`) on the operator's request. No push was requested. No build or hand-off steps remain for this task.\n",
+  "seedGate": null,
+  "seed": "740d1e9276cac5054c7b9eb0addf96f9448320a1a318b372d0cc3dc0a0c5a1f5",
+  "startedAt": "2026-10-04T05:01:19.899Z",
+  "endedAt": "2026-10-04T05:20:02.491Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 5
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 3
+    },
+    "generations": {
+      "maxDepth": 0,
+      "rootsPerGeneration": 0,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 1
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 1800,
+        "outputTokens": 60000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": [
+        "node_modules"
+      ]
+    },
+    "apply": "report",
+    "draw": "model"
+  },
+  "base": {
+    "commit": "2ad5d0a042f5e8704ab49690ac5bb424457af0c0",
+    "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+  },
+  "spec": {
+    "sha256": "f7f1990fe22f607656b0b2e2119dd3465a2cb730c102a3c0641c9367ded75d0b",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate resume-policy-acceptance: fails on the base twice, as declared\ngate subagents-suite: passes on the base twice, as declared\ngate check: passes on the base twice, as declared\ngate loader: passes on the base twice, as declared",
+        "ms": 74853
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 210,
+      "cacheReadTokens": 2263004,
+      "cacheWriteTokens": 143879,
+      "outputTokens": 51302
+    },
+    "author": {
+      "inputTokens": 62,
+      "cacheReadTokens": 857417,
+      "cacheWriteTokens": 54508,
+      "outputTokens": 21271,
+      "ms": 355871
+    },
+    "review": null,
+    "ms": 1122592
+  },
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Treat the task as closed and only check it. The ledger already reports `done`, with the implementation commit (`69ef926`) and the closeout commit (`26b42ee`) recorded. Confirm that both commits exist, that the six implementation paths haven't changed since `69ef926`, and that the ledger status and outcome match the repository. Change nothing unless a mismatch turns up.",
+          "firstStep": "Run `git log --oneline -5 69ef926 26b42ee` and `git diff --stat 69ef926 HEAD -- <six implementation paths>` to confirm the recorded commits exist and the scoped files haven't changed."
+        },
+        {
+          "id": "c2",
+          "approach": "Rerun the full closeout validation so the ledger can record a clean result. Run formatting, lint, typecheck, unit tests, the pair harness, the loader smoke test and the package dry-run on the current tree now that concurrent edits have settled. If everything passes, append that as new evidence in the ledger without rewriting the earlier failed attempts.",
+          "firstStep": "Run the repository's full check script (the chain that runs unit, then pair, then loader) on the current HEAD and capture the output."
+        },
+        {
+          "id": "c3",
+          "approach": "Find out whether the four failures in the latest closeout run are flaky. These are the two standalone-extension registration timeouts and the two task bash-tool detach/abort tests. Run those suites repeatedly under full-suite parallelism to see whether they fail on their own, and record the result as out-of-scope evidence for whoever owns that code. Don't change source code under this task.",
+          "firstStep": "Run the two affected Vitest files 10 times in a loop alongside the full suite and record the pass/fail counts."
+        },
+        {
+          "id": "c4",
+          "approach": "Audit the shared resume policy for gaps the acceptance criteria might have missed. Use `rg` to find every caller of the invocation-policy resume-compatibility function and check that no other resume path still defaults omitted `inherit_context` or `isolated` to `false`. Any gap found becomes a follow-up note, not a reopening of this task.",
+          "firstStep": "Run `rg -n \"inherit_context|isolated\" src/` and cross-check each resume path against the shared policy interface."
+        },
+        {
+          "id": "c5",
+          "approach": "Check the documentation and the wiki ledger for consistency. Run `wiki_lint` and `wiki_references` on the task page and its `spec.md` so the archived ledger has no broken links and is properly linked from the index. Check that the product docs and the model-visible guidance describe the resume semantics in matching terms.",
+          "firstStep": "Run the `wiki_lint` tool and then `wiki_references` on the task's ledger page to check its link neighborhood."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 4,
+        "cacheReadTokens": 2712,
+        "cacheWriteTokens": 2027,
+        "outputTokens": 919,
+        "ms": 11780
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "Write a failing test that reproduces the problem before you change any source file."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c3",
+            "constraint": "Change as few files as possible."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "Write a failing test that reproduces the problem before you change any source file.",
+      "startSeq": 0,
+      "endSeq": 4,
+      "startCommit": "2ad5d0a042f5e8704ab49690ac5bb424457af0c0",
+      "commit": "00ac1035bf0f6935e9d6f2894e920695677549ec",
+      "selfReport": "done",
+      "learned": "The \"done\" ledger described commits and a fix that weren't in this repository, so checking that the recorded hashes actually exist was what showed the work still needed doing.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 68,
+        "cacheReadTokens": 949335,
+        "cacheWriteTokens": 48693,
+        "outputTokens": 14342,
+        "runMs": 415519,
+        "scoreMs": 43552
+      },
+      "gates": {
+        "resume-policy-acceptance": "pass",
+        "subagents-suite": "pass",
+        "check": "pass",
+        "loader": "pass"
+      },
+      "gateOutput": {
+        "resume-policy-acceptance": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r0\n\n\n Test Files  1 passed (1)\n      Tests  15 passed (15)\n   Start at  22:19:02\n   Duration  14.27s (transform 1.23s, setup 0ms, import 13.37s, tests 586ms, environment 0ms)\n\n",
+          "stderr": "",
+          "ms": 18502
+        },
+        "subagents-suite": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r0\n\n\n Test Files  14 passed (14)\n      Tests  185 passed (185)\n   Start at  22:19:16\n   Duration  8.43s (transform 4.19s, setup 0ms, import 44.65s, tests 5.29s, environment 1ms)\n\n",
+          "stderr": "",
+          "ms": 9170
+        },
+        "check": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 check\n> npm run format:check && npm run lint && npm run typecheck\n\n\n> apple-pi@0.1.0 format:check\n> biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json\n\nChecked 332 files in 231ms. No fixes applied.\n\n> apple-pi@0.1.0 lint\n> biome lint components optional-extensions extensions tests scripts\n\nChecked 329 files in 141ms. No fixes applied.\n\n> apple-pi@0.1.0 typecheck\n> tsc --noEmit\n\n",
+          "stderr": "",
+          "ms": 11349
+        },
+        "loader": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 test:loader\n> node tests/package-load.mjs\n\napple-pi: all extension entrypoints loaded\n",
+          "stderr": "",
+          "ms": 4531
+        }
+      },
+      "gatesPassed": 4,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 417
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 1,
+      "endSeq": 3,
+      "startCommit": "2ad5d0a042f5e8704ab49690ac5bb424457af0c0",
+      "commit": "eb2ff594a5d9304522b5e871909cf9f891d8038d",
+      "selfReport": "abandoned",
+      "learned": "This branch-search copy is at a base without the fix commit or its ledger task, and the two standalone extension-registration tests reliably time out at 5 s under the full parallel suite but pass alone, so no clean closeout result can be recorded here.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 24,
+        "cacheReadTokens": 98391,
+        "cacheWriteTokens": 12072,
+        "outputTokens": 3613,
+        "runMs": 204285,
+        "scoreMs": 43552
+      },
+      "gates": {
+        "resume-policy-acceptance": "fail",
+        "subagents-suite": "pass",
+        "check": "pass",
+        "loader": "pass"
+      },
+      "gateOutput": {
+        "resume-policy-acceptance": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r1\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts (15 tests | 4 failed) 564ms\n     × reuses stored true settings when fixed settings are omitted 11ms\n     × treats blank guidance as omission 1ms\n     × lets foreground/background change per invocation 1ms\n     × reuses stored settings on omission, accepts matches, rejects changes 541ms\n\n Test Files  1 failed (1)\n      Tests  4 failed | 11 passed (15)\n   Start at  22:19:02\n   Duration  14.25s (transform 1.23s, setup 0ms, import 13.37s, tests 564ms, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > reuses stored true settings when fixed settings are omitted\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:120:26\n    118|   const h = nestedHarness();\n    119|   const result = await h.run({ resume: \"child-1\" });\n    120|   expect(result.isError).toBeFalsy();\n       |                          ^\n    121|   expect(h.resume).toHaveBeenCalledOnce();\n    122|   expect(h.resume.mock.calls[0][0]).toBe(\"child-1\");\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > treats blank guidance as omission\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:160:26\n    158|   const h = nestedHarness();\n    159|   const result = await h.run({ resume: \"child-1\", system_prompt: \"   \"…\n    160|   expect(result.isError).toBeFalsy();\n       |                          ^\n    161|   expect(h.resume).toHaveBeenCalledOnce();\n    162|  });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > lets foreground/background change per invocation\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:196:30\n    194|   const h = nestedHarness({ ...STORED, runInBackground: false });\n    195|   const background = await h.run({ resume: \"child-1\", run_in_backgroun…\n    196|   expect(background.isError).toBeFalsy();\n       |                              ^\n    197|   expect(h.resume).toHaveBeenCalledOnce();\n    198|   expect(h.resume.mock.calls[0][3]).toMatchObject({ isBackground: true…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > root agent tool resume policy > reuses stored settings on omission, accepts matches, rejects changes\nAssertionError: expected 'profile, system_prompt, inherit_conte…' not to contain 'fixed when an agent session starts'\n\nExpected: \"fixed when an agent session starts\"\nReceived: \"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.\"\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:303:40\n    301|    // Omitted fixed settings reuse the stored true values.\n    302|    const omitted = await run(\"omit\", { resume: agentId, prompt: \"follo…\n    303|    expect(omitted.content[0].text).not.toContain(\"fixed when an agent …\n       |                                        ^\n    304|    expect(omitted.isError).toBeFalsy();\n    305|    const afterOmit = h.replies();\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯\n\n",
+          "ms": 18490
+        },
+        "subagents-suite": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r1\n\n\n Test Files  13 passed (13)\n      Tests  169 passed (169)\n   Start at  22:19:16\n   Duration  8.44s (transform 3.79s, setup 0ms, import 40.11s, tests 4.99s, environment 1ms)\n\n",
+          "stderr": "",
+          "ms": 9185
+        },
+        "check": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 check\n> npm run format:check && npm run lint && npm run typecheck\n\n\n> apple-pi@0.1.0 format:check\n> biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json\n\nChecked 331 files in 231ms. No fixes applied.\n\n> apple-pi@0.1.0 lint\n> biome lint components optional-extensions extensions tests scripts\n\nChecked 328 files in 139ms. No fixes applied.\n\n> apple-pi@0.1.0 typecheck\n> tsc --noEmit\n\n",
+          "stderr": "",
+          "ms": 11347
+        },
+        "loader": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 test:loader\n> node tests/package-load.mjs\n\napple-pi: all extension entrypoints loaded\n",
+          "stderr": "",
+          "ms": 4530
+        }
+      },
+      "gatesPassed": 3,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 0
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c3",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "2ad5d0a042f5e8704ab49690ac5bb424457af0c0",
+      "commit": "02437d495e5315bd31677b3203253b000411c16b",
+      "selfReport": "done",
+      "learned": "All four closeout failures are flaky: the two registration timeouts and the Ctrl+B detach test fail only under full-suite load, but the abort test also fails 3 of 10 times alone, most likely because the abort can arrive before the command starts.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 52,
+        "cacheReadTokens": 355149,
+        "cacheWriteTokens": 26579,
+        "outputTokens": 11157,
+        "runMs": 545135,
+        "scoreMs": 43551
+      },
+      "gates": {
+        "resume-policy-acceptance": "fail",
+        "subagents-suite": "pass",
+        "check": "pass",
+        "loader": "pass"
+      },
+      "gateOutput": {
+        "resume-policy-acceptance": {
+          "exitCode": 1,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r2\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts (15 tests | 4 failed) 565ms\n     × reuses stored true settings when fixed settings are omitted 11ms\n     × treats blank guidance as omission 1ms\n     × lets foreground/background change per invocation 0ms\n     × reuses stored settings on omission, accepts matches, rejects changes 544ms\n\n Test Files  1 failed (1)\n      Tests  4 failed | 11 passed (15)\n   Start at  22:19:02\n   Duration  14.25s (transform 1.23s, setup 0ms, import 13.37s, tests 565ms, environment 0ms)\n\n",
+          "stderr": "\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > reuses stored true settings when fixed settings are omitted\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:120:26\n    118|   const h = nestedHarness();\n    119|   const result = await h.run({ resume: \"child-1\" });\n    120|   expect(result.isError).toBeFalsy();\n       |                          ^\n    121|   expect(h.resume).toHaveBeenCalledOnce();\n    122|   expect(h.resume.mock.calls[0][0]).toBe(\"child-1\");\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > treats blank guidance as omission\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:160:26\n    158|   const h = nestedHarness();\n    159|   const result = await h.run({ resume: \"child-1\", system_prompt: \"   \"…\n    160|   expect(result.isError).toBeFalsy();\n       |                          ^\n    161|   expect(h.resume).toHaveBeenCalledOnce();\n    162|  });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > nested agent tool resume policy > lets foreground/background change per invocation\nAssertionError: expected true to be falsy\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:196:30\n    194|   const h = nestedHarness({ ...STORED, runInBackground: false });\n    195|   const background = await h.run({ resume: \"child-1\", run_in_backgroun…\n    196|   expect(background.isError).toBeFalsy();\n       |                              ^\n    197|   expect(h.resume).toHaveBeenCalledOnce();\n    198|   expect(h.resume.mock.calls[0][3]).toMatchObject({ isBackground: true…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯\n\n FAIL  components/subagents/tests/acceptance-resume-policy.test.ts > root agent tool resume policy > reuses stored settings on omission, accepts matches, rejects changes\nAssertionError: expected 'profile, system_prompt, inherit_conte…' not to contain 'fixed when an agent session starts'\n\nExpected: \"fixed when an agent session starts\"\nReceived: \"profile, system_prompt, inherit_context, pair, and isolated are fixed when an agent session starts; resume it with the original values or launch a new agent.\"\n\n ❯ components/subagents/tests/acceptance-resume-policy.test.ts:303:40\n    301|    // Omitted fixed settings reuse the stored true values.\n    302|    const omitted = await run(\"omit\", { resume: agentId, prompt: \"follo…\n    303|    expect(omitted.content[0].text).not.toContain(\"fixed when an agent …\n       |                                        ^\n    304|    expect(omitted.isError).toBeFalsy();\n    305|    const afterOmit = h.replies();\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯\n\n",
+          "ms": 18493
+        },
+        "subagents-suite": {
+          "exitCode": 0,
+          "stdout": "\n RUN  v4.1.10 /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-eval-clone-t4VaqC/.git/apple-pi/branch-search/bs-20261004-050119-0166/wt/r2\n\n\n Test Files  13 passed (13)\n      Tests  169 passed (169)\n   Start at  22:19:16\n   Duration  8.44s (transform 3.67s, setup 0ms, import 40.27s, tests 5.03s, environment 1ms)\n\n",
+          "stderr": "",
+          "ms": 9183
+        },
+        "check": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 check\n> npm run format:check && npm run lint && npm run typecheck\n\n\n> apple-pi@0.1.0 format:check\n> biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json\n\nChecked 331 files in 80ms. No fixes applied.\n\n> apple-pi@0.1.0 lint\n> biome lint components optional-extensions extensions tests scripts\n\nChecked 328 files in 65ms. No fixes applied.\n\n> apple-pi@0.1.0 typecheck\n> tsc --noEmit\n\n",
+          "stderr": "",
+          "ms": 11318
+        },
+        "loader": {
+          "exitCode": 0,
+          "stdout": "\n> apple-pi@0.1.0 test:loader\n> node tests/package-load.mjs\n\napple-pi: all extension entrypoints loaded\n",
+          "stderr": "",
+          "ms": 4557
+        }
+      },
+      "gatesPassed": 3,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 72
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+    },
+    {
+      "phase": "after g0",
+      "tree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54"
+    }
+  ],
+  "winner": "r0",
+  "apply": {
+    "applied": false,
+    "workspaceTree": "cae67c735e7ffd38e90ffa1f8b1029ad41348d54",
+    "reason": "apply mode is report"
+  },
+  "outcome": "ready",
+  "abortReason": null,
+  "cleanupErrors": []
+}
