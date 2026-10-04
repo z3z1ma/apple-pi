@@ -19,7 +19,8 @@ export interface BranchSearchConfig extends SearchShape {
 	passive: { enabled: boolean; repeatThreshold: number };
 	enumerate: { count: number };
 	branch: { limits: { wallClockSec?: number; outputTokens?: number } };
-	scorer: { validationRetries: number; reviewProfile?: string };
+	/** `challengers`: wrong solutions written to test the authored checks before the freeze; absent runs none. */
+	scorer: { validationRetries: number; reviewProfile?: string; challengers?: number };
 	fidelity?: { profile?: string };
 	constraints: string[];
 	workspace: { cloneIgnored: string[] };
@@ -128,6 +129,7 @@ const REQUIRED: [string, Check][] = [
 
 const OPTIONAL: [string, Check][] = [
 	["scorer.reviewProfile", profile],
+	["scorer.challengers", integer(1)],
 	["fidelity.profile", profile],
 	["draw", oneOf("random", "model")],
 ];

@@ -229,6 +229,18 @@ describe("worktree forks", () => {
 		expect(existsSync(binding.tmp)).toBe(false);
 	});
 
+	it("runs the fork's shell commands with the binding's environment", async () => {
+		const { session, cwd } = await settledSession({
+			"fork env": call("bash", { command: 'echo "$APPLE_PI_FORK_TEST" > env.txt', verbatim: true }, "bash-env"),
+		});
+		const root = worktree();
+		const binding = { ...bind(root, cwd), env: { APPLE_PI_FORK_TEST: "bound" } };
+		await fork(session, cwd, "fork env", { worktree: binding }).result;
+
+		expect(readFileSync(join(root, "env.txt"), "utf8").trim()).toBe("bound");
+		expect(process.env.APPLE_PI_FORK_TEST).toBeUndefined();
+	});
+
 	it("refuses writes and edits outside the worktree", async () => {
 		const outside = "/apple-pi-fork-guard";
 		const { session, cwd } = await settledSession({

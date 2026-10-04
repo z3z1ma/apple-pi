@@ -56,6 +56,68 @@ ${report}
 Correct the spec and reply with only the corrected JSON object.`;
 }
 
+/**
+ * A challenger of the authored checks, forked at the fork point. It never sees the checks; its wrong
+ * solution and stated defect test whether they reject a plausible mistake.
+ */
+export function challengerPrompt(number: number, goal: string | undefined): string {
+	return `Branch search: challenger ${number}.
+
+Before independent attempts implement the current task, hidden acceptance checks are tested against wrong solutions. Write one in this copy of the repository: a plausible but wrong implementation of the goal, the kind of fix a capable engineer might ship. It should look complete and solve most of the goal, but contain one realistic defect, such as a missed case, an input the change mishandles, or a requirement it quietly drops.
+
+${goalLine(goal)}You are working in a disposable copy of the repository at its current state. Change the files as a real fix would. Do not point out the defect in code, comments, or tests. Make reasonable decisions on your own; the user is away.
+
+End your final message with exactly this line:
+defect: <one sentence naming the defect you planted>`;
+}
+
+/** The planted defect a challenger names on its last `defect:` line, or null. */
+export function parseDefect(text: string): string | null {
+	const lines = [...text.matchAll(/^\s*defect:\s*(.+?)\s*$/gim)];
+	return lines.at(-1)?.[1] ?? null;
+}
+
+/** Challenger solutions that pass every authored gate go back to the author in its own conversation. */
+export function gapPrompt(gaps: { key: string; defect: string | null; diff: string }[]): string {
+	const shown = gaps.map(
+		({ key, defect, diff }) =>
+			`${key} states that it planted this defect: ${defect ?? "(it did not say)"}\nIts diff from the current state:\n\`\`\`diff\n${diff}\n\`\`\``,
+	);
+	return `Branch search: your checks may have missed a wrong solution.
+
+Challengers were asked to write plausible but wrong implementations of the goal without seeing your checks. ${gaps.length === 1 ? "This one passes" : "These pass"} every gate of your spec:
+
+${shown.join("\n\n")}
+
+A challenger's claim is not proof. Judge each solution against the goal:
+- If it is wrong, add or sharpen gates so that they reject it and others with the same defect, while a correct implementation still passes. Test only through interfaces a correct implementation can know. The harness requires that the revised gates reject every solution you do not dismiss.
+- If it actually meets the goal, dismiss the claim with a one-line reason; your gates need not reject it.
+
+Reply with only JSON: the revised spec object, or
+{"dismissed": {"<challenger>": "<one-line reason>"}, "spec": <the revised spec, omitted when you dismiss every solution>}`;
+}
+
+/**
+ * The author's answer to a gap prompt: dismissals and an optional revised spec, or undefined when the
+ * reply is a plain spec; a string names why it cannot be used.
+ */
+export function parseRepair(
+	value: unknown,
+): { dismissed: Record<string, string>; spec?: unknown } | undefined | string {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const reply = value as Record<string, unknown>;
+	if ("version" in reply || !("dismissed" in reply || "spec" in reply)) return undefined;
+	const dismissed = reply.dismissed ?? {};
+	if (
+		typeof dismissed !== "object" ||
+		dismissed === null ||
+		Array.isArray(dismissed) ||
+		!Object.values(dismissed).every((reason) => typeof reason === "string" && reason.trim() !== "")
+	)
+		return '"dismissed" must map challenger names to one-line reasons';
+	return { dismissed: dismissed as Record<string, string>, ...("spec" in reply ? { spec: reply.spec } : {}) };
+}
+
 /** Spec 10.5. */
 export function reviewPrompt(input: { goal: string; seedGate?: string; diffStat: string; spec: string }): string {
 	return `Review an acceptance spec for an automated search. Several attempts will implement the goal without seeing the spec. Check three things:

@@ -105,7 +105,12 @@ export function checkScorerSpec(spec: ScorerSpec): string[] {
  * content (spec 7.3). A destination that a symlink in the branch's tree leads outside the worktree is
  * refused before anything is written; the returned reason then fails every gate.
  */
-export async function installScorer(worktree: string, base: string, spec: ScorerSpec): Promise<string | undefined> {
+export async function installScorer(
+	worktree: string,
+	base: string,
+	spec: ScorerSpec,
+	env?: NodeJS.ProcessEnv,
+): Promise<string | undefined> {
 	const root = canonical(worktree);
 	/** Why the destination is refused, or undefined when it stays inside the worktree. */
 	const refusal = (path: string): string | undefined => {
@@ -126,7 +131,7 @@ export async function installScorer(worktree: string, base: string, spec: Scorer
 		mkdirSync(dirname(target), { recursive: true });
 		writeFileSync(target, file.content);
 	}
-	if (spec.protect.length > 0) await git(worktree, ["checkout", base, "--", ...spec.protect]);
+	if (spec.protect.length > 0) await git(worktree, ["checkout", base, "--", ...spec.protect], { env });
 	return undefined;
 }
 
@@ -220,14 +225,18 @@ function scorerEnv(searchId: string): NodeJS.ProcessEnv {
 	return { CI: "1", APPLE_PI_BRANCH_SEARCH: searchId };
 }
 
-/** Run every gate in order. A gate passes only when it exits 0 within its timeout. */
+/**
+ * Run every gate in order. A gate passes only when it exits 0 within its timeout. `extraEnv` is the
+ * git environment of a worktree whose commit lives in a private object store.
+ */
 export async function runGates(
 	worktree: string,
 	spec: ScorerSpec,
 	searchId: string,
 	signal?: AbortSignal,
+	extraEnv?: NodeJS.ProcessEnv,
 ): Promise<GateResult[]> {
-	const env = scorerEnv(searchId);
+	const env = { ...scorerEnv(searchId), ...extraEnv };
 	const results: GateResult[] = [];
 	for (const gate of spec.gates) {
 		signal?.throwIfAborted();
@@ -241,6 +250,19 @@ export async function runGates(
 /** Every gate fails with the reason the scorer could not be installed. */
 export function refusedGates(spec: ScorerSpec, reason: string): GateResult[] {
 	return spec.gates.map(({ id }) => ({ id, result: "fail", exitCode: null, stdout: "", stderr: reason, ms: 0 }));
+}
+
+/** Install the scorer in a worktree that holds a solution, then run its gates; a refused install fails them all. */
+export async function gatesOn(
+	worktree: string,
+	base: string,
+	spec: ScorerSpec,
+	searchId: string,
+	signal?: AbortSignal,
+	env?: NodeJS.ProcessEnv,
+): Promise<GateResult[]> {
+	const refused = await installScorer(worktree, base, spec, env);
+	return refused ? refusedGates(spec, refused) : runGates(worktree, spec, searchId, signal, env);
 }
 
 /** The number on the last non-empty stdout line, if that whole line is one finite number (spec 7.1). */
@@ -355,8 +377,7 @@ export async function scoreBranches(
 	};
 	await settleAll(
 		branches.map(async ({ key, worktree }) => {
-			const refused = await installScorer(worktree, base, spec);
-			const gates = refused ? refusedGates(spec, refused) : await runGates(worktree, spec, searchId, signal);
+			const gates = await gatesOn(worktree, base, spec, searchId, signal);
 			const score: BranchScoring = {
 				gates,
 				diffSize: 0,

@@ -83,6 +83,27 @@ export interface ReviewRecord {
 	ms: number;
 }
 
+/**
+ * One challenger of the authored scorer: a plausible but wrong solution and the defect it states it
+ * planted. Scorer content: it joins the record only when the search ends (spec 8.4).
+ */
+export interface ChallengerRecord {
+	key: string;
+	/** The `defect:` line of its final message; null when it gave none. */
+	defect: string | null;
+	/** Its binary diff from the base. */
+	diff: string;
+	/** Whether its solution passed every gate of the authored scorer, which sent it to the author. */
+	gap: boolean;
+	/** Whether the gates of the frozen scorer reject its solution; a gap neither caught nor dismissed is open. */
+	caught: boolean;
+	/** Whether the author judged that this gap's solution meets the goal, so the claimed defect is not one. */
+	dismissed: boolean;
+	/** The author's one-line reason for a dismissal; null otherwise. */
+	dismissReason: string | null;
+	cost: TokenCost & { ms: number };
+}
+
 export type SearchMode = "human" | "agent" | "passive";
 
 export interface SearchRecord {
@@ -114,8 +135,12 @@ export interface SearchRecord {
 		author: (TokenCost & { ms: number }) | null;
 		/** The scorer review request (spec 6.2, 10.5); null without a review profile. */
 		review: (TokenCost & { ms: number }) | null;
+		/** Every challenger together; null until the search ends, and without `scorer.challengers`. */
+		challengers: (TokenCost & { ms: number }) | null;
 		ms: number;
 	};
+	/** The challenger pass (`scorer.challengers`); null until the search ends, and when no challenger ran. */
+	challengers: ChallengerRecord[] | null;
 	enumerations: EnumerationRecord[];
 	steps: { seq: number; step: Step }[];
 	branches: (BranchRecord & Partial<BranchScore>)[];

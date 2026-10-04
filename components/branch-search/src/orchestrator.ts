@@ -14,13 +14,17 @@ import { type BatchEntry, type Enumeration, type NodeKey, type ObservedTree, pla
 import {
 	authorPrompt,
 	authorRetryPrompt,
+	challengerPrompt,
 	childDirective,
 	enumeratorPrompt,
 	enumeratorRetryPrompt,
 	fidelityPrompt,
+	gapPrompt,
+	parseDefect,
 	parseEnumeration,
 	parseFidelity,
 	parseJson,
+	parseRepair,
 	parseReview,
 	parseSelfReport,
 	reviewPrompt,
@@ -32,6 +36,7 @@ import {
 	type ValidationRecord,
 	type BranchScore,
 	type BranchSelfReport,
+	type ChallengerRecord,
 	emptyCost,
 	type FidelityRecord,
 	type ReviewRecord,
@@ -47,6 +52,8 @@ import {
 	checkScorerSpec,
 	type DiffStat,
 	diffStat,
+	type GateResult,
+	gatesOn,
 	parseScorerSpec,
 	type ScorerSpec,
 	scoreBranches,
@@ -57,12 +64,17 @@ import {
 import {
 	addWorktree,
 	applyWinner,
+	commitAll,
 	commitWorktree,
 	git,
 	gitCommonDir,
 	hasHead,
 	PLAIN_DIFF,
+	privateObjects,
+	refPrefix,
 	pruneRefs,
+	readRefs,
+	restoreRefs,
 	removeWorktrees,
 	repoRoot,
 	snapshotBase,
@@ -179,6 +191,10 @@ function customPrompt(text: string): AgentMessage {
 	return { role: "custom", customType: MESSAGE_TYPE, content: text, display: false, timestamp: Date.now() };
 }
 
+function passesAll(gates: GateResult[]): boolean {
+	return gates.every((gate) => gate.result === "pass");
+}
+
 function lastAssistant(messages: AgentMessage[]) {
 	const last = messages.at(-1);
 	return last?.role === "assistant" ? last : undefined;
@@ -210,6 +226,12 @@ export async function runBranchSearch(options: SearchOptions): Promise<SearchRes
 	return search.run();
 }
 
+/** A challenger as the search holds it: its commit lives only in the private scorer object store. */
+interface LiveChallenger extends ChallengerRecord {
+	/** Null until its work is committed; a cancelled or failed challenger has none. */
+	commit: string | null;
+}
+
 interface LiveBranch {
 	record: BranchRecord;
 	worktree: string;
@@ -233,6 +255,20 @@ class Search {
 	readonly authorCost: TokenCost & { ms: number } = { ...emptyCost(), ms: 0 };
 	/** Fork point: the parent's conversation when the search starts. */
 	readonly forkPoint: AgentMessage[];
+	/** The author's conversation so far; each later author turn continues it (spec 6.3). */
+	authorMessages: AgentMessage[];
+	/** Scorer content: in memory until the search ends; their commits only in `scorerObjects` (spec 8.4). */
+	readonly challengers: LiveChallenger[] = [];
+	/** Challenger solutions that passed the authored gates; every later validation requires the gates to reject them. */
+	gaps: LiveChallenger[] = [];
+	/**
+	 * The private object store of the scorer-side forks (author, challengers) and of the challengers'
+	 * commits: whatever git writes there is deleted before the enumerator starts (spec 8.4).
+	 */
+	readonly scorerObjects: string;
+	scorerEnv: Record<string, string> | undefined;
+	/** The shared refs before the scorer phase; role forks' git may move them onto private objects. */
+	refsBefore: Map<string, string> | undefined;
 	readonly forks = new Set<ForkHandle>();
 	readonly worktrees = new Set<string>();
 	readonly branches: LiveBranch[] = [];
@@ -252,12 +288,14 @@ class Search {
 		readonly options: SearchOptions,
 		readonly config: BranchSearchConfig,
 		readonly root: string,
-		commonDir: string,
+		readonly commonDir: string,
 	) {
 		this.stateDir = join(commonDir, "apple-pi", "branch-search", this.id);
+		this.scorerObjects = join(this.stateDir, "scorer-objects");
 		this.recordPath = join(this.stateDir, "record.json");
 		this.seed = options.seed ?? randomBytes(32);
 		this.forkPoint = options.session.sessionManager.buildSessionProjection().messages;
+		this.authorMessages = this.forkPoint;
 		this.record = {
 			id: this.id,
 			mode: options.mode,
@@ -269,7 +307,8 @@ class Search {
 			config,
 			base: null,
 			spec: null,
-			cost: { total: emptyCost(), author: null, review: null, ms: 0 },
+			cost: { total: emptyCost(), author: null, review: null, challengers: null, ms: 0 },
+			challengers: null,
 			enumerations: [],
 			steps: [],
 			branches: [],
@@ -331,9 +370,13 @@ class Search {
 			base.commit,
 			this.options.scorer
 				? await this.validateSupplied(base.commit, this.options.scorer)
-				: await this.authorScorer(base.commit),
+				: await this.challenge(base.commit, await this.authorScorer(base.commit)),
 		);
 		this.baseValues = validation.baseValues;
+		await this.checkChallengers(base.commit, spec);
+		await this.restoreSharedRefs();
+		// No challenger solution or object an author wrote may be on disk once the enumerator starts (spec 8.4).
+		rmSync(this.scorerObjects, { recursive: true, force: true });
 		this.freeze(spec);
 
 		this.status("enumerate");
@@ -469,12 +512,48 @@ class Search {
 	 * a new message, up to `scorer.validationRetries` times (spec 6.3).
 	 */
 	private async authorScorer(base: string): Promise<{ spec: ScorerSpec; validation: Validation }> {
-		let messages = this.forkPoint;
-		let append = this.atForkPoint(authorPrompt(this.options.goal, this.options.seedGate));
-		for (let attempt = 0; attempt <= this.config.scorer.validationRetries; attempt++) {
+		this.refsBefore = await readRefs(this.root);
+		this.scorerEnv = privateObjects(this.commonDir, this.scorerObjects);
+		const append = this.atForkPoint(authorPrompt(this.options.goal, this.options.seedGate));
+		const authored = await this.authorTurns(base, append, this.config.scorer.validationRetries + 1);
+		if (!authored) throw new SearchAbort("scorer invalid");
+		return authored;
+	}
+
+	/**
+	 * Up to `turns` author turns, each continuing the author's conversation: the first with `append`,
+	 * each later one with the report on the previous reply. Returns the first spec that validates.
+	 */
+	private async authorTurns(
+		base: string,
+		append: AgentMessage,
+		turns: number,
+		/** Repair turns: the spec that stands while the author may dismiss gaps instead of revising it. */
+		current?: { spec: ScorerSpec; validation: Validation },
+	): Promise<{ spec: ScorerSpec; validation: Validation } | undefined> {
+		let next = append;
+		for (let turn = 0; turn < turns; turn++) {
 			this.status("author");
-			messages = await this.runAuthor(base, messages, append);
-			const value = parseJson(replyText(messages));
+			this.authorMessages = await this.runAuthor(base, this.authorMessages, next);
+			const attempt = this.validation.length;
+			let value = parseJson(replyText(this.authorMessages));
+			if (current) {
+				const answer = parseRepair(value);
+				const problem = typeof answer === "string" ? answer : answer && this.dismiss(answer.dismissed);
+				if (problem) {
+					this.validation.push({ attempt, ok: false, report: problem, ms: 0 });
+					next = customPrompt(authorRetryPrompt(problem));
+					continue;
+				}
+				if (answer && typeof answer !== "string" && !("spec" in answer)) {
+					if (this.gaps.length === 0) return current;
+					const report = `These solutions are neither rejected nor dismissed: ${this.gaps.map((g) => g.key).join(", ")}.`;
+					this.validation.push({ attempt, ok: false, report, ms: 0 });
+					next = customPrompt(authorRetryPrompt(report));
+					continue;
+				}
+				if (answer && typeof answer !== "string") value = answer.spec;
+			}
 			const parsed = value === undefined ? ["the reply is not valid JSON"] : parseScorerSpec(value);
 			let report: string;
 			if (Array.isArray(parsed)) {
@@ -486,9 +565,161 @@ class Search {
 				if (validation.ok) return { spec: parsed, validation };
 				report = validation.report;
 			}
-			append = customPrompt(authorRetryPrompt(report));
+			next = customPrompt(authorRetryPrompt(report));
 		}
+		return undefined;
+	}
+
+	/**
+	 * With `scorer.challengers`, challenger forks each write a plausible but wrong solution without
+	 * seeing the checks. A solution that passes every authored gate is a gap: the author gets its diff
+	 * and stated defect and revises the spec, which must then reject every gap, within
+	 * `scorer.validationRetries` turns. A gap still open when they run out makes the scorer invalid.
+	 */
+	private async challenge(
+		base: string,
+		authored: { spec: ScorerSpec; validation: Validation },
+	): Promise<{ spec: ScorerSpec; validation: Validation }> {
+		const count = this.config.scorer.challengers;
+		if (count === undefined) return authored;
+		this.status("challenge");
+		await settleAll(Array.from({ length: count }, (_, i) => this.runChallenger(base, i + 1)));
+		for (const challenger of this.challengers) {
+			challenger.gap = passesAll(await this.gatesOnChallenger(base, authored.spec, challenger));
+			challenger.caught = !challenger.gap;
+		}
+		this.gaps = this.challengers.filter((challenger) => challenger.gap);
+		if (this.gaps.length === 0) return authored;
+		const repaired = await this.authorTurns(
+			base,
+			customPrompt(gapPrompt(this.gaps)),
+			this.config.scorer.validationRetries,
+			authored,
+		);
+		if (repaired) return repaired;
+		this.spec = authored.spec;
+		// Every gap dismissed, though a revision failed: the authored spec stands.
+		if (this.gaps.length === 0) return authored;
+		return this.openGaps(this.gaps);
+	}
+
+	/**
+	 * Mark the named gaps dismissed: the author judged their solutions correct, so they no longer count
+	 * and later validations need not reject them. Returns a problem for a name that is not an open gap.
+	 */
+	private dismiss(dismissed: Record<string, string>): string | undefined {
+		const unknown = Object.keys(dismissed).filter((key) => !this.gaps.some((gap) => gap.key === key));
+		if (unknown.length > 0) return `Only open gaps can be dismissed, not: ${unknown.join(", ")}.`;
+		for (const gap of this.gaps) {
+			const reason = dismissed[gap.key];
+			if (reason === undefined) continue;
+			gap.dismissed = true;
+			gap.dismissReason = reason.trim();
+		}
+		this.gaps = this.gaps.filter((gap) => !gap.dismissed);
+		return undefined;
+	}
+
+	/**
+	 * Run every challenger solution against the final scorer, after repair and review, so `caught`
+	 * describes the scorer that freezes. A solution it accepts is an open gap: the scorer is invalid.
+	 */
+	private async checkChallengers(base: string, spec: ScorerSpec): Promise<void> {
+		for (const challenger of this.challengers)
+			challenger.caught = !passesAll(await this.gatesOnChallenger(base, spec, challenger));
+		const open = this.challengers.filter((challenger) => !challenger.caught && !challenger.dismissed);
+		if (open.length > 0) this.openGaps(open);
+	}
+
+	/**
+	 * Put back every shared ref the scorer phase created, deleted, or moved, with the reflog entries
+	 * it added (a stash or a commit on a branch), before the private store those refs may name goes.
+	 * The search's own refs are left alone. Runs once.
+	 */
+	private async restoreSharedRefs(): Promise<void> {
+		const before = this.refsBefore;
+		if (!before) return;
+		this.refsBefore = undefined;
+		await restoreRefs(this.root, before, refPrefix(this.id), this.scorerEnv);
+	}
+
+	/** Record the open gaps as a failed validation and end the search `aborted: scorer invalid`. */
+	private openGaps(open: LiveChallenger[]): never {
+		const report = [
+			"The scorer leaves open gaps:",
+			...open.map(({ key }) => `${key}: its wrong solution passes every gate`),
+		].join("\n");
+		this.validation.push({ attempt: this.validation.length, ok: false, report, ms: 0 });
 		throw new SearchAbort("scorer invalid");
+	}
+
+	/**
+	 * One challenger: a role fork of the parent at the fork point in its own base worktree. Its git
+	 * writes, and the harness's commit of its work, go to the private scorer object store. Its record
+	 * and cost exist from the start, so a cancelled or failed challenger still counts what it spent.
+	 */
+	private async runChallenger(base: string, number: number): Promise<void> {
+		const key = `challenger-${number}`;
+		const started = Date.now();
+		const challenger: LiveChallenger = {
+			key,
+			defect: null,
+			diff: "",
+			gap: false,
+			caught: false,
+			dismissed: false,
+			dismissReason: null,
+			cost: { ...emptyCost(), ms: 0 },
+			commit: null,
+		};
+		this.challengers.push(challenger);
+		const env = this.scorerEnv;
+		let path: string | undefined;
+		try {
+			path = await this.worktree(key, base);
+			const { wallClockSec, outputTokens } = this.config.branch.limits;
+			let output = 0;
+			const fork = this.fork({
+				messages: this.forkPoint,
+				append: this.atForkPoint(challengerPrompt(number, this.options.goal)),
+				label: `Branch search ${key}`,
+				worktree: this.forkWorktree(path, [], env),
+				onUsage: (usage) => {
+					addUsage(challenger.cost, usage);
+					output += usage.output;
+					if (outputTokens !== undefined && output > outputTokens) fork.abort();
+				},
+			});
+			const timer = wallClockSec === undefined ? undefined : setTimeout(() => fork.abort(), wallClockSec * 1000);
+			const result = await fork.result.finally(() => clearTimeout(timer));
+			this.options.signal.throwIfAborted();
+			const worktree = path;
+			const commit = await this.serial(() => commitAll(worktree, `branch-search ${this.id} ${key}`, env));
+			const patch = await git(this.root, ["diff", ...PLAIN_DIFF, "--binary", base, commit], { env });
+			// `git` trims its output; a patch needs its final newline to apply.
+			challenger.diff = patch === "" ? "" : `${patch}\n`;
+			challenger.defect = parseDefect(replyText(result.messages));
+			challenger.commit = commit;
+		} finally {
+			challenger.cost.ms = Date.now() - started;
+			if (path !== undefined) {
+				const worktree = path;
+				await this.serial(() => removeWorktrees(this.root, [worktree]));
+				this.worktrees.delete(worktree);
+			}
+		}
+	}
+
+	/** The spec's gates on a challenger's solution, in a fresh worktree of its private commit. */
+	private async gatesOnChallenger(base: string, spec: ScorerSpec, challenger: LiveChallenger): Promise<GateResult[]> {
+		const env = this.scorerEnv;
+		const path = await this.worktree(`check-${challenger.key}`, challenger.commit as string, env);
+		try {
+			return await gatesOn(path, base, spec, this.id, this.options.signal, env);
+		} finally {
+			await this.serial(() => removeWorktrees(this.root, [path]));
+			this.worktrees.delete(path);
+		}
 	}
 
 	/** One author turn in a fresh `wt/author` worktree, discarded before validation (spec 6.2). */
@@ -500,7 +731,7 @@ class Search {
 				messages,
 				append,
 				label: "Branch search scorer author",
-				worktree: this.forkWorktree(worktree),
+				worktree: this.forkWorktree(worktree, [], this.scorerEnv),
 				onUsage: (usage) => addUsage(this.authorCost, usage),
 			});
 			const result = await fork.result;
@@ -611,8 +842,20 @@ class Search {
 			this.worktrees.delete(worktree);
 		}
 		this.options.signal.throwIfAborted();
-		this.validation.push({ attempt, ok: validation.ok, report: validation.report, ms: Date.now() - started });
-		return validation;
+		const lines = [validation.report];
+		let ok = validation.ok;
+		for (const gap of this.gaps) {
+			const gates = await this.gatesOnChallenger(base, spec, gap);
+			const failed = gates.filter((gate) => gate.result !== "pass").map((gate) => gate.id);
+			if (failed.length === 0) {
+				ok = false;
+				lines.push(`${gap.key}: its wrong solution passes every gate; a gate must reject it`);
+			} else lines.push(`${gap.key}: its wrong solution is rejected by gate ${failed.join(", ")}`);
+		}
+		const report = lines.join("\n");
+		this.options.signal.throwIfAborted();
+		this.validation.push({ attempt, ok, report, ms: Date.now() - started });
+		return { ...validation, ok, report };
 	}
 
 	private plan() {
@@ -674,8 +917,9 @@ class Search {
 	 * A fork's binding to its worktree, with a private temporary directory beside the worktrees (spec 8.4).
 	 * `ancestors` are the worktree roots its inherited conversation may name; they map onto `root`.
 	 */
-	private forkWorktree(root: string, ancestors: string[] = []): ForkWorktree {
-		return { root, parentRoot: this.root, tmp: join(this.stateDir, "tmp", basename(root)), ancestors };
+	private forkWorktree(root: string, ancestors: string[] = [], env?: Record<string, string>): ForkWorktree {
+		const tmp = join(this.stateDir, "tmp", basename(root));
+		return { root, parentRoot: this.root, tmp, ancestors, ...(env ? { env } : {}) };
 	}
 
 	/** The worktree roots of a branch and of every branch its conversation continues, oldest first. */
@@ -689,10 +933,10 @@ class Search {
 		return roots;
 	}
 
-	private async worktree(name: string, commit: string): Promise<string> {
+	private async worktree(name: string, commit: string, env?: NodeJS.ProcessEnv): Promise<string> {
 		const path = join(this.stateDir, "wt", name);
 		this.worktrees.add(path);
-		await this.serial(() => addWorktree(this.root, path, commit, this.config.workspace.cloneIgnored));
+		await this.serial(() => addWorktree(this.root, path, commit, this.config.workspace.cloneIgnored, env));
 		return path;
 	}
 
@@ -954,15 +1198,20 @@ class Search {
 	/** Non-scorer parts only; scoring results join the record when the search ends (spec 8.4). */
 	private save(): void {
 		const authored = this.options.scorer === undefined;
+		const challengers = this.record.challengers?.map((challenger) => challenger.cost) ?? [];
 		this.record.cost = {
 			total: sumCosts([
 				...(authored ? [this.authorCost] : []),
 				...(this.reviewCost ? [this.reviewCost] : []),
+				...challengers,
 				...this.record.enumerations.map((e) => e.cost),
 				...this.record.branches.map((b) => b.cost),
 			]),
 			author: authored ? this.authorCost : null,
 			review: this.reviewCost,
+			challengers: this.record.challengers
+				? { ...sumCosts(challengers), ms: challengers.reduce((total, { ms }) => total + ms, 0) }
+				: null,
 			ms: Date.now() - this.started,
 		};
 		writeRecord(this.recordPath, this.record);
@@ -985,6 +1234,8 @@ class Search {
 		await attempt(() => pruneRefs(this.root, this.id, this.record.winner ? ["base", this.record.winner] : ["base"]));
 		await attempt(() => rmSync(join(this.stateDir, "wt"), { recursive: true, force: true }));
 		await attempt(() => rmSync(join(this.stateDir, "tmp"), { recursive: true, force: true }));
+		await attempt(() => this.restoreSharedRefs());
+		await attempt(() => rmSync(this.scorerObjects, { recursive: true, force: true }));
 
 		// A frozen spec keeps its bytes; a search that ended before the freeze stores its last candidate.
 		const specText = this.specText ?? (this.spec && `${JSON.stringify(this.spec, null, 2)}\n`);
@@ -997,6 +1248,8 @@ class Search {
 			baseValues: this.baseValues,
 		};
 		this.record.branches = this.record.branches.map((branch) => ({ ...branch, ...this.scores.get(branch.key) }));
+		this.record.challengers =
+			this.challengers.length === 0 ? null : this.challengers.map(({ commit: _, ...challenger }) => challenger);
 		this.record.endedAt = new Date().toISOString();
 		this.record.cleanupErrors = problems;
 		await attempt(() => this.save());

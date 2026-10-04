@@ -20,7 +20,7 @@ import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js"
 import registerTasks from "../../tasks/src/index.js";
 import { ProfileRequestError, runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
-import type { ScorerSpec } from "../src/scorer.js";
+import { installScorer, runGates, type ScorerSpec } from "../src/scorer.js";
 import {
 	type Behavior,
 	candidateList,
@@ -1395,5 +1395,523 @@ describe("fidelity tag cost", { timeout: 30_000 }, () => {
 			reason: "the fidelity request failed: overloaded",
 			cost: { inputTokens: 9, cacheReadTokens: 2, cacheWriteTokens: 1, outputTokens: 4, ms: expect.any(Number) },
 		});
+	});
+});
+
+/** A wrong solution the authored gates miss: value is 2, but it leaves a flag the goal forbids. */
+const GAP_MARK = "flag-9b2e";
+const DEFECT_MARK = "defect-9b2e";
+const GAP_SOLUTION = write("app.ts", `export const value = 2;\nexport const flag = "${GAP_MARK}";\n`, "gap");
+const REPAIRED: ScorerSpec = {
+	...AUTHORED,
+	gates: [...AUTHORED.gates, { id: "noflag", run: `! grep -q ${GAP_MARK} app.ts`, onBase: "pass", timeoutSec: 30 }],
+};
+const CHALLENGER_PROMPT = /^Branch search: challenger (\d+)\./;
+
+/** A challenger that commits its own work, which must not reach the repository's object store. */
+const OWN_COMMIT = fauxAssistantMessage(
+	fauxToolCall(
+		"bash",
+		{
+			command: "git add -A && git -c user.name=c -c user.email=c@localhost -c commit.gpgsign=false commit -qm mine",
+			verbatim: true,
+		},
+		{ id: "own-commit" },
+	),
+	{ stopReason: "toolUse" },
+);
+
+function planted(defect: string): Reply {
+	return withOutput(fauxAssistantMessage(`Implemented.\ndefect: ${defect}`), 7);
+}
+
+const isChallengerRequest = (request: Context) =>
+	request.messages.some((message) => CHALLENGER_PROMPT.test(text(message)));
+
+/** Each challenger replies by its number, one scripted reply per model turn after its prompt. */
+function challengers(scripts: Record<number, Reply[]>) {
+	return (context: Context): Reply | undefined => {
+		const index = context.messages.findLastIndex((message) => CHALLENGER_PROMPT.test(text(message)));
+		if (index < 0) return undefined;
+		const number = Number(CHALLENGER_PROMPT.exec(text(context.messages[index]))?.[1]);
+		const turn = context.messages.slice(index + 1).filter((message) => message.role === "assistant").length;
+		return scripts[number]?.[turn] ?? fauxAssistantMessage("defect: none");
+	};
+}
+
+/** Two challengers: 1 plants a gap the authored gates miss, 2 a defect they already reject. */
+async function gapFixture(author: Reply[] = [authorReply(AUTHORED), authorReply(REPAIRED)]) {
+	return fixture(
+		{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+		{
+			author,
+			other: challengers({
+				1: [GAP_SOLUTION, OWN_COMMIT, planted(`leaves the ${GAP_MARK} flag set (${DEFECT_MARK})`)],
+				2: [WRONG, planted("value is 3")],
+			}),
+		},
+	);
+}
+
+describe("challenger pass", { timeout: 30_000 }, () => {
+	it("sends a challenger solution that passes every gate to the author, and the frozen gates reject it", async () => {
+		const run = await gapFixture();
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2 } },
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(run.requests.filter(isChallengerRequest).length).toBeGreaterThanOrEqual(2);
+		// One repair round, continuing the author's conversation with the gap's diff and stated defect.
+		const authorRequests = run.requests.filter(isAuthorRequest);
+		expect(authorRequests).toHaveLength(2);
+		const [first, repair] = authorRequests as [Context, Context];
+		expect(repair.messages.slice(0, first.messages.length)).toEqual(first.messages);
+		const prompt = text(repair.messages.at(-1));
+		expect(prompt).toContain(DEFECT_MARK);
+		expect(prompt).toContain(`+export const flag = "${GAP_MARK}";`);
+		// The challenger the authored gates rejected is not a gap.
+		expect(prompt).not.toContain("value is 3");
+		// Challengers never see the checks.
+		for (const request of run.requests.filter(isChallengerRequest))
+			expect(JSON.stringify(request.messages)).not.toContain(MARKER);
+
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(REPAIRED);
+		expect(record.spec?.validation.map((entry) => entry.ok)).toEqual([true, true]);
+		expect(record.spec?.validation[1]?.report).toContain("challenger-1");
+		expect(record.challengers).toEqual([
+			expect.objectContaining({ key: "challenger-1", gap: true, caught: true }),
+			expect.objectContaining({ key: "challenger-2", gap: false, caught: true }),
+		]);
+
+		// The frozen gates, run independently on the gap solution, reject it.
+		const gap = record.challengers?.[0] as NonNullable<SearchRecord["challengers"]>[number];
+		const base = (record.base as { commit: string }).commit;
+		const check = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-gap-")));
+		cleanup.push(() => rmSync(check, { recursive: true, force: true }));
+		const wt = join(check, "wt");
+		gitOut(run.cwd, "worktree", "add", "--detach", "-q", wt, base);
+		execFileSync("git", ["apply"], { cwd: wt, input: gap.diff });
+		const frozen = JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8")) as ScorerSpec;
+		expect(await installScorer(wt, base, frozen)).toBeUndefined();
+		const gates = await runGates(wt, frozen, record.id);
+		expect(gates.map((gate) => gate.result)).toEqual(["pass", "fail"]);
+		gitOut(run.cwd, "worktree", "remove", "--force", wt);
+		// The authored gates alone would have let it pass.
+		expect(gates[0]?.result).toBe("pass");
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("starts no author round for a challenger solution the authored gates already reject, and marks it caught", async () => {
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ author: [authorReply(AUTHORED)], other: challengers({ 1: [WRONG, planted("value is 3")] }) },
+		);
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 1 } },
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(run.requests.filter(isAuthorRequest)).toHaveLength(1);
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(AUTHORED);
+		expect(record.challengers).toEqual([
+			expect.objectContaining({ key: "challenger-1", defect: "value is 3", gap: false, caught: true }),
+		]);
+		expect(record.challengers?.[0]?.diff).toContain("+export const value = 3;");
+	});
+
+	it("starts no challenger and sends no challenger request without scorer.challengers", async () => {
+		const run = await gapFixture([authorReply(AUTHORED)]);
+		const { result, record } = await search(run, { authored: true });
+
+		expect(result.outcome).toBe("ready");
+		expect(run.requests.some(isChallengerRequest)).toBe(false);
+		expect(run.requests.filter(isAuthorRequest)).toHaveLength(1);
+		expect(record.challengers).toBeNull();
+	});
+
+	it("keeps challenger diffs, defects, and checks out of enumerator and attempt requests and off disk while they run", async () => {
+		const run = await gapFixture();
+		const snapshots: { status: string; refs: string[]; files: string[]; objects: string; grep: string }[] = [];
+		const { result } = await search(
+			run,
+			{ authored: true, config: { scorer: { validationRetries: 1, challengers: 2 } } },
+			(status) => {
+				if (status !== "branching enumerate 0/0" && status !== "branching run g0 2/2") return;
+				const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+				const dir = join(run.cwd, ".git", "apple-pi", "branch-search", id as string);
+				const grep = execFileSync(
+					"bash",
+					["-c", `grep -rl -e '${GAP_MARK}' -e '${DEFECT_MARK}' -e '${MARKER}' .git || true`],
+					{ cwd: run.cwd, encoding: "utf8" },
+				);
+				// Every object the repository can read, reachable or not.
+				const objects = execFileSync(
+					"bash",
+					["-c", "git cat-file --batch-all-objects --batch | LC_ALL=C grep -a -c flag-9b2e || true"],
+					{ cwd: run.cwd, encoding: "utf8" },
+				).trim();
+				snapshots.push({
+					status,
+					refs: searchRefs(run.cwd),
+					files: [
+						...readdirSync(dir),
+						...(existsSync(join(dir, "wt")) ? readdirSync(join(dir, "wt")) : []),
+						readFileSync(join(dir, "record.json"), "utf8"),
+					],
+					objects,
+					grep,
+				});
+			},
+		);
+
+		expect(result.outcome).toBe("ready");
+		expect(snapshots.map((s) => s.status)).toEqual(["branching enumerate 0/0", "branching run g0 2/2"]);
+		// Challenger 1 committed its own work, in its disposable repository.
+		const own = run.requests
+			.flatMap((request) => request.messages)
+			.find((message) => message.role === "toolResult" && message.toolCallId === "own-commit");
+		expect(own?.role === "toolResult" && own.isError).toBe(false);
+		for (const snapshot of snapshots) {
+			expect(snapshot.refs.some((ref) => ref.includes("challenger"))).toBe(false);
+			// The configuration names the key; no challenger itself appears.
+			expect(snapshot.files).not.toContain("challenge");
+			expect(snapshot.files.join("\n")).not.toMatch(/challenger-\d|flag-9b2e|defect-9b2e/);
+			expect(snapshot.objects).toBe("0");
+			expect(snapshot.grep).toBe("");
+		}
+		const later = run.requests.filter(
+			(request) =>
+				request.messages.some((message) => /^Branch search: (approach list|attempt)/.test(text(message))) &&
+				!isAuthorRequest(request),
+		);
+		expect(later.length).toBeGreaterThan(0);
+		for (const request of later) {
+			const content = JSON.stringify(request.messages);
+			expect(content).not.toContain(GAP_MARK);
+			expect(content).not.toContain(DEFECT_MARK);
+			expect(content).not.toContain(MARKER);
+			expect(content).not.toMatch(/Branch search: challenger/);
+		}
+	});
+
+	it("records each challenger's diff, defect, and caught or not, and counts its tokens in the search cost", async () => {
+		const run = await gapFixture();
+		const { record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2 } },
+		});
+
+		const [gap, caught] = record.challengers as NonNullable<SearchRecord["challengers"]>;
+		expect(gap).toEqual(
+			expect.objectContaining({
+				key: "challenger-1",
+				defect: `leaves the ${GAP_MARK} flag set (${DEFECT_MARK})`,
+				gap: true,
+				caught: true,
+				diff: expect.stringContaining(`+export const flag = "${GAP_MARK}";`),
+			}),
+		);
+		expect(caught).toEqual(expect.objectContaining({ key: "challenger-2", defect: "value is 3", gap: false }));
+		for (const challenger of [gap, caught]) expect(challenger?.cost.outputTokens).toBeGreaterThanOrEqual(7);
+		const challengerOutput = (gap?.cost.outputTokens ?? 0) + (caught?.cost.outputTokens ?? 0);
+		expect(record.cost.challengers?.outputTokens).toBe(challengerOutput);
+		const others =
+			(record.cost.author?.outputTokens ?? 0) +
+			record.enumerations.reduce((sum, e) => sum + e.cost.outputTokens, 0) +
+			record.branches.reduce((sum, b) => sum + b.cost.outputTokens, 0);
+		expect(record.cost.total.outputTokens).toBe(others + challengerOutput);
+	});
+
+	it("refuses a review refinement that lets a gap solution pass again", async () => {
+		const run = await gapFixture();
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2, reviewProfile: "deep" } },
+			review: async () => reviewReply(JSON.stringify({ verdict: "refine", reason: "simpler", spec: AUTHORED })),
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(record.spec?.review).toEqual(expect.objectContaining({ verdict: "refine", applied: false }));
+		expect(record.spec?.validation.at(-1)?.report).toMatch(/challenger-1.*passes every gate/);
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(REPAIRED);
+		expect(record.challengers?.map((c) => c.caught)).toEqual([true, true]);
+	});
+
+	it("ends aborted: scorer invalid with the open gap reported when repair rounds run out", async () => {
+		for (const [validationRetries, author] of [
+			[1, [authorReply(AUTHORED), authorReply(AUTHORED)]],
+			[0, [authorReply(AUTHORED)]],
+		] as const) {
+			const run = await gapFixture([...author]);
+			// A review whose refinement would close the gap is never asked: the search ends first.
+			let reviews = 0;
+			const { result, record } = await search(run, {
+				authored: true,
+				config: { scorer: { validationRetries, challengers: 2, reviewProfile: "deep" } },
+				review: async () => {
+					reviews++;
+					return reviewReply(JSON.stringify({ verdict: "refine", reason: "close it", spec: REPAIRED }));
+				},
+			});
+
+			expect(result.outcome).toBe("aborted: scorer invalid");
+			expect(reviews).toBe(0);
+			expect(record.spec?.review).toBeNull();
+			expect(run.requests.filter(isAuthorRequest)).toHaveLength(1 + validationRetries);
+			expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+			expect(record.spec?.validation.at(-1)).toEqual(
+				expect.objectContaining({ ok: false, report: expect.stringMatching(/challenger-1.*passes every gate/) }),
+			);
+			expect(record.challengers?.[0]).toEqual(expect.objectContaining({ gap: true, caught: false }));
+			expect(record.challengers?.[1]).toEqual(expect.objectContaining({ gap: false, caught: true }));
+			expectCleanedUp(run.cwd, record, ["base"]);
+		}
+	});
+
+	it("derives caught from the frozen scorer: a revision that closes one gap but lets another wrong solution pass aborts", async () => {
+		// Fixes challenger 1's gap, but weakens the value check so challenger 2's value 3 passes.
+		const weakened: ScorerSpec = {
+			...REPAIRED,
+			gates: [
+				{ id: "value", run: "grep -qE 'value = (2|3)' app.ts", onBase: "fail", timeoutSec: 30 },
+				...REPAIRED.gates.slice(1),
+			],
+		};
+		const run = await gapFixture([authorReply(AUTHORED), authorReply(weakened)]);
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2 } },
+		});
+
+		expect(result.outcome).toBe("aborted: scorer invalid");
+		expect(record.challengers?.[0]).toEqual(expect.objectContaining({ gap: true, caught: true }));
+		expect(record.challengers?.[1]).toEqual(expect.objectContaining({ gap: false, caught: false }));
+		expect(record.spec?.validation.at(-1)?.report).toMatch(/challenger-2.*passes every gate/);
+		expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+	});
+
+	it("derives caught after the review: a refinement that closes the gap but lets another wrong solution pass aborts", async () => {
+		const weakened: ScorerSpec = {
+			...REPAIRED,
+			gates: [
+				{ id: "value", run: "grep -qE 'value = (2|3)' app.ts", onBase: "fail", timeoutSec: 30 },
+				...REPAIRED.gates.slice(1),
+			],
+		};
+		const run = await gapFixture();
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2, reviewProfile: "deep" } },
+			review: async () => reviewReply(JSON.stringify({ verdict: "refine", reason: "simpler", spec: weakened })),
+		});
+
+		// The refinement rejects challenger 1's gap, so it validates and replaces the repaired spec.
+		expect(record.spec?.review).toEqual(expect.objectContaining({ verdict: "refine", applied: true }));
+		expect(result.outcome).toBe("aborted: scorer invalid");
+		expect(record.challengers?.[0]).toEqual(expect.objectContaining({ gap: true, caught: true }));
+		expect(record.challengers?.[1]).toEqual(expect.objectContaining({ gap: false, caught: false }));
+		expect(record.spec?.validation.at(-1)?.report).toMatch(/challenger-2.*passes every gate/);
+		expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+	});
+
+	it("runs challenger gates with the challenger's git store, so a gate that reads HEAD sees its commit", async () => {
+		const head = { id: "head", run: "git cat-file -e 'HEAD^{commit}'", onBase: "pass" as const, timeoutSec: 30 };
+		const authored: ScorerSpec = { ...AUTHORED, gates: [...AUTHORED.gates, head] };
+		const repaired: ScorerSpec = { ...REPAIRED, gates: [...REPAIRED.gates, head] };
+		const run = await gapFixture([authorReply(authored), authorReply(repaired)]);
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2 } },
+		});
+
+		expect(result.outcome).toBe("ready");
+		// The gap passed the authored gates, head included, so it went to the author.
+		expect(record.challengers?.[0]).toEqual(expect.objectContaining({ gap: true, caught: true }));
+		expect(run.requests.filter(isAuthorRequest)).toHaveLength(2);
+	});
+
+	it("keeps a cancelled challenger's token cost in the record", async () => {
+		const controller = new AbortController();
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")] },
+			{
+				author: [authorReply(AUTHORED)],
+				other: (context) => {
+					const reply = challengers({ 1: [withOutput(GAP_SOLUTION, 11)] })(context);
+					if (reply === undefined) return undefined;
+					// The second turn, after the write: cancel the search while it waits.
+					if (context.messages.at(-1)?.role === "toolResult") {
+						controller.abort();
+						return "until-aborted";
+					}
+					return reply;
+				},
+			},
+		);
+		const { result, record } = await search(run, {
+			authored: true,
+			signal: controller.signal,
+			config: { scorer: { validationRetries: 1, challengers: 1 } },
+		});
+
+		expect(result.outcome).toBe("aborted: cancelled");
+		expect(record.challengers?.[0]?.cost.outputTokens).toBe(11);
+		expect(record.cost.challengers?.outputTokens).toBe(11);
+		expect(record.cost.total.outputTokens).toBeGreaterThanOrEqual(11);
+		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("keeps objects the author adds with git during repair out of the repository's object store", async () => {
+		const AUTHOR_MARK = "author-marker-5d1c";
+		const add = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{ command: `echo ${AUTHOR_MARK} > scratch.txt && git add scratch.txt`, verbatim: true },
+				{ id: "author-add" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const run = await gapFixture([authorReply(AUTHORED), add, authorReply(REPAIRED)]);
+		let objects: string | undefined;
+		const { result } = await search(
+			run,
+			{ authored: true, config: { scorer: { validationRetries: 1, challengers: 2 } } },
+			(status) => {
+				if (status !== "branching enumerate 0/0") return;
+				objects = execFileSync(
+					"bash",
+					["-c", `git cat-file --batch-all-objects --batch | LC_ALL=C grep -a -c ${AUTHOR_MARK} || true`],
+					{ cwd: run.cwd, encoding: "utf8" },
+				).trim();
+			},
+		);
+
+		expect(result.outcome).toBe("ready");
+		const added = run.requests
+			.flatMap((request) => request.messages)
+			.find((message) => message.role === "toolResult" && message.toolCallId === "author-add");
+		expect(added?.role === "toolResult" && added.isError).toBe(false);
+		expect(objects).toBe("0");
+	});
+
+	it("lets the author dismiss a claimed defect in a solution that meets the goal, and the search proceeds", async () => {
+		const CLAIM = "claim-7e1d";
+		const correct = write("app.ts", "export const value = 2;\n", "correct");
+		const dismissal = fauxAssistantMessage(
+			JSON.stringify({ dismissed: { "challenger-1": "value is 2, so the goal holds" } }),
+		);
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{
+				author: [authorReply(AUTHORED), dismissal],
+				other: challengers({ 1: [correct, planted(`value is subtly wrong (${CLAIM})`)] }),
+			},
+		);
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 1 } },
+		});
+
+		expect(result.outcome).toBe("ready");
+		const repair = run.requests.filter(isAuthorRequest)[1] as Context;
+		expect(text(repair.messages.at(-1))).toContain(CLAIM);
+		expect(text(repair.messages.at(-1))).toContain('"dismissed"');
+		expect(record.challengers?.[0]).toEqual(
+			expect.objectContaining({
+				gap: true,
+				caught: false,
+				dismissed: true,
+				dismissReason: "value is 2, so the goal holds",
+			}),
+		);
+		expect(JSON.parse(readFileSync(join(stateDir(run.cwd, record), "spec.json"), "utf8"))).toEqual(AUTHORED);
+		expect(record.spec?.validation.map((entry) => entry.ok)).toEqual([true]);
+	});
+
+	it("records a repaired gap as not dismissed", async () => {
+		const run = await gapFixture();
+		const { result, record } = await search(run, {
+			authored: true,
+			config: { scorer: { validationRetries: 1, challengers: 2 } },
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(record.challengers?.[0]).toEqual(
+			expect.objectContaining({ gap: true, caught: true, dismissed: false, dismissReason: null }),
+		);
+	});
+
+	it("restores the shared refs and stash that role forks changed before the enumerator starts", async () => {
+		const REF_MARK = "ref-marker-3c8a";
+		const id = "c@localhost";
+		const refs = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{
+					command: [
+						`echo ${REF_MARK} > r.txt && git add r.txt`,
+						"git checkout -q -b chal-branch",
+						`git -c user.name=c -c user.email=${id} -c commit.gpgsign=false commit -qm ${REF_MARK}`,
+						`echo ${REF_MARK}-stash > s.txt && git add s.txt`,
+						`git -c user.name=c -c user.email=${id} stash -q`,
+						"git tag chal-tag",
+					].join(" && "),
+					verbatim: true,
+				},
+				{ id: "refs" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{
+				author: [authorReply(AUTHORED)],
+				other: challengers({ 1: [refs, planted("value is 3")] }),
+			},
+		);
+		// A stash that predates the search keeps its place and its reflog.
+		writeFileSync(join(run.cwd, "src", "keep.txt"), "changed\n");
+		gitOut(run.cwd, "-c", "user.name=t", "-c", `user.email=${id}`, "stash", "-q");
+		const listRefs = () =>
+			gitOut(run.cwd, "for-each-ref", "--format=%(refname) %(objectname)")
+				.split("\n")
+				.filter((line) => !line.startsWith("refs/apple-pi/"));
+		const before = listRefs();
+		const stashLog = gitOut(run.cwd, "reflog", "show", "--format=%H", "refs/stash");
+		let atEnumerate: { refs: string[]; fsck: string; objects: string; stashLog: string } | undefined;
+		const { result } = await search(
+			run,
+			{ authored: true, config: { scorer: { validationRetries: 1, challengers: 1 } } },
+			(status) => {
+				if (status !== "branching enumerate 0/0") return;
+				atEnumerate = {
+					refs: listRefs(),
+					fsck: execFileSync("bash", ["-c", "git fsck --no-dangling 2>&1; echo exit=$?"], {
+						cwd: run.cwd,
+						encoding: "utf8",
+					}),
+					objects: execFileSync(
+						"bash",
+						["-c", `git cat-file --batch-all-objects --batch | LC_ALL=C grep -a -c ${REF_MARK} || true`],
+						{ cwd: run.cwd, encoding: "utf8" },
+					).trim(),
+					stashLog: gitOut(run.cwd, "reflog", "show", "--format=%H", "refs/stash"),
+				};
+			},
+		);
+
+		expect(result.outcome).toBe("ready");
+		const ran = run.requests
+			.flatMap((request) => request.messages)
+			.find((message) => message.role === "toolResult" && message.toolCallId === "refs");
+		expect(ran?.role === "toolResult" && ran.isError).toBe(false);
+		expect(atEnumerate?.refs).toEqual(before);
+		expect(atEnumerate?.stashLog).toBe(stashLog);
+		expect(atEnumerate?.fsck).toMatch(/exit=0\s*$/);
+		expect(atEnumerate?.fsck).not.toMatch(/broken|invalid|missing|error/i);
+		expect(atEnumerate?.objects).toBe("0");
 	});
 });

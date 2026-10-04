@@ -4,7 +4,7 @@
   "branches": { "perGeneration": 3, "maxTotal": 6 },
   "generations": { "maxDepth": 1, "rootsPerGeneration": 1, "parentsPerGeneration": 1, "childrenPerParent": 2 },
   "branch": { "limits": { "wallClockSec": 900, "outputTokens": 40000 } },
-  "scorer": { "validationRetries": 1 },
+  "scorer": { "validationRetries": 1, "challengers": 2 },
   "constraints": [
     "Add no new dependencies.",
     "Change as few files as possible.",

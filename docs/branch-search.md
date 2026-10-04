@@ -4,7 +4,7 @@ A single agent run follows the path its model finds most likely. When that path 
 
 When a search runs, the harness:
 
-1. Asks a fork of the conversation to write the acceptance checks (the **scorer**), validates them on the current workspace, and freezes them.
+1. Asks a fork of the conversation to write the acceptance checks (the **scorer**), validates them on the current workspace, optionally tests them against wrong solutions (see [Challenger pass](#challenger-pass)), and freezes them.
 2. Asks another fork for a list of distinct approaches. When you give a goal, the enumerator prompt and every attempt's directive state it.
 3. Uses its own random draw, not the model's preference, to choose which approaches run.
 4. Runs each chosen approach as a fork of the conversation in its own git worktree. Every fork shares the parent's prompt-cache prefix.
@@ -27,7 +27,7 @@ Only one search runs per session. Starting another while one runs prints the act
 
 The search forks the conversation as it stands when the search starts. If the main agent is running when you issue the command, the status line shows `branch search queued`, and the search starts when that run settles.
 
-While the search runs, the status line shows `branching <phase> <alive>/<total>`. Phases: `author`, `validate`, `review`, `enumerate`, `run g<n>`, `score g<n>`, `enumerate g<n>` (approach lists for the failed attempts generation `n` continues), `apply`.
+While the search runs, the status line shows `branching <phase> <alive>/<total>`. Phases: `author`, `validate`, `challenge`, `review`, `enumerate`, `run g<n>`, `score g<n>`, `enumerate g<n>` (approach lists for the failed attempts generation `n` continues), `apply`.
 
 Before it applies a winner, the search waits until the main agent is not running. From then until apply, and any rollback, has finished, the main agent's `write`, `edit`, `bash`, and `pi_exec` calls fail with `Branch search is applying its winner to the workspace. Retry this call in a moment.` So do `agent`, `steer_subagent`, `schedule`, and `monitor`, which would start or steer a writer this check cannot see. A subagent or managed task that was already running keeps running and is not held. Cancel works during the wait.
 
@@ -89,6 +89,7 @@ Files, merged key by key, with project values replacing user values and arrays r
 | `generations.childrenPerParent` | integer ≥ 1 | yes | Continuations of each of those failed attempts. |
 | `branch.limits` | `{ wallClockSec?, outputTokens? }` | yes, at least one field | Limits per attempt. An attempt over a limit stops, and its work is still scored. |
 | `scorer.validationRetries` | integer ≥ 0 | yes | Corrections the author may make to checks that fail validation. |
+| `scorer.challengers` | integer ≥ 1 | no | Challenger forks that each write a wrong solution to test the authored checks (see [Challenger pass](#challenger-pass)). Without it, no challenger runs. |
 | `scorer.reviewProfile` | model profile name | no | A [model profile](model-profiles.md) that reviews the checks once. |
 | `fidelity.profile` | model profile name | no | Evaluation only: after each generation, one request per attempt on this profile asks whether the attempt's diff follows its approach, and the record keeps the answer, its reason, and its token cost. The tag never decides which attempt wins. |
 | `constraints` | string[] | yes | Extra constraints the draw may add to an approach. The harness adds `none`. |
@@ -105,7 +106,7 @@ Example:
   "branches": { "perGeneration": 3, "maxTotal": 6 },
   "generations": { "maxDepth": 1, "rootsPerGeneration": 1, "parentsPerGeneration": 1, "childrenPerParent": 2 },
   "branch": { "limits": { "wallClockSec": 900 } },
-  "scorer": { "validationRetries": 2 },
+  "scorer": { "validationRetries": 2, "challengers": 2 },
   "constraints": ["Add no new dependencies.", "Change as few files as possible."],
   "workspace": { "cloneIgnored": ["node_modules"] },
   "apply": "auto"
@@ -118,9 +119,24 @@ The scorer author is a fork of the conversation in its own worktree. It writes *
 
 The harness validates the scorer on the current workspace: every gate runs twice and must give the same result as declared, and every objective must print a number. A scorer that fails validation goes back to the author with the report, up to `scorer.validationRetries` times. If it still fails, the search ends `aborted: scorer invalid`.
 
-With `scorer.reviewProfile` set, one request on that profile reviews the checks: the goal, the files changed since `HEAD`, and the scorer. A `refine` verdict replaces the scorer once, if the replacement validates. If the review request fails or the replacement does not validate, the author's scorer stands and the record says why. Without a review profile, no review request is sent.
+With `scorer.challengers` set, the challenger pass follows (see [Challenger pass](#challenger-pass)).
+
+With `scorer.reviewProfile` set, one request on that profile reviews the checks: the goal, the files changed since `HEAD`, and the scorer. A `refine` verdict replaces the scorer once, if the replacement validates (which includes rejecting every gap the challenger pass found). If the review request fails or the replacement does not validate, the author's scorer stands and the record says why. Without a review profile, no review request is sent.
 
 The harness then freezes the scorer: it records the SHA-256 of the scorer's exact bytes before any approach is listed or run, and at the end stores those bytes as `spec.json`. A search never changes its scorer.
+
+## Challenger pass
+
+Authored checks can miss a plausible mistake, so with `scorer.challengers` set the search attacks them before any approach is listed. It applies only to an authored scorer; a supplied scorer (evaluation with oracle gates) skips it.
+
+1. That many challengers start at once. Each is a fork of the conversation at the fork point, with the same blocked tools, private temporary directory, and `branch.limits` as an attempt. Its prompt asks for a plausible but wrong implementation of the goal, the kind of fix a capable engineer might ship, and a final line `defect: <the defect it planted>`. Challengers never see the checks.
+2. Each challenger works in its own worktree of the base. The harness commits its work into the scorer's private object store (see [Keeping the scorer hidden](#keeping-the-scorer-hidden)) and removes the worktree.
+3. It runs the authored gates on each solution, in a fresh worktree of its commit with the scorer's files installed and its protected paths restored. Gate commands there run with the private store's git environment, so they see the solution's commit. A solution that passes every gate is a **gap**.
+4. When there are gaps, the author's conversation continues with each gap's diff and stated defect. A claimed defect is not proof, so the author judges each gap: it revises the spec so its gates reject the solution, or, when the solution actually meets the goal, it dismisses the claim with a one-line reason (`{"dismissed": {"challenger-1": "<reason>"}, "spec": …}`, with `spec` omitted when it dismisses every gap). A dismissed gap no longer counts: it causes no abort, and the gates need not reject it. Validation now also requires that the gates reject every gap that is not dismissed. A failed revision goes back to the author with the report, like any validation failure. These repair turns share the bound `scorer.validationRetries`. If it runs out (at once when it is `0`) with a gap neither rejected nor dismissed, the scorer is invalid: the search ends `aborted: scorer invalid`, the last validation report names the open gaps, and no review request is sent.
+5. After the review, every challenger solution runs against the final scorer. A solution it rejects is **caught**. If it accepts any that is not dismissed, for example because a revision closed one gap but weakened a check another challenger's defect relied on, the search ends `aborted: scorer invalid` with that solution named in the report.
+6. The private object store, and with it every challenger solution, is deleted before the enumerator starts.
+
+Each challenger costs its tokens in the search's cost, including a challenger that was cancelled or failed. Challengers are not rerun after a repair.
 
 ## Later generations
 
@@ -202,6 +218,8 @@ Attempts cannot see the checks that judge them. The harness keeps them apart in 
 
 - While any enumerator or attempt runs, no scorer file exists on disk, no scorer command runs, and the scorer is in no prompt. The scorer lives only in the harness's memory.
 - The author writes the scorer only in its reply. Its worktree and the validation worktree are removed before the enumerator starts.
+- The author and the challengers run their shell commands with `GIT_OBJECT_DIRECTORY` pointing at a private object store under the search's state directory, with the repository's store as an alternate. A `git add`, `git commit`, or `git stash` they run, and the harness's commits of the challengers' work, write there, never into the repository's object store. The store is deleted before the enumerator starts, so no attempt can find scorer or challenger content among the repository's unreachable objects. Refs are shared, though: a branch, tag, commit on a branch, or stash that these forks create would name objects in the private store. So the harness reads every ref (`refs/stash` included) before the author starts, and before the store is deleted it puts back every ref the phase created, deleted, or moved, dropping the reflog entries it added (a stash entry, say). The search's own refs are left alone.
+- Challenger solutions are scorer content too: their diffs and stated defects reach only the author, and join the record when the search ends.
 - Every fork (author, enumerator, attempt) gets a private temporary directory under the search's state directory, outside every worktree. Its shell commands run with `TMPDIR`, `TMP`, and `TEMP` pointing there, long command output spills there, and its `write` and `edit` calls may write only there and in its worktree. The directory is deleted when the fork stops, so nothing the author put in temporary files reaches a later attempt.
 - Every shell command an attempt starts runs in its own process group. When the attempt stops, the harness kills every group that still has a process, and waits until they are gone, before any scoring starts. A process left running cannot watch the checks.
 - Scoring installs the scorer's files in each attempt's worktree only after the attempt's work is committed, so the winning diff never contains them.
@@ -212,6 +230,7 @@ If a process survives the kill, the search ends `aborted: error` instead of scor
 Residual risks, accepted in this version:
 
 - A process that leaves its process group (for example with `setsid` or a double fork into a new session) escapes the kill and could watch scoring.
+- A scorer-side fork's shell command that unsets `GIT_OBJECT_DIRECTORY` or names the repository's git directory explicitly can still write to the shared object store.
 - A shell command can still write to a temporary path it names literally, such as `/tmp/x`, instead of `$TMPDIR`; that file is not deleted with the fork.
 - Process groups are tracked by number. A group that empties while its attempt keeps running is forgotten when the attempt next starts a command, but until then its number could be reused by an unrelated group, which the kill would then reach.
 
@@ -234,7 +253,7 @@ Each search keeps its state under `$(git rev-parse --git-common-dir)/apple-pi/br
 
 After the search, the directory keeps:
 
-- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, the token cost of the scorer author and of the review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, fidelity tag (with `fidelity.profile`), and token cost, plus the winner and outcome.
+- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, the token cost of the scorer author, of the review, and of the challengers, each challenger's diff, stated defect, whether it was a gap, whether the author dismissed it and why, and whether the frozen gates reject it (with `scorer.challengers`), every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, fidelity tag (with `fidelity.profile`), and token cost, plus the winner and outcome.
 - `spec.json`: the frozen scorer; its SHA-256 equals the hash in the record.
 - `winner.patch`: the applied diff, when the winner was applied.
 

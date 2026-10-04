@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -86,6 +86,25 @@ describe("branch search configuration", () => {
 		config.scorer = { validationRetries: 0, reviewProfile: "deep" };
 		config.fidelity = { profile: "fast" };
 		expect(validateBranchSearchConfig(config).ok).toBe(true);
+	});
+
+	it("accepts a positive integer of challengers and rejects any other value", () => {
+		const config = validConfig();
+		config.scorer = { validationRetries: 1, challengers: 2 };
+		const accepted = validateBranchSearchConfig(config);
+		expect(accepted.ok && accepted.config.scorer.challengers).toBe(2);
+		for (const challengers of [0, 1.5, "2"]) {
+			config.scorer = { validationRetries: 1, challengers };
+			const result = validateBranchSearchConfig(config);
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.text).toContain("scorer.challengers: must be an integer ≥ 1");
+		}
+	});
+
+	it("accepts the repository's example configuration, which sets 2 challengers", () => {
+		const example = JSON.parse(readFileSync(join(import.meta.dirname, "../../../branch-search.example.json"), "utf8"));
+		expect(example.scorer.challengers).toBe(2);
+		expect(validateBranchSearchConfig(example).ok).toBe(true);
 	});
 
 	it("rejects a non-object configuration", () => {

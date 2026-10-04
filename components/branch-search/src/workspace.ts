@@ -111,10 +111,26 @@ function run(command: string, args: string[]): Promise<void> {
 	});
 }
 
+/**
+ * A git environment whose new objects go to the private store `objects`, while the repository's own
+ * store stays readable. Objects written under it never enter the repository's object store, so
+ * deleting `objects` removes them from disk entirely; no ref may point at them.
+ */
+export function privateObjects(commonDir: string, objects: string): Record<string, string> {
+	mkdirSync(objects, { recursive: true });
+	return { GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(commonDir, "objects") };
+}
+
 /** A detached worktree at `commit`, with the listed ignored directories cloned from the parent (spec 8.1, 8.2). */
-export async function addWorktree(root: string, path: string, commit: string, cloneIgnored: string[]): Promise<void> {
+export async function addWorktree(
+	root: string,
+	path: string,
+	commit: string,
+	cloneIgnored: string[],
+	env?: NodeJS.ProcessEnv,
+): Promise<void> {
 	mkdirSync(dirname(path), { recursive: true });
-	await git(root, ["worktree", "add", "--detach", "-q", path, commit]);
+	await git(root, ["worktree", "add", "--detach", "-q", path, commit], { env });
 	await cloneIgnoredDirs(root, path, cloneIgnored);
 }
 
@@ -132,11 +148,18 @@ export async function cloneIgnoredDirs(root: string, path: string, cloneIgnored:
 
 /** Commit everything in the worktree and point the branch ref at it (spec 6.6 step 7). */
 export async function commitWorktree(root: string, path: string, id: string, key: string): Promise<string> {
-	await git(path, ["add", "-A"]);
-	await git(path, [...COMMITTER, "commit", "--no-verify", "--allow-empty", "-q", "-m", `branch-search ${id} ${key}`]);
-	const commit = await git(path, ["rev-parse", "HEAD"]);
+	const commit = await commitAll(path, `branch-search ${id} ${key}`);
 	await git(root, ["update-ref", branchRef(id, key), commit]);
 	return commit;
+}
+
+/** Commit everything in the worktree to its HEAD, without a ref; under `privateObjects`, into that store. */
+export async function commitAll(path: string, message: string, env?: NodeJS.ProcessEnv): Promise<string> {
+	await git(path, ["add", "-A"], { env });
+	// An automatic gc would run on the private store alone.
+	const gc = env ? ["-c", "gc.auto=0"] : [];
+	await git(path, [...COMMITTER, ...gc, "commit", "--no-verify", "--allow-empty", "-q", "-m", message], { env });
+	return git(path, ["rev-parse", "HEAD"], { env });
 }
 
 /**
@@ -169,6 +192,50 @@ export async function removeWorktrees(root: string, worktrees: Iterable<string>)
 			failures.push(`${path}: still registered as a worktree`);
 	}
 	if (failures.length > 0) throw new Error(`Could not remove worktrees: ${failures.join("; ")}`);
+}
+
+/** Every ref of the repository with the object it names, `refs/stash` included. */
+export async function readRefs(root: string, env?: NodeJS.ProcessEnv): Promise<Map<string, string>> {
+	const lines = await git(root, ["for-each-ref", "--format=%(refname) %(objectname)"], { env });
+	return new Map(
+		lines
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => line.split(" ") as [string, string]),
+	);
+}
+
+/**
+ * Restore the refs to `before`, except those under `skip`: delete a ref that was created (and its
+ * reflog), recreate one that was deleted, and for one that moved, drop its newest reflog entries
+ * while they do not lead back to the old value, then set it. `env` keeps objects named by the
+ * entries being dropped readable.
+ */
+export async function restoreRefs(
+	root: string,
+	before: Map<string, string>,
+	skip: string,
+	env?: NodeJS.ProcessEnv,
+): Promise<void> {
+	const after = await readRefs(root, env);
+	for (const [ref, value] of after) {
+		if (ref.startsWith(skip) || before.get(ref) === value) continue;
+		const old = before.get(ref);
+		if (old === undefined) {
+			await git(root, ["update-ref", "-d", ref], { env });
+			continue;
+		}
+		const entries = (await git(root, ["reflog", "show", "--format=%H", ref], { env }).catch(() => ""))
+			.split("\n")
+			.filter(Boolean);
+		for (const entry of entries) {
+			if (entry === old) break;
+			await git(root, ["reflog", "delete", "--updateref", "--rewrite", `${ref}@{0}`], { env });
+		}
+		if ((await readRefs(root, env)).get(ref) !== old) await git(root, ["update-ref", ref, old], { env });
+	}
+	for (const [ref, value] of before)
+		if (!ref.startsWith(skip) && !after.has(ref)) await git(root, ["update-ref", ref, value], { env });
 }
 
 /** Delete every ref of the search except the named keys. */
