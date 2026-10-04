@@ -79,14 +79,14 @@ export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMa
 	].join("\n\n");
 }
 
-export default function registerChangeReflection(pi: ExtensionAPI): void {
-	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change review");
-	// Changed paths in first-change order, each with what ran after its last change.
+/**
+ * Paths changed by successful built-in `edit`/`write` calls, in first-change order, each with what
+ * ran after its last change. Tool calls made inside a forked continuation are not the agent's own.
+ * The caller clears it when its reflection window ends.
+ */
+export function trackChanges(pi: ExtensionAPI): Map<string, string[]> {
 	const changed = new Map<string, string[]>();
-	let completed = false;
-
 	pi.on("session_start", () => changed.clear());
-
 	pi.on("tool_result", (event, ctx) => {
 		if (inForkedContinuation()) return;
 		if (EXECUTION_TOOLS.has(event.toolName)) {
@@ -98,6 +98,13 @@ export default function registerChangeReflection(pi: ExtensionAPI): void {
 		const path = event.input.path;
 		if (typeof path === "string" && path.length > 0) changed.set(displayPath(ctx.cwd, path), []);
 	});
+	return changed;
+}
+
+export default function registerChangeReflection(pi: ExtensionAPI): void {
+	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change review");
+	const changed = trackChanges(pi);
+	let completed = false;
 
 	pi.on("agent_before_settle", (event) => {
 		completed = event.outcome === "completed";

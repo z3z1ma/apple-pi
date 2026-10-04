@@ -28,13 +28,14 @@ const model = {
 
 /**
  * A real AgentSession on a scripted model, with `app.ts` in a temporary cwd. Call `dispose` when done.
- * `replies` is a queue, or a function of the request for runs whose order is not fixed. A function may
- * return `"until-aborted"` to hold the request open until its signal aborts. With `options.cwd`, the
+ * `replies` is a queue, or a function of the request (and its abort signal) for runs whose order is not fixed. A function may
+ * return `"until-aborted"` to hold the request open until its signal aborts, or a promise to hold it until
+ * the test releases a reply. With `options.cwd`, the
  * session runs in that existing directory instead, which `dispose` leaves in place.
  */
 export async function fauxSession(
 	extensionFactories: ExtensionFactory[],
-	replies: Reply[] | ((context: Context) => Reply | "until-aborted"),
+	replies: Reply[] | ((context: Context, signal?: AbortSignal) => Reply | "until-aborted" | Promise<Reply>),
 	tools: string[],
 	options: { cwd?: string; sessionManager?: SessionManager } = {},
 ) {
@@ -50,21 +51,26 @@ export async function fauxSession(
 	const stream = (_model: Model<string>, context: Context, options?: { signal?: AbortSignal }) => {
 		requests.push(structuredClone(context));
 		const message =
-			typeof replies === "function" ? replies(context) : (replies.shift() ?? fauxAssistantMessage("done"));
+			typeof replies === "function"
+				? replies(context, options?.signal)
+				: (replies.shift() ?? fauxAssistantMessage("done"));
 		const events = createAssistantMessageEventStream();
-		if (message === "until-aborted") {
-			const abort = () => {
-				const error = { ...fauxAssistantMessage(""), stopReason: "aborted" as const, errorMessage: "aborted" };
-				events.push({ type: "error", reason: "aborted", error });
-				events.end(error);
-			};
-			// A run aborted between requests (say, from a tool hook) sends its next request already aborted.
-			if (options?.signal?.aborted) abort();
-			else options?.signal?.addEventListener("abort", abort);
-			return events;
-		}
-		events.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });
-		events.end(message);
+		let settled = false;
+		const settle = (reply: Reply) => {
+			if (settled) return;
+			settled = true;
+			if (reply.stopReason === "aborted") events.push({ type: "error", reason: "aborted", error: reply });
+			else events.push({ type: "done", reason: reply.stopReason === "toolUse" ? "toolUse" : "stop", message: reply });
+			events.end(reply);
+		};
+		// Like a real provider, an aborted request ends as aborted, whatever reply was scripted. A run
+		// aborted between requests (say, from a tool hook or turn ceiling) sends its next request already aborted.
+		const abort = () => settle({ ...fauxAssistantMessage(""), stopReason: "aborted", errorMessage: "aborted" });
+		if (options?.signal?.aborted) abort();
+		else if (message === "until-aborted" || message instanceof Promise)
+			options?.signal?.addEventListener("abort", abort, { once: true });
+		if (message instanceof Promise) void message.then(settle);
+		else if (message !== "until-aborted") settle(message);
 		return events;
 	};
 	const { modelRuntime } = fauxModelBackend(model);

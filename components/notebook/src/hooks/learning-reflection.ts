@@ -8,12 +8,21 @@ export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
 /** New tokens between automatic reflections; chosen by the user, to be tuned from real use. */
 export const LEARNING_REFLECTION_SPACING_TOKENS = 500_000;
 
-const REFLECTION =
-	"Reflect on what you learned since the last reflection. What surprised you? Which failures taught something, and what worked instead? Did you find how to reach an environment or service, a harness pitfall, or a user correction worth keeping? Record each learning with `update_notebook`, and skip ordinary failures that taught nothing. If nothing is worth keeping, say so in one line.";
+const QUESTIONS =
+	"Reflect on what you learned since the last reflection. What surprised you? Which failures taught something, and what worked instead? Did you find how to reach an environment or service, a harness pitfall, or a user correction worth keeping? Record each learning with `update_notebook`, and skip ordinary failures that taught nothing.";
+
+function withEvidence(prompt: string, evidence: readonly string[]): string {
+	if (evidence.length === 0) return prompt;
+	return `${prompt}\n\nFailed or surprising tool calls since the last reflection:\n${evidence.map((item) => `- ${item}`).join("\n")}`;
+}
 
 export function learningReflectionPrompt(evidence: readonly string[]): string {
-	if (evidence.length === 0) return REFLECTION;
-	return `${REFLECTION}\n\nFailed or surprising tool calls since the last reflection:\n${evidence.map((item) => `- ${item}`).join("\n")}`;
+	return withEvidence(`${QUESTIONS} If nothing is worth keeping, say so in one line.`, evidence);
+}
+
+/** The learning questions and evidence, for a caller that supplies its own closing instruction. */
+export function learningQuestions(evidence: readonly string[]): string {
+	return withEvidence(QUESTIONS, evidence);
 }
 
 function describeCall(toolName: string, input: Record<string, unknown>): string {
@@ -31,6 +40,20 @@ function describeEvidence(event: ToolResultEvent): string | undefined {
 }
 
 /**
+ * Failed or surprising tool calls, deduplicated in first-seen order. Tool calls made inside a
+ * forked continuation are not the agent's own. The caller empties it when it reflects.
+ */
+export function trackLearningEvidence(pi: ExtensionAPI): string[] {
+	const evidence: string[] = [];
+	pi.on("tool_result", (event) => {
+		if (inForkedContinuation()) return;
+		const item = describeEvidence(event);
+		if (item && !evidence.includes(item)) evidence.push(item);
+	});
+	return evidence;
+}
+
+/**
  * Once enough new tokens have passed, reflect in a headless fork after a completed
  * run, with the failed or surprising tool calls of that stretch as evidence.
  * `/reflect` asks the main agent in-band at any time.
@@ -39,11 +62,11 @@ export function registerLearningReflection(pi: ExtensionAPI): void {
 	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Reflection");
 	let newTokens = 0;
 	let completed = false;
-	let evidence: string[] = [];
+	const evidence = trackLearningEvidence(pi);
 
 	const reset = () => {
 		newTokens = 0;
-		evidence = [];
+		evidence.length = 0;
 	};
 	const takePrompt = () => {
 		const prompt = learningReflectionPrompt(evidence);
@@ -57,12 +80,6 @@ export function registerLearningReflection(pi: ExtensionAPI): void {
 		const message = event.message;
 		if (message.role !== "assistant") return;
 		newTokens += message.usage.input + message.usage.cacheWrite + message.usage.output;
-	});
-
-	pi.on("tool_result", (event) => {
-		if (inForkedContinuation()) return;
-		const item = describeEvidence(event);
-		if (item && !evidence.includes(item)) evidence.push(item);
 	});
 
 	pi.on("agent_before_settle", (event) => {

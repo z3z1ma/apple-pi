@@ -15,8 +15,20 @@ The fork applies a clear improvement and revalidates what it affects, or keeps t
 - Edits made by the fork do not trigger a second reflection. The next run that changes files starts a new reflection.
 - Aborted or failed runs, runs without successful `edit`/`write` calls, and failed tool calls do not trigger a reflection.
 
+## Interactive coding children
+
+A public interactive child with active built-in `edit` or `write` tools reviews its own work before it hands off, in its own conversation rather than in a fork. This applies to nested children too, and to custom agents. Pairing does not affect it (`pair: false` keeps it), and there is no setting to turn it off. Children without those tools, the internal `/btw` and consultation sessions, internal managed runs, and `pi_exec` workers do not get it.
+
+When one invocation (a launch or a resume) completes, the child receives one instruction and keeps working before Pi settles the run:
+
+1. **Review**, only if the invocation made a successful `edit` or `write` call. It uses the same lenses and the same list of what ran after each file's last change as the root review. When the intended behavior is unclear, the child uses `clarify` if it has it. The answer is advice, not new authorization. If the question stays open, the child leaves the disputed change alone and reports the question and the verification it affects.
+2. **Learning**, after every completed invocation, with that invocation's failed or surprising tool calls as evidence. It does not wait for the root's [token spacing](context.md#pair-programmer-notebook). Additions go to the primary notebook through the child's add-only `update_notebook`. Recording nothing is a valid outcome.
+3. **Final report.** This replaces the earlier report. It describes the files as they now stand, the checks that ran after the last changes, what remains unverified, the review outcome, and a brief summary of notebook additions. It also names any learning that could not be recorded and why. A rejected notebook addition on its own does not fail the child.
+
+Each invocation gets this phase once. Edits made during the review do not start another one, and a resume starts a new invocation. The phase counts toward the child's usual turn limit and follows its usual cancellation. The caller sees the result only after the phase finishes. If the phase fails, is stopped, or reaches the turn ceiling, the child is reported as failed, stopped, or aborted like any other run. Its changed files are kept, and the handoff says that the completion review did not finish, so an earlier report is never presented as reviewed. There is no extra notification to the root.
+
 ## Scope
 
-The extension loads only in the root session. Interactive subagents and `pi_exec` workers do not load it.
+The passive fork described above loads only in the root session. Interactive coding children run the in-band phase described above. `pi_exec` workers get neither.
 
 Only the built-in `edit` and `write` tools count as changes. Files changed by `bash`, subagents, or `pi_exec` do not trigger a reflection.

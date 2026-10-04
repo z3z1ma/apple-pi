@@ -67,6 +67,12 @@ function textOf(message: { content: unknown } | undefined): string {
 			: "";
 }
 
+/** A coding child's in-band completion phase restates its final report as the full handoff. */
+function completionHandoff(context: { messages: Array<{ role: string; content: unknown }> }) {
+	if (!textOf(context.messages.at(-1)).startsWith("Before you hand off")) return undefined;
+	return fauxAssistantMessage(textOf(context.messages.findLast((message) => message.role === "assistant")));
+}
+
 function call(name: string, args: Parameters<typeof fauxToolCall>[1]) {
 	return fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: "toolUse" });
 }
@@ -86,6 +92,8 @@ describe("shared notebook through real interactive sessions", () => {
 			[installPair, installSubagents],
 			(context) => {
 				if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					if (childStep++ === 0)
 						return call("update_notebook", {
 							reflections: [{ content: "The temporary service uses port 4321; connect to that port next time." }],
@@ -153,6 +161,8 @@ describe("shared notebook through real interactive sessions", () => {
 			const script: Parameters<typeof fauxSession>[1] = (context) => {
 				if (!getCurrentSystemPrompt(context.messages).includes("Notebook coding child."))
 					return fauxAssistantMessage("Host ready.");
+				const handoff = completionHandoff(context);
+				if (handoff) return handoff;
 				switch (childStep++) {
 					case 0:
 						return call("update_notebook", {
@@ -230,6 +240,8 @@ describe("shared notebook through real interactive sessions", () => {
 				[installPair, installSubagents],
 				(context) => {
 					if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
+						const handoff = completionHandoff(context);
+						if (handoff) return handoff;
 						if (childStep++ === 0)
 							return call("update_notebook", {
 								reflections: [
@@ -347,6 +359,8 @@ describe("shared notebook through real interactive sessions", () => {
 			[installPair, installSubagents],
 			(context) => {
 				if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					switch (childStep++) {
 						case 0:
 							return call("read_notebook", {});
@@ -455,6 +469,8 @@ describe("shared notebook through real interactive sessions", () => {
 			[installPair, installSubagents],
 			(context) => {
 				if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					const label = JSON.stringify(context.messages.filter((message) => message.role === "user")).includes("alpha")
 						? "alpha"
 						: "beta";
@@ -549,6 +565,8 @@ describe("shared notebook through real interactive sessions", () => {
 			(context) => {
 				const prompt = getCurrentSystemPrompt(context.messages);
 				if (prompt.includes("Notebook leaf child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					if (leafStep++ === 0)
 						return call("update_notebook", {
 							reflections: [{ content: "The nested build uses a separate cache; clear that cache when retrying." }],
@@ -558,6 +576,8 @@ describe("shared notebook through real interactive sessions", () => {
 					return "until-aborted";
 				}
 				if (prompt.includes("Notebook coding child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					if (coderStep++ === 0)
 						return call("agent", {
 							prompt: "Discover the nested cache.",
@@ -620,6 +640,8 @@ describe("shared notebook through real interactive sessions", () => {
 			[installPair, installSubagents],
 			(context) => {
 				if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
+					const handoff = completionHandoff(context);
+					if (handoff) return handoff;
 					switch (childStep++) {
 						case 0:
 							return call("bash", { command: "printf 'UNCITED_CHILD_SECRET\\n'" });

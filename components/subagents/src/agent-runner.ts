@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, SessionEntry, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
 	type AgentSession,
 	type AgentSessionEvent,
@@ -29,6 +29,7 @@ import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
 import { createChildNotebookTools, type SharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
+import { registerCompletionReflection, withUnfinishedCompletionNote } from "./completion-reflection.js";
 import { buildFullParentContext, extractText } from "./context.js";
 import { detectEnv } from "./env.js";
 import { resolveAgentProfile } from "./model-routing.js";
@@ -167,6 +168,8 @@ export type AgentRunContext = Pick<
 
 export interface RunOptions {
 	notebook?: SharedNotebook;
+	/** Public interactive children review and reflect in-band before each handoff when they can edit. */
+	completionReflection?: boolean;
 	/** Host-prepared session state, used by ephemeral parent forks. */
 	sessionManager?: SessionManager;
 	/** ExtensionAPI instance — used for pi.exec() instead of execSync. */
@@ -262,11 +265,22 @@ export interface RunResult {
 	failure?: string;
 }
 
-/**
- * Subscribe to a session and collect the last assistant message text.
- * Returns an object with a `getText()` getter and an `unsubscribe` function.
- */
-function collectResponseText(session: AgentSession) {
+async function runPrompt(session: AgentSession, prompt: string): Promise<string | undefined> {
+	try {
+		await session.prompt(prompt);
+	} catch (error) {
+		return error instanceof Error ? error.message || error.name : String(error) || "Agent prompt failed";
+	}
+}
+
+function collectInvocation(session: AgentSession) {
+	// Compaction changes the model projection, not the journal ancestry.
+	const anchor = session.sessionManager.getLeafId();
+	const getEntries = () => {
+		const branch = session.sessionManager.getBranch();
+		const index = anchor ? branch.findIndex((entry) => entry.id === anchor) : -1;
+		return anchor && index < 0 ? [] : branch.slice(index + 1);
+	};
 	let text = "";
 	const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
 		// message_start also fires for user and toolResult messages — resetting on
@@ -279,24 +293,22 @@ function collectResponseText(session: AgentSession) {
 			text += event.assistantMessageEvent.delta;
 		}
 	});
-	return { getText: () => text, unsubscribe };
+	return { getText: () => text, getEntries, unsubscribe };
 }
 
 /**
  * Get the last non-empty assistant text produced during THIS invocation.
- * `startIndex` is the message count captured before the prompt, so the walk-back
- * never crosses into a previous turn: on a resume whose new turn failed empty,
- * this returns "" instead of the prior turn's answer (#144). Defaults to 0 (a
- * fresh spawn, where the whole history belongs to this run).
+ * Canonical entries after the invocation's starting leaf survive compaction;
+ * a shortened model projection cannot hide its failure or expose a prior answer.
  */
 function getAssistantResponse(
-	session: AgentSession,
-	startIndex = 0,
+	entries: readonly SessionEntry[],
 	streamedText = "",
 ): { text: string; messageMarker?: string } {
-	for (let i = session.messages.length - 1; i >= startIndex; i--) {
-		const msg = session.messages[i];
-		if (msg.role !== "assistant") continue;
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+		const msg = entry.message;
 		const text = extractText(msg.content).trim();
 		if (text) {
 			return { text: streamedText || text, messageMarker: assistantMessageMarker(msg) };
@@ -318,13 +330,13 @@ function getAssistantResponse(
  * Everything else completes: a "toolUse" stop (which is not terminal), and —
  * crucially — a "length" or "stop" stop that DID produce text.
  * "aborted" is handled by the manager's abort flag / "stopped" guard, not here.
- * Bounded by `startIndex` (like the text fallback) so a resume that produced no
- * assistant message of its own never inherits a PRIOR turn's stop reason.
+ * Invocation-local canonical entries keep prior stop reasons out even after compaction.
  */
-function finalTurnError(session: AgentSession, startIndex = 0): string | undefined {
-	for (let i = session.messages.length - 1; i >= startIndex; i--) {
-		const msg = session.messages[i];
-		if (msg.role !== "assistant") continue;
+function finalTurnError(entries: readonly SessionEntry[]): string | undefined {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+		const msg = entry.message;
 		if (msg.stopReason === "error") {
 			return (msg as { errorMessage?: string }).errorMessage?.trim() || "provider error with no output";
 		}
@@ -451,6 +463,9 @@ export async function runAgent(
 				},
 			},
 			...(options.loadStandardChildExtensions !== false ? [createMcpExtension(), createToolSearchExtension()] : []),
+			...(options.completionReflection
+				? [{ name: "completion-reflection", hidden: true, factory: registerCompletionReflection }]
+				: []),
 		],
 		noSkills,
 		noPromptTemplates: true,
@@ -704,7 +719,7 @@ export async function runAgent(
 		}
 	});
 
-	const collector = collectResponseText(session);
+	const collector = collectInvocation(session);
 	const cleanupAbort = forwardAbortSignal(session, options.signal);
 
 	// A task prompt is the entire handoff unless this invocation explicitly
@@ -715,26 +730,25 @@ export async function runAgent(
 		if (parentContext) effectivePrompt = parentContext + prompt;
 	}
 
-	// Boundary for the history fallback: only assistant text produced from here
-	// on counts as this run's output (a fresh session, so usually 0).
-	const startLen = session.messages.length;
+	let promptFailure: string | undefined;
 	try {
 		options.signal?.throwIfAborted();
-		await session.prompt(effectivePrompt);
+		promptFailure = await runPrompt(session, effectivePrompt);
 	} finally {
 		unsubTurns();
 		collector.unsubscribe();
 		cleanupAbort();
 	}
 
-	const response = getAssistantResponse(session, startLen, collector.getText().trim());
+	const entries = collector.getEntries();
+	const response = getAssistantResponse(entries, collector.getText().trim());
 	return {
-		responseText: response.text,
+		responseText: withUnfinishedCompletionNote(response.text, entries),
 		responseMessageMarker: response.messageMarker,
 		session,
 		aborted,
 		steered: softLimitReached,
-		failure: finalTurnError(session, startLen),
+		failure: promptFailure ?? finalTurnError(entries),
 	};
 }
 
@@ -758,8 +772,7 @@ export async function resumeAgent(
 	// Boundary for the history fallback: the session already holds prior turns,
 	// so only assistant text produced by THIS resume prompt counts as its output
 	// — a failed resume must not surface the previous turn's answer (#144).
-	const startLen = session.messages.length;
-	const collector = collectResponseText(session);
+	const collector = collectInvocation(session);
 	const cleanupAbort = forwardAbortSignal(session, options.signal);
 
 	let turnCount = 0;
@@ -828,19 +841,21 @@ export async function resumeAgent(
 				)
 			: () => {};
 
+	let promptFailure: string | undefined;
 	try {
-		await session.prompt(prompt);
+		promptFailure = await runPrompt(session, prompt);
 	} finally {
 		collector.unsubscribe();
 		unsubEvents();
 		cleanupAbort();
 	}
 
-	const response = getAssistantResponse(session, startLen, collector.getText().trim());
+	const entries = collector.getEntries();
+	const response = getAssistantResponse(entries, collector.getText().trim());
 	return {
-		text: response.text,
+		text: withUnfinishedCompletionNote(response.text, entries),
 		responseMessageMarker: response.messageMarker,
-		failure: finalTurnError(session, startLen),
+		failure: promptFailure ?? finalTurnError(entries),
 		aborted,
 		steered: softLimitReached,
 	};

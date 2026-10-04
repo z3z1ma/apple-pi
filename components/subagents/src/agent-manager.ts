@@ -373,6 +373,7 @@ export class AgentManager {
 			customTools: [...(options.customTools ?? []), ...(options.enableClarify ? [createClarifyTool(ctx)] : [])],
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
 			notebook: options.notebook,
+			completionReflection: options.internalOwner === undefined,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
 			pair: options.pair,

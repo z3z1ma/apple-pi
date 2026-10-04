@@ -460,6 +460,8 @@ describe("subagent runner with Pi's real AgentSession", () => {
 				fauxToolCall("edit", { path: "missing.ts", edits: [{ oldText: "x", newText: "y" }] }),
 			]),
 			() => fauxAssistantMessage([fauxText("EDITS-DONE")]),
+			() => fauxAssistantMessage([fauxText("EDITS-DONE")]),
+			() => fauxAssistantMessage([fauxText("NO-EDITS")]),
 			() => fauxAssistantMessage([fauxText("NO-EDITS")]),
 		]);
 		const model = faux.getModel();
