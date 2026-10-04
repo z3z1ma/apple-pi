@@ -10,7 +10,7 @@ Build branch search as specified in `spec.md`: hidden pre-registered scorer, ext
 
 ## Current State
 
-Spec section 15 records the verification answers: V1-V4 and V7 pass on Pi 0.99.0 with faux models (`evidence/branch-search-spike.test.ts`), V9 and V10 have no supported mechanism, and V11 is partly answered. V5, V6, and V8 are still open; the tickets that need them answer them.
+Spec section 15 records the verification answers: V1-V4 and V7 pass on Pi 0.99.0 with faux models (`evidence/branch-search-spike.test.ts`), V9 and V10 have no supported mechanism, and V11 is partly answered. V5 and V6 are answered by tickets 06 and 05; V8 is still open (ticket 09 or later).
 
 Decided (operator, 2026-10-03):
 
@@ -36,6 +36,7 @@ Progress:
 - 03 committed. Deviations: a failed `git apply` restores the base and ends `ready` with the reason; a winner with the base tree counts as `applied` with nothing to change; a scorer whose files cannot be installed on the base is invalid; diffs ignore user diff drivers (`--no-ext-diff --no-textconv`), so the merge command text differs slightly from spec 6.9. Real-path resolution follows links component by component, like the kernel. Waiting for the root session to settle before apply (spec 6.9 step 1) moves to ticket 04.
 - 04 committed. `/branch-search` is live: author loop, freeze, review, phase separation, report message. Deviations: review also runs on a supplied scorer, so evaluation with oracle gates must leave `scorer.reviewProfile` unset; a failed review keeps the author's scorer; apply holds the root session (root `write`/`edit`/`bash`/`pi_exec` are refused while it applies) and rollback restores only paths the apply still owns; each worktree fork gets a private temp directory under the state directory; a command goal appears in the enumerator and branch prompts. Residual risks (documented): a process that leaves its group, literal `/tmp` paths in shell commands, reuse of an emptied process-group number. - 07 committed. Later generations run all six planning rules; `draw: "model"` works. Children and dead-parent enumerators map their ancestors' worktree paths to their own worktree (`ForkWorktree.ancestors`). One failed enumerator stops its siblings and ends `aborted: enumeration failed`. Deviations: concurrent enumerators share a worktree-command queue; status adds `enumerate g<n>`; a parent is enumerated even when `maxTotal` leaves no room for its children (spec rule order).
 - 05 committed. `search_branches` is live (V3 and V6 answered: forks answer the pending call with a tool result; progress goes through `onUpdate`). Deviations: roots of later generations also answer the call with a tool result; the tool refuses itself in every forked continuation; refusals are error results; `pi_exec` capture excludes the tool.
+- 06 committed. Passive activation and the in-branch stall abort are live; V5 answered in spec 15. Deviations: hex runs normalize before digit runs; the stall detector runs even with passive off; any search that starts in the root session spends every signature at the threshold; spent signatures travel in report `details` and are recovered with the counts after a reload. Gap (documented): a search cut off by a session event adds no report, so its spent signatures are lost.
 
 ## Outcome
 
