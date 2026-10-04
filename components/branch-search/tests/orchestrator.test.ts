@@ -1914,4 +1914,94 @@ describe("challenger pass", { timeout: 30_000 }, () => {
 		expect(atEnumerate?.fsck).not.toMatch(/broken|invalid|missing|error/i);
 		expect(atEnumerate?.objects).toBe("0");
 	});
+
+	it("leaves the user's own branch, commit, and stash changes made during the scorer phase in place", async () => {
+		const MARK = "ref-marker-91fe";
+		const email = "c@localhost";
+		const refs = fauxAssistantMessage(
+			fauxToolCall(
+				"bash",
+				{
+					command: [
+						`echo ${MARK} > r.txt && git add r.txt`,
+						"git checkout -q -b chal-branch",
+						`git -c user.name=c -c user.email=${email} -c commit.gpgsign=false commit -qm ${MARK}`,
+						`echo ${MARK}-stash > s.txt && git add s.txt`,
+						`git -c user.name=c -c user.email=${email} stash -q`,
+						"git tag chal-tag",
+					].join(" && "),
+					verbatim: true,
+				},
+				{ id: "refs" },
+			),
+			{ stopReason: "toolUse" },
+		);
+		let cwd = "";
+		const user: Record<string, string> = {};
+		const as = ["-c", "user.name=u", "-c", `user.email=${email}`, "-c", "commit.gpgsign=false"];
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{
+				author: [authorReply(AUTHORED)],
+				other: (context) => {
+					const reply = challengers({ 1: [refs, planted("value is 3")] })(context);
+					// After the challenger changed its refs, the user works in the parent checkout.
+					if (reply !== undefined && context.messages.at(-1)?.role === "toolResult" && !user.stash) {
+						const commit = (message: string) =>
+							gitOut(cwd, ...as, "commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", message);
+						user.created = commit("user new branch");
+						gitOut(cwd, "update-ref", "-m", "user", "refs/heads/user-new", user.created);
+						user.moved = commit("user moves a branch");
+						gitOut(cwd, "update-ref", "-m", "user", "refs/heads/user-old", user.moved);
+						writeFileSync(join(cwd, "src", "keep.txt"), "user change\n");
+						gitOut(cwd, ...as, "stash", "-q");
+						user.stash = gitOut(cwd, "rev-parse", "refs/stash");
+					}
+					return reply;
+				},
+			},
+		);
+		cwd = run.cwd;
+		gitOut(cwd, "branch", "user-old");
+		writeFileSync(join(cwd, "src", "keep.txt"), "changed\n");
+		gitOut(cwd, ...as, "stash", "-q");
+		const earlierStash = gitOut(cwd, "rev-parse", "refs/stash");
+		const listRefs = () =>
+			gitOut(cwd, "for-each-ref", "--format=%(refname) %(objectname)")
+				.split("\n")
+				.filter((line) => !line.startsWith("refs/apple-pi/"));
+		let atEnumerate: { refs: string[]; stashLog: string[]; fsck: string; userLog: string[] } | undefined;
+		const { result } = await search(
+			run,
+			{ authored: true, config: { scorer: { validationRetries: 1, challengers: 1 } } },
+			(status) => {
+				if (status !== "branching enumerate 0/0") return;
+				atEnumerate = {
+					refs: listRefs(),
+					stashLog: gitOut(cwd, "reflog", "show", "--format=%H", "refs/stash").split("\n"),
+					userLog: gitOut(cwd, "reflog", "show", "--format=%H", "refs/heads/user-old").split("\n"),
+					fsck: execFileSync("bash", ["-c", "git fsck --no-dangling 2>&1; echo exit=$?"], {
+						cwd,
+						encoding: "utf8",
+					}),
+				};
+			},
+		);
+
+		expect(result.outcome).toBe("ready");
+		expect(user.stash).toBeTruthy();
+		const refsAt = new Map(atEnumerate?.refs.map((line) => line.split(" ") as [string, string]));
+		// The user's changes survive.
+		expect(refsAt.get("refs/heads/user-new")).toBe(user.created);
+		expect(refsAt.get("refs/heads/user-old")).toBe(user.moved);
+		expect(atEnumerate?.userLog[0]).toBe(user.moved);
+		expect(refsAt.get("refs/stash")).toBe(user.stash);
+		// The challenger's stash entry, between the two user stashes, is gone; theirs stay.
+		expect(atEnumerate?.stashLog).toEqual([user.stash, earlierStash]);
+		// The challenger's own refs are restored.
+		expect(refsAt.has("refs/heads/chal-branch")).toBe(false);
+		expect(refsAt.has("refs/tags/chal-tag")).toBe(false);
+		expect(atEnumerate?.fsck).toMatch(/exit=0\s*$/);
+		expect(atEnumerate?.fsck).not.toMatch(/broken|invalid|missing|error/i);
+	});
 });

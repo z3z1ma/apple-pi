@@ -205,11 +205,22 @@ export async function readRefs(root: string, env?: NodeJS.ProcessEnv): Promise<M
 	);
 }
 
+/** Whether the repository's own object store holds `value`, ignoring any private store. */
+async function inSharedStore(root: string, value: string): Promise<boolean> {
+	return git(root, ["cat-file", "-e", `${value}^{object}`]).then(
+		() => true,
+		() => false,
+	);
+}
+
 /**
- * Restore the refs to `before`, except those under `skip`: delete a ref that was created (and its
- * reflog), recreate one that was deleted, and for one that moved, drop its newest reflog entries
- * while they do not lead back to the old value, then set it. `env` keeps objects named by the
- * entries being dropped readable.
+ * Undo the ref changes of role forks whose git wrote objects only to a private store (named by
+ * `env`), and leave everyone else's alone. A created or moved ref whose new value the shared store
+ * holds is someone else's change, such as the user committing or stashing in the parent checkout.
+ * Otherwise it is the forks': a created ref is deleted, a moved one goes back to its old value.
+ * Every reflog entry of a changed ref whose value the shared store lacks is dropped, newest last
+ * so the others keep their positions; an entry the shared store holds is never dropped. Refs under
+ * `skip` are left alone, and refs deleted meanwhile are recreated, which loses nothing.
  */
 export async function restoreRefs(
 	root: string,
@@ -221,18 +232,23 @@ export async function restoreRefs(
 	for (const [ref, value] of after) {
 		if (ref.startsWith(skip) || before.get(ref) === value) continue;
 		const old = before.get(ref);
-		if (old === undefined) {
+		if (old === undefined && !(await inSharedStore(root, value))) {
 			await git(root, ["update-ref", "-d", ref], { env });
 			continue;
 		}
 		const entries = (await git(root, ["reflog", "show", "--format=%H", ref], { env }).catch(() => ""))
 			.split("\n")
 			.filter(Boolean);
-		for (const entry of entries) {
-			if (entry === old) break;
-			await git(root, ["reflog", "delete", "--updateref", "--rewrite", `${ref}@{0}`], { env });
+		const missing: number[] = [];
+		for (const [index, entry] of entries.entries()) if (!(await inSharedStore(root, entry))) missing.push(index);
+		for (const index of missing.reverse()) {
+			const update = index === 0 ? ["--updateref"] : [];
+			await git(root, ["reflog", "delete", ...update, "--rewrite", `${ref}@{${index}}`], { env });
 		}
-		if ((await readRefs(root, env)).get(ref) !== old) await git(root, ["update-ref", ref, old], { env });
+		const current = (await readRefs(root, env)).get(ref);
+		if (current !== undefined && (await inSharedStore(root, current))) continue;
+		if (old === undefined) await git(root, ["update-ref", "-d", ref], { env });
+		else await git(root, ["update-ref", ref, old], { env });
 	}
 	for (const [ref, value] of before)
 		if (!ref.startsWith(skip) && !after.has(ref)) await git(root, ["update-ref", ref, value], { env });
