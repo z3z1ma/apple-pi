@@ -1,31 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, normalize, sep } from "node:path";
+import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 
-/** Read from the Pi agent directory, then from `.pi/` in a trusted project (spec 11). */
+/** Read from the Pi agent directory, then from `.pi/` in a trusted project. */
 export const CONFIG_FILE = "branch-search.json";
 
-export interface SearchShape {
-	branches: { perGeneration: number; maxTotal: number };
-	generations: {
-		maxDepth: number;
-		rootsPerGeneration: number;
-		parentsPerGeneration: number;
-		childrenPerParent: number;
-	};
-}
-
-export interface BranchSearchConfig extends SearchShape {
-	passive: { enabled: boolean; repeatThreshold: number };
-	enumerate: { count: number };
-	branch: { limits: { wallClockSec?: number; outputTokens?: number } };
-	/** `challengers`: wrong solutions written to test the authored checks before the freeze; absent runs none. */
-	scorer: { validationRetries: number; reviewProfile?: string; challengers?: number };
-	fidelity?: { profile?: string };
-	constraints: string[];
+export interface BranchSearchConfig {
+	/** Approaches the enumerator lists, and the most attempts that run. */
+	attempts: number;
+	/** Limits per attempt. */
+	limits: { wallClockSec?: number; outputTokens?: number };
 	workspace: { cloneIgnored: string[] };
-	apply: "auto" | "report";
-	draw: "random" | "model";
+	/** With `profile`, a model on that profile chooses among the attempts that pass every gate. */
+	judge?: { profile?: string };
 }
 
 export type ConfigResult = { ok: true; config: BranchSearchConfig } | { ok: false; text: string };
@@ -64,28 +52,8 @@ export function readBranchSearchConfig(cwd: string, projectTrusted: boolean, age
 
 type Check = (value: unknown) => string | undefined;
 
-const integer =
-	(min: number): Check =>
-	(value) =>
-		Number.isInteger(value) && (value as number) >= min ? undefined : `must be an integer ≥ ${min}`;
-const boolean: Check = (value) => (typeof value === "boolean" ? undefined : "must be true or false");
-const oneOf =
-	(...options: string[]): Check =>
-	(value) =>
-		options.includes(value as string) ? undefined : `must be one of ${options.map((o) => `"${o}"`).join(", ")}`;
-const strings: Check = (value) =>
-	Array.isArray(value) && value.every((entry) => typeof entry === "string") ? undefined : "must be a list of strings";
-const profile: Check = (value) => (typeof value === "string" && value !== "" ? undefined : "must be a profile name");
-
-const relativeDirs: Check = (value) => {
-	const problem = strings(value);
-	if (problem) return problem;
-	const bad = (value as string[]).find((path) => {
-		const clean = normalize(path);
-		return path === "" || isAbsolute(path) || clean === ".." || clean.startsWith(`..${sep}`);
-	});
-	return bad === undefined ? undefined : `must hold relative paths inside the workspace ("${bad}" is not)`;
-};
+const attempts: Check = (value) =>
+	Number.isInteger(value) && (value as number) >= 2 ? undefined : "must be an integer ≥ 2";
 
 const limits: Check = (value) => {
 	if (!isRecord(value)) return "must be an object with wallClockSec or outputTokens";
@@ -98,40 +66,13 @@ const limits: Check = (value) => {
 	return undefined;
 };
 
-/** The tree-shape keys of `SearchShape` with their minimums: the keys replay can tune (spec 11, 18.1). */
-export const SHAPE_KEYS = {
-	"branches.perGeneration": 1,
-	"branches.maxTotal": 1,
-	"generations.maxDepth": 0,
-	"generations.rootsPerGeneration": 0,
-	"generations.parentsPerGeneration": 1,
-	"generations.childrenPerParent": 1,
-} as const;
+const profile: Check = (value) => (typeof value === "string" && value !== "" ? undefined : "must be a profile name");
 
-export type ShapeKey = keyof typeof SHAPE_KEYS;
-
-/** Why `value` cannot be the value of a tree-shape key, or undefined when it can. */
-export function checkShapeValue(key: ShapeKey, value: unknown): string | undefined {
-	return integer(SHAPE_KEYS[key])(value);
-}
-
-const REQUIRED: [string, Check][] = [
-	["passive.enabled", boolean],
-	["passive.repeatThreshold", integer(2)],
-	["enumerate.count", integer(2)],
-	...Object.entries(SHAPE_KEYS).map(([key, min]): [string, Check] => [key, integer(min)]),
-	["branch.limits", limits],
-	["scorer.validationRetries", integer(0)],
-	["constraints", strings],
-	["workspace.cloneIgnored", relativeDirs],
-	["apply", oneOf("auto", "report")],
-];
-
-const OPTIONAL: [string, Check][] = [
-	["scorer.reviewProfile", profile],
-	["scorer.challengers", integer(1)],
-	["fidelity.profile", profile],
-	["draw", oneOf("random", "model")],
+const KEYS: [string, Check, "required" | "optional"][] = [
+	["attempts", attempts, "required"],
+	["limits", limits, "required"],
+	["workspace.cloneIgnored", relativePathsProblem, "required"],
+	["judge.profile", profile, "optional"],
 ];
 
 function lookup(config: unknown, key: string): unknown {
@@ -140,31 +81,18 @@ function lookup(config: unknown, key: string): unknown {
 	return value;
 }
 
-/** One line per missing or invalid key, `<key>: <problem>`; empty when the configuration is usable. */
-export function configProblems(raw: unknown): string[] {
-	const problems: string[] = [];
-	for (const [key, check] of REQUIRED) {
-		const value = lookup(raw, key);
-		const problem = value === undefined ? "missing" : check(value);
-		if (problem) problems.push(`${key}: ${problem}`);
-	}
-	for (const [key, check] of OPTIONAL) {
-		const value = lookup(raw, key);
-		const problem = value === undefined ? undefined : check(value);
-		if (problem) problems.push(`${key}: ${problem}`);
-	}
-	return problems;
-}
-
 /** Every required key present and valid; otherwise text naming each missing or invalid key. */
 export function validateBranchSearchConfig(raw: unknown): ConfigResult {
-	const problems = configProblems(raw);
-	if (problems.length > 0) {
+	const problems: string[] = [];
+	for (const [key, check, presence] of KEYS) {
+		const value = lookup(raw, key);
+		const problem = value === undefined ? (presence === "required" ? "missing" : undefined) : check(value);
+		if (problem) problems.push(`${key}: ${problem}`);
+	}
+	if (problems.length > 0)
 		return {
 			ok: false,
 			text: `Branch search is not configured. Fix these keys in ${CONFIG_FILE}:\n${problems.map((p) => `  ${p}`).join("\n")}`,
 		};
-	}
-	const config = raw as BranchSearchConfig;
-	return { ok: true, config: { ...config, draw: config.draw ?? "random" } };
+	return { ok: true, config: raw as BranchSearchConfig };
 }

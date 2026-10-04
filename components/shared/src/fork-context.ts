@@ -1,24 +1,14 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
- * A fork's own copy of the repository, the parent workspace and ancestor worktrees whose paths map onto it, and the
- * fork's private temporary directory: outside every worktree, created when the fork starts and
- * deleted when it settles.
+ * A fork's own copy of the repository, the parent workspace whose paths map onto it, and the fork's
+ * private temporary directory: outside every worktree, created when the fork starts and deleted when
+ * it settles.
  */
 export interface ForkWorktree {
 	readonly root: string;
 	readonly parentRoot: string;
 	readonly tmp: string;
-	/**
-	 * Worktree roots of the forks whose conversation this fork continues. Their paths in the
-	 * conversation map onto this fork's root, like paths under `parentRoot`.
-	 */
-	readonly ancestors?: readonly string[];
-	/**
-	 * Variables the fork's shell commands run with, on top of the process environment and `tmp`;
-	 * branch search points git at a private object store with it.
-	 */
-	readonly env?: Readonly<Record<string, string>>;
 }
 
 interface ForkContext {
@@ -28,8 +18,6 @@ interface ForkContext {
 	readonly processGroups?: Set<number>;
 	/** The fork's private temporary directory, when it is bound to a worktree. */
 	readonly tmp?: string;
-	/** Extra environment of the fork's shell commands, when its worktree binding sets one. */
-	readonly env?: Readonly<Record<string, string>>;
 }
 
 // Shared through globalThis so every module copy (reloads, tests, child loaders) sees one scope.
@@ -55,11 +43,6 @@ export function forkCwd(): string | undefined {
 /** The private temporary directory of the fork whose tool is running, if that fork is bound to a worktree. */
 export function forkTmpDir(): string | undefined {
 	return forkScope.getStore()?.tmp;
-}
-
-/** The extra shell environment of the fork whose tool is running, if its worktree binding sets one. */
-export function forkEnv(): Readonly<Record<string, string>> | undefined {
-	return forkScope.getStore()?.env;
 }
 
 function groupEmpty(pgid: number): boolean {

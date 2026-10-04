@@ -1,55 +1,49 @@
-import type { SearchRecord } from "./record.js";
-import type { DiffStat } from "./scorer.js";
-import { branchRef, PLAIN_DIFF } from "./workspace.js";
+import { qualifies } from "./judge.js";
+import type { AttemptRecord, SearchRecord } from "./record.js";
+import { branchRef, type DiffStat, PLAIN_DIFF } from "./workspace.js";
 
-export interface ReportInput {
-	record: SearchRecord;
-	recordPath: string;
-	gateCount: number;
-	winnerStat?: DiffStat;
-}
-
-/** The command that brings a kept winner into the workspace (spec 6.9 step 4). */
+/** The command that brings a winner that was not applied into the workspace. */
 export function mergeCommand(base: string, id: string, winner: string): string {
 	return `git diff ${PLAIN_DIFF.join(" ")} --binary ${base} ${branchRef(id, winner)} | git apply --3way`;
 }
 
-/** Plain text, summary line first (spec 6.10). */
-export function formatReport({ record, recordPath, gateCount, winnerStat }: ReportInput): string {
-	const survivors = record.branches.filter((branch) => branch.status === "survived");
-	const generations = new Set(record.branches.map((branch) => branch.generation)).size;
+function fate(attempt: AttemptRecord): string {
+	const { scores } = attempt;
+	if (!scores) return "unscored";
+	const failed = scores.gates.filter((gate) => !gate.pass).map((gate) => `\`${gate.command}\``);
+	const values = scores.judges.map(({ value }) => String(value ?? "—")).join(", ");
+	const verdict =
+		failed.length > 0 ? `failed gate ${failed.join(", ")}` : (scores.failure ?? `passed ${scores.gates.length} gates`);
+	return `${verdict}; judges ${values}; diff ${attempt.diffSize ?? "—"} lines`;
+}
+
+/** Plain text, summary line first. */
+export function formatReport(record: SearchRecord, recordPath: string, winnerStat?: DiffStat): string {
+	const qualified = record.attempts.filter(({ scores }) => scores && qualifies(scores));
 	const lines = [
-		`Branch search ${record.id}: ${record.outcome}. ${survivors.length} of ${record.branches.length} branches survived over ${generations} generations.`,
+		`Branch search ${record.id}: ${record.outcome}. ${qualified.length} of ${record.attempts.length} attempts passed every gate and judge.`,
 	];
 	if (record.abortReason) lines.push(`Reason: ${record.abortReason}`);
-	const validation = record.spec?.validation.at(-1);
-	if (record.outcome === "aborted: scorer invalid" && validation) lines.push(validation.report);
-	const winner = record.branches.find((branch) => branch.key === record.winner);
+	const winner = record.attempts.find((attempt) => attempt.key === record.winner);
 	if (winner && winnerStat) {
-		const baseValues = record.spec?.baseValues ?? {};
 		lines.push(
-			`Winner: ${winner.key} (${winner.candidate}, constraint: ${winner.constraint}) +${winnerStat.added} -${winnerStat.deleted} in ${winnerStat.files} files.`,
-			`Objectives: ${Object.entries(winner.objectives ?? {})
-				.map(([id, value]) => (id in baseValues ? `${id}=${value} (base ${baseValues[id]})` : `${id}=${value}`))
-				.join(", ")}`,
+			`Winner: ${winner.key} (${winner.candidate.id}) +${winnerStat.added} -${winnerStat.deleted} in ${winnerStat.files} files.`,
 		);
+		if (record.choice)
+			lines.push(
+				record.choice.winner === null
+					? `Judge model ${record.choice.profile} could not choose (${record.choice.reason}); ranked by judge numbers.`
+					: `Chosen by judge model ${record.choice.profile}: ${record.choice.reason}`,
+			);
 		if (record.apply && !record.apply.applied) lines.push(`Not applied: ${record.apply.reason}`);
 		if (record.outcome === "ready")
 			lines.push(`Merge: ${mergeCommand(record.base?.commit ?? "", record.id, winner.key)}`);
 	}
-	if (record.branches.length > 0) {
-		lines.push("Branches:");
-		for (const branch of record.branches) {
-			const fate =
-				branch.status === undefined
-					? "unscored"
-					: branch.status === "survived"
-						? "survived"
-						: `dead (gates passed ${branch.gatesPassed}/${gateCount})`;
-			lines.push(
-				`  ${branch.key} ${fate} ${branch.selfReport ?? "unfinished"}: ${branch.learned ?? "(nothing reported)"}`,
-			);
-		}
+	if (record.attempts.length > 0) {
+		lines.push(`Judges: ${record.judges.map(({ command, better }) => `\`${command}\` (${better})`).join(", ")}`);
+		lines.push("Attempts:");
+		for (const attempt of record.attempts)
+			lines.push(`  ${attempt.key} ${attempt.candidate.id} ${attempt.stop ?? "unfinished"}: ${fate(attempt)}`);
 	}
 	if (record.cleanupErrors.length > 0) lines.push(`Cleanup failed: ${record.cleanupErrors.join("; ")}`);
 	lines.push(`Record: ${recordPath}`);

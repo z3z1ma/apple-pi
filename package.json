@@ -102,8 +102,7 @@
     "test:loader": "node tests/package-load.mjs",
     "pack:check": "npm pack --dry-run",
     "audit:cache": "node scripts/cache-audit.mjs",
-    "eval:branch-search": "node scripts/eval-run.mjs eval/branch-search.eval.ts",
-    "eval:traps": "node scripts/eval-run.mjs eval/traps.eval.ts"
+    "eval:history": "node scripts/eval-run.mjs eval/history.eval.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": ">=0.99.0",

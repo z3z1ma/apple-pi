@@ -2,12 +2,12 @@
 /**
  * Runs one real-model evaluation entry through Vitest (`vitest.eval.config.ts`) and owns its cancellation.
  *
- *   node scripts/eval-run.mjs eval/traps.eval.ts
+ *   node scripts/eval-run.mjs eval/history.eval.ts
  *
  * Vitest's main process exits at once on SIGINT or SIGTERM, which would orphan the worker running the
  * evaluation in the middle of its cleanup. So Vitest runs in its own process group, out of reach of the
  * terminal's signals, and this process turns the first SIGINT or SIGTERM into the stop file that the entry
- * watches (`components/branch-search/eval/stop.ts`). The evaluation then stops its runs, removes their
+ * watches (`components/history-eval/src/stop.ts`). The evaluation then stops its runs, removes their
  * directories, closes its sessions, and writes its report; this process exits with Vitest's status. A second
  * signal kills the whole group without cleanup.
  */

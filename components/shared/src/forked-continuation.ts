@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { type AfterToolCallContext, Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import { AgentSession, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -61,11 +61,6 @@ export interface ForkRequest {
 	blockedTools?: ReadonlySet<string>;
 	/** Called with each assistant reply's usage as it ends, so a caller can enforce a token limit. */
 	onUsage?: (usage: Usage) => void;
-	/**
-	 * Called with each of the fork's own tool results, before the parent's hooks see it, so a caller
-	 * can watch the fork's commands (branch search's stall detector).
-	 */
-	onToolResult?: (context: AfterToolCallContext) => void;
 }
 
 export interface ForkResult {
@@ -88,7 +83,7 @@ export function trackLiveSessions(): void {
 }
 
 /** Render a passive message as its first line, collapsed, and its whole text, expanded. */
-export function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
+function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
 	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {
 		const text =
 			typeof message.content === "string"
@@ -114,20 +109,10 @@ function writesOutside(path: string, { root, tmp }: ForkWorktree): boolean {
 	return !within(target, canonical(root)) && !within(target, canonical(tmp));
 }
 
-/**
- * The roots whose paths map onto the fork's own root, most specific first: an ancestor worktree
- * inside the parent's git directory must not be read as a path in the parent repository.
- */
-function mappedRoots({ parentRoot, ancestors = [] }: ForkWorktree): string[] {
-	return [parentRoot, ...ancestors].filter(Boolean).sort((a, b) => b.length - a.length);
-}
-
-function remapPath(path: string, worktree: ForkWorktree, cwd: string): string {
-	const { root, tmp } = worktree;
+function remapPath(path: string, { root, parentRoot, tmp }: ForkWorktree, cwd: string): string {
 	if (!isAbsolute(path)) return resolve(cwd, path);
 	if (within(path, root) || within(path, tmp)) return path;
-	const from = mappedRoots(worktree).find((mapped) => within(path, mapped));
-	return from === undefined ? path : join(root, relative(from, path));
+	return within(path, parentRoot) ? join(root, relative(parentRoot, path)) : path;
 }
 
 function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): string {
@@ -135,12 +120,9 @@ function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): s
 	return within(cwd, repository) ? join(root, relative(repository, cwd)) : root;
 }
 
-function remapCommand(command: string, worktree: ForkWorktree): string {
-	const { root, tmp } = worktree;
-	const roots = mappedRoots(worktree).map((mapped) => mapped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-	if (roots.length === 0) return command;
-	// One alternation, longest root first, so an ancestor is never matched as the parent root plus a subpath.
-	const parentPath = new RegExp(`(?:${roots.join("|")})(?![\\w.-])`, "g");
+function remapCommand(command: string, { root, parentRoot, tmp }: ForkWorktree): string {
+	if (!parentRoot) return command;
+	const parentPath = new RegExp(`${parentRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w.-])`, "g");
 	// The worktree and the temporary directory may live under the parent root (in its git
 	// directory), so leave their own paths alone.
 	const keep = (text: string, kept: string[]): string => {
@@ -242,12 +224,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			if (refusal) return { block: true, reason: refusal };
 			return parent.beforeToolCall?.(context, toolSignal);
 		},
-		afterToolCall: request.onToolResult
-			? async (context, toolSignal) => {
-					request.onToolResult?.(context);
-					return parent.afterToolCall?.(context, toolSignal);
-				}
-			: parent.afterToolCall,
+		afterToolCall: parent.afterToolCall,
 		sessionId: parent.sessionId,
 		thinkingBudgets: parent.thinkingBudgets,
 		transport: parent.transport,
@@ -271,9 +248,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 	});
 	const processGroups = worktree && new Set<number>();
 	if (worktree) mkdirSync(worktree.tmp, { recursive: true, mode: 0o700 });
-	const result = runInFork({ cwd, processGroups, tmp: worktree?.tmp, env: worktree?.env }, () =>
-		fork.prompt(request.append),
-	)
+	const result = runInFork({ cwd, processGroups, tmp: worktree?.tmp }, () => fork.prompt(request.append))
 		.finally(async () => {
 			unsubscribe();
 			if (!worktree) return;

@@ -5,7 +5,6 @@ import type { Model } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
 import { profileRequest } from "../src/extension.js";
-import { ProfileRequestError } from "../src/orchestrator.js";
 
 const restore: (() => void)[] = [];
 afterEach(() => {
@@ -54,7 +53,7 @@ describe("profileRequest", () => {
 		expect(answer).toEqual({ text: "hello", usage: expect.objectContaining(USAGE) });
 	});
 
-	it("keeps the usage of an error reply on the rejection", async () => {
+	it("rejects with the error of a failed reply", async () => {
 		profiles();
 		const reply = {
 			...fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded" }),
@@ -63,8 +62,6 @@ describe("profileRequest", () => {
 		const failure = await profileRequest(registry(reply))("quick", "prompt", new AbortController().signal).catch(
 			(error: unknown) => error,
 		);
-		expect(failure).toBeInstanceOf(ProfileRequestError);
-		expect((failure as ProfileRequestError).message).toBe("overloaded");
-		expect((failure as ProfileRequestError).usage).toEqual(expect.objectContaining(USAGE));
+		expect((failure as Error).message).toBe("overloaded");
 	});
 });

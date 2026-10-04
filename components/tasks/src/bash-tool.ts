@@ -21,7 +21,7 @@ import {
 	execBashParameters,
 } from "./types.js";
 import { rewriteCommand } from "../../rtk/src/index.js";
-import { forkCwd, forkEnv, forkTmpDir, trackForkProcessGroup } from "../../shared/src/fork-context.js";
+import { forkCwd, forkTmpDir, trackForkProcessGroup } from "../../shared/src/fork-context.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -49,7 +49,6 @@ function resolveShellEnv(ctx?: ExtensionContext): NodeJS.ProcessEnv {
 	// A worktree fork keeps its temporary files in its own directory, which is deleted when it settles.
 	const tmp = forkTmpDir();
 	if (tmp) env.TMPDIR = env.TMP = env.TEMP = tmp;
-	Object.assign(env, forkEnv());
 	return env;
 }
 

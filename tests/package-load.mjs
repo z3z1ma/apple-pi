@@ -138,11 +138,9 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.endsWith("branch-search.ts") &&
-				(extension.handlers.get("agent_settled")?.length ?? 0) > 0 &&
-				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+				extension.path.endsWith("branch-search.ts") && (extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
 		),
-		"missing branch search settle and shutdown hooks",
+		"missing branch search shutdown hook",
 	);
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
@@ -160,10 +158,10 @@ try {
 		"stash",
 		"edit-prompt",
 		"inspect-tool",
-		"branch-search",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
+	assert(!commands.has("branch-search"), "branch search is the model's tool; there is no /branch-search command");
 	const workCommandCount = result.extensions.reduce(
 		(count, extension) => count + Number(extension.commands.has("work")),
 		0,
@@ -251,10 +249,18 @@ try {
 		),
 		"branch search extension must own search_branches",
 	);
-	assert.deepEqual(Object.keys(searchBranchesTool.definition.parameters.properties), ["goal"]);
-	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal"]);
+	assert.deepEqual(Object.keys(searchBranchesTool.definition.parameters.properties), ["goal", "judges", "gates"]);
+	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal", "judges"]);
 	assert.equal(searchBranchesTool.definition.executionMode, "sequential");
-	assert.match(searchBranchesTool.definition.promptGuidelines.join("\n"), /Call it alone in its message/);
+	const searchGuidance = searchBranchesTool.definition.promptGuidelines.join("\n");
+	for (const taught of [
+		/several distinct approaches/,
+		/last stdout line is one number/,
+		/gate/,
+		/user suggests/,
+		/alone in its message/,
+	])
+		assert.match(searchGuidance, taught);
 
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])

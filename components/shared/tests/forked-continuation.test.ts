@@ -134,40 +134,6 @@ describe("worktree forks", () => {
 		expect(existsSync(join(cwd, "absolute.txt"))).toBe(false);
 	});
 
-	it("points ancestor worktree paths its conversation names at its own worktree, most specific root first", async () => {
-		// Ancestors live inside the parent's git directory, as branch search keeps them.
-		let ancestor = "";
-		const { session, cwd } = await settledSession((parent) => {
-			ancestor = join(parent, ".git", "wt", "r0");
-			return {
-				"fork ancestor read": call("read", { path: `${ancestor}/app.ts` }, "read-ancestor"),
-				"fork ancestor shell": call(
-					"bash",
-					{ command: `cat ${ancestor}/app.ts > copy.txt; echo ${parent}/x ${ancestor}.c0/y`, verbatim: true },
-					"bash-ancestor",
-				),
-			};
-		});
-		const root = join(cwd, ".git", "wt", "r0.c0");
-		mkdirSync(root, { recursive: true });
-		writeFileSync(join(root, "app.ts"), "own copy\n");
-		const binding = { ...bind(root, cwd), ancestors: [ancestor] };
-
-		const read = await fork(session, cwd, "fork ancestor read", { worktree: binding }).result;
-		expect(toolResult(read.messages, "read-ancestor")).toEqual({
-			isError: false,
-			text: expect.stringContaining("own copy"),
-		});
-
-		const shell = await fork(session, cwd, "fork ancestor shell", { worktree: binding }).result;
-		expect(readFileSync(join(root, "copy.txt"), "utf8")).toBe("own copy\n");
-		// The parent root maps too; the fork's own root, which extends an ancestor's name, stays.
-		expect(toolResult(shell.messages, "bash-ancestor").text).toContain(`${root}/x ${root}/y`);
-		// The transcript keeps the model's original arguments.
-		const calls = JSON.stringify(shell.messages.filter((message) => message.role === "assistant"));
-		expect(calls).toContain(`cat ${ancestor}/app.ts`);
-	});
-
 	it("refuses background commands in a worktree fork", async () => {
 		const { session, cwd } = await settledSession({
 			"fork background": call(
@@ -227,18 +193,6 @@ describe("worktree forks", () => {
 		const own = await fork(session, cwd, "fork own tmp", { worktree: worktreeBinding }).result;
 		expect(toolResult(own.messages, "write-own").isError).toBe(false);
 		expect(existsSync(binding.tmp)).toBe(false);
-	});
-
-	it("runs the fork's shell commands with the binding's environment", async () => {
-		const { session, cwd } = await settledSession({
-			"fork env": call("bash", { command: 'echo "$APPLE_PI_FORK_TEST" > env.txt', verbatim: true }, "bash-env"),
-		});
-		const root = worktree();
-		const binding = { ...bind(root, cwd), env: { APPLE_PI_FORK_TEST: "bound" } };
-		await fork(session, cwd, "fork env", { worktree: binding }).result;
-
-		expect(readFileSync(join(root, "env.txt"), "utf8").trim()).toBe("bound");
-		expect(process.env.APPLE_PI_FORK_TEST).toBeUndefined();
 	});
 
 	it("refuses writes and edits outside the worktree", async () => {

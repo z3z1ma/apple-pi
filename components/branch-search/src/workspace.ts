@@ -1,41 +1,15 @@
-import { execFile } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { cloneIgnoredDirs, git } from "../../shared/src/git.js";
 import { canonical } from "../../shared/src/real-path.js";
 
 /**
- * Git plumbing for one search: the base snapshot, worktrees, branch commits, refs, and
- * cleanup (spec 6.1, 6.6 step 7, 6.11, 8.1, 8.2). Nothing here writes the user's index.
+ * Git plumbing for one search: the base snapshot, worktrees, attempt commits, refs, apply, and
+ * cleanup. Nothing here writes the user's index.
  */
 
 const COMMITTER = ["-c", "user.name=apple-pi", "-c", "user.email=apple-pi@localhost", "-c", "commit.gpgsign=false"];
-
-export interface GitOptions {
-	env?: NodeJS.ProcessEnv;
-	/** Written to git's stdin. */
-	input?: string;
-}
-
-export function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
-	return new Promise((resolvePromise, reject) => {
-		const child = execFile(
-			"git",
-			args,
-			{
-				cwd,
-				// No optional locks: status-like reads never refresh the user's index.
-				env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env },
-				maxBuffer: 256 * 1024 * 1024,
-			},
-			(error, stdout, stderr) => {
-				if (error) reject(new Error(`git ${args.join(" ")} failed: ${stderr.trim() || error.message}`));
-				else resolvePromise(stdout.trim());
-			},
-		);
-		if (options.input !== undefined) child.stdin?.end(options.input);
-	});
-}
 
 /**
  * Flags for every `git diff` whose output the search parses or applies: a configured external diff
@@ -64,16 +38,11 @@ export async function hasHead(cwd: string): Promise<boolean> {
 	}
 }
 
-/** The repository root in the session's spelling of the path, which is the one the model sees. */
-export async function repoRoot(cwd: string): Promise<string> {
-	return resolve(cwd, await git(cwd, ["rev-parse", "--show-cdup"]));
-}
-
 export async function gitCommonDir(cwd: string): Promise<string> {
 	return resolve(cwd, await git(cwd, ["rev-parse", "--git-common-dir"]));
 }
 
-/** The tree of the workspace as it stands, built in a temporary index (spec 6.1 step 5). */
+/** The tree of the workspace as it stands, built in a temporary index. */
 export async function snapshotTree(root: string): Promise<string> {
 	const dir = mkdtempSync(join(tmpdir(), "apple-pi-branch-index-"));
 	const env = { GIT_INDEX_FILE: join(dir, "index") };
@@ -94,72 +63,20 @@ export async function snapshotBase(root: string, id: string): Promise<{ commit: 
 	return { commit, tree };
 }
 
-function cloneCommand(source: string, target: string): [string, string[]] {
-	// Copy-on-write clones where the filesystem supports them (APFS, btrfs, XFS). On macOS the
-	// system cp owns -c; a GNU cp earlier on PATH does not.
-	return process.platform === "darwin"
-		? ["/bin/cp", ["-cR", source, target]]
-		: ["cp", ["-R", "--reflink=auto", source, target]];
-}
-
-function run(command: string, args: string[]): Promise<void> {
-	return new Promise((resolvePromise, reject) => {
-		execFile(command, args, (error, _stdout, stderr) => {
-			if (error) reject(new Error(`${command} ${args.join(" ")} failed: ${stderr.trim() || error.message}`));
-			else resolvePromise();
-		});
-	});
-}
-
-/**
- * A git environment whose new objects go to the private store `objects`, while the repository's own
- * store stays readable. Objects written under it never enter the repository's object store, so
- * deleting `objects` removes them from disk entirely; no ref may point at them.
- */
-export function privateObjects(commonDir: string, objects: string): Record<string, string> {
-	mkdirSync(objects, { recursive: true });
-	return { GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(commonDir, "objects") };
-}
-
-/** A detached worktree at `commit`, with the listed ignored directories cloned from the parent (spec 8.1, 8.2). */
-export async function addWorktree(
-	root: string,
-	path: string,
-	commit: string,
-	cloneIgnored: string[],
-	env?: NodeJS.ProcessEnv,
-): Promise<void> {
+/** A detached worktree at `commit`, with the listed ignored directories cloned from the parent. */
+export async function addWorktree(root: string, path: string, commit: string, cloneIgnored: string[]): Promise<void> {
 	mkdirSync(dirname(path), { recursive: true });
-	await git(root, ["worktree", "add", "--detach", "-q", path, commit], { env });
+	await git(root, ["worktree", "add", "--detach", "-q", path, commit]);
 	await cloneIgnoredDirs(root, path, cloneIgnored);
 }
 
-/** Clone each listed ignored directory of `root` that exists into `path`, unless `path` already has it (spec 8.2). */
-export async function cloneIgnoredDirs(root: string, path: string, cloneIgnored: string[]): Promise<void> {
-	for (const entry of cloneIgnored) {
-		const source = join(root, entry);
-		const target = join(path, entry);
-		if (!existsSync(source) || existsSync(target)) continue;
-		mkdirSync(dirname(target), { recursive: true });
-		const [command, args] = cloneCommand(source, target);
-		await run(command, args);
-	}
-}
-
-/** Commit everything in the worktree and point the branch ref at it (spec 6.6 step 7). */
+/** Commit everything in the worktree and point the attempt's ref at it. */
 export async function commitWorktree(root: string, path: string, id: string, key: string): Promise<string> {
-	const commit = await commitAll(path, `branch-search ${id} ${key}`);
+	await git(path, ["add", "-A"]);
+	await git(path, [...COMMITTER, "commit", "--no-verify", "--allow-empty", "-q", "-m", `branch-search ${id} ${key}`]);
+	const commit = await git(path, ["rev-parse", "HEAD"]);
 	await git(root, ["update-ref", branchRef(id, key), commit]);
 	return commit;
-}
-
-/** Commit everything in the worktree to its HEAD, without a ref; under `privateObjects`, into that store. */
-export async function commitAll(path: string, message: string, env?: NodeJS.ProcessEnv): Promise<string> {
-	await git(path, ["add", "-A"], { env });
-	// An automatic gc would run on the private store alone.
-	const gc = env ? ["-c", "gc.auto=0"] : [];
-	await git(path, [...COMMITTER, ...gc, "commit", "--no-verify", "--allow-empty", "-q", "-m", message], { env });
-	return git(path, ["rev-parse", "HEAD"], { env });
 }
 
 /**
@@ -194,66 +111,6 @@ export async function removeWorktrees(root: string, worktrees: Iterable<string>)
 	if (failures.length > 0) throw new Error(`Could not remove worktrees: ${failures.join("; ")}`);
 }
 
-/** Every ref of the repository with the object it names, `refs/stash` included. */
-export async function readRefs(root: string, env?: NodeJS.ProcessEnv): Promise<Map<string, string>> {
-	const lines = await git(root, ["for-each-ref", "--format=%(refname) %(objectname)"], { env });
-	return new Map(
-		lines
-			.split("\n")
-			.filter(Boolean)
-			.map((line) => line.split(" ") as [string, string]),
-	);
-}
-
-/** Whether the repository's own object store holds `value`, ignoring any private store. */
-async function inSharedStore(root: string, value: string): Promise<boolean> {
-	return git(root, ["cat-file", "-e", `${value}^{object}`]).then(
-		() => true,
-		() => false,
-	);
-}
-
-/**
- * Undo the ref changes of role forks whose git wrote objects only to a private store (named by
- * `env`), and leave everyone else's alone. A created or moved ref whose new value the shared store
- * holds is someone else's change, such as the user committing or stashing in the parent checkout.
- * Otherwise it is the forks': a created ref is deleted, a moved one goes back to its old value.
- * Every reflog entry of a changed ref whose value the shared store lacks is dropped, newest last
- * so the others keep their positions; an entry the shared store holds is never dropped. Refs under
- * `skip` are left alone, and refs deleted meanwhile are recreated, which loses nothing.
- */
-export async function restoreRefs(
-	root: string,
-	before: Map<string, string>,
-	skip: string,
-	env?: NodeJS.ProcessEnv,
-): Promise<void> {
-	const after = await readRefs(root, env);
-	for (const [ref, value] of after) {
-		if (ref.startsWith(skip) || before.get(ref) === value) continue;
-		const old = before.get(ref);
-		if (old === undefined && !(await inSharedStore(root, value))) {
-			await git(root, ["update-ref", "-d", ref], { env });
-			continue;
-		}
-		const entries = (await git(root, ["reflog", "show", "--format=%H", ref], { env }).catch(() => ""))
-			.split("\n")
-			.filter(Boolean);
-		const missing: number[] = [];
-		for (const [index, entry] of entries.entries()) if (!(await inSharedStore(root, entry))) missing.push(index);
-		for (const index of missing.reverse()) {
-			const update = index === 0 ? ["--updateref"] : [];
-			await git(root, ["reflog", "delete", ...update, "--rewrite", `${ref}@{${index}}`], { env });
-		}
-		const current = (await readRefs(root, env)).get(ref);
-		if (current !== undefined && (await inSharedStore(root, current))) continue;
-		if (old === undefined) await git(root, ["update-ref", "-d", ref], { env });
-		else await git(root, ["update-ref", ref, old], { env });
-	}
-	for (const [ref, value] of before)
-		if (!ref.startsWith(skip) && !after.has(ref)) await git(root, ["update-ref", ref, value], { env });
-}
-
 /** Delete every ref of the search except the named keys. */
 export async function pruneRefs(root: string, id: string, keep: string[]): Promise<void> {
 	const refs = await git(root, ["for-each-ref", "--format=%(refname)", refPrefix(id)]);
@@ -272,8 +129,7 @@ export interface ApplyResult {
 }
 
 /**
- * Apply the winner to the workspace only when apply mode is `auto` and the workspace still holds the
- * base tree (spec 6.9). The binary diff from base to winner goes to `patchPath`, which outlives
+ * Apply the winner to the workspace only when the workspace still holds the base tree. The binary diff from base to winner goes to `patchPath`, which outlives
  * cleanup, and `git apply` lands it in the working tree without touching the user's index. `git apply`
  * checks the patch before writing but does not undo a write that fails partway, so a failure
  * restores to base every path the patch wrote that still holds what it wrote (see `restoreOwned`).
@@ -283,14 +139,12 @@ export async function applyWinner(
 	options: {
 		base: { commit: string; tree: string };
 		winner: string;
-		mode: "auto" | "report";
 		patchPath: string;
 		/** Checked last before the patch lands, so a cancelled search leaves the workspace as it was. */
 		signal?: AbortSignal;
 	},
 ): Promise<ApplyResult> {
 	const workspaceTree = await snapshotTree(root);
-	if (options.mode !== "auto") return { applied: false, workspaceTree, reason: "apply mode is report" };
 	if (workspaceTree !== options.base.tree)
 		return { applied: false, workspaceTree, reason: "the workspace changed during the search" };
 	const { base, winner, patchPath } = options;
@@ -375,4 +229,24 @@ export async function restoreOwned(root: string, base: string, winner: string): 
 	}
 	for (const path of remove) rmSync(join(root, path), { force: true });
 	return left;
+}
+
+export interface DiffStat {
+	added: number;
+	deleted: number;
+	files: number;
+}
+
+/** `git diff --numstat` totals; binary rows count as 0 lines. */
+export async function diffStat(root: string, from: string, to: string): Promise<DiffStat> {
+	const rows = (await git(root, ["diff", ...PLAIN_DIFF, "--numstat", from, to])).split("\n").filter(Boolean);
+	const count = (value: string | undefined) => (value === undefined || value === "-" ? 0 : Number(value));
+	let added = 0;
+	let deleted = 0;
+	for (const row of rows) {
+		const [plus, minus] = row.split("\t");
+		added += count(plus);
+		deleted += count(minus);
+	}
+	return { added, deleted, files: rows.length };
 }

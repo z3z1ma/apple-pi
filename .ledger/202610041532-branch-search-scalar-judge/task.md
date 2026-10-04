@@ -35,8 +35,8 @@ The evaluation harness (`components/branch-search/eval/`: task extraction from l
 
 ## Current State
 
-Ready. Next: implement (builder), review, commit.
+Done (2026-10-04).
 
 ## Outcome
 
-Pending.
+Committed as one refactor on top of `9de3f40`. `components/branch-search/src` went from 4100 to 1304 lines and its tests from 9044 to about 1500. Operator decisions during the work: branch search is the model's tool only (`/branch-search` removed; the model writes judges, often from a measure the user suggests), and judges and gates come only as tool arguments. With the tool as the only entry, the apply hold and its tool block were removed as unreachable. The evaluation harness moved to `components/history-eval/` (not shipped); generic helpers (`runCommand`, git helpers, relative-path validation) moved to `components/shared/` so history-eval no longer imports branch search. Review fixes: oracle installation refuses symlinked destinations, `cloneIgnored` rejects `..` segments. Full suite on the final tree: 125 files, 1374 tests, pair 118/118, loader OK. Everything removed is at tag `branch-search-v1` (local only until pushed). Not verified: a search against a real model after the simplification.

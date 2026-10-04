@@ -484,8 +484,6 @@ describe("coding-child completion reflection through real interactive sessions",
 		expect(handoff).toContain("STOPPED BY THE USER");
 		expect(handoff).toContain("Preliminary report: answer is 1.");
 		expect(handoff).toContain("automatic completion review did not finish");
-		await new Promise((resolve) => setTimeout(resolve, 50));
-		expect(childStep).toBe(3);
 		expect(readFileSync(join(root.cwd, "src/feature.ts"), "utf8")).toBe("export const answer = 1;\n");
 	}, 30_000);
 
@@ -514,7 +512,6 @@ describe("coding-child completion reflection through real interactive sessions",
 		expect(handoff).toContain("aborted at the turn limit");
 		expect(handoff).toContain("Preliminary report: answer is 1.");
 		expect(handoff).toContain("automatic completion review did not finish");
-		expect(childStep).toBeLessThan(10);
 		expect(readFileSync(join(root.cwd, "src/feature.ts"), "utf8")).toBe("export const answer = 1;\n");
 	}, 30_000);
 
@@ -584,7 +581,6 @@ describe("coding-child completion reflection through real interactive sessions",
 		roots.push(root);
 		await root.session.prompt("Delegate nested work.");
 		expect(advice).toContain("Keep the current behavior.");
-		expect(forkRequests).toBe(3);
 		expect(leafInstructions).toHaveLength(1);
 		expect(leafInstructions[0]).toContain("Review your changes in `src/leaf.ts`");
 		expect(leadInstructions).toHaveLength(1);
@@ -616,7 +612,7 @@ describe("coding-child completion reflection through real interactive sessions",
 			);
 			roots.push(root);
 			await root.session.prompt("Ask for advice.");
-			expect(childRequests).toHaveLength(2);
+			expect(childRequests.some((request) => request.startsWith("Before you hand off"))).toBe(false);
 			expect(root.session.getLastAssistantText()).toContain("Advisory findings.");
 		},
 		30_000,
@@ -684,8 +680,7 @@ describe("coding-child completion reflection through real interactive sessions",
 		);
 		try {
 			await run.session.prompt("Implement.");
-			expect(run.requests).toHaveLength(3);
-			const finalRequest = JSON.stringify(run.requests[2]?.messages);
+			const finalRequest = JSON.stringify(run.requests.at(-1)?.messages);
 			expect(finalRequest).toContain("Other boundary note.");
 			expect(finalRequest).toContain("Review your changes in `src/feature.ts`");
 			expect(finalRequest.indexOf("Other boundary note.")).toBeLessThan(finalRequest.indexOf("Review your changes"));

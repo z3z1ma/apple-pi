@@ -6,26 +6,18 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
-	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-	checkScorerSpec,
-	diffStat,
-	installScorer,
-	OUTPUT_TAIL_BYTES,
-	runCommand,
-	type ScorerSpec,
-} from "../src/scorer.js";
-import {
 	addWorktree,
 	applyWinner,
 	baseRef,
 	branchRef,
 	commitWorktree,
+	diffStat,
 	gitCommonDir,
 	hasHead,
 	removeWorktrees,
@@ -45,18 +37,6 @@ function repo(files: Record<string, string> = { "app.ts": "export const value = 
 	dirs.push(dir);
 	initRepo(dir, files);
 	return dir;
-}
-
-function spec(overrides: Partial<ScorerSpec> = {}): ScorerSpec {
-	return {
-		version: 1,
-		goal: "value is 2",
-		files: [{ path: "checks/value.test.sh", content: "grep -q 'value = 2' app.ts\n" }],
-		protect: ["app.test.ts"],
-		gates: [{ id: "value", run: "bash checks/value.test.sh", onBase: "fail", timeoutSec: 10 }],
-		objectives: [],
-		...overrides,
-	};
 }
 
 describe("base snapshot", { timeout: 30_000 }, () => {
@@ -130,7 +110,7 @@ describe("apply", { timeout: 30_000 }, () => {
 	it("applies the winner's diff to an unchanged workspace and keeps the patch", async () => {
 		const { dir, base, winner, patchPath } = await searched();
 		const index = readFileSync(join(dir, ".git", "index"));
-		const result = await applyWinner(dir, { base, winner, mode: "auto", patchPath });
+		const result = await applyWinner(dir, { base, winner, patchPath });
 
 		expect(result).toEqual({ applied: true, workspaceTree: base.tree });
 		expect(readFileSync(join(dir, "app.ts"), "utf8")).toBe("export const value = 2;\n");
@@ -146,7 +126,7 @@ describe("apply", { timeout: 30_000 }, () => {
 		gitOut(dir, "config", "diff.external", "true");
 		gitOut(dir, "config", "diff.blank.textconv", "true");
 		writeFileSync(join(dir, ".git", "info", "attributes"), "* diff=blank\n");
-		const result = await applyWinner(dir, { base, winner, mode: "auto", patchPath });
+		const result = await applyWinner(dir, { base, winner, patchPath });
 
 		expect(result).toEqual({ applied: true, workspaceTree: base.tree });
 		expect(readFileSync(join(dir, "app.ts"), "utf8")).toBe("export const value = 2;\n");
@@ -163,7 +143,7 @@ describe("apply", { timeout: 30_000 }, () => {
 		await removeWorktrees(dir, [wt]);
 		const patchPath = join(await gitCommonDir(dir), "apple-pi", "winner.patch");
 
-		expect(await applyWinner(dir, { base, winner, mode: "auto", patchPath })).toEqual({
+		expect(await applyWinner(dir, { base, winner, patchPath })).toEqual({
 			applied: true,
 			workspaceTree: base.tree,
 		});
@@ -187,7 +167,7 @@ describe("apply", { timeout: 30_000 }, () => {
 		const index = readFileSync(join(dir, ".git", "index"));
 		let result: Awaited<ReturnType<typeof applyWinner>>;
 		try {
-			result = await applyWinner(dir, { base, winner, mode: "auto", patchPath });
+			result = await applyWinner(dir, { base, winner, patchPath });
 		} finally {
 			chmodSync(join(dir, "ro"), 0o755);
 		}
@@ -232,7 +212,7 @@ describe("apply", { timeout: 30_000 }, () => {
 	it("leaves a workspace that changed during the search untouched", async () => {
 		const { dir, base, winner, patchPath } = await searched();
 		writeFileSync(join(dir, "keep.txt"), "edited during the search\n");
-		const result = await applyWinner(dir, { base, winner, mode: "auto", patchPath });
+		const result = await applyWinner(dir, { base, winner, patchPath });
 
 		expect(result.applied).toBe(false);
 		expect(result.reason).toBe("the workspace changed during the search");
@@ -246,51 +226,16 @@ describe("apply", { timeout: 30_000 }, () => {
 	it("leaves the workspace untouched when the search is cancelled before the patch lands", async () => {
 		const { dir, base, winner, patchPath } = await searched();
 		const controller = new AbortController();
-		const applying = applyWinner(dir, { base, winner, mode: "auto", patchPath, signal: controller.signal });
+		const applying = applyWinner(dir, { base, winner, patchPath, signal: controller.signal });
 		controller.abort();
 
 		await expect(applying).rejects.toThrow();
 		expect(readFileSync(join(dir, "app.ts"), "utf8")).toBe("export const value = 1;\n");
 		expect(existsSync(join(dir, "added.ts"))).toBe(false);
 	});
-
-	it("leaves the workspace untouched in report mode", async () => {
-		const { dir, base, winner, patchPath } = await searched();
-		const result = await applyWinner(dir, { base, winner, mode: "report", patchPath });
-
-		expect(result).toEqual({ applied: false, workspaceTree: base.tree, reason: "apply mode is report" });
-		expect(readFileSync(join(dir, "app.ts"), "utf8")).toBe("export const value = 1;\n");
-		expect(existsSync(join(dir, "added.ts"))).toBe(false);
-		expect(existsSync(patchPath)).toBe(false);
-	});
 });
 
-describe("scorer overlay", { timeout: 30_000 }, () => {
-	it("installs scorer files and restores protected paths to their base content", async () => {
-		const dir = repo({ "app.ts": "export const value = 1;\n", "app.test.ts": "original test\n" });
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		writeFileSync(join(wt, "app.test.ts"), "weakened test\n");
-		await commitWorktree(dir, wt, "bs-test", "r0");
-
-		await installScorer(wt, base.commit, spec());
-
-		expect(readFileSync(join(wt, "app.test.ts"), "utf8")).toBe("original test\n");
-		expect(readFileSync(join(wt, "checks", "value.test.sh"), "utf8")).toBe("grep -q 'value = 2' app.ts\n");
-		await removeWorktrees(dir, [wt]);
-	});
-
-	it("restores a protected path from base even when the scorer installs a file there", async () => {
-		const dir = repo({ "app.ts": "x\n", "app.test.ts": "original test\n" });
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		await installScorer(wt, base.commit, spec({ files: [{ path: "app.test.ts", content: "scorer\n" }] }));
-		expect(readFileSync(join(wt, "app.test.ts"), "utf8")).toBe("original test\n");
-		await removeWorktrees(dir, [wt]);
-	});
-
+describe("diff size", { timeout: 30_000 }, () => {
 	it("counts added and deleted lines with binary rows as zero", async () => {
 		const dir = repo({ "app.ts": "a\nb\nc\n" });
 		const base = await snapshotBase(dir, "bs-test");
@@ -314,165 +259,6 @@ describe("scorer overlay", { timeout: 30_000 }, () => {
 
 		expect(await diffStat(dir, base.commit, commit)).toEqual({ added: 2, deleted: 1, files: 1 });
 		await removeWorktrees(dir, [wt]);
-	});
-});
-
-describe("scorer spec schema", () => {
-	it("accepts a well-formed spec", () => {
-		expect(checkScorerSpec(spec())).toEqual([]);
-	});
-
-	it("rejects a reserved id, a duplicate id, a path that leaves the worktree, and a spec without gates", () => {
-		const gate = { id: "diff_size", run: "true", onBase: "pass" as const, timeoutSec: 1 };
-		expect(checkScorerSpec(spec({ gates: [gate] })).join()).toContain("diff_size");
-		expect(
-			checkScorerSpec(
-				spec({
-					gates: [{ ...gate, id: "same" }],
-					objectives: [{ id: "same", run: "echo 1", better: "lower", timeoutSec: 1 }],
-				}),
-			).join(),
-		).toContain("same");
-		expect(checkScorerSpec(spec({ files: [{ path: "../escape.sh", content: "" }] })).join()).toContain("../escape.sh");
-		expect(checkScorerSpec(spec({ protect: ["/etc/passwd"] })).join()).toContain("/etc/passwd");
-		expect(checkScorerSpec(spec({ gates: [] })).join()).toContain("gate");
-	});
-});
-
-describe("scorer file destinations", () => {
-	it("refuses a scorer file whose final component is a symlink out of the worktree", async () => {
-		const dir = repo({ "app.ts": "x\n" });
-		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
-		dirs.push(outside);
-		writeFileSync(join(outside, "target.sh"), "untouched\n");
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		symlinkSync(join(outside, "target.sh"), join(wt, "gate.sh"));
-
-		const refused = await installScorer(
-			wt,
-			base.commit,
-			spec({ files: [{ path: "gate.sh", content: "x\n" }], protect: [] }),
-		);
-
-		expect(refused).toContain("outside the worktree");
-		expect(readFileSync(join(outside, "target.sh"), "utf8")).toBe("untouched\n");
-		await removeWorktrees(dir, [wt]);
-	});
-});
-
-describe("scorer file destinations through dangling links", { timeout: 30_000 }, () => {
-	it("refuses a scorer file whose final component is a dangling symlink out of the worktree", async () => {
-		const dir = repo({ "app.ts": "x\n" });
-		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
-		dirs.push(outside);
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		symlinkSync(join(outside, "new-file.sh"), join(wt, "gate.sh"));
-		symlinkSync(join(outside, "missing-dir", "deeper"), join(wt, "nested"));
-
-		for (const path of ["gate.sh", "nested/gate.sh"]) {
-			const refused = await installScorer(wt, base.commit, spec({ files: [{ path, content: "x\n" }], protect: [] }));
-			expect(refused).toContain("outside the worktree");
-		}
-		expect(existsSync(join(outside, "new-file.sh"))).toBe(false);
-		expect(existsSync(join(outside, "missing-dir"))).toBe(false);
-		await removeWorktrees(dir, [wt]);
-	});
-	it("refuses a scorer file whose destination cannot be resolved", async () => {
-		const dir = repo({ "app.ts": "x\n" });
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		symlinkSync("loop-b", join(wt, "loop-a"));
-		symlinkSync("loop-a", join(wt, "loop-b"));
-
-		const refused = await installScorer(
-			wt,
-			base.commit,
-			spec({ files: [{ path: "loop-a/gate.sh", content: "x\n" }], protect: [] }),
-		);
-
-		expect(refused).toMatch(/scorer file loop-a\/gate.sh cannot be resolved/);
-		await removeWorktrees(dir, [wt]);
-	});
-
-	it("refuses a scorer file behind a link whose target climbs out through another link", async () => {
-		const dir = repo({ "app.ts": "x\n" });
-		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
-		dirs.push(outside);
-		mkdirSync(join(outside, "child"));
-		const base = await snapshotBase(dir, "bs-test");
-		const wt = join(await gitCommonDir(dir), "apple-pi", "wt", "r0");
-		await addWorktree(dir, wt, base.commit, []);
-		symlinkSync(join(outside, "child"), join(wt, "pivot"));
-		symlinkSync("pivot/../hidden.sh", join(wt, "gate.sh"));
-
-		const refused = await installScorer(
-			wt,
-			base.commit,
-			spec({ files: [{ path: "gate.sh", content: "x\n" }], protect: [] }),
-		);
-
-		expect(refused).toContain("outside the worktree");
-		expect(existsSync(join(outside, "hidden.sh"))).toBe(false);
-		await removeWorktrees(dir, [wt]);
-	});
-});
-
-describe("scorer commands", () => {
-	const alive = (pid: number) => {
-		try {
-			process.kill(pid, 0);
-			return true;
-		} catch {
-			return false;
-		}
-	};
-	const gone = async (pid: number) => {
-		for (let i = 0; i < 50 && alive(pid); i++) await new Promise((resolve) => setTimeout(resolve, 20));
-		return !alive(pid);
-	};
-
-	it("kills what a command left running in its process group when it settles", async () => {
-		for (const command of [
-			"sleep 20 </dev/null >/dev/null 2>&1 & echo $!",
-			"sleep 20 </dev/null >/dev/null 2>&1 & echo $!; exit 3",
-		]) {
-			const result = await runCommand(command, tmpdir(), 10, {});
-			const pid = Number(result.stdout.trim().split("\n").at(-1));
-			expect(pid).toBeGreaterThan(0);
-			expect(await gone(pid)).toBe(true);
-		}
-	});
-
-	it("kills the process group on timeout", async () => {
-		const result = await runCommand("sleep 20 </dev/null >/dev/null 2>&1 & echo $!; sleep 20", tmpdir(), 0.5, {});
-		expect(result.timedOut).toBe(true);
-		expect(await gone(Number(result.stdout.trim()))).toBe(true);
-	});
-
-	it("kills at once when the signal is already aborted", async () => {
-		const controller = new AbortController();
-		controller.abort();
-		const started = Date.now();
-		await runCommand("sleep 20", tmpdir(), 30, {}, controller.signal);
-		expect(Date.now() - started).toBeLessThan(5000);
-	});
-
-	it("keeps only the last 64 KiB of stdout and stderr", async () => {
-		const result = await runCommand(
-			"head -c 200000 /dev/zero | tr '\\0' a; printf END; head -c 200000 /dev/zero | tr '\\0' b >&2; printf END >&2",
-			tmpdir(),
-			30,
-			{},
-		);
-		expect(result.stdout.length).toBe(OUTPUT_TAIL_BYTES);
-		expect(result.stdout.endsWith("aaaEND")).toBe(true);
-		expect(result.stderr.length).toBe(OUTPUT_TAIL_BYTES);
-		expect(result.stderr.endsWith("bbbEND")).toBe(true);
 	});
 });
 

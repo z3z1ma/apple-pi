@@ -8,15 +8,9 @@ import type { Reply } from "../../../tests/helpers/faux-session.js";
 /** A complete configuration; tests change the keys they exercise. */
 export function validConfig(): Record<string, unknown> {
 	return {
-		passive: { enabled: false, repeatThreshold: 3 },
-		enumerate: { count: 4 },
-		branches: { perGeneration: 2, maxTotal: 6 },
-		generations: { maxDepth: 0, rootsPerGeneration: 0, parentsPerGeneration: 1, childrenPerParent: 1 },
-		branch: { limits: { wallClockSec: 600 } },
-		scorer: { validationRetries: 1 },
-		constraints: ["Add no new dependencies."],
+		attempts: 2,
+		limits: { wallClockSec: 600 },
 		workspace: { cloneIgnored: ["node_modules"] },
-		apply: "report",
 	};
 }
 
@@ -39,7 +33,21 @@ export function gitOut(dir: string, ...args: string[]): string {
 	return execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
 }
 
-export type Behavior = (Reply | "until-aborted")[];
+/** A reply, a held request, or a function called when the request arrives (for a barrier). */
+export type Behavior = (Reply | "until-aborted" | (() => Promise<Reply>))[];
+
+/** Entries that each hold their request until all `count` have arrived, then reply. */
+export function barrier(count: number, reply: Reply): () => Promise<Reply> {
+	let arrived = 0;
+	let release: () => void = () => {};
+	const all = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	return () => {
+		if (++arrived === count) release();
+		return all.then(() => reply);
+	};
+}
 
 export function text(message: Context["messages"][number] | undefined): string {
 	if (!message) return "";
@@ -51,9 +59,7 @@ export function write(path: string, content: string, id: string): Reply {
 	return fauxAssistantMessage(fauxToolCall("write", { path, content }, { id }), { stopReason: "toolUse" });
 }
 
-export function finish(result: "done" | "abandoned", learned: string): Reply {
-	return fauxAssistantMessage(`Finished.\nresult: ${result}\nlearned: ${learned}`);
-}
+export const DONE = fauxAssistantMessage("Finished.");
 
 export function withOutput(reply: Reply, output: number): Reply {
 	return { ...reply, usage: { ...reply.usage, output } };
@@ -61,39 +67,43 @@ export function withOutput(reply: Reply, output: number): Reply {
 
 export const FIX = write("app.ts", "export const value = 2;\n", "fix");
 export const WRONG = write("app.ts", "export const value = 3;\n", "wrong");
+/** An attempt's judge number: `score.txt`, which the fixture's judge prints. */
+export const scoreOf = (value: string, id: string) => write("score.txt", `${value}\n`, id);
+
+/** The fixture's gate and judge. */
+export const GATE = "bash check.sh";
+export const JUDGE = { command: "cat score.txt", better: "lower" as const };
+
+export function candidateList(ids: string[]): Reply {
+	const candidates = ids.map((id) => ({ id, approach: `approach ${id}`, firstStep: `open app.ts for ${id}` }));
+	return fauxAssistantMessage(JSON.stringify({ candidates }));
+}
 
 /**
- * The scripted model: the enumerator prompt gets the candidate list; each branch replies by its
- * approach, one scripted reply per model turn after its directive.
+ * The scripted model: the enumerator prompt gets the candidate list in `behaviors` order; each
+ * attempt replies by its approach, one scripted reply per model turn after its prompt.
  */
 export function scriptedModel(
 	behaviors: Record<string, Behavior>,
 	enumerator?: () => Reply | "until-aborted",
-	author: Reply[] = [],
-	/** Answers any other request first, such as the parent's own turns or a review; undefined passes. */
+	/** Answers any other request first, such as the parent's own turns; undefined passes. */
 	other?: (context: Context) => Reply | "until-aborted" | undefined,
 ) {
-	const candidates = Object.keys(behaviors).map((id) => ({
-		id,
-		approach: `approach ${id}`,
-		firstStep: `open app.ts for ${id}`,
-	}));
-	return (context: Context): Reply | "until-aborted" => {
+	return (context: Context): Reply | "until-aborted" | Promise<Reply> => {
 		const answer = other?.(context);
 		if (answer !== undefined) return answer;
-		if (context.messages.some((message) => text(message).includes("Branch search: acceptance checks.")))
-			return author.shift() ?? fauxAssistantMessage("No more scripted author replies.");
 		if (text(context.messages.at(-1)).includes("Branch search: approach list."))
-			return enumerator?.() ?? fauxAssistantMessage(JSON.stringify({ candidates, preferred: "c1" }));
-		const directive = context.messages.findLastIndex((message) => text(message).includes("Branch search: attempt"));
-		if (directive < 0) return fauxAssistantMessage("Understood.");
-		const approach = /Approach: approach (\S+)/.exec(text(context.messages[directive]))?.[1] as string;
-		const turn = context.messages.slice(directive + 1).filter((message) => message.role === "assistant").length;
-		return behaviors[approach]?.[turn] ?? fauxAssistantMessage("result: done\nlearned: nothing more to do");
+			return enumerator?.() ?? candidateList(Object.keys(behaviors));
+		const prompt = context.messages.findLastIndex((message) => text(message).includes("Branch search: attempt"));
+		if (prompt < 0) return fauxAssistantMessage("Understood.");
+		const approach = /Approach: approach (\S+)/.exec(text(context.messages[prompt]))?.[1] as string;
+		const turn = context.messages.slice(prompt + 1).filter((message) => message.role === "assistant").length;
+		const entry = behaviors[approach]?.[turn] ?? DONE;
+		return typeof entry === "function" ? entry() : entry;
 	};
 }
 
-/** The search fixture: a check that passes once `app.ts` holds value 2, and an ignored dependency directory. */
+/** The search fixture: a gate that passes once `app.ts` holds value 2, and an ignored dependency directory. */
 export function initFixtureRepo(cwd: string): void {
 	initRepo(cwd, {
 		".gitignore": "agent/\nnode_modules/\n",
@@ -102,26 +112,4 @@ export function initFixtureRepo(cwd: string): void {
 	});
 	mkdirSync(join(cwd, "node_modules"));
 	writeFileSync(join(cwd, "node_modules", "dep.js"), "dep\n");
-}
-
-export function candidateList(ids: string[], preferred = ids[0]): Reply {
-	const candidates = ids.map((id) => ({ id, approach: `approach ${id}`, firstStep: `open app.ts for ${id}` }));
-	return fauxAssistantMessage(JSON.stringify({ candidates, preferred }));
-}
-
-const PEEK = fauxAssistantMessage(fauxToolCall("bash", { command: "cat app.ts; ls", verbatim: true }, { id: "peek" }), {
-	stopReason: "toolUse",
-});
-
-/**
- * The enumerator of a dead branch: a request whose approach-list prompt follows an attempt's
- * conversation. It looks at its worktree once, then lists the child approaches.
- */
-export function childEnumerator(ids: string[]) {
-	return (context: Context): Reply | undefined => {
-		const prompt = context.messages.findLastIndex((m) => text(m).includes("Branch search: approach list."));
-		if (prompt < 0) return undefined;
-		if (!context.messages.slice(0, prompt).some((m) => text(m).startsWith("Branch search: attempt"))) return undefined;
-		return context.messages.at(-1)?.role === "toolResult" ? candidateList(ids, ids.at(-1)) : PEEK;
-	};
 }
