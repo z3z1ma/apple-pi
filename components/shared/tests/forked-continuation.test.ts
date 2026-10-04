@@ -9,7 +9,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Context } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -127,6 +127,22 @@ describe("worktree forks", () => {
 		expect(readFileSync(join(root, "where.txt"), "utf8").trim()).toBe(realpathSync(root));
 		expect(readFileSync(join(root, "absolute.txt"), "utf8")).toBe("absolute\n");
 		expect(existsSync(join(cwd, "absolute.txt"))).toBe(false);
+	});
+
+	it("refuses background commands in a worktree fork", async () => {
+		const { session, cwd } = await settledSession({
+			"fork background": call(
+				"bash",
+				{ command: "sleep 30", run_in_background: true, verbatim: true },
+				"bash-background",
+			),
+		});
+		const { messages } = await fork(session, cwd, "fork background").result;
+
+		expect(toolResult(messages, "bash-background")).toEqual({
+			isError: true,
+			text: expect.stringContaining("Background commands are not available inside a branch search attempt."),
+		});
 	});
 
 	it("refuses writes and edits outside the worktree", async () => {
@@ -260,6 +276,16 @@ describe("worktree forks", () => {
 		expect(entries).toHaveLength(2);
 	});
 
+	it("reports each reply's usage as it arrives", async () => {
+		const { session, cwd } = await settledSession({ "fork live usage": call("ls", {}, "ls-live") });
+		const seen: number[] = [];
+		const handle = fork(session, cwd, "fork live usage", { onUsage: (usage) => seen.push(usage.output) });
+		const { usage } = await handle.result;
+
+		expect(seen).toHaveLength(2);
+		expect(seen).toEqual(usage.map((entry) => entry.output));
+	});
+
 	it("reads the worktree copy through the parent's absolute path", async () => {
 		const { session, cwd } = await settledSession((parent) => ({
 			"fork read": call("read", { path: `${parent}/..cache/data.txt` }, "read-1"),
@@ -288,5 +314,19 @@ describe("worktree forks", () => {
 			text: expect.stringContaining("Branch search isolates this attempt to its own copy of the repository."),
 		});
 		expect(existsSync(join(cwd, "escaped.md"))).toBe(false);
+	});
+
+	it("works in the worktree's copy of the parent's subdirectory", async () => {
+		const { session, cwd } = await settledSession({
+			"fork subdir": call("bash", { command: "pwd -P > where.txt", verbatim: true }, "bash-subdir"),
+		});
+		// The parent session runs in a subdirectory of its repository.
+		const repository = dirname(cwd);
+		const root = worktree();
+		mkdirSync(join(root, basename(cwd)));
+		await fork(session, cwd, "fork subdir", { worktree: { root, parentRoot: repository } }).result;
+
+		const copy = join(root, basename(cwd));
+		expect(readFileSync(join(copy, "where.txt"), "utf8").trim()).toBe(realpathSync(copy));
 	});
 });

@@ -21,7 +21,7 @@ import {
 	execBashParameters,
 } from "./types.js";
 import { rewriteCommand } from "../../rtk/src/index.js";
-import { forkWorktreeRoot } from "../../shared/src/fork-context.js";
+import { forkCwd } from "../../shared/src/fork-context.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -66,7 +66,7 @@ export async function prepareShellCommand(
 	signal?.throwIfAborted();
 	const { command, stdin } = params;
 	const verbatim = (params as BashParameters).verbatim === true;
-	const effectiveCwd = forkWorktreeRoot() ?? (ctx?.cwd || cwd || process.cwd());
+	const effectiveCwd = forkCwd() ?? (ctx?.cwd || cwd || process.cwd());
 	const shellConfig = getShellConfig();
 	const env = resolveShellEnv(ctx);
 	const commandFromStdin = shellConfig.commandTransport === "stdin";

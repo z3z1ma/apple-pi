@@ -7,7 +7,8 @@ export interface ForkWorktree {
 }
 
 interface ForkContext {
-	readonly worktree?: ForkWorktree;
+	/** The fork's working directory, when it is bound to a worktree. */
+	readonly cwd?: string;
 }
 
 // Shared through globalThis so every module copy (reloads, tests, child loaders) sees one scope.
@@ -25,7 +26,7 @@ export function inForkedContinuation(): boolean {
 	return forkScope.getStore() !== undefined;
 }
 
-/** The worktree root of the fork whose tool is running, if that fork is bound to one. */
-export function forkWorktreeRoot(): string | undefined {
-	return forkScope.getStore()?.worktree?.root;
+/** The working directory of the fork whose tool is running, if that fork is bound to a worktree. */
+export function forkCwd(): string | undefined {
+	return forkScope.getStore()?.cwd;
 }

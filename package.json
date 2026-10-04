@@ -45,6 +45,7 @@
     "components/rtk/src/",
     "components/change-reflection/src/",
     "components/pi-exec/src/",
+    "components/branch-search/src/",
     "extensions/",
     "skills/",
     "prompts/",

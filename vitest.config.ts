@@ -25,6 +25,7 @@ export default defineConfig({
 			"components/rtk/tests/**/*.test.ts",
 			"components/change-reflection/tests/**/*.test.ts",
 			"components/pi-exec/tests/**/*.test.ts",
+			"components/branch-search/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

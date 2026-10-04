@@ -1,6 +1,5 @@
 import { tmpdir } from "node:os";
-import { realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import { AgentSession, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -8,12 +7,14 @@ import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
 import { ASK_USER_QUESTION_TOOL_NAME } from "../../ask-user-question/src/types.js";
 import { type ForkWorktree, runInFork } from "./fork-context.js";
+import { canonical, within } from "./real-path.js";
 
 const FORK_FRAME =
 	"You are a headless fork of this conversation. No user is present, and your messages stay in the fork. When you finish, reply with one line for the main conversation: what you did and how you checked it, or that nothing needed to change.";
 const NO_USER = "No user is present in a headless fork. Decide, or name the open question in your reply.";
 const BLOCKED = "This tool is not available inside a branch search attempt.";
 const ISOLATED = "Branch search isolates this attempt to its own copy of the repository.";
+const NO_BACKGROUND = "Background commands are not available inside a branch search attempt.";
 
 const PATH_TOOLS = new Set(["read", "write", "edit", "ls", "grep", "find"]);
 const WRITE_TOOLS = new Set(["write", "edit"]);
@@ -56,6 +57,8 @@ export interface ForkRequest {
 	label: string;
 	worktree?: ForkWorktree;
 	blockedTools?: ReadonlySet<string>;
+	/** Called with each assistant reply's usage as it ends, so a caller can enforce a token limit. */
+	onUsage?: (usage: Usage) => void;
 }
 
 export interface ForkResult {
@@ -72,24 +75,6 @@ export function liveSession(ctx: ExtensionContext): AgentSession | undefined {
 	return liveSessions().get(ctx.sessionManager);
 }
 
-function within(path: string, dir: string): boolean {
-	const rel = relative(dir, path);
-	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-/** The path with symlinks resolved; a path that does not exist yet resolves through its nearest existing ancestor. */
-function canonical(path: string): string {
-	const missing: string[] = [];
-	for (let dir = path; ; dir = dirname(dir)) {
-		try {
-			return join(realpathSync(dir), ...missing.reverse());
-		} catch {
-			if (dirname(dir) === dir) return path;
-			missing.push(basename(dir));
-		}
-	}
-}
-
 /** Writes stay in the worktree or the temp directory, and never reach the parent workspace (spec I5). */
 function writesOutside(path: string, { root, parentRoot }: ForkWorktree): boolean {
 	const target = canonical(path);
@@ -97,10 +82,15 @@ function writesOutside(path: string, { root, parentRoot }: ForkWorktree): boolea
 	return within(target, canonical(parentRoot)) || !within(target, canonical(tmpdir()));
 }
 
-function remapPath(path: string, { root, parentRoot }: ForkWorktree): string {
-	if (!isAbsolute(path)) return resolve(root, path);
+function remapPath(path: string, { root, parentRoot }: ForkWorktree, cwd: string): string {
+	if (!isAbsolute(path)) return resolve(cwd, path);
 	if (within(path, root) || !within(path, parentRoot)) return path;
 	return join(root, relative(parentRoot, path));
+}
+
+function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): string {
+	const [cwd, repository] = [canonical(parentCwd), canonical(parentRoot)];
+	return within(cwd, repository) ? join(root, relative(repository, cwd)) : root;
 }
 
 function remapCommand(command: string, { root, parentRoot }: ForkWorktree): string {
@@ -114,17 +104,19 @@ function remapCommand(command: string, { root, parentRoot }: ForkWorktree): stri
 }
 
 /** Point a tool call at the worktree in place; return a refusal when it would write outside it. */
-function isolate(tool: string, args: Record<string, unknown>, worktree: ForkWorktree): string | undefined {
+function isolate(tool: string, args: Record<string, unknown>, worktree: ForkWorktree, cwd: string): string | undefined {
+	// A managed background task would outlive the attempt and its worktree.
+	if (tool === "bash" && args.run_in_background) return NO_BACKGROUND;
 	if (tool === "bash" && typeof args.command === "string") {
 		args.command = remapCommand(args.command, worktree);
 		return undefined;
 	}
 	if (!PATH_TOOLS.has(tool)) return undefined;
 	if (typeof args.path !== "string") {
-		if (SEARCH_TOOLS.has(tool)) args.path = worktree.root;
+		if (SEARCH_TOOLS.has(tool)) args.path = cwd;
 		return undefined;
 	}
-	args.path = remapPath(args.path, worktree);
+	args.path = remapPath(args.path, worktree, cwd);
 	const path = args.path as string;
 	if (WRITE_TOOLS.has(tool) && writesOutside(path, worktree)) return ISOLATED;
 	return undefined;
@@ -141,6 +133,8 @@ function isolate(tool: string, args: Record<string, unknown>, worktree: ForkWork
 export function startFork(session: AgentSession, request: ForkRequest): ForkHandle {
 	const parent = session.agent;
 	const { worktree, blockedTools } = request;
+	// The fork works in the worktree's copy of the directory the parent session runs in.
+	const cwd = worktree && forkDirectory(session.sessionManager.getCwd(), worktree);
 	const fork = new Agent({
 		initialState: {
 			systemPrompt: parent.state.systemPrompt,
@@ -160,7 +154,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			const tool = context.toolCall.name;
 			if (tool === ASK_USER_QUESTION_TOOL_NAME) return { block: true, reason: NO_USER };
 			if (blockedTools?.has(tool)) return { block: true, reason: BLOCKED };
-			const refusal = worktree && isolate(tool, context.args as Record<string, unknown>, worktree);
+			const refusal = worktree && isolate(tool, context.args as Record<string, unknown>, worktree, cwd as string);
 			if (refusal) return { block: true, reason: refusal };
 			return parent.beforeToolCall?.(context, toolSignal);
 		},
@@ -176,6 +170,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 		if (event.type !== "message_end" || event.message.role !== "assistant") return;
 		const { provider, responseModel, model } = event.message;
 		usage.push(event.message.usage);
+		request.onUsage?.(event.message.usage);
 		session.sessionManager.appendUsage(
 			"forked_continuation",
 			provider,
@@ -184,7 +179,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			request.label,
 		);
 	});
-	const result = runInFork({ worktree }, () => fork.prompt(request.append))
+	const result = runInFork({ cwd }, () => fork.prompt(request.append))
 		.then(() => ({ messages: fork.state.messages, usage }))
 		.finally(unsubscribe);
 	return { result, abort: () => fork.abort() };
