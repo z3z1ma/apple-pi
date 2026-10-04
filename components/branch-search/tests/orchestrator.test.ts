@@ -58,9 +58,10 @@ async function fixture(
 		enumerator?: () => Reply | "until-aborted";
 		author?: Reply[];
 		parentPrompt?: string;
+		other?: (context: Context) => Reply | "until-aborted" | undefined;
 	} = {},
 ) {
-	const model = scriptedModel(behaviors, options.enumerator, options.author);
+	const model = scriptedModel(behaviors, options.enumerator, options.author, options.other);
 	const run = await fauxSession([registerTasks], (context) => model(context), ["read", "write", "edit", "ls", "bash"]);
 	cleanup.push(run.dispose);
 	const cwd = realpathSync(run.cwd);
@@ -922,5 +923,295 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 		);
 		expect(directives.length).toBeGreaterThan(0);
 		for (const directive of directives) expect(directive).toContain("Goal: Make value equal 2.");
+	});
+});
+
+/** Two gates, so dead branches differ in gates passed; markers a leak would carry (spec I2). */
+const TWO_GATES: ScorerSpec = {
+	version: 1,
+	goal: "value is 2",
+	files: [{ path: "hidden/gate-7f3a.sh", content: `# ${MARKER}\necho gate-output-7f3a\nbash check.sh\n` }],
+	protect: ["check.sh"],
+	gates: [
+		{ id: "keepfile", run: "test -f src/keep.txt", onBase: "pass", timeoutSec: 30 },
+		{ id: "valuecheck", run: "bash hidden/gate-7f3a.sh", onBase: "fail", timeoutSec: 30 },
+	],
+	objectives: [],
+};
+const SCORER_TRACES = [
+	MARKER,
+	"gate-output-7f3a",
+	"hidden/gate-7f3a.sh",
+	"keepfile",
+	"valuecheck",
+	"test -f src/keep.txt",
+];
+
+function candidateList(ids: string[], preferred = ids[0]): Reply {
+	const candidates = ids.map((id) => ({ id, approach: `approach ${id}`, firstStep: `open app.ts for ${id}` }));
+	return fauxAssistantMessage(JSON.stringify({ candidates, preferred }));
+}
+
+const PEEK = fauxAssistantMessage(fauxToolCall("bash", { command: "cat app.ts; ls", verbatim: true }, { id: "peek" }), {
+	stopReason: "toolUse",
+});
+
+/**
+ * The enumerator of a dead branch: a request whose approach-list prompt follows an attempt's
+ * conversation. It looks at its worktree once, then lists the child approaches.
+ */
+function childEnumerator(ids: string[]) {
+	return (context: Context): Reply | undefined => {
+		const prompt = context.messages.findLastIndex((m) => text(m).includes("Branch search: approach list."));
+		if (prompt < 0) return undefined;
+		if (!context.messages.slice(0, prompt).some((m) => text(m).startsWith("Branch search: attempt"))) return undefined;
+		return context.messages.at(-1)?.role === "toolResult" ? candidateList(ids, ids.at(-1)) : PEEK;
+	};
+}
+
+const REMOVE_KEEP = fauxAssistantMessage(
+	fauxToolCall("bash", { command: "rm src/keep.txt", verbatim: true }, { id: "rm-keep" }),
+	{ stopReason: "toolUse" },
+);
+
+const LATER = { maxDepth: 1, rootsPerGeneration: 1, parentsPerGeneration: 1, childrenPerParent: 1 };
+
+function directiveOf(request: Context): string {
+	return text(request.messages.at(-1));
+}
+
+describe("later generations", { timeout: 60_000 }, () => {
+	it("continues the dead branch with the most gates passed, and its child survives and wins", async () => {
+		const run = await fixture(
+			{
+				c1: [REMOVE_KEEP, WRONG, finish("done", "removed keep")],
+				c2: [write("notes-c2.txt", "from c2\n", "notes"), WRONG, finish("abandoned", "three is wrong")],
+				k1: [FIX, finish("done", "two works")],
+				k2: [FIX, finish("done", "two works")],
+			},
+			{ enumerator: () => candidateList(["c1", "c2"]), other: childEnumerator(["k1", "k2"]) },
+		);
+		const onDisk: Record<string, { wt: string[]; leaks: string }> = {};
+		const { result, record } = await search(
+			run,
+			{ scorer: TWO_GATES, config: { generations: LATER, branches: { perGeneration: 2, maxTotal: 6 } } },
+			(status) => {
+				const phase = /^branching (enumerate g1|run g1) /.exec(status ?? "")?.[1];
+				if (!phase || onDisk[phase]) return;
+				const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+				const dir = join(run.cwd, ".git", "apple-pi", "branch-search", id as string);
+				const leaks = execFileSync("bash", ["-c", `grep -rl -e '${MARKER}' . || true`], { cwd: dir, encoding: "utf8" });
+				onDisk[phase] = { wt: existsSync(join(dir, "wt")) ? readdirSync(join(dir, "wt")) : [], leaks };
+			},
+		);
+
+		const parent = branchOf(record, "c2");
+		expect(branchOf(record, "c1")).toEqual(expect.objectContaining({ status: "dead", gatesPassed: 0 }));
+		expect(parent).toEqual(expect.objectContaining({ status: "dead", gatesPassed: 1, generation: 0 }));
+		const child = record.branches.find((branch) => branch.parent === parent.key);
+		if (!child) throw new Error("no child of the better dead branch ran");
+		expect(child).toEqual(
+			expect.objectContaining({
+				key: `${parent.key}.c0`,
+				generation: 1,
+				startCommit: parent.commit,
+				status: "survived",
+			}),
+		);
+		expect(child.startSeq).toBeGreaterThan(parent.endSeq as number);
+		expect(gitOut(run.cwd, "show", `${child.commit}:notes-c2.txt`)).toBe("from c2");
+		expect(result.outcome).toBe("ready");
+		expect(record.winner).toBe(child.key);
+		expect(result.report.split("\n")[0]).toBe(
+			`Branch search ${record.id}: ready. 1 of 3 branches survived over 2 generations.`,
+		);
+
+		// Every planning result, in order; the dead branch's own enumeration with its key and cost.
+		expect(record.steps.map(({ step }) => step)).toEqual([
+			{ kind: "run", batch: expect.any(Array) },
+			{ kind: "enumerate", parents: [parent.key] },
+			{ kind: "run", batch: [expect.objectContaining({ key: child.key, parent: parent.key })] },
+			{ kind: "stop", outcome: "survivor" },
+		]);
+		expect(record.enumerations).toEqual([
+			expect.objectContaining({ key: "root" }),
+			expect.objectContaining({
+				key: parent.key,
+				preferred: "k2",
+				cost: expect.objectContaining({ outputTokens: expect.any(Number), ms: expect.any(Number) }),
+			}),
+		]);
+
+		// The enumerator forks the dead branch's full conversation, in a worktree of its commit.
+		const parentRequests = run.requests.filter((r) =>
+			r.messages.some((m) => text(m).startsWith(`Branch search: attempt ${parent.key}.`)),
+		);
+		const parentLast = parentRequests
+			.filter((r) => !r.messages.some((m) => /approach list|continuing from/.test(text(m))))
+			.at(-1) as Context;
+		const enumeratorFirst = parentRequests.find((r) => directiveOf(r).includes("approach list")) as Context;
+		expect(enumeratorFirst.messages.slice(0, parentLast.messages.length)).toEqual(parentLast.messages);
+		expect(enumeratorFirst.messages).toHaveLength(parentLast.messages.length + 2);
+		const peeked = run.requests
+			.flatMap((r) => r.messages)
+			.find((m) => m.role === "toolResult" && m.toolCallId === "peek");
+		expect(text(peeked)).toContain("export const value = 3;");
+		expect(text(peeked)).toContain("notes-c2.txt");
+
+		// The child's first request starts with its parent branch's full conversation.
+		const childFirst = run.requests.find((r) =>
+			directiveOf(r).startsWith(`Branch search: attempt ${child.key}, continuing from ${parent.key}.`),
+		) as Context;
+		expect(childFirst.messages.slice(0, parentLast.messages.length)).toEqual(parentLast.messages);
+		expect(childFirst.messages).toHaveLength(parentLast.messages.length + 2);
+		expect(text(childFirst.messages.at(-2))).toContain("learned: three is wrong");
+		expect(directiveOf(childFirst)).toContain("Hidden acceptance checks rejected the current state of this attempt.");
+
+		// No request ever carries a gate id, a gate command, a scorer file, or scorer output (I2).
+		const sent = JSON.stringify(run.requests.map((r) => r.messages));
+		for (const trace of SCORER_TRACES) expect(sent).not.toContain(trace);
+
+		// Worktrees that held installed scorer files are gone before the next generation's forks start.
+		expect(onDisk["enumerate g1"]).toEqual({ wt: [], leaks: "" });
+		expect(onDisk["run g1"]?.leaks).toBe("");
+		expect(onDisk["run g1"]?.wt).toEqual([child.key]);
+
+		expectCleanedUp(run.cwd, record, ["base", child.key]);
+	});
+
+	it("starts unused roots and children of several parents in later generations, and stops with no survivor at maxDepth", async () => {
+		const run = await fixture(
+			{
+				c1: [WRONG, finish("done", "three")],
+				c2: [WRONG, finish("done", "three")],
+				c3: [WRONG, finish("done", "three")],
+				k1: [WRONG, finish("done", "still three")],
+				k2: [WRONG, finish("done", "still three")],
+			},
+			{ enumerator: () => candidateList(["c1", "c2", "c3"]), other: childEnumerator(["k1", "k2"]) },
+		);
+		const { result, record } = await search(run, {
+			scorer: TWO_GATES,
+			config: { generations: { ...LATER, parentsPerGeneration: 2 }, branches: { perGeneration: 2, maxTotal: 6 } },
+		});
+
+		expect(result.outcome).toBe("no survivor");
+		expect(record.steps.map(({ step }) => step.kind)).toEqual(["run", "enumerate", "run", "stop"]);
+		expect(record.steps[1]?.step).toEqual({ kind: "enumerate", parents: ["r0", "r1"] });
+		// The two enumerators run at once, so the record lists them as they finish.
+		expect(record.enumerations.map((enumeration) => enumeration.key).sort()).toEqual(["r0", "r1", "root"]);
+		expect(record.steps.at(-1)?.step).toEqual({ kind: "stop", outcome: "no survivor" });
+		const later = record.branches.filter((branch) => branch.generation === 1);
+		expect(later.map(({ key, parent }) => ({ key, parent }))).toEqual([
+			{ key: "r2", parent: null },
+			{ key: "r0.c0", parent: "r0" },
+			{ key: "r1.c0", parent: "r1" },
+		]);
+		const root = later[0] as SearchRecord["branches"][number];
+		expect(root.startCommit).toBe(record.base?.commit);
+		expect(result.report).toContain("0 of 5 branches survived over 2 generations");
+		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("points the parent branch's worktree paths in an inherited conversation at the child's own worktree", async () => {
+		const pwd = fauxAssistantMessage(fauxToolCall("bash", { command: "pwd -P", verbatim: true }, { id: "pwd" }), {
+			stopReason: "toolUse",
+		});
+		const result = (context: Context, id: string) =>
+			context.messages.find((m) => m.role === "toolResult" && m.toolCallId === id);
+		// The child reads app.ts through the directory its parent printed.
+		const child = (context: Context): Reply | undefined => {
+			if (!context.messages.some((m) => /^Branch search: attempt \S+, continuing from/.test(text(m)))) return undefined;
+			if (result(context, "read-inherited")) return finish("done", "read through the inherited path");
+			const printed = text(result(context, "pwd")).trim();
+			return fauxAssistantMessage(fauxToolCall("read", { path: `${printed}/app.ts` }, { id: "read-inherited" }), {
+				stopReason: "toolUse",
+			});
+		};
+		const enumerate = childEnumerator(["k1", "k2"]);
+		const run = await fixture(
+			{ c1: [pwd, WRONG, finish("done", "three")], c2: [pwd, WRONG, finish("done", "three")] },
+			{ enumerator: () => candidateList(["c1", "c2"]), other: (context) => child(context) ?? enumerate(context) },
+		);
+		const { record } = await search(run, {
+			scorer: TWO_GATES,
+			config: { generations: { ...LATER, rootsPerGeneration: 0 }, branches: { perGeneration: 1, maxTotal: 2 } },
+		});
+
+		const parent = record.branches[0] as SearchRecord["branches"][number];
+		const printed = text(
+			run.requests.flatMap((r) => r.messages).find((m) => m.role === "toolResult" && m.toolCallId === "pwd"),
+		).trim();
+		expect(printed).toBe(join(stateDir(run.cwd, record), "wt", parent.key));
+		const read = run.requests
+			.flatMap((r) => r.messages)
+			.find((m) => m.role === "toolResult" && m.toolCallId === "read-inherited");
+		expect(read?.role === "toolResult" && read.isError).toBe(false);
+		expect(text(read)).toContain("export const value = 3;");
+		// The inherited conversation reaches the child unchanged.
+		const childRequest = run.requests.find((r) => r.messages.some((m) => text(m).includes("continuing from")));
+		expect(text(childRequest?.messages.find((m) => m.role === "toolResult" && m.toolCallId === "pwd")).trim()).toBe(
+			printed,
+		);
+		expect(record.branches.map((branch) => branch.key)).toEqual([parent.key, `${parent.key}.c0`]);
+	});
+
+	it("stops the other enumerators and ends enumeration failed when one dead branch's enumerator fails", async () => {
+		const enumerators = (context: Context): Reply | "until-aborted" | undefined => {
+			const prompt = context.messages.findLastIndex((m) => text(m).includes("Branch search: approach list."));
+			if (prompt < 0) return undefined;
+			const attempt = context.messages
+				.slice(0, prompt)
+				.map(text)
+				.find((t) => t.startsWith("Branch search: attempt"));
+			if (attempt === undefined) return undefined;
+			return attempt.startsWith("Branch search: attempt r0.")
+				? fauxAssistantMessage("No list today.")
+				: "until-aborted";
+		};
+		const run = await fixture(
+			{ c1: [WRONG, finish("done", "three")], c2: [WRONG, finish("done", "three")] },
+			{ enumerator: () => candidateList(["c1", "c2"]), other: enumerators },
+		);
+		// A search that hangs on the waiting enumerator ends cancelled instead of timing the test out.
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 15_000);
+		const { result, record } = await search(run, {
+			scorer: TWO_GATES,
+			signal: controller.signal,
+			config: { generations: { ...LATER, parentsPerGeneration: 2 }, branches: { perGeneration: 2, maxTotal: 6 } },
+		});
+		clearTimeout(timer);
+
+		expect(result.outcome).toBe("aborted: enumeration failed");
+		expect(record.steps.at(-1)?.step).toEqual({ kind: "enumerate", parents: ["r0", "r1"] });
+		const retries = run.requests.filter(
+			(r) =>
+				text(r.messages.at(-1)).includes("could not be used") &&
+				r.messages.some((m) => text(m).startsWith("Branch search: attempt r0.")),
+		);
+		expect(retries).toHaveLength(1);
+		expect(record.branches.map((branch) => branch.generation)).toEqual([0, 0]);
+		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("never exceeds maxTotal and stops when a step has no branch to run", async () => {
+		const run = await fixture(
+			{ c1: [WRONG, finish("done", "three")], c2: [WRONG, finish("done", "three")], k1: [FIX], k2: [FIX] },
+			{ enumerator: () => candidateList(["c1", "c2"]), other: childEnumerator(["k1", "k2"]) },
+		);
+		const { result, record } = await search(run, {
+			scorer: TWO_GATES,
+			config: { generations: { ...LATER, maxDepth: 3 }, branches: { perGeneration: 2, maxTotal: 2 } },
+		});
+
+		expect(result.outcome).toBe("no survivor");
+		expect(record.branches).toHaveLength(2);
+		expect(record.steps.map(({ step }) => step)).toEqual([
+			{ kind: "run", batch: expect.any(Array) },
+			{ kind: "enumerate", parents: ["r0"] },
+			{ kind: "stop", outcome: "no survivor" },
+		]);
+		expectCleanedUp(run.cwd, record, ["base"]);
 	});
 });

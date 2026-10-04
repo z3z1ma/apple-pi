@@ -26,6 +26,11 @@ describe("branch search configuration", () => {
 		}
 	});
 
+	it('accepts the evaluation arm draw "model"', () => {
+		const result = validateBranchSearchConfig({ ...validConfig(), draw: "model" });
+		expect(result.ok && result.config.draw).toBe("model");
+	});
+
 	it("names every missing required key", () => {
 		const result = validateBranchSearchConfig({ passive: { enabled: true } });
 		expect(result.ok).toBe(false);

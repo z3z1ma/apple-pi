@@ -117,8 +117,7 @@ const REQUIRED: [string, Check][] = [
 const OPTIONAL: [string, Check][] = [
 	["scorer.reviewProfile", profile],
 	["fidelity.profile", profile],
-	// `draw: "model"` is an evaluation arm that later generations bring (ticket 07).
-	["draw", (value) => (value === "model" ? `"model" is not available yet` : oneOf("random")(value))],
+	["draw", oneOf("random", "model")],
 ];
 
 function lookup(config: unknown, key: string): unknown {

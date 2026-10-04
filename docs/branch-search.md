@@ -8,8 +8,9 @@ When a search runs, the harness:
 2. Asks another fork for a list of distinct approaches. When you give a goal, the enumerator prompt and every attempt's directive state it.
 3. Uses its own random draw, not the model's preference, to choose which approaches run.
 4. Runs each chosen approach as a fork of the conversation in its own git worktree. Every fork shares the parent's prompt-cache prefix.
-5. Scores every attempt with the hidden checks, ranks the survivors, and applies the winner's diff to the workspace.
-6. Adds one passive message with the report to the conversation.
+5. Scores every attempt with the hidden checks. While no attempt passes, it starts a later generation: continuations of the failed attempts that came closest, and fresh approaches from the first list (see [Later generations](#later-generations)).
+6. Ranks the survivors and applies the winner's diff to the workspace.
+7. Adds one passive message with the report to the conversation.
 
 The extension loads only in the root session. Subagents and `pi_exec` workers do not load it.
 
@@ -23,9 +24,9 @@ Only one search runs per session. Starting another while one runs prints the act
 
 The search forks the conversation as it stands when the search starts. If the main agent is running when you issue the command, the status line shows `branch search queued`, and the search starts when that run settles.
 
-While the search runs, the status line shows `branching <phase> <alive>/<total>`. Phases: `author`, `validate`, `review`, `enumerate`, `run g0`, `score g0`, `apply`.
+While the search runs, the status line shows `branching <phase> <alive>/<total>`. Phases: `author`, `validate`, `review`, `enumerate`, `run g<n>`, `score g<n>`, `enumerate g<n>` (approach lists for the failed attempts generation `n` continues), `apply`.
 
-Before it applies a winner, the search waits until the main agent is not running. From then until apply, and any rollback, has finished, the main agent's `write`, `edit`, `bash`, and `pi_exec` calls fail with `Branch search is applying its winner to the workspace. Retry this call in a moment.` Cancel works during the wait.
+Before it applies a winner, the search waits until the main agent is not running. From then until apply, and any rollback, has finished, the main agent's `write`, `edit`, `bash`, and `pi_exec` calls fail with `Branch search is applying its winner to the workspace. Retry this call in a moment.` So do `agent`, `steer_subagent`, `schedule`, and `monitor`, which would start or steer a writer this check cannot see. A subagent or managed task that was already running keeps running and is not held. Cancel works during the wait.
 
 If `git apply` fails partway, the search puts back to base only the files that still hold what the patch wrote. A file someone else changed in the meantime, for example in an editor, is left alone, and the report names it.
 
@@ -45,12 +46,12 @@ Files, merged key by key, with project values replacing user values and arrays r
 | `passive.enabled` | boolean | yes | Enables passive activation after repeated failures (not available yet). |
 | `passive.repeatThreshold` | integer ≥ 2 | yes | Repeats of one failure that trigger passive search. |
 | `enumerate.count` | integer ≥ 2 | yes | Approaches requested from the enumerator. |
-| `branches.perGeneration` | integer ≥ 1 | yes | Approaches that run. |
-| `branches.maxTotal` | integer ≥ 1 | yes | Upper bound on attempts in one search. |
-| `generations.maxDepth` | integer ≥ 0 | yes | Generations after the first. Set `0`: later generations are not available yet. |
-| `generations.rootsPerGeneration` | integer ≥ 0 | yes | New approaches per later generation. |
-| `generations.parentsPerGeneration` | integer ≥ 1 | yes | Failed attempts that later generations continue. |
-| `generations.childrenPerParent` | integer ≥ 1 | yes | Continuations per failed attempt. |
+| `branches.perGeneration` | integer ≥ 1 | yes | Approaches that run in the first generation. |
+| `branches.maxTotal` | integer ≥ 1 | yes | Upper bound on attempts in one search, over all generations. |
+| `generations.maxDepth` | integer ≥ 0 | yes | Generations after the first. `0` ends the search after the first generation. |
+| `generations.rootsPerGeneration` | integer ≥ 0 | yes | Approaches from the first list, not yet run, that each later generation starts fresh. |
+| `generations.parentsPerGeneration` | integer ≥ 1 | yes | Failed attempts of the previous generation that each later generation continues. |
+| `generations.childrenPerParent` | integer ≥ 1 | yes | Continuations of each of those failed attempts. |
 | `branch.limits` | `{ wallClockSec?, outputTokens? }` | yes, at least one field | Limits per attempt. An attempt over a limit stops, and its work is still scored. |
 | `scorer.validationRetries` | integer ≥ 0 | yes | Corrections the author may make to checks that fail validation. |
 | `scorer.reviewProfile` | model profile name | no | A [model profile](model-profiles.md) that reviews the checks once. |
@@ -58,7 +59,7 @@ Files, merged key by key, with project values replacing user values and arrays r
 | `constraints` | string[] | yes | Extra constraints the draw may add to an approach. The harness adds `none`. |
 | `workspace.cloneIgnored` | string[] | yes | Ignored directories cloned into each worktree, for example `["node_modules", ".venv"]`. |
 | `apply` | `"auto"` or `"report"` | yes | `auto` applies the winner when the workspace did not change during the search. |
-| `draw` | `"random"` | no | How approaches are chosen. Defaults to `"random"`. |
+| `draw` | `"random"` or `"model"` | no | How approaches are chosen. Defaults to `"random"`. `"model"` runs each list's preferred approach first, then the others in listed order; it exists to measure the random draw against the model's own choice. |
 
 Example:
 
@@ -66,8 +67,8 @@ Example:
 {
   "passive": { "enabled": false, "repeatThreshold": 3 },
   "enumerate": { "count": 4 },
-  "branches": { "perGeneration": 3, "maxTotal": 3 },
-  "generations": { "maxDepth": 0, "rootsPerGeneration": 0, "parentsPerGeneration": 1, "childrenPerParent": 1 },
+  "branches": { "perGeneration": 3, "maxTotal": 6 },
+  "generations": { "maxDepth": 1, "rootsPerGeneration": 1, "parentsPerGeneration": 1, "childrenPerParent": 2 },
   "branch": { "limits": { "wallClockSec": 900 } },
   "scorer": { "validationRetries": 2 },
   "constraints": ["Add no new dependencies.", "Change as few files as possible."],
@@ -86,11 +87,22 @@ With `scorer.reviewProfile` set, one request on that profile reviews the checks:
 
 The harness then freezes the scorer: it records the SHA-256 of the scorer's exact bytes before any approach is listed or run, and at the end stores those bytes as `spec.json`. A search never changes its scorer.
 
+## Later generations
+
+When every attempt of a generation fails a gate, and fewer than `generations.maxDepth` generations have followed the first, the search plans another generation:
+
+1. It ranks that generation's failed attempts by gates passed (more first), then by diff size (smaller first), then by attempt ID, and takes the first `generations.parentsPerGeneration`.
+2. For each of them, an enumerator forks that attempt's final conversation, in a new worktree of its committed state, and lists approaches from there. It knows what the attempt tried, so its list reflects what the attempt learned. These enumerators run at once. If one of them gives two unusable lists, the others stop and the search ends `aborted: enumeration failed`.
+3. The generation runs the next `generations.rootsPerGeneration` approaches of the first list that have not run, as fresh attempts from the starting workspace, and then the first `generations.childrenPerParent` approaches of each failed attempt's list, in rank order. Each continuation forks its failed attempt's final conversation, works in a new worktree of that attempt's committed state, and is told only that hidden checks rejected the state, never which check failed or what it printed. Paths of the failed attempt's worktree (or of its own predecessors) that appear in that conversation point at the continuation's worktree.
+4. The search never runs more than `branches.maxTotal` attempts. It drops the attempts that would exceed the bound from the end of the generation. A generation with nothing left to run ends the search `no survivor`, as does a failed generation at `generations.maxDepth`.
+
+Attempt IDs record where an attempt came from: `r2` runs position 2 of the first list's drawn order, and `r2.c0` runs position 0 of `r2`'s own list. Each list's drawn order, and each attempt's constraint, is drawn from the search's seed and the ID alone, so an attempt gets the same approach and constraint however the counts are configured. A continuation shares its failed attempt's prompt cache. The worktrees of a scored generation, which hold the installed checks, are removed before any fork of the next step starts.
+
 ## Keeping the scorer hidden
 
 Attempts cannot see the checks that judge them. The harness keeps them apart in time rather than by guarding paths, because a shell can reach any path indirectly:
 
-- While the enumerator or any attempt runs, no scorer file exists on disk, no scorer command runs, and the scorer is in no prompt. The scorer lives only in the harness's memory.
+- While any enumerator or attempt runs, no scorer file exists on disk, no scorer command runs, and the scorer is in no prompt. The scorer lives only in the harness's memory.
 - The author writes the scorer only in its reply. Its worktree and the validation worktree are removed before the enumerator starts.
 - Every fork (author, enumerator, attempt) gets a private temporary directory under the search's state directory, outside every worktree. Its shell commands run with `TMPDIR`, `TMP`, and `TEMP` pointing there, long command output spills there, and its `write` and `edit` calls may write only there and in its worktree. The directory is deleted when the fork stops, so nothing the author put in temporary files reaches a later attempt.
 - Every shell command an attempt starts runs in its own process group. When the attempt stops, the harness kills every group that still has a process, and waits until they are gone, before any scoring starts. A process left running cannot watch the checks.
@@ -122,7 +134,7 @@ Each search keeps its state under `$(git rev-parse --git-common-dir)/apple-pi/br
 
 After the search, the directory keeps:
 
-- `record.json`: mode, goal, seed, configuration, base, the scorer's hash, validation reports and review, every approach list, every planning step, every attempt with its approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
+- `record.json`: mode, goal, seed, configuration, base, the scorer's hash, validation reports and review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
 - `spec.json`: the frozen scorer; its SHA-256 equals the hash in the record.
 - `winner.patch`: the applied diff, when the winner was applied.
 

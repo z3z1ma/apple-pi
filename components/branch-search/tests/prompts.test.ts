@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEnumeration, parseSelfReport, rootDirective } from "../src/prompts.js";
+import { childDirective, parseEnumeration, parseSelfReport, rootDirective } from "../src/prompts.js";
 
 const candidates = [
 	{ id: "c1", approach: "a", firstStep: "s" },
@@ -48,5 +48,20 @@ describe("root directive", () => {
 		expect(rootDirective("r1", candidates[0] as (typeof candidates)[0], "Add no new dependencies.")).toContain(
 			"Constraint: Add no new dependencies.",
 		);
+	});
+});
+
+describe("child directive", () => {
+	it("names the attempt and its parent, says only that hidden checks rejected the state, and states the goal", () => {
+		const directive = childDirective("r1.c0", "r1", candidates[1] as (typeof candidates)[0], "none", "value is 2");
+		expect(directive.startsWith("Branch search: attempt r1.c0, continuing from r1.\n\n")).toBe(true);
+		expect(directive).toContain("Hidden acceptance checks rejected the current state of this attempt.");
+		expect(directive).toContain("continuing from r1.\n\nGoal: value is 2\n\nHidden acceptance checks");
+		expect(directive).toContain("in this direction:\n\nApproach: b\nFirst action: t\n\n");
+		expect(directive).not.toContain("Constraint:");
+		expect(directive).toMatch(/result: done \| abandoned\nlearned: <one sentence about what this attempt revealed>$/);
+		expect(
+			childDirective("r1.c0", "r1", candidates[0] as (typeof candidates)[0], "Change as few files as possible."),
+		).toContain("First action: s\nConstraint: Change as few files as possible.\n\n");
 	});
 });

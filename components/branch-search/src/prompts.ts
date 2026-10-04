@@ -96,12 +96,12 @@ export function parseJson(reply: string): unknown {
 	}
 }
 
-/** Spec 10.2. */
 /** The goal the user stated for the search, if any, as a prompt line (after the fork point). */
 function goalLine(goal: string | undefined): string {
 	return goal === undefined ? "" : `Goal: ${goal}\n\n`;
 }
 
+/** Spec 10.2. */
 export function enumeratorPrompt(count: number, goal?: string): string {
 	return `Branch search: approach list.
 
@@ -128,6 +128,29 @@ ${goalLine(goal)}Approach: ${candidate.approach}
 First action: ${candidate.firstStep}${constraintLine}
 
 Commit fully to this approach. Work until the task is complete under it, or until you have concrete evidence that it cannot work. Make reasonable decisions on your own; the user is away. Hidden acceptance checks will judge the final state of the repository.
+
+End your final message with exactly these two lines:
+result: done | abandoned
+learned: <one sentence about what this attempt revealed>`;
+}
+
+/** Spec 10.4. The child learns only that hidden checks rejected the state, never which (spec I2). */
+export function childDirective(
+	branchId: string,
+	parentId: string,
+	candidate: Candidate,
+	constraint: string,
+	goal?: string,
+): string {
+	const constraintLine = constraint === "none" ? "" : `\nConstraint: ${constraint}`;
+	return `Branch search: attempt ${branchId}, continuing from ${parentId}.
+
+${goalLine(goal)}Hidden acceptance checks rejected the current state of this attempt. Continue from the current state of the repository in this direction:
+
+Approach: ${candidate.approach}
+First action: ${candidate.firstStep}${constraintLine}
+
+Work until the task is complete or until you have concrete evidence that this direction cannot work.
 
 End your final message with exactly these two lines:
 result: done | abandoned

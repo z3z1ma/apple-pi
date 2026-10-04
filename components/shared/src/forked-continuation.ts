@@ -107,10 +107,20 @@ function writesOutside(path: string, { root, tmp }: ForkWorktree): boolean {
 	return !within(target, canonical(root)) && !within(target, canonical(tmp));
 }
 
-function remapPath(path: string, { root, parentRoot, tmp }: ForkWorktree, cwd: string): string {
+/**
+ * The roots whose paths map onto the fork's own root, most specific first: an ancestor worktree
+ * inside the parent's git directory must not be read as a path in the parent repository.
+ */
+function mappedRoots({ parentRoot, ancestors = [] }: ForkWorktree): string[] {
+	return [parentRoot, ...ancestors].filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+function remapPath(path: string, worktree: ForkWorktree, cwd: string): string {
+	const { root, tmp } = worktree;
 	if (!isAbsolute(path)) return resolve(cwd, path);
-	if (within(path, root) || within(path, tmp) || !within(path, parentRoot)) return path;
-	return join(root, relative(parentRoot, path));
+	if (within(path, root) || within(path, tmp)) return path;
+	const from = mappedRoots(worktree).find((mapped) => within(path, mapped));
+	return from === undefined ? path : join(root, relative(from, path));
 }
 
 function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): string {
@@ -118,9 +128,12 @@ function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): s
 	return within(cwd, repository) ? join(root, relative(repository, cwd)) : root;
 }
 
-function remapCommand(command: string, { root, parentRoot, tmp }: ForkWorktree): string {
-	const escaped = parentRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const parentPath = new RegExp(`${escaped}(?![\\w.-])`, "g");
+function remapCommand(command: string, worktree: ForkWorktree): string {
+	const { root, tmp } = worktree;
+	const roots = mappedRoots(worktree).map((mapped) => mapped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+	if (roots.length === 0) return command;
+	// One alternation, longest root first, so an ancestor is never matched as the parent root plus a subpath.
+	const parentPath = new RegExp(`(?:${roots.join("|")})(?![\\w.-])`, "g");
 	// The worktree and the temporary directory may live under the parent root (in its git
 	// directory), so leave their own paths alone.
 	const keep = (text: string, kept: string[]): string => {

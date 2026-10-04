@@ -9,10 +9,11 @@ import type { ForkWorktree } from "../../shared/src/fork-context.js";
 import { type ForkHandle, type ForkRequest, startFork } from "../../shared/src/forked-continuation.js";
 import { type BranchSearchConfig, validateBranchSearchConfig } from "./config.js";
 import { constraintPool } from "./draw.js";
-import { type BatchEntry, type Enumeration, type ObservedTree, planStep, selectWinner } from "./plan.js";
+import { type BatchEntry, type Enumeration, type NodeKey, type ObservedTree, planStep, selectWinner } from "./plan.js";
 import {
 	authorPrompt,
 	authorRetryPrompt,
+	childDirective,
 	enumeratorPrompt,
 	enumeratorRetryPrompt,
 	parseEnumeration,
@@ -186,6 +187,8 @@ export async function runBranchSearch(options: SearchOptions): Promise<SearchRes
 interface LiveBranch {
 	record: BranchRecord;
 	worktree: string;
+	/** The branch's final conversation, which its enumerator and children fork (spec 6.7). */
+	messages: AgentMessage[];
 }
 
 class Search {
@@ -214,6 +217,7 @@ class Search {
 	readonly started = Date.now();
 	seq = 0;
 	phase = "prepare";
+	gitQueue: Promise<void> = Promise.resolve();
 	winnerStat: DiffStat | undefined;
 
 	constructor(
@@ -299,17 +303,10 @@ class Search {
 		this.freeze(spec);
 
 		this.status("enumerate");
-		const root = await this.enumerate(base.commit);
-		this.enumerations.root = root;
+		this.enumerations.root = await this.enumerate("root", base.commit, this.forkPoint);
 		this.save();
 
-		const step = this.plan();
-		if (step.kind !== "run") throw new Error(`Unexpected first step ${step.kind}.`);
-		await this.runGeneration(0, step.batch, base);
-		await this.scoreGeneration(0, base.commit);
-
-		const stop = this.plan();
-		if (stop.kind !== "stop") throw new Error(`Later generations are not available yet (step ${stop.kind}).`);
+		const stop = await this.runGenerations(base);
 		const { gates, objectives } = spec;
 		const winner =
 			stop.outcome === "survivor"
@@ -334,6 +331,76 @@ class Search {
 			release();
 		}
 		this.end(this.record.apply.applied ? "applied" : "ready");
+	}
+
+	/**
+	 * Plan, enumerate, run, and score until the planning function stops (spec 6.7). Each generation's
+	 * worktrees, which hold installed scorer files after scoring, are removed before any later fork
+	 * starts (spec 8.4); children and enumerators get fresh worktrees from their parent's commit.
+	 */
+	private async runGenerations(base: { commit: string; tree: string }): Promise<{ kind: "stop"; outcome: string }> {
+		let generation = 0;
+		for (;;) {
+			const step = this.plan();
+			if (step.kind === "stop") return step;
+			if (step.kind === "enumerate") {
+				this.status(`enumerate g${generation}`);
+				await this.enumerateParents(step.parents);
+				this.save();
+				continue;
+			}
+			await this.runGeneration(generation, step.batch, base);
+			await this.scoreGeneration(generation, base.commit);
+			await this.removeGeneration(generation);
+			generation++;
+		}
+	}
+
+	/**
+	 * The parents' enumerators run at once. The first failure stops the others, including any still
+	 * waiting to start, and is rethrown once every one of them has removed its worktree.
+	 */
+	private async enumerateParents(parents: NodeKey[]): Promise<void> {
+		const stop = new AbortController();
+		let failure: { error: unknown } | undefined;
+		await Promise.allSettled(
+			parents.map(async (key) => {
+				try {
+					await this.enumerateParent(key, stop.signal);
+				} catch (error) {
+					if (!failure) {
+						failure = { error };
+						stop.abort();
+					}
+				}
+			}),
+		);
+		if (failure) throw failure.error;
+	}
+
+	/** The enumerator of a dead branch: a fork of its final conversation in a worktree of its commit (spec 6.7). */
+	private async enumerateParent(key: NodeKey, stop: AbortSignal): Promise<void> {
+		const parent = this.liveBranch(key);
+		this.enumerations[key] = await this.enumerate(
+			key,
+			parent.record.commit as string,
+			parent.messages,
+			this.lineage(key),
+			stop,
+		);
+	}
+
+	private liveBranch(key: NodeKey): LiveBranch {
+		const branch = this.branches.find(({ record }) => record.key === key);
+		if (!branch) throw new Error(`Unknown branch ${key}.`);
+		return branch;
+	}
+
+	/** Remove a scored generation's worktrees; its commits and refs stay. */
+	private async removeGeneration(generation: number): Promise<void> {
+		const worktrees = this.branches.filter(({ record }) => record.generation === generation).map((b) => b.worktree);
+		await removeWorktrees(this.root, worktrees);
+		for (const worktree of worktrees) this.worktrees.delete(worktree);
 	}
 
 	/** Wait for the hold on the root session; a hold granted after a cancel ends at once. */
@@ -561,36 +628,90 @@ class Search {
 		return handle;
 	}
 
-	/** A fork's binding to its worktree, with a private temporary directory beside the worktrees (spec 8.4). */
-	private forkWorktree(root: string): ForkWorktree {
-		return { root, parentRoot: this.root, tmp: join(this.stateDir, "tmp", basename(root)) };
+	/**
+	 * A fork's binding to its worktree, with a private temporary directory beside the worktrees (spec 8.4).
+	 * `ancestors` are the worktree roots its inherited conversation may name; they map onto `root`.
+	 */
+	private forkWorktree(root: string, ancestors: string[] = []): ForkWorktree {
+		return { root, parentRoot: this.root, tmp: join(this.stateDir, "tmp", basename(root)), ancestors };
+	}
+
+	/** The worktree roots of a branch and of every branch its conversation continues, oldest first. */
+	private lineage(key: NodeKey | null): string[] {
+		const roots: string[] = [];
+		for (let current = key; current !== null; ) {
+			const branch = this.liveBranch(current);
+			roots.unshift(branch.worktree);
+			current = branch.record.parent;
+		}
+		return roots;
 	}
 
 	private async worktree(name: string, commit: string): Promise<string> {
 		const path = join(this.stateDir, "wt", name);
 		this.worktrees.add(path);
-		await addWorktree(this.root, path, commit, this.config.workspace.cloneIgnored);
+		await this.serial(() => addWorktree(this.root, path, commit, this.config.workspace.cloneIgnored));
 		return path;
 	}
 
-	/** The root enumerator: a fork of the parent in its own base worktree, asked once more after an unusable reply (spec 6.4). */
-	private async enumerate(base: string): Promise<Enumeration> {
-		const worktree = this.forkWorktree(await this.worktree("enum-root", base));
+	/** Enumerators run concurrently; their git worktree commands run one at a time. */
+	private serial<T>(task: () => Promise<T>): Promise<T> {
+		const run = this.gitQueue.then(task);
+		this.gitQueue = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	}
+
+	/**
+	 * An enumerator: a fork of `messages` in its own worktree of `commit`, asked once more after an
+	 * unusable reply (spec 6.4). The root enumerator forks the parent at the base; the enumerator of a
+	 * dead branch forks that branch's final conversation at its commit (spec 6.7).
+	 */
+	private async enumerate(
+		key: string,
+		commit: string,
+		from: AgentMessage[],
+		ancestors: string[] = [],
+		stop?: AbortSignal,
+	): Promise<Enumeration> {
+		stop?.throwIfAborted();
+		const path = await this.worktree(`enum-${key}`, commit);
+		try {
+			return await this.runEnumerator(key, this.forkWorktree(path, ancestors), from, stop);
+		} finally {
+			await this.serial(() => removeWorktrees(this.root, [path]));
+			this.worktrees.delete(path);
+		}
+	}
+
+	/** `stop` aborts the enumerator's fork and keeps it from starting another (a sibling failed). */
+	private async runEnumerator(
+		key: string,
+		worktree: ForkWorktree,
+		from: AgentMessage[],
+		stop?: AbortSignal,
+	): Promise<Enumeration> {
 		const cost = emptyCost();
 		const started = Date.now();
-		let messages = this.forkPoint;
+		let messages = from;
 		let append = customPrompt(enumeratorPrompt(this.config.enumerate.count, this.options.goal));
 		for (let attempt = 1; attempt <= 2; attempt++) {
+			stop?.throwIfAborted();
 			const fork = this.fork({
 				messages,
 				append,
-				label: "Branch search enumerator",
+				label: `Branch search enumerator ${key}`,
 				worktree,
 				onUsage: (usage) => addUsage(cost, usage),
 			});
-			const result = await fork.result;
+			const abort = () => fork.abort();
+			stop?.addEventListener("abort", abort, { once: true });
+			const result = await fork.result.finally(() => stop?.removeEventListener("abort", abort));
 			this.options.signal.throwIfAborted();
-			const parsed = parseEnumeration("root", replyText(result.messages));
+			stop?.throwIfAborted();
+			const parsed = parseEnumeration(key, replyText(result.messages));
 			if (typeof parsed !== "string") {
 				this.record.enumerations.push({ ...parsed, attempts: attempt, cost: { ...cost, ms: Date.now() - started } });
 				return parsed;
@@ -610,9 +731,10 @@ class Search {
 		this.record.parentTreeChecks.push({ phase: `before g${generation}`, tree: await snapshotTree(this.root) });
 		const runs: Promise<void>[] = [];
 		for (const entry of batch) {
-			const worktree = await this.worktree(entry.key, base.commit);
+			const start = entry.parent === null ? base.commit : (this.liveBranch(entry.parent).record.commit as string);
+			const worktree = await this.worktree(entry.key, start);
 			this.options.signal.throwIfAborted();
-			runs.push(this.startBranch(generation, entry, base.commit, worktree));
+			runs.push(this.startBranch(generation, entry, start, worktree));
 			this.status(`run g${generation}`);
 		}
 		await settleAll(runs);
@@ -624,9 +746,22 @@ class Search {
 		this.save();
 	}
 
+	/**
+	 * A root forks the parent at the fork point under the root directive; a child forks its parent
+	 * branch's final conversation under the child directive (spec 6.6, 10.3, 10.4).
+	 */
 	private startBranch(generation: number, entry: BatchEntry, startCommit: string, worktree: string): Promise<void> {
-		const candidate = this.enumerations.root?.candidates.find((c) => c.id === entry.candidate);
+		const enumeration = this.enumerations[entry.parent ?? "root"];
+		const candidate = enumeration?.candidates.find((c) => c.id === entry.candidate);
 		if (!candidate) throw new Error(`Unknown candidate ${entry.candidate}.`);
+		const { goal } = this.options;
+		const [messages, directive] =
+			entry.parent === null
+				? [this.forkPoint, rootDirective(entry.key, candidate, entry.constraint, goal)]
+				: [
+						this.liveBranch(entry.parent).messages,
+						childDirective(entry.key, entry.parent, candidate, entry.constraint, goal),
+					];
 		const record: BranchRecord = {
 			key: entry.key,
 			generation,
@@ -641,7 +776,8 @@ class Search {
 			learned: null,
 			cost: { ...emptyCost(), runMs: 0, scoreMs: 0 },
 		};
-		this.branches.push({ record, worktree });
+		const live: LiveBranch = { record, worktree, messages: [] };
+		this.branches.push(live);
 		this.record.branches.push(record);
 
 		const { wallClockSec, outputTokens } = this.config.branch.limits;
@@ -657,10 +793,10 @@ class Search {
 			}
 		};
 		const fork = this.fork({
-			messages: this.forkPoint,
-			append: customPrompt(rootDirective(entry.key, candidate, entry.constraint, this.options.goal)),
+			messages,
+			append: customPrompt(directive),
 			label: `Branch search ${entry.key}`,
-			worktree: this.forkWorktree(worktree),
+			worktree: this.forkWorktree(worktree, this.lineage(entry.parent)),
 			onUsage,
 		});
 		const timer =
@@ -672,6 +808,7 @@ class Search {
 					}, wallClockSec * 1000);
 		return fork.result.then(({ messages }) => {
 			clearTimeout(timer);
+			live.messages = messages;
 			record.endSeq = this.seq++;
 			record.cost.runMs = Date.now() - started;
 			const last = lastAssistant(messages);

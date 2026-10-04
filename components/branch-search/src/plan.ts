@@ -49,36 +49,76 @@ export type Step =
 	| { kind: "run"; batch: BatchEntry[] };
 
 /**
+ * The first `count` positions of an enumeration's draw order, as candidates (spec 6.5). With
+ * `draw: "model"` the preferred candidate comes first, then the others in returned order.
+ */
+function drawCandidates(
+	enumeration: Enumeration,
+	draw: "random" | "model",
+	seed: Uint8Array,
+	count: number,
+): Candidate[] {
+	const { candidates, preferred } = enumeration;
+	if (draw === "random")
+		return drawOrder(seed, enumeration.key, candidates.length, count).map((index) => candidates[index] as Candidate);
+	const first = candidates.filter((candidate) => candidate.id === preferred);
+	return [...first, ...candidates.filter((candidate) => candidate.id !== preferred)].slice(0, Math.max(0, count));
+}
+
+function entry(key: NodeKey, parent: NodeKey | null, candidate: Candidate, tree: ObservedTree, seed: Uint8Array) {
+	return { key, parent, candidate: candidate.id, constraint: drawConstraint(seed, key, tree.constraints) };
+}
+
+/**
  * The one pure function that decides every step of a search (spec 6.7). It reads only
  * its arguments, so replay can call it offline on a stored record.
- * Rules 1 and 2 are implemented; later generations (rules 3 to 6) arrive with ticket 07.
  */
 export function planStep(tree: ObservedTree, shape: SearchShape, draw: "random" | "model", seed: Uint8Array): Step {
-	if (draw !== "random") throw new Error(`Draw mode "${draw}" is not available yet.`);
 	const root = tree.enumerations.root;
 	if (!root) throw new Error("planStep needs the root enumeration.");
+	const { branches, generations } = shape;
 
+	// Rule 1: generation 0.
 	if (tree.nodes.length === 0) {
-		const count = Math.min(shape.branches.perGeneration, shape.branches.maxTotal);
-		const order = drawOrder(seed, "root", root.candidates.length, count);
-		return {
-			kind: "run",
-			batch: order.map((index, p) => {
-				const key = `r${p}`;
-				return {
-					key,
-					parent: null,
-					candidate: (root.candidates[index] as Candidate).id,
-					constraint: drawConstraint(seed, key, tree.constraints),
-				};
-			}),
-		};
+		const count = Math.min(branches.perGeneration, branches.maxTotal);
+		const batch = drawCandidates(root, draw, seed, count).map((candidate, p) =>
+			entry(`r${p}`, null, candidate, tree, seed),
+		);
+		return { kind: "run", batch };
 	}
 
+	// Rules 2 and 3: a survivor, or the depth limit.
 	const latest = Math.max(...tree.nodes.map((node) => node.generation));
-	if (tree.nodes.some((node) => node.generation === latest && node.status === "survived"))
-		return { kind: "stop", outcome: "survivor" };
-	return { kind: "stop", outcome: "no survivor" };
+	const newest = tree.nodes.filter((node) => node.generation === latest);
+	if (newest.some((node) => node.status === "survived")) return { kind: "stop", outcome: "survivor" };
+	if (latest >= generations.maxDepth) return { kind: "stop", outcome: "no survivor" };
+
+	// Rule 4: parents, enumerated before they can have children.
+	const parents = newest
+		.filter((node) => node.status === "dead")
+		.sort((a, b) => b.gatesPassed - a.gatesPassed || a.diffSize - b.diffSize || compareNodeKeys(a.key, b.key))
+		.slice(0, generations.parentsPerGeneration)
+		.map((node) => node.key);
+	const missing = parents.filter((key) => !tree.enumerations[key]);
+	if (missing.length > 0) return { kind: "enumerate", parents: missing };
+
+	// Rule 5: unused root positions, then children per parent in rank order, trimmed to maxTotal.
+	const used = new Set(tree.nodes.map((node) => node.key));
+	const roots = drawCandidates(root, draw, seed, root.candidates.length)
+		.map((candidate, p) => ({ key: `r${p}`, candidate }))
+		.filter(({ key }) => !used.has(key))
+		.slice(0, generations.rootsPerGeneration)
+		.map(({ key, candidate }) => entry(key, null, candidate, tree, seed));
+	const children = parents.flatMap((parent) =>
+		drawCandidates(tree.enumerations[parent] as Enumeration, draw, seed, generations.childrenPerParent).map(
+			(candidate, j) => entry(`${parent}.c${j}`, parent, candidate, tree, seed),
+		),
+	);
+	const batch = [...roots, ...children].slice(0, Math.max(0, branches.maxTotal - tree.nodes.length));
+
+	// Rule 6.
+	if (batch.length === 0) return { kind: "stop", outcome: "no survivor" };
+	return { kind: "run", batch };
 }
 
 /** Node keys compare segment by segment, by number: r2 < r10, r1 < r1.c3 < r1.c10. */

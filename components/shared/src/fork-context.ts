@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
- * A fork's own copy of the repository, the parent workspace whose paths map onto it, and the
+ * A fork's own copy of the repository, the parent workspace and ancestor worktrees whose paths map onto it, and the
  * fork's private temporary directory: outside every worktree, created when the fork starts and
  * deleted when it settles.
  */
@@ -9,6 +9,11 @@ export interface ForkWorktree {
 	readonly root: string;
 	readonly parentRoot: string;
 	readonly tmp: string;
+	/**
+	 * Worktree roots of the forks whose conversation this fork continues. Their paths in the
+	 * conversation map onto this fork's root, like paths under `parentRoot`.
+	 */
+	readonly ancestors?: readonly string[];
 }
 
 interface ForkContext {
