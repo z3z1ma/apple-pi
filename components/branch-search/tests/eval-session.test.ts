@@ -86,4 +86,35 @@ describe("evaluation sessions", { timeout: 60_000 }, () => {
 
 		expect(withoutCredentials(snapshot(real))).toEqual(withoutCredentials(before));
 	});
+
+	it("resolve a profile whose model only the downloaded catalog names, and leave the catalog unchanged", async () => {
+		setEnv("PI_OFFLINE", "1");
+		const scratch = tempDir("apple-pi-eval-scratch-");
+		const runtime = await ModelRuntime.create({
+			authPath: join(scratch, "auth.json"),
+			modelsPath: join(scratch, "models.json"),
+			modelsStorePath: join(scratch, "models-store.json"),
+		});
+		const builtIn = runtime.getModels().find((model) => model.provider === "openai");
+		if (!builtIn) throw new Error("no built-in openai model");
+		const real = tempDir("apple-pi-eval-real-agent-");
+		setEnv("PI_CODING_AGENT_DIR", real);
+		const catalogModel = { ...builtIn, id: "catalog-only-model", name: "Catalog only" };
+		writeFileSync(
+			join(real, "models-store.json"),
+			JSON.stringify({
+				[builtIn.provider]: { models: [catalogModel], checkedAt: Date.now(), lastModified: Date.now() },
+			}),
+		);
+		writeFileSync(
+			join(real, "model-profiles.json"),
+			JSON.stringify({ profiles: { coding: { model: `${builtIn.provider}/catalog-only-model`, thinking: "off" } } }),
+		);
+		const before = snapshot(real);
+
+		const sessions = await realSessions("coding", { agentDir: real });
+		expect(sessions.modelLabel).toContain(`${builtIn.provider}/catalog-only-model`);
+		sessions.close();
+		expect(withoutCredentials(snapshot(real))).toEqual(withoutCredentials(before));
+	});
 });

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
@@ -45,6 +45,9 @@ export async function realSessions(
 	const stateDir = mkdtempSync(join(tmpdir(), "apple-pi-eval-agent-"));
 	const close = () => rmSync(stateDir, { recursive: true, force: true });
 	try {
+		// The downloaded model catalog names models the built-in list lacks; runs read a copy of it.
+		const store = join(agentDir, "models-store.json");
+		if (existsSync(store)) copyFileSync(store, join(stateDir, "models-store.json"));
 		const runtime = await ModelRuntime.create({
 			authPath: join(agentDir, "auth.json"),
 			modelsPath: join(agentDir, "models.json"),
