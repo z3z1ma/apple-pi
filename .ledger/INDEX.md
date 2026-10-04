@@ -15,3 +15,5 @@
 - `.ledger/202610040735-pi-exec-work-panel/task.md` — ready — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
 
 - `.ledger/202610041515-repository-history-replay/task.md` — planning — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
+
+- `.ledger/202610041532-branch-search-scalar-judge/task.md` — planning — Simplify branch search to a scalar-judge tool — Reduce branch search to parallel worktree attempts scored by user-supplied numeric judges (plus optional gates and an optional model judge); remove the authored scorer and its machinery (tagged branch-search-v1); move the evaluation harness to its own internal component for history replay.
