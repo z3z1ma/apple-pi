@@ -53,6 +53,12 @@ npm run pack:check
 
 Biome is the repository formatter and lint runner. It formats all TypeScript and JavaScript with tabs through one shared configuration. `format:check` is the no-write CI check; `lint` enables Biome's recommended correctness rules, high-signal debugger and loose-equality checks, and a function-level cognitive-complexity limit of 50. `noExplicitAny` remains off for the Pi API's intentionally untyped generic boundary, non-null assertions remain off in existing test setup, and control-character regex detection remains off because ANSI/control-character sanitizers are intentional. Any complexity suppression must document the specific cohesive state-machine or algorithm boundary it protects.
 
+## Scripted SDK tests
+
+- Reuse [`tests/helpers/faux-session.ts`](../tests/helpers/faux-session.ts) for ordinary scripted sessions with temporary state.
+- Custom provider streams must handle both cancellation during a request and a signal already aborted when the request starts. Emit an aborted response in either case; Pi can make a final request after cancellation. Verify cancellation through the provider signal and confirm that the parent can continue, as in the [clarification tests](../components/subagents/tests/subagent-clarify.test.ts).
+- Supply explicit, nonzero usage on returned assistant-message fixtures when testing accounting. `fauxAssistantMessage` defaults its usage counters to zero.
+
 ## Manual TUI checks
 
 Unit tests use a fake `tui`; they cannot prove real focus routing, mouse dispatch, or overlay stacking. Check those in a real Pi driven through tmux:
