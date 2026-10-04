@@ -318,6 +318,9 @@ describe("evaluation configuration", () => {
 			ok: true,
 			config: expect.objectContaining({ model: "coding" }),
 		});
+		// The search configuration is the validator's normalized one: an omitted draw is "random".
+		const loaded = loadEvalConfig(join(dir, "eval.json"));
+		expect(loaded.ok && loaded.config.search.draw).toBe("random");
 	});
 });
 

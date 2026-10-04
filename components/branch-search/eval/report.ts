@@ -32,7 +32,8 @@ export function totalTokens(cost: TokenCost): number {
 	return cost.inputTokens + cost.cacheReadTokens + cost.cacheWriteTokens + cost.outputTokens;
 }
 
-function usd(cost: TokenCost, rates: Rates | undefined): string {
+/** The price of `cost` at `rates`, in US dollars to six decimals; `n/a` without rates. */
+export function usd(cost: TokenCost, rates: Rates | undefined): string {
 	if (!rates) return "n/a";
 	const dollars =
 		(cost.inputTokens * rates.input +

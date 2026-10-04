@@ -22,10 +22,11 @@ export interface EvaluationOptions {
 	onProgress?: (line: string) => void;
 }
 
-export function reportPathFor(out: string, startedAt: Date): string {
+/** `out` itself when it is a `.md` file, otherwise a timestamped `<name>-<stamp>.md` in the directory `out`. */
+export function reportPathFor(out: string, startedAt: Date, name = "branch-search-evaluation"): string {
 	if (out.endsWith(".md")) return out;
 	const stamp = startedAt.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-	return join(out, `branch-search-evaluation-${stamp}.md`);
+	return join(out, `${name}-${stamp}.md`);
 }
 
 /**

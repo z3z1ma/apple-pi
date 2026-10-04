@@ -112,7 +112,9 @@ export function parseRepair(
 		typeof dismissed !== "object" ||
 		dismissed === null ||
 		Array.isArray(dismissed) ||
-		!Object.values(dismissed).every((reason) => typeof reason === "string" && reason.trim() !== "")
+		!Object.values(dismissed).every(
+			(reason) => typeof reason === "string" && reason.trim() !== "" && !/[\r\n]/.test(reason.trim()),
+		)
 	)
 		return '"dismissed" must map challenger names to one-line reasons';
 	return { dismissed: dismissed as Record<string, string>, ...("spec" in reply ? { spec: reply.spec } : {}) };

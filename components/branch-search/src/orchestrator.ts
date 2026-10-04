@@ -634,13 +634,14 @@ class Search {
 	/**
 	 * Put back every shared ref the scorer phase created, deleted, or moved, with the reflog entries
 	 * it added (a stash or a commit on a branch), before the private store those refs may name goes.
-	 * The search's own refs are left alone. Runs once.
+	 * The search's own refs are left alone. Cleanup retries a restore that failed.
 	 */
 	private async restoreSharedRefs(): Promise<void> {
 		const before = this.refsBefore;
 		if (!before) return;
-		this.refsBefore = undefined;
 		await restoreRefs(this.root, before, refPrefix(this.id), this.scorerEnv);
+		// Cleared only once restored, so cleanup retries a restore that failed.
+		this.refsBefore = undefined;
 	}
 
 	/** Record the open gaps as a failed validation and end the search `aborted: scorer invalid`. */
@@ -1235,7 +1236,8 @@ class Search {
 		await attempt(() => rmSync(join(this.stateDir, "wt"), { recursive: true, force: true }));
 		await attempt(() => rmSync(join(this.stateDir, "tmp"), { recursive: true, force: true }));
 		await attempt(() => this.restoreSharedRefs());
-		await attempt(() => rmSync(this.scorerObjects, { recursive: true, force: true }));
+		// A ref still unrestored may name objects in the private store, so the store stays with it.
+		if (!this.refsBefore) await attempt(() => rmSync(this.scorerObjects, { recursive: true, force: true }));
 
 		// A frozen spec keeps its bytes; a search that ended before the freeze stores its last candidate.
 		const specText = this.specText ?? (this.spec && `${JSON.stringify(this.spec, null, 2)}\n`);

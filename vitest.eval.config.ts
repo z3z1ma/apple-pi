@@ -1,6 +1,10 @@
 import { defineConfig } from "vitest/config";
 
-/** The branch search evaluation on real models (`npm run eval:branch-search`); never part of `npm test`. */
+/**
+ * The branch search evaluations on real models, never part of `npm test`: the ledger-history evaluation
+ * (`npm run eval:branch-search`) and the trap benchmark (`npm run eval:traps`). Both run through
+ * `scripts/eval-run.mjs`, which selects the entry and owns SIGINT/SIGTERM.
+ */
 export default defineConfig({
 	test: {
 		environment: "node",

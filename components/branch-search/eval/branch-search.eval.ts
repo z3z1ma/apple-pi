@@ -4,6 +4,7 @@ import { repoRoot } from "../src/workspace.js";
 import { loadEvalConfig } from "./config.js";
 import { runEvaluation } from "./run.js";
 import { realSessions } from "./session.js";
+import { evalStopSignal } from "./stop.js";
 
 /**
  * The real evaluation (spec 18), on real models: run only through `npm run eval:branch-search`, which
@@ -28,13 +29,10 @@ it("evaluates branch search on closed ledger tasks", async () => {
 		console.error(loaded.text);
 		throw new Error(loaded.text);
 	}
-	// SIGINT or SIGTERM aborts the running arm; the evaluation then shuts its session down, removes its
-	// clone, and writes the report of what finished before the run exits.
-	const controller = new AbortController();
-	const stop = () => controller.abort();
-	process.once("SIGINT", stop);
-	process.once("SIGTERM", stop);
+	// SIGINT or SIGTERM to the launcher aborts the running arm; the evaluation then shuts its session down,
+	// removes its clone, and writes the report of what finished before the run exits.
 	const sessions = await realSessions(loaded.config.model);
+	const stop = evalStopSignal();
 	try {
 		const { reportPath } = await runEvaluation({
 			repo: await repoRoot(process.cwd()),
@@ -45,12 +43,11 @@ it("evaluates branch search on closed ledger tasks", async () => {
 			rates: sessions.rates,
 			createSession: sessions.createSession,
 			onProgress: (line) => console.log(line),
-			signal: controller.signal,
+			signal: stop.signal,
 		});
 		console.log(`Branch search evaluation report: ${reportPath}`);
 	} finally {
-		process.off("SIGINT", stop);
-		process.off("SIGTERM", stop);
+		stop.dispose();
 		sessions.close();
 	}
 });

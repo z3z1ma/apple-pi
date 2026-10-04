@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { childDirective, parseEnumeration, parseSelfReport, rootDirective } from "../src/prompts.js";
+import { childDirective, parseEnumeration, parseRepair, parseSelfReport, rootDirective } from "../src/prompts.js";
 
 const candidates = [
 	{ id: "c1", approach: "a", firstStep: "s" },
@@ -63,5 +63,20 @@ describe("child directive", () => {
 		expect(
 			childDirective("r1.c0", "r1", candidates[0] as (typeof candidates)[0], "Change as few files as possible."),
 		).toContain("First action: s\nConstraint: Change as few files as possible.\n\n");
+	});
+});
+
+describe("repair replies", () => {
+	it("takes dismissals with one-line reasons and an optional spec, and leaves a plain spec alone", () => {
+		expect(parseRepair({ dismissed: { "challenger-1": "meets the goal" } })).toEqual({
+			dismissed: { "challenger-1": "meets the goal" },
+		});
+		expect(parseRepair({ dismissed: {}, spec: { version: 1 } })).toEqual({ dismissed: {}, spec: { version: 1 } });
+		expect(parseRepair({ version: 1, gates: [] })).toBeUndefined();
+	});
+
+	it("refuses a dismissal reason that is empty or spans several lines", () => {
+		expect(parseRepair({ dismissed: { "challenger-1": "" } })).toMatch(/one-line reasons/);
+		expect(parseRepair({ dismissed: { "challenger-1": "fine\nreally" } })).toMatch(/one-line reasons/);
 	});
 });

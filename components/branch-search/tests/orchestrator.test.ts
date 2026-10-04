@@ -1945,8 +1945,8 @@ describe("challenger pass", { timeout: 30_000 }, () => {
 				author: [authorReply(AUTHORED)],
 				other: (context) => {
 					const reply = challengers({ 1: [refs, planted("value is 3")] })(context);
-					// After the challenger changed its refs, the user works in the parent checkout.
-					if (reply !== undefined && context.messages.at(-1)?.role === "toolResult" && !user.stash) {
+					// Once the challenger runs, and before it changes its refs, the user works in the parent checkout.
+					if (reply !== undefined && !user.stash) {
 						const commit = (message: string) =>
 							gitOut(cwd, ...as, "commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", message);
 						user.created = commit("user new branch");
@@ -1996,7 +1996,7 @@ describe("challenger pass", { timeout: 30_000 }, () => {
 		expect(refsAt.get("refs/heads/user-old")).toBe(user.moved);
 		expect(atEnumerate?.userLog[0]).toBe(user.moved);
 		expect(refsAt.get("refs/stash")).toBe(user.stash);
-		// The challenger's stash entry, between the two user stashes, is gone; theirs stay.
+		// The challenger's stash entry, pushed on top of the user's, is gone; the user's stay.
 		expect(atEnumerate?.stashLog).toEqual([user.stash, earlierStash]);
 		// The challenger's own refs are restored.
 		expect(refsAt.has("refs/heads/chal-branch")).toBe(false);

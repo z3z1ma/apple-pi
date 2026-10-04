@@ -115,27 +115,13 @@ async function runArm(arm: ArmId, task: EvalTask, options: ArmOptions): Promise<
 		record: null,
 	};
 	try {
-		const evalSession = await options.createSession(clone.dir);
-		const { session } = evalSession;
-		// Cancellation stops the trajectory; a search stops through its own signal.
-		const abort = () => void session.abort();
-		options.signal?.addEventListener("abort", abort, { once: true });
-		const started = Date.now();
-		try {
-			options.signal?.throwIfAborted();
-			if (arm === "A") await runSingle(session, task.goal, options.search, result);
-			else await runSearch(arm, clone.dir, task, evalSession, options, result);
-		} catch (error) {
-			result.error = error instanceof Error ? error.message : String(error);
-		} finally {
-			result.ms = Date.now() - started;
-			options.signal?.removeEventListener("abort", abort);
-			// Shutdown first, so extensions stop what they started (background commands) before the
-			// final state is scored and the clone is removed.
-			await disposeAgentSession(session);
-			await evalSession.dispose();
-		}
-		options.signal?.throwIfAborted();
+		const ran = await inSession(clone.dir, options.createSession, options.signal, (evalSession) =>
+			arm === "A"
+				? runSingle(evalSession.session, task.goal, options.search, result)
+				: runSearch(arm, clone.dir, task, evalSession, options, result),
+		);
+		result.ms = ran.ms;
+		if (ran.error !== undefined) result.error = ran.error;
 		const gates = await scoreOracle(clone.dir, task, options.signal);
 		result.gates = Object.fromEntries(gates.map((gate) => [gate.id, gate.result]));
 		result.solved = result.error === undefined && gates.every((gate) => gate.result === "pass");
@@ -147,14 +133,49 @@ async function runArm(arm: ArmId, task: EvalTask, options: ArmOptions): Promise<
 }
 
 /**
+ * One run in a new session in `cwd`: `body` gets the session, and cancellation aborts it. A failure of
+ * `body` becomes the run's error. The session is then shut down and disposed, so extensions stop what
+ * they started (background commands) before the final state is scored and the directory is removed;
+ * after a cancellation the run throws instead of returning, so nothing scores a cut-off state.
+ */
+export async function inSession(
+	cwd: string,
+	createSession: SessionFactory,
+	signal: AbortSignal | undefined,
+	body: (evalSession: EvalSession) => Promise<void>,
+): Promise<{ ms: number; error?: string }> {
+	const evalSession = await createSession(cwd);
+	const { session } = evalSession;
+	// Cancellation stops the trajectory; a search stops through its own signal.
+	const abort = () => void session.abort();
+	signal?.addEventListener("abort", abort, { once: true });
+	const started = Date.now();
+	let error: string | undefined;
+	let ms = 0;
+	try {
+		signal?.throwIfAborted();
+		await body(evalSession);
+	} catch (thrown) {
+		error = thrown instanceof Error ? thrown.message : String(thrown);
+	} finally {
+		ms = Date.now() - started;
+		signal?.removeEventListener("abort", abort);
+		await disposeAgentSession(session);
+		await evalSession.dispose();
+	}
+	signal?.throwIfAborted();
+	return error === undefined ? { ms } : { ms, error };
+}
+
+/**
  * Arm A: the goal as one prompt to the main agent, under the same per-trajectory limits a branch gets
  * (`branch.limits`), so A and each branch have the same budget.
  */
-async function runSingle(
+export async function runSingle(
 	session: AgentSession,
 	goal: string,
 	search: BranchSearchConfig,
-	result: ArmResult,
+	result: Pick<ArmResult, "tokens" | "outcome">,
 ): Promise<void> {
 	const { wallClockSec, outputTokens } = search.branch.limits;
 	let limited = false;

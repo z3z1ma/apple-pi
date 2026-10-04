@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { type BranchSearchConfig, configProblems } from "../src/config.js";
+import { type BranchSearchConfig, configProblems, validateBranchSearchConfig } from "../src/config.js";
 import type { TaskOverride } from "./tasks.js";
 
 /**
@@ -77,5 +77,8 @@ export function loadEvalConfig(path: string): { ok: true; config: EvalConfig } |
 			ok: false,
 			text: `The evaluation configuration ${path} is incomplete. Fix these keys:\n${problems.map((p) => `  ${p}`).join("\n")}`,
 		};
-	return { ok: true, config: value as unknown as EvalConfig };
+	// The search block as the branch-search validator normalizes it (an omitted `draw` is "random").
+	const search = validateBranchSearchConfig(value.search);
+	if (!search.ok) return { ok: false, text: search.text };
+	return { ok: true, config: { ...value, search: search.config } as unknown as EvalConfig };
 }
