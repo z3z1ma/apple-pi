@@ -10,7 +10,7 @@ Treat each completed ledger task, with its transcripts, start and end commits, a
 
 ## Current State
 
-Captured, not shaped. Open questions in `notes.md` section 9. Branch-search cleanup (separate work) comes first.
+Captured, not shaped. The branch-search cleanup (`.ledger/202610041532-branch-search-scalar-judge/`) comes first; it also moves the evaluation harness this task will reuse. Next here: answer the open questions in `notes.md` section 9, then shape intent, approach, and acceptance criteria.
 
 ## Outcome
 

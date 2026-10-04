@@ -6,9 +6,11 @@ Captured 2026-10-04 from the operator's discussion after the branch-search work.
 
 Branch search (`.ledger/history/202610031403-branch-search/`) built parallel attempts in isolated worktrees, a hidden model-authored scorer, external random draws, later generations, replay of configuration grids (after Dream-RSI), challengers that attack the authored checks, and an evaluation harness. Evidence, in order:
 
-- **Ledger-history pilot (1 task, Opus):** no arm solved it; about $8; an hour. Unfair comparison (the single trajectory got a bare goal) and whole e2e files as oracles.
+An "arm" is one way of doing the task in a comparison: the agent alone, or a search. The "oracle" is a hidden test that decides whether a run solved the task.
+
+- **Ledger-history pilot (1 task, Opus; report in `.ledger/history/202610031403-branch-search/evaluation/`):** no arm solved it; about $8; an hour. Unfair comparison (the single trajectory got a bare goal) and whole e2e files as oracles.
 - **Slugify demo (gpt-6.1-sol):** search 12/12 vs alone 9/12 on a hidden oracle, about 6 minutes vs 1.5. But the authored checks missed ligatures, so no attempt died; the win was luck, not selection.
-- **Trap benchmark (3 traps × 5 runs × 3 arms, gpt-6.1-sol, about $12):** alone 15/15, search 13/15, search with challengers 14/15. Win bar (+20 points) not met. Scorer kill rate on the known-wrong solutions was 100% in both search arms. Search cost about 5x the tokens and 3-4x the time. All search misses: two survivors passed the same incomplete checks and the smallest-diff tie-break picked the worse one.
+- **Trap benchmark (3 traps × 5 runs × 3 arms, gpt-6.1-sol, about $12; report in `.ledger/202610040726-branch-search-challenger-benchmark/evaluation/`):** alone 15/15, search 13/15, search with challengers 14/15. Win bar (+20 points) not met. Scorer kill rate on the known-wrong solutions was 100% in both search arms. Search cost about 5x the tokens and 3-4x the time. All search misses: two survivors passed the same incomplete checks and the smallest-diff tie-break picked the worse one.
 
 ## 2. Conclusions about branch search
 

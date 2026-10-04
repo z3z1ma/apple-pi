@@ -6,7 +6,7 @@ Updated: 2026-10-04
 
 ## Intent
 
-Branch search earns its keep only with a real, user-supplied judge (conclusion in `.ledger/202610041515-repository-history-replay/notes.md` section 2). Reduce it to that, with the simplest code paths and architecture, and park everything else at git tag `branch-search-v1` (annotated, at `837e5e5`).
+Branch search earns its keep only with a real, user-supplied judge (conclusion in `.ledger/202610041515-repository-history-replay/notes.md` section 2). Reduce it to that, with the simplest code paths and architecture, and park everything else at git tag `branch-search-v1` (annotated, at `837e5e5`). The tag exists only in the local clone until someone with push access runs `git push origin branch-search-v1`.
 
 ## Target behavior (approved 2026-10-04)
 
