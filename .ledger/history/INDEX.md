@@ -101,3 +101,5 @@
 - `.ledger/history/202610031016-subagent-outcome-framing/task.md` — done — Deepen subagent outcome framing — Concentrate shared outcome framing for root results, nested results, and notifications behind one interface while preserving observable behavior, persistence ownership, and delivery lifecycle.
 
 - `.ledger/history/202610031136-subagent-resume-policy/task.md` — done — Centralize public-subagent resume policy — Deepen invocation policy for root and nested public subagents: omitted fixed settings reuse stored choices, explicit changes are rejected, and caller-owned ownership and execution remain unchanged.
+
+- `.ledger/history/202610031403-branch-search/task.md` — done — Branch search: externally drawn parallel attempts scored by hidden checks — Design and build branch search: pre-registered hidden scorer, enumerated approaches drawn by seeded RNG, forked continuations in isolated git worktrees sharing the parent cache prefix, objective selection and apply. Starts with Pi integration spikes V1-V3.
