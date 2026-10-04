@@ -46,11 +46,14 @@ export async function fauxSession(
 			typeof replies === "function" ? replies(context) : (replies.shift() ?? fauxAssistantMessage("done"));
 		const events = createAssistantMessageEventStream();
 		if (message === "until-aborted") {
-			options?.signal?.addEventListener("abort", () => {
+			const abort = () => {
 				const error = { ...fauxAssistantMessage(""), stopReason: "aborted" as const, errorMessage: "aborted" };
 				events.push({ type: "error", reason: "aborted", error });
 				events.end(error);
-			});
+			};
+			// A run aborted between requests (say, from a tool hook) sends its next request already aborted.
+			if (options?.signal?.aborted) abort();
+			else options?.signal?.addEventListener("abort", abort);
 			return events;
 		}
 		events.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });

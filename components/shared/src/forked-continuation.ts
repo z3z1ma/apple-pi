@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { type AfterToolCallContext, Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import { AgentSession, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -59,6 +59,11 @@ export interface ForkRequest {
 	blockedTools?: ReadonlySet<string>;
 	/** Called with each assistant reply's usage as it ends, so a caller can enforce a token limit. */
 	onUsage?: (usage: Usage) => void;
+	/**
+	 * Called with each of the fork's own tool results, before the parent's hooks see it, so a caller
+	 * can watch the fork's commands (branch search's stall detector).
+	 */
+	onToolResult?: (context: AfterToolCallContext) => void;
 }
 
 export interface ForkResult {
@@ -235,7 +240,12 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			if (refusal) return { block: true, reason: refusal };
 			return parent.beforeToolCall?.(context, toolSignal);
 		},
-		afterToolCall: parent.afterToolCall,
+		afterToolCall: request.onToolResult
+			? async (context, toolSignal) => {
+					request.onToolResult?.(context);
+					return parent.afterToolCall?.(context, toolSignal);
+				}
+			: parent.afterToolCall,
 		sessionId: parent.sessionId,
 		thinkingBudgets: parent.thinkingBudgets,
 		transport: parent.transport,

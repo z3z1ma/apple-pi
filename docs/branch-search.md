@@ -10,7 +10,9 @@ When a search runs, the harness:
 4. Runs each chosen approach as a fork of the conversation in its own git worktree. Every fork shares the parent's prompt-cache prefix.
 5. Scores every attempt with the hidden checks. While no attempt passes, it starts a later generation: continuations of the failed attempts that came closest, and fresh approaches from the first list (see [Later generations](#later-generations)).
 6. Ranks the survivors and applies the winner's diff to the workspace.
-7. Reports the outcome: one passive message for `/branch-search`, or the tool result for `search_branches`.
+7. Reports the outcome: one passive message for `/branch-search` and for a passive search, or the tool result for `search_branches`.
+
+A search starts in one of three ways: you run `/branch-search`, the main agent calls `search_branches`, or, with passive activation on, the main agent repeats the same failing command (see [Passive activation](#passive-activation)).
 
 The extension loads only in the root session. Subagents and `pi_exec` workers do not load it, and `pi_exec` programs cannot call `search_branches`.
 
@@ -46,6 +48,24 @@ The main agent can start a search itself with `search_branches`. Its one paramet
 - Inside a fork the tool is refused: search forks get `This tool is not available inside a branch search attempt.`, other forked continuations get `search_branches is not available inside a forked continuation.`
 - A missing or invalid configuration fails the call with the list of problems.
 
+## Passive activation
+
+With `passive.enabled` set to `true`, a search starts on its own when the main agent is stuck on one failure.
+
+The harness watches the results of the main agent's shell commands: `bash`, and any tool whose result reports an exit code. Commands that forks run (branch search attempts, reflections) do not count. The exit code comes from the tool's structured exit status when it reports one; otherwise a failed command is an error result that ends with `Command exited with code <n>`, and any other successful result counts as exit 0. Output that merely contains that line, and a command started in the background or moved there with Ctrl+B, are not exits. For each command that exits non-zero, it computes a failure signature from:
+
+- the command, with runs of whitespace collapsed to one space;
+- the exit code;
+- the first output line that matches `error`, `fail`, `exception`, `panic`, or `assert` (any case), or else the last non-empty line, with each absolute path replaced by its file name and each run of digits, or of six or more hex characters (also inside a longer word), replaced by `#`.
+
+So the same test failing at a different line number, in a different temporary directory, or with a different commit hash in its message, counts as the same failure. When the same command later exits 0, the harness forgets every failure of that command.
+
+When the main agent's run settles, no search is running, and one failure has repeated `passive.repeatThreshold` times, a passive search starts with that command as its **seed gate**: the scorer author is told that the command failed repeatedly and to use it as a gate that fails on the current workspace if it expresses the goal, and the scorer review sees it too. The search has no stated goal, so the author infers it from the conversation. It forks the conversation as it stands at that settle, and it reports, like `/branch-search`, with one passive message that starts no turn. The record stores `mode: "passive"` and the `seedGate`. The harness shows the notice ``Branch search started: `<command>` failed <n> times.``, and `/branch-search status` and `/branch-search cancel` work on the passive search.
+
+Every search that starts in the main session, whether from `/branch-search`, `search_branches`, or passive activation, and however it ends (cancelled included), spends each failure that has reached `passive.repeatThreshold` at that moment: none of them starts a passive search later in the session, however often it repeats. A `/branch-search` you queued still starts as usual. The search's report message, or its `search_branches` result, lists the spent signatures in its details. When a session starts, the harness reads them back from those reports and rebuilds the counts from the main agent's tool results on the current branch, so resuming or reloading a session keeps both. A `/branch-search` or passive search cut off by a session switch, tree navigation, shutdown, or reload adds no report, so the signatures it spent are not kept. A new session starts with no counts and nothing spent. With `passive.enabled` set to `false`, no repeat count starts a search.
+
+The same detector runs inside each attempt, with that attempt's own counts and regardless of `passive.enabled`. When one failure repeats `passive.repeatThreshold` times in an attempt, the harness stops the attempt, which reports `stalled`. Its work is still committed and scored, like an attempt stopped by a limit.
+
 ## Configuration
 
 The feature stays off until every required key is set. `/branch-search` then prints each missing or invalid key, `search_branches` returns them as an error, and neither starts anything. The code carries no built-in values for limits or counts.
@@ -57,8 +77,8 @@ Files, merged key by key, with project values replacing user values and arrays r
 
 | Key | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `passive.enabled` | boolean | yes | Enables passive activation after repeated failures (not available yet). |
-| `passive.repeatThreshold` | integer ≥ 2 | yes | Repeats of one failure that trigger passive search. |
+| `passive.enabled` | boolean | yes | Starts a search when the main agent repeats one failure (see [Passive activation](#passive-activation)). |
+| `passive.repeatThreshold` | integer ≥ 2 | yes | Repeats of one failure that start a passive search, and that stop an attempt as `stalled`. |
 | `enumerate.count` | integer ≥ 2 | yes | Approaches requested from the enumerator. |
 | `branches.perGeneration` | integer ≥ 1 | yes | Approaches that run in the first generation. |
 | `branches.maxTotal` | integer ≥ 1 | yes | Upper bound on attempts in one search, over all generations. |
@@ -140,7 +160,9 @@ Residual risks, accepted in this version:
 | `no survivor` | No attempt passed every gate. |
 | `aborted: <reason>` | The search stopped early: `no git history`, `scorer invalid`, `enumeration failed`, `cancelled`, or `error`. |
 
-The report's first line is the summary, for example `Branch search bs-20261004-142233-9f1c: applied. 1 of 3 branches survived over 1 generations.` The rest gives the winner, its objective values, every attempt with its fate and one-sentence lesson, and the record path. From `/branch-search`, the chat shows the summary line and expanding the message shows the rest; the message starts no turn. From `search_branches`, the whole report is the tool result.
+Each attempt in the report carries its self-report: `done` or `abandoned` from its final message, `unknown` when that message says neither, `limit` when it exceeded `branch.limits`, `stalled` when it repeated one failure up to `passive.repeatThreshold`, or `error` when its run ended on a provider error. The self-report never decides an attempt's fate; the checks do.
+
+The report's first line is the summary, for example `Branch search bs-20261004-142233-9f1c: applied. 1 of 3 branches survived over 1 generations.` The rest gives the winner, its objective values, every attempt with its fate and one-sentence lesson, and the record path. From `/branch-search` and a passive search, the chat shows the summary line and expanding the message shows the rest; the message starts no turn. From `search_branches`, the whole report is the tool result.
 
 ## Workspace and record
 
@@ -148,7 +170,7 @@ Each search keeps its state under `$(git rev-parse --git-common-dir)/apple-pi/br
 
 After the search, the directory keeps:
 
-- `record.json`: mode, goal, seed, configuration, base, the scorer's hash, validation reports and review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
+- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
 - `spec.json`: the frozen scorer; its SHA-256 equals the hash in the record.
 - `winner.patch`: the applied diff, when the winner was applied.
 

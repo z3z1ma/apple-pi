@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AfterToolCallContext, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { abortable } from "../../shared/src/abortable.js";
@@ -9,6 +9,7 @@ import type { ForkWorktree } from "../../shared/src/fork-context.js";
 import { type ForkHandle, type ForkRequest, startFork } from "../../shared/src/forked-continuation.js";
 import { type BranchSearchConfig, validateBranchSearchConfig } from "./config.js";
 import { constraintPool } from "./draw.js";
+import { FailureCounter, shellOutcome } from "./failure-signature.js";
 import { type BatchEntry, type Enumeration, type NodeKey, type ObservedTree, planStep, selectWinner } from "./plan.js";
 import {
 	authorPrompt,
@@ -112,6 +113,8 @@ export interface SearchOptions {
 	 */
 	scorer?: ScorerSpec;
 	goal?: string;
+	/** Passive mode: the repeatedly failing command; the author and the reviewer see it (spec 5.3, 10.1, 10.5). */
+	seedGate?: string;
 	/**
 	 * Wraps a prompt appended to the fork point: the author's first turn, the root enumerator, and every
 	 * root branch. Without it, the prompt is a hidden custom message (human mode). Agent mode answers
@@ -240,6 +243,7 @@ class Search {
 			id: this.id,
 			mode: options.mode,
 			goal: options.goal ?? null,
+			seedGate: options.seedGate ?? null,
 			seed: Buffer.from(this.seed).toString("hex"),
 			startedAt: new Date(this.started).toISOString(),
 			endedAt: null,
@@ -447,7 +451,7 @@ class Search {
 	 */
 	private async authorScorer(base: string): Promise<{ spec: ScorerSpec; validation: Validation }> {
 		let messages = this.forkPoint;
-		let append = this.atForkPoint(authorPrompt(this.options.goal));
+		let append = this.atForkPoint(authorPrompt(this.options.goal, this.options.seedGate));
 		for (let attempt = 0; attempt <= this.config.scorer.validationRetries; attempt++) {
 			this.status("author");
 			messages = await this.runAuthor(base, messages, append);
@@ -508,6 +512,7 @@ class Search {
 		this.review = review;
 		const prompt = reviewPrompt({
 			goal: this.options.goal ?? authored.spec.goal,
+			seedGate: this.options.seedGate,
 			diffStat: await git(this.root, ["diff", ...PLAIN_DIFF, "--stat", "HEAD", base]),
 			spec: JSON.stringify(authored.spec),
 		});
@@ -796,16 +801,26 @@ class Search {
 		this.record.branches.push(record);
 
 		const { wallClockSec, outputTokens } = this.config.branch.limits;
-		let limited = false;
+		// Why the harness stopped the run, if it did; the first reason stands.
+		let stopped: "limit" | "stalled" | undefined;
+		const stop = (reason: "limit" | "stalled") => {
+			if (stopped) return;
+			stopped = reason;
+			fork.abort();
+		};
 		let output = 0;
 		const started = Date.now();
 		const onUsage = (usage: Usage) => {
 			addUsage(record.cost, usage);
 			output += usage.output;
-			if (outputTokens !== undefined && output > outputTokens && !limited) {
-				limited = true;
-				fork.abort();
-			}
+			if (outputTokens !== undefined && output > outputTokens) stop("limit");
+		};
+		// The in-branch failure detector: the branch's own counts, the passive threshold (spec 6.6 step 4).
+		const failures = new FailureCounter();
+		const onToolResult = ({ toolCall, args, result, isError }: AfterToolCallContext) => {
+			const outcome = shellOutcome(toolCall.name, args, result, isError);
+			const counted = outcome && failures.record(outcome);
+			if (counted && counted.count >= this.config.passive.repeatThreshold) stop("stalled");
 		};
 		const fork = this.fork({
 			messages,
@@ -813,14 +828,9 @@ class Search {
 			label: `Branch search ${entry.key}`,
 			worktree: this.forkWorktree(worktree, this.lineage(entry.parent)),
 			onUsage,
+			onToolResult,
 		});
-		const timer =
-			wallClockSec === undefined
-				? undefined
-				: setTimeout(() => {
-						limited = true;
-						fork.abort();
-					}, wallClockSec * 1000);
+		const timer = wallClockSec === undefined ? undefined : setTimeout(() => stop("limit"), wallClockSec * 1000);
 		return fork.result.then(({ messages }) => {
 			clearTimeout(timer);
 			live.messages = messages;
@@ -830,7 +840,7 @@ class Search {
 			const { selfReport, learned } = parseSelfReport(replyText(messages));
 			record.learned = learned;
 			let report: BranchSelfReport = selfReport;
-			if (limited) report = "limit";
+			if (stopped) report = stopped;
 			else if (last?.stopReason === "error" || last?.stopReason === "aborted") report = "error";
 			record.selfReport = report;
 		});

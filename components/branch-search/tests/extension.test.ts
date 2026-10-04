@@ -377,6 +377,199 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 	});
 });
 
+const FAILING = 'echo "Error: value is 1 at app.ts:$RANDOM"; exit 1';
+
+/** The parent's scripted turns: `prompt` runs FAILING `times` times in one run, then ends it. */
+function failingParent(prompt: string, times: number): (context: Context) => Reply | "until-aborted" | undefined {
+	return (context) => {
+		const last = context.messages.at(-1);
+		const ran = (id: string) => last?.role === "toolResult" && last.toolCallId === id;
+		const call = (n: number) =>
+			fauxAssistantMessage(fauxToolCall("bash", { command: FAILING, verbatim: true }, { id: `${prompt}-${n}` }), {
+				stopReason: "toolUse",
+			});
+		if (text(last) === prompt) return call(1);
+		for (let n = 1; n < times; n++) if (ran(`${prompt}-${n}`)) return call(n + 1);
+		if (ran(`${prompt}-${times}`)) return fauxAssistantMessage(`${prompt} done`);
+		return undefined;
+	};
+}
+
+function searchDirs(cwd: string): string[] {
+	const dir = join(cwd, ".git", "apple-pi", "branch-search");
+	return existsSync(dir) ? readdirSync(dir) : [];
+}
+
+/** A passive search starts inside the settle handler, so right after a run no search may be active. */
+async function expectNoSearch(run: Awaited<ReturnType<typeof harness>>) {
+	await run.session.prompt("/branch-search status");
+	expect(run.notes.at(-1)).toBe("No branch search is running.");
+}
+
+describe("passive activation", { timeout: 30_000 }, () => {
+	it("starts one passive search at the next settle after a failure repeats to the threshold, with that command as seed gate", async () => {
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 3 } });
+		const first = failingParent("Fail thrice.", 3);
+		const again = failingParent("Fail again.", 2);
+		const run = await harness(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ other: (context) => first(context) ?? again(context) },
+		);
+		await run.session.prompt("Fail thrice.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+
+		const record = recordOf(reportText(run.reports()[0]));
+		expect(record.mode).toBe("passive");
+		expect(record.seedGate).toBe(FAILING);
+		expect(record.goal).toBeNull();
+		// The report records the signature the search spent, which a later session start reads back.
+		expect((run.reports()[0] as { details?: { consumedSignatures?: unknown } }).details?.consumedSignatures).toEqual([
+			expect.stringMatching(/^[0-9a-f]{64}$/),
+		]);
+		const [author] = run.authorRequests();
+		expect(text(author?.messages.at(-1))).toContain(
+			`The command \`${FAILING}\` failed repeatedly. Use it as a gate with onBase "fail" if it expresses the goal.`,
+		);
+		// The fork point is the settled conversation, and the report is the one message the search adds.
+		expect(author?.messages.some((message) => text(message) === "Fail thrice. done")).toBe(true);
+		expect(run.session.messages.filter((message) => message.role === "custom")).toHaveLength(1);
+
+		// The same signature, repeated further, never starts a second search.
+		await run.session.prompt("Fail again.");
+		await expectNoSearch(run);
+		await run.session.prompt("Fail again.");
+		await expectNoSearch(run);
+		expect(run.notes.filter((note) => note.startsWith("Branch search started"))).toEqual([
+			`Branch search started: \`${FAILING}\` failed 3 times.`,
+		]);
+		expect(searchDirs(run.cwd)).toEqual([record.id]);
+		expect(run.authorRequests()).toHaveLength(1);
+		expect(run.reports()).toHaveLength(1);
+	});
+
+	it("never starts a passive search for a signature that was due when an operator-cancelled search_branches started", async () => {
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 2 } });
+		const twice = failingParent("Fail twice.", 2);
+		const once = failingParent("Fail once.", 1);
+		const search = searchingParent();
+		const run = await harness(
+			{ c1: ["until-aborted"], c2: ["until-aborted"] },
+			{
+				other: (context) => {
+					// The run that crosses the threshold then calls search_branches.
+					const last = context.messages.at(-1);
+					if (last?.role === "toolResult" && last.toolCallId === "Fail twice.-2")
+						return fauxAssistantMessage(
+							fauxToolCall("search_branches", { goal: "Make value equal 2." }, { id: SEARCH_CALL }),
+							{ stopReason: "toolUse" },
+						);
+					return twice(context) ?? once(context) ?? search(context);
+				},
+			},
+		);
+		const updates = toolUpdates(run.session);
+		const parent = run.session.prompt("Fail twice.");
+		await vi.waitFor(() => expect(updates).toContain("branching run g0 2/2"), { timeout: 20_000 });
+		await run.session.abort();
+		await parent;
+		expect(searchResults(run.session.messages)).toHaveLength(1);
+
+		// The settle after the abort, and later failures of the same signature, start nothing.
+		await expectNoSearch(run);
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		// The tool result carries the spent signature, so a reload keeps it spent.
+		await run.session.reload();
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		expect(searchDirs(run.cwd)).toHaveLength(1);
+		expect(run.notes.filter((note) => note.startsWith("Branch search started"))).toEqual([]);
+	});
+
+	it("never starts a passive search for a signature that was due when a cancelled /branch-search started", async () => {
+		configure({ ...validConfig(), passive: { enabled: false, repeatThreshold: 2 } });
+		const twice = failingParent("Fail twice.", 2);
+		const once = failingParent("Fail once.", 1);
+		const run = await harness(
+			{ c1: ["until-aborted"], c2: ["until-aborted"] },
+			{ other: (context) => twice(context) ?? once(context) },
+		);
+		await run.session.prompt("Fail twice.");
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.statuses).toContain("branching run g0 2/2"), { timeout: 20_000 });
+		await run.session.prompt("/branch-search cancel");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+
+		// Passive activation turned on afterwards still finds the signature spent.
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 2 } });
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		expect(searchDirs(run.cwd)).toHaveLength(1);
+	});
+
+	it("keeps counts and spent signatures across a reload of the same session", async () => {
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 3 } });
+		const twice = failingParent("Fail twice.", 2);
+		const once = failingParent("Fail once.", 1);
+		const run = await harness(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ other: (context) => twice(context) ?? once(context) },
+		);
+		const reload = () => run.session.reload();
+		await run.session.prompt("Fail twice.");
+		await expectNoSearch(run);
+		// Two failures before the reload and one after reach the threshold.
+		await reload();
+		await run.session.prompt("Fail once.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+
+		// After another reload, the signature that already started a search starts none.
+		await reload();
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		expect(searchDirs(run.cwd)).toHaveLength(1);
+	});
+
+	it("starts nothing with passive mode off, however often a failure repeats", async () => {
+		configure({ ...validConfig(), passive: { enabled: false, repeatThreshold: 2 } });
+		const run = await harness({ c1: [FIX] }, { other: failingParent("Fail often.", 5) });
+		await run.session.prompt("Fail often.");
+		await expectNoSearch(run);
+		await run.session.prompt("Hello.");
+		await expectNoSearch(run);
+
+		expect(searchDirs(run.cwd)).toEqual([]);
+		expect(run.authorRequests()).toHaveLength(0);
+		expect(run.statuses).toEqual([]);
+	});
+
+	it("does not count tool results produced inside forks", async () => {
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 3 } });
+		const failing = (id: string) =>
+			fauxAssistantMessage(fauxToolCall("bash", { command: FAILING, verbatim: true }, { id }), {
+				stopReason: "toolUse",
+			});
+		const run = await harness(
+			{
+				c1: [FIX, failing("c1-1"), failing("c1-2"), finish("done", "two")],
+				c2: [WRONG, failing("c2-1"), failing("c2-2"), finish("done", "three")],
+			},
+			{ other: failingParent("Fail once.", 1) },
+		);
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+		const branchRuns = run.requests.flatMap((r) => r.messages).filter((m) => m.role === "toolResult");
+		expect(branchRuns.some((m) => m.role === "toolResult" && m.toolCallId === "c2-2")).toBe(true);
+
+		// Four failures in forks and one in the root: below the root threshold, so nothing starts.
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		expect(searchDirs(run.cwd)).toHaveLength(1);
+		expect(run.authorRequests()).toHaveLength(1);
+		expect(run.reports()).toHaveLength(1);
+	});
+});
+
 describe("search_branches", { timeout: 30_000 }, () => {
 	it("returns the report as its result, adds no other message, forks from its own pending call, and streams progress", async () => {
 		configure({ ...validConfig(), apply: "auto" });

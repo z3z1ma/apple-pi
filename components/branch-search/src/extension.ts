@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../../shared/src/forked-continuation.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { type BranchSearchConfig, readBranchSearchConfig, validateBranchSearchConfig } from "./config.js";
+import { FailureCounter, shellOutcome } from "./failure-signature.js";
 import {
 	BRANCH_SEARCH_MESSAGE_TYPE,
 	type ReviewRequest,
@@ -16,6 +17,7 @@ import {
 	type SearchProgress,
 	type SearchResult,
 } from "./orchestrator.js";
+import type { SearchMode } from "./record.js";
 
 const STATUS_KEY = "branch-search";
 const QUEUED = "branch search queued";
@@ -35,7 +37,12 @@ interface ActiveSearch {
 	readonly controller: AbortController;
 	readonly config: BranchSearchConfig;
 	readonly goal: string | undefined;
+	/** `passive` when repeated failures of `seedGate` started it (spec 5.3); it then reports like `human`. */
+	readonly mode: SearchMode;
+	readonly seedGate?: string;
 	queued: boolean;
+	/** The failure signatures this search spent when it started; its report details carry them. */
+	consumed: string[];
 	search?: { id: string; progress: () => SearchProgress };
 	/** Set when the session it belongs to went away: no report and no UI calls on a stale context. */
 	silent: boolean;
@@ -90,6 +97,33 @@ function answerCall(toolCallId: string): (prompt: string) => AgentMessage {
 		isError: false,
 		timestamp: Date.now(),
 	});
+}
+
+/** The `details` of a search's report message or `search_branches` result. */
+interface ReportDetails {
+	outcome: SearchResult["outcome"];
+	recordPath: SearchResult["recordPath"];
+	/** Failure signatures the search spent when it started (spec 5.3); read back at session start. */
+	consumedSignatures: string[];
+}
+
+function reportDetails(entry: ActiveSearch, result: SearchResult): ReportDetails {
+	return { outcome: result.outcome, recordPath: result.recordPath, consumedSignatures: entry.consumed };
+}
+
+/** The signatures spent by the searches whose reports `entries` hold, on every branch of the session. */
+function consumedIn(entries: readonly SessionEntry[]): Set<string> {
+	const consumed = new Set<string>();
+	for (const entry of entries) {
+		let details: unknown;
+		if (entry.type === "custom_message" && entry.customType === BRANCH_SEARCH_MESSAGE_TYPE) details = entry.details;
+		else if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.toolName === TOOL_NAME)
+			details = entry.message.details;
+		const signatures = (details as { consumedSignatures?: unknown } | undefined)?.consumedSignatures;
+		if (!Array.isArray(signatures)) continue;
+		for (const signature of signatures) if (typeof signature === "string") consumed.add(signature);
+	}
+	return consumed;
 }
 
 /** One request on a user-global model profile, without the conversation or tools (spec 10.5). */
@@ -160,7 +194,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 				customType: BRANCH_SEARCH_MESSAGE_TYPE,
 				content: result.report,
 				display: true,
-				details: { outcome: result.outcome, recordPath: result.recordPath },
+				details: reportDetails(entry, result),
 			},
 			{ triggerTurn: false },
 		);
@@ -172,6 +206,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 		cwd: ctx.cwd,
 		config: entry.config,
 		goal: entry.goal,
+		seedGate: entry.seedGate,
 		review: profileReview(ctx),
 		onStart: (search: ActiveSearch["search"]) => {
 			entry.search = search;
@@ -188,9 +223,10 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 			ctx.ui.notify("Branch search skipped: the live session is not available.", "warning");
 			return;
 		}
+		consume(entry);
 		entry.done = runBranchSearch({
 			...common(entry, ctx, session),
-			mode: "human",
+			mode: entry.mode,
 			exclusive: holdRoot(ctx, true),
 			onStatus: (text) => {
 				if (!entry.silent) ctx.ui.setStatus(STATUS_KEY, text);
@@ -222,10 +258,75 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 	pi.on("session_tree", cancelForSession);
 	pi.on("session_shutdown", cancelForSession);
 
+	/**
+	 * The root session's failure detector (spec 5.3): only the root run's own shell results count;
+	 * forks run their tools through these hooks too, inside their fork scope. Every search that starts
+	 * in the root session spends each signature then at its threshold, so none of them starts a
+	 * passive search later in the session.
+	 */
+	let failures = new FailureCounter();
+	let consumed = new Set<string>();
+	const consume = (entry: ActiveSearch) => {
+		entry.consumed = failures.reached(entry.config.passive.repeatThreshold).map(({ signature }) => signature);
+		for (const signature of entry.consumed) consumed.add(signature);
+	};
+	/**
+	 * Rebuilt from the session at every start, so a reload or resume keeps both, and a new session
+	 * starts empty: the counts from the root tool results on the current branch (fork results never
+	 * enter the session), the spent signatures from the details of the session's search reports.
+	 */
+	pi.on("session_start", (_event, ctx) => {
+		failures = new FailureCounter();
+		consumed = consumedIn(ctx.sessionManager.getEntries());
+		const calls = new Map<string, unknown>();
+		for (const entry of ctx.sessionManager.getBranch()) {
+			if (entry.type !== "message") continue;
+			const message = entry.message;
+			if (message.role === "assistant") {
+				for (const block of message.content) if (block.type === "toolCall") calls.set(block.id, block.arguments);
+			} else if (message.role === "toolResult") {
+				const outcome = shellOutcome(message.toolName, calls.get(message.toolCallId), message, message.isError);
+				if (outcome) failures.record(outcome);
+			}
+		}
+	});
+	pi.on("tool_result", (event) => {
+		if (inForkedContinuation()) return undefined;
+		const outcome = shellOutcome(event.toolName, event.input, event, event.isError);
+		if (outcome) failures.record(outcome);
+		return undefined;
+	});
+
+	/** At a root settle with no search active: start a passive search for the first signature due. */
+	const startPassive = (ctx: ExtensionContext) => {
+		// Every threshold is at least 2, so nothing can be due before a signature repeats.
+		if (failures.reached(2).length === 0) return;
+		const validated = loadConfig(ctx);
+		if (!validated.ok || !validated.config.passive.enabled) return;
+		const due = failures
+			.reached(validated.config.passive.repeatThreshold)
+			.find(({ signature }) => !consumed.has(signature));
+		if (!due) return;
+		const entry: ActiveSearch = {
+			controller: new AbortController(),
+			config: validated.config,
+			goal: undefined,
+			mode: "passive",
+			seedGate: due.command,
+			queued: true,
+			consumed: [],
+			silent: false,
+		};
+		active = entry;
+		ctx.ui.notify(`Branch search started: \`${due.command}\` failed ${due.count} times.`, "info");
+		begin(entry, ctx);
+	};
+
 	pi.on("agent_settled", (_event, ctx) => {
 		for (const resolve of settleWaiters) resolve();
 		settleWaiters.clear();
 		if (active?.queued) begin(active, ctx);
+		else if (!active) startPassive(ctx);
 	});
 
 	pi.registerCommand("branch-search", {
@@ -266,7 +367,9 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 				controller: new AbortController(),
 				config: validated.config,
 				goal: input === "" ? undefined : input,
+				mode: "human",
 				queued: true,
+				consumed: [],
 				silent: false,
 			};
 			active = entry;
@@ -309,10 +412,13 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 				controller: new AbortController(),
 				config: validated.config,
 				goal: params.goal,
+				mode: "agent",
 				queued: false,
+				consumed: [],
 				silent: false,
 			};
 			active = entry;
+			consume(entry);
 			const cancel = () => entry.controller.abort();
 			signal?.addEventListener("abort", cancel, { once: true });
 			if (signal?.aborted) cancel();
@@ -331,10 +437,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 			);
 			try {
 				const result = await run;
-				return {
-					content: [{ type: "text", text: result.report }],
-					details: { outcome: result.outcome, recordPath: result.recordPath },
-				};
+				return { content: [{ type: "text", text: result.report }], details: reportDetails(entry, result) };
 			} finally {
 				signal?.removeEventListener("abort", cancel);
 				if (active === entry) active = undefined;

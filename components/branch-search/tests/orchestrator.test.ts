@@ -80,13 +80,14 @@ interface SearchRun {
 async function search(
 	run: Awaited<ReturnType<typeof fixture>>,
 	overrides: { config?: Record<string, unknown>; signal?: AbortSignal } & Partial<
-		Pick<SearchOptions, "scorer" | "review" | "exclusive" | "forkPointPrompt">
+		Pick<SearchOptions, "scorer" | "review" | "exclusive" | "forkPointPrompt" | "mode" | "seedGate">
 	> & { authored?: boolean } = {},
 	onStatus?: (status: string | undefined) => void,
 ): Promise<SearchRun> {
 	const statuses: (string | undefined)[] = [];
 	const result = await runBranchSearch({
-		mode: "human",
+		mode: overrides.mode ?? "human",
+		seedGate: overrides.seedGate,
 		session: run.session,
 		cwd: run.cwd,
 		config: { ...validConfig(), ...overrides.config },
@@ -319,6 +320,37 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 		expect(broken.selfReport).toBe("error");
 		expect(broken.status).toBe("survived");
 		expect(result.outcome).toBe("ready");
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("aborts a branch that repeats one failure up to the threshold, reports stalled, and still scores it", async () => {
+		const failing = (n: number) =>
+			fauxAssistantMessage(
+				fauxToolCall("bash", { command: `echo "Error: value at line ${n}"; exit 1`, verbatim: true }, { id: `f${n}` }),
+				{ stopReason: "toolUse" },
+			);
+		// The same command each time, so the failing line differs only in its number.
+		const same = (id: string) =>
+			fauxAssistantMessage(
+				fauxToolCall("bash", { command: 'echo "Error: value at line $RANDOM"; exit 1', verbatim: true }, { id }),
+				{ stopReason: "toolUse" },
+			);
+		const run = await fixture({
+			stuck: [FIX, same("s1"), same("s2"), same("s3"), "until-aborted"],
+			// Different commands never add up to one signature.
+			varied: [FIX, failing(1), failing(2), failing(3), finish("done", "varied")],
+		});
+		// Passive activation is off; the in-branch detector still runs.
+		const { result, record } = await search(run);
+
+		const stuck = branchOf(record, "stuck");
+		expect(stuck.selfReport).toBe("stalled");
+		expect(stuck.status).toBe("survived");
+		expect(stuck.gates).toEqual({ value: "pass" });
+		expect(gitOut(run.cwd, "show", `${stuck.commit}:app.ts`)).toBe("export const value = 2;");
+		const varied = branchOf(record, "varied");
+		expect(varied.selfReport).toBe("done");
+		expect(result.report).toMatch(new RegExp(`${stuck.key} survived stalled:`));
 		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
 	});
 
@@ -723,6 +755,30 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 		expect(record.spec?.review).toEqual(expect.objectContaining({ verdict: "refine", applied: true }));
 		expect(record.spec?.validation.map((entry) => entry.ok)).toEqual([true, true]);
 		expect(branchOf(record, "c1").gates).toEqual({ value: "pass", keep: "pass" });
+	});
+
+	it("gives a passive search's seed gate to the author and the reviewer, and records it", async () => {
+		const run = await fixture(
+			{ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] },
+			{ author: [authorReply(AUTHORED)] },
+		);
+		const prompts: string[] = [];
+		const { record } = await search(run, {
+			authored: true,
+			mode: "passive",
+			seedGate: "bash check.sh",
+			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
+			review: async (_profile, prompt) => {
+				prompts.push(prompt);
+				return '{"verdict":"confirm"}';
+			},
+		});
+
+		expect(prompts[0]).toContain("Seed gate: bash check.sh");
+		const author = run.requests.find((r) => text(r.messages.at(-1)).startsWith("Branch search: acceptance checks."));
+		expect(text(author?.messages.at(-1))).toContain("The command `bash check.sh` failed repeatedly.");
+		expect(record.mode).toBe("passive");
+		expect(record.seedGate).toBe("bash check.sh");
 	});
 
 	it("sends no review request without a review profile", async () => {

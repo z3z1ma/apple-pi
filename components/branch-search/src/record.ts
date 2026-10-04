@@ -21,7 +21,7 @@ export interface EnumerationRecord {
 	cost: TokenCost & { ms: number };
 }
 
-export type BranchSelfReport = "done" | "abandoned" | "unknown" | "limit" | "error";
+export type BranchSelfReport = "done" | "abandoned" | "unknown" | "limit" | "stalled" | "error";
 
 export interface BranchRecord {
 	key: NodeKey;
@@ -75,6 +75,8 @@ export interface SearchRecord {
 	id: string;
 	mode: SearchMode;
 	goal: string | null;
+	/** The repeatedly failing command that started a passive search (spec 5.3); null otherwise. */
+	seedGate: string | null;
 	seed: string;
 	startedAt: string;
 	endedAt: string | null;
