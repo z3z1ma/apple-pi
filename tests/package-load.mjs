@@ -186,6 +186,7 @@ try {
 		"wiki_references",
 		"task",
 		"bash",
+		"search_branches",
 	]) {
 		assert(tools.has(tool), `missing ${tool} tool`);
 	}
@@ -239,6 +240,20 @@ try {
 		),
 		"tasks extension must own schedule, monitor, and task",
 	);
+
+	const searchBranchesTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "search_branches");
+	assert(
+		result.extensions.some(
+			(extension) => extension.path.endsWith("branch-search.ts") && extension.tools.has("search_branches"),
+		),
+		"branch search extension must own search_branches",
+	);
+	assert.deepEqual(Object.keys(searchBranchesTool.definition.parameters.properties), ["goal"]);
+	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal"]);
+	assert.equal(searchBranchesTool.definition.executionMode, "sequential");
+	assert.match(searchBranchesTool.definition.promptGuidelines.join("\n"), /Call it alone in its message/);
 
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])

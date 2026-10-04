@@ -1,4 +1,6 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
 import {
 	liveSession,
@@ -24,6 +26,9 @@ const QUEUED = "branch search queued";
  */
 const WORKSPACE_TOOLS = new Set(["write", "edit", "bash", "pi_exec", "agent", "steer_subagent", "schedule", "monitor"]);
 const APPLYING = "Branch search is applying its winner to the workspace. Retry this call in a moment.";
+const TOOL_NAME = "search_branches";
+const ALONE = `Call ${TOOL_NAME} on its own, as the only tool call in its message, so the search can fork the conversation at this call.`;
+const IN_FORK = `${TOOL_NAME} is not available inside a forked continuation.`;
 
 /** The one search of this root session: queued until the root run settles, then running. */
 interface ActiveSearch {
@@ -53,6 +58,40 @@ function statusText(active: ActiveSearch | undefined): string {
 	].join("\n");
 }
 
+/** The configuration, or the text that says why it cannot be used. */
+function loadConfig(
+	ctx: ExtensionContext,
+): { ok: true; config: BranchSearchConfig } | { ok: false; text: string; level: "error" | "warning" } {
+	let raw: unknown;
+	try {
+		raw = readBranchSearchConfig(ctx.cwd, ctx.isProjectTrusted());
+	} catch (error) {
+		return { ok: false, text: error instanceof Error ? error.message : String(error), level: "error" };
+	}
+	const validated = validateBranchSearchConfig(raw);
+	return validated.ok ? validated : { ...validated, level: "warning" };
+}
+
+/** True when `toolCallId` is the only tool call of the message the conversation ends with. */
+function callsAlone(messages: AgentMessage[], toolCallId: string): boolean {
+	const last = messages.at(-1);
+	if (last?.role !== "assistant") return false;
+	const calls = last.content.filter((block) => block.type === "toolCall");
+	return calls.length === 1 && calls[0]?.id === toolCallId;
+}
+
+/** The fork prompt as the result of the pending `search_branches` call, so the fork point ends with that call. */
+function answerCall(toolCallId: string): (prompt: string) => AgentMessage {
+	return (prompt) => ({
+		role: "toolResult",
+		toolCallId,
+		toolName: TOOL_NAME,
+		content: [{ type: "text", text: prompt }],
+		isError: false,
+		timestamp: Date.now(),
+	});
+}
+
 /** One request on a user-global model profile, without the conversation or tools (spec 10.5). */
 function profileReview(ctx: ExtensionContext): ReviewRequest {
 	return async (profile, prompt, signal) => {
@@ -74,10 +113,11 @@ function profileReview(ctx: ExtensionContext): ReviewRequest {
 }
 
 /**
- * `/branch-search [goal]`, `status`, and `cancel` (spec 5.1). One search per root session; a search
- * asked for while the root run streams starts at the next `agent_settled`. The report joins the
- * conversation as one passive message (spec 6.10). Session switch, tree navigation, and shutdown
- * cancel the search, which still cleans up (spec 6.11).
+ * `/branch-search [goal]`, `status`, and `cancel` (spec 5.1), and the `search_branches` tool (spec
+ * 5.2). One search per root session; a search asked for while the root run streams starts at the
+ * next `agent_settled`. The command's report joins the conversation as one passive message; the
+ * tool's report is its result (spec 6.10). Session switch, tree navigation, and shutdown cancel the
+ * search, which still cleans up (spec 6.11).
  */
 export default function registerBranchSearch(pi: ExtensionAPI): void {
 	trackLiveSessions();
@@ -90,8 +130,9 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 	/**
 	 * The hold starts in the same synchronous step that sees the session idle (at once, or in the
 	 * `agent_settled` handler), so no root tool call can slip in between the check and the hold.
+	 * A search inside a tool call holds at once: the root run is blocked on that call.
 	 */
-	const holdRoot = (ctx: ExtensionContext) => () =>
+	const holdRoot = (ctx: ExtensionContext, waitForSettle: boolean) => () =>
 		new Promise<() => void>((resolve) => {
 			const grant = () => {
 				holds++;
@@ -102,7 +143,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 					holds--;
 				});
 			};
-			if (ctx.isIdle()) grant();
+			if (!waitForSettle || ctx.isIdle()) grant();
 			else settleWaiters.add(grant);
 		});
 
@@ -125,6 +166,19 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 		);
 	};
 
+	/** What every search shares, whatever started it. */
+	const common = (entry: ActiveSearch, ctx: ExtensionContext, session: AgentSession) => ({
+		session,
+		cwd: ctx.cwd,
+		config: entry.config,
+		goal: entry.goal,
+		review: profileReview(ctx),
+		onStart: (search: ActiveSearch["search"]) => {
+			entry.search = search;
+		},
+		signal: entry.controller.signal,
+	});
+
 	const begin = (entry: ActiveSearch, ctx: ExtensionContext) => {
 		entry.queued = false;
 		ctx.ui.setStatus(STATUS_KEY, undefined);
@@ -135,20 +189,12 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 			return;
 		}
 		entry.done = runBranchSearch({
+			...common(entry, ctx, session),
 			mode: "human",
-			session,
-			cwd: ctx.cwd,
-			config: entry.config,
-			goal: entry.goal,
-			review: profileReview(ctx),
-			exclusive: holdRoot(ctx),
-			onStart: (search) => {
-				entry.search = search;
-			},
+			exclusive: holdRoot(ctx, true),
 			onStatus: (text) => {
 				if (!entry.silent) ctx.ui.setStatus(STATUS_KEY, text);
 			},
-			signal: entry.controller.signal,
 		})
 			.then(
 				(result) => deliver(entry, result),
@@ -211,16 +257,9 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 				);
 				return;
 			}
-			let raw: unknown;
-			try {
-				raw = readBranchSearchConfig(ctx.cwd, ctx.isProjectTrusted());
-			} catch (error) {
-				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-				return;
-			}
-			const validated = validateBranchSearchConfig(raw);
+			const validated = loadConfig(ctx);
 			if (!validated.ok) {
-				ctx.ui.notify(validated.text, "warning");
+				ctx.ui.notify(validated.text, validated.level);
 				return;
 			}
 			const entry: ActiveSearch = {
@@ -237,6 +276,69 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 			}
 			ctx.ui.setStatus(STATUS_KEY, QUEUED);
 			ctx.ui.notify(QUEUED, "info");
+		},
+	});
+
+	pi.registerTool({
+		name: TOOL_NAME,
+		label: "Search Branches",
+		description:
+			"Explore several independent implementation approaches in parallel and keep the one that passes objective acceptance checks. " +
+			"Use this when two or more approaches are plausible, when you are uncertain which direction is correct, or after an approach has failed. " +
+			"The harness writes hidden acceptance checks, runs each approach in an isolated worktree, applies the winning change to the workspace, and returns the outcome. " +
+			"State the goal as the observable result that must hold when the work is done.",
+		promptSnippet:
+			"Try several implementation approaches in parallel isolated worktrees and keep the one that passes hidden acceptance checks",
+		promptGuidelines: [
+			`Use ${TOOL_NAME} when two or more implementation approaches are plausible and you cannot tell which is right, or after an approach has failed. Call it alone in its message with the goal as an observable result; it blocks until the search ends, applies the winner when the workspace is unchanged, and returns the report.`,
+		],
+		parameters: Type.Object({
+			goal: Type.String({ description: "The observable result that must hold when the work is done." }),
+		}),
+		executionMode: "sequential",
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			if (inForkedContinuation()) throw new Error(IN_FORK);
+			if (active)
+				throw new Error(active.search ? `Branch search ${active.search.id} is already running.` : statusText(active));
+			const session = liveSession(ctx);
+			if (!session) throw new Error("Branch search is not available: the live session is not available.");
+			if (!callsAlone(session.sessionManager.buildSessionProjection().messages, toolCallId)) throw new Error(ALONE);
+			const validated = loadConfig(ctx);
+			if (!validated.ok) throw new Error(validated.text);
+			const entry: ActiveSearch = {
+				controller: new AbortController(),
+				config: validated.config,
+				goal: params.goal,
+				queued: false,
+				silent: false,
+			};
+			active = entry;
+			const cancel = () => entry.controller.abort();
+			signal?.addEventListener("abort", cancel, { once: true });
+			if (signal?.aborted) cancel();
+			const run = runBranchSearch({
+				...common(entry, ctx, session),
+				mode: "agent",
+				forkPointPrompt: answerCall(toolCallId),
+				exclusive: holdRoot(ctx, false),
+				onStatus: (text) => {
+					if (text !== undefined) onUpdate?.({ content: [{ type: "text", text }], details: undefined });
+				},
+			});
+			entry.done = run.then(
+				() => undefined,
+				() => undefined,
+			);
+			try {
+				const result = await run;
+				return {
+					content: [{ type: "text", text: result.report }],
+					details: { outcome: result.outcome, recordPath: result.recordPath },
+				};
+			} finally {
+				signal?.removeEventListener("abort", cancel);
+				if (active === entry) active = undefined;
+			}
 		},
 	});
 }

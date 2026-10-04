@@ -10,9 +10,9 @@ When a search runs, the harness:
 4. Runs each chosen approach as a fork of the conversation in its own git worktree. Every fork shares the parent's prompt-cache prefix.
 5. Scores every attempt with the hidden checks. While no attempt passes, it starts a later generation: continuations of the failed attempts that came closest, and fresh approaches from the first list (see [Later generations](#later-generations)).
 6. Ranks the survivors and applies the winner's diff to the workspace.
-7. Adds one passive message with the report to the conversation.
+7. Reports the outcome: one passive message for `/branch-search`, or the tool result for `search_branches`.
 
-The extension loads only in the root session. Subagents and `pi_exec` workers do not load it.
+The extension loads only in the root session. Subagents and `pi_exec` workers do not load it, and `pi_exec` programs cannot call `search_branches`.
 
 ## Commands
 
@@ -32,9 +32,23 @@ If `git apply` fails partway, the search puts back to base only the files that s
 
 Switching sessions, navigating the session tree, or shutting down cancels the search and waits until cleanup has finished: worktrees removed, refs pruned, and the record final. No report is added.
 
+## The `search_branches` tool
+
+The main agent can start a search itself with `search_branches`. Its one parameter, `goal`, states the observable result that must hold when the work is done. The tool's prompt guidance tells the model to reach for it when two or more approaches are plausible and it cannot tell which is right, or after an approach has failed.
+
+- The call blocks until the search ends and returns the report as its result. The conversation gains nothing else: no passive message.
+- The search forks the conversation through the assistant message that holds the call. The scorer author, the first approach list, and every fresh attempt receive their prompt as the result of that call, so their requests start with the main agent's own request and share its prompt cache. The first fork request writes that assistant message to the cache. Continuations of a failed attempt continue that attempt's conversation, as with the command.
+- The call must be the only tool call in its message. Otherwise it fails with `Call search_branches on its own, as the only tool call in its message, …` and starts nothing.
+- Progress streams as tool updates in the status format, `branching <phase> <alive>/<total>`. The status line is not used.
+- While the search applies its winner, the main agent is still blocked in the call, so the search does not wait for it to settle. The same root tools as for the command are refused during the apply.
+- Aborting the call (for example with Escape) cancels the search; the call returns once cleanup has finished, with the `aborted: cancelled` report.
+- While another search runs, from the command or the tool, the call fails at once with `Branch search <id> is already running.` `/branch-search status` and `/branch-search cancel` work on a search the tool started.
+- Inside a fork the tool is refused: search forks get `This tool is not available inside a branch search attempt.`, other forked continuations get `search_branches is not available inside a forked continuation.`
+- A missing or invalid configuration fails the call with the list of problems.
+
 ## Configuration
 
-The feature stays off until every required key is set. `/branch-search` then prints each missing or invalid key and starts nothing. The code carries no built-in values for limits or counts.
+The feature stays off until every required key is set. `/branch-search` then prints each missing or invalid key, `search_branches` returns them as an error, and neither starts anything. The code carries no built-in values for limits or counts.
 
 Files, merged key by key, with project values replacing user values and arrays replacing whole:
 
@@ -126,7 +140,7 @@ Residual risks, accepted in this version:
 | `no survivor` | No attempt passed every gate. |
 | `aborted: <reason>` | The search stopped early: `no git history`, `scorer invalid`, `enumeration failed`, `cancelled`, or `error`. |
 
-The report's first line is the summary, for example `Branch search bs-20261004-142233-9f1c: applied. 1 of 3 branches survived over 1 generations.` The chat shows that line; expanding the message shows the winner, its objective values, every attempt with its fate and one-sentence lesson, and the record path. The message starts no turn.
+The report's first line is the summary, for example `Branch search bs-20261004-142233-9f1c: applied. 1 of 3 branches survived over 1 generations.` The rest gives the winner, its objective values, every attempt with its fate and one-sentence lesson, and the record path. From `/branch-search`, the chat shows the summary line and expanding the message shows the rest; the message starts no turn. From `search_branches`, the whole report is the tool result.
 
 ## Workspace and record
 

@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { startFork } from "../../shared/src/forked-continuation.js";
 import registerTasks from "../../tasks/src/index.js";
 import registerBranchSearch from "../src/index.js";
 import type { SearchRecord } from "../src/record.js";
@@ -85,6 +86,7 @@ async function harness(
 		"edit",
 		"ls",
 		"bash",
+		"search_branches",
 	]);
 	cleanup.push(run.dispose);
 	const recorded = recordingUi(options.onStatus);
@@ -98,6 +100,49 @@ async function harness(
 			request.messages.some((m) => text(m).includes("Branch search: acceptance checks.")),
 		);
 	return { ...run, ...recorded, cwd, reports, authorRequests };
+}
+
+const SEARCH_CALL = "search-1";
+
+const SIBLING_CALL = "sibling-1";
+
+/**
+ * The parent's scripted turns: "Search now." calls `search_branches` (with a sibling `read` when
+ * asked); the call's own result ends the turn. Fork prompts start with "Branch search: ", which no
+ * result the parent receives does.
+ */
+function searchingParent(withSibling = false): (context: Context) => Reply | "until-aborted" | undefined {
+	return (context) => {
+		const last = context.messages.at(-1);
+		if (text(last) === "Search now.") {
+			const calls = [fauxToolCall("search_branches", { goal: "Make value equal 2." }, { id: SEARCH_CALL })];
+			if (withSibling) calls.push(fauxToolCall("read", { path: "app.ts" }, { id: SIBLING_CALL }));
+			return fauxAssistantMessage(calls, { stopReason: "toolUse" });
+		}
+		if (last?.role !== "toolResult" || text(last).startsWith("Branch search: ")) return undefined;
+		if (last.toolCallId === SEARCH_CALL || last.toolCallId === SIBLING_CALL) return fauxAssistantMessage("parent done");
+		return undefined;
+	};
+}
+
+/** The `search_branches` results in the parent session. */
+function searchResults(messages: readonly object[]) {
+	return messages.filter(
+		(
+			m,
+		): m is { role: "toolResult"; toolCallId: string; content: { type: string; text?: string }[]; isError: boolean } =>
+			(m as { role?: string }).role === "toolResult" && (m as { toolCallId?: string }).toolCallId === SEARCH_CALL,
+	);
+}
+
+/** The text of each `search_branches` progress update, in order. */
+function toolUpdates(session: AgentSession): string[] {
+	const updates: string[] = [];
+	session.subscribe((event) => {
+		if (event.type !== "tool_execution_update" || event.toolName !== "search_branches") return;
+		updates.push(text(event.partialResult as never));
+	});
+	return updates;
 }
 
 function reportText(message: object | undefined): string {
@@ -317,6 +362,7 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 		const pi = {
 			on: () => {},
 			registerCommand: () => {},
+			registerTool: () => {},
 			registerMessageRenderer: (type: string, renderer: (...args: any[]) => any) => renderers.set(type, renderer),
 		} as unknown as ExtensionAPI;
 		registerBranchSearch(pi);
@@ -328,5 +374,170 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 			"↳ Branch search bs-1: applied. 1 of 2 branches survived.",
 		]);
 		expect(render(message, { expanded: true }, theme).render(200).join("\n")).toContain("Winner: r1\nRecord: x");
+	});
+});
+
+describe("search_branches", { timeout: 30_000 }, () => {
+	it("returns the report as its result, adds no other message, forks from its own pending call, and streams progress", async () => {
+		configure({ ...validConfig(), apply: "auto" });
+		const run = await harness(
+			{ c1: [WRONG, finish("done", "three")], c2: [FIX, finish("done", "two")] },
+			{ other: searchingParent() },
+		);
+		const updates = toolUpdates(run.session);
+		const before = run.session.messages.length;
+		await run.session.prompt("Search now.");
+
+		const [result] = searchResults(run.session.messages);
+		const report = text(result as never);
+		const record = recordOf(report);
+		expect(report.split("\n")[0]).toBe(
+			`Branch search ${record.id}: applied. 1 of 2 branches survived over 1 generations.`,
+		);
+		expect(result?.isError).toBe(false);
+		expect(record.mode).toBe("agent");
+		expect(record.goal).toBe("Make value equal 2.");
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 2;\n");
+		// The parent gained its prompt, the call, its result, and its reply: no report message (I7).
+		expect(run.session.messages.slice(before).map((m) => m.role)).toEqual([
+			"user",
+			"assistant",
+			"toolResult",
+			"assistant",
+		]);
+		expect(run.reports()).toHaveLength(0);
+
+		// Every role fork and root starts with the parent's request through the call, then answers the call with its prompt (I4).
+		const parentNext = run.requests.find((r) => text(r.messages.at(-1)) === report) as Context;
+		const shared = parentNext.messages.length - 1;
+		const opening = run.requests.filter((r) => {
+			const last = r.messages.at(-1);
+			return last?.role === "toolResult" && last.toolCallId === SEARCH_CALL && r !== parentNext;
+		});
+		expect(opening.map((r) => text(r.messages.at(-1)).split("\n")[0])).toEqual([
+			"Branch search: acceptance checks.",
+			"Branch search: approach list.",
+			expect.stringMatching(/^Branch search: attempt r0\./),
+			expect.stringMatching(/^Branch search: attempt r1\./),
+		]);
+		for (const request of opening) {
+			expect(request.messages).toHaveLength(parentNext.messages.length);
+			expect(request.messages.slice(0, shared)).toEqual(parentNext.messages.slice(0, shared));
+			expect(request.systemPrompt).toEqual(parentNext.systemPrompt);
+			expect(request.tools).toEqual(parentNext.tools);
+		}
+		// No fork request carries a custom prompt after the call.
+		expect(run.requests.filter((r) => r.messages[shared]?.role === "user" && r.messages.length > shared)).toEqual([]);
+
+		// Progress streams through tool updates in the status format; the UI status line stays untouched.
+		expect(updates).toEqual(
+			expect.arrayContaining(["branching author 0/0", "branching run g0 2/2", "branching apply 1/2"]),
+		);
+		for (const update of updates) expect(update).toMatch(/^branching \S+( g\d+)? \d+\/\d+$/);
+		expect(run.statuses).toEqual([]);
+	});
+
+	it("cancels the search and cleans up before the aborted call returns", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: ["until-aborted"], c2: ["until-aborted"] }, { other: searchingParent() });
+		const updates = toolUpdates(run.session);
+		const parent = run.session.prompt("Search now.");
+		await vi.waitFor(() => expect(updates).toContain("branching run g0 2/2"), { timeout: 20_000 });
+		const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+
+		// A command while the tool's search runs names it and starts nothing.
+		await run.session.prompt("/branch-search something else");
+		expect(run.notes.at(-1)).toBe(`Branch search ${id} is already running.`);
+
+		await run.session.abort();
+		await parent;
+		expect(worktrees(run.cwd)).toEqual([`worktree ${run.cwd}`]);
+		const stateDir = join(run.cwd, ".git", "apple-pi", "branch-search", id as string);
+		expect(existsSync(join(stateDir, "wt"))).toBe(false);
+		const record = JSON.parse(readFileSync(join(stateDir, "record.json"), "utf8")) as SearchRecord;
+		expect(record.outcome).toBe("aborted: cancelled");
+		expect(record.endedAt).not.toBeNull();
+		const [result] = searchResults(run.session.messages);
+		expect(text(result as never).split("\n")[0]).toMatch(new RegExp(`^Branch search ${id}: aborted: cancelled\\.`));
+		expect(run.reports()).toHaveLength(0);
+
+		await run.session.prompt("/branch-search status");
+		expect(run.notes.at(-1)).toBe("No branch search is running.");
+	});
+
+	it("returns at once while another search runs", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: ["until-aborted"], c2: ["until-aborted"] }, { other: searchingParent() });
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.statuses).toContain("branching run g0 2/2"), { timeout: 20_000 });
+		const [id] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
+
+		await run.session.prompt("Search now.");
+		const [result] = searchResults(run.session.messages);
+		expect(result?.isError).toBe(true);
+		expect(text(result as never)).toBe(`Branch search ${id} is already running.`);
+		expect(readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"))).toEqual([id]);
+		expect(run.authorRequests()).toHaveLength(1);
+
+		await run.session.prompt("/branch-search cancel");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+	});
+
+	it("refuses a call that shares its message with other tool calls and starts nothing", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: [FIX] }, { other: searchingParent(true) });
+		const before = run.requests.length;
+		await run.session.prompt("Search now.");
+
+		const [result] = searchResults(run.session.messages);
+		expect(result?.isError).toBe(true);
+		expect(text(result as never)).toContain("Call search_branches on its own");
+		// The sibling still ran, and only the parent's own two requests were sent.
+		const sibling = run.session.messages.find((m) => m.role === "toolResult" && m.toolCallId === SIBLING_CALL);
+		expect(sibling).toMatchObject({ isError: false });
+		expect(run.requests).toHaveLength(before + 2);
+		expect(existsSync(join(run.cwd, ".git", "apple-pi"))).toBe(false);
+	});
+
+	it("is blocked inside a branch search fork and inside any other forked continuation", async () => {
+		configure(validConfig());
+		const nested = fauxAssistantMessage(fauxToolCall("search_branches", { goal: "nested" }, { id: "nested-1" }), {
+			stopReason: "toolUse",
+		});
+		const run = await harness(
+			{ c1: [nested, finish("done", "tried")], c2: [FIX, finish("done", "two")] },
+			{
+				other: (context) => {
+					const last = context.messages.at(-1);
+					if (text(last) === "Reflect.") return nested;
+					if (
+						last?.role === "toolResult" &&
+						last.toolCallId === "nested-1" &&
+						!context.messages.some((m) => text(m).startsWith("Branch search: "))
+					)
+						return fauxAssistantMessage("reflected");
+					return undefined;
+				},
+			},
+		);
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+		const blocked = run.requests
+			.flatMap((r) => r.messages)
+			.find((m) => m.role === "toolResult" && m.toolCallId === "nested-1");
+		expect(blocked).toMatchObject({ isError: true });
+		expect(text(blocked)).toBe("This tool is not available inside a branch search attempt.");
+		expect(readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"))).toHaveLength(1);
+
+		// A fork outside branch search (a reflection) reaches the tool, which refuses it.
+		const reflection = await startFork(run.session, {
+			messages: run.session.sessionManager.buildSessionProjection().messages,
+			append: { role: "custom", customType: "test", content: "Reflect.", display: false, timestamp: Date.now() },
+			label: "test reflection",
+		}).result;
+		const refused = reflection.messages.find((m) => m.role === "toolResult" && m.toolCallId === "nested-1");
+		expect(refused).toMatchObject({ isError: true });
+		expect(text(refused as never)).toBe("search_branches is not available inside a forked continuation.");
+		expect(readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"))).toHaveLength(1);
 	});
 });

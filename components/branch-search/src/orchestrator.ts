@@ -112,6 +112,12 @@ export interface SearchOptions {
 	 */
 	scorer?: ScorerSpec;
 	goal?: string;
+	/**
+	 * Wraps a prompt appended to the fork point: the author's first turn, the root enumerator, and every
+	 * root branch. Without it, the prompt is a hidden custom message (human mode). Agent mode answers
+	 * the pending `search_branches` call with it, so the fork point ends with that call (spec 5.2, I4).
+	 */
+	forkPointPrompt?: (prompt: string) => AgentMessage;
 	/** Sends the scorer review when `scorer.reviewProfile` is set. */
 	review?: ReviewRequest;
 	/**
@@ -283,6 +289,11 @@ class Search {
 		return { outcome: this.record.outcome as string, report, recordPath: this.recordPath };
 	}
 
+	/** A prompt appended to the fork point itself; continuations of a fork's own conversation use `customPrompt`. */
+	private atForkPoint(prompt: string): AgentMessage {
+		return (this.options.forkPointPrompt ?? customPrompt)(prompt);
+	}
+
 	private end(outcome: string, abortReason: string | null = null): void {
 		this.record.outcome = outcome;
 		this.record.abortReason = abortReason;
@@ -303,7 +314,9 @@ class Search {
 		this.freeze(spec);
 
 		this.status("enumerate");
-		this.enumerations.root = await this.enumerate("root", base.commit, this.forkPoint);
+		this.enumerations.root = await this.enumerate("root", base.commit, this.forkPoint, [], undefined, (prompt) =>
+			this.atForkPoint(prompt),
+		);
 		this.save();
 
 		const stop = await this.runGenerations(base);
@@ -434,7 +447,7 @@ class Search {
 	 */
 	private async authorScorer(base: string): Promise<{ spec: ScorerSpec; validation: Validation }> {
 		let messages = this.forkPoint;
-		let append = customPrompt(authorPrompt(this.options.goal));
+		let append = this.atForkPoint(authorPrompt(this.options.goal));
 		for (let attempt = 0; attempt <= this.config.scorer.validationRetries; attempt++) {
 			this.status("author");
 			messages = await this.runAuthor(base, messages, append);
@@ -675,11 +688,12 @@ class Search {
 		from: AgentMessage[],
 		ancestors: string[] = [],
 		stop?: AbortSignal,
+		opening: (prompt: string) => AgentMessage = customPrompt,
 	): Promise<Enumeration> {
 		stop?.throwIfAborted();
 		const path = await this.worktree(`enum-${key}`, commit);
 		try {
-			return await this.runEnumerator(key, this.forkWorktree(path, ancestors), from, stop);
+			return await this.runEnumerator(key, this.forkWorktree(path, ancestors), from, opening, stop);
 		} finally {
 			await this.serial(() => removeWorktrees(this.root, [path]));
 			this.worktrees.delete(path);
@@ -691,12 +705,13 @@ class Search {
 		key: string,
 		worktree: ForkWorktree,
 		from: AgentMessage[],
+		opening: (prompt: string) => AgentMessage,
 		stop?: AbortSignal,
 	): Promise<Enumeration> {
 		const cost = emptyCost();
 		const started = Date.now();
 		let messages = from;
-		let append = customPrompt(enumeratorPrompt(this.config.enumerate.count, this.options.goal));
+		let append = opening(enumeratorPrompt(this.config.enumerate.count, this.options.goal));
 		for (let attempt = 1; attempt <= 2; attempt++) {
 			stop?.throwIfAborted();
 			const fork = this.fork({
@@ -755,12 +770,12 @@ class Search {
 		const candidate = enumeration?.candidates.find((c) => c.id === entry.candidate);
 		if (!candidate) throw new Error(`Unknown candidate ${entry.candidate}.`);
 		const { goal } = this.options;
-		const [messages, directive] =
+		const [messages, append] =
 			entry.parent === null
-				? [this.forkPoint, rootDirective(entry.key, candidate, entry.constraint, goal)]
+				? [this.forkPoint, this.atForkPoint(rootDirective(entry.key, candidate, entry.constraint, goal))]
 				: [
 						this.liveBranch(entry.parent).messages,
-						childDirective(entry.key, entry.parent, candidate, entry.constraint, goal),
+						customPrompt(childDirective(entry.key, entry.parent, candidate, entry.constraint, goal)),
 					];
 		const record: BranchRecord = {
 			key: entry.key,
@@ -794,7 +809,7 @@ class Search {
 		};
 		const fork = this.fork({
 			messages,
-			append: customPrompt(directive),
+			append,
 			label: `Branch search ${entry.key}`,
 			worktree: this.forkWorktree(worktree, this.lineage(entry.parent)),
 			onUsage,

@@ -80,7 +80,7 @@ interface SearchRun {
 async function search(
 	run: Awaited<ReturnType<typeof fixture>>,
 	overrides: { config?: Record<string, unknown>; signal?: AbortSignal } & Partial<
-		Pick<SearchOptions, "scorer" | "review" | "exclusive">
+		Pick<SearchOptions, "scorer" | "review" | "exclusive" | "forkPointPrompt">
 	> & { authored?: boolean } = {},
 	onStatus?: (status: string | undefined) => void,
 ): Promise<SearchRun> {
@@ -93,6 +93,7 @@ async function search(
 		scorer: overrides.authored ? undefined : (overrides.scorer ?? SCORER),
 		review: overrides.review,
 		exclusive: overrides.exclusive ?? (async () => () => {}),
+		forkPointPrompt: overrides.forkPointPrompt,
 		goal: "Make value equal 2.",
 		signal: overrides.signal ?? new AbortController().signal,
 		onStatus: (status) => {
@@ -1111,6 +1112,62 @@ describe("later generations", { timeout: 60_000 }, () => {
 		expect(root.startCommit).toBe(record.base?.commit);
 		expect(result.report).toContain("0 of 5 branches survived over 2 generations");
 		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("appends every prompt at the fork point through forkPointPrompt, in every generation, and continues forks with custom prompts", async () => {
+		const run = await fixture(
+			{
+				c1: [WRONG, finish("done", "three")],
+				c2: [WRONG, finish("done", "three")],
+				k1: [WRONG, finish("done", "still three")],
+			},
+			{
+				enumerator: () => candidateList(["c1", "c2"]),
+				other: childEnumerator(["k1", "k2"]),
+				author: [authorReply(SCORER)],
+			},
+		);
+		const forkPoint = run.session.sessionManager.buildSessionProjection().messages.length;
+		const { result, record } = await search(run, {
+			authored: true,
+			scorer: undefined,
+			config: { generations: LATER, branches: { perGeneration: 1, maxTotal: 3 } },
+			forkPointPrompt: (prompt) => ({
+				role: "toolResult",
+				toolCallId: "pending",
+				toolName: "search_branches",
+				content: [{ type: "text", text: prompt }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+		});
+
+		expect(result.outcome).toBe("no survivor");
+		expect(record.branches.map(({ key }) => key)).toEqual(["r0", "r1", "r0.c0"]);
+		const prompts = (role: string) =>
+			run.requests.flatMap((request) =>
+				request.messages
+					.filter((message) => message.role === role && text(message).startsWith("Branch search: "))
+					.map((message) => text(message).split("\n")[0] as string),
+			);
+		// Author, root enumerator, and the roots of both generations answer at the fork point ...
+		const opening = new Set(prompts("toolResult"));
+		expect([...opening]).toEqual(
+			expect.arrayContaining([
+				"Branch search: acceptance checks.",
+				"Branch search: approach list.",
+				expect.stringMatching(/^Branch search: attempt r0\./),
+				expect.stringMatching(/^Branch search: attempt r1\./),
+			]),
+		);
+		for (const request of run.requests) {
+			const at = request.messages[forkPoint];
+			if (at && text(at).startsWith("Branch search: ")) expect(at.role).toBe("toolResult");
+		}
+		// ... while the dead branch's enumerator and its child continue that branch with custom prompts.
+		expect(new Set(prompts("user"))).toEqual(
+			new Set(["Branch search: approach list.", "Branch search: attempt r0.c0, continuing from r0."]),
+		);
 	});
 
 	it("points the parent branch's worktree paths in an inherited conversation at the child's own worktree", async () => {
