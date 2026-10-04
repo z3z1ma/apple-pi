@@ -55,8 +55,8 @@ Biome is the repository formatter and lint runner. It formats all TypeScript and
 
 ## Scripted SDK tests
 
-- Reuse [`tests/helpers/faux-session.ts`](../tests/helpers/faux-session.ts) for ordinary scripted sessions with temporary state.
-- Custom provider streams must handle both cancellation during a request and a signal already aborted when the request starts. Emit an aborted response in either case; Pi can make a final request after cancellation. Verify cancellation through the provider signal and confirm that the parent can continue, as in the [clarification tests](../components/subagents/tests/subagent-clarify.test.ts).
+- Reuse [`tests/helpers/faux-session.ts`](../tests/helpers/faux-session.ts) to test real Pi sessions driven by scripted model responses in a temporary workspace.
+- Custom provider streams must handle both cancellation during a request and an `AbortSignal` already aborted when the request starts. Emit an aborted response in either case; Pi can make a final request after cancellation. Verify cancellation through the provider signal. For child or fork cancellation, also confirm that the parent session can continue, as in the [clarification tests](../components/subagents/tests/subagent-clarify.test.ts).
 - Supply explicit, nonzero usage on returned assistant-message fixtures when testing accounting. `fauxAssistantMessage` defaults its usage counters to zero.
 
 ## Manual TUI checks
