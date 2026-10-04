@@ -20,6 +20,7 @@ const cases = [
 	["Йошкар-Ола", "йошкар-ола"],
 	["ギター 東京", "ギター-東京"],
 	["Ελληνικά", "ελληνικά"],
+	["Q\u0307uark Ø\u0301re", "quark-ore"],
 ];
 
 for (const [title, slug] of cases) {

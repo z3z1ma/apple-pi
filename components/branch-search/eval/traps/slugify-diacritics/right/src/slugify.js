@@ -16,9 +16,13 @@ const LATIN_SPELLINGS = {
 	þ: "th",
 };
 
-/** Spells one Latin letter in ASCII: drops its marks, or uses its usual spelling. */
+/**
+ * Spells one Latin letter, with any combining marks that follow it, in ASCII: uses its usual spelling, or drops its
+ * marks. NFC cannot compose every letter and mark (`q` + U+0307 stays two code points), so the marks come along.
+ */
 function latinToAscii(letter) {
-	return LATIN_SPELLINGS[letter] ?? letter.normalize("NFD").replace(/\p{M}/gu, "");
+	const base = letter.normalize("NFD").replace(/\p{M}/gu, "");
+	return LATIN_SPELLINGS[base] ?? base;
 }
 
 /**
@@ -29,7 +33,7 @@ export function slugify(title) {
 	return title
 		.normalize("NFC")
 		.toLowerCase()
-		.replace(/\p{Script=Latin}/gu, latinToAscii)
+		.replace(/\p{Script=Latin}\p{M}*/gu, latinToAscii)
 		.replace(/[^\p{L}\p{N}]+/gu, "-")
 		.replace(/^-+|-+$/g, "");
 }
