@@ -46,4 +46,4 @@ Tickets 01-04 done. First benchmark (2026-10-04, `evaluation/trap-benchmark-2026
 
 ## Outcome
 
-Pending.
+Win bar not met; the agent alone solved every trap. Conclusion with the operator (2026-10-04): a model-authored scorer shares the attempts' blind spots, so the authored-scorer path adds cost without value; branching stays only for user-defined scalar judges. Branch search is to be simplified, and the follow-up idea moved to `.ledger/202610041515-repository-history-replay/` (see its `notes.md`).
