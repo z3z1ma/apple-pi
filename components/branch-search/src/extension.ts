@@ -17,8 +17,12 @@ import {
 
 const STATUS_KEY = "branch-search";
 const QUEUED = "branch search queued";
-/** Root tools that change the workspace; blocked while the search applies its winner (spec 6.9). */
-const WORKSPACE_TOOLS = new Set(["write", "edit", "bash", "pi_exec"]);
+/**
+ * Root tools that change the workspace, or start or steer a writer that does not pass through this
+ * hook (a subagent, a scheduled or monitored command); blocked while the search applies its winner
+ * (spec 6.9). Writers already running when the hold starts are not stopped.
+ */
+const WORKSPACE_TOOLS = new Set(["write", "edit", "bash", "pi_exec", "agent", "steer_subagent", "schedule", "monitor"]);
 const APPLYING = "Branch search is applying its winner to the workspace. Retry this call in a moment.";
 
 /** The one search of this root session: queued until the root run settles, then running. */

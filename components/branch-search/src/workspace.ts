@@ -233,8 +233,11 @@ async function workingBlob(root: string, path: string): Promise<string | undefin
 	let stat: ReturnType<typeof lstatSync>;
 	try {
 		stat = lstatSync(target);
-	} catch {
-		return undefined;
+	} catch (error) {
+		// Only absence counts as absent; a path that cannot be inspected is not shown to be owned.
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === "ENOENT" || code === "ENOTDIR") return undefined;
+		throw error;
 	}
 	if (stat.isSymbolicLink()) return git(root, ["hash-object", "--stdin"], { input: readlinkSync(target) });
 	if (!stat.isFile()) return undefined;

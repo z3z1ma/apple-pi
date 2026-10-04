@@ -228,27 +228,31 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 		expect(reportText(run.reports()[0])).toMatch(/: ready\./);
 	});
 
-	it("blocks root tools that change the workspace while it applies the winner", async () => {
+	it("blocks root tools that change the workspace while it applies the winner, and a retried edit survives", async () => {
 		configure({ ...validConfig(), apply: "auto" });
-		const edit = (id: string, value: number) =>
-			fauxAssistantMessage(
-				fauxToolCall("write", { path: "app.ts", content: `export const value = ${value};\n` }, { id }),
-				{
-					stopReason: "toolUse",
-				},
-			);
+		const edit = (id: string) =>
+			fauxAssistantMessage(fauxToolCall("write", { path: "app.ts", content: "export const value = 7;\n" }, { id }), {
+				stopReason: "toolUse",
+			});
 		let root: Promise<void> | undefined;
 		let session: { prompt(text: string): Promise<void> } | undefined;
+		let attempts = 0;
 		const run = await harness(
 			{ c1: [WRONG, finish("done", "three")], c2: [FIX, finish("done", "two")] },
 			{
 				other: (context) => {
 					const last = context.messages.at(-1);
-					if (text(last) === "Edit app now.") return edit("root-edit", 7);
-					if (text(last) === "Edit app again.") return edit("root-again", 8);
-					if (last?.role === "toolResult" && last.toolCallId.startsWith("root-"))
-						return fauxAssistantMessage("root done");
-					return undefined;
+					if (text(last) === "Edit app now.") return edit(`root-${attempts++}`);
+					if (last?.role !== "toolResult") return undefined;
+					// The same root turn retries its edit after each refusal, as the reason asks, reading
+					// the file in between (a real wait; the scripted model itself never yields).
+					if (last.toolCallId.startsWith("look-")) return edit(`root-${attempts++}`);
+					if (!last.toolCallId.startsWith("root-")) return undefined;
+					if (last.isError && attempts < 500)
+						return fauxAssistantMessage(fauxToolCall("read", { path: "app.ts" }, { id: `look-${attempts}` }), {
+							stopReason: "toolUse",
+						});
+					return fauxAssistantMessage("root done");
 				},
 				onStatus: (status) => {
 					// A root turn that starts once the apply holds the session.
@@ -263,13 +267,15 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 		await root;
 
 		expect(reportText(run.reports()[0])).toMatch(/: applied\./);
-		const blocked = run.session.messages.find((m) => m.role === "toolResult" && m.toolCallId === "root-edit");
-		expect(blocked).toMatchObject({ isError: true });
-		expect(text(blocked as never)).toContain("Branch search is applying its winner");
-		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 2;\n");
-		// The hold ends with the apply.
-		await run.session.prompt("Edit app again.");
-		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 8;\n");
+		const results = run.session.messages.filter((m) => m.role === "toolResult" && m.toolCallId.startsWith("root-"));
+		const blocked = results.filter((m) => m.role === "toolResult" && m.isError);
+		expect(blocked.length).toBeGreaterThan(0);
+		for (const result of blocked) expect(text(result as never)).toContain("Branch search is applying its winner");
+		expect(results.at(-1)).toMatchObject({ isError: false });
+		// The edit retried after the hold ended lands over the applied winner, and nothing undoes it.
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 7;\n");
+		const record = recordOf(reportText(run.reports()[0]));
+		expect(record.apply).toEqual(expect.objectContaining({ applied: true }));
 	});
 
 	it("finishes cleanup before a session shutdown handler returns", async () => {
