@@ -9,3 +9,5 @@
 - `.ledger/202610030909-headless-fork-reflections/task.md` — in-progress — Run passive reflections in headless forks of the conversation — Change reflection and automatic learning reflection run as headless forks of the live conversation (identical request prefix) and return one passive message, instead of continuing the run in-band.
 
 - `.ledger/202610032128-coding-child-reflections/task.md` — ready — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
+
+- `.ledger/202610040726-branch-search-challenger-benchmark/task.md` — ready — Branch search: adversarial scorer and trap benchmark — Add a challenger pass that attacks authored checks with plausible wrong implementations, and a fast staged-trap benchmark (agent alone vs search vs search with challengers, repeated runs) to measure whether search beats one trajectory.
