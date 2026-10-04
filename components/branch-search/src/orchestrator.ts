@@ -88,8 +88,12 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 export const BRANCH_SEARCH_MESSAGE_TYPE = "branch-search";
 const MESSAGE_TYPE = BRANCH_SEARCH_MESSAGE_TYPE;
 
-/** One request on a user-global model profile; resolves with the reply text (spec 10.5). */
-export type ReviewRequest = (profile: string, prompt: string, signal: AbortSignal) => Promise<string>;
+/** One request on a user-global model profile; resolves with the reply text and its token usage (spec 10.5). */
+export type ReviewRequest = (
+	profile: string,
+	prompt: string,
+	signal: AbortSignal,
+) => Promise<{ text: string; usage: Parameters<typeof addUsage>[1] }>;
 
 /** Branch counts per state, for `/branch-search status`. */
 export interface SearchProgress {
@@ -211,6 +215,8 @@ class Search {
 	/** The exact bytes whose hash is recorded at the freeze and stored as spec.json. */
 	specText: string | undefined;
 	review: ReviewRecord | null = null;
+	/** The review request's tokens and duration; null without a review profile. */
+	reviewCost: (TokenCost & { ms: number }) | null = null;
 	readonly authorCost: TokenCost & { ms: number } = { ...emptyCost(), ms: 0 };
 	/** Fork point: the parent's conversation when the search starts. */
 	readonly forkPoint: AgentMessage[];
@@ -250,7 +256,7 @@ class Search {
 			config,
 			base: null,
 			spec: null,
-			cost: { total: emptyCost(), author: null, ms: 0 },
+			cost: { total: emptyCost(), author: null, review: null, ms: 0 },
 			enumerations: [],
 			steps: [],
 			branches: [],
@@ -510,6 +516,8 @@ class Search {
 		const started = Date.now();
 		const review: ReviewRecord = { profile, verdict: "error", reason: null, applied: false, ms: 0 };
 		this.review = review;
+		const cost = { ...emptyCost(), ms: 0 };
+		this.reviewCost = cost;
 		const prompt = reviewPrompt({
 			goal: this.options.goal ?? authored.spec.goal,
 			seedGate: this.options.seedGate,
@@ -519,14 +527,16 @@ class Search {
 		let reply: string;
 		try {
 			if (!this.options.review) throw new Error("no review request is available");
-			reply = await abortable(this.options.review(profile, prompt, signal), signal);
+			const answer = await abortable(this.options.review(profile, prompt, signal), signal);
+			addUsage(cost, answer.usage);
+			reply = answer.text;
 		} catch (error) {
 			signal.throwIfAborted();
 			review.reason = `the review request failed: ${error instanceof Error ? error.message : String(error)}`;
-			review.ms = Date.now() - started;
+			review.ms = cost.ms = Date.now() - started;
 			return authored;
 		}
-		review.ms = Date.now() - started;
+		review.ms = cost.ms = Date.now() - started;
 		const verdict = parseReview(reply);
 		if (typeof verdict === "string") {
 			review.reason = `the reply could not be used: ${verdict}`;
@@ -892,10 +902,12 @@ class Search {
 		this.record.cost = {
 			total: sumCosts([
 				...(authored ? [this.authorCost] : []),
+				...(this.reviewCost ? [this.reviewCost] : []),
 				...this.record.enumerations.map((e) => e.cost),
 				...this.record.branches.map((b) => b.cost),
 			]),
 			author: authored ? this.authorCost : null,
+			review: this.reviewCost,
 			ms: Date.now() - this.started,
 		};
 		writeRecord(this.recordPath, this.record);

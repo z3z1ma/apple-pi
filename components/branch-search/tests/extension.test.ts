@@ -1,4 +1,13 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@earendil-works/pi-ai";
@@ -21,6 +30,7 @@ import {
 	text,
 	validConfig,
 	WRONG,
+	withOutput,
 } from "./fixtures.js";
 
 const cleanup: (() => void)[] = [];
@@ -175,7 +185,7 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 				other: (context) => {
 					if (!text(context.messages.at(-1)).includes("Review an acceptance spec")) return undefined;
 					reviews.push(context);
-					return fauxAssistantMessage('{"verdict":"confirm"}');
+					return withOutput(fauxAssistantMessage('{"verdict":"confirm"}'), 13);
 				},
 			},
 		);
@@ -198,6 +208,8 @@ describe("/branch-search", { timeout: 30_000 }, () => {
 		expect(reviews).toHaveLength(1);
 		expect(reviews[0]?.messages).toHaveLength(1);
 		expect(record.spec?.review).toEqual(expect.objectContaining({ profile: "deep", verdict: "confirm" }));
+		// The review's tokens join the search-level cost.
+		expect(record.cost.review).toEqual(expect.objectContaining({ outputTokens: 13 }));
 		// Exactly one message joins the parent, and it started no turn.
 		expect(run.session.messages.filter((message) => message.role === "custom")).toHaveLength(1);
 		expect(run.session.messages.at(-1)).toBe(run.reports()[0]);
@@ -406,6 +418,74 @@ async function expectNoSearch(run: Awaited<ReturnType<typeof harness>>) {
 	expect(run.notes.at(-1)).toBe("No branch search is running.");
 }
 
+describe("/branch-search replay", { timeout: 30_000 }, () => {
+	it("prints the tuning table over this repository's records and changes no configuration", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: [WRONG, finish("done", "three")], c2: [FIX, finish("done", "two")] });
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+		const record = recordOf(reportText(run.reports()[0]));
+		const settings = readFileSync(join(agentDir, "branch-search.json"), "utf8");
+		writeFileSync(join(run.cwd, "grid.json"), JSON.stringify({ "branches.perGeneration": [3] }));
+		const before = run.requests.length;
+
+		await run.session.prompt("/branch-search replay grid.json");
+
+		const table = run.notes.at(-1) as string;
+		expect(table).toContain("Replay tuning over 1 record, 1 world.");
+		expect(table).toContain("Compared on 1 world where every configuration is evaluable.");
+		// Two candidates only: three roots replay the same two nodes, so the current configuration wins the tie.
+		expect(table).toMatch(/^1 +1\/1 +\d+ +[\d.]+s +current$/m);
+		expect(table).toMatch(/^2 +1\/1 +\d+ +[\d.]+s +branches\.perGeneration=3$/m);
+		expect(table).toContain("Unevaluable: none.");
+		expect(record.outcome).toBe("ready");
+		expect(readFileSync(join(agentDir, "branch-search.json"), "utf8")).toBe(settings);
+		expect(run.requests).toHaveLength(before);
+		expect(run.reports()).toHaveLength(1);
+	});
+
+	it("reports malformed records as unreadable with their path and replays the valid ones", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: [WRONG, finish("done", "three")], c2: [FIX, finish("done", "two")] });
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
+		const records = join(run.cwd, ".git", "apple-pi", "branch-search");
+		const malformed = { "bs-null": "null", "bs-broken": '{"id":"broken","outcome":"ready"}', "bs-garbage": "{" };
+		for (const [id, content] of Object.entries(malformed)) {
+			mkdirSync(join(records, id));
+			writeFileSync(join(records, id, "record.json"), content);
+		}
+		writeFileSync(join(run.cwd, "grid.json"), JSON.stringify({ "branches.perGeneration": [1] }));
+
+		await run.session.prompt("/branch-search replay grid.json");
+
+		const table = run.notes.at(-1) as string;
+		expect(table).toContain("Replay tuning over 1 record, 1 world.");
+		for (const id of Object.keys(malformed))
+			expect(table).toMatch(new RegExp(`^Unreadable: /.*/branch-search/${id}/record\\.json: .+$`, "m"));
+		expect(table).toContain("Compared on 1 world where every configuration is evaluable.");
+		expect(table).toMatch(/^\d +1\/1 +\d+ +[\d.]+s +current$/m);
+	});
+
+	it("prints the problem with an invalid or missing grid and does nothing else", async () => {
+		configure(validConfig());
+		const run = await harness({ c1: [FIX] });
+		writeFileSync(join(run.cwd, "grid.json"), JSON.stringify({ "enumerate.count": [3], "branches.maxTotal": [0] }));
+
+		await run.session.prompt("/branch-search replay grid.json");
+		expect(run.notes.at(-1)).toMatch(/^Replay grid .*grid\.json is invalid:\n {2}enumerate\.count: not a tunable key/);
+		expect(run.notes.at(-1)).toContain("branches.maxTotal: 0 must be an integer ≥ 1");
+
+		await run.session.prompt("/branch-search replay missing.json");
+		expect(run.notes.at(-1)).toMatch(/^Cannot read replay grid .*missing\.json/);
+
+		await run.session.prompt("/branch-search replay");
+		expect(run.notes.at(-1)).toBe("Usage: /branch-search replay <grid.json>");
+		expect(searchDirs(run.cwd)).toEqual([]);
+		expect(run.reports()).toHaveLength(0);
+	});
+});
+
 describe("passive activation", { timeout: 30_000 }, () => {
 	it("starts one passive search at the next settle after a failure repeats to the threshold, with that command as seed gate", async () => {
 		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 3 } });
@@ -501,6 +581,28 @@ describe("passive activation", { timeout: 30_000 }, () => {
 		await vi.waitFor(() => expect(run.reports()).toHaveLength(1), { timeout: 20_000 });
 
 		// Passive activation turned on afterwards still finds the signature spent.
+		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 2 } });
+		await run.session.prompt("Fail once.");
+		await expectNoSearch(run);
+		expect(searchDirs(run.cwd)).toHaveLength(1);
+	});
+
+	it("keeps the signatures a search spent when a reload cuts it off", async () => {
+		configure({ ...validConfig(), passive: { enabled: false, repeatThreshold: 2 } });
+		const twice = failingParent("Fail twice.", 2);
+		const once = failingParent("Fail once.", 1);
+		const run = await harness(
+			{ c1: ["until-aborted"], c2: ["until-aborted"] },
+			{ other: (context) => twice(context) ?? once(context) },
+		);
+		await run.session.prompt("Fail twice.");
+		await run.session.prompt("/branch-search Make value equal 2.");
+		await vi.waitFor(() => expect(run.statuses).toContain("branching run g0 2/2"), { timeout: 20_000 });
+		await run.session.reload();
+
+		// The cut-off search left its report, which carries the spent signature into the reloaded session.
+		expect(run.reports()).toHaveLength(1);
+		expect(reportText(run.reports()[0]).split("\n")[0]).toMatch(/: aborted: cancelled\./);
 		configure({ ...validConfig(), passive: { enabled: true, repeatThreshold: 2 } });
 		await run.session.prompt("Fail once.");
 		await expectNoSearch(run);

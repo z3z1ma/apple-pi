@@ -23,6 +23,8 @@ import type { SearchRecord } from "../src/record.js";
 import type { ScorerSpec } from "../src/scorer.js";
 import {
 	type Behavior,
+	candidateList,
+	childEnumerator,
 	FIX,
 	finish,
 	gitOut,
@@ -105,6 +107,10 @@ async function search(
 	});
 	const record = result.recordPath ? JSON.parse(readFileSync(result.recordPath, "utf8")) : undefined;
 	return { result, statuses, record };
+}
+
+function reviewReply(text: string) {
+	return { text, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
 }
 
 function searchRefs(cwd: string): string[] {
@@ -712,7 +718,7 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
 			review: async (_profile, prompt) => {
 				prompts.push(prompt);
-				return '{"verdict":"confirm"}';
+				return reviewReply('{"verdict":"confirm"}');
 			},
 		});
 
@@ -739,7 +745,7 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
 			review: async (profile, prompt) => {
 				reviews.push({ profile, prompt });
-				return JSON.stringify({ verdict: "refine", reason: "protect src/keep.txt", spec: refined });
+				return reviewReply(JSON.stringify({ verdict: "refine", reason: "protect src/keep.txt", spec: refined }));
 			},
 		});
 
@@ -770,7 +776,7 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 			config: { scorer: { validationRetries: 1, reviewProfile: "deep" } },
 			review: async (_profile, prompt) => {
 				prompts.push(prompt);
-				return '{"verdict":"confirm"}';
+				return reviewReply('{"verdict":"confirm"}');
 			},
 		});
 
@@ -791,7 +797,7 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 			authored: true,
 			review: async () => {
 				reviews++;
-				return JSON.stringify({ verdict: "confirm" });
+				return reviewReply(JSON.stringify({ verdict: "confirm" }));
 			},
 		});
 
@@ -1003,28 +1009,6 @@ const SCORER_TRACES = [
 	"valuecheck",
 	"test -f src/keep.txt",
 ];
-
-function candidateList(ids: string[], preferred = ids[0]): Reply {
-	const candidates = ids.map((id) => ({ id, approach: `approach ${id}`, firstStep: `open app.ts for ${id}` }));
-	return fauxAssistantMessage(JSON.stringify({ candidates, preferred }));
-}
-
-const PEEK = fauxAssistantMessage(fauxToolCall("bash", { command: "cat app.ts; ls", verbatim: true }, { id: "peek" }), {
-	stopReason: "toolUse",
-});
-
-/**
- * The enumerator of a dead branch: a request whose approach-list prompt follows an attempt's
- * conversation. It looks at its worktree once, then lists the child approaches.
- */
-function childEnumerator(ids: string[]) {
-	return (context: Context): Reply | undefined => {
-		const prompt = context.messages.findLastIndex((m) => text(m).includes("Branch search: approach list."));
-		if (prompt < 0) return undefined;
-		if (!context.messages.slice(0, prompt).some((m) => text(m).startsWith("Branch search: attempt"))) return undefined;
-		return context.messages.at(-1)?.role === "toolResult" ? candidateList(ids, ids.at(-1)) : PEEK;
-	};
-}
 
 const REMOVE_KEEP = fauxAssistantMessage(
 	fauxToolCall("bash", { command: "rm src/keep.txt", verbatim: true }, { id: "rm-keep" }),

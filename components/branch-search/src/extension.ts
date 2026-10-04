@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSession, ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -17,7 +19,9 @@ import {
 	type SearchProgress,
 	type SearchResult,
 } from "./orchestrator.js";
-import type { SearchMode } from "./record.js";
+import { readRecords, type SearchMode } from "./record.js";
+import { formatTuning, parseGrid, tune } from "./replay.js";
+import { gitCommonDir } from "./workspace.js";
 
 const STATUS_KEY = "branch-search";
 const QUEUED = "branch search queued";
@@ -46,6 +50,11 @@ interface ActiveSearch {
 	search?: { id: string; progress: () => SearchProgress };
 	/** Set when the session it belongs to went away: no report and no UI calls on a stale context. */
 	silent: boolean;
+	/**
+	 * Set when a reload cuts the search off: the session stays, so the report still joins it and
+	 * carries the signatures the search spent into the reloaded session.
+	 */
+	reportWhenSilent?: boolean;
 	/** Settles when the search has ended and cleaned up. */
 	done?: Promise<void>;
 }
@@ -77,6 +86,45 @@ function loadConfig(
 	}
 	const validated = validateBranchSearchConfig(raw);
 	return validated.ok ? validated : { ...validated, level: "warning" };
+}
+
+/**
+ * `/branch-search replay <grid.json>` (spec 18.1): replay every grid configuration on this repository's
+ * search records and return the tuning table. It reads the configuration, the grid, and the records,
+ * and changes nothing; the operator sets the values.
+ */
+async function replayGrid(ctx: ExtensionContext, path: string): Promise<{ text: string; level: "info" | "warning" }> {
+	if (path === "") return { text: "Usage: /branch-search replay <grid.json>", level: "warning" };
+	const validated = loadConfig(ctx);
+	if (!validated.ok) return { text: validated.text, level: "warning" };
+	const gridPath = resolve(ctx.cwd, path);
+	let raw: unknown;
+	try {
+		raw = JSON.parse(readFileSync(gridPath, "utf8"));
+	} catch (error) {
+		return {
+			text: `Cannot read replay grid ${gridPath}: ${error instanceof Error ? error.message : String(error)}`,
+			level: "warning",
+		};
+	}
+	const current = validated.config;
+	const grid = parseGrid(raw, { branches: current.branches, generations: current.generations });
+	if (!grid.ok)
+		return {
+			text: `Replay grid ${gridPath} is invalid:\n${grid.problems.map((p) => `  ${p}`).join("\n")}`,
+			level: "warning",
+		};
+	let records: ReturnType<typeof readRecords>;
+	try {
+		records = readRecords(join(await gitCommonDir(ctx.cwd), "apple-pi", "branch-search"));
+	} catch (error) {
+		return {
+			text: `Cannot read branch search records: ${error instanceof Error ? error.message : String(error)}`,
+			level: "warning",
+		};
+	}
+	const tuning = tune(records.records, grid.configurations);
+	return { text: formatTuning(tuning, grid.configurations[0]?.shape ?? current, records.unreadable), level: "info" };
 }
 
 /** True when `toolCallId` is the only tool call of the message the conversation ends with. */
@@ -139,10 +187,11 @@ function profileReview(ctx: ExtensionContext): ReviewRequest {
 			.result();
 		if (reply.stopReason === "error" || reply.stopReason === "aborted")
 			throw new Error(reply.errorMessage ?? reply.stopReason);
-		return reply.content
+		const text = reply.content
 			.flatMap((block) => (block.type === "text" ? [block.text] : []))
 			.join("\n")
 			.trim();
+		return { text, usage: reply.usage };
 	};
 }
 
@@ -188,7 +237,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 	});
 
 	const deliver = (entry: ActiveSearch, result: SearchResult) => {
-		if (entry.silent) return;
+		if (entry.silent && !entry.reportWhenSilent) return;
 		pi.sendMessage(
 			{
 				customType: BRANCH_SEARCH_MESSAGE_TYPE,
@@ -245,10 +294,12 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 	};
 
 	/** Cancel the search and wait until its worktrees, refs, and record are final. */
-	const cancelForSession = async (_event: unknown, ctx: ExtensionContext) => {
+	const cancelForSession = async (event: { type: string; reason?: string }, ctx: ExtensionContext) => {
 		const entry = active;
 		if (!entry) return;
 		entry.silent = true;
+		// The old instance stays live until this handler returns, so the report can still be sent.
+		entry.reportWhenSilent = event.type === "session_shutdown" && event.reason === "reload";
 		entry.controller.abort();
 		if (entry.queued) active = undefined;
 		ctx.ui.setStatus(STATUS_KEY, undefined);
@@ -331,9 +382,14 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 
 	pi.registerCommand("branch-search", {
 		description:
-			"Try several approaches in isolated worktrees and keep the one that passes hidden checks: /branch-search [goal] | status | cancel",
+			"Try several approaches in isolated worktrees and keep the one that passes hidden checks: /branch-search [goal] | status | cancel | replay <grid.json>",
 		handler: async (args, ctx) => {
 			const input = args.trim();
+			if (input === "replay" || input.startsWith("replay ")) {
+				const replayed = await replayGrid(ctx, input.slice("replay".length).trim());
+				ctx.ui.notify(replayed.text, replayed.level);
+				return;
+			}
 			if (input === "status") {
 				ctx.ui.notify(statusText(active), "info");
 				return;

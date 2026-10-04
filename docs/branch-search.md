@@ -21,6 +21,7 @@ The extension loads only in the root session. Subagents and `pi_exec` workers do
 - `/branch-search [goal]` starts a search. `goal` is free text that states the observable result that must hold when the work is done. Without a goal, the scorer author infers it from the conversation.
 - `/branch-search status` prints the search ID, phase, branch counts per state (running, stopped, survived, dead), and elapsed time.
 - `/branch-search cancel` cancels the search. The search ends `aborted: cancelled` and cleans up.
+- `/branch-search replay <grid.json>` replays a grid of tree shapes over this repository's stored searches and prints the tuning table (see [Replay tuning](#replay-tuning)). It starts no search and changes no setting.
 
 Only one search runs per session. Starting another while one runs prints the active search ID and starts nothing.
 
@@ -32,7 +33,7 @@ Before it applies a winner, the search waits until the main agent is not running
 
 If `git apply` fails partway, the search puts back to base only the files that still hold what the patch wrote. A file someone else changed in the meantime, for example in an editor, is left alone, and the report names it.
 
-Switching sessions, navigating the session tree, or shutting down cancels the search and waits until cleanup has finished: worktrees removed, refs pruned, and the record final. No report is added.
+Switching sessions, navigating the session tree, shutting down, or reloading cancels the search and waits until cleanup has finished: worktrees removed, refs pruned, and the record final. No report is added, except after a reload, which keeps the session: there the `aborted: cancelled` report joins it as usual.
 
 ## The `search_branches` tool
 
@@ -62,7 +63,7 @@ So the same test failing at a different line number, in a different temporary di
 
 When the main agent's run settles, no search is running, and one failure has repeated `passive.repeatThreshold` times, a passive search starts with that command as its **seed gate**: the scorer author is told that the command failed repeatedly and to use it as a gate that fails on the current workspace if it expresses the goal, and the scorer review sees it too. The search has no stated goal, so the author infers it from the conversation. It forks the conversation as it stands at that settle, and it reports, like `/branch-search`, with one passive message that starts no turn. The record stores `mode: "passive"` and the `seedGate`. The harness shows the notice ``Branch search started: `<command>` failed <n> times.``, and `/branch-search status` and `/branch-search cancel` work on the passive search.
 
-Every search that starts in the main session, whether from `/branch-search`, `search_branches`, or passive activation, and however it ends (cancelled included), spends each failure that has reached `passive.repeatThreshold` at that moment: none of them starts a passive search later in the session, however often it repeats. A `/branch-search` you queued still starts as usual. The search's report message, or its `search_branches` result, lists the spent signatures in its details. When a session starts, the harness reads them back from those reports and rebuilds the counts from the main agent's tool results on the current branch, so resuming or reloading a session keeps both. A `/branch-search` or passive search cut off by a session switch, tree navigation, shutdown, or reload adds no report, so the signatures it spent are not kept. A new session starts with no counts and nothing spent. With `passive.enabled` set to `false`, no repeat count starts a search.
+Every search that starts in the main session, whether from `/branch-search`, `search_branches`, or passive activation, and however it ends (cancelled included), spends each failure that has reached `passive.repeatThreshold` at that moment: none of them starts a passive search later in the session, however often it repeats. A `/branch-search` you queued still starts as usual. The search's report message, or its `search_branches` result, lists the spent signatures in its details. When a session starts, the harness reads them back from those reports and rebuilds the counts from the main agent's tool results on the current branch, so resuming or reloading a session keeps both. A search cut off by a reload still adds its report, so its signatures stay spent. A `/branch-search` or passive search cut off by a session switch, tree navigation, or shutdown adds no report, so the signatures it spent are not kept when you come back to that session. A new session starts with no counts and nothing spent. With `passive.enabled` set to `false`, no repeat count starts a search.
 
 The same detector runs inside each attempt, with that attempt's own counts and regardless of `passive.enabled`. When one failure repeats `passive.repeatThreshold` times in an attempt, the harness stops the attempt, which reports `stalled`. Its work is still committed and scored, like an attempt stopped by a limit.
 
@@ -132,6 +133,51 @@ When every attempt of a generation fails a gate, and fewer than `generations.max
 
 Attempt IDs record where an attempt came from: `r2` runs position 2 of the first list's drawn order, and `r2.c0` runs position 0 of `r2`'s own list. Each list's drawn order, and each attempt's constraint, is drawn from the search's seed and the ID alone, so an attempt gets the same approach and constraint however the counts are configured. A continuation shares its failed attempt's prompt cache. The worktrees of a scored generation, which hold the installed checks, are removed before any fork of the next step starts.
 
+## Replay tuning
+
+Every finished search leaves a record of each attempt it ran: its outcome and its cost. Because an attempt's approach and constraint depend only on the seed and its ID, a different tree shape run on the same search would have run some of the same attempts, with the same outcomes. Replay uses this to compare tree shapes on past searches without running a model or a check again. It calls the same planning and selection code as a live search, so replaying a search's own configuration reproduces its steps, its winner, and its outcome.
+
+Only the tree-shape keys can be tuned this way: `branches.perGeneration`, `branches.maxTotal`, `generations.maxDepth`, `generations.rootsPerGeneration`, `generations.parentsPerGeneration`, and `generations.childrenPerParent`. The other keys change what the model or the checks produce.
+
+To tune:
+
+1. Collect searches. Replay uses every search in the repository that ended `applied`, `ready`, or `no survivor` (a **world**); aborted and unfinished searches are skipped. Replay reads each world's `record.json` and the frozen `spec.json` beside it, whose gates and objective directions select the winner. A record that is not valid JSON, is not a search record, lacks what replay reads (for example an empty approach list), or whose `spec.json` is missing or does not match the hash in the record, is listed as `Unreadable:` with its path; the others are still replayed.
+2. Write a grid file that maps tunable keys to lists of values, for example:
+
+   ```json
+   { "branches.perGeneration": [2, 3], "generations.childrenPerParent": [1, 2] }
+   ```
+
+   The grid is every combination of the listed values, with each unlisted key at its current value. The current configuration is always in the grid. An unknown key, a value list that is empty, or a value the configuration would reject prints the problem, and nothing is replayed.
+3. Run `/branch-search replay grid.json`. A relative path is resolved from the session's working directory. The command reads every record under `$(git rev-parse --git-common-dir)/apple-pi/branch-search/`.
+4. Set the winning values in `branch-search.json` yourself; the command changes no setting.
+
+Each world is replayed under its own seed, its own approach lists, and its own `draw` mode: a search that ran with `draw: "model"` replays only under `draw: "model"`, and the grid cannot set `draw`. A configuration is **unevaluable** on a world when it asks for an attempt or a failed attempt's approach list that the world never produced.
+
+The table:
+
+```
+Replay tuning over 5 records, 4 worlds.
+Current: branches.perGeneration=3 branches.maxTotal=6 generations.maxDepth=1 …
+Compared on 3 worlds where every configuration is evaluable.
+Rank  Solved  Tokens  Wall-clock  Configuration
+1     2/3     84120   312.4s      branches.perGeneration=2
+2     2/3     97311   340.0s      current
+3     2/3     97311   340.0s      generations.childrenPerParent=3
+Unevaluable:
+  generations.childrenPerParent=3: bs-20261004-142233-9f1c (no node r1.c2)
+```
+
+- A configuration is named by the keys it changes from the current one.
+- Configurations are compared only on the worlds where every configuration is evaluable. **Solved** counts those worlds on which the configuration's replay ends with a winner. **Tokens** adds, per world, the scorer author's and the scorer review's tokens, the approach lists the configuration used (the first list included), and the attempts it ran; input, cache-read, cache-write, and output tokens all count. **Wall-clock** adds, per generation, the longest attempt's run plus scoring time; it leaves out the scorer author, validation, review, and approach listing.
+- Rank orders by solved (more first), then tokens, then wall-clock (lower first). The current configuration wins a tie, so tuning never moves to a configuration that only replays as well.
+- **Unevaluable** lists, per configuration, the worlds it could not replay and the first missing attempt or list.
+
+Limits:
+
+- Replay sees only the attempts that ran. A configuration larger than the recorded searches is unevaluable on them, so tuning can shrink a configuration, and can grow it only after searches that ran with larger values.
+- Each attempt's outcome is one sample from a model that might do otherwise on another run. Replay treats it as the outcome.
+
 ## Keeping the scorer hidden
 
 Attempts cannot see the checks that judge them. The harness keeps them apart in time rather than by guarding paths, because a shell can reach any path indirectly:
@@ -170,8 +216,10 @@ Each search keeps its state under `$(git rev-parse --git-common-dir)/apple-pi/br
 
 After the search, the directory keeps:
 
-- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
+- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, the token cost of the scorer author and of the review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
 - `spec.json`: the frozen scorer; its SHA-256 equals the hash in the record.
 - `winner.patch`: the applied diff, when the winner was applied.
+
+Replay tuning reads only `record.json` and `spec.json`.
 
 Refs under `refs/apple-pi/branch-search/<search-id>/` keep the base and the winner; the other attempt refs are deleted.

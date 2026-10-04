@@ -103,3 +103,25 @@ export function initFixtureRepo(cwd: string): void {
 	mkdirSync(join(cwd, "node_modules"));
 	writeFileSync(join(cwd, "node_modules", "dep.js"), "dep\n");
 }
+
+export function candidateList(ids: string[], preferred = ids[0]): Reply {
+	const candidates = ids.map((id) => ({ id, approach: `approach ${id}`, firstStep: `open app.ts for ${id}` }));
+	return fauxAssistantMessage(JSON.stringify({ candidates, preferred }));
+}
+
+const PEEK = fauxAssistantMessage(fauxToolCall("bash", { command: "cat app.ts; ls", verbatim: true }, { id: "peek" }), {
+	stopReason: "toolUse",
+});
+
+/**
+ * The enumerator of a dead branch: a request whose approach-list prompt follows an attempt's
+ * conversation. It looks at its worktree once, then lists the child approaches.
+ */
+export function childEnumerator(ids: string[]) {
+	return (context: Context): Reply | undefined => {
+		const prompt = context.messages.findLastIndex((m) => text(m).includes("Branch search: approach list."));
+		if (prompt < 0) return undefined;
+		if (!context.messages.slice(0, prompt).some((m) => text(m).startsWith("Branch search: attempt"))) return undefined;
+		return context.messages.at(-1)?.role === "toolResult" ? candidateList(ids, ids.at(-1)) : PEEK;
+	};
+}

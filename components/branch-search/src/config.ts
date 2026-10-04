@@ -97,16 +97,28 @@ const limits: Check = (value) => {
 	return undefined;
 };
 
+/** The tree-shape keys of `SearchShape` with their minimums: the keys replay can tune (spec 11, 18.1). */
+export const SHAPE_KEYS = {
+	"branches.perGeneration": 1,
+	"branches.maxTotal": 1,
+	"generations.maxDepth": 0,
+	"generations.rootsPerGeneration": 0,
+	"generations.parentsPerGeneration": 1,
+	"generations.childrenPerParent": 1,
+} as const;
+
+export type ShapeKey = keyof typeof SHAPE_KEYS;
+
+/** Why `value` cannot be the value of a tree-shape key, or undefined when it can. */
+export function checkShapeValue(key: ShapeKey, value: unknown): string | undefined {
+	return integer(SHAPE_KEYS[key])(value);
+}
+
 const REQUIRED: [string, Check][] = [
 	["passive.enabled", boolean],
 	["passive.repeatThreshold", integer(2)],
 	["enumerate.count", integer(2)],
-	["branches.perGeneration", integer(1)],
-	["branches.maxTotal", integer(1)],
-	["generations.maxDepth", integer(0)],
-	["generations.rootsPerGeneration", integer(0)],
-	["generations.parentsPerGeneration", integer(1)],
-	["generations.childrenPerParent", integer(1)],
+	...Object.entries(SHAPE_KEYS).map(([key, min]): [string, Check] => [key, integer(min)]),
 	["branch.limits", limits],
 	["scorer.validationRetries", integer(0)],
 	["constraints", strings],
