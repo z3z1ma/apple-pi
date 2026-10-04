@@ -316,6 +316,25 @@ describe("worktree forks", () => {
 		expect(existsSync(join(cwd, "escaped.md"))).toBe(false);
 	});
 
+	it("refuses a write through a link whose target climbs out through another link", async () => {
+		const { session, cwd } = await settledSession({
+			"fork pivot": call("write", { path: "gate.sh", content: "x" }, "write-pivot"),
+		});
+		const root = join(cwd, ".git", "wt");
+		mkdirSync(join(cwd, "child"), { recursive: true });
+		mkdirSync(root, { recursive: true });
+		// pivot leads into the parent workspace; gate.sh's .. applies after following it.
+		symlinkSync(join(cwd, "child"), join(root, "pivot"));
+		symlinkSync("pivot/../hidden.sh", join(root, "gate.sh"));
+		const { messages } = await fork(session, cwd, "fork pivot", { worktree: { root, parentRoot: cwd } }).result;
+
+		expect(toolResult(messages, "write-pivot")).toEqual({
+			isError: true,
+			text: expect.stringContaining("Branch search isolates this attempt to its own copy of the repository."),
+		});
+		expect(existsSync(join(cwd, "hidden.sh"))).toBe(false);
+	});
+
 	it("works in the worktree's copy of the parent's subdirectory", async () => {
 		const { session, cwd } = await settledSession({
 			"fork subdir": call("bash", { command: "pwd -P > where.txt", verbatim: true }, "bash-subdir"),

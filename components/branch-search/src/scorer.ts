@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { canonical, within } from "../../shared/src/real-path.js";
-import { git } from "./workspace.js";
+import { git, PLAIN_DIFF } from "./workspace.js";
 
 /** The pre-registered acceptance spec (spec 7.1). */
 export interface ScorerSpec {
@@ -44,6 +44,9 @@ export function checkScorerSpec(spec: ScorerSpec): string[] {
 		if (!insideWorktree(path)) problems.push(`file path "${path}" must stay inside the worktree`);
 	for (const path of spec.protect ?? [])
 		if (!insideWorktree(path)) problems.push(`protected path "${path}" must stay inside the worktree`);
+	for (const { id, repeat } of spec.objectives ?? [])
+		if (repeat !== undefined && !(Number.isInteger(repeat) && repeat >= 1))
+			problems.push(`objective "${id}" repeat must be a positive integer`);
 	return problems;
 }
 
@@ -152,6 +155,10 @@ export interface GateResult {
 	ms: number;
 }
 
+function scorerEnv(searchId: string): NodeJS.ProcessEnv {
+	return { CI: "1", APPLE_PI_BRANCH_SEARCH: searchId };
+}
+
 /** Run every gate in order. A gate passes only when it exits 0 within its timeout. */
 export async function runGates(
 	worktree: string,
@@ -159,7 +166,7 @@ export async function runGates(
 	searchId: string,
 	signal?: AbortSignal,
 ): Promise<GateResult[]> {
-	const env = { CI: "1", APPLE_PI_BRANCH_SEARCH: searchId };
+	const env = scorerEnv(searchId);
 	const results: GateResult[] = [];
 	for (const gate of spec.gates) {
 		signal?.throwIfAborted();
@@ -170,6 +177,234 @@ export async function runGates(
 	return results;
 }
 
+/** Every gate fails with the reason the scorer could not be installed. */
+export function refusedGates(spec: ScorerSpec, reason: string): GateResult[] {
+	return spec.gates.map(({ id }) => ({ id, result: "fail", exitCode: null, stdout: "", stderr: reason, ms: 0 }));
+}
+
+/** The number on the last non-empty stdout line, if that whole line is one finite number (spec 7.1). */
+export function lastNumber(stdout: string): number | undefined {
+	const line = stdout
+		.split("\n")
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.at(-1);
+	if (line === undefined) return undefined;
+	const value = Number(line);
+	return Number.isFinite(value) ? value : undefined;
+}
+
+/** The middle value; the mean of the middle pair for an even count. */
+export function median(values: readonly number[]): number {
+	const sorted = [...values].sort((a, b) => a - b);
+	const middle = Math.floor(sorted.length / 2);
+	return sorted.length % 2 === 1
+		? (sorted[middle] as number)
+		: ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
+export interface ObjectiveResult {
+	id: string;
+	/** The median of `values`; undefined when a run failed. */
+	value: number | undefined;
+	values: number[];
+	/** Why the measurement failed: non-zero exit, timeout, or no finite number. */
+	failure?: string;
+	/** Output of the last run. */
+	exitCode: number | null;
+	stdout: string;
+	stderr: string;
+	ms: number;
+}
+
+type Objective = ScorerSpec["objectives"][number];
+
+/** Run an objective `repeat` times (default 1) and keep the median; the first failed run ends it (spec 7.1, 7.2). */
+export async function measureObjective(
+	worktree: string,
+	objective: Objective,
+	searchId: string,
+	signal?: AbortSignal,
+): Promise<ObjectiveResult> {
+	const values: number[] = [];
+	let last: CommandResult = { exitCode: null, timedOut: false, stdout: "", stderr: "", ms: 0 };
+	let failure: string | undefined;
+	let ms = 0;
+	for (let run = 1; run <= (objective.repeat ?? 1) && failure === undefined; run++) {
+		signal?.throwIfAborted();
+		last = await runCommand(objective.run, worktree, objective.timeoutSec, scorerEnv(searchId), signal);
+		ms += last.ms;
+		const value = lastNumber(last.stdout);
+		if (last.timedOut) failure = `timed out after ${objective.timeoutSec}s`;
+		else if (last.exitCode !== 0) failure = `exited with code ${last.exitCode}`;
+		else if (value === undefined) failure = "printed no finite number on its last non-empty stdout line";
+		else values.push(value);
+		if (failure !== undefined && (objective.repeat ?? 1) > 1) failure += ` (run ${run})`;
+	}
+	const { exitCode, stdout, stderr } = last;
+	return {
+		id: objective.id,
+		value: failure === undefined ? median(values) : undefined,
+		values,
+		...(failure === undefined ? {} : { failure }),
+		exitCode,
+		stdout,
+		stderr,
+		ms,
+	};
+}
+
+/** Wait for every task, then fail with the first error, so nothing still runs in a worktree that cleanup removes. */
+export async function settleAll(tasks: Promise<unknown>[]): Promise<void> {
+	const failed = (await Promise.allSettled(tasks)).find((result) => result.status === "rejected");
+	if (failed) throw failed.reason;
+}
+
+export interface BranchScoring {
+	gates: GateResult[];
+	/** The built-in objective, measured for every branch, dead or alive (spec 7.4). */
+	diffSize: number;
+	/** In declared order; stops at the first failed objective. Empty when a gate failed. */
+	objectives: ObjectiveResult[];
+	survived: boolean;
+}
+
+/**
+ * Score one generation (spec 6.7 steps 1 to 4). Each branch installs the scorer, runs its gates, then
+ * its non-serial objectives, then `diffSize`, all branches at once. Serial objectives run after every
+ * one of those has finished, one branch at a time in the given order, so concurrent load does not
+ * distort them. A failed gate or objective kills the branch and skips its remaining objectives.
+ */
+export async function scoreBranches(
+	branches: readonly { key: string; worktree: string }[],
+	base: string,
+	spec: ScorerSpec,
+	searchId: string,
+	diffSize: (key: string) => Promise<number>,
+	signal?: AbortSignal,
+): Promise<Map<string, BranchScoring>> {
+	const scored = new Map<string, BranchScoring>();
+	const measure = async (worktree: string, score: BranchScoring, objectives: Objective[]) => {
+		for (const objective of objectives) {
+			if (!score.survived) return;
+			const result = await measureObjective(worktree, objective, searchId, signal);
+			score.objectives.push(result);
+			if (result.value === undefined) score.survived = false;
+		}
+	};
+	await settleAll(
+		branches.map(async ({ key, worktree }) => {
+			const refused = await installScorer(worktree, base, spec);
+			const gates = refused ? refusedGates(spec, refused) : await runGates(worktree, spec, searchId, signal);
+			const score: BranchScoring = {
+				gates,
+				diffSize: 0,
+				objectives: [],
+				survived: gates.every((gate) => gate.result === "pass"),
+			};
+			scored.set(key, score);
+			await measure(
+				worktree,
+				score,
+				spec.objectives.filter((objective) => !objective.serial),
+			);
+			score.diffSize = await diffSize(key);
+		}),
+	);
+	for (const { key, worktree } of branches) {
+		signal?.throwIfAborted();
+		const score = scored.get(key) as BranchScoring;
+		await measure(
+			worktree,
+			score,
+			spec.objectives.filter((objective) => objective.serial),
+		);
+		const order = spec.objectives.map((objective) => objective.id);
+		score.objectives.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+	}
+	return scored;
+}
+
+/** The end of a command's output, enough to tell the author why a check misbehaved. */
+function excerpt({ stdout, stderr }: { stdout: string; stderr: string }): string {
+	const text = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+	return text === "" ? "" : `\n    output: ${text.slice(-1000).replace(/\n/g, "\n    ")}`;
+}
+
+export interface Validation {
+	ok: boolean;
+	/** One line per gate and objective, plus every problem; what the author reads to correct the spec. */
+	report: string;
+	/** Median base value of each objective that measured. */
+	baseValues: Record<string, number>;
+}
+
+/**
+ * Validate a spec on the base in a fresh worktree created from it (spec 6.3): install files and restore
+ * protected paths, run every gate twice (both runs must agree with each other and with `onBase`), measure
+ * every objective, and require an objective when no gate fails on the base. The caller owns the worktree;
+ * a retry needs a fresh one, because this installs the scorer and the commands may leave files behind.
+ */
+export async function validateScorer(
+	worktree: string,
+	base: string,
+	spec: ScorerSpec,
+	searchId: string,
+	signal?: AbortSignal,
+): Promise<Validation> {
+	const lines: string[] = [];
+	let ok = true;
+	const problem = (line: string) => {
+		ok = false;
+		lines.push(line);
+	};
+	const baseValues: Record<string, number> = {};
+	const finish = () => ({
+		ok,
+		report: [ok ? "The scorer spec is valid on the base." : "The scorer spec is invalid on the base.", ...lines].join(
+			"\n",
+		),
+		baseValues,
+	});
+
+	if (spec.objectives.length === 0 && !spec.gates.some((gate) => gate.onBase === "fail"))
+		problem(`no gate has onBase "fail", so the spec needs at least one objective`);
+	let refused: string | undefined;
+	try {
+		refused = await installScorer(worktree, base, spec);
+	} catch (error) {
+		refused = error instanceof Error ? error.message : String(error);
+	}
+	if (refused !== undefined) {
+		problem(`could not install the scorer: ${refused}`);
+		return finish();
+	}
+
+	const first = await runGates(worktree, spec, searchId, signal);
+	const second = await runGates(worktree, spec, searchId, signal);
+	spec.gates.forEach((gate, i) => {
+		const runs = [first[i], second[i]] as GateResult[];
+		const [a, b] = runs.map((run) => (run.result === "pass" ? "pass" : "fail"));
+		const shown = runs.map((run) => run.result).join(", then ");
+		if (a !== b) problem(`gate ${gate.id}: the two base runs disagree (${shown})${excerpt(runs[1] as GateResult)}`);
+		else if (a !== gate.onBase)
+			problem(
+				`gate ${gate.id}: declared onBase "${gate.onBase}" but ${a === "pass" ? "passed" : "failed"} on the base (${shown})${excerpt(runs[1] as GateResult)}`,
+			);
+		else lines.push(`gate ${gate.id}: ${a === "pass" ? "passes" : "fails"} on the base twice, as declared`);
+	});
+
+	for (const objective of spec.objectives) {
+		const result = await measureObjective(worktree, objective, searchId, signal);
+		if (result.value === undefined) problem(`objective ${objective.id}: ${result.failure}${excerpt(result)}`);
+		else {
+			baseValues[objective.id] = result.value;
+			lines.push(`objective ${objective.id}: base value ${result.value} (runs ${result.values.join(", ")})`);
+		}
+	}
+	return finish();
+}
+
 export interface DiffStat {
 	added: number;
 	deleted: number;
@@ -178,7 +413,7 @@ export interface DiffStat {
 
 /** `git diff --numstat` totals; binary rows count as 0 lines. `diff_size` is added + deleted (spec 7.4). */
 export async function diffStat(root: string, from: string, to: string): Promise<DiffStat> {
-	const rows = (await git(root, ["diff", "--numstat", from, to])).split("\n").filter(Boolean);
+	const rows = (await git(root, ["diff", ...PLAIN_DIFF, "--numstat", from, to])).split("\n").filter(Boolean);
 	const count = (value: string | undefined) => (value === undefined || value === "-" ? 0 : Number(value));
 	let added = 0;
 	let deleted = 0;

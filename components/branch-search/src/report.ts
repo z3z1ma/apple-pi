@@ -1,6 +1,6 @@
 import type { SearchRecord } from "./record.js";
 import type { DiffStat } from "./scorer.js";
-import { branchRef } from "./workspace.js";
+import { branchRef, PLAIN_DIFF } from "./workspace.js";
 
 export interface ReportInput {
 	record: SearchRecord;
@@ -11,7 +11,7 @@ export interface ReportInput {
 
 /** The command that brings a kept winner into the workspace (spec 6.9 step 4). */
 export function mergeCommand(base: string, id: string, winner: string): string {
-	return `git diff --binary ${base} ${branchRef(id, winner)} | git apply --3way`;
+	return `git diff ${PLAIN_DIFF.join(" ")} --binary ${base} ${branchRef(id, winner)} | git apply --3way`;
 }
 
 /** Plain text, summary line first (spec 6.10). */
@@ -22,15 +22,20 @@ export function formatReport({ record, recordPath, gateCount, winnerStat }: Repo
 		`Branch search ${record.id}: ${record.outcome}. ${survivors.length} of ${record.branches.length} branches survived over ${generations} generations.`,
 	];
 	if (record.abortReason) lines.push(`Reason: ${record.abortReason}`);
+	const validation = record.spec?.validation.at(-1);
+	if (record.outcome === "aborted: scorer invalid" && validation) lines.push(validation.report);
 	const winner = record.branches.find((branch) => branch.key === record.winner);
 	if (winner && winnerStat) {
+		const baseValues = record.spec?.baseValues ?? {};
 		lines.push(
 			`Winner: ${winner.key} (${winner.candidate}, constraint: ${winner.constraint}) +${winnerStat.added} -${winnerStat.deleted} in ${winnerStat.files} files.`,
 			`Objectives: ${Object.entries(winner.objectives ?? {})
-				.map(([id, value]) => `${id}=${value}`)
+				.map(([id, value]) => (id in baseValues ? `${id}=${value} (base ${baseValues[id]})` : `${id}=${value}`))
 				.join(", ")}`,
-			`Merge: ${mergeCommand(record.base?.commit ?? "", record.id, winner.key)}`,
 		);
+		if (record.apply && !record.apply.applied) lines.push(`Not applied: ${record.apply.reason}`);
+		if (record.outcome === "ready")
+			lines.push(`Merge: ${mergeCommand(record.base?.commit ?? "", record.id, winner.key)}`);
 	}
 	if (record.branches.length > 0) {
 		lines.push("Branches:");

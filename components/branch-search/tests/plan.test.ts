@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { SearchShape } from "../src/config.js";
 import { constraintPool, drawConstraint, drawOrder } from "../src/draw.js";
-import { compareNodeKeys, type ObservedNode, type ObservedTree, planStep, selectWinner } from "../src/plan.js";
+import {
+	compareNodeKeys,
+	type ObservedNode,
+	type ObservedTree,
+	planStep,
+	type Ranking,
+	selectWinner,
+} from "../src/plan.js";
 
 const seed = new Uint8Array(32).fill(3);
 const pool = constraintPool(["Add no new dependencies.", "Change as few files as possible."]);
@@ -18,9 +25,26 @@ function tree(nodes: ObservedNode[] = []): ObservedTree {
 	return { enumerations: { root: { key: "root", candidates, preferred: "c1" } }, nodes, constraints: pool };
 }
 
-function node(key: string, status: "survived" | "dead", diffSize = 1): ObservedNode {
-	return { key, parent: null, generation: 0, status, gatesPassed: status === "survived" ? 1 : 0, diffSize };
+function node(
+	key: string,
+	status: "survived" | "dead",
+	diffSize = 1,
+	objectives: Record<string, number> = {},
+): ObservedNode {
+	return {
+		key,
+		parent: null,
+		generation: 0,
+		status,
+		gatesPassed: status === "survived" ? 1 : 0,
+		diffSize,
+		objectives: { ...objectives, diff_size: diffSize },
+	};
 }
+
+const FAIL_GATE = [{ onBase: "fail" as const }];
+const PASS_GATE = [{ onBase: "pass" as const }];
+const NO_OBJECTIVES: Ranking = { gates: FAIL_GATE, objectives: [], baseValues: {} };
 
 describe("planStep", () => {
 	it("runs the first perGeneration root positions with their keyed constraints in generation 0", () => {
@@ -69,18 +93,74 @@ describe("planStep", () => {
 });
 
 describe("selectWinner", () => {
-	it("picks the survivor with the smallest diff_size, then node key", () => {
+	it("picks the survivor with the smallest diff_size, then node key, when the spec has no objectives", () => {
 		const nodes = [
 			node("r0", "dead", 1),
 			node("r3", "survived", 5),
 			node("r2", "survived", 4),
 			node("r1", "survived", 4),
 		];
-		expect(selectWinner(nodes)?.key).toBe("r1");
+		expect(selectWinner(nodes, NO_OBJECTIVES)?.key).toBe("r1");
 	});
 
 	it("never picks a dead node", () => {
-		expect(selectWinner([node("r0", "dead", 0)])).toBeUndefined();
+		expect(selectWinner([node("r0", "dead", 0)], NO_OBJECTIVES)).toBeUndefined();
+	});
+
+	it("ranks by the first objective in its direction before diff_size", () => {
+		const nodes = [node("r0", "survived", 1, { speed: 10 }), node("r1", "survived", 50, { speed: 3 })];
+		const lower: Ranking = { gates: FAIL_GATE, objectives: [{ id: "speed", better: "lower" }], baseValues: {} };
+		const higher: Ranking = { gates: FAIL_GATE, objectives: [{ id: "speed", better: "higher" }], baseValues: {} };
+		expect(selectWinner(nodes, lower)?.key).toBe("r1");
+		expect(selectWinner(nodes, higher)?.key).toBe("r0");
+	});
+
+	it("breaks a tie on one objective by the next objective in declared order, then diff_size, then node key", () => {
+		const ranking: Ranking = {
+			gates: FAIL_GATE,
+			objectives: [
+				{ id: "a", better: "higher" },
+				{ id: "b", better: "lower" },
+			],
+			baseValues: {},
+		};
+		const nodes = [
+			node("r10", "survived", 3, { a: 5, b: 1 }),
+			node("r0", "survived", 1, { a: 4, b: 0 }),
+			node("r3", "survived", 2, { a: 5, b: 2 }),
+			node("r2", "survived", 3, { a: 5, b: 1 }),
+			node("r1", "survived", 4, { a: 5, b: 1 }),
+		];
+		// a=5 ties among r10, r3, r2, r1; b=1 ties r10, r2, r1; diff_size 3 ties r10 and r2; r2 < r10.
+		expect(selectWinner(nodes, ranking)?.key).toBe("r2");
+	});
+
+	it("without a gate that fails on base, keeps only survivors that strictly beat the first objective's base value", () => {
+		const ranking: Ranking = {
+			gates: PASS_GATE,
+			objectives: [
+				{ id: "ms", better: "lower" },
+				{ id: "size", better: "lower" },
+			],
+			baseValues: { ms: 100, size: 10 },
+		};
+		const equal = node("r0", "survived", 0, { ms: 100, size: 0 });
+		const worse = node("r1", "survived", 0, { ms: 120, size: 0 });
+		const better = node("r2", "survived", 9, { ms: 99, size: 50 });
+		expect(selectWinner([equal, worse, better], ranking)?.key).toBe("r2");
+		expect(selectWinner([equal, worse], ranking)).toBeUndefined();
+
+		const higher: Ranking = { ...ranking, objectives: [{ id: "ms", better: "higher" }] };
+		expect(selectWinner([equal, worse, better], higher)?.key).toBe("r1");
+	});
+
+	it("does not apply the base rule when some gate fails on base", () => {
+		const ranking: Ranking = {
+			gates: [...PASS_GATE, ...FAIL_GATE],
+			objectives: [{ id: "ms", better: "lower" }],
+			baseValues: { ms: 1 },
+		};
+		expect(selectWinner([node("r0", "survived", 0, { ms: 5 })], ranking)?.key).toBe("r0");
 	});
 
 	it("orders node keys by their numbers", () => {

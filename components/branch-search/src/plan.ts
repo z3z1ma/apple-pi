@@ -25,6 +25,8 @@ export interface ObservedNode {
 	status: "survived" | "dead";
 	gatesPassed: number;
 	diffSize: number;
+	/** Measured objective values by id, `diff_size` included; a dead branch may lack some. */
+	objectives: Record<string, number>;
 }
 
 export interface ObservedTree {
@@ -90,9 +92,39 @@ export function compareNodeKeys(a: NodeKey, b: NodeKey): number {
 	return left.length - right.length;
 }
 
-/** The survivor with the smallest diff_size, then node key (spec 7.4). Objectives arrive with ticket 03. */
-export function selectWinner<T extends ObservedNode>(nodes: readonly T[]): T | undefined {
+/** What selection reads from the frozen scorer spec and its validation (spec 6.8). */
+export interface Ranking {
+	gates: readonly { onBase: "fail" | "pass" }[];
+	objectives: readonly { id: string; better: "lower" | "higher" }[];
+	/** Median base value of each objective, from validation. */
+	baseValues: Record<string, number>;
+}
+
+/** Positive when `a` is better than `b` in the objective's direction. */
+function advantage(better: "lower" | "higher", a: number, b: number): number {
+	return better === "lower" ? b - a : a - b;
+}
+
+/**
+ * The winner among survivors (spec 6.8). Without a gate that fails on base, a survivor must strictly
+ * beat the first objective's base value. Then objectives in declared order and direction, then
+ * diff_size (smaller first), then node key.
+ */
+export function selectWinner<T extends ObservedNode>(nodes: readonly T[], ranking: Ranking): T | undefined {
+	const [first] = ranking.objectives;
+	const mustBeatBase = first !== undefined && !ranking.gates.some((gate) => gate.onBase === "fail");
+	const value = (node: T, id: string) => node.objectives[id] as number;
 	return nodes
 		.filter((node) => node.status === "survived")
-		.sort((a, b) => a.diffSize - b.diffSize || compareNodeKeys(a.key, b.key))[0];
+		.filter(
+			(node) =>
+				!mustBeatBase || advantage(first.better, value(node, first.id), ranking.baseValues[first.id] as number) > 0,
+		)
+		.sort((a, b) => {
+			for (const { id, better } of ranking.objectives) {
+				const difference = advantage(better, value(b, id), value(a, id));
+				if (difference !== 0) return difference;
+			}
+			return a.diffSize - b.diffSize || compareNodeKeys(a.key, b.key);
+		})[0];
 }

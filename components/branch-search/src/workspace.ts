@@ -13,11 +13,13 @@ const COMMITTER = ["-c", "user.name=apple-pi", "-c", "user.email=apple-pi@localh
 
 export interface GitOptions {
 	env?: NodeJS.ProcessEnv;
+	/** Written to git's stdin. */
+	input?: string;
 }
 
 export function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
 	return new Promise((resolvePromise, reject) => {
-		execFile(
+		const child = execFile(
 			"git",
 			args,
 			{
@@ -31,8 +33,15 @@ export function git(cwd: string, args: string[], options: GitOptions = {}): Prom
 				else resolvePromise(stdout.trim());
 			},
 		);
+		if (options.input !== undefined) child.stdin?.end(options.input);
 	});
 }
+
+/**
+ * Flags for every `git diff` whose output the search parses or applies: a configured external diff
+ * or textconv driver would otherwise replace the real content changes.
+ */
+export const PLAIN_DIFF = ["--no-ext-diff", "--no-textconv"];
 
 export function refPrefix(id: string): string {
 	return `refs/apple-pi/branch-search/${id}/`;
@@ -164,4 +173,83 @@ export async function pruneRefs(root: string, id: string, keep: string[]): Promi
 	for (const ref of refs.split("\n").filter(Boolean)) {
 		if (!kept.has(ref)) await git(root, ["update-ref", "-d", ref]);
 	}
+}
+
+export interface ApplyResult {
+	applied: boolean;
+	/** The workspace tree when apply was decided, compared with the base tree. */
+	workspaceTree: string;
+	/** Why the winner was not applied. */
+	reason?: string;
+}
+
+/**
+ * Apply the winner to the workspace only when apply mode is `auto` and the workspace still holds the
+ * base tree (spec 6.9). The binary diff from base to winner goes to `patchPath`, which outlives
+ * cleanup, and `git apply` lands it in the working tree without touching the user's index. `git apply`
+ * checks the patch before writing but does not undo a write that fails partway, so a failure
+ * restores every path the patch touches to base (see `restoreBase`).
+ */
+export async function applyWinner(
+	root: string,
+	options: {
+		base: { commit: string; tree: string };
+		winner: string;
+		mode: "auto" | "report";
+		patchPath: string;
+		/** Checked last before the patch lands, so a cancelled search leaves the workspace as it was. */
+		signal?: AbortSignal;
+	},
+): Promise<ApplyResult> {
+	const workspaceTree = await snapshotTree(root);
+	if (options.mode !== "auto") return { applied: false, workspaceTree, reason: "apply mode is report" };
+	if (workspaceTree !== options.base.tree)
+		return { applied: false, workspaceTree, reason: "the workspace changed during the search" };
+	const { base, winner, patchPath } = options;
+	await git(root, ["diff", ...PLAIN_DIFF, "--binary", `--output=${patchPath}`, base.commit, winner]);
+	// A winner with the base tree changes nothing, and git apply refuses an empty patch.
+	if ((await git(root, ["rev-parse", `${winner}^{tree}`])) === base.tree) return { applied: true, workspaceTree };
+	options.signal?.throwIfAborted();
+	try {
+		await git(root, ["apply", "--whitespace=nowarn", patchPath]);
+	} catch (error) {
+		const failure = error instanceof Error ? error.message : String(error);
+		const restored = await restoreBase(root, base.commit, winner).then(
+			() => "the workspace was restored to the base",
+			(rollback: Error) =>
+				`restoring the base also failed, so the workspace may hold part of the winner: ${rollback.message}`,
+		);
+		return { applied: false, workspaceTree, reason: `${failure}; ${restored}` };
+	}
+	return { applied: true, workspaceTree };
+}
+
+/**
+ * Put every path that differs between base and winner back to its base content, and remove the
+ * paths only the winner has. Valid only while the workspace held the base tree before the patch.
+ * A temporary index holding just the base entries of those paths finds which files differ and
+ * checks them out; the user's index is never read or written.
+ */
+async function restoreBase(root: string, base: string, winner: string): Promise<void> {
+	const split = (output: string) => output.split("\0").filter(Boolean);
+	const touched = new Set(
+		split(await git(root, ["diff", ...PLAIN_DIFF, "--no-renames", "--name-only", "-z", base, winner])),
+	);
+	const entries = split(await git(root, ["ls-tree", "-r", "-z", base])).filter((entry) =>
+		touched.has(entry.slice(entry.indexOf("\t") + 1)),
+	);
+	const dir = mkdtempSync(join(tmpdir(), "apple-pi-branch-restore-"));
+	const env = { GIT_INDEX_FILE: join(dir, "index") };
+	try {
+		await git(root, ["update-index", "-z", "--index-info"], { env, input: entries.map((e) => `${e}\0`).join("") });
+		// Exits non-zero when entries need an update; diff-files then names them.
+		await git(root, ["update-index", "-q", "--refresh"], { env }).catch(() => undefined);
+		const changed = split(await git(root, ["diff-files", "--name-only", "-z"], { env }));
+		if (changed.length > 0)
+			await git(root, ["checkout-index", "-f", "-z", "--stdin"], { env, input: changed.map((p) => `${p}\0`).join("") });
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+	const inBase = new Set(entries.map((entry) => entry.slice(entry.indexOf("\t") + 1)));
+	for (const path of touched) if (!inBase.has(path)) rmSync(join(root, path), { force: true });
 }

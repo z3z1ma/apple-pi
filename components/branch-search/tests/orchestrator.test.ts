@@ -7,6 +7,7 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -174,12 +175,13 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 			if (status !== "branching run g0 2/2") return;
 			const [stateDir] = readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"));
 			const dir = join(run.cwd, ".git", "apple-pi", "branch-search", stateDir as string);
-			onDisk.push(...readdirSync(dir), readFileSync(join(dir, "record.json"), "utf8"));
+			onDisk.push(...readdirSync(dir), ...readdirSync(join(dir, "wt")), readFileSync(join(dir, "record.json"), "utf8"));
 		});
 
 		// While branches run, no scorer content is on disk (spec 8.4).
 		expect(onDisk).toContain("record.json");
 		expect(onDisk).not.toContain("spec.json");
+		expect(onDisk).not.toContain("validate");
 		expect(onDisk.join("\n")).not.toMatch(/"gates"|hidden\/gate\.sh|"status"/);
 
 		expect(result.outcome).toBe("ready");
@@ -209,7 +211,7 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 		expect(result.report).toContain(`Record: ${result.recordPath}`);
 		const merge = /^Merge: (.+)$/m.exec(result.report)?.[1] as string;
 		expect(merge).toBe(
-			`git diff --binary ${base.commit} refs/apple-pi/branch-search/${record.id}/${winner.key} | git apply --3way`,
+			`git diff --no-ext-diff --no-textconv --binary ${base.commit} refs/apple-pi/branch-search/${record.id}/${winner.key} | git apply --3way`,
 		);
 		const check = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-merge-")));
 		cleanup.push(() => rmSync(check, { recursive: true, force: true }));
@@ -374,10 +376,13 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 	});
 
 	it("cleans up after an injected error", async () => {
-		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
-		// Installing a scorer file over an existing directory fails while scoring.
-		const scorer = { ...SCORER, files: [{ path: "src", content: "not a directory\n" }] };
-		const { result, record, statuses } = await search(run, { scorer });
+		// A directory where the scorer installs a file makes installing it fail while scoring.
+		const blocker = fauxAssistantMessage(
+			fauxToolCall("bash", { command: "mkdir -p hidden/gate.sh", verbatim: true }, { id: "dir" }),
+			{ stopReason: "toolUse" },
+		);
+		const run = await fixture({ c1: [blocker, FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const { result, record, statuses } = await search(run);
 
 		expect(result.outcome).toBe("aborted: error");
 		expect(record.abortReason).toMatch(/EISDIR|directory/);
@@ -408,6 +413,147 @@ describe("generation-0 branch search", { timeout: 30_000 }, () => {
 
 		expect(assignments(first.record)).toHaveLength(2);
 		expect(assignments(second.record)).toEqual(assignments(first.record));
+	});
+
+	it("applies the winner to an unchanged workspace with apply auto and keeps the patch", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const { result, record } = await search(run, { config: { apply: "auto" } });
+
+		expect(result.outcome).toBe("applied");
+		expect(record.outcome).toBe("applied");
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 2;\n");
+		const patch = join(run.cwd, ".git", "apple-pi", "branch-search", record.id, "winner.patch");
+		expect(readFileSync(patch, "utf8")).toContain("value = 2");
+		expect(record.apply).toEqual({ applied: true, workspaceTree: record.base?.tree });
+		expect(result.report.split("\n")[0]).toBe(
+			`Branch search ${record.id}: applied. 1 of 2 branches survived over 1 generations.`,
+		);
+		expect(result.report).not.toContain("Merge:");
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("ends ready and leaves every workspace file untouched when the workspace changed during the search", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const { result, record } = await search(run, { config: { apply: "auto" } }, (status) => {
+			if (status === "branching run g0 2/2") writeFileSync(join(run.cwd, "notes.md"), "written meanwhile\n");
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 1;\n");
+		expect(readFileSync(join(run.cwd, "notes.md"), "utf8")).toBe("written meanwhile\n");
+		expect(existsSync(join(run.cwd, ".git", "apple-pi", "branch-search", record.id, "winner.patch"))).toBe(false);
+		expect(record.apply).toEqual(
+			expect.objectContaining({ applied: false, reason: "the workspace changed during the search" }),
+		);
+		expect(result.report).toContain("Not applied: the workspace changed during the search");
+		expect(result.report).toMatch(/^Merge: /m);
+		expectCleanedUp(run.cwd, record, ["base", record.winner as string]);
+	});
+
+	it("ends aborted: scorer invalid before any enumerator runs, and records the validation report", async () => {
+		const invalid: [string, ScorerSpec, RegExp][] = [
+			[
+				"fail gate passes on base",
+				{ ...SCORER, gates: [{ id: "value", run: "true", onBase: "fail", timeoutSec: 30 }] },
+				/gate value: declared onBase "fail" but passed on the base/,
+			],
+			[
+				"base runs disagree",
+				{
+					...SCORER,
+					gates: [{ id: "value", run: "test -e seen && exit 0; touch seen; exit 1", onBase: "fail", timeoutSec: 30 }],
+				},
+				/gate value: the two base runs disagree/,
+			],
+			[
+				"objective prints no number",
+				{ ...SCORER, objectives: [{ id: "speed", run: "echo fast", better: "lower", timeoutSec: 30 }] },
+				/objective speed: printed no finite number/,
+			],
+		];
+		for (const [name, scorer, problem] of invalid) {
+			const run = await fixture({ c1: [FIX], c2: [FIX] });
+			const { result, record } = await search(run, { scorer });
+
+			expect(result.outcome, name).toBe("aborted: scorer invalid");
+			expect(record.spec?.validation, name).toEqual([
+				expect.objectContaining({ attempt: 0, ok: false, report: expect.stringMatching(problem) }),
+			]);
+			expect(result.report, name).toMatch(problem);
+			expect(record.enumerations, name).toEqual([]);
+			expect(record.branches, name).toEqual([]);
+			expectCleanedUp(run.cwd, record, ["base"]);
+			expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+		}
+	});
+
+	it("writes no scorer content outside the worktree before the enumerator starts, even through base symlinks", async () => {
+		const run = await fixture({ c1: [FIX], c2: [FIX] });
+		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
+		cleanup.push(() => rmSync(outside, { recursive: true, force: true }));
+		mkdirSync(join(outside, "child"));
+		// Committed in the base, so the validate worktree has them before the scorer is installed.
+		symlinkSync(join(outside, "child"), join(run.cwd, "pivot"));
+		symlinkSync("pivot/../hidden.sh", join(run.cwd, "gate.sh"));
+		gitOut(run.cwd, "add", "pivot", "gate.sh");
+		gitOut(run.cwd, "commit", "-q", "-m", "links");
+		const scorer: ScorerSpec = { ...SCORER, files: [{ path: "gate.sh", content: "bash check.sh\n" }] };
+		const { result, record } = await search(run, { scorer });
+
+		expect(result.outcome).toBe("aborted: scorer invalid");
+		expect(record.spec?.validation[0]?.report).toMatch(/could not install the scorer: .*outside the worktree/);
+		expect(readdirSync(outside)).toEqual(["child"]);
+		expect(run.requests.some((request) => text(request.messages.at(-1)).includes("approach list"))).toBe(false);
+		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+
+	it("ranks survivors by objective, kills a branch whose objective fails, and reports base values", async () => {
+		const score = (value: string, id: string) => write("score.txt", value, id);
+		const run = await fixture({
+			c1: [FIX, score("5\n", "s1"), finish("done", "five")],
+			c2: [FIX, score("1\n2\n3\n9\n", "s2"), finish("done", "nine")],
+			c3: [FIX, score("oops\n", "s3"), finish("done", "oops")],
+		});
+		const scorer: ScorerSpec = {
+			...SCORER,
+			objectives: [
+				{ id: "score", run: "tail -n 1 score.txt 2>/dev/null || echo 0", better: "higher", timeoutSec: 30 },
+				{ id: "steady", run: "echo 1", better: "lower", timeoutSec: 30, serial: true, repeat: 3 },
+			],
+		};
+		const { result, record } = await search(run, { scorer, config: { branches: { perGeneration: 3, maxTotal: 6 } } });
+
+		expect(result.outcome).toBe("ready");
+		const nine = branchOf(record, "c2");
+		expect(record.winner).toBe(nine.key);
+		// app.ts +1 -1 and four score lines; the lower-scoring c1 has the smaller diff and still loses.
+		expect(nine.objectives).toEqual({ score: 9, steady: 1, diff_size: 6 });
+		expect(branchOf(record, "c1").objectives?.diff_size).toBe(3);
+		expect(branchOf(record, "c1").status).toBe("survived");
+		const oops = branchOf(record, "c3");
+		expect(oops.status).toBe("dead");
+		expect(oops.objectiveOutput?.score?.failure).toMatch(/no finite number/);
+		expect(record.spec?.baseValues).toEqual({ score: 0, steady: 1 });
+		expect(result.report).toContain("Objectives: score=9 (base 0), steady=1 (base 1), diff_size=6");
+		expectCleanedUp(run.cwd, record, ["base", nine.key]);
+	});
+
+	it("ends no survivor when no gate fails on base and no survivor beats the first objective's base value", async () => {
+		const run = await fixture({
+			c1: [FIX, write("score.txt", "0\n", "s1"), finish("done", "zero")],
+			c2: [FIX, finish("done", "none")],
+		});
+		const scorer: ScorerSpec = {
+			...SCORER,
+			gates: [{ id: "runs", run: "true", onBase: "pass", timeoutSec: 30 }],
+			objectives: [{ id: "score", run: "cat score.txt 2>/dev/null || echo 0", better: "higher", timeoutSec: 30 }],
+		};
+		const { result, record } = await search(run, { scorer });
+
+		expect(record.branches.map((branch) => branch.status)).toEqual(["survived", "survived"]);
+		expect(result.outcome).toBe("no survivor");
+		expect(record.winner).toBeNull();
+		expectCleanedUp(run.cwd, record, ["base"]);
 	});
 
 	it("ends aborted: no git history in a workspace without a HEAD commit", async () => {

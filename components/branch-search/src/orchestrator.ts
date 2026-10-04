@@ -18,6 +18,7 @@ import {
 import {
 	addUsage,
 	type BranchRecord,
+	type ValidationRecord,
 	type BranchScore,
 	type BranchSelfReport,
 	emptyCost,
@@ -27,16 +28,19 @@ import {
 } from "./record.js";
 import { formatReport } from "./report.js";
 import {
+	type BranchScoring,
 	checkScorerSpec,
 	type DiffStat,
 	diffStat,
-	type GateResult,
-	installScorer,
-	runGates,
 	type ScorerSpec,
+	scoreBranches,
+	settleAll,
+	type Validation,
+	validateScorer,
 } from "./scorer.js";
 import {
 	addWorktree,
+	applyWinner,
 	commitWorktree,
 	gitCommonDir,
 	hasHead,
@@ -84,7 +88,7 @@ export interface SearchOptions {
 }
 
 export interface SearchResult {
-	/** `ready`, `no survivor`, `aborted: <reason>`, or `not configured`. */
+	/** `applied`, `ready`, `no survivor`, `aborted: <reason>`, or `not configured`. */
 	outcome: string;
 	/** The report body (spec 6.10), or the configuration problems. */
 	report: string;
@@ -118,7 +122,7 @@ function replyText(messages: AgentMessage[]): string {
 		.trim();
 }
 
-/** Run one complete search for a supplied scorer: prepare, enumerate, draw, run, score, select, report, clean up. */
+/** Run one complete search for a supplied scorer: prepare, validate, enumerate, draw, run, score, select, apply, report, clean up. */
 export async function runBranchSearch(options: SearchOptions): Promise<SearchResult> {
 	const validated = validateBranchSearchConfig(options.config);
 	if (!validated.ok) return { outcome: "not configured", report: validated.text };
@@ -132,17 +136,6 @@ export async function runBranchSearch(options: SearchOptions): Promise<SearchRes
 		return { outcome: "aborted: no git history", report: "Branch search: aborted: no git history." };
 	const search = new Search(options, validated.config, await repoRoot(options.cwd), await gitCommonDir(options.cwd));
 	return search.run();
-}
-
-/** Wait for every task, then fail with the first error, so nothing still runs in a worktree that cleanup removes. */
-async function settleAll(tasks: Promise<unknown>[]): Promise<void> {
-	const failed = (await Promise.allSettled(tasks)).find((result) => result.status === "rejected");
-	if (failed) throw failed.reason;
-}
-
-/** Every gate fails with the reason the scorer could not be installed. */
-function refusedGates(scorer: ScorerSpec, reason: string): GateResult[] {
-	return scorer.gates.map(({ id }) => ({ id, result: "fail", exitCode: null, stdout: "", stderr: reason, ms: 0 }));
 }
 
 interface LiveBranch {
@@ -165,6 +158,9 @@ class Search {
 	/** Scoring results stay in memory until the last branch stops (spec 8.4). */
 	readonly scores = new Map<string, BranchScore>();
 	readonly enumerations: Record<string, Enumeration> = {};
+	/** Validation reports and base values are scorer content: held until the search ends (spec 8.4). */
+	readonly validation: ValidationRecord[] = [];
+	baseValues: Record<string, number> = {};
 	readonly started = Date.now();
 	seq = 0;
 	phase = "prepare";
@@ -196,6 +192,7 @@ class Search {
 			branches: [],
 			parentTreeChecks: [],
 			winner: null,
+			apply: null,
 			outcome: null,
 			abortReason: null,
 			cleanupErrors: [],
@@ -241,6 +238,10 @@ class Search {
 		this.record.base = base;
 		this.save();
 
+		const validation = await this.validate(base.commit, 0);
+		if (!validation.ok) throw new SearchAbort("scorer invalid");
+		this.baseValues = validation.baseValues;
+
 		this.status("enumerate");
 		const root = await this.enumerate(base.commit);
 		this.enumerations.root = root;
@@ -253,12 +254,45 @@ class Search {
 
 		const stop = this.plan();
 		if (stop.kind !== "stop") throw new Error(`Later generations are not available yet (step ${stop.kind}).`);
-		const winner = stop.outcome === "survivor" ? selectWinner(this.observedTree().nodes) : undefined;
+		const { gates, objectives } = this.options.scorer;
+		const winner =
+			stop.outcome === "survivor"
+				? selectWinner(this.observedTree().nodes, { gates, objectives, baseValues: this.baseValues })
+				: undefined;
 		if (!winner) return this.end("no survivor");
 		this.record.winner = winner.key;
 		const commit = this.branches.find((branch) => branch.record.key === winner.key)?.record.commit as string;
 		this.winnerStat = await diffStat(this.root, base.commit, commit);
-		this.end("ready");
+		this.options.signal.throwIfAborted();
+		this.record.apply = await applyWinner(this.root, {
+			base,
+			winner: commit,
+			mode: this.config.apply,
+			patchPath: join(this.stateDir, "winner.patch"),
+			signal: this.options.signal,
+		});
+		this.end(this.record.apply.applied ? "applied" : "ready");
+	}
+
+	/**
+	 * Validate the scorer on the base in a fresh `wt/validate` worktree (spec 6.3), then remove that
+	 * worktree, so no scorer file is on disk once an enumerator or branch starts (spec 8.4). Each
+	 * call is one attempt; the author's correction loop calls it again with the next attempt number.
+	 */
+	private async validate(base: string, attempt: number): Promise<Validation> {
+		this.status("validate");
+		const started = Date.now();
+		const worktree = await this.worktree("validate", base);
+		let validation: Validation;
+		try {
+			validation = await validateScorer(worktree, base, this.options.scorer, this.id, this.options.signal);
+		} finally {
+			await removeWorktrees(this.root, [worktree]);
+			this.worktrees.delete(worktree);
+		}
+		this.options.signal.throwIfAborted();
+		this.validation.push({ attempt, ok: validation.ok, report: validation.report, ms: Date.now() - started });
+		return validation;
 	}
 
 	private plan() {
@@ -282,6 +316,7 @@ class Search {
 						status: score.status,
 						gatesPassed: score.gatesPassed,
 						diffSize: score.objectives.diff_size as number,
+						objectives: score.objectives,
 					},
 				];
 			}),
@@ -422,32 +457,43 @@ class Search {
 		});
 	}
 
-	/** Install the scorer in each worktree and run its gates; survivors and dead branches alike get diff_size (spec 6.7). */
+	/**
+	 * Install the scorer in each worktree and run gates, objectives, and diff_size (spec 6.7 steps 1 to 4).
+	 * Every branch, dead or alive, gets its diff_size.
+	 */
 	private async scoreGeneration(generation: number, base: string): Promise<void> {
 		this.status(`score g${generation}`);
 		const { scorer, signal } = this.options;
 		const branches = this.branches.filter(({ record }) => record.generation === generation);
-		await settleAll(
-			branches.map(async ({ record, worktree }) => {
-				const started = Date.now();
-				const refused = await installScorer(worktree, base, scorer);
-				const gates = refused ? refusedGates(scorer, refused) : await runGates(worktree, scorer, this.id, signal);
-				const stat = await diffStat(this.root, base, record.commit as string);
-				const gatesPassed = gates.filter((gate) => gate.result === "pass").length;
-				this.scores.set(record.key, {
-					gates: Object.fromEntries(gates.map((gate) => [gate.id, gate.result])),
-					gateOutput: Object.fromEntries(
-						gates.map(({ id, exitCode, stdout, stderr, ms }) => [id, { exitCode, stdout, stderr, ms }]),
-					),
-					gatesPassed,
-					status: gatesPassed === scorer.gates.length ? "survived" : "dead",
-					objectives: { diff_size: stat.added + stat.deleted },
-				});
-				record.cost.scoreMs = Date.now() - started;
-				this.status(`score g${generation}`);
-			}),
+		const scored = await scoreBranches(
+			branches.map(({ record, worktree }) => ({ key: record.key, worktree })),
+			base,
+			scorer,
+			this.id,
+			async (key) => {
+				const commit = branches.find(({ record }) => record.key === key)?.record.commit as string;
+				const stat = await diffStat(this.root, base, commit);
+				return stat.added + stat.deleted;
+			},
+			signal,
 		);
+		for (const { record } of branches) {
+			const { gates, diffSize, objectives, survived } = scored.get(record.key) as BranchScoring;
+			const measured = objectives.flatMap(({ id, value }) => (value === undefined ? [] : [[id, value]]));
+			this.scores.set(record.key, {
+				gates: Object.fromEntries(gates.map((gate) => [gate.id, gate.result])),
+				gateOutput: Object.fromEntries(
+					gates.map(({ id, exitCode, stdout, stderr, ms }) => [id, { exitCode, stdout, stderr, ms }]),
+				),
+				gatesPassed: gates.filter((gate) => gate.result === "pass").length,
+				status: survived ? "survived" : "dead",
+				objectives: { ...Object.fromEntries(measured), diff_size: diffSize },
+				objectiveOutput: Object.fromEntries(objectives.map(({ id, value: _, ...output }) => [id, output])),
+			});
+			record.cost.scoreMs = [...gates, ...objectives].reduce((total, { ms }) => total + ms, 0);
+		}
 		signal.throwIfAborted();
+		this.status(`score g${generation}`);
 	}
 
 	/** Non-scorer parts only; scoring results join the record when the search ends (spec 8.4). */
@@ -478,7 +524,12 @@ class Search {
 
 		const specPath = join(this.stateDir, "spec.json");
 		await attempt(() => writeFileSync(specPath, this.specText));
-		this.record.spec = { sha256: createHash("sha256").update(this.specText).digest("hex"), path: "spec.json" };
+		this.record.spec = {
+			sha256: createHash("sha256").update(this.specText).digest("hex"),
+			path: "spec.json",
+			validation: this.validation,
+			baseValues: this.baseValues,
+		};
 		this.record.branches = this.record.branches.map((branch) => ({ ...branch, ...this.scores.get(branch.key) }));
 		this.record.endedAt = new Date().toISOString();
 		this.record.cleanupErrors = problems;
