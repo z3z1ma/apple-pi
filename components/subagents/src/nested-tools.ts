@@ -41,6 +41,7 @@ export const SUBAGENT_TOOL_NAMES = {
 } as const;
 
 interface NestedSpawnOptions {
+	notebook?: import("../../notebook/src/shared-notebook.js").SharedNotebook;
 	enableClarify: true;
 	description: string;
 	/** Exact enabled config authorized by this nested dispatch. */
@@ -88,6 +89,7 @@ export interface NestedAgentManager {
 }
 
 export interface NestedToolContext {
+	notebook?: import("../../notebook/src/shared-notebook.js").SharedNotebook;
 	manager: NestedAgentManager;
 	pi: ExtensionAPI;
 	parentAgentId: string;
@@ -223,6 +225,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 			const model = resolvedAgentProfile.model;
 
 			const options: NestedSpawnOptions = {
+				notebook: context.notebook,
 				enableClarify: true,
 				description: params.description,
 				agentConfig: config,

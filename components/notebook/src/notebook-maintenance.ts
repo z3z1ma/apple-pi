@@ -20,6 +20,8 @@ import {
 	type Reflection,
 	reflectionToSummaryLine,
 } from "./session-ledger/index.js";
+import { notebookSourceEntries } from "./session-ledger/sources.js";
+import type { ChildSources } from "./session-ledger/types.js";
 import { estimateStringTokens } from "./tokens.js";
 
 export const UPDATE_NOTEBOOK_TOOL_NAME = "update_notebook";
@@ -78,6 +80,7 @@ export type NotebookUpdate = {
 	sourceTokens?: number;
 	priorCoverageId?: string;
 	sessionIdentity?: string;
+	childSources?: ChildSources;
 };
 
 export type PairNotebookUpdate = NotebookUpdate & {
@@ -203,15 +206,15 @@ export function preparePairNotebookBatch(args: {
 	sourceTokens: number;
 	sessionIdentity?: string;
 }): PairNotebookBatch | undefined {
-	const allSourceIds = args.entries.filter(isSourceEntry).map((entry) => entry.id);
-	if (allSourceIds.length === 0) return undefined;
+	const primarySourceIds = args.entries.filter(isSourceEntry).map((entry) => entry.id);
+	if (primarySourceIds.length === 0) return undefined;
 
 	const lastCoverage = latestCoverageIndex(args.entries, NOTEBOOK_OBSERVATIONS_RECORDED);
 	const backlog = sourceEntriesAfter(args.entries, lastCoverage);
 	const maxTokens = resolveNotebookSourceMaxTokens(args.config, args.contextWindow);
 	const serialized = serializeSourceAddressedBranchEntries(backlog, { maxTokens });
 	const priorCoverageId = latestCoverageMarkerId(args.entries, NOTEBOOK_OBSERVATIONS_RECORDED);
-	const coversUpToId = serialized.sourceEntryIds.at(-1) ?? priorCoverageId ?? allSourceIds[0];
+	const coversUpToId = serialized.sourceEntryIds.at(-1) ?? priorCoverageId ?? primarySourceIds[0];
 	if (!coversUpToId) return undefined;
 
 	const folded = foldLedger(args.entries);
@@ -230,7 +233,7 @@ export function preparePairNotebookBatch(args: {
 	return {
 		id: `${coversUpToId}:${serialized.sourceEntryIds.length}:${expectedReflectionIds.join(",")}`,
 		coversUpToId,
-		allowedSourceEntryIds: allSourceIds,
+		allowedSourceEntryIds: notebookSourceEntries(args.entries).map((entry) => entry.id),
 		reflections: folded.currentReflections,
 		expectedReflectionIds,
 		fullMaintenanceDue: args.fullMaintenanceDue,
@@ -263,6 +266,7 @@ export function commitNotebookUpdate(
 		reflections: update.reflections,
 		retiredReflectionIds: update.retiredIds.filter((id) => currentIds.includes(id)),
 		droppedObservationIds: [],
+		...(update.childSources ? { childSources: update.childSources } : {}),
 	});
 	if (!data) return false;
 	pi.appendEntry(NOTEBOOK_MAINTENANCE, data);
@@ -355,7 +359,7 @@ function applyLiveNotebookUpdate(
 	fullMaintenanceDue: boolean,
 ): NotebookUpdate | undefined {
 	const sources = entries.filter(isSourceEntry);
-	const allowedSourceEntryIds = sources.map((entry) => entry.id);
+	const allowedSourceEntryIds = notebookSourceEntries(entries).map((entry) => entry.id);
 	const userIndex = sources.findLastIndex((entry) => (entry.message as { role?: string } | undefined)?.role === "user");
 	const currentTurnIds = sources.slice(Math.max(0, userIndex)).map((entry) => entry.id);
 	params = {

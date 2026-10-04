@@ -82,6 +82,8 @@ interface SpawnArgs {
 
 export interface SpawnOptions {
 	description: string;
+	/** Primary-owned notebook capability supplied only by public interactive dispatch. */
+	notebook?: import("../../notebook/src/shared-notebook.js").SharedNotebook;
 	/** Model selected from the user-global profile at the spawning boundary. */
 	model?: Model<any>;
 	/** True when `model`/`thinkingLevel` are the completed spawn-boundary resolution. */
@@ -370,6 +372,7 @@ export class AgentManager {
 			toolPolicy: options.toolPolicy,
 			customTools: [...(options.customTools ?? []), ...(options.enableClarify ? [createClarifyTool(ctx)] : [])],
 			loadStandardChildExtensions: options.loadStandardChildExtensions,
+			notebook: options.notebook,
 			isolated: options.isolated,
 			inheritContext: options.inheritContext,
 			pair: options.pair,

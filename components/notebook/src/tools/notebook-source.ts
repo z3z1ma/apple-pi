@@ -33,6 +33,7 @@ export type RecallSourceEntryDetails = {
 	timestamp: string;
 	tokens: number;
 	qualifiers: string[];
+	sourceOrigin?: Entry["sourceOrigin"];
 	content?: string;
 };
 
@@ -143,10 +144,11 @@ function sourceEntryDetails(entry: Entry, includeContent: boolean): RecallSource
 	const content = renderSourceEntryContentOnly(entry);
 	return {
 		id: entry.id,
-		origin,
+		origin: entry.sourceOrigin ? `Child ${entry.sourceOrigin.agentType}: ${origin}` : origin,
 		timestamp,
 		tokens: estimateEntryTokens(entry),
 		qualifiers,
+		...(entry.sourceOrigin ? { sourceOrigin: entry.sourceOrigin } : {}),
 		...(includeContent && content ? { content } : {}),
 	};
 }

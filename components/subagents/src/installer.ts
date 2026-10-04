@@ -2,6 +2,7 @@ import { defineTool, type ExtensionAPI, getMarkdownTheme } from "@earendil-works
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
+import { getSharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { abortable } from "../../shared/src/abortable.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
@@ -275,6 +276,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			const maxTurns = normalizeMaxTurns(invocation.maxTurns ?? getDefaultMaxTurns());
 			const tracker = createActivityTracker(maxTurns, () => widget.update(), request.onActivity);
 			const id = manager.spawn(pi, ctx, dispatch.type, request.prompt, {
+				notebook: getSharedNotebook(pi.events),
 				description: request.description,
 				agentConfig,
 				model: resolved.model,
@@ -856,6 +858,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				runInBackground: invocation.runInBackground,
 			};
 			const options = {
+				notebook: getSharedNotebook(pi.events),
 				enableClarify: true,
 				description: params.description,
 				agentConfig: config,

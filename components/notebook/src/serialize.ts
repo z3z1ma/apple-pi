@@ -1,4 +1,5 @@
 import type { Message, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ChildSourceOrigin } from "./session-ledger/types.js";
 import { estimateStringTokens } from "./tokens.js";
 
 function pad(n: number): string {
@@ -126,6 +127,7 @@ export type RenderableEntry = {
 	customType?: string;
 	content?: unknown;
 	summary?: unknown;
+	sourceOrigin?: ChildSourceOrigin & { entryId: string };
 };
 
 function renderCustomMessage(entry: RenderableEntry, options: { recallFormat: boolean }): string {
@@ -277,6 +279,13 @@ function renderRecallMessage(entry: RenderableEntry): string | null {
 }
 
 export function renderRecallSourceEntry(entry: RenderableEntry): string | null {
+	if (entry.sourceOrigin) {
+		const { sessionId, agentType, agentId, entryId } = entry.sourceOrigin;
+		const rendered = renderRecallSourceEntry({ ...entry, sourceOrigin: undefined });
+		return rendered
+			? `[Child ${agentType}${agentId ? ` (${agentId})` : ""}; session ${sessionId}; source ${entryId}; notebook source ${entry.id}]\n${rendered}`
+			: null;
+	}
 	if (entry.type === "message") return renderRecallMessage(entry);
 	if (entry.type === "custom_message") return renderCustomMessage(entry, { recallFormat: true });
 	if (entry.type === "branch_summary" && typeof entry.summary === "string") {

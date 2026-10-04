@@ -1,4 +1,5 @@
 import { isSourceEntry } from "./progress.js";
+import { notebookSourceEntries } from "./sources.js";
 import {
 	type Entry,
 	isNotebookMaintenanceEntry,
@@ -154,7 +155,7 @@ function resolveSourceIds(
 	nonSourceEntryIds: string[];
 } {
 	const ids = uniqueStrings([...sourceEntryIds]);
-	const byId = new Map(entries.map((entry) => [entry.id, entry]));
+	const byId = new Map([...entries, ...notebookSourceEntries(entries)].map((entry) => [entry.id, entry]));
 	const sourceEntries: Entry[] = [];
 	const missingSourceEntryIds: string[] = [];
 	const nonSourceEntryIds: string[] = [];

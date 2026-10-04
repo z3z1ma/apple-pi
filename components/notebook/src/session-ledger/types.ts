@@ -23,6 +23,18 @@ export type Entry = {
 	data?: unknown;
 	details?: unknown;
 	firstKeptEntryId?: string;
+	sourceOrigin?: ChildSourceOrigin & { entryId: string };
+};
+
+export type ChildSourceOrigin = {
+	sessionId: string;
+	agentType: string;
+	agentId?: string;
+};
+
+export type ChildSources = {
+	origin: ChildSourceOrigin;
+	entries: Entry[];
 };
 
 export type Observation = {
@@ -69,6 +81,7 @@ export type NotebookMaintenanceEntryData = {
 	reflections: Reflection[];
 	retiredReflectionIds: string[];
 	droppedObservationIds: string[];
+	childSources?: ChildSources;
 };
 
 export type NotebookDetails = {
@@ -171,6 +184,17 @@ export function isReflectionsRetiredData(value: unknown): value is ReflectionsRe
 	return isNonEmptyStringArray(value.successorIds);
 }
 
+function isChildSources(value: unknown): value is ChildSources {
+	if (!isPlainRecord(value) || !isPlainRecord(value.origin)) return false;
+	return (
+		isNonEmptyString(value.origin.sessionId) &&
+		isNonEmptyString(value.origin.agentType) &&
+		(value.origin.agentId === undefined || isNonEmptyString(value.origin.agentId)) &&
+		Array.isArray(value.entries) &&
+		value.entries.every((entry) => isPlainRecord(entry) && isNonEmptyString(entry.id) && isNonEmptyString(entry.type))
+	);
+}
+
 export function isNotebookMaintenanceData(value: unknown): value is NotebookMaintenanceEntryData {
 	if (!isPlainRecord(value)) return false;
 	return (
@@ -182,7 +206,8 @@ export function isNotebookMaintenanceData(value: unknown): value is NotebookMain
 		Array.isArray(value.retiredReflectionIds) &&
 		value.retiredReflectionIds.every(isNonEmptyString) &&
 		Array.isArray(value.droppedObservationIds) &&
-		value.droppedObservationIds.every(isNonEmptyString)
+		value.droppedObservationIds.every(isNonEmptyString) &&
+		(value.childSources === undefined || isChildSources(value.childSources))
 	);
 }
 

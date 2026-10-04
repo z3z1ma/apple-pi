@@ -26,6 +26,7 @@ import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../../../extensions/rtk.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
+import { createChildNotebookTools, type SharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
 import { buildFullParentContext, extractText } from "./context.js";
@@ -165,6 +166,7 @@ export type AgentRunContext = Pick<
 >;
 
 export interface RunOptions {
+	notebook?: SharedNotebook;
 	/** Host-prepared session state, used by ephemeral parent forks. */
 	sessionManager?: SessionManager;
 	/** ExtensionAPI instance — used for pi.exec() instead of execSync. */
@@ -514,10 +516,17 @@ export async function runAgent(
 					allowedSubagents: agentConfig.allowedSubagents,
 					configCwd,
 					projectTrusted,
+					notebook: options.notebook,
 				})
 			: [];
 	const nestedToolNames = new Set(nestedTools.map((tool) => tool.name));
-	const customTools = [...nestedTools, ...(options.customTools ?? [])];
+	const notebookTools =
+		options.notebook &&
+		options.loadStandardChildExtensions !== false &&
+		toolNames.some((name) => (name === "edit" || name === "write") && !disallowedSet?.has(name))
+			? createChildNotebookTools(options.notebook, { agentType: type, agentId: options.agentId })
+			: [];
+	const customTools = [...nestedTools, ...(options.customTools ?? []), ...notebookTools];
 	const customToolNames = new Set(customTools.map((tool) => tool.name));
 	if (customToolNames.size !== customTools.length)
 		throw new Error(`Agent "${type}" received duplicate custom tool names`);

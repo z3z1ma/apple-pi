@@ -61,6 +61,7 @@ import {
 	rawTokensSinceObservationCoverage,
 } from "../../notebook/src/session-ledger/index.js";
 import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
+import { registerSharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
@@ -1336,6 +1337,7 @@ export default function (pi: ExtensionAPI) {
 		registerNotebookCompactionPacket(pi);
 		registerNotebookSourceTool(pi);
 		registerMainNotebookTool(pi, rootNotebook);
+		registerSharedNotebook(pi, rootNotebook);
 		registerLearningReflection(pi);
 		registerOpenLearnings(pi);
 	}

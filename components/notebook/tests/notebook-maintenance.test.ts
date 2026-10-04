@@ -9,7 +9,16 @@ import {
 	registerMainNotebookTool,
 	UpdateNotebookTool,
 } from "../src/notebook-maintenance.js";
-import { type Entry, foldLedger, NOTEBOOK_MAINTENANCE, type Reflection } from "../src/session-ledger/index.js";
+import {
+	type Entry,
+	foldLedger,
+	latestCoverageMarkerId,
+	NOTEBOOK_MAINTENANCE,
+	NOTEBOOK_OBSERVATIONS_RECORDED,
+	type Reflection,
+} from "../src/session-ledger/index.js";
+import { recallNotebookSources } from "../src/session-ledger/recall.js";
+import { childSourceId } from "../src/session-ledger/sources.js";
 
 function sourceEntries(): Entry[] {
 	return [
@@ -125,6 +134,82 @@ describe("pair programmer notebook maintenance", () => {
 			}),
 		);
 	});
+
+	it.each([false, true])(
+		"curates retained child evidence with full maintenance %s without using it as coverage",
+		async (fullMaintenanceDue) => {
+			const childSession = "child-session";
+			const original: Entry = {
+				type: "message",
+				id: "child-evidence",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "ARCHIVED_CHILD_ONLY: the child found a separate cache." }],
+				},
+			};
+			const citation = childSourceId(childSession, original.id);
+			const old = conclusion("Clear the cache before retrying.", [citation]);
+			const entries: Entry[] = [
+				...sourceEntries(),
+				{
+					type: "custom",
+					id: "child-capture",
+					customType: NOTEBOOK_MAINTENANCE,
+					data: {
+						coversUpToId: "source-user",
+						observations: [],
+						reflections: [old],
+						retiredReflectionIds: [],
+						droppedObservationIds: [],
+						childSources: {
+							origin: { sessionId: childSession, agentType: "builder", agentId: "child-1" },
+							entries: [original],
+						},
+					},
+				},
+			];
+			const batch = preparePairNotebookBatch({ entries, config: DEFAULTS, fullMaintenanceDue, sourceTokens: 42 });
+			expect(batch?.unresolvedSource).not.toContain("ARCHIVED_CHILD_ONLY");
+			const tool = new UpdateNotebookTool();
+			tool.begin(batch);
+			const content = "The child uses a separate cache; clear that cache before retrying.";
+			const result = await tool.execute("curate-child", {
+				reflections: [{ content, sourceEntryIds: [citation], supersedes: [old.id] }],
+				retireReflectionIds: [],
+				retainReflectionIds: [],
+			});
+			expect(result.details).toMatchObject({ accepted: true, reflections: 1, retired: 1, rejected: 0 });
+			const staged = tool.takeStaged()!;
+			expect(
+				commitNotebookUpdate(
+					{
+						appendEntry: (customType: string, data: unknown) =>
+							entries.push({ type: "custom", id: "pair-curation", customType, data }),
+					} as never,
+					{ disposed: false } as never,
+					entries,
+					staged,
+				),
+			).toBe(true);
+			expect(latestCoverageMarkerId(entries, NOTEBOOK_OBSERVATIONS_RECORDED)).toBe(
+				fullMaintenanceDue ? "source-assistant" : "source-user",
+			);
+			const current = foldLedger(entries).currentReflections;
+			expect(current).toHaveLength(1);
+			expect(current[0]).toMatchObject({ content, sourceEntryIds: [citation] });
+			expect(current[0].id).not.toBe(old.id);
+			const recall = recallNotebookSources(entries, current[0].id);
+			expect(recall.status).toBe("found");
+			if (recall.status !== "found") throw new Error("Curated learning was not recallable");
+			expect(recall.sourceEntries).toEqual([
+				expect.objectContaining({
+					id: citation,
+					message: original.message,
+					sourceOrigin: { sessionId: childSession, agentType: "builder", agentId: "child-1", entryId: original.id },
+				}),
+			]);
+		},
+	);
 
 	it("commits an empty full review as one coverage envelope", () => {
 		const entries = sourceEntries();

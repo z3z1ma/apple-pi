@@ -36,7 +36,7 @@ export async function fauxSession(
 	extensionFactories: ExtensionFactory[],
 	replies: Reply[] | ((context: Context) => Reply | "until-aborted"),
 	tools: string[],
-	options: { cwd?: string } = {},
+	options: { cwd?: string; sessionManager?: SessionManager } = {},
 ) {
 	const owned = options.cwd === undefined;
 	const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
@@ -85,7 +85,7 @@ export async function fauxSession(
 		model,
 		modelRuntime: { ...modelRuntime, stream, streamSimple: stream } as never,
 		resourceLoader: loader,
-		sessionManager: SessionManager.inMemory(cwd),
+		sessionManager: options.sessionManager ?? SessionManager.inMemory(cwd),
 		settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
 	});
 	await session.bindExtensions({});
