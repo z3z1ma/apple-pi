@@ -8,13 +8,14 @@ import {
 	ToolExecutionComponent,
 	UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
-import { Container, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, sliceByColumn, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
 	formatCollapsedLine,
 	formatCompactionSummary,
 	formatExpandedLines,
 	formatThoughtHeader,
 	formatThoughtSnippet,
+	formatToolName,
 	formatUserMessage,
 	makeMarkdownTheme,
 	stripAnsi,
@@ -22,6 +23,23 @@ import {
 import type { ToolStatus } from "./types.js";
 
 const PATCH_APPLIED = Symbol.for("apple_pi.terse_tools_patched");
+const TOOL_INSPECTOR = Symbol.for("apple_pi.terse_tools_inspector");
+
+type ToolInspector = (component: ToolExecutionComponent) => void;
+
+export function setToolInspector(inspector?: ToolInspector): void {
+	(ToolExecutionComponent as any)[TOOL_INSPECTOR] = inspector;
+}
+
+interface ToolMouseLayout {
+	width: number;
+	headerRow: number;
+	detailEnd: number;
+	labelStart: number;
+	labelEnd: number;
+}
+
+const toolMouseLayouts = new WeakMap<ToolExecutionComponent, ToolMouseLayout>();
 
 let activeTheme: Theme | undefined;
 
@@ -361,8 +379,42 @@ export function installTerseToolRenderer(): void {
 		return lines;
 	};
 
+	// The terse rows replace Pi's child layout, so mouse routing must use these same rows.
+	ToolExecutionComponent.prototype.handleMouse = function (event) {
+		if ((this as any).hideComponent || event.type !== "click" || event.button !== "left") return undefined;
+		if (event.x < 0 || event.x >= event.width || event.y < 0 || event.y >= event.height) return undefined;
+		let layout = toolMouseLayouts.get(this);
+		if (!layout || layout.width !== event.width) {
+			this.render(event.width);
+			layout = toolMouseLayouts.get(this);
+		}
+		if (!layout || event.y < layout.headerRow || event.y >= layout.detailEnd) return undefined;
+		const handled = {
+			handled: true as const,
+			target: {
+				component: this,
+				originX: event.screenX - event.x,
+				originY: event.screenY - event.y,
+				width: event.width,
+				height: event.height,
+			},
+		};
+		if (event.y === layout.headerRow && event.x >= layout.labelStart && event.x < layout.labelEnd) {
+			const inspect: ToolInspector | undefined = (ToolExecutionComponent as any)[TOOL_INSPECTOR];
+			if (inspect) {
+				inspect(this);
+				return handled;
+			}
+		}
+		this.setExpanded(!(this as any).expanded);
+		return handled;
+	};
+
 	ToolExecutionComponent.prototype.render = function (width: number): string[] {
-		if ((this as any).hideComponent) return [];
+		if ((this as any).hideComponent) {
+			toolMouseLayouts.delete(this);
+			return [];
+		}
 
 		const theme = getActiveTheme();
 		const status: ToolStatus = (this as any).isPartial
@@ -390,7 +442,6 @@ export function installTerseToolRenderer(): void {
 			if (hasTextBefore) {
 				lines.unshift("");
 			}
-			lines.push("");
 		} else {
 			const line = formatCollapsedLine(
 				(this as any).toolName,
@@ -404,6 +455,24 @@ export function installTerseToolRenderer(): void {
 			);
 			lines = hasTextBefore ? ["", line] : [line];
 		}
+
+		const headerRow = hasTextBefore ? 1 : 0;
+		const labelStart = 2;
+		const name = stripAnsi(formatToolName((this as any).toolName, theme));
+		const displayedName = stripAnsi(sliceByColumn(lines[headerRow], labelStart, visibleWidth(name)));
+		let label = "";
+		for (const character of displayedName) {
+			if (!name.startsWith(label + character)) break;
+			label += character;
+		}
+		toolMouseLayouts.set(this, {
+			width,
+			headerRow,
+			detailEnd: lines.length,
+			labelStart,
+			labelEnd: labelStart + visibleWidth(label),
+		});
+		if ((this as any).expanded) lines.push("");
 
 		const imageComponents = (this as any).imageComponents;
 		if (Array.isArray(imageComponents)) {

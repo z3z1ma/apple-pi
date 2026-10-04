@@ -1111,8 +1111,13 @@ describe("terse tools extension spinner and label lifecycle", () => {
 	it("hooks into Pi extension events to manage spinner and clear hidden thinking label", () => {
 		const handlers = new Map<string, (event: any, ctx: any) => void>();
 		const mockPi: any = {
+			registerCommand() {},
 			on(event: string, handler: (event: any, ctx: any) => void) {
-				handlers.set(event, handler);
+				const previous = handlers.get(event);
+				handlers.set(event, (value, ctx) => {
+					previous?.(value, ctx);
+					handler(value, ctx);
+				});
 			},
 		};
 

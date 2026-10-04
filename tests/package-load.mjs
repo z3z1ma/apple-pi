@@ -159,6 +159,7 @@ try {
 		"pi-sessions",
 		"stash",
 		"edit-prompt",
+		"inspect-tool",
 		"branch-search",
 	]) {
 		assert(commands.has(command), `missing /${command}`);

@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { formatThinkingSpinnerMessage } from "./formatters.js";
+import { installToolInspector } from "./inspector.js";
 import { installTerseToolRenderer } from "./patch.js";
 
 export default function (pi?: ExtensionAPI): void {
@@ -8,6 +9,8 @@ export default function (pi?: ExtensionAPI): void {
 	if (!pi || typeof pi.on !== "function") {
 		return;
 	}
+
+	installToolInspector(pi);
 
 	const clearThinkingLabel = (ctx: ExtensionContext) => {
 		if (typeof ctx?.ui?.setHiddenThinkingLabel === "function") {
