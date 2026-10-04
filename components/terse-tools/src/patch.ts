@@ -2,6 +2,7 @@ import {
 	AssistantMessageComponent,
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
+	CustomMessageComponent,
 	ExtensionRunner,
 	getMarkdownTheme,
 	Theme,
@@ -166,6 +167,9 @@ export function precedingHasTextDelta(component: ToolExecutionComponent): boolea
 	for (let i = index - 1; i >= 0; i--) {
 		const prev = children[i];
 		if (prev?.constructor?.name === "Spacer") continue;
+		if (prev instanceof CustomMessageComponent && (prev as any).message?.customType === "advisory") {
+			return false;
+		}
 		if (prev instanceof ToolExecutionComponent || prev?.constructor?.name === "ToolExecutionComponent") {
 			return false;
 		}

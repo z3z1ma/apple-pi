@@ -3,10 +3,11 @@ import {
 	AssistantMessageComponent,
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
+	CustomMessageComponent,
 	initTheme,
 	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
-import { Container, Spacer, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	formatCollapsedLine,
@@ -435,6 +436,37 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(lines[1])).toBe("● Read(/tmp/file.ts)");
 		expect(lines[1]).not.toContain("ctrl+o");
 		expect(stripAnsi(lines[2])).toBe("● Bash(npm test) (ctrl+o to expand)");
+	});
+
+	it("keeps the next tool adjacent to a pair note", () => {
+		for (const customType of ["advisory", "other"]) {
+			const container = new Container();
+			const note = new CustomMessageComponent(
+				{
+					role: "custom",
+					customType,
+					content: "check the lock",
+					display: true,
+					timestamp: 0,
+				},
+				() => new Text("● CONCERN check the lock", 0, 0),
+			);
+			const tool = new ToolExecutionComponent(
+				"bash",
+				"after_note",
+				{ command: "git status" },
+				{},
+				undefined,
+				{} as any,
+				process.cwd(),
+			);
+			container.addChild(note);
+			container.addChild(tool);
+			const lines = container.render(100).map((line) => stripAnsi(line).trimEnd());
+			const noteRow = lines.indexOf("● CONCERN check the lock");
+			expect(noteRow).toBeGreaterThanOrEqual(0);
+			expect(lines[noteRow + 1]).toBe(customType === "advisory" ? "● Bash(git status) (ctrl+o to expand)" : "");
+		}
 	});
 
 	it("renders expanded view when setExpanded is true", () => {
