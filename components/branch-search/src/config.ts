@@ -138,8 +138,8 @@ function lookup(config: unknown, key: string): unknown {
 	return value;
 }
 
-/** Every required key present and valid; otherwise text naming each missing or invalid key. */
-export function validateBranchSearchConfig(raw: unknown): ConfigResult {
+/** One line per missing or invalid key, `<key>: <problem>`; empty when the configuration is usable. */
+export function configProblems(raw: unknown): string[] {
 	const problems: string[] = [];
 	for (const [key, check] of REQUIRED) {
 		const value = lookup(raw, key);
@@ -151,6 +151,12 @@ export function validateBranchSearchConfig(raw: unknown): ConfigResult {
 		const problem = value === undefined ? undefined : check(value);
 		if (problem) problems.push(`${key}: ${problem}`);
 	}
+	return problems;
+}
+
+/** Every required key present and valid; otherwise text naming each missing or invalid key. */
+export function validateBranchSearchConfig(raw: unknown): ConfigResult {
+	const problems = configProblems(raw);
 	if (problems.length > 0) {
 		return {
 			ok: false,

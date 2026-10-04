@@ -115,6 +115,11 @@ function run(command: string, args: string[]): Promise<void> {
 export async function addWorktree(root: string, path: string, commit: string, cloneIgnored: string[]): Promise<void> {
 	mkdirSync(dirname(path), { recursive: true });
 	await git(root, ["worktree", "add", "--detach", "-q", path, commit]);
+	await cloneIgnoredDirs(root, path, cloneIgnored);
+}
+
+/** Clone each listed ignored directory of `root` that exists into `path`, unless `path` already has it (spec 8.2). */
+export async function cloneIgnoredDirs(root: string, path: string, cloneIgnored: string[]): Promise<void> {
 	for (const entry of cloneIgnored) {
 		const source = join(root, entry);
 		const target = join(path, entry);

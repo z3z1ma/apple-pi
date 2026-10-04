@@ -18,7 +18,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
-import { runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
+import { ProfileRequestError, runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
 import type { ScorerSpec } from "../src/scorer.js";
 import {
@@ -884,7 +884,8 @@ describe("authored scorer", { timeout: 30_000 }, () => {
 				});
 			},
 		});
-		await vi.waitFor(() => expect(order).toEqual(["wait"]));
+		// The whole search runs before the hold is asked for; under full-suite load that takes seconds.
+		await vi.waitFor(() => expect(order).toEqual(["wait"]), { timeout: 20_000 });
 		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 1;\n");
 		grant();
 		const { result } = await applied;
@@ -1310,5 +1311,89 @@ describe("later generations", { timeout: 60_000 }, () => {
 			{ kind: "stop", outcome: "no survivor" },
 		]);
 		expectCleanedUp(run.cwd, record, ["base"]);
+	});
+});
+
+describe("fidelity tag", { timeout: 30_000 }, () => {
+	it("tags every branch with one fidelity request on the profile, and the tag never changes selection", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const requests: { profile: string; prompt: string }[] = [];
+		const { result, record } = await search(run, {
+			config: { fidelity: { profile: "quick" } },
+			review: async (profile, prompt) => {
+				requests.push({ profile, prompt });
+				// The passing branch is called unfaithful: selection must ignore it.
+				const faithful = !prompt.includes("value = 2");
+				return {
+					text: JSON.stringify({ faithful, reason: faithful ? "matches" : "drifted" }),
+					usage: { input: 7, output: 3, cacheRead: 0, cacheWrite: 0 },
+				};
+			},
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(requests).toHaveLength(2);
+		expect(requests.every(({ profile }) => profile === "quick")).toBe(true);
+		const passing = branchOf(record, "c1");
+		const failing = branchOf(record, "c2");
+		expect(record.winner).toBe(passing.key);
+		const prompt = requests.find((request) => request.prompt.includes("value = 2"))?.prompt as string;
+		expect(prompt).toContain("Directive: approach c1 / First action: open app.ts for c1 / Constraint: ");
+		expect(prompt).toMatch(/^\+export const value = 2;$/m);
+		expect(prompt).toContain('Reply with only JSON: {"faithful": true|false, "reason": "..."}');
+		expect(passing.fidelity).toEqual({
+			profile: "quick",
+			faithful: false,
+			reason: "drifted",
+			cost: { inputTokens: 7, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 3, ms: expect.any(Number) },
+		});
+		expect(failing.fidelity).toEqual(expect.objectContaining({ faithful: true, reason: "matches" }));
+	});
+
+	it("records an unusable fidelity reply without a verdict and still selects", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const { result, record } = await search(run, {
+			config: { fidelity: { profile: "quick" } },
+			review: async () => reviewReply("not json"),
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(branchOf(record, "c1").fidelity).toEqual(
+			expect.objectContaining({ faithful: null, reason: expect.stringContaining("could not be used") }),
+		);
+	});
+
+	it("sends no fidelity request and records no tag without a fidelity profile", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		let requests = 0;
+		const { record } = await search(run, {
+			review: async () => {
+				requests++;
+				return reviewReply('{"faithful": true, "reason": "x"}');
+			},
+		});
+
+		expect(requests).toBe(0);
+		for (const branch of record.branches) expect(branch.fidelity).toBeNull();
+	});
+});
+
+describe("fidelity tag cost", { timeout: 30_000 }, () => {
+	it("counts the usage of a failed fidelity request and records no verdict", async () => {
+		const run = await fixture({ c1: [FIX, finish("done", "two")], c2: [WRONG, finish("done", "three")] });
+		const { result, record } = await search(run, {
+			config: { fidelity: { profile: "quick" } },
+			review: async () => {
+				throw new ProfileRequestError("overloaded", { input: 9, output: 4, cacheRead: 2, cacheWrite: 1 });
+			},
+		});
+
+		expect(result.outcome).toBe("ready");
+		expect(branchOf(record, "c1").fidelity).toEqual({
+			profile: "quick",
+			faithful: null,
+			reason: "the fidelity request failed: overloaded",
+			cost: { inputTokens: 9, cacheReadTokens: 2, cacheWriteTokens: 1, outputTokens: 4, ms: expect.any(Number) },
+		});
 	});
 });

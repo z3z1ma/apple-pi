@@ -17,7 +17,9 @@ import {
 	childDirective,
 	enumeratorPrompt,
 	enumeratorRetryPrompt,
+	fidelityPrompt,
 	parseEnumeration,
+	parseFidelity,
 	parseJson,
 	parseReview,
 	parseSelfReport,
@@ -31,6 +33,7 @@ import {
 	type BranchScore,
 	type BranchSelfReport,
 	emptyCost,
+	type FidelityRecord,
 	type ReviewRecord,
 	type SearchMode,
 	type SearchRecord,
@@ -88,12 +91,22 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 export const BRANCH_SEARCH_MESSAGE_TYPE = "branch-search";
 const MESSAGE_TYPE = BRANCH_SEARCH_MESSAGE_TYPE;
 
-/** One request on a user-global model profile; resolves with the reply text and its token usage (spec 10.5). */
+/** One request on a user-global model profile; resolves with the reply text and its token usage (spec 10.5, 10.6). */
 export type ReviewRequest = (
 	profile: string,
 	prompt: string,
 	signal: AbortSignal,
 ) => Promise<{ text: string; usage: Parameters<typeof addUsage>[1] }>;
+
+/** A profile request whose reply ended in an error or abort; it still cost what `usage` says. */
+export class ProfileRequestError extends Error {
+	constructor(
+		message: string,
+		readonly usage: Parameters<typeof addUsage>[1],
+	) {
+		super(message);
+	}
+}
 
 /** Branch counts per state, for `/branch-search status`. */
 export interface SearchProgress {
@@ -125,7 +138,7 @@ export interface SearchOptions {
 	 * the pending `search_branches` call with it, so the fork point ends with that call (spec 5.2, I4).
 	 */
 	forkPointPrompt?: (prompt: string) => AgentMessage;
-	/** Sends the scorer review when `scorer.reviewProfile` is set. */
+	/** Sends the scorer review when `scorer.reviewProfile` is set, and the fidelity tags when `fidelity.profile` is set. */
 	review?: ReviewRequest;
 	/**
 	 * Holds the root session for the apply (spec 6.9 step 1): resolves once the root session has
@@ -373,7 +386,7 @@ class Search {
 				continue;
 			}
 			await this.runGeneration(generation, step.batch, base);
-			await this.scoreGeneration(generation, base.commit);
+			await settleAll([this.scoreGeneration(generation, base.commit), this.tagFidelity(generation)]);
 			await this.removeGeneration(generation);
 			generation++;
 		}
@@ -531,6 +544,7 @@ class Search {
 			addUsage(cost, answer.usage);
 			reply = answer.text;
 		} catch (error) {
+			if (error instanceof ProfileRequestError) addUsage(cost, error.usage);
 			signal.throwIfAborted();
 			review.reason = `the review request failed: ${error instanceof Error ? error.message : String(error)}`;
 			review.ms = cost.ms = Date.now() - started;
@@ -781,9 +795,7 @@ class Search {
 	 * branch's final conversation under the child directive (spec 6.6, 10.3, 10.4).
 	 */
 	private startBranch(generation: number, entry: BatchEntry, startCommit: string, worktree: string): Promise<void> {
-		const enumeration = this.enumerations[entry.parent ?? "root"];
-		const candidate = enumeration?.candidates.find((c) => c.id === entry.candidate);
-		if (!candidate) throw new Error(`Unknown candidate ${entry.candidate}.`);
+		const candidate = this.candidate(entry.parent, entry.candidate);
 		const { goal } = this.options;
 		const [messages, append] =
 			entry.parent === null
@@ -804,6 +816,7 @@ class Search {
 			commit: null,
 			selfReport: null,
 			learned: null,
+			fidelity: null,
 			cost: { ...emptyCost(), runMs: 0, scoreMs: 0 },
 		};
 		const live: LiveBranch = { record, worktree, messages: [] };
@@ -854,6 +867,48 @@ class Search {
 			else if (last?.stopReason === "error" || last?.stopReason === "aborted") report = "error";
 			record.selfReport = report;
 		});
+	}
+
+	/** A candidate of the enumeration a branch was drawn from: the root's, or its parent's. */
+	private candidate(parent: NodeKey | null, id: string) {
+		const candidate = this.enumerations[parent ?? "root"]?.candidates.find((c) => c.id === id);
+		if (!candidate) throw new Error(`Unknown candidate ${id}.`);
+		return candidate;
+	}
+
+	/**
+	 * With `fidelity.profile`, one request per branch of the generation on that profile asks whether
+	 * the branch's diff implements its directive (spec 6.6, 10.6). The tag is for evaluation: a failed
+	 * request or an unusable reply records why, and no tag changes a branch's fate or the selection.
+	 */
+	private async tagFidelity(generation: number): Promise<void> {
+		const profile = this.config.fidelity?.profile;
+		if (profile === undefined) return;
+		const { signal } = this.options;
+		const branches = this.branches.filter(({ record }) => record.generation === generation);
+		await settleAll(
+			branches.map(async ({ record }) => {
+				const started = Date.now();
+				const tag: FidelityRecord = { profile, faithful: null, reason: "", cost: { ...emptyCost(), ms: 0 } };
+				record.fidelity = tag;
+				try {
+					if (!this.options.review) throw new Error("no profile request is available");
+					const diff = await git(this.root, ["diff", ...PLAIN_DIFF, record.startCommit, record.commit as string]);
+					const prompt = fidelityPrompt(this.candidate(record.parent, record.candidate), record.constraint, diff);
+					const answer = await abortable(this.options.review(profile, prompt, signal), signal);
+					addUsage(tag.cost, answer.usage);
+					const verdict = parseFidelity(answer.text);
+					if (typeof verdict === "string") tag.reason = `the reply could not be used: ${verdict}`;
+					else Object.assign(tag, verdict);
+				} catch (error) {
+					if (error instanceof ProfileRequestError) addUsage(tag.cost, error.usage);
+					signal.throwIfAborted();
+					tag.reason = `the fidelity request failed: ${error instanceof Error ? error.message : String(error)}`;
+				} finally {
+					tag.cost.ms = Date.now() - started;
+				}
+			}),
+		);
 	}
 
 	/**

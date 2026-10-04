@@ -91,8 +91,8 @@
     ]
   },
   "scripts": {
-    "format": "biome format --write components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json",
-    "format:check": "biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json",
+    "format": "biome format --write components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts vitest.eval.config.ts biome.json",
+    "format:check": "biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts vitest.eval.config.ts biome.json",
     "lint": "biome lint components optional-extensions extensions tests scripts",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit",
@@ -101,7 +101,8 @@
     "test:pair": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/pair-programmer/tests/pair.test.mjs",
     "test:loader": "node tests/package-load.mjs",
     "pack:check": "npm pack --dry-run",
-    "audit:cache": "node scripts/cache-audit.mjs"
+    "audit:cache": "node scripts/cache-audit.mjs",
+    "eval:branch-search": "vitest run --config vitest.eval.config.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": ">=0.99.0",

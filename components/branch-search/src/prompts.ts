@@ -74,6 +74,23 @@ ${SCORER_SCHEMA}
 Reply with only JSON: {"verdict":"confirm"} or {"verdict":"refine","reason":"...","spec":{...}}`;
 }
 
+/** Spec 10.6: whether a branch's diff implements its directive. A tag for evaluation only. */
+export function fidelityPrompt(candidate: Candidate, constraint: string, diff: string): string {
+	return `Directive: ${candidate.approach} / First action: ${candidate.firstStep} / Constraint: ${constraint}
+Diff:
+${diff}
+
+Does the diff implement the directive's approach? Reply with only JSON: {"faithful": true|false, "reason": "..."}`;
+}
+
+/** The fidelity verdict, or why the reply cannot be used. */
+export function parseFidelity(reply: string): { faithful: boolean; reason: string } | string {
+	const value = parseJson(reply) as { faithful?: unknown; reason?: unknown } | undefined;
+	if (value === undefined) return "it is not valid JSON";
+	if (typeof value?.faithful !== "boolean") return '"faithful" is not true or false';
+	return { faithful: value.faithful, reason: typeof value.reason === "string" ? value.reason : "" };
+}
+
 export type ReviewVerdict = { verdict: "confirm" } | { verdict: "refine"; reason: string; spec: unknown };
 
 /** The reviewer's verdict, or why the reply cannot be used. */

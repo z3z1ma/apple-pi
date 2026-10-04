@@ -37,7 +37,19 @@ export interface BranchRecord {
 	commit: string | null;
 	selfReport: BranchSelfReport | null;
 	learned: string | null;
+	/** The fidelity tag (spec 6.6, 10.6); null without `fidelity.profile`. It never decides selection. */
+	fidelity: FidelityRecord | null;
 	cost: TokenCost & { runMs: number; scoreMs: number };
+}
+
+/** Whether a branch's diff implements its directive, by one request on `fidelity.profile` (spec 10.6). */
+export interface FidelityRecord {
+	profile: string;
+	/** Null when the request failed or its reply could not be used; `reason` then says why. */
+	faithful: boolean | null;
+	reason: string;
+	/** The tag request's own tokens and duration; an evaluation cost, outside the search's `cost.total`. */
+	cost: TokenCost & { ms: number };
 }
 
 /** What scoring revealed about a branch. Held in memory until the last branch of the search stops (spec 8.4). */

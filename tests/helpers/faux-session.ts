@@ -29,16 +29,23 @@ const model = {
 /**
  * A real AgentSession on a scripted model, with `app.ts` in a temporary cwd. Call `dispose` when done.
  * `replies` is a queue, or a function of the request for runs whose order is not fixed. A function may
- * return `"until-aborted"` to hold the request open until its signal aborts.
+ * return `"until-aborted"` to hold the request open until its signal aborts. With `options.cwd`, the
+ * session runs in that existing directory instead, which `dispose` leaves in place.
  */
 export async function fauxSession(
 	extensionFactories: ExtensionFactory[],
 	replies: Reply[] | ((context: Context) => Reply | "until-aborted"),
 	tools: string[],
+	options: { cwd?: string } = {},
 ) {
-	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
-	mkdirSync(join(cwd, "agent"));
-	writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
+	const owned = options.cwd === undefined;
+	const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
+	// The agent directory stays out of a supplied cwd, which may be a repository under test.
+	const agentDir = owned ? join(cwd, "agent") : mkdtempSync(join(tmpdir(), "apple-pi-faux-agent-"));
+	if (owned) {
+		mkdirSync(agentDir);
+		writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
+	}
 	const requests: Context[] = [];
 	const stream = (_model: Model<string>, context: Context, options?: { signal?: AbortSignal }) => {
 		requests.push(structuredClone(context));
@@ -63,7 +70,7 @@ export async function fauxSession(
 	const { modelRuntime } = fauxModelBackend(model);
 	const loader = new DefaultResourceLoader({
 		cwd,
-		agentDir: join(cwd, "agent"),
+		agentDir,
 		extensionFactories,
 		noSkills: true,
 		noPromptTemplates: true,
@@ -87,7 +94,7 @@ export async function fauxSession(
 		session.messages.filter((message) => message.role === "custom" && message.customType === customType);
 	const dispose = () => {
 		session.dispose();
-		rmSync(cwd, { recursive: true, force: true });
+		rmSync(owned ? cwd : agentDir, { recursive: true, force: true });
 	};
 	return { cwd, session, requests, customMessages, dispose };
 }

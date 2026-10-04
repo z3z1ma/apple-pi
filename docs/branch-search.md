@@ -90,7 +90,7 @@ Files, merged key by key, with project values replacing user values and arrays r
 | `branch.limits` | `{ wallClockSec?, outputTokens? }` | yes, at least one field | Limits per attempt. An attempt over a limit stops, and its work is still scored. |
 | `scorer.validationRetries` | integer ≥ 0 | yes | Corrections the author may make to checks that fail validation. |
 | `scorer.reviewProfile` | model profile name | no | A [model profile](model-profiles.md) that reviews the checks once. |
-| `fidelity.profile` | model profile name | no | Reserved for evaluation. |
+| `fidelity.profile` | model profile name | no | Evaluation only: after each generation, one request per attempt on this profile asks whether the attempt's diff follows its approach, and the record keeps the answer, its reason, and its token cost. The tag never decides which attempt wins. |
 | `constraints` | string[] | yes | Extra constraints the draw may add to an approach. The harness adds `none`. |
 | `workspace.cloneIgnored` | string[] | yes | Ignored directories cloned into each worktree, for example `["node_modules", ".venv"]`. |
 | `apply` | `"auto"` or `"report"` | yes | `auto` applies the winner when the workspace did not change during the search. |
@@ -178,6 +178,24 @@ Limits:
 - Replay sees only the attempts that ran. A configuration larger than the recorded searches is unevaluable on them, so tuning can shrink a configuration, and can grow it only after searches that ran with larger values.
 - Each attempt's outcome is one sample from a model that might do otherwise on another run. Replay treats it as the outcome.
 
+## Evaluation
+
+The maintainer evaluation measures search against a single trajectory on this repository's closed ledger tasks. It runs on real models and is never part of `npm test`:
+
+```bash
+BRANCH_SEARCH_EVAL_CONFIG=eval.json BRANCH_SEARCH_EVAL_OUT=.ledger/<task-id> npm run eval:branch-search
+```
+
+`eval.json` names the model profile every arm runs on (`model`), the closed task ids (`tasks`), the time limit of one oracle test run (`oracle.timeoutSec`), optional explicit task boundaries (`overrides`, below), and the search configuration (`search`, every required key of `branch-search.json`). A missing file or key prints what to fix and stops before any model request. SIGINT or SIGTERM stops the running arm, shuts its session down, removes its clone, and writes the report of what finished.
+
+**Task evidence.** Tasks interleave in the history, so the span from a bundle's creation to its archiving is not the task's work. A task's commits are the ones its bundle cites: every hex word of 7 to 40 characters in any file of the closed bundle that names exactly one commit of this repository. The cited commits must form one line of history; otherwise the task is skipped for ambiguous provenance. The base is the parent of the oldest cited commit, the final state the newest, and the goal the closed `task.md`. The oracle gates are the test files the cited commits add or change, and only those, that fail on the base with their final version copied in and pass on the final commit; Vitest files run under a harness configuration, so the base's test allowlist cannot hide them. `overrides` sets a task's boundaries explicitly instead: `{"<task id>": {"base": "<commit>", "final": "<commit>", "tests": ["<path>", ...]}}`, where `tests` defaults to the test files changed from base to final. A task without cited commits or an override, or without oracle gates, is listed as skipped with the reason.
+
+**Arms.** Each task runs five times: A, one prompt to the main agent under `branch.limits`; B, a search with `draw: "model"`; C, a search with `draw: "random"`; B and C once with the oracle gates as the scorer (without `scorer.reviewProfile`) and once with an authored scorer. Every final state, the winner's commit for a search, is scored with the oracle gates once the arm's session has shut down, which stops any background command it started.
+
+**Isolation.** Every run happens in a fresh temporary repository that holds only the history reachable from the base, fetched through a temporary ref that is deleted at once, with no remote and with `workspace.cloneIgnored` cloned in; the task's solution and its oracle tests cannot be read through git, and the oracle test files are copied in only for scoring, after the arm ends. The sessions read the real credentials, `models.json`, and `model-profiles.json`; settings, the models store, and sessions live in a temporary agent directory, and extension, package, skill, prompt, and theme discovery stays off. Each session loads the extensions an ordinary child session loads, plus tasks, and excludes the tools a search fork may not run.
+
+**Report.** Written to `BRANCH_SEARCH_EVAL_OUT` (a `.md` path, or a directory such as the active ledger task bundle), it lists per task the base, final commit, and cited commits, and per arm whether it solved the task, its tokens, cache reads, run wall-clock, and main-model-equivalent price, C's winner rank, tail wins, and the success criteria. The winner rank is the position of the winner's root ancestor in the model order of the root enumeration (`preferred` first, then the returned order). A tail win is conservative: arm C solved the task, and that root is not `preferred` and sits at or beyond the most roots B's configuration could ever draw (`branches.perGeneration + generations.maxDepth × generations.rootsPerGeneration`, at most `branches.maxTotal`). Each search's `record.json` and `spec.json` are copied beside the report.
+
 ## Keeping the scorer hidden
 
 Attempts cannot see the checks that judge them. The harness keeps them apart in time rather than by guarding paths, because a shell can reach any path indirectly:
@@ -216,7 +234,7 @@ Each search keeps its state under `$(git rev-parse --git-common-dir)/apple-pi/br
 
 After the search, the directory keeps:
 
-- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, the token cost of the scorer author and of the review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, and token cost, plus the winner and outcome.
+- `record.json`: mode, goal, seed gate, seed, configuration, base, the scorer's hash, validation reports and review, the token cost of the scorer author and of the review, every approach list with the attempt it continues and its cost, every planning step, every attempt with its parent, generation, start and end order, approach, constraint, commits, self-report, gate and objective results, fidelity tag (with `fidelity.profile`), and token cost, plus the winner and outcome.
 - `spec.json`: the frozen scorer; its SHA-256 equals the hash in the record.
 - `winner.patch`: the applied diff, when the winner was applied.
 

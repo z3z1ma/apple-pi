@@ -14,6 +14,7 @@ import { type BranchSearchConfig, readBranchSearchConfig, validateBranchSearchCo
 import { FailureCounter, shellOutcome } from "./failure-signature.js";
 import {
 	BRANCH_SEARCH_MESSAGE_TYPE,
+	ProfileRequestError,
 	type ReviewRequest,
 	runBranchSearch,
 	type SearchProgress,
@@ -174,19 +175,25 @@ function consumedIn(entries: readonly SessionEntry[]): Set<string> {
 	return consumed;
 }
 
-/** One request on a user-global model profile, without the conversation or tools (spec 10.5). */
-function profileReview(ctx: ExtensionContext): ReviewRequest {
+/**
+ * One request on a user-global model profile, without the conversation or tools: the scorer review and
+ * the fidelity tags (spec 10.5, 10.6). The evaluation harness sends its tags through it too.
+ */
+export function profileRequest(
+	registry: Pick<ExtensionContext["modelRegistry"], "find" | "streamSimple">,
+): ReviewRequest {
 	return async (profile, prompt, signal) => {
-		const { model, thinking } = resolveModelProfile(profile, ctx.modelRegistry);
-		const reply = await ctx.modelRegistry
+		const { model, thinking } = resolveModelProfile(profile, registry);
+		const reply = await registry
 			.streamSimple(
 				model,
 				{ messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
 				{ signal, ...(thinking === "off" ? {} : { reasoning: thinking }) },
 			)
 			.result();
+		// A failed reply may still have been billed; its usage travels with the error.
 		if (reply.stopReason === "error" || reply.stopReason === "aborted")
-			throw new Error(reply.errorMessage ?? reply.stopReason);
+			throw new ProfileRequestError(reply.errorMessage ?? reply.stopReason, reply.usage);
 		const text = reply.content
 			.flatMap((block) => (block.type === "text" ? [block.text] : []))
 			.join("\n")
@@ -256,7 +263,7 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 		config: entry.config,
 		goal: entry.goal,
 		seedGate: entry.seedGate,
-		review: profileReview(ctx),
+		review: profileRequest(ctx.modelRegistry),
 		onStart: (search: ActiveSearch["search"]) => {
 			entry.search = search;
 		},
