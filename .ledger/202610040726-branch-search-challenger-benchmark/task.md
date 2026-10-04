@@ -6,7 +6,7 @@ Updated: 2026-10-04
 
 ## Intent
 
-The slugify demo (2026-10-04, `/tmp/bs-demo`) showed that the search works live in about 6 minutes, but its authored checks missed ligatures (`æ`, `ß`, `œ`). No attempt died, and the search beat the agent alone by luck. The checks are the weak link. This task makes the checks adversarial and measures, on fast staged traps, whether search beats one trajectory.
+The slugify demo (2026-10-04; a throwaway repository, not kept: `slugify` keeps every script, and the goal is to turn Latin letters with diacritics into ASCII) showed that the search works live in about 6 minutes, but its authored checks missed ligatures (`æ`, `ß`, `œ`). No attempt died, and the search beat the agent alone by luck. The checks are the weak link. This task makes the checks adversarial and measures, on fast staged traps, whether search beats one trajectory.
 
 Prior work: `.ledger/history/202610031403-branch-search/` (spec, tickets, pilot evaluation). Product behavior: `docs/branch-search.md`.
 
