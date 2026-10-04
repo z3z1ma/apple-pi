@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "goal": "Make slugify transliterate accented Latin letters, Latin letters with strokes, and Latin ligatures to their usual ASCII spellings, including decomposed combining accents, while preserving existing slug formatting and non-Latin letters apart from lowercasing.",
+  "files": [
+    {
+      "path": "acceptance/slugify-check.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\nif (mode === 'latin') {\n  const cases = [\n    ['Crème Brûlée', 'creme-brulee'], ['Łódź', 'lodz'],\n    ['ÀÁÂÃÄÅ ĀĂĄ ǍǞǠǺ', 'aaaaaa-aaa-aaaa'],\n    ['ÇĆĈĊČ ÈÉÊËĒĔĖĘĚ', 'ccccc-eeeeeeeee'],\n    ['ÌÍÎÏĨĪĬĮİ ÑŃŅŇ', 'iiiiiiiii-nnnn'],\n    ['ÒÓÔÕÖŌŎŐ ǑǪǬ', 'oooooooo-ooo'],\n    ['ÙÚÛÜŨŪŬŮŰŲ ÝŸŶ', 'uuuuuuuuuu-yyy'],\n    ['Đđ Ðð Þþ Łł Øø Ææ Œœ ßẞ', 'dd-dd-thth-ll-oo-aeae-oeoe-ssss'],\n    ['Ħħ ı Ŋŋ ſ Ƒƒ Ŧŧ', 'hh-i-nn-s-ff-tt'],\n    ['Ǣǣ Ǽǽ Ǿǿ', 'aeae-aeae-oo'],\n    ['ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ', 'ff-fi-fl-ffi-ffl-st-st'],\n    ['Straße smørrebrød encyclopædia œuvre', 'strasse-smorrebrod-encyclopaedia-oeuvre'],\n    ['Tiếng Việt — Dvořák — İstanbul', 'tieng-viet-dvorak-istanbul'],\n    ['a\\u0301b e\\u0300\\u0302x n\\u0303o', 'ab-ex-no'],\n    ['a\\u1ab0b e\\u1dc0f o\\u20d7p u\\ufe20v', 'ab-ef-op-uv'],\n    ['Crème Ελληνικά Łódź Йога', 'creme-ελληνικά-lodz-йога'],\n    ['a\\u0301/東京/ø/ά/Й', 'a-東京-o-ά-й'],\n  ];\n  for (const [input, expected] of cases) {\n    check(input, expected);\n    if (!/[\\p{Script=Greek}\\p{Script=Cyrillic}]/u.test(input)) check(input.normalize('NFD'), expected);\n  }\n} else if (mode === 'decomposable') {\n  let count = 0;\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{Script=Latin}$/u.test(letter) || !/^\\p{L}$/u.test(letter)) continue;\n    const decomposed = letter.toLowerCase().normalize('NFD');\n    if (!/^[a-z]\\p{M}+$/u.test(decomposed)) continue;\n    const expected = decomposed[0];\n    check(letter, expected);\n    check(decomposed, expected);\n    check(`x${letter}y`, `x${expected}y`);\n    check(`x${decomposed}y`, `x${expected}y`);\n    count++;\n  }\n  assert.ok(count > 400, `Only tested ${count} letters`);\n} else if (mode === 'preserve') {\n  const baseline = text => text.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n  const examples = [\n    '', '  --Release 2.0--  ', 'Hello, World!', 'A___B...C', '123 ٤٥٦ １２３',\n    'Привет мир', 'Йога Ёлка Ї Є Ӑ Ӧ', 'Ελληνικά ΆΈΉΊΌΎΏ ΐΰ',\n    '東京 日本語 カタカナ ひらがな', '中文 한국어 한글', 'עברית العربية فارسی',\n    'हिन्दी বাংলা தமிழ் ไทย', 'ԱԲԳ აბგ', '😀Hello🌍WORLD🚀',\n    'α\\u0301 β\\u0308', 'и\\u0306 е\\u0308', 'a/b\\\\c : d+e @f #g',\n    '𝔄 𝕭 𝖈 Ⅳ ① ²', '\\u0301hello\\u0301',\n  ];\n  for (const input of examples) check(input, baseline(input));\n  // Cover each non-Latin Unicode letter, including accented letters and\n  // scripts outside the BMP. No global normalization may alter these.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || /^\\p{Script=Latin}$/u.test(letter)) continue;\n    check(letter, baseline(letter));\n  }\n} else {\n  throw new Error(`Unknown check mode: ${mode}`);\n}\nconsole.log(`Passed ${mode}`);\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "latin-spellings-and-combining-accents",
+      "run": "node acceptance/slugify-check.mjs latin",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "all-canonically-decomposable-latin",
+      "run": "node acceptance/slugify-check.mjs decomposable",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve-other-scripts-and-formatting",
+      "run": "node acceptance/slugify-check.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

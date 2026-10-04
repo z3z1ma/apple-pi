@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "goal": "Transliterate Latin letters with diacritics, strokes, and ligatures to their usual lowercase ASCII spelling, including decomposed combining accents, while preserving existing slug formatting and non-Latin letters.",
+  "files": [
+    {
+      "path": "test/acceptance-slugify.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst group = process.argv[2];\nfunction check(input, expected) {\n  assert.equal(slugify(input), expected, JSON.stringify(input));\n}\nif (group === 'accents') {\n  check('Crème Brûlée', 'creme-brulee');\n  check('Łódź', 'lodz');\n  check('  CAFÉ, déjà vu!  ', 'cafe-deja-vu');\n  // Exhaustively cover canonical Latin accent decompositions with an ASCII base.\n  let count = 0;\n  for (let cp = 0; cp <= 0x2fff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || !/^\\p{Script=Latin}$/u.test(letter)) continue;\n    const decomposed = letter.normalize('NFD');\n    if (!/^[A-Za-z]\\p{M}+$/u.test(decomposed)) continue;\n    const expected = decomposed[0].toLowerCase();\n    check(letter, expected);\n    check(decomposed, expected);\n    check(`X${letter}Y`, `x${expected}y`);\n    check(`X${decomposed}Y`, `x${expected}y`);\n    count++;\n  }\n  assert.ok(count > 400);\n  check('Cafe\\u0301 noir', 'cafe-noir');\n  check('A\\u030a\\u0301ngstro\\u0308m', 'angstrom');\n  check('a\\u0301\\u0323\\u0304b', 'ab');\n} else if (group === 'specials') {\n  const pairs = [\n    ['Ææ', 'aeae'], ['Œœ', 'oeoe'], ['Øø', 'oo'],\n    ['Łł', 'll'], ['Đđ', 'dd'], ['Ðð', 'dd'], ['Þþ', 'thth'],\n    ['Ħħ', 'hh'], ['Ŧŧ', 'tt'], ['Ŋŋ', 'nn'], ['ı', 'i'],\n    ['ſ', 's'], ['ẞß', 'ssss'], ['ƒ', 'f'],\n    ['Ǣǣ', 'aeae'], ['Ǽǽ', 'aeae'], ['Ǿǿ', 'oo'],\n    ['ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ', 'ff-fi-fl-ffi-ffl-st-st'],\n  ];\n  for (const [input, expected] of pairs) {\n    check(input, expected);\n    check(input.normalize('NFD'), expected);\n    check(`A${input}Z`, `a${expected}z`);\n  }\n  check('Straße smørrebrød cœur encyclopædia', 'strasse-smorrebrod-coeur-encyclopaedia');\n  check('Dvořák Łódź Þingvellir Đà Nẵng', 'dvorak-lodz-thingvellir-da-nang');\n  check('ø\\u0301 æ\\u0304 ß\\u0301 ł\\u0307', 'o-ae-ss-l');\n} else if (group === 'preserve') {\n  const legacy = title => title.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n  const samples = [\n    '', '  --  ', 'Hello, World!', '  --Release 2.0--  ',\n    'a_b/c.d\\\\e', 'A\\tB\\nC', 'foo---bar', '123 ٤٥٦ １２３',\n    'Привет мир', 'Й Ё й ё', 'Ελληνικά ΆΈΉΊΌΎΏ ΐ ΰ',\n    '日本語 東京 カタカナ ひらがな', '中文 汉字', '한국어 한글',\n    'العربية', 'עברית', 'हिन्दी', 'বাংলা', 'ไทย',\n    'ქართული', 'Հայերեն', 'ᎠᎡᎢ', '𐐀𐐁', '🙂 Hello 🚀 World!',\n  ];\n  for (const input of samples) check(input, legacy(input));\n  // Non-Latin letters must not be globally decomposed, transliterated or dropped.\n  for (let cp = 0; cp <= 0x2fff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || /^\\p{Script=Latin}$/u.test(letter)) continue;\n    check(`A${letter}Z`, legacy(`A${letter}Z`));\n  }\n} else {\n  throw new Error('Unknown acceptance group: ' + group);\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/slugify.test.js"
+  ],
+  "gates": [
+    {
+      "id": "latin_accents",
+      "run": "node test/acceptance-slugify.mjs accents",
+      "onBase": "fail",
+      "timeoutSec": 60
+    },
+    {
+      "id": "latin_strokes_and_ligatures",
+      "run": "node test/acceptance-slugify.mjs specials",
+      "onBase": "fail",
+      "timeoutSec": 60
+    },
+    {
+      "id": "preserve_scripts_and_formatting",
+      "run": "node test/acceptance-slugify.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 60
+    },
+    {
+      "id": "existing_tests",
+      "run": "node --test test/slugify.test.js",
+      "onBase": "fail",
+      "timeoutSec": 60
+    }
+  ],
+  "objectives": []
+}

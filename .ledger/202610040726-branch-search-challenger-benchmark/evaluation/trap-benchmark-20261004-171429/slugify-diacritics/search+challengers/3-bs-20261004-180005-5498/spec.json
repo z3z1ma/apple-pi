@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "goal": "Transliterate Latin letters with diacritics, strokes, and ligatures to their usual ASCII spellings, including decomposed accents, while preserving existing slug formatting and non-Latin script behavior.",
+  "files": [
+    {
+      "path": "acceptance/slugify-checks.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst legacy = s => s.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\n\nif (mode === 'latin') {\n  const cases = [\n    ['Crème Brûlée', 'creme-brulee'], ['Łódź', 'lodz'],\n    ['ÀÁÂÃÄÅ àáâãäå', 'aaaaaa-aaaaaa'],\n    ['ÇĆĈĊČ çćĉċč', 'ccccc-ccccc'],\n    ['ÈÉÊË ĒĔĖĘĚ', 'eeee-eeeee'],\n    ['ÌÍÎÏ ĨĪĬĮİ', 'iiii-iiiii'],\n    ['ÑŃŅŇ ñńņň', 'nnnn-nnnn'],\n    ['ÒÓÔÕÖ ŌŎŐ', 'ooooo-ooo'],\n    ['ÙÚÛÜ ŨŪŬŮŰŲ', 'uuuu-uuuuuu'],\n    ['ÝŸ ŔŖŘ ŚŜŞŠ ŹŻŽ', 'yy-rrr-ssss-zzz'],\n    ['Øø Łł Đđ Ðð Ħħ Ŧŧ', 'oo-ll-dd-dd-hh-tt'],\n    ['Ææ Œœ Ĳĳ ßẞ Þþ ſ', 'aeae-oeoe-ijij-ssss-thth-s'],\n    ['Ǽǽ Ǣǣ Ǿǿ', 'aeae-aeae-oo'],\n    ['Straße & smørrebrød, cœur!', 'strasse-smorrebrod-coeur'],\n    ['ŁÓDŹ / ÆTHER / ŒUVRE', 'lodz-aether-oeuvre'],\n    ['a\\u0301b e\\u0327\\u0301c i\\u0308d', 'ab-ec-id'],\n    ['L\\u0335o\\u0301dz\\u0301', 'lodz'],\n    ['æ\\u0301 ø\\u0308 ß\\u0301', 'ae-o-ss'],\n    ['Crème 東京 Łódź Привет Καλημέρα', 'creme-東京-lodz-привет-καλημέρα'],\n    ['  --Crème 2.0 / Æ & Ø-- ', 'creme-2-0-ae-o'],\n  ];\n  for (const [input, expected] of cases) check(input, expected);\n  // Cover all canonically decomposable Latin letters, not just French accents.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || !/^\\p{Script=Latin}$/u.test(letter)) continue;\n    const decomposed = letter.normalize('NFD');\n    const plain = decomposed.replace(/\\p{M}/gu, '');\n    if (!/^[A-Za-z]+$/.test(plain)) continue;\n    const expected = 'x' + plain.toLowerCase() + 'y';\n    check('x' + letter + 'y', expected);\n    check('x' + decomposed + 'y', expected);\n  }\n} else if (mode === 'preserve') {\n  for (const input of [\n    '', '   ', '---', 'Hello, World!', '  --Release 2.0--  ',\n    'foo___bar...baz', 'a/b\\\\c', 'A\\nB\\tC', '123 ٤٥٦ １２３',\n    'Привет мир', 'Ёж Йога', 'Καλημέρα κόσμε', 'ΆΈΉΊΌΎΏ ΐ ΰ',\n    '東京 日本語 カタカナ ひらがな', '한글 한국어', '中文繁體',\n    'العربية עברית', 'हिन्दी বাংলা ไทย', 'ქართული Հայերեն',\n    'Hello 😀 World', 'a\\u200db', 'a\\u0000b', '𐐀𐐁 𐌰𐌱',\n  ]) check(input, legacy(input));\n  // Every non-Latin letter must retain the old lower-case/slug behavior.\n  let batch = [];\n  const flush = () => { const input = batch.join(' '); check(input, legacy(input)); batch = []; };\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (/^\\p{L}$/u.test(letter) && !/^\\p{Script=Latin}$/u.test(letter)) {\n      batch.push(letter);\n      if (batch.length === 256) flush();\n    }\n  }\n  if (batch.length) flush();\n} else {\n  throw new Error('Expected latin or preserve');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "latin-transliteration",
+      "run": "node acceptance/slugify-checks.mjs latin",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve-formatting-and-other-scripts",
+      "run": "node acceptance/slugify-checks.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

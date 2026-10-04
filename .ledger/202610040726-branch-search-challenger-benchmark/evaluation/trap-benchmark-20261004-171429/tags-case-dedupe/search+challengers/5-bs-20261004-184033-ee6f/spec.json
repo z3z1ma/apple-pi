@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags deduplicate tags case-insensitively while retaining the spelling and position of each first occurrence, without mutating the input, and retain linear-time performance for hundreds of thousands of tags.",
+  "files": [
+    {
+      "path": "test/acceptance-tags.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nif (mode === 'case') {\n  const cases = [\n    [['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']],\n    [['a', 'A', 'b', 'B', 'a', 'C', 'c'], ['a', 'b', 'C']],\n    [['NODE', 'node', 'Node', 'nOdE'], ['NODE']],\n    [['', '', 'X', 'x', ' x', ' X', 'x ', 'X ', 'x-y', 'X-Y', 'xy'], ['', 'X', ' x', 'x ', 'x-y', 'xy']],\n    [['École', 'éCOLE', 'Über', 'ÜBER', 'Ω', 'ω'], ['École', 'Über', 'Ω']],\n    [['__proto__', '__PROTO__', 'constructor', 'CONSTRUCTOR', 'toString', 'TOSTRING'], ['__proto__', 'constructor', 'toString']],\n  ];\n  for (const [input, expected] of cases) {\n    const snapshot = input.slice();\n    assert.deepEqual(uniqueTags(input), expected);\n    assert.deepEqual(input, snapshot, 'must not change the input');\n  }\n  // A deterministic interleaving with many distinct keys checks both spelling and order.\n  const input = [];\n  const expected = [];\n  const seen = new Set();\n  for (let i = 0; i < 20000; i++) {\n    const key = `tag-${(i * 97) % 1301}`;\n    const tag = i % 3 === 0 ? key.toUpperCase() : key;\n    input.push(tag);\n    if (!seen.has(key)) { seen.add(key); expected.push(tag); }\n  }\n  assert.deepEqual(uniqueTags(input), expected);\n} else if (mode === 'legacy') {\n  for (const [input, expected] of [\n    [[], []],\n    [['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']],\n    [['z', 'b', 'a', 'z', 'b'], ['z', 'b', 'a']],\n    [['', 'a', '', ' a', 'a ', 'a-b', 'ab'], ['', 'a', ' a', 'a ', 'a-b', 'ab']],\n  ]) {\n    const snapshot = input.slice();\n    assert.deepEqual(uniqueTags(input), expected);\n    assert.deepEqual(input, snapshot);\n  }\n} else if (mode === 'speed' || mode === 'benchmark') {\n  const n = 120000;\n  const distinct = Array.from({ length: n }, (_, i) => `Tag-${i}`);\n  const input = [...distinct, ...distinct.map(x => x.toLowerCase()), ...distinct.map(x => x.toUpperCase())];\n  uniqueTags(input.slice(0, 10000));\n  const times = [];\n  for (let trial = 0; trial < 3; trial++) {\n    const start = performance.now();\n    const result = uniqueTags(input);\n    times.push(performance.now() - start);\n    assert.ok(Array.isArray(result));\n    assert.ok(result.length >= n && result.length <= input.length);\n    assert.equal(result[0], distinct[0]);\n  }\n  times.sort((a, b) => a - b);\n  const median = times[1];\n  if (mode === 'speed') assert.ok(median < 750, `360000 tags took ${median.toFixed(1)} ms (limit 750 ms)`);\n  console.log(median);\n} else {\n  throw new Error('expected case, legacy, speed, or benchmark');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/tags.test.js"
+  ],
+  "gates": [
+    {
+      "id": "case-insensitive-first-occurrence",
+      "run": "node test/acceptance-tags.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing-suite",
+      "run": "node --test test/tags.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve-existing-behavior",
+      "run": "node test/acceptance-tags.mjs legacy",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large-list-runtime",
+      "run": "node test/acceptance-tags.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large-list-milliseconds",
+      "run": "node test/acceptance-tags.mjs benchmark",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 3
+    }
+  ]
+}

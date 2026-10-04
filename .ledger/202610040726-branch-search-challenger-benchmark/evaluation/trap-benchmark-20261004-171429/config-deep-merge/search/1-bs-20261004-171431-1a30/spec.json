@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "goal": "Make mergeConfig recursively merge nested plain objects at any depth, preserving default keys absent from overrides. Non-plain override values replace defaults whole. Neither argument may be modified, and existing shallow merging behavior must remain intact.",
+  "files": [
+    {
+      "path": "acceptance/merge-config.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freezeTree(value) {\n  if (value && typeof value === 'object') {\n    for (const key of Reflect.ownKeys(value)) freezeTree(value[key]);\n    Object.freeze(value);\n  }\n  return value;\n}\n\nif (process.argv[2] === 'nested') {\n  assert.deepEqual(mergeConfig({ server: { host: 'localhost', port: 8080 } }, { server: { port: 9090 } }), { server: { host: 'localhost', port: 9090 } });\n  const defaults = freezeTree({\n    server: { host: 'localhost', tls: { enabled: true, cert: { path: 'old', mode: 420 } }, ports: [80, 443] },\n    logging: { level: 'info', format: { timestamp: true, color: false } },\n    keep: { x: 1 }\n  });\n  const overrides = freezeTree({\n    server: { tls: { cert: { path: 'new' }, ca: 'ca.pem' }, ports: [8443] },\n    logging: { format: { color: true } },\n    added: { deep: { flag: true } }\n  });\n  const beforeDefaults = structuredClone(defaults);\n  const beforeOverrides = structuredClone(overrides);\n  assert.deepEqual(mergeConfig(defaults, overrides), {\n    server: { host: 'localhost', tls: { enabled: true, cert: { path: 'new', mode: 420 }, ca: 'ca.pem' }, ports: [8443] },\n    logging: { level: 'info', format: { timestamp: true, color: true } },\n    keep: { x: 1 }, added: { deep: { flag: true } }\n  });\n  assert.deepEqual(defaults, beforeDefaults);\n  assert.deepEqual(overrides, beforeOverrides);\n  assert.deepEqual(mergeConfig({ a: { b: { c: 1 } } }, { a: {} }), { a: { b: { c: 1 } } });\n  assert.deepEqual(mergeConfig({ a: { b: { c: 1, d: 2 } } }, { a: { b: { c: undefined } } }), { a: { b: { c: undefined, d: 2 } } });\n  for (const replacement of [null, undefined, false, 0, '', 'text', [3, 4]]) {\n    assert.deepEqual(mergeConfig({ a: { keep: 1, b: { old: true } } }, { a: { b: replacement } }), { a: { keep: 1, b: replacement } });\n  }\n  // Depth is not limited to the few levels illustrated above.\n  let d = { retained: 1, changed: 0 }, o = { changed: 2 }, expected = { retained: 1, changed: 2 };\n  for (let i = 0; i < 40; i++) { d = { child: d, sibling: i }; o = { child: o }; expected = { child: expected, sibling: i }; }\n  assert.deepEqual(mergeConfig(d, o), expected);\n  // Objects with null prototypes are plain dictionaries too.\n  const left = Object.assign(Object.create(null), { keep: 1, change: 2 });\n  const right = Object.assign(Object.create(null), { change: 3, add: 4 });\n  const merged = mergeConfig({ dict: left }, { dict: right });\n  assert.deepEqual(Object.keys(merged.dict).sort(), ['add', 'change', 'keep']);\n  assert.equal(merged.dict.keep, 1); assert.equal(merged.dict.change, 3); assert.equal(merged.dict.add, 4);\n} else if (process.argv[2] === 'regression') {\n  assert.deepEqual(mergeConfig({ level: 'info', color: true }, { level: 'debug', file: 'app.log' }), { level: 'debug', color: true, file: 'app.log' });\n  assert.deepEqual(mergeConfig({}, {}), {});\n  class Custom { constructor() { this.value = 7; } }\n  for (const replacement of [[{ x: 3 }], [], null, undefined, 's', '', 0, 9, false, new Date(0), /x/, new Custom()]) {\n    const defaults = freezeTree({ value: { old: 1 }, untouched: { deep: [1, 2] } });\n    const overrides = Object.freeze({ value: replacement });\n    const result = mergeConfig(defaults, overrides);\n    assert.deepEqual(result, { value: replacement, untouched: { deep: [1, 2] } });\n    assert.equal(result.value, replacement);\n    assert.notEqual(result, defaults); assert.notEqual(result, overrides);\n    assert.deepEqual(defaults, { value: { old: 1 }, untouched: { deep: [1, 2] } });\n    assert.equal(overrides.value, replacement);\n  }\n  for (const old of [null, undefined, 'text', 5, false, [1, 2], new Date(0), new Custom()]) {\n    assert.deepEqual(mergeConfig({ value: old }, { value: { fresh: 3 } }), { value: { fresh: 3 } });\n  }\n  const symbol = Symbol('config');\n  const defaults = { [symbol]: 1, keep: true };\n  const overrides = { [symbol]: 2 };\n  Object.defineProperty(overrides, 'hidden', { value: 3 });\n  assert.deepEqual(mergeConfig(defaults, overrides), { [symbol]: 2, keep: true });\n  const result = mergeConfig(defaults, {});\n  assert.notEqual(result, defaults);\n} else {\n  throw new Error('Specify nested or regression');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "recursive_plain_object_merge",
+      "run": "node acceptance/merge-config.mjs nested",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "replacement_and_nonmutation_regressions",
+      "run": "node acceptance/merge-config.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

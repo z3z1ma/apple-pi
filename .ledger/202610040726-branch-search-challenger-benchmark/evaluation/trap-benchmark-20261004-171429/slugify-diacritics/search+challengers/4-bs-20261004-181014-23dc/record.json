@@ -1,0 +1,375 @@
+{
+  "id": "bs-20261004-181014-23dc",
+  "mode": "human",
+  "goal": "Make `slugify` in `src/slugify.js` turn Latin letters with diacritics into plain ASCII: `slugify(\"Crème Brûlée\")` returns `\"creme-brulee\"` and `slugify(\"Łódź\")` returns `\"lodz\"`.\n\nThis covers every Latin letter, not only those Unicode can split into a base letter and an accent: letters with a stroke and ligatures take their usual ASCII spelling (for example `ø` → `o`, `æ` → `ae`, `ß` → `ss`). Accents count whether the title writes them precomposed or as separate combining marks after the letter.\n\nKeep everything that works today. In particular, letters of other scripts stay exactly as they are: `slugify` keeps Cyrillic, Greek, Japanese, and every other script unchanged, apart from lower case.",
+  "seedGate": null,
+  "seed": "97ef28ee8c5e0fb6d745024190b573a29b6bd571ae5591d6294626799c1df3ee",
+  "startedAt": "2026-10-04T18:10:14.431Z",
+  "endedAt": "2026-10-04T18:20:39.597Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1,
+      "challengers": 2
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "785cb9f4bd3c0be316c45c365a88a1d3adea7f8b",
+    "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+  },
+  "spec": {
+    "sha256": "2f889447da37c91442a0387f04fd9ebf5097569e5c751d290cbcd531943e65e4",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate latin_canonical_accents: fails on the base twice, as declared\ngate latin_strokes_and_ligatures: fails on the base twice, as declared\ngate preserve_other_scripts_and_existing_rules: passes on the base twice, as declared",
+        "ms": 814
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 185768,
+      "cacheReadTokens": 652416,
+      "cacheWriteTokens": 0,
+      "outputTokens": 26907
+    },
+    "author": {
+      "inputTokens": 14295,
+      "cacheReadTokens": 8704,
+      "cacheWriteTokens": 0,
+      "outputTokens": 3139,
+      "ms": 135470
+    },
+    "review": null,
+    "challengers": {
+      "inputTokens": 24889,
+      "cacheReadTokens": 9984,
+      "cacheWriteTokens": 0,
+      "outputTokens": 2993,
+      "ms": 148757
+    },
+    "ms": 625166
+  },
+  "challengers": [
+    {
+      "key": "challenger-1",
+      "defect": "Global normalization and combining-mark removal also alter non-Latin letters, such as accented Greek and Cyrillic й, instead of preserving them apart from lowercasing.",
+      "diff": "diff --git a/src/slugify.js b/src/slugify.js\nindex 775eb1e..c0d34ce 100644\n--- a/src/slugify.js\n+++ b/src/slugify.js\n@@ -1,10 +1,40 @@\n+// Latin letters that do not decompose into an ASCII letter and an accent.\n+const latinReplacements = new Map([\n+\t[\"æ\", \"ae\"], [\"œ\", \"oe\"], [\"ß\", \"ss\"], [\"ø\", \"o\"],\n+\t[\"ł\", \"l\"], [\"đ\", \"d\"], [\"ð\", \"d\"], [\"þ\", \"th\"],\n+\t[\"ħ\", \"h\"], [\"ı\", \"i\"], [\"ſ\", \"s\"], [\"ŧ\", \"t\"],\n+\t[\"ŋ\", \"n\"], [\"ƒ\", \"f\"], [\"ĸ\", \"k\"], [\"ŉ\", \"n\"],\n+\t[\"ĳ\", \"ij\"], [\"ƀ\", \"b\"], [\"ƃ\", \"b\"], [\"ƈ\", \"c\"],\n+\t[\"ƌ\", \"d\"], [\"ɗ\", \"d\"], [\"ɖ\", \"d\"], [\"ə\", \"e\"],\n+\t[\"ɛ\", \"e\"], [\"ǝ\", \"e\"], [\"ɠ\", \"g\"], [\"ɣ\", \"g\"],\n+\t[\"ɦ\", \"h\"], [\"ɨ\", \"i\"], [\"ɩ\", \"i\"], [\"ƙ\", \"k\"],\n+\t[\"ƚ\", \"l\"], [\"ƛ\", \"l\"], [\"ɲ\", \"n\"], [\"ƞ\", \"n\"],\n+\t[\"ɵ\", \"o\"], [\"ɔ\", \"o\"], [\"ƣ\", \"oi\"], [\"ƥ\", \"p\"],\n+\t[\"ʀ\", \"r\"], [\"ʃ\", \"s\"], [\"ƨ\", \"s\"], [\"ƭ\", \"t\"],\n+\t[\"ʈ\", \"t\"], [\"ʉ\", \"u\"], [\"ʊ\", \"u\"], [\"ʋ\", \"v\"],\n+\t[\"ƴ\", \"y\"], [\"ƶ\", \"z\"], [\"ʒ\", \"z\"], [\"ƹ\", \"z\"],\n+\t[\"ƺ\", \"z\"], [\"ƾ\", \"ts\"], [\"ǆ\", \"dz\"], [\"ǳ\", \"dz\"],\n+\t[\"ǉ\", \"lj\"], [\"ǌ\", \"nj\"], [\"ȝ\", \"y\"], [\"ȡ\", \"d\"],\n+\t[\"ȴ\", \"l\"], [\"ȵ\", \"n\"], [\"ȶ\", \"t\"], [\"ȷ\", \"j\"],\n+\t[\"ȼ\", \"c\"], [\"ƿ\", \"w\"], [\"ȿ\", \"s\"], [\"ɀ\", \"z\"],\n+\t[\"ɂ\", \"\"], [\"ɇ\", \"e\"], [\"ɉ\", \"j\"], [\"ɋ\", \"q\"],\n+\t[\"ɍ\", \"r\"], [\"ɏ\", \"y\"], [\"ꜳ\", \"aa\"], [\"ꜵ\", \"ao\"],\n+\t[\"ꜷ\", \"au\"], [\"ꜹ\", \"av\"], [\"ꜻ\", \"av\"], [\"ꜽ\", \"ay\"],\n+\t[\"ꝏ\", \"oo\"], [\"ꝡ\", \"vy\"], [\"ﬀ\", \"ff\"], [\"ﬁ\", \"fi\"],\n+\t[\"ﬂ\", \"fl\"], [\"ﬃ\", \"ffi\"], [\"ﬄ\", \"ffl\"], [\"ﬅ\", \"st\"],\n+\t[\"ﬆ\", \"st\"],\n+]);\n+\n /**\n- * Turns a title into a URL slug: lower case, runs of anything that is not a letter or a digit become one hyphen, and\n- * no hyphen at either end. Letters of every script are kept.\n+ * Turns a title into a URL slug: lower case, transliterate accented Latin letters,\n+ * collapse separators into one hyphen, and trim hyphens at either end.\n  */\n export function slugify(title) {\n \treturn title\n \t\t.toLowerCase()\n+\t\t.normalize(\"NFD\")\n+\t\t.replace(/\\p{M}+/gu, \"\")\n+\t\t.replace(/\\p{Script=Latin}/gu, letter => latinReplacements.get(letter) ?? letter)\n \t\t.replace(/[^\\p{L}\\p{N}]+/gu, \"-\")\n \t\t.replace(/^-+|-+$/g, \"\");\n }\ndiff --git a/test/slugify.test.js b/test/slugify.test.js\nindex 52bb499..95631d2 100644\n--- a/test/slugify.test.js\n+++ b/test/slugify.test.js\n@@ -17,4 +17,10 @@ test(\"keeps letters of other scripts\", () => {\n test(\"turns Latin letters with diacritics into ASCII\", () => {\n \tassert.equal(slugify(\"Crème Brûlée\"), \"creme-brulee\");\n \tassert.equal(slugify(\"Łódź\"), \"lodz\");\n+\tassert.equal(slugify(\"Cre\\u0300me Bru\\u0302le\\u0301e\"), \"creme-brulee\");\n+});\n+\n+test(\"transliterates Latin strokes and ligatures\", () => {\n+\tassert.equal(slugify(\"Smørrebrød Æsir Straße Œuvre\"), \"smorrebrod-aesir-strasse-oeuvre\");\n+\tassert.equal(slugify(\"Þingvellir Đorđe ﬂower\"), \"thingvellir-dorde-flower\");\n });\n",
+      "gap": false,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 9417,
+        "cacheReadTokens": 8448,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1549,
+        "ms": 77799
+      }
+    },
+    {
+      "key": "challenger-2",
+      "defect": "Normalization and combining-mark removal apply to every script, altering accented non-Latin letters instead of preserving them apart from lowercase.",
+      "diff": "diff --git a/src/slugify.js b/src/slugify.js\nindex 775eb1e..5846f48 100644\n--- a/src/slugify.js\n+++ b/src/slugify.js\n@@ -1,10 +1,38 @@\n+// Latin letters whose ASCII spelling is not supplied by canonical decomposition.\n+const latinSpellings = new Map([\n+\t[\"æ\", \"ae\"], [\"œ\", \"oe\"], [\"ß\", \"ss\"], [\"ø\", \"o\"],\n+\t[\"ł\", \"l\"], [\"đ\", \"d\"], [\"ð\", \"d\"], [\"þ\", \"th\"],\n+\t[\"ħ\", \"h\"], [\"ı\", \"i\"], [\"ŧ\", \"t\"], [\"ŋ\", \"n\"],\n+\t[\"ĸ\", \"k\"], [\"ſ\", \"s\"], [\"ƒ\", \"f\"], [\"ƀ\", \"b\"],\n+\t[\"ƃ\", \"b\"], [\"ƈ\", \"c\"], [\"ƌ\", \"d\"], [\"ɗ\", \"d\"],\n+\t[\"ɖ\", \"d\"], [\"ə\", \"e\"], [\"ɛ\", \"e\"], [\"ǝ\", \"e\"],\n+\t[\"ɠ\", \"g\"], [\"ɣ\", \"g\"], [\"ɦ\", \"h\"], [\"ɨ\", \"i\"],\n+\t[\"ɩ\", \"i\"], [\"ƙ\", \"k\"], [\"ƚ\", \"l\"], [\"ƛ\", \"l\"],\n+\t[\"ɲ\", \"n\"], [\"ƞ\", \"n\"], [\"ɵ\", \"o\"], [\"ɔ\", \"o\"],\n+\t[\"ƥ\", \"p\"], [\"ʀ\", \"r\"], [\"ʃ\", \"s\"], [\"ƭ\", \"t\"],\n+\t[\"ʈ\", \"t\"], [\"ʉ\", \"u\"], [\"ʊ\", \"u\"], [\"ʋ\", \"v\"],\n+\t[\"ƴ\", \"y\"], [\"ƶ\", \"z\"], [\"ʒ\", \"z\"], [\"ƹ\", \"z\"],\n+\t[\"ƺ\", \"z\"], [\"ƿ\", \"w\"], [\"ȝ\", \"g\"], [\"ȡ\", \"d\"],\n+\t[\"ȴ\", \"l\"], [\"ȵ\", \"n\"], [\"ȶ\", \"t\"], [\"ȷ\", \"j\"],\n+\t[\"ɀ\", \"z\"], [\"ɇ\", \"e\"], [\"ɉ\", \"j\"], [\"ɋ\", \"q\"],\n+\t[\"ɍ\", \"r\"], [\"ɏ\", \"y\"], [\"ꜳ\", \"aa\"], [\"ꜵ\", \"ao\"],\n+\t[\"ꜷ\", \"au\"], [\"ꜹ\", \"av\"], [\"ꜻ\", \"av\"], [\"ꜽ\", \"ay\"],\n+\t[\"ꝏ\", \"oo\"], [\"ǳ\", \"dz\"], [\"ǆ\", \"dz\"], [\"ǉ\", \"lj\"],\n+\t[\"ǌ\", \"nj\"], [\"ﬀ\", \"ff\"], [\"ﬁ\", \"fi\"], [\"ﬂ\", \"fl\"],\n+\t[\"ﬃ\", \"ffi\"], [\"ﬄ\", \"ffl\"], [\"ﬅ\", \"st\"], [\"ﬆ\", \"st\"],\n+]);\n+\n /**\n- * Turns a title into a URL slug: lower case, runs of anything that is not a letter or a digit become one hyphen, and\n+ * Turns a title into a URL slug: lower case, Latin letters rendered as ASCII,\n+ * runs of anything that is not a letter or a digit become one hyphen, and\n  * no hyphen at either end. Letters of every script are kept.\n  */\n export function slugify(title) {\n \treturn title\n \t\t.toLowerCase()\n+\t\t.normalize(\"NFD\")\n+\t\t.replace(/\\p{M}+/gu, \"\")\n+\t\t.replace(/\\p{Script=Latin}/gu, letter => latinSpellings.get(letter) ?? letter)\n \t\t.replace(/[^\\p{L}\\p{N}]+/gu, \"-\")\n \t\t.replace(/^-+|-+$/g, \"\");\n }\ndiff --git a/test/slugify.test.js b/test/slugify.test.js\nindex 52bb499..539d710 100644\n--- a/test/slugify.test.js\n+++ b/test/slugify.test.js\n@@ -18,3 +18,9 @@ test(\"turns Latin letters with diacritics into ASCII\", () => {\n \tassert.equal(slugify(\"Crème Brûlée\"), \"creme-brulee\");\n \tassert.equal(slugify(\"Łódź\"), \"lodz\");\n });\n+\n+test(\"handles decomposed accents and Latin ligatures\", () => {\n+\tassert.equal(slugify(\"Cre\\u0300me Bru\\u0302le\\u0301e\"), \"creme-brulee\");\n+\tassert.equal(slugify(\"Æsir, Œuvre, Straße, smørrebrød\"), \"aesir-oeuvre-strasse-smorrebrod\");\n+\tassert.equal(slugify(\"Đorđe Þór\"), \"dorde-thor\");\n+});\n",
+      "gap": false,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 15472,
+        "cacheReadTokens": 1536,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1444,
+        "ms": 70958
+      }
+    }
+  ],
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Add a Latin-only folding helper before the existing slug cleanup in src/slugify.js. Match Latin letters together with any following combining marks, use canonical decomposition to remove accents within those matches, and apply a comprehensive explicit ASCII mapping for letters that do not decompose, including strokes and ligatures. Leave all unmatched text untouched and retain the current lowercasing, separator collapsing, and trimming behavior. This avoids changing Greek, Cyrillic, Japanese, or combining marks belonging to other scripts.",
+          "firstStep": "Add regression tests for the two requested examples, decomposed Latin accents, ø/æ/ß, and unchanged existing behavior for non-Latin text; then introduce a Latin-cluster folding helper."
+        },
+        {
+          "id": "c2",
+          "approach": "Generate a checked-in Latin-to-ASCII lookup table from pinned Unicode data plus curated transliteration overrides. A build-time generator would enumerate Latin letters, derive mappings where canonical decomposition permits it, and require reviewed ASCII spellings for the remaining letters. At runtime, slugify would use the table and consume combining marks only after Latin letters, without normalizing the entire title. This trades a larger generated artifact for explicit coverage, reproducibility, and a small runtime implementation.",
+          "firstStep": "Create a generator that inventories Latin letters from a pinned Unicode release and reports every letter lacking an ASCII mapping, starting with overrides for ł, ø, æ, œ, and ß."
+        },
+        {
+          "id": "c3",
+          "approach": "Use an established transliteration dependency behind a strictly Latin-only adapter. Segment the lowercased title into Latin-letter clusters and untouched text, pass only the Latin clusters to the library, and then run the existing slug cleanup. Audit the dependency’s output and supplement missing Latin mappings locally rather than allowing it to transliterate whole titles. This explores outsourcing the mapping maintenance while protecting every other script from the library’s broader transliteration behavior.",
+          "firstStep": "Evaluate candidate transliteration libraries against a Latin coverage corpus and mixed-script regression cases, checking their Unicode coverage, licenses, bundle size, and whether Latin-only invocation produces the required ASCII spellings."
+        },
+        {
+          "id": "c4",
+          "approach": "Replace the regex cleanup chain with a single-pass Unicode-aware slug builder. The scanner would lowercase as today, identify Latin letters and their following combining marks, fold them through a reviewed transliteration registry, emit other letters and digits unchanged, and manage pending separators to preserve current collapsing and trimming behavior. This is a broader rewrite and therefore riskier, but makes script boundaries and combining-mark handling explicit rather than layering another preprocessing replacement onto the current implementation.",
+          "firstStep": "Capture the current function’s output in differential tests covering punctuation, digits, mixed scripts, and combining marks, then prototype the scanner with Latin folding disabled and require it to match the existing implementation."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 3398,
+        "cacheReadTokens": 1408,
+        "cacheWriteTokens": 0,
+        "outputTokens": 741,
+        "ms": 42426
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "Delete or simplify existing code before you add code."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "none"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 0,
+      "endSeq": 4,
+      "startCommit": "785cb9f4bd3c0be316c45c365a88a1d3adea7f8b",
+      "commit": "2bba68b1f70896f9350667e33e89b61360fe976e",
+      "selfReport": "unknown",
+      "learned": "Canonical decomposition alone leaves hundreds of Latin letters unmapped, so complete coverage requires explicit spellings for ligatures, stroke letters, and specialist variants.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 58992,
+        "cacheReadTokens": 287232,
+        "cacheWriteTokens": 0,
+        "outputTokens": 6261,
+        "runMs": 282103,
+        "scoreMs": 219
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "preserve_other_scripts_and_existing_rules": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "canonical: OK\n",
+          "stderr": "",
+          "ms": 71
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "special: OK\n",
+          "stderr": "",
+          "ms": 44
+        },
+        "preserve_other_scripts_and_existing_rules": {
+          "exitCode": 0,
+          "stdout": "preserve: OK\n",
+          "stderr": "",
+          "ms": 104
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 45847
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 1,
+      "endSeq": 3,
+      "startCommit": "785cb9f4bd3c0be316c45c365a88a1d3adea7f8b",
+      "commit": "60c7cb09cf3337612a5c88a629d778a860c670ed",
+      "selfReport": "unknown",
+      "learned": "Latin-cluster normalization plus an explicit mapping folds Latin letters without stripping accents from other scripts.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 25969,
+        "cacheReadTokens": 133504,
+        "cacheWriteTokens": 0,
+        "outputTokens": 4742,
+        "runMs": 217691,
+        "scoreMs": 205
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "preserve_other_scripts_and_existing_rules": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "canonical: OK\n",
+          "stderr": "",
+          "ms": 75
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "special: OK\n",
+          "stderr": "",
+          "ms": 40
+        },
+        "preserve_other_scripts_and_existing_rules": {
+          "exitCode": 0,
+          "stdout": "preserve: OK\n",
+          "stderr": "",
+          "ms": 90
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 133
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "none",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "785cb9f4bd3c0be316c45c365a88a1d3adea7f8b",
+      "commit": "ab0ca0f4b32bbc48647d08771039714b7da29259",
+      "selfReport": "done",
+      "learned": "A single-pass scanner preserves legacy separator behavior while handling Latin accents explicitly without normalizing other scripts.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 58225,
+        "cacheReadTokens": 211584,
+        "cacheWriteTokens": 0,
+        "outputTokens": 9031,
+        "runMs": 366023,
+        "scoreMs": 193
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "preserve_other_scripts_and_existing_rules": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "canonical: OK\n",
+          "stderr": "",
+          "ms": 66
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "special: OK\n",
+          "stderr": "",
+          "ms": 41
+        },
+        "preserve_other_scripts_and_existing_rules": {
+          "exitCode": 0,
+          "stdout": "preserve: OK\n",
+          "stderr": "",
+          "ms": 86
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 203
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+    },
+    {
+      "phase": "after g0",
+      "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+    }
+  ],
+  "winner": "r1",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

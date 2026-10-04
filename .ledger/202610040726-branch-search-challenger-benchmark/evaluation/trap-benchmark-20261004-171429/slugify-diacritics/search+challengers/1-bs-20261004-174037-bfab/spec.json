@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "goal": "Make the existing slugify export transliterate Latin letters and ligatures to ASCII, including precomposed and combining accents, while preserving existing slug formatting and non-Latin letters apart from lowercasing.",
+  "files": [
+    {
+      "path": "acceptance/slugify-check.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nlet checked = 0;\nlet failures = 0;\nfunction check(input, expected) {\n  checked++;\n  try { assert.equal(slugify(input), expected); }\n  catch (error) {\n    failures++;\n    if (failures <= 15) console.error(JSON.stringify(input), 'expected', JSON.stringify(expected), 'got', error.actual);\n  }\n}\n\nif (mode === 'examples') {\n  for (const [input, expected] of [\n    ['Crème Brûlée', 'creme-brulee'], ['Łódź', 'lodz'],\n    ['Smørrebrød Æsir Straße', 'smorrebrod-aesir-strasse'],\n    ['Cre\\u0300me Bru\\u0302le\\u0301e', 'creme-brulee'],\n    ['--Crème / Łódź 2026!--', 'creme-lodz-2026'],\n  ]) check(input, expected);\n} else if (mode === 'latin') {\n  // Every canonically decomposable Latin letter whose base is ASCII,\n  // including the Vietnamese, extended Latin and polytonic accent combinations.\n  for (let cp = 0; cp <= 0x2fff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    const decomposed = letter.normalize('NFD');\n    if (/^\\p{Script=Latin}$/u.test(letter) && /^[A-Za-z]\\p{M}+$/u.test(decomposed)) {\n      const expected = 'x' + decomposed[0].toLowerCase() + 'y';\n      check('X' + letter + 'Y', expected);\n      check('X' + decomposed + 'Y', expected);\n    }\n  }\n  // These letters do not become ASCII merely by canonical decomposition.\n  for (const [letters, ascii] of [\n    ['øØ', 'o'], ['łŁ', 'l'], ['đĐ', 'd'], ['ðÐ', 'd'],\n    ['þÞ', 'th'], ['æÆ', 'ae'], ['œŒ', 'oe'], ['ßẞ', 'ss'],\n    ['ħĦ', 'h'], ['ı', 'i'], ['ſ', 's'], ['ƒƑ', 'f'],\n    ['ǿǾ', 'o'], ['ǽǼ', 'ae'], ['ǣǢ', 'ae'], ['ẛ', 's'],\n  ]) {\n    for (const letter of letters) {\n      check('A' + letter + 'Z', 'a' + ascii + 'z');\n      check('A' + letter.normalize('NFD') + 'Z', 'a' + ascii + 'z');\n      check('A' + letter + '\\u0301\\u0327Z', 'a' + ascii + 'z');\n    }\n  }\n  for (const mark of ['\\u0300', '\\u0301', '\\u0308', '\\u0327', '\\u0304', '\\u030a', '\\u030b', '\\u0331', '\\u1ab0', '\\u1dc0', '\\ufe20']) {\n    check('Cafe' + mark + ' noir', 'cafe-noir');\n    check('A' + mark + '\\u0301B', 'ab');\n  }\n  check('ÀÉÎÕÜ ÇÑ ŽŠ ŐŰ ĂÂÊÔƠƯ ẮẶỆỘỨỴ', 'aeiou-cn-zs-ou-aaeoou-aaeouy');\n  check('Crème Ελληνικά Łódź Й Ё 日本語 Æsir', 'creme-ελληνικά-lodz-й-ё-日本語-aesir');\n} else if (mode === 'existing') {\n  for (const [input, expected] of [\n    ['Hello, World!', 'hello-world'], ['  --Release 2.0--  ', 'release-2-0'],\n    ['', ''], [' --- !!! 😀 ', ''], ['A___B...C / D\\nE\\tF', 'a-b-c-d-e-f'],\n    ['ABC123 0 456', 'abc123-0-456'], ['a😀b', 'a-b'],\n    ['Привет мир', 'привет-мир'], ['Й Ё й ё Ї ЇЖАК', 'й-ё-й-ё-ї-їжак'],\n    ['Αθήνα Ελληνικά Ώ ΐ ΰ ς', 'αθήνα-ελληνικά-ώ-ΐ-ΰ-ς'],\n    ['日本語 東京 カタカナ が パ', '日本語-東京-カタカナ-が-パ'],\n    ['한국어 한글', '한국어-한글'], ['中文 汉字', '中文-汉字'],\n    ['العربية فارسی اردو', 'العربية-فارسی-اردو'], ['שלום עולם', 'שלום-עולם'],\n    ['हिन्दी বাংলা தமிழ் ไทย', 'ह-न-द-ব-ল-தம-ழ-ไทย'],\n    ['ԱԲԳ ქართული', 'աբգ-ქართული'], ['１２３ ١٢٣ Ⅳ', '１２３-١٢٣-ⅳ'],\n    ['a+b=c@d#e', 'a-b-c-d-e'],\n  ]) check(input, expected);\n  // Script letters must not be transliterated, normalized, or stripped of\n  // their precomposed distinctions. Test them individually to avoid boundaries.\n  const scripts = /^(?:\\p{Script=Cyrillic}|\\p{Script=Greek}|\\p{Script=Hebrew}|\\p{Script=Arabic}|\\p{Script=Hiragana}|\\p{Script=Katakana}|\\p{Script=Hangul})$/u;\n  for (let cp = 0; cp <= 0xffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (/^\\p{L}$/u.test(letter) && scripts.test(letter)) {\n      check('Q' + letter + 'Z', 'q' + letter.toLowerCase() + 'z');\n    }\n  }\n} else {\n  throw new Error('Unknown check mode: ' + mode);\n}\nconsole.log(`${checked} cases checked; ${failures} failures`);\nif (failures) process.exitCode = 1;\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "requested_examples",
+      "run": "node acceptance/slugify-check.mjs examples",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "latin_diacritics_and_ligatures",
+      "run": "node acceptance/slugify-check.mjs latin",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_formatting_and_other_scripts",
+      "run": "node acceptance/slugify-check.mjs existing",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

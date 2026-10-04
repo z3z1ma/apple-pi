@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags in src/tags.js deduplicate tags case-insensitively while preserving the first spelling and first-seen order, without mutating inputs, and retain linear-time performance well under one second for large lists.",
+  "files": [
+    {
+      "path": ".checks/unique-tags.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nfunction check(input, expected) {\n  const original = [...input];\n  Object.freeze(input);\n  const result = uniqueTags(input);\n  assert.ok(Array.isArray(result));\n  assert.deepEqual(result, expected);\n  assert.deepEqual(input, original);\n}\nif (mode === 'case') {\n  check(['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']);\n  check(['js', 'JS', 'Js', 'jS'], ['js']);\n  check(['NODE', 'node', 'Node', 'CSS', 'css', 'JS'], ['NODE', 'CSS', 'JS']);\n  check(['', '', 'A', 'a', ' a', ' A', 'a ', 'A ', 'ab', 'AB', 'a-b', 'A-B'], ['', 'A', ' a', 'a ', 'ab', 'a-b']);\n  check(['__proto__', '__PROTO__', 'constructor', 'CONSTRUCTOR', 'toString', 'TOSTRING'], ['__proto__', 'constructor', 'toString']);\n  let seed = 123456789;\n  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };\n  const tags = [];\n  for (let i = 0; i < 20000; i++) {\n    const base = `topic-${random() % 2500}-js`;\n    tags.push([...base].map(c => (random() & 8) ? c.toUpperCase() : c).join(''));\n  }\n  const seen = new Set();\n  const expected = tags.filter(tag => {\n    const key = tag.toLowerCase();\n    if (seen.has(key)) return false;\n    seen.add(key);\n    return true;\n  });\n  check(tags, expected);\n} else if (mode === 'preserve') {\n  check([], []);\n  check(['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']);\n  check(['z', 'a', 'm', 'z', 'a', 'b'], ['z', 'a', 'm', 'b']);\n  check(['', ' ', '', '  ', ' '], ['', ' ', '  ']);\n  check(['__proto__', 'constructor', 'toString', '__proto__'], ['__proto__', 'constructor', 'toString']);\n  const tags = Array.from({ length: 100000 }, (_, i) => `tag-${i}`);\n  check([...tags, ...tags], tags);\n} else if (mode === 'speed' || mode === 'bench') {\n  // Mostly distinct strings penalize quadratic scans; build inputs outside timing.\n  const tags = Array.from({ length: 200000 }, (_, i) => `Topic-${i}-JavaScript`);\n  for (let i = 0; i < 5; i++) uniqueTags(tags.slice(0, 1000));\n  const times = [];\n  for (let i = 0; i < 3; i++) {\n    const start = performance.now();\n    const result = uniqueTags(tags);\n    times.push(performance.now() - start);\n    assert.deepEqual(result, tags);\n  }\n  const median = times.sort((a, b) => a - b)[1];\n  if (mode === 'speed') assert.ok(median < 600, `200,000 tags took ${median.toFixed(1)}ms (limit 600ms)`);\n  console.log(median.toFixed(3));\n} else {\n  throw new Error('unknown check mode');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/tags.test.js"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_spelling",
+      "run": "node .checks/unique-tags.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_existing_behavior",
+      "run": "node .checks/unique-tags.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_tests",
+      "run": "npm test",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_speed",
+      "run": "node .checks/unique-tags.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_list_milliseconds",
+      "run": "node .checks/unique-tags.mjs bench",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 3
+    }
+  ]
+}

@@ -1,0 +1,382 @@
+{
+  "id": "bs-20261004-182831-1961",
+  "mode": "human",
+  "goal": "Make `uniqueTags` in `src/tags.js` treat tags that differ only in letter case as duplicates, keeping the spelling seen first: `uniqueTags([\"JS\", \"Node\", \"js\", \"NODE\", \"css\"])` returns `[\"JS\", \"Node\", \"css\"]`.\n\nKeep everything that works today: the result keeps each tag at its first position, and `uniqueTags` stays linear-time. Callers pass lists of 100,000 tags and more, which must take well under a second.",
+  "seedGate": null,
+  "seed": "1cd54a6d5975acc41c600af50a3104ffd1e9a666e6928d4ec04e60ffa827bc4c",
+  "startedAt": "2026-10-04T18:28:31.604Z",
+  "endedAt": "2026-10-04T18:32:14.982Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "5c6d6c99a85b405b69afcd2b64061c22954c47ba",
+    "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+  },
+  "spec": {
+    "sha256": "ee0abdb43a168d571ec040a4e00a98604d55877903d96b14d622d563185e1a96",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate case_insensitive: fails on the base twice, as declared\ngate preserve_existing_behavior: passes on the base twice, as declared\ngate large_list_performance: passes on the base twice, as declared\nobjective mixed_case_runtime_ms: base value 55.8197 (runs 60.0081, 54.0142, 55.8197, 60.9132, 54.3349)",
+        "ms": 1049
+      }
+    ],
+    "review": null,
+    "baseValues": {
+      "mixed_case_runtime_ms": 55.8197
+    }
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 38607,
+      "cacheReadTokens": 19968,
+      "cacheWriteTokens": 0,
+      "outputTokens": 6731
+    },
+    "author": {
+      "inputTokens": 10180,
+      "cacheReadTokens": 7168,
+      "cacheWriteTokens": 0,
+      "outputTokens": 2608,
+      "ms": 104477
+    },
+    "review": null,
+    "challengers": null,
+    "ms": 223378
+  },
+  "challengers": null,
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Replace the direct Set conversion in uniqueTags with a single forward loop, a Set of lowercase comparison keys, and an output array. For each tag, compute tag.toLowerCase(); if its key has not been seen, record the key and append the original tag. This preserves the first spelling and position without modifying the input, and takes expected linear time in the total input text size.",
+          "firstStep": "Add tests for mixed-case duplicates, first-occurrence ordering, empty input, and unchanged input; then replace the current return statement with the Set-and-output loop."
+        },
+        {
+          "id": "c2",
+          "approach": "Use a Map from lowercase keys to original tags inside uniqueTags. Traverse the input once and insert only when the key is absent, then return an array of the Map's values. Map insertion order preserves first-occurrence order, and refusing to overwrite values preserves first spelling. This stores the result directly in an ordered lookup structure rather than maintaining a separate output array.",
+          "firstStep": "Implement a Map-based prototype with an explicit has check before set, and verify that the requested example returns [\"JS\", \"Node\", \"css\"]."
+        },
+        {
+          "id": "c3",
+          "approach": "Keep an array-filtering implementation but track lowercase keys in an Object.create(null) dictionary. The filter predicate accepts only the first occurrence of each key and records a boolean marker. A null-prototype dictionary avoids collisions with inherited property names such as constructor and __proto__, while filter retains the original tags and their order. This offers a different lookup mechanism with expected linear-time behavior.",
+          "firstStep": "Prototype the null-prototype dictionary and filter predicate, adding mixed-case tests for ordinary tags and property-like tags such as \"__proto__\" and \"constructor\"."
+        },
+        {
+          "id": "c4",
+          "approach": "Use a character trie of lowercase keys instead of hashing complete strings. Scan tags in order, walk or create trie nodes for each normalized key, and append the original tag only when its terminal node was previously unmarked. This preserves spelling and order and is linear in total normalized character count. It is unlikely to beat Set because node allocation and traversal can be expensive, but explores a genuinely different mechanism; its suitability depends on meeting the large-list performance requirement.",
+          "firstStep": "Build a minimal trie prototype and benchmark it on representative lists of at least 100,000 tags, including mostly unique tags, before investing in integration."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 2882,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "outputTokens": 773,
+        "ms": 39840
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "none"
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Change as few files as possible."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c3",
+            "constraint": "Change as few files as possible."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "none",
+      "startSeq": 0,
+      "endSeq": 5,
+      "startCommit": "5c6d6c99a85b405b69afcd2b64061c22954c47ba",
+      "commit": "1accdae4c9ea6b523b0d424f44f3fe4411cbaef9",
+      "selfReport": "done",
+      "learned": "A lowercase character trie meets the large-list performance requirement on the tested workloads while preserving first-seen spelling and order.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 8993,
+        "cacheReadTokens": 6528,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1752,
+        "runMs": 74251,
+        "scoreMs": 1552
+      },
+      "gates": {
+        "case_insensitive": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive": {
+          "exitCode": 0,
+          "stdout": "\n> tags@1.0.0 test\n> node --test\n\n✔ removes repeated tags, keeping first-seen order (0.5235ms)\n✔ returns an empty list for no tags (0.04825ms)\n✔ treats tags that differ only in letter case as duplicates (0.048375ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.355459\n",
+          "stderr": "",
+          "ms": 232
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 42
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 230
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "mixed_case_runtime_ms": 131.0473,
+        "diff_size": 51
+      },
+      "objectiveOutput": {
+        "mixed_case_runtime_ms": {
+          "values": [
+            129.1802,
+            127.7283,
+            135.1855,
+            131.536,
+            131.0473
+          ],
+          "exitCode": 0,
+          "stdout": "131.0473\n",
+          "stderr": "",
+          "ms": 1048
+        }
+      }
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 1,
+      "endSeq": 3,
+      "startCommit": "5c6d6c99a85b405b69afcd2b64061c22954c47ba",
+      "commit": "08d505001bac82aae3f7fa9372fd11daff4792b5",
+      "selfReport": "unknown",
+      "learned": "A lowercase-keyed Map preserves first spelling and order while efficiently deduplicating large tag lists.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 8368,
+        "cacheReadTokens": 1408,
+        "cacheWriteTokens": 0,
+        "outputTokens": 687,
+        "runMs": 42814,
+        "scoreMs": 1015
+      },
+      "gates": {
+        "case_insensitive": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive": {
+          "exitCode": 0,
+          "stdout": "\n> tags@1.0.0 test\n> node --test\n\n✔ removes repeated tags, keeping first-seen order (0.540958ms)\n✔ returns an empty list for no tags (0.049583ms)\n✔ treats tags that differ only in letter case as duplicates (0.042917ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.087334\n",
+          "stderr": "",
+          "ms": 235
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 41
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 159
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "mixed_case_runtime_ms": 55.5295,
+        "diff_size": 11
+      },
+      "objectiveOutput": {
+        "mixed_case_runtime_ms": {
+          "values": [
+            58.2991,
+            58.7329,
+            49.9854,
+            55.5295,
+            49.7475
+          ],
+          "exitCode": 0,
+          "stdout": "49.7475\n",
+          "stderr": "",
+          "ms": 580
+        }
+      }
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c3",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 2,
+      "endSeq": 4,
+      "startCommit": "5c6d6c99a85b405b69afcd2b64061c22954c47ba",
+      "commit": "1415bfd89689ef5af0b750534aad4f819ae3e3e8",
+      "selfReport": "done",
+      "learned": "A null-prototype dictionary safely deduplicates lowercase keys, including property-like names, while filter preserves original spelling and order.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 8184,
+        "cacheReadTokens": 4864,
+        "cacheWriteTokens": 0,
+        "outputTokens": 911,
+        "runMs": 57151,
+        "scoreMs": 1036
+      },
+      "gates": {
+        "case_insensitive": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive": {
+          "exitCode": 0,
+          "stdout": "\n> tags@1.0.0 test\n> node --test\n\n✔ removes repeated tags, keeping first-seen order (0.514458ms)\n✔ returns an empty list for no tags (0.048042ms)\n✔ treats tags that differ only in letter case as duplicates (0.041583ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.910583\n",
+          "stderr": "",
+          "ms": 231
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 46
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 163
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "mixed_case_runtime_ms": 56.224,
+        "diff_size": 28
+      },
+      "objectiveOutput": {
+        "mixed_case_runtime_ms": {
+          "values": [
+            56.224,
+            61.5305,
+            57.7799,
+            51.7323,
+            55.6003
+          ],
+          "exitCode": 0,
+          "stdout": "55.6003\n",
+          "stderr": "",
+          "ms": 596
+        }
+      }
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+    },
+    {
+      "phase": "after g0",
+      "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+    }
+  ],
+  "winner": "r1",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "01069a7ca60062debe90405e65faad2126bafe1f"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

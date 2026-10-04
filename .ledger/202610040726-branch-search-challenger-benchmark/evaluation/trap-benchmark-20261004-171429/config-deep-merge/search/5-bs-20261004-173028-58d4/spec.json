@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "goal": "Make mergeConfig recursively merge nested plain objects key by key at any depth, while preserving whole-value replacement for non-plain overrides and never modifying either argument.",
+  "files": [
+    {
+      "path": "acceptance/merge-nested.test.js",
+      "content": "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freeze(value) {\n  if (value && typeof value === 'object') {\n    for (const item of Object.values(value)) freeze(item);\n    Object.freeze(value);\n  }\n  return value;\n}\n\ntest('nested sibling keys survive and new keys are added', () => {\n  const defaults = freeze({ server: { host: 'localhost', port: 8080 }, level: 'info' });\n  const overrides = freeze({ server: { port: 9090, tls: true } });\n  assert.deepEqual(mergeConfig(defaults, overrides), {\n    server: { host: 'localhost', port: 9090, tls: true }, level: 'info'\n  });\n  assert.deepEqual(defaults, { server: { host: 'localhost', port: 8080 }, level: 'info' });\n  assert.deepEqual(overrides, { server: { port: 9090, tls: true } });\n});\n\ntest('merge continues at every nested plain-object level', () => {\n  let defaults = { retained: 'leaf', changed: 0 };\n  let overrides = { changed: 1, added: true };\n  let expected = { retained: 'leaf', changed: 1, added: true };\n  for (let depth = 0; depth < 40; depth++) {\n    defaults = { retained: depth, child: defaults, untouched: { value: depth } };\n    overrides = { child: overrides, introduced: depth };\n    expected = { retained: depth, child: expected, untouched: { value: depth }, introduced: depth };\n  }\n  freeze(defaults);\n  freeze(overrides);\n  assert.deepEqual(mergeConfig(defaults, overrides), expected);\n});\n\ntest('empty object overrides retain nested defaults; independent branches merge', () => {\n  assert.deepEqual(mergeConfig(\n    { a: { x: 1, inner: { left: 2, right: 3 } }, b: { keep: 4 }, c: 5 },\n    { a: { inner: { right: 30 } }, b: {}, c: { new: 6 } }\n  ), { a: { x: 1, inner: { left: 2, right: 30 } }, b: { keep: 4 }, c: { new: 6 } });\n});\n\ntest('plain objects with null prototypes participate in recursive merging', () => {\n  const defaults = { branch: Object.assign(Object.create(null), { keep: 1, child: { x: 2, y: 3 } }) };\n  const overrides = { branch: Object.assign(Object.create(null), { child: { y: 4 }, add: 5 }) };\n  const result = mergeConfig(defaults, overrides);\n  assert.equal(result.branch.keep, 1);\n  assert.equal(result.branch.add, 5);\n  assert.deepEqual(result.branch.child, { x: 2, y: 4 });\n  assert.equal(defaults.branch.child.y, 3);\n});\n"
+    },
+    {
+      "path": "acceptance/merge-preserved.test.js",
+      "content": "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { mergeConfig } from '../src/config.js';\n\ntest('existing shallow behavior, additions, and empty inputs', () => {\n  assert.deepEqual(mergeConfig({ level: 'info', color: true }, { level: 'debug', file: 'app.log' }),\n    { level: 'debug', color: true, file: 'app.log' });\n  assert.deepEqual(mergeConfig({}, {}), {});\n  assert.deepEqual(mergeConfig({ a: 1 }, {}), { a: 1 });\n  assert.deepEqual(mergeConfig({}, { a: 1 }), { a: 1 });\n});\n\ntest('non-plain overrides replace whole values, not array indices or instance fields', () => {\n  class Settings { constructor() { this.changed = 9; } }\n  const replacements = [[ 'c' ], [], null, 'text', 7, false, undefined, new Date(0), /abc/g,\n    new Settings(), new Map([['a', 1]]), new Set([1]), () => 42];\n  for (const replacement of replacements) {\n    for (const previous of [{ keep: 1, changed: 2 }, ['a', 'b'], null, 4]) {\n      const defaults = Object.freeze({ value: previous, untouched: true });\n      const overrides = Object.freeze({ value: replacement });\n      const result = mergeConfig(defaults, overrides);\n      assert.deepEqual(result, { value: replacement, untouched: true });\n      assert.ok(Object.hasOwn(result, 'value'));\n      assert.equal(defaults.value, previous);\n      assert.equal(overrides.value, replacement);\n    }\n  }\n});\n\ntest('plain-object override replaces non-plain defaults without incorporating their keys', () => {\n  class Settings { constructor() { this.old = 1; } }\n  for (const previous of [[1, 2], null, 'abc', 5, new Date(0), new Settings()]) {\n    assert.deepEqual(mergeConfig({ value: previous }, { value: { fresh: true } }),\n      { value: { fresh: true } });\n  }\n});\n\ntest('own enumerable keys and symbols are preserved without copying inherited keys', () => {\n  const symbol = Symbol('option');\n  const defaults = Object.assign(Object.create({ inherited: 1 }), { keep: 2, [symbol]: 'before' });\n  const overrides = Object.assign(Object.create({ unwanted: 3 }), { add: 4, [symbol]: 'after' });\n  Object.defineProperty(defaults, 'hidden', { value: 5 });\n  assert.deepEqual(mergeConfig(defaults, overrides), { keep: 2, add: 4, [symbol]: 'after' });\n});\n\ntest('arguments remain unchanged and result is a new top-level object', () => {\n  const defaults = { tags: ['a', 'b'], config: { keep: 1 }, level: 'info' };\n  const overrides = { tags: ['c'], level: 'debug' };\n  const beforeDefaults = structuredClone(defaults);\n  const beforeOverrides = structuredClone(overrides);\n  const result = mergeConfig(defaults, overrides);\n  assert.notEqual(result, defaults);\n  assert.notEqual(result, overrides);\n  assert.deepEqual(defaults, beforeDefaults);\n  assert.deepEqual(overrides, beforeOverrides);\n});\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "recursive_plain_object_merge",
+      "run": "node --test acceptance/merge-nested.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_existing_behavior",
+      "run": "node --test acceptance/merge-preserved.test.js",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

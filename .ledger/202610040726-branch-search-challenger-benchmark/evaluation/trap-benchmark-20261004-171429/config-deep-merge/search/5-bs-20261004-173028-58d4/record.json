@@ -1,0 +1,314 @@
+{
+  "id": "bs-20261004-173028-58d4",
+  "mode": "human",
+  "goal": "Make `mergeConfig` in `src/config.js` merge nested plain objects key by key, at any depth: `mergeConfig({ server: { host: \"localhost\", port: 8080 } }, { server: { port: 9090 } })` returns `{ server: { host: \"localhost\", port: 9090 } }`.\n\nKeep everything that works today. An override value that is not a plain object, such as an array, `null`, a string, or a number, replaces the default value whole, as it does now: `mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] })` returns `{ tags: [\"c\"] }`. `mergeConfig` never modifies its arguments.",
+  "seedGate": null,
+  "seed": "6ae2e9d2184e874f54fabf2a6cc47e3c3271eea2ba27565a16c4d4291e8c9bec",
+  "startedAt": "2026-10-04T17:30:28.223Z",
+  "endedAt": "2026-10-04T17:35:02.583Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "2f25323f3edfb7e176c784d025717ac5435d3e24",
+    "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "spec": {
+    "sha256": "3de6404d191ba750cb18468dfc9d8f2850f2824ba5bd84f08ffb012e51af1f26",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate recursive_plain_object_merge: fails on the base twice, as declared\ngate preserve_existing_behavior: passes on the base twice, as declared",
+        "ms": 461
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 52847,
+      "cacheReadTokens": 21120,
+      "cacheWriteTokens": 0,
+      "outputTokens": 8713
+    },
+    "author": {
+      "inputTokens": 16492,
+      "cacheReadTokens": 9216,
+      "cacheWriteTokens": 0,
+      "outputTokens": 3655,
+      "ms": 136005
+    },
+    "review": null,
+    "challengers": null,
+    "ms": 274360
+  },
+  "challengers": null,
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Implement a small recursive merge directly in src/config.js. Start each level with the existing spread-based merge, then recursively merge keys whose default and override values are both plain objects. All other override values retain whole-value replacement semantics, including arrays and null. Allocate a new object at every merged level so neither argument is modified, and leave untouched branches shared as they are today.",
+          "firstStep": "Add tests for the server example, multiple nesting levels, non-plain replacement values, and argument immutability, then introduce a plain-object predicate and recursive merging in mergeConfig."
+        },
+        {
+          "id": "c2",
+          "approach": "Use an iterative work stack rather than recursion. Create the initial spread-based result, then process tasks containing a default object, an override object, and their output object. For each pair of matching plain-object values, allocate a fresh merged child and enqueue another task; leave every other value as the spread merge selected it. This avoids consuming the JavaScript call stack for deeply nested configurations.",
+          "firstStep": "Add a deeply nested configuration test, then prototype a stack-driven traversal in src/config.js that enumerates own enumerable override keys, including symbols."
+        },
+        {
+          "id": "c3",
+          "approach": "Separate override discovery from application using immutable path patches. Walk defaults and overrides together to collect replacement paths, descending only when both values are plain objects. Apply those patches to a spread-based root result using copy-on-write ancestors, so sibling defaults survive and input objects are never mutated. This is more complex than direct recursion but explores a reusable patch-based strategy and could support future change reporting.",
+          "firstStep": "Write tests for several overrides sharing a nested ancestor, then prototype a patch collector and an immutable patch applicator that preserve untouched branches."
+        },
+        {
+          "id": "c4",
+          "approach": "Delegate nested merging to a maintained deep-merge library behind a compatibility adapter. Configure or customize it to merge only pairs of plain objects, replace arrays and all other non-plain override values wholesale, and avoid mutating inputs. Keep the existing root spread behavior in the adapter and verify property enumeration and reference behavior rather than assuming the library's defaults match. This adds a dependency and may require substantial adaptation, so it is less likely to be the best solution for this small function.",
+          "firstStep": "Inspect package.json and the existing tests, then evaluate a deep-merge library against a compatibility test matrix before adding any dependency."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 2975,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "outputTokens": 682,
+        "ms": 38399
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "none"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 0,
+      "endSeq": 3,
+      "startCommit": "2f25323f3edfb7e176c784d025717ac5435d3e24",
+      "commit": "e537a8bf6a9447044efea9569548e7a5d408a13f",
+      "selfReport": "abandoned",
+      "learned": "The required library-backed approach cannot proceed because no deep-merge library is available and adding dependencies is forbidden.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 7289,
+        "cacheReadTokens": 1536,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1049,
+        "runMs": 43893,
+        "scoreMs": 205
+      },
+      "gates": {
+        "recursive_plain_object_merge": "fail",
+        "preserve_existing_behavior": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 1,
+          "stdout": "✖ nested sibling keys survive and new keys are added (1.147292ms)\n✖ merge continues at every nested plain-object level (1.998583ms)\n✖ empty object overrides retain nested defaults; independent branches merge (0.159334ms)\n✖ plain objects with null prototypes participate in recursive merging (0.124208ms)\nℹ tests 4\nℹ suites 0\nℹ pass 0\nℹ fail 4\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 52.837084\n\n✖ failing tests:\n\ntest at acceptance/merge-nested.test.js:13:1\n✖ nested sibling keys survive and new keys are added (1.147292ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n    {\n      level: 'info',\n      server: {\n  -     host: 'localhost',\n        port: 9090,\n        tls: true\n      }\n    }\n  \n      at TestContext.<anonymous> (file:///private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-trap-SvJKro/.git/apple-pi/branch-search/bs-20261004-173028-58d4/wt/r0/acceptance/merge-nested.test.js:16:10)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.start (node:internal/test_runner/test:1257:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { server: { port: 9090, tls: true }, level: 'info' },\n    expected: { server: { host: 'localhost', port: 9090, tls: true }, level: 'info' },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at acceptance/merge-nested.test.js:23:1\n✖ merge continues at every nested plain-object level (1.998583ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  ... Skipped lines\n  \n    {\n      child: {\n        child: {\n          child: {\n            child: {\n  ...\n                                                                                      changed: 1,\n  -                                                                                   retained: 'leaf'\n                                                                                    },\n                                                                                    introduced: 0,\n  -                                                                                 retained: 0,\n  -                                                                                 untouched: {\n  -                                                                                   value: 0\n  -                                                                                 }\n                                                                                  },\n                                                                                  introduced: 1,\n  -                                                                               retained: 1,\n  -                                                                               untouched: {\n  -                                                                                 value: 1\n  -                                                                               }\n                                                                                },\n                                                                                introduced: 2,\n  -                                                                             retained: 2,\n  -                                                                             untouched: {\n  -                                                                               value: 2\n  -                                                                             }\n                                                                              },\n                                                                              introduced: 3,\n  -                                                                           retained: 3,\n  -                                                                           untouched: {\n  -                                                                             value: 3\n  -                                                                           }\n                                                                            },\n                                                                            introduced: 4,\n  -                                                                         retained: 4,\n  -                                                                         untouched: {\n  -                                                                           value: 4\n  -                                                                         }\n                                                                          },\n                                                                          introduced: 5,\n  -                                                                       retained: 5,\n  -                                                                       untouched: {\n  -                                                                         value: 5\n  -                                                                       }\n                                                                        },\n                                                                        introduced: 6,\n  -                                                                     retained: 6,\n  -                                                                     untouched: {\n  -                                                                       value: 6\n  -                                                                     }\n                                                                      },\n                                                                      introduced: 7,\n  -                                                                   retained: 7,\n  -                                                                   untouched: {\n  -                                                                     value: 7\n  -                                                                   }\n                                                                    },\n                                                                    introduced: 8,\n  -                                                                 retained: 8,\n  -                                                                 untouched: {\n  -                                                                   value: 8\n  -                                                                 }\n                                                                  },\n                                                                  introduced: 9,\n  -                                                               retained: 9,\n  -                                                               untouched: {\n  -                                                                 value: 9\n  -                                                               }\n                                                                },\n                                                                introduced: 10,\n  -                                                             retained: 10,\n  -                                                             untouched: {\n  -                                                               value: 10\n  -                                                             }\n                                                              },\n                                                              introduced: 11,\n  -                                                           retained: 11,\n  -                                                           untouched: {\n  -                                                             value: 11\n  -                                                           }\n                                                            },\n                                                            introduced: 12,\n  -                                                         retained: 12,\n  -                                                         untouched: {\n  -                                                           value: 12\n  -                                                         }\n                                                          },\n                                                          introduced: 13,\n  -                                                       retained: 13,\n  -                                                       untouched: {\n  -                                                         value: 13\n  -                                                       }\n                                                        },\n                                                        introduced: 14,\n  -                                                     retained: 14,\n  -                                                     untouched: {\n  -                                                       value: 14\n  -                                                     }\n                                                      },\n                                                      introduced: 15,\n  -                                                   retained: 15,\n  -                                                   untouched: {\n  -                                                     value: 15\n  -                                                   }\n                                                    },\n                                                    introduced: 16,\n  -                                                 retained: 16,\n  -                                                 untouched: {\n  -                                                   value: 16\n  -                                                 }\n                                                  },\n                                                  introduced: 17,\n  -                                               retained: 17,\n  -                                               untouched: {\n  -                                                 value: 17\n  -                                               }\n                                                },\n                                                introduced: 18,\n  -                                             retained: 18,\n  -                                             untouched: {\n  -                                               value: 18\n  -                                             }\n                                              },\n                                              introduced: 19,\n  -                                           retained: 19,\n  -                                           untouched: {\n  -                                             value: 19\n  -                                           }\n                                            },\n                                            introduced: 20,\n  -                                         retained: 20,\n  -                                         untouched: {\n  -                                           value: 20\n  -                                         }\n                                          },\n                                          introduced: 21,\n  -                                       retained: 21,\n  -                                       untouched: {\n  -                                         value: 21\n  -                                       }\n                                        },\n                                        introduced: 22,\n  -                                     retained: 22,\n  -                                     untouched: {\n  -                                       value: 22\n  -                                     }\n                                      },\n                                      introduced: 23,\n  -                                   retained: 23,\n  -                                   untouched: {\n  -                                     value: 23\n  -                                   }\n                                    },\n                                    introduced: 24,\n  -                                 retained: 24,\n  -                                 untouched: {\n  -                                   value: 24\n  -                                 }\n                                  },\n                                  introduced: 25,\n  -                               retained: 25,\n  -                               untouched: {\n  -                                 value: 25\n  -                               }\n                                },\n                                introduced: 26,\n  -                             retained: 26,\n  -                             untouched: {\n  -                               value: 26\n  -                             }\n                              },\n                              introduced: 27,\n  -                           retained: 27,\n  -                           untouched: {\n  -                             value: 27\n  -                           }\n                            },\n                            introduced: 28,\n  -                         retained: 28,\n  -                         untouched: {\n  -                           value: 28\n  -                         }\n                          },\n                          introduced: 29,\n  -                       retained: 29,\n  -                       untouched: {\n  -                         value: 29\n  -                       }\n                        },\n                        introduced: 30,\n  -                     retained: 30,\n  -                     untouched: {\n  -                       value: 30\n  -                     }\n                      },\n                      introduced: 31,\n  -                   retained: 31,\n  -                   untouched: {\n  -                     value: 31\n  -                   }\n                    },\n                    introduced: 32,\n  -                 retained: 32,\n  -                 untouched: {\n  -                   value: 32\n  -                 }\n                  },\n                  introduced: 33,\n  -               retained: 33,\n  -               untouched: {\n  -                 value: 33\n  -               }\n                },\n                introduced: 34,\n  -             retained: 34,\n  -             untouched: {\n  -               value: 34\n  -             }\n              },\n              introduced: 35,\n  -           retained: 35,\n  -           untouched: {\n  -             value: 35\n  -           }\n            },\n            introduced: 36,\n  -         retained: 36,\n  -         untouched: {\n  -           value: 36\n  -         }\n          },\n          introduced: 37,\n  -       retained: 37,\n  -       untouched: {\n  -         value: 37\n  -       }\n        },\n        introduced: 38,\n  -     retained: 38,\n  -     untouched: {\n  -       value: 38\n  -     }\n      },\n      introduced: 39,\n      retained: 39,\n      untouched: {\n        value: 39\n  \n      at TestContext.<anonymous> (file:///private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-trap-SvJKro/.git/apple-pi/branch-search/bs-20261004-173028-58d4/wt/r0/acceptance/merge-nested.test.js:34:10)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)\n      at Test.postRun (node:internal/test_runner/test:1537:19)\n      at Test.run (node:internal/test_runner/test:1462:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { retained: 39, child: { child: [Object], introduced: 38 }, untouched: { value: 39 }, introduced: 39 },\n    expected: { retained: 39, child: { retained: 38, child: [Object], untouched: [Object], introduced: 38 }, untouched: { value: 39 }, introduced: 39 },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at acceptance/merge-nested.test.js:37:1\n✖ empty object overrides retain nested defaults; independent branches merge (0.159334ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n    {\n      a: {\n        inner: {\n  -       left: 2,\n          right: 30\n        },\n  -     x: 1\n      },\n  +   b: {},\n  -   b: {\n  -     keep: 4\n  -   },\n      c: {\n        new: 6\n      }\n    }\n  \n      at TestContext.<anonymous> (file:///private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-trap-SvJKro/.git/apple-pi/branch-search/bs-20261004-173028-58d4/wt/r0/acceptance/merge-nested.test.js:38:10)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)\n      at Test.postRun (node:internal/test_runner/test:1537:19)\n      at Test.run (node:internal/test_runner/test:1462:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { a: { inner: [Object] }, b: {}, c: { new: 6 } },\n    expected: { a: { x: 1, inner: [Object] }, b: { keep: 4 }, c: { new: 6 } },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at acceptance/merge-nested.test.js:44:1\n✖ plain objects with null prototypes participate in recursive merging (0.124208ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  undefined !== 1\n  \n      at TestContext.<anonymous> (file:///private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-trap-SvJKro/.git/apple-pi/branch-search/bs-20261004-173028-58d4/wt/r0/acceptance/merge-nested.test.js:48:10)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)\n      at Test.postRun (node:internal/test_runner/test:1537:19)\n      at Test.run (node:internal/test_runner/test:1462:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: 1,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+          "stderr": "",
+          "ms": 119
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "✔ existing shallow behavior, additions, and empty inputs (0.557667ms)\n✔ non-plain overrides replace whole values, not array indices or instance fields (1.034125ms)\n✔ plain-object override replaces non-plain defaults without incorporating their keys (0.106ms)\n✔ own enumerable keys and symbols are preserved without copying inherited keys (0.069625ms)\n✔ arguments remain unchanged and result is a new top-level object (0.110292ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 39.885542\n",
+          "stderr": "",
+          "ms": 86
+        }
+      },
+      "gatesPassed": 1,
+      "status": "dead",
+      "objectives": {
+        "diff_size": 0
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 1,
+      "endSeq": 5,
+      "startCommit": "2f25323f3edfb7e176c784d025717ac5435d3e24",
+      "commit": "bddfdf8b848532b8f2577ecb9b991144ce1551dd",
+      "selfReport": "unknown",
+      "learned": "An explicit work stack merges configurations 20,000 levels deep without consuming the JavaScript call stack.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 15592,
+        "cacheReadTokens": 1536,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1960,
+        "runMs": 98096,
+        "scoreMs": 199
+      },
+      "gates": {
+        "recursive_plain_object_merge": "pass",
+        "preserve_existing_behavior": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 0,
+          "stdout": "✔ nested sibling keys survive and new keys are added (0.615416ms)\n✔ merge continues at every nested plain-object level (0.525292ms)\n✔ empty object overrides retain nested defaults; independent branches merge (0.090792ms)\n✔ plain objects with null prototypes participate in recursive merging (0.0855ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 49.801958\n",
+          "stderr": "",
+          "ms": 98
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "✔ existing shallow behavior, additions, and empty inputs (0.586125ms)\n✔ non-plain overrides replace whole values, not array indices or instance fields (1.120208ms)\n✔ plain-object override replaces non-plain defaults without incorporating their keys (0.104667ms)\n✔ own enumerable keys and symbols are preserved without copying inherited keys (0.064333ms)\n✔ arguments remain unchanged and result is a new top-level object (0.097791ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.273833\n",
+          "stderr": "",
+          "ms": 101
+        }
+      },
+      "gatesPassed": 2,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 111
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "none",
+      "startSeq": 2,
+      "endSeq": 4,
+      "startCommit": "2f25323f3edfb7e176c784d025717ac5435d3e24",
+      "commit": "ea4e97ee1f3ef7f7af54282977dd02f2916c926f",
+      "selfReport": "unknown",
+      "learned": "A spread-first recursive merge preserves replacement and sharing behavior while merging nested plain objects without modifying either argument.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 10499,
+        "cacheReadTokens": 8832,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1367,
+        "runMs": 61280,
+        "scoreMs": 195
+      },
+      "gates": {
+        "recursive_plain_object_merge": "pass",
+        "preserve_existing_behavior": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 0,
+          "stdout": "✔ nested sibling keys survive and new keys are added (0.640125ms)\n✔ merge continues at every nested plain-object level (0.536459ms)\n✔ empty object overrides retain nested defaults; independent branches merge (0.089167ms)\n✔ plain objects with null prototypes participate in recursive merging (0.079208ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.454375\n",
+          "stderr": "",
+          "ms": 99
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "✔ existing shallow behavior, additions, and empty inputs (0.557875ms)\n✔ non-plain overrides replace whole values, not array indices or instance fields (1.101792ms)\n✔ plain-object override replaces non-plain defaults without incorporating their keys (0.105625ms)\n✔ own enumerable keys and symbols are preserved without copying inherited keys (0.066667ms)\n✔ arguments remain unchanged and result is a new top-level object (0.1ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.376416\n",
+          "stderr": "",
+          "ms": 96
+        }
+      },
+      "gatesPassed": 2,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 81
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    },
+    {
+      "phase": "after g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    }
+  ],
+  "winner": "r2",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

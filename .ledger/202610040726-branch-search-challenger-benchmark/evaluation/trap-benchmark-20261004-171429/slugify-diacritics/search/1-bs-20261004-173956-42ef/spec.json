@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "goal": "Transliterate Latin letters with diacritics, strokes, and ligatures to their usual ASCII spelling in slugify, including decomposed combining accents, while preserving existing separator, lowercase, number, and non-Latin-script behavior.",
+  "files": [
+    {
+      "path": "test/acceptance-slugify.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nfunction check(input, expected) {\n  assert.equal(slugify(input), expected, `slugify(${JSON.stringify(input)})`);\n}\nif (mode === 'canonical') {\n  check('Crème Brûlée', 'creme-brulee');\n  check('Łódź', 'lodz');\n  let count = 0;\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || !/^\\p{Script=Latin}$/u.test(letter)) continue;\n    const decomposed = letter.normalize('NFD');\n    if (!/^[A-Za-z]\\p{M}+$/u.test(decomposed)) continue;\n    const expected = decomposed[0].toLowerCase();\n    check(letter, expected);\n    check(`x ${letter} y`, `x-${expected}-y`);\n    check(decomposed, expected);\n    count++;\n  }\n  assert.ok(count > 400, 'exercise broad canonical Latin coverage');\n} else if (mode === 'special') {\n  const cases = [\n    ['Øresund', 'oresund'], ['smørrebrød', 'smorrebrod'],\n    ['Æsir æon', 'aesir-aeon'], ['Œuvre cœur', 'oeuvre-coeur'],\n    ['Straße ẞ', 'strasse-ss'], ['ŁÓDŹ ł', 'lodz-l'],\n    ['Đà Nẵng đ', 'da-nang-d'], ['Ħal ħ', 'hal-h'],\n    ['Ŧ ŧ', 't-t'], ['ı I', 'i-i'], ['Ĳ ĳssel', 'ij-ijssel'],\n    ['ſ', 's'], ['ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ', 'ff-fi-fl-ffi-ffl-st-st'],\n    ['Ǽ ǽ Ǣ ǣ Ǿ ǿ', 'ae-ae-ae-ae-o-o'],\n    ['Crème/東京/Łódź/Йога/Άλφα', 'creme-東京-lodz-йога-άλφα']\n  ];\n  for (const [input, expected] of cases) check(input, expected);\n} else if (mode === 'combining') {\n  for (const [input, expected] of [\n    ['Cre\\u0300me Bru\\u0302le\\u0301e', 'creme-brulee'],\n    ['a\\u0301b', 'ab'], ['a\\u0301\\u0327\\u0304b', 'ab'],\n    ['A\\u0308 Z\\u0307', 'a-z'], ['ø\\u0301æ\\u0304ß\\u0308', 'oaess'],\n    ['  e\\u0301--o\\u0308! ', 'e-o'],\n    ['a\\u1ab0b a\\u1dc0b a\\u20d0b a\\ufe20b', 'ab-ab-ab-ab']\n  ]) check(input, expected);\n} else if (mode === 'regression') {\n  const baseline = s => s.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n  for (const input of [\n    '', '---', 'Hello, World!', '  --Release 2.0--  ',\n    'a_b/c.d\\\\e', ' A\\tB\\nC ', '123 ٤٥٦ １２３ ①²',\n    'Привет мир', 'Й Ё Ї Ѓ Ќ Ў', 'Ά Έ Ή Ί Ό Ύ Ώ Ϊ Ϋ ᾈ ᾦ',\n    'Καλημέρα κόσμε', '東京 日本語 カタカナ が パ', '한글 가 각',\n    'العربية فارسی', 'שלום', 'हिन्दी বাংলা', 'ไทย', 'ქართული',\n    'Հայերեն', '中文', 'ᎠᎡᎢ', '𐐀𐐁', '🙂 Hello 🌍 World!',\n    'Йога/Άλφα/東京', 'ＡＢＣ ① Ⅳ', 'α\\u0301β и\\u0306я'\n  ]) check(input, baseline(input));\n  // Exercise every non-Latin Unicode letter individually. This also catches\n  // indiscriminate decomposition of accented Greek, Cyrillic, or Hangul.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (/^\\p{L}$/u.test(letter) && !/^\\p{Script=Latin}$/u.test(letter)) {\n      check(letter, baseline(letter));\n    }\n  }\n} else {\n  throw new Error('Unknown acceptance mode');\n}\nconsole.log(`OK: ${mode}`);\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "canonical-latin",
+      "run": "node test/acceptance-slugify.mjs canonical",
+      "onBase": "fail",
+      "timeoutSec": 60
+    },
+    {
+      "id": "strokes-and-ligatures",
+      "run": "node test/acceptance-slugify.mjs special",
+      "onBase": "fail",
+      "timeoutSec": 60
+    },
+    {
+      "id": "combining-latin-accents",
+      "run": "node test/acceptance-slugify.mjs combining",
+      "onBase": "fail",
+      "timeoutSec": 60
+    },
+    {
+      "id": "preserve-existing-behavior",
+      "run": "node test/acceptance-slugify.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 60
+    }
+  ],
+  "objectives": []
+}

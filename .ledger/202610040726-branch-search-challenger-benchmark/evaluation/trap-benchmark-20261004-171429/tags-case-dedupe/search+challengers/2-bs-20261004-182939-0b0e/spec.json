@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags case-insensitive while preserving the spelling and order of first occurrences, without mutating inputs or sacrificing linear-time performance on lists of hundreds of thousands of tags.",
+  "files": [
+    {
+      "path": "acceptance/case.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { uniqueTags } from '../src/tags.js';\n\nfunction check(input, expected) {\n  const before = input.slice();\n  assert.deepEqual(uniqueTags(Object.freeze(input)), expected);\n  assert.deepEqual(input, before);\n}\ncheck(['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']);\ncheck(['a', 'A', 'b', 'B', 'a', 'C', 'c'], ['a', 'b', 'C']);\ncheck(['CSS', 'css', 'CsS', 'HTML', 'html'], ['CSS', 'HTML']);\ncheck(['', '', ' A', ' a', 'A ', 'a ', 'a', 'A'], ['', ' A', 'A ', 'a']);\ncheck(['__proto__', '__PROTO__', 'constructor', 'CONSTRUCTOR', 'toString', 'TOSTRING'], ['__proto__', 'constructor', 'toString']);\ncheck(['É', 'é', 'Ω', 'ω', 'Ж', 'ж', '猫', '猫'], ['É', 'Ω', 'Ж', '猫']);\n\n// Deterministic shuffled interleaving: expected positions are derived from\n// first occurrence, not from sorting or any implementation-specific helper.\nlet state = 918273;\nconst random = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0);\nconst input = [];\nfor (let i = 0; i < 12000; i++) {\n  const tag = 'tag-' + (random() % 173) + '-x';\n  input.push(random() % 2 ? tag.toUpperCase() : tag);\n}\nconst expected = [];\nconst seen = new Set();\nfor (const tag of input) {\n  const key = tag.toLowerCase();\n  if (!seen.has(key)) { seen.add(key); expected.push(tag); }\n}\ncheck(input, expected);\nconsole.log('case-insensitive first-occurrence checks passed');\n"
+    },
+    {
+      "path": "acceptance/preserve.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { uniqueTags } from '../src/tags.js';\nfor (const [input, expected] of [\n  [[], []],\n  [['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']],\n  [['z', 'a', 'm', 'z', 'a', 'q'], ['z', 'a', 'm', 'q']],\n  [['', '', ' ', '  ', ' '], ['', ' ', '  ']],\n  [['__proto__', 'constructor', 'toString', '__proto__'], ['__proto__', 'constructor', 'toString']],\n  [['same', 'same', 'same'], ['same']],\n]) {\n  const before = input.slice();\n  assert.deepEqual(uniqueTags(Object.freeze(input)), expected);\n  assert.deepEqual(input, before);\n}\nconsole.log('existing behavior checks passed');\n"
+    },
+    {
+      "path": "acceptance/performance.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst distinct = Array.from({length: 200000}, (_, i) => 'tag-' + i + '-value');\nconst mixed = distinct.concat(distinct.map(t => t.toUpperCase()));\nconst repeated = Array.from({length: 400000}, (_, i) => i % 2 ? 'REPEATED' : 'repeated');\nfor (let i = 0; i < 5; i++) uniqueTags(mixed.slice(0, 2000));\nconst times = [];\nfor (const input of [distinct, mixed, repeated]) {\n  const start = performance.now();\n  const output = uniqueTags(input);\n  const elapsed = performance.now() - start;\n  assert.ok(Array.isArray(output));\n  assert.ok(elapsed < 900, `uniqueTags took ${elapsed.toFixed(1)} ms for ${input.length} tags; must stay well under a second`);\n  times.push(elapsed);\n}\nconsole.log(times.reduce((sum, n) => sum + n, 0));\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_occurrence",
+      "run": "node acceptance/case.mjs",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_existing_behavior",
+      "run": "node acceptance/preserve.mjs",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_performance",
+      "run": "node acceptance/performance.mjs",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_list_runtime_ms",
+      "run": "node acceptance/performance.mjs",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 3
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags deduplicate string tags case-insensitively, preserving the first spelling and first-seen order without mutating the input. Preserve existing behavior and linear-time performance on hundreds of thousands of tags.",
+  "files": [
+    {
+      "path": "acceptance/tags-check.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nif (mode === 'existing') {\n  for (const [input, expected] of [\n    [[], []],\n    [['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']],\n    [['z', 'a', 'z', 'b', 'a', 'c'], ['z', 'a', 'b', 'c']],\n    [['', ' ', '', ' ', 'x'], ['', ' ', 'x']],\n    [['__proto__', 'constructor', 'toString', '__proto__'], ['__proto__', 'constructor', 'toString']],\n  ]) {\n    const before = [...input];\n    Object.freeze(input);\n    assert.deepEqual(uniqueTags(input), expected);\n    assert.deepEqual(input, before);\n  }\n} else if (mode === 'case') {\n  for (const [input, expected] of [\n    [['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']],\n    [['js', 'JS', 'node', 'NODE'], ['js', 'node']],\n    [['CSS', 'Js', 'css', 'NODE', 'jS', 'node', 'HTML'], ['CSS', 'Js', 'NODE', 'HTML']],\n    [['', '', 'A', 'a', ' a', ' A', 'a ', 'A '], ['', 'A', ' a', 'a ']],\n    [['__PROTO__', '__proto__', 'Constructor', 'constructor', 'TOSTRING', 'toString'], ['__PROTO__', 'Constructor', 'TOSTRING']],\n    [['École', 'éCOLE', 'Ä', 'ä', 'Ω', 'ω'], ['École', 'Ä', 'Ω']],\n  ]) {\n    Object.freeze(input);\n    assert.deepEqual(uniqueTags(input), expected);\n  }\n  // Many unique keys, varied first spellings, and nonadjacent duplicates.\n  const input = [], expected = [];\n  for (let i = 0; i < 100000; i++) {\n    const tag = (i % 2 ? 'Tag-' : 'tAG-') + i;\n    input.push(tag);\n    expected.push(tag);\n    if (i % 11 === 0) input.push(tag.toLowerCase());\n  }\n  for (let i = 99999; i >= 0; i--) input.push('TAG-' + i);\n  assert.deepEqual(uniqueTags(input), expected);\n} else if (mode === 'speed' || mode === 'benchmark') {\n  const input = [];\n  for (let i = 0; i < 200000; i++) input.push('Tag-' + i);\n  for (let i = 199999; i >= 0; i--) input.push('TAG-' + i);\n  // Exclude data construction and module loading from the measurement.\n  for (let i = 0; i < 3; i++) uniqueTags(input.slice(0, 10000));\n  const times = [];\n  for (let i = 0; i < 3; i++) {\n    const start = performance.now();\n    const result = uniqueTags(input);\n    times.push(performance.now() - start);\n    assert.ok(Array.isArray(result));\n    assert.ok(result.length >= 200000 && result.length <= input.length);\n  }\n  times.sort((a, b) => a - b);\n  if (mode === 'speed') assert.ok(times[1] < 750, `400,000 tags took ${times[1]} ms (median)`);\n  else console.log(times[1]);\n} else {\n  throw new Error('Unknown check mode');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "existing_behavior",
+      "run": "node acceptance/tags-check.mjs existing",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "case_insensitive_first_seen",
+      "run": "node acceptance/tags-check.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_speed",
+      "run": "node acceptance/tags-check.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_list_milliseconds",
+      "run": "node acceptance/tags-check.mjs benchmark",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 5
+    }
+  ]
+}

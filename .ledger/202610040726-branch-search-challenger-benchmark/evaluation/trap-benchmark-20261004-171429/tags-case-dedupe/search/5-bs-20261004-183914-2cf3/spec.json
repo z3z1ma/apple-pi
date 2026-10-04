@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags in src/tags.js deduplicate string tags case-insensitively, preserving the first spelling and first-seen order, without mutating the input or sacrificing linear-time performance on hundreds of thousands of tags.",
+  "files": [
+    {
+      "path": "test/acceptance-tags.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nfunction check(input, expected) {\n  const before = input.slice();\n  assert.deepEqual(uniqueTags(input), expected);\n  assert.deepEqual(input, before, 'must not change the input');\n}\nif (mode === 'case') {\n  check(['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']);\n  check(['js', 'JS', 'jS', 'Js'], ['js']);\n  check(['B', 'a', 'b', 'A', 'C', 'c'], ['B', 'a', 'C']);\n  check(['', '', 'Tag', 'tag', ' tag', 'TAG ', ' tag', 'tag-name', 'TAG-NAME', 'tag_name'], ['', 'Tag', ' tag', 'TAG ', 'tag-name', 'tag_name']);\n  check(['CAFÉ', 'café', 'École', 'école', 'Über', 'über'], ['CAFÉ', 'École', 'Über']);\n  // Generated interleaving exercises first spelling and first position independently.\n  const input = [];\n  for (let i = 0; i < 100000; i++) {\n    const k = (i * 7919) % 20011;\n    const tag = `tag-${k}`;\n    input.push(i % 3 === 0 ? tag.toUpperCase() : tag);\n  }\n  const seen = new Set();\n  const expected = [];\n  for (const tag of input) {\n    const key = tag.toLowerCase();\n    if (!seen.has(key)) { seen.add(key); expected.push(tag); }\n  }\n  check(input, expected);\n  check(['nODE', 'Node', 'NODE'], ['nODE']);\n} else if (mode === 'regression') {\n  check([], []);\n  check(['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']);\n  check(['z', 'a', 'z', 'b', 'a'], ['z', 'a', 'b']);\n  check(['one'], ['one']);\n  check(['', ' ', '', ' x', 'x ', 'x', ' '], ['', ' ', ' x', 'x ', 'x']);\n  const input = ['a', 'b'];\n  const result = uniqueTags(input);\n  assert.notStrictEqual(result, input);\n  result.push('c');\n  assert.deepEqual(input, ['a', 'b']);\n} else if (mode === 'speed' || mode === 'benchmark') {\n  // Setup and validation are outside the measured region. All tags are already\n  // lowercase so this performance guard also passes on the original function.\n  uniqueTags(Array.from({ length: 2000 }, (_, i) => `warm-${i}`));\n  let totalMs = 0;\n  for (const n of [100000, 200000]) {\n    const expected = Array.from({ length: n }, (_, i) => `tag-${i}`);\n    const input = expected.concat(expected.slice().reverse());\n    const start = performance.now();\n    const result = uniqueTags(input);\n    const ms = performance.now() - start;\n    assert.deepEqual(result, expected);\n    if (mode === 'speed') assert.ok(ms < 750, `${input.length} tags took ${ms.toFixed(1)}ms; expected well under one second`);\n    totalMs += ms;\n  }\n  if (mode === 'benchmark') console.log(totalMs.toFixed(6));\n} else {\n  throw new Error(`unknown mode: ${mode}`);\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_seen",
+      "run": "node test/acceptance-tags.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_behavior",
+      "run": "node test/acceptance-tags.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_input_speed",
+      "run": "node test/acceptance-tags.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_input_elapsed_ms",
+      "run": "node test/acceptance-tags.mjs benchmark",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 5
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "goal": "Transliterate Latin letters, including canonically decomposable accents, strokes, and ligatures, to their usual ASCII spellings in slugify; handle combining accents after Latin letters while preserving existing separator, lowercase, numeric, and non-Latin-script behavior.",
+  "files": [
+    {
+      "path": "acceptance/slugify-checks.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\n\nif (mode === 'latin') {\n  const words = [\n    ['Crème Brûlée', 'creme-brulee'], ['Łódź', 'lodz'],\n    ['ÀÁÂÃÄÅ ĆČÇ ÈÉÊË ÌÍÎÏ Ñ ÒÓÔÕÖ ÙÚÛÜ ÝŸ', 'aaaaaa-ccc-eeee-iiii-n-ooooo-uuuu-yy'],\n    ['Dvořák São Tomé Zürich', 'dvorak-sao-tome-zurich'],\n    ['Việt Nam', 'viet-nam'], ['İstanbul', 'istanbul'],\n    ['Smørrebrød Æsir Œuvre Straße', 'smorrebrod-aesir-oeuvre-strasse'],\n    ['Øresund Đakovo ŁÓDŹ', 'oresund-dakovo-lodz'],\n    ['Ð Þ Ħ ı Ŧ ſ', 'd-th-h-i-t-s'],\n    ['ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ', 'ff-fi-fl-ffi-ffl-st-st'],\n    ['ẞ Æ Œ Ø Đ Ł Ħ Ð Þ Ŧ', 'ss-ae-oe-o-d-l-h-d-th-t'],\n  ];\n  for (const [input, expected] of words) {\n    check(input, expected);\n    check(input.normalize('NFD'), expected);\n    check(input.toLowerCase(), expected);\n  }\n  // Exhaust all canonically decomposable Latin letters whose base is ASCII.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || !/^\\p{Script=Latin}$/u.test(letter)) continue;\n    const plain = letter.toLowerCase().normalize('NFD').replace(/\\p{M}/gu, '');\n    if (!/^[a-z]+$/.test(plain)) continue;\n    check(letter, plain);\n    check(letter.normalize('NFD'), plain);\n    check('x' + letter + 'y', 'x' + plain + 'y');\n  }\n  check('Cafe\\u0301 au lait', 'cafe-au-lait');\n  check('a\\u0301\\u0323b e\\u0308\\u0301lan', 'ab-elan');\n  check(' --Ærø / Straße & Crème 42!! ', 'aero-strasse-creme-42');\n  check('Crème Москва Αθήνα 東京', 'creme-москва-αθήνα-東京');\n} else if (mode === 'preserve') {\n  const cases = [\n    ['', ''], [' --- ! 🌍 ', ''], ['Hello, World!', 'hello-world'],\n    ['  --Release 2.0--  ', 'release-2-0'], ['a___b\\tc\\nd', 'a-b-c-d'],\n    ['foo---bar', 'foo-bar'], ['123 ٤٥٦ １２３', '123-٤٥٦-１２３'],\n    ['Привет мир', 'привет-мир'], ['Ёж Йога', 'ёж-йога'],\n    ['Αθήνα κόσμος', 'αθήνα-κόσμος'], ['東京 日本語', '東京-日本語'],\n    ['한글 가각', '한글-가각'], ['العربية עברית', 'العربية-עברית'],\n    ['नमस्ते', 'नमस-त'], ['α\\u0301β', 'α-β'],\n  ];\n  for (const [input, expected] of cases) check(input, expected);\n  // Every individual non-Latin letter and number must retain the old behavior,\n  // including precomposed accents and compatibility characters in other scripts.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const ch = String.fromCodePoint(cp);\n    if (!/^[\\p{L}\\p{N}]$/u.test(ch) || /^\\p{Script=Latin}$/u.test(ch)) continue;\n    const expected = ch.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n    check(ch, expected);\n  }\n} else {\n  throw new Error('Unknown check mode');\n}\nconsole.log('OK: ' + mode);\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "latin_transliteration",
+      "run": "node acceptance/slugify-checks.mjs latin",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_existing_behavior",
+      "run": "node acceptance/slugify-checks.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

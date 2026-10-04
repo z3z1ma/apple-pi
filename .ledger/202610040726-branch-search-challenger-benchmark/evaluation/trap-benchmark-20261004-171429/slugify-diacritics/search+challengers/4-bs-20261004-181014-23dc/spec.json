@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "goal": "Transliterate Latin letters with diacritics, strokes, and ligatures to their usual lowercase ASCII spellings, including decomposed accents, while preserving existing separator, digit, and non-Latin-script behavior.",
+  "files": [
+    {
+      "path": "acceptance/slugify-check.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\n\nif (mode === 'canonical') {\n  for (const [input, expected] of [\n    ['Crème Brûlée', 'creme-brulee'],\n    ['Łódź', 'lodz'],\n    ['  déjà vu! São Tomé & Príncipe  ', 'deja-vu-sao-tome-principe'],\n    ['Cafe\\u0301 noir', 'cafe-noir'],\n    ['a\\u0308\\u0304b e\\u0301\\u0323clair', 'ab-eclair'],\n    ['İSTANBUL', 'istanbul'],\n    ['Việt Nam 2025', 'viet-nam-2025'],\n  ]) check(input, expected);\n  let count = 0;\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || !/^\\p{Script=Latin}$/u.test(letter)) continue;\n    const decomposed = letter.normalize('NFD');\n    const ascii = decomposed.replace(/\\p{M}/gu, '').toLowerCase();\n    if (!/^[a-z]+$/.test(ascii)) continue;\n    check(`x${letter}z`, `x${ascii}z`);\n    check(`x${decomposed}z`, `x${ascii}z`);\n    count++;\n  }\n  assert.ok(count > 400, 'coverage includes Latin extended diacritics');\n} else if (mode === 'special') {\n  const groups = [\n    ['Ææ', 'ae'], ['Œœ', 'oe'], ['ßẞ', 'ss'],\n    ['Øø', 'o'], ['Łł', 'l'], ['Đđ', 'd'], ['Ðð', 'd'],\n    ['Þþ', 'th'], ['Ħħ', 'h'], ['Ŧŧ', 't'], ['Ŋŋ', 'n'],\n    ['ı', 'i'], ['ſ', 's'],\n  ];\n  for (const [letters, ascii] of groups) {\n    for (const letter of letters) {\n      check(letter, ascii);\n      check(`A${letter}B`, `a${ascii}b`);\n      check(`A${letter}\\u0301\\u0323B`, `a${ascii}b`);\n    }\n  }\n  check('Æsir & Œuvre — Straße, smørrebrød', 'aesir-oeuvre-strasse-smorrebrod');\n  check('Þingvellir, Đorđe, ħ', 'thingvellir-dorde-h');\n  check('ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ', 'ff-fi-fl-ffi-ffl-st-st');\n} else if (mode === 'preserve') {\n  const oldSlug = title => title.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n  for (const input of [\n    '', 'Hello, World!', '  --Release 2.0--  ', 'ABC_xyz / 9.0',\n    '0123456789 ١٢٣ １２３', 'a😀b👩‍💻c', 'a\\u0000b', '---',\n    'Привет мир', 'Йога ЁЖ Ї Є Ґ', 'Ελληνικά ΐ ΰ Ά Έ Ώ',\n    '日本語 カタカナ ひらがな', '한글 안녕하세요', '你好 世界',\n    'العربية فارسی', 'עברית', 'हिन्दी বাংলা', 'ไทย',\n    'ᎠᎡᎢ ႠႡႢ ԱԲԳ',\n  ]) check(input, oldSlug(input));\n  // Preserve each non-Latin letter, including letters whose canonical decomposition\n  // would change under blanket accent removal (Greek, Cyrillic, Hangul, etc.).\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{L}$/u.test(letter) || /^\\p{Script=Latin}$/u.test(letter)) continue;\n    check(letter, oldSlug(letter));\n  }\n} else {\n  throw new Error(`Unknown mode: ${mode}`);\n}\nconsole.log(`${mode}: OK`);\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "latin_canonical_accents",
+      "run": "node acceptance/slugify-check.mjs canonical",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "latin_strokes_and_ligatures",
+      "run": "node acceptance/slugify-check.mjs special",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_other_scripts_and_existing_rules",
+      "run": "node acceptance/slugify-check.mjs preserve",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

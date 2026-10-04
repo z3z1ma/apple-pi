@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "goal": "Make mergeConfig recursively merge nested plain objects key by key at any depth, preserve whole-value replacement for non-plain overrides, and never modify either argument.",
+  "files": [
+    {
+      "path": "acceptance/deep-merge.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freeze(value) {\n  if (value && typeof value === 'object') {\n    for (const child of Object.values(value)) freeze(child);\n    Object.freeze(value);\n  }\n  return value;\n}\nconst defaults = freeze({\n  server: { host: 'localhost', port: 8080, tls: { enabled: true, cert: { path: 'old', format: 'pem' } } },\n  logging: { level: 'info', outputs: { file: true, console: true } },\n  tags: ['a', 'b'], untouched: { enabled: true }\n});\nconst overrides = freeze({\n  server: { port: 9090, tls: { cert: { path: 'new' }, verify: false } },\n  logging: { outputs: { console: false, remote: true } }, tags: ['c'], added: { x: 1 }\n});\nassert.deepEqual(mergeConfig(defaults, overrides), {\n  server: { host: 'localhost', port: 9090, tls: { enabled: true, cert: { path: 'new', format: 'pem' }, verify: false } },\n  logging: { level: 'info', outputs: { file: true, console: false, remote: true } },\n  tags: ['c'], untouched: { enabled: true }, added: { x: 1 }\n});\nassert.deepEqual(mergeConfig({ a: { b: { c: 1 } } }, { a: {} }), { a: { b: { c: 1 } } });\nassert.deepEqual(mergeConfig({ a: {} }, { a: { b: { c: 1 } } }), { a: { b: { c: 1 } } });\nassert.deepEqual(mergeConfig({ a: { keep: true, b: { keep: true, c: 1 } } }, { a: { b: null } }), { a: { keep: true, b: null } });\n\n// Exercise repeated nested merges beyond just the first few levels.\nlet left = { retained: 1, replaced: 'before' };\nlet right = { replaced: 'after', added: 2 };\nlet expected = { retained: 1, replaced: 'after', added: 2 };\nfor (let i = 0; i < 40; i++) {\n  left = { child: left, sibling: i };\n  right = { child: right };\n  expected = { child: expected, sibling: i };\n}\nfreeze(left); freeze(right);\nassert.deepEqual(mergeConfig(left, right), expected);\n\n// Null-prototype dictionaries are also plain objects; no result prototype is prescribed.\nconst dictionary = Object.assign(Object.create(null), { keep: 1, replace: 2 });\nconst patch = Object.assign(Object.create(null), { replace: 3, add: 4 });\nconst merged = mergeConfig({ dictionary }, { dictionary: patch }).dictionary;\nassert.equal(merged.keep, 1);\nassert.equal(merged.replace, 3);\nassert.equal(merged.add, 4);\nassert.deepEqual(Object.keys(dictionary).sort(), ['keep', 'replace']);\nassert.equal(dictionary.replace, 2);\nassert.equal(patch.replace, 3);\nconsole.log('recursive merge checks passed');\n"
+    },
+    {
+      "path": "acceptance/compatibility.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { mergeConfig } from '../src/config.js';\n\nassert.deepEqual(mergeConfig({ level: 'info', color: true }, { level: 'debug', file: 'app.log' }), { level: 'debug', color: true, file: 'app.log' });\nassert.deepEqual(mergeConfig({}, {}), {});\nassert.deepEqual(mergeConfig({ a: 1 }, {}), { a: 1 });\nassert.deepEqual(mergeConfig({}, { a: 1 }), { a: 1 });\n\nconst fn = () => 1;\nclass Box { constructor() { this.x = 1; } }\nconst values = [null, undefined, false, true, 0, 9, '', 'value', [], ['c'], new Date(0), /x/, fn, new Box()];\nfor (const value of values) {\n  const defaults = Object.freeze({ item: Object.freeze({ keep: 1, other: 2 }), stable: 3 });\n  const overrides = Object.freeze({ item: value });\n  const result = mergeConfig(defaults, overrides);\n  assert.strictEqual(result.item, value, 'non-plain overrides replace whole values');\n  assert.equal(result.stable, 3);\n  assert.deepEqual(defaults.item, { keep: 1, other: 2 });\n  assert.strictEqual(overrides.item, value);\n}\nfor (const value of values) {\n  const defaults = { item: value };\n  const overrides = { item: { newKey: 1 } };\n  assert.deepEqual(mergeConfig(defaults, overrides), { item: { newKey: 1 } });\n  assert.strictEqual(defaults.item, value);\n  assert.deepEqual(overrides, { item: { newKey: 1 } });\n}\nconst inherited = Object.create({ inherited: 2 });\ninherited.own = 1;\nassert.deepEqual(mergeConfig(inherited, { extra: 3 }), { own: 1, extra: 3 });\nassert.deepEqual(mergeConfig({ keep: 4 }, inherited), { keep: 4, own: 1 });\nconst symbol = Symbol('key');\nassert.deepEqual(mergeConfig({ [symbol]: 1, keep: 2 }, { [symbol]: 3 }), { [symbol]: 3, keep: 2 });\nconst defaults = { a: 1, untouched: { b: 2 } };\nconst overrides = { a: 3, added: { c: 4 } };\nconst beforeDefaults = structuredClone(defaults);\nconst beforeOverrides = structuredClone(overrides);\nmergeConfig(defaults, overrides);\nassert.deepEqual(defaults, beforeDefaults);\nassert.deepEqual(overrides, beforeOverrides);\nconsole.log('compatibility checks passed');\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/config.test.js"
+  ],
+  "gates": [
+    {
+      "id": "existing-tests",
+      "run": "node --test test/config.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "recursive-plain-object-merge",
+      "run": "node acceptance/deep-merge.mjs",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "replacement-and-compatibility",
+      "run": "node acceptance/compatibility.mjs",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

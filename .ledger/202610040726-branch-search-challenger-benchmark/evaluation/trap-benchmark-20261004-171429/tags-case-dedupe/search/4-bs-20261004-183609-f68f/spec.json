@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags deduplicate string tags case-insensitively while preserving the first spelling and first-seen order, without mutating inputs or sacrificing linear-time performance on large lists.",
+  "files": [
+    {
+      "path": "acceptance/unique-tags.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nif (mode === 'case') {\n  const cases = [\n    [['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']],\n    [['js', 'JS', 'Js', 'jS'], ['js']],\n    [['B', 'a', 'b', 'C', 'A', 'c', 'D'], ['B', 'a', 'C', 'D']],\n    [['', 'A', '', 'a', ' ', ' A', ' a', 'A '], ['', 'A', ' ', ' A', 'A ']],\n    [['tag-1', 'TAG-1', 'tag-2', 'TAG-2', '1', '01'], ['tag-1', 'tag-2', '1', '01']],\n  ];\n  for (const [input, expected] of cases) {\n    const snapshot = input.slice();\n    assert.deepEqual(uniqueTags(input), expected);\n    assert.deepEqual(input, snapshot);\n  }\n  // Check first-seen spelling and order throughout a large, varied ASCII list.\n  const input = [];\n  const expected = [];\n  const seen = new Set();\n  for (let i = 0; i < 100000; i++) {\n    const id = (i * 7919) % 23003;\n    const tag = (i % 3 === 0 ? 'TAG-' : i % 3 === 1 ? 'tag-' : 'Tag-') + id;\n    input.push(tag);\n    const key = tag.toLowerCase();\n    if (!seen.has(key)) { seen.add(key); expected.push(tag); }\n  }\n  assert.deepEqual(uniqueTags(input), expected);\n} else if (mode === 'regression') {\n  for (const [input, expected] of [\n    [[], []],\n    [['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']],\n    [['z', 'a', 'm', 'z', 'a', 'q'], ['z', 'a', 'm', 'q']],\n    [['', '', 'x', '', 'x'], ['', 'x']],\n    [['__proto__', 'constructor', 'toString', '__proto__'], ['__proto__', 'constructor', 'toString']],\n  ]) {\n    const frozen = Object.freeze(input.slice());\n    assert.deepEqual(uniqueTags(frozen), expected);\n    assert.deepEqual(frozen, input);\n  }\n} else if (mode === 'speed' || mode === 'benchmark') {\n  const first = Array.from({length: 200000}, (_, i) => 'tag-' + i);\n  const input = first.concat(mode === 'benchmark' ? first.map(t => t.toUpperCase()) : first);\n  for (let i = 0; i < 3; i++) uniqueTags(first.slice(0, 1000));\n  const start = performance.now();\n  const result = uniqueTags(input);\n  const elapsed = performance.now() - start;\n  if (mode === 'speed') {\n    assert.deepEqual(result, first);\n    assert.ok(elapsed < 800, `400000 tags took ${elapsed.toFixed(1)} ms (limit 800 ms)`);\n  } else {\n    console.log(elapsed);\n  }\n} else {\n  throw new Error('Unknown mode');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_seen",
+      "run": "node acceptance/unique-tags.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_order_and_input_behavior",
+      "run": "node acceptance/unique-tags.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_speed",
+      "run": "node acceptance/unique-tags.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_mixed_case_time_ms",
+      "run": "node acceptance/unique-tags.mjs benchmark",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 5
+    }
+  ]
+}

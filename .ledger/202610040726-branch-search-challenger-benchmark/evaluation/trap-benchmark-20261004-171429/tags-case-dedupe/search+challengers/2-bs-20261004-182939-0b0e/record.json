@@ -1,0 +1,416 @@
+{
+  "id": "bs-20261004-182939-0b0e",
+  "mode": "human",
+  "goal": "Make `uniqueTags` in `src/tags.js` treat tags that differ only in letter case as duplicates, keeping the spelling seen first: `uniqueTags([\"JS\", \"Node\", \"js\", \"NODE\", \"css\"])` returns `[\"JS\", \"Node\", \"css\"]`.\n\nKeep everything that works today: the result keeps each tag at its first position, and `uniqueTags` stays linear-time. Callers pass lists of 100,000 tags and more, which must take well under a second.",
+  "seedGate": null,
+  "seed": "f4dd4d864027ec03e20abad430f3ba0cc71f96f1dedffe2dc8bc9470a55d5d16",
+  "startedAt": "2026-10-04T18:29:39.793Z",
+  "endedAt": "2026-10-04T18:34:42.414Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1,
+      "challengers": 2
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "e5dc2f433ebfd6a1a956561a5dab5bba894ea692",
+    "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+  },
+  "spec": {
+    "sha256": "cb792a903534c30425a1d5b8f32dd7dd241f99bf3a91994c39dcb35f169855e7",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate case_insensitive_first_occurrence: fails on the base twice, as declared\ngate preserve_existing_behavior: passes on the base twice, as declared\ngate large_list_performance: passes on the base twice, as declared\nobjective large_list_runtime_ms: base value 68.40491599999999 (runs 68.40491599999999, 73.153958, 66.23745799999999)",
+        "ms": 973
+      }
+    ],
+    "review": null,
+    "baseValues": {
+      "large_list_runtime_ms": 68.40491599999999
+    }
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 64581,
+      "cacheReadTokens": 33280,
+      "cacheWriteTokens": 0,
+      "outputTokens": 7384
+    },
+    "author": {
+      "inputTokens": 13424,
+      "cacheReadTokens": 11776,
+      "cacheWriteTokens": 0,
+      "outputTokens": 2881,
+      "ms": 123477
+    },
+    "review": null,
+    "challengers": {
+      "inputTokens": 15290,
+      "cacheReadTokens": 6400,
+      "cacheWriteTokens": 0,
+      "outputTokens": 749,
+      "ms": 78900
+    },
+    "ms": 302621
+  },
+  "challengers": [
+    {
+      "key": "challenger-1",
+      "defect": "The plain-object lookup incorrectly drops tags such as \"constructor\" and \"__proto__\" because inherited properties are mistaken for previously seen tags.",
+      "diff": "diff --git a/src/tags.js b/src/tags.js\nindex b3f185c..4d94488 100644\n--- a/src/tags.js\n+++ b/src/tags.js\n@@ -1,4 +1,15 @@\n-/** Returns `tags` without duplicates, each tag at its first position. Runs in linear time. */\n+/** Returns `tags` without duplicates, ignoring letter case and keeping each tag's first spelling and position. Runs in linear time. */\n export function uniqueTags(tags) {\n-\treturn [...new Set(tags)];\n+\tconst seen = {};\n+\tconst result = [];\n+\n+\tfor (const tag of tags) {\n+\t\tconst key = tag.toLowerCase();\n+\t\tif (!seen[key]) {\n+\t\t\tseen[key] = true;\n+\t\t\tresult.push(tag);\n+\t\t}\n+\t}\n+\n+\treturn result;\n }\n",
+      "gap": false,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 7771,
+        "cacheReadTokens": 3200,
+        "cacheWriteTokens": 0,
+        "outputTokens": 367,
+        "ms": 31144
+      }
+    },
+    {
+      "key": "challenger-2",
+      "defect": "The plain-object lookup incorrectly drops tags such as \"constructor\" and \"__proto__\" because inherited properties are treated as already-seen tags.",
+      "diff": "diff --git a/src/tags.js b/src/tags.js\nindex b3f185c..7b785f4 100644\n--- a/src/tags.js\n+++ b/src/tags.js\n@@ -1,4 +1,15 @@\n-/** Returns `tags` without duplicates, each tag at its first position. Runs in linear time. */\n+/** Returns `tags` without case-insensitive duplicates, each tag at its first position. Runs in linear time. */\n export function uniqueTags(tags) {\n-\treturn [...new Set(tags)];\n+\tconst seen = {};\n+\tconst result = [];\n+\n+\tfor (const tag of tags) {\n+\t\tconst key = tag.toLowerCase();\n+\t\tif (!seen[key]) {\n+\t\t\tseen[key] = true;\n+\t\t\tresult.push(tag);\n+\t\t}\n+\t}\n+\n+\treturn result;\n }\n",
+      "gap": false,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 7519,
+        "cacheReadTokens": 3200,
+        "cacheWriteTokens": 0,
+        "outputTokens": 382,
+        "ms": 47756
+      }
+    }
+  ],
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Use a single forward pass with a Set of lowercase keys and a separate result array. For each tag, compute its lowercase key; if the key is unseen, record it and append the original tag. This preserves the first spelling and position without mutating the input, with expected linear time and space proportional to the number of distinct tags.",
+          "firstStep": "Inspect src/tags.js and its tests, then implement the forward-pass Set algorithm and add a regression test for the supplied mixed-case example."
+        },
+        {
+          "id": "c2",
+          "approach": "Use an insertion-ordered Map from lowercase keys to original tags. Traverse the input once and insert only when the normalized key is absent, then return the Map's values as an array. Map insertion order preserves first occurrence order, and guarding insertion preserves first spelling. This provides expected linear time without maintaining a separate output array during traversal.",
+          "firstStep": "Inspect uniqueTags in src/tags.js, then prototype a Map implementation using has() before set() and test that later case variants never overwrite the first spelling."
+        },
+        {
+          "id": "c3",
+          "approach": "Track lowercase keys in an Object.create(null) dictionary while building the result in a forward loop. The null prototype avoids inherited-key collisions for tags such as \"constructor\" and \"__proto__\". This explores a plain-object membership mechanism rather than Set or Map, with expected linear time, though its performance should be benchmarked before choosing it.",
+          "firstStep": "Implement a null-prototype membership-table prototype in src/tags.js and add tests covering mixed-case duplicates and property-like tag names."
+        },
+        {
+          "id": "c4",
+          "approach": "Separate duplicate detection from output construction: make a first pass that normalizes tags, tracks seen keys, and marks first-occurrence indices in a Uint8Array; make a second pass that copies the marked original tags into the result. This remains expected linear time and preserves spelling and order, but intentionally explores a two-phase strategy with additional per-input memory and traversal overhead, making it less likely to outperform the simpler alternatives.",
+          "firstStep": "Prototype the two-pass marking implementation, then benchmark it on lists of at least 100,000 tags with both mostly unique tags and many case-variant duplicates."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 1395,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "outputTokens": 688,
+        "ms": 33541
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Change as few files as possible."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "none"
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c3",
+            "constraint": "Write a failing test that reproduces the problem before you change any source file."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 0,
+      "endSeq": 3,
+      "startCommit": "e5dc2f433ebfd6a1a956561a5dab5bba894ea692",
+      "commit": "684546e70a73afd3be0c38e25cdb1a751a01089b",
+      "selfReport": "done",
+      "learned": "A guarded Map insertion preserves first spelling and order while efficiently removing case-insensitive duplicates.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 6989,
+        "cacheReadTokens": 4608,
+        "cacheWriteTokens": 0,
+        "outputTokens": 656,
+        "runMs": 42640,
+        "scoreMs": 700
+      },
+      "gates": {
+        "case_insensitive_first_occurrence": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive_first_occurrence": {
+          "exitCode": 0,
+          "stdout": "case-insensitive first-occurrence checks passed\n",
+          "stderr": "",
+          "ms": 44
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "existing behavior checks passed\n",
+          "stderr": "",
+          "ms": 42
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "119.25099999999998\n",
+          "stderr": "",
+          "ms": 204
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "large_list_runtime_ms": 66.88329200000001,
+        "diff_size": 11
+      },
+      "objectiveOutput": {
+        "large_list_runtime_ms": {
+          "values": [
+            67.902501,
+            66.88329200000001,
+            59.110834000000004
+          ],
+          "exitCode": 0,
+          "stdout": "59.110834000000004\n",
+          "stderr": "",
+          "ms": 410
+        }
+      }
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "none",
+      "startSeq": 1,
+      "endSeq": 4,
+      "startCommit": "e5dc2f433ebfd6a1a956561a5dab5bba894ea692",
+      "commit": "4d72380620ef74b5edc9ba64b57863136c4ce7b4",
+      "selfReport": "done",
+      "learned": "The two-pass marking approach preserves first spelling and order while remaining comfortably below one second for the tested million-tag inputs.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 10901,
+        "cacheReadTokens": 2176,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1278,
+        "runMs": 59259,
+        "scoreMs": 672
+      },
+      "gates": {
+        "case_insensitive_first_occurrence": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive_first_occurrence": {
+          "exitCode": 0,
+          "stdout": "case-insensitive first-occurrence checks passed\n",
+          "stderr": "",
+          "ms": 46
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "existing behavior checks passed\n",
+          "stderr": "",
+          "ms": 40
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "103.45445799999999\n",
+          "stderr": "",
+          "ms": 190
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "large_list_runtime_ms": 55.22949999999998,
+        "diff_size": 40
+      },
+      "objectiveOutput": {
+        "large_list_runtime_ms": {
+          "values": [
+            53.091167000000006,
+            57.745124000000004,
+            55.22949999999998
+          ],
+          "exitCode": 0,
+          "stdout": "55.22949999999998\n",
+          "stderr": "",
+          "ms": 396
+        }
+      }
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c3",
+      "constraint": "Write a failing test that reproduces the problem before you change any source file.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "e5dc2f433ebfd6a1a956561a5dab5bba894ea692",
+      "commit": "2f9ac1a433a22f4badd0d28728ca1e52a7a6e07b",
+      "selfReport": "done",
+      "learned": "A null-prototype membership dictionary handles property-like names safely and provides case-insensitive deduplication comfortably within the performance requirement.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 16582,
+        "cacheReadTokens": 8320,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1132,
+        "runMs": 92807,
+        "scoreMs": 712
+      },
+      "gates": {
+        "case_insensitive_first_occurrence": "pass",
+        "preserve_existing_behavior": "pass",
+        "large_list_performance": "pass"
+      },
+      "gateOutput": {
+        "case_insensitive_first_occurrence": {
+          "exitCode": 0,
+          "stdout": "case-insensitive first-occurrence checks passed\n",
+          "stderr": "",
+          "ms": 42
+        },
+        "preserve_existing_behavior": {
+          "exitCode": 0,
+          "stdout": "existing behavior checks passed\n",
+          "stderr": "",
+          "ms": 40
+        },
+        "large_list_performance": {
+          "exitCode": 0,
+          "stdout": "128.924999\n",
+          "stderr": "",
+          "ms": 209
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "large_list_runtime_ms": 70.47179200000001,
+        "diff_size": 33
+      },
+      "objectiveOutput": {
+        "large_list_runtime_ms": {
+          "values": [
+            70.47179200000001,
+            70.683042,
+            65.515832
+          ],
+          "exitCode": 0,
+          "stdout": "65.515832\n",
+          "stderr": "",
+          "ms": 421
+        }
+      }
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+    },
+    {
+      "phase": "after g0",
+      "tree": "01069a7ca60062debe90405e65faad2126bafe1f"
+    }
+  ],
+  "winner": "r1",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "01069a7ca60062debe90405e65faad2126bafe1f"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

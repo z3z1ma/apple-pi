@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal": "Make the public slugify function transliterate accented Latin letters, stroked Latin letters, and Latin ligatures to their usual ASCII spellings, including decomposed combining accents, while preserving existing separator, casing, digit, and non-Latin-script behavior.",
+  "files": [
+    {
+      "path": "acceptance/slugify-checks.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\n\nif (mode === 'decomposition') {\n  check('Crème Brûlée', 'creme-brulee');\n  check('ÀÁÂÃÄÅ Ç ÈÉÊË ÌÍÎÏ Ñ ÒÓÔÕÖ ÙÚÛÜ ÝŸ', 'aaaaaa-c-eeee-iiii-n-ooooo-uuuu-yy');\n  check('Việt Nam — Tiếng Việt', 'viet-nam-tieng-viet');\n  // Exhaustively cover Latin letters whose canonical decomposition is an\n  // ASCII letter plus one or more accents, rather than a selected language.\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const letter = String.fromCodePoint(cp);\n    if (!/^\\p{Script=Latin}$/u.test(letter) || !/^\\p{L}$/u.test(letter)) continue;\n    const decomposed = letter.normalize('NFD');\n    if (/^[A-Za-z]\\p{M}+$/u.test(decomposed)) {\n      check(letter, decomposed[0].toLowerCase());\n      check('X' + letter + 'Y', 'x' + decomposed[0].toLowerCase() + 'y');\n    }\n  }\n} else if (mode === 'exceptions') {\n  const pairs = [\n    ['Łł', 'll'], ['Øø', 'oo'], ['Ææ', 'aeae'], ['Œœ', 'oeoe'],\n    ['ẞß', 'ssss'], ['Đđ', 'dd'], ['Ðð', 'dd'], ['Þþ', 'thth'],\n    ['Ħħ', 'hh'], ['Ŧŧ', 'tt'], ['ı', 'i'], ['Ŋŋ', 'nn'],\n    ['ſ', 's'], ['Ĳĳ', 'ijij'], ['ﬀﬁﬂﬃﬄﬅﬆ', 'fffiflffifflstst'],\n    ['ǼǽǢǣ', 'aeaeaeae'], ['Ǿǿ', 'oo'],\n  ];\n  check('Łódź', 'lodz');\n  check('smørrebrød Straße Æsir Œuvre', 'smorrebrod-strasse-aesir-oeuvre');\n  for (const [input, expected] of pairs) {\n    check(input, expected);\n    check('A' + input + 'Z', 'a' + expected + 'z');\n    check('  ' + input + ' / ' + input + '  ', expected + '-' + expected);\n  }\n} else if (mode === 'combining') {\n  const pairs = [\n    ['Cre\\u0300me Bru\\u0302le\\u0301e', 'creme-brulee'],\n    ['Cafe\\u0301', 'cafe'], ['a\\u0308b', 'ab'],\n    ['A\\u030a\\u0301 B\\u0323\\u0307 C\\u0327', 'a-b-c'],\n    ['İstanbul', 'istanbul'], ['I\\u0307stanbul', 'istanbul'],\n    ['Ł\\u0301o\\u0301dz\\u0301', 'lodz'], ['æ\\u0301 ß\\u0308', 'ae-ss'],\n    ['e\\u0301 / e\\u0301', 'e-e'], ['é\\u0323cole', 'ecole'],\n  ];\n  for (const [input, expected] of pairs) check(input, expected);\n  for (const input of ['Crème Brûlée', 'Ångström', 'Việt Nam', 'Ǽsir', 'İstanbul']) {\n    const expected = { 'Crème Brûlée': 'creme-brulee', 'Ångström': 'angstrom', 'Việt Nam': 'viet-nam', 'Ǽsir': 'aesir', 'İstanbul': 'istanbul' }[input];\n    check(input.normalize('NFD'), expected);\n    check(input.normalize('NFC'), expected);\n  }\n} else if (mode === 'regression') {\n  for (const [input, expected] of [\n    ['Hello, World!', 'hello-world'], ['  --Release 2.0--  ', 'release-2-0'],\n    ['', ''], [' ---!? 🐱 ', ''], ['a__b...c\\nd\\te', 'a-b-c-d-e'],\n    ['ABC 0123456789', 'abc-0123456789'], ['fooBar', 'foobar'],\n    ['Привет мир', 'привет-мир'], ['Ёж ЙОД', 'ёж-йод'],\n    ['Αθήνα Ώρα', 'αθήνα-ώρα'], ['日本語 東京', '日本語-東京'],\n    ['한글 한국', '한글-한국'], ['中文', '中文'], ['ԱԲԳ', 'աբգ'],\n  ]) {\n    check(input, expected);\n  }\n  // All non-Latin Unicode letters must retain their spelling (after casing).\n  // Batches keep assertion diagnostics and memory bounded.\n  let batch = [];\n  const flush = () => {\n    if (batch.length) check(batch.join(' '), batch.join('-').toLowerCase());\n    batch = [];\n  };\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const c = String.fromCodePoint(cp);\n    if (/^\\p{L}$/u.test(c) && !/^\\p{Script=Latin}$/u.test(c)) {\n      batch.push(c);\n      if (batch.length === 512) flush();\n    }\n  }\n  flush();\n} else if (mode === 'mixed') {\n  check('Crème 東京 Łódź Αθήνα Ёж', 'creme-東京-lodz-αθήνα-ёж');\n  check('Øresund 日本語 Straße 한글', 'oresund-日本語-strasse-한글');\n} else {\n  throw new Error('Unknown check group: ' + mode);\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "latin_canonical_accents",
+      "run": "node acceptance/slugify-checks.mjs decomposition",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "latin_strokes_and_ligatures",
+      "run": "node acceptance/slugify-checks.mjs exceptions",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "latin_combining_accents",
+      "run": "node acceptance/slugify-checks.mjs combining",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_behavior_and_non_latin",
+      "run": "node acceptance/slugify-checks.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "mixed_scripts",
+      "run": "node acceptance/slugify-checks.mjs mixed",
+      "onBase": "fail",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

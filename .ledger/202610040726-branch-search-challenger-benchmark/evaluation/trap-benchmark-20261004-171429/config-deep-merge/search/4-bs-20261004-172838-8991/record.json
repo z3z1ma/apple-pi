@@ -1,0 +1,314 @@
+{
+  "id": "bs-20261004-172838-8991",
+  "mode": "human",
+  "goal": "Make `mergeConfig` in `src/config.js` merge nested plain objects key by key, at any depth: `mergeConfig({ server: { host: \"localhost\", port: 8080 } }, { server: { port: 9090 } })` returns `{ server: { host: \"localhost\", port: 9090 } }`.\n\nKeep everything that works today. An override value that is not a plain object, such as an array, `null`, a string, or a number, replaces the default value whole, as it does now: `mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] })` returns `{ tags: [\"c\"] }`. `mergeConfig` never modifies its arguments.",
+  "seedGate": null,
+  "seed": "773c4565834848c84700789b226267f621a5c547985eb5cf9e8586b187cffab3",
+  "startedAt": "2026-10-04T17:28:38.053Z",
+  "endedAt": "2026-10-04T17:39:55.315Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "ad2bf935658e74fda662dd22bdd9f11d6837e0cc",
+    "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "spec": {
+    "sha256": "e40807d98398e6fe370304c6c9bdbf74533d236f78867d47c27a6b6c414cff2c",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate recursive_plain_object_merge: fails on the base twice, as declared\ngate existing_merge_semantics: passes on the base twice, as declared",
+        "ms": 480
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 88597,
+      "cacheReadTokens": 370816,
+      "cacheWriteTokens": 0,
+      "outputTokens": 15182
+    },
+    "author": {
+      "inputTokens": 17593,
+      "cacheReadTokens": 11008,
+      "cacheWriteTokens": 0,
+      "outputTokens": 3114,
+      "ms": 130113
+    },
+    "review": null,
+    "challengers": null,
+    "ms": 677262
+  },
+  "challengers": null,
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Extend mergeConfig in src/config.js with direct recursive merging. Start each call with the existing shallow-spread result, then recursively replace entries only when both the default and override values are plain objects. Recognize Object.prototype and null prototypes as plain, excluding arrays, null, and class instances. This preserves whole-value replacement for other values and creates fresh objects along merged paths without modifying either argument.",
+          "firstStep": "Add tests for nested partial overrides, several nesting levels, arrays and null replacing defaults, and unchanged input objects before implementing the recursive branch."
+        },
+        {
+          "id": "c2",
+          "approach": "Keep mergeConfig as a thin entry point and introduce a reusable immutable object-overlay helper in a separate module. The helper copies the base object and folds the override's own enumerable properties into it, recursively combining plain-object pairs and assigning all other override values directly. Centralize plain-object detection and property handling in this helper, preserving the existing spread behavior for symbols and avoiding unsafe assignment to special keys.",
+          "firstStep": "Create a test file for the proposed overlay helper that defines plain-object detection, whole-value replacement, symbol-key handling, and nonmutation expectations."
+        },
+        {
+          "id": "c3",
+          "approach": "Implement an iterative deep merge inside src/config.js using an explicit stack of default, override, and destination object triples. Initialize destinations with shallow spreads, allocate a new destination for each matching pair of nested plain objects, and push those pairs onto the stack. Non-plain override values remain direct replacements. This avoids recursive call-stack limits while retaining immutable merging, at the cost of more bookkeeping.",
+          "firstStep": "Add a deeply nested test fixture that verifies key preservation and input nonmutation, then prototype the stack-based traversal against it."
+        },
+        {
+          "id": "c4",
+          "approach": "Delegate deep merging to a maintained dependency through a compatibility adapter in src/config.js. Evaluate a library with customizable merge rules, explicitly restricting recursive merging to plain-object pairs and configuring arrays and every other non-plain override to replace rather than concatenate or merge. Audit cloning, enumerable-key handling, and special-key behavior so the adapter preserves today's semantics; reject the library if those guarantees cannot be met.",
+          "firstStep": "Build a compatibility test matrix for the current shallow-spread semantics and the requested nested behavior, then evaluate candidate libraries against that matrix before adding a dependency."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 3333,
+        "cacheReadTokens": 1280,
+        "cacheWriteTokens": 0,
+        "outputTokens": 609,
+        "ms": 36586
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Delete or simplify existing code before you add code."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Write a failing test that reproduces the problem before you change any source file."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 0,
+      "endSeq": 4,
+      "startCommit": "ad2bf935658e74fda662dd22bdd9f11d6837e0cc",
+      "commit": "ff32fdf639e8c037fd215718dc3d71490db4338c",
+      "selfReport": "unknown",
+      "learned": "Recursive plain-object overlays can preserve spread semantics and input immutability while safely handling symbol and special keys.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 15911,
+        "cacheReadTokens": 14208,
+        "cacheWriteTokens": 0,
+        "outputTokens": 2306,
+        "runMs": 113300,
+        "scoreMs": 179
+      },
+      "gates": {
+        "recursive_plain_object_merge": "pass",
+        "existing_merge_semantics": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 0,
+          "stdout": "✔ partial overrides merge at multiple levels without changing either input (0.701709ms)\n✔ empty nested overrides preserve defaults and newly added keys survive (0.096334ms)\n✔ recursion is not limited to a few levels (0.10675ms)\n✔ null-prototype plain records merge as records (0.0985ms)\n✔ nested non-object overrides still replace whole subtrees (0.05775ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 45.634958\n",
+          "stderr": "",
+          "ms": 99
+        },
+        "existing_merge_semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merge preserves unspecified keys and accepts new keys (0.712208ms)\n✔ non-plain override values replace whole, including falsy values (1.091125ms)\n✔ a plain object override replaces a non-plain default rather than merging it (0.13275ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.072959\n",
+          "stderr": "",
+          "ms": 80
+        }
+      },
+      "gatesPassed": 2,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 114
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 1,
+      "endSeq": 3,
+      "startCommit": "ad2bf935658e74fda662dd22bdd9f11d6837e0cc",
+      "commit": "ec998ea2d5aa56d4e4a787183c227c54fbb6c278",
+      "selfReport": "unknown",
+      "learned": "Direct recursion on pairs of plain objects preserves nested defaults while retaining whole-value replacement for other values.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 10987,
+        "cacheReadTokens": 9344,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1627,
+        "runMs": 78749,
+        "scoreMs": 180
+      },
+      "gates": {
+        "recursive_plain_object_merge": "pass",
+        "existing_merge_semantics": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 0,
+          "stdout": "✔ partial overrides merge at multiple levels without changing either input (0.651834ms)\n✔ empty nested overrides preserve defaults and newly added keys survive (0.359334ms)\n✔ recursion is not limited to a few levels (0.141875ms)\n✔ null-prototype plain records merge as records (0.103167ms)\n✔ nested non-object overrides still replace whole subtrees (0.062791ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.3935\n",
+          "stderr": "",
+          "ms": 90
+        },
+        "existing_merge_semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merge preserves unspecified keys and accepts new keys (0.610125ms)\n✔ non-plain override values replace whole, including falsy values (0.94175ms)\n✔ a plain object override replaces a non-plain default rather than merging it (0.461125ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 44.564083\n",
+          "stderr": "",
+          "ms": 90
+        }
+      },
+      "gatesPassed": 2,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 82
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Write a failing test that reproduces the problem before you change any source file.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "ad2bf935658e74fda662dd22bdd9f11d6837e0cc",
+      "commit": "9801411590a5b27989357b1aee67cbe72e4c7de5",
+      "selfReport": "done",
+      "learned": "Configurable deep merging still needs an adapter to preserve spread semantics for undefined, reference identity, and special keys.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 40773,
+        "cacheReadTokens": 334976,
+        "cacheWriteTokens": 0,
+        "outputTokens": 7526,
+        "runMs": 508685,
+        "scoreMs": 175
+      },
+      "gates": {
+        "recursive_plain_object_merge": "pass",
+        "existing_merge_semantics": "pass"
+      },
+      "gateOutput": {
+        "recursive_plain_object_merge": {
+          "exitCode": 0,
+          "stdout": "✔ partial overrides merge at multiple levels without changing either input (0.969625ms)\n✔ empty nested overrides preserve defaults and newly added keys survive (0.115ms)\n✔ recursion is not limited to a few levels (0.208083ms)\n✔ null-prototype plain records merge as records (0.11025ms)\n✔ nested non-object overrides still replace whole subtrees (0.061042ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 44.657791\n",
+          "stderr": "",
+          "ms": 90
+        },
+        "existing_merge_semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merge preserves unspecified keys and accepts new keys (0.789375ms)\n✔ non-plain override values replace whole, including falsy values (0.670375ms)\n✔ a plain object override replaces a non-plain default rather than merging it (0.116208ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.797917\n",
+          "stderr": "",
+          "ms": 85
+        }
+      },
+      "gatesPassed": 2,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 232
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    },
+    {
+      "phase": "after g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    }
+  ],
+  "winner": "r1",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

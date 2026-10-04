@@ -31,7 +31,13 @@ Prior work: `.ledger/history/202610031403-branch-search/` (spec, tickets, pilot 
 
 ## Current State
 
-Tickets 01-03 committed; ticket 04 (the real run) waits for operator go-ahead.
+Tickets 01-04 done. First benchmark (2026-10-04, `evaluation/trap-benchmark-20261004-171429.md`, operator chose the `balanced` profile, openai/gpt-6.1-sol, medium): 45 of 45 runs, about $12 estimated, 91 minutes.
+
+- Solved: alone 15 of 15, search 13 of 15, search+challengers 14 of 15. Win bar not met (-7 points against +20).
+- Scorer kill rate on the known-wrong solutions: 100% in both search arms.
+- Cost: search arms about 5x the tokens and 3-4x the wall-clock of the agent alone.
+- All search misses were on slugify: two survivors passed the authored checks with nearly equal diffs, and the smaller one missed hidden cases; one search had no survivor.
+- Reading: the goals state every requirement the oracle checks, so a careful single agent solved everything; the benchmark had no headroom for search to show a gain. The smallest-diff tie-break can prefer the less complete of two survivors when the checks miss a case.
 
 - 01 `fbe4e45` (+ `586b270`): challenger pass. Decisions in review: an open gap after the repair rounds ends `aborted: scorer invalid`; the author may dismiss a claimed defect with a recorded reason; author and challenger forks write git objects to a private store; scorer-phase refs are restored except changes whose objects the shared store holds (user work). A ref deleted during the phase is recreated. Documented residuals: a fork that deliberately bypasses the private store; a user stash pushed on top of a challenger stash in the same phase leaves the challenger's entry.
 - 02 `ecebfa0` (+ `edf6af1`): traps slugify-diacritics (input coverage), config-deep-merge (regression), tags-case-dedupe (performance).

@@ -1,0 +1,377 @@
+{
+  "id": "bs-20261004-174551-0693",
+  "mode": "human",
+  "goal": "Make `slugify` in `src/slugify.js` turn Latin letters with diacritics into plain ASCII: `slugify(\"Crème Brûlée\")` returns `\"creme-brulee\"` and `slugify(\"Łódź\")` returns `\"lodz\"`.\n\nThis covers every Latin letter, not only those Unicode can split into a base letter and an accent: letters with a stroke and ligatures take their usual ASCII spelling (for example `ø` → `o`, `æ` → `ae`, `ß` → `ss`). Accents count whether the title writes them precomposed or as separate combining marks after the letter.\n\nKeep everything that works today. In particular, letters of other scripts stay exactly as they are: `slugify` keeps Cyrillic, Greek, Japanese, and every other script unchanged, apart from lower case.",
+  "seedGate": null,
+  "seed": "a998c6f1ed7ed3e69cdb0dbb6c49f4ca44ec45317230c84eb26977226fcad02a",
+  "startedAt": "2026-10-04T17:45:51.367Z",
+  "endedAt": "2026-10-04T17:58:14.650Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "34f5aac688c8253742b092ef1d56af9aaf7a2ecf",
+    "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+  },
+  "spec": {
+    "sha256": "d878f1f50d6faa7a8d715ef981e85270bada87a80bad467b261130bbecce6498",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate latin_canonical_accents: fails on the base twice, as declared\ngate latin_strokes_and_ligatures: fails on the base twice, as declared\ngate latin_combining_accents: fails on the base twice, as declared\ngate existing_behavior_and_non_latin: passes on the base twice, as declared\ngate mixed_scripts: fails on the base twice, as declared",
+        "ms": 793
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 161148,
+      "cacheReadTokens": 1133824,
+      "cacheWriteTokens": 0,
+      "outputTokens": 25922
+    },
+    "author": {
+      "inputTokens": 12275,
+      "cacheReadTokens": 10240,
+      "cacheWriteTokens": 0,
+      "outputTokens": 4110,
+      "ms": 164184
+    },
+    "review": null,
+    "challengers": null,
+    "ms": 743283
+  },
+  "challengers": null,
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Add Latin-only normalization inside slugify before the existing separator cleanup. Match Latin letters with their following combining marks, normalize only those matches, remove their accents, and apply an explicit ASCII transliteration table for letters that normalization does not handle, including ł, ø, æ, œ, and ß. Audit the table against Unicode Latin-letter coverage rather than limiting it to common European examples. Leave non-Latin characters outside normalization entirely, preserving the current lowercasing and separator behavior.",
+          "firstStep": "Add regression tests for the requested examples, decomposed Latin accents, strokes and ligatures, and unchanged Cyrillic, Greek, Japanese, and mixed-script titles."
+        },
+        {
+          "id": "c2",
+          "approach": "Generate a complete, checked-in Latin-to-ASCII mapping from versioned Unicode data plus curated transliterations. A build-time generator would resolve decomposition mappings and explicitly account for Latin letters without decompositions; runtime slugify would use simple table lookups and discard combining accents associated with Latin letters. This avoids runtime normalization and makes coverage inspectable, at the cost of maintaining a generator and a larger mapping artifact. The existing lowercase and separator pipeline would remain intact for everything else.",
+          "firstStep": "Create a generator prototype that enumerates Unicode Latin letters and reports every character without an assigned ASCII spelling, starting with a pinned Unicode version."
+        },
+        {
+          "id": "c3",
+          "approach": "Use an existing JavaScript transliteration dependency through a narrowly scoped adapter. Pass only Latin-letter sequences and their attached combining marks to the dependency, then feed the reconstructed title through the current slugify pipeline. Never transliterate an entire title, since most general-purpose libraries also convert other scripts. Choose the dependency only after verifying its coverage of non-decomposing Latin letters, decomposed accents, and less common Latin characters; supplement any gaps within the adapter.",
+          "firstStep": "Inspect the project's dependency and runtime constraints, then evaluate candidate transliteration packages against a Latin-coverage fixture and mixed-script preservation tests."
+        },
+        {
+          "id": "c4",
+          "approach": "Implement Latin folding through an ICU-backed transliteration adapter, using a Latin-to-ASCII transform restricted to Latin letters and their associated combining marks. Keep the existing JavaScript slug cleanup unchanged and preserve non-Latin portions verbatim until its normal lowercasing step. This explores a native or WebAssembly Unicode engine rather than hand-maintained JavaScript mappings, although package size, runtime compatibility, and transform coverage could make it less attractive. Audit and supplement unsupported Latin mappings instead of assuming the engine covers every letter.",
+          "firstStep": "Build an isolated ICU native or WebAssembly proof of concept and check its restricted transform on Crème Brûlée, Łódź, ø, æ, ß, decomposed accents, and mixed-script strings."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 3066,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "outputTokens": 817,
+        "ms": 38099
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "none"
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Delete or simplify existing code before you add code."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Delete or simplify existing code before you add code."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "none",
+      "startSeq": 0,
+      "endSeq": 3,
+      "startCommit": "34f5aac688c8253742b092ef1d56af9aaf7a2ecf",
+      "commit": "babeab54c2c3811563b2d11ac711aa0ca6891102",
+      "selfReport": "done",
+      "learned": "Latin-scoped normalization plus an audited transliteration table handles Unicode Latin letters without altering other scripts.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 38071,
+        "cacheReadTokens": 196224,
+        "cacheWriteTokens": 0,
+        "outputTokens": 4457,
+        "runMs": 197600,
+        "scoreMs": 282
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "latin_combining_accents": "pass",
+        "existing_behavior_and_non_latin": "pass",
+        "mixed_scripts": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 71
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 47
+        },
+        "latin_combining_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 43
+        },
+        "existing_behavior_and_non_latin": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 76
+        },
+        "mixed_scripts": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 45
+        }
+      },
+      "gatesPassed": 5,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 147
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 1,
+      "endSeq": 4,
+      "startCommit": "34f5aac688c8253742b092ef1d56af9aaf7a2ecf",
+      "commit": "3ef28a78296be7b1bbaaa1fd99f599949ba12b6d",
+      "selfReport": "done",
+      "learned": "Pinned Unicode decompositions plus explicit curated spellings provide complete, inspectable Latin coverage without altering other scripts.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 37388,
+        "cacheReadTokens": 255360,
+        "cacheWriteTokens": 0,
+        "outputTokens": 6031,
+        "runMs": 258531,
+        "scoreMs": 304
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "latin_combining_accents": "pass",
+        "existing_behavior_and_non_latin": "pass",
+        "mixed_scripts": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 70
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 42
+        },
+        "latin_combining_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 43
+        },
+        "existing_behavior_and_non_latin": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 105
+        },
+        "mixed_scripts": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 44
+        }
+      },
+      "gatesPassed": 5,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 45558
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "34f5aac688c8253742b092ef1d56af9aaf7a2ecf",
+      "commit": "18612c3d42996b367153b120f1ab70d0f3eb1e66",
+      "selfReport": "done",
+      "learned": "ICU handles common Latin folding correctly, but complete coverage requires supplemental rules and an exhaustive audit.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 70348,
+        "cacheReadTokens": 672000,
+        "cacheWriteTokens": 0,
+        "outputTokens": 10507,
+        "runMs": 538493,
+        "scoreMs": 318
+      },
+      "gates": {
+        "latin_canonical_accents": "pass",
+        "latin_strokes_and_ligatures": "pass",
+        "latin_combining_accents": "pass",
+        "existing_behavior_and_non_latin": "pass",
+        "mixed_scripts": "pass"
+      },
+      "gateOutput": {
+        "latin_canonical_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 77
+        },
+        "latin_strokes_and_ligatures": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 53
+        },
+        "latin_combining_accents": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 53
+        },
+        "existing_behavior_and_non_latin": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 81
+        },
+        "mixed_scripts": {
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": "",
+          "ms": 54
+        }
+      },
+      "gatesPassed": 5,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 630
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+    },
+    {
+      "phase": "after g0",
+      "tree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+    }
+  ],
+  "winner": "r0",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "02cf0f8e0ba1ab11d8e8971485acf74ce41d6dc0"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

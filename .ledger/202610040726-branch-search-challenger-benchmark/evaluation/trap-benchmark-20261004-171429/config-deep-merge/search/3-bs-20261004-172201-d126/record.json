@@ -1,0 +1,335 @@
+{
+  "id": "bs-20261004-172201-d126",
+  "mode": "human",
+  "goal": "Make `mergeConfig` in `src/config.js` merge nested plain objects key by key, at any depth: `mergeConfig({ server: { host: \"localhost\", port: 8080 } }, { server: { port: 9090 } })` returns `{ server: { host: \"localhost\", port: 9090 } }`.\n\nKeep everything that works today. An override value that is not a plain object, such as an array, `null`, a string, or a number, replaces the default value whole, as it does now: `mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] })` returns `{ tags: [\"c\"] }`. `mergeConfig` never modifies its arguments.",
+  "seedGate": null,
+  "seed": "616e03d6883409b5698f3fdb1918031b575186de57afa8fd200172fa660b5d30",
+  "startedAt": "2026-10-04T17:22:01.407Z",
+  "endedAt": "2026-10-04T17:27:08.913Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "378bf8ef170c4f5d4f71579bbee9283f7b31e2a5",
+    "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "spec": {
+    "sha256": "6fa1c0c76f8a4bce10329393d34267120485b5e7632856202b3671df9df8873c",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate existing-tests: fails on the base twice, as declared\ngate recursive-plain-object-merge: fails on the base twice, as declared\ngate replacement-and-compatibility: passes on the base twice, as declared",
+        "ms": 476
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 63223,
+      "cacheReadTokens": 29312,
+      "cacheWriteTokens": 0,
+      "outputTokens": 10797
+    },
+    "author": {
+      "inputTokens": 15864,
+      "cacheReadTokens": 12032,
+      "cacheWriteTokens": 0,
+      "outputTokens": 3490,
+      "ms": 139626
+    },
+    "review": null,
+    "challengers": null,
+    "ms": 307506
+  },
+  "challengers": null,
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Replace the shallow spread in src/config.js with a small recursive merge. Start each level with a fresh shallow copy of the defaults, then visit the override's own enumerable keys. Recurse only when both corresponding values are plain objects; otherwise assign the override value unchanged, preserving whole-value replacement for arrays, null, primitives, and non-plain objects. Use an explicit plain-object predicate and safe property creation so the current spread behavior is preserved without mutating either input.",
+          "firstStep": "Add regression tests for nested sibling preservation, merging at several depths, whole-value replacement, and unchanged inputs, then implement the recursive helper in src/config.js."
+        },
+        {
+          "id": "c2",
+          "approach": "Implement the merge with an explicit work stack rather than recursion. Create a fresh root result using the existing spread behavior, then queue pairs of corresponding plain objects with their destination objects. For each queued pair, allocate a fresh destination and process its override keys, queuing deeper plain-object pairs and directly assigning all replacement values. This explores an iterative implementation that avoids call-stack limits on deeply nested configuration while keeping both arguments untouched.",
+          "firstStep": "Define a work-item structure containing defaults, overrides, and destination, then add a deeply nested merge test before replacing the current implementation with the stack-driven algorithm."
+        },
+        {
+          "id": "c3",
+          "approach": "Delegate merging to a well-tested immutable deep-merge utility, with src/config.js remaining a thin adapter. Configure or customize the utility so only plain objects are merged, arrays and all other override values replace wholesale, and neither argument is mutated. This trades bespoke code for a dependency, but requires checking the utility's behavior for undefined, symbols, special property names, and object prototypes against the current spread semantics.",
+          "firstStep": "Inspect package.json and the lockfile for an existing deep-merge utility, then write a small compatibility test suite to determine whether it can satisfy the required replacement and immutability rules without extensive adaptation."
+        },
+        {
+          "id": "c4",
+          "approach": "Use a two-phase copy-on-write patch strategy. First traverse the defaults and overrides to collect replacement operations, descending only where both values are plain objects. Then apply those operations to a fresh root, copying each affected ancestor object once and retaining untouched branches by reference. This separates conflict resolution from result construction and avoids recursive merge calls, although path tracking and ancestor-copy caching make it more complex than a direct merge.",
+          "firstStep": "Add a test covering several overrides sharing a nested ancestor, then prototype an operation collector that emits key-path arrays and replacement values without writing to either input."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 1695,
+        "cacheReadTokens": 1280,
+        "cacheWriteTokens": 0,
+        "outputTokens": 664,
+        "ms": 37061
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Delete or simplify existing code before you add code."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Write a failing test that reproduces the problem before you change any source file."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "none"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 0,
+      "endSeq": 5,
+      "startCommit": "378bf8ef170c4f5d4f71579bbee9283f7b31e2a5",
+      "commit": "544ab88b66103506735b919afd70cfe4c18f4540",
+      "selfReport": "done",
+      "learned": "Path-based ancestor caching keeps shared-ancestor updates efficient while correctly handling aliased default objects.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 15688,
+        "cacheReadTokens": 4864,
+        "cacheWriteTokens": 0,
+        "outputTokens": 2944,
+        "runMs": 128941,
+        "scoreMs": 176
+      },
+      "gates": {
+        "existing-tests": "pass",
+        "recursive-plain-object-merge": "pass",
+        "replacement-and-compatibility": "pass"
+      },
+      "gateOutput": {
+        "existing-tests": {
+          "exitCode": 0,
+          "stdout": "✔ an override replaces the default value (0.717917ms)\n✔ keys only in the overrides are added (0.073375ms)\n✔ nested objects merge key by key (0.068167ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.750167\n",
+          "stderr": "",
+          "ms": 96
+        },
+        "recursive-plain-object-merge": {
+          "exitCode": 0,
+          "stdout": "recursive merge checks passed\n",
+          "stderr": "",
+          "ms": 41
+        },
+        "replacement-and-compatibility": {
+          "exitCode": 0,
+          "stdout": "compatibility checks passed\n",
+          "stderr": "",
+          "ms": 39
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 169
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Write a failing test that reproduces the problem before you change any source file.",
+      "startSeq": 1,
+      "endSeq": 4,
+      "startCommit": "378bf8ef170c4f5d4f71579bbee9283f7b31e2a5",
+      "commit": "557a390e52ab3cf7b21940a82e66460ca71f6638",
+      "selfReport": "unknown",
+      "learned": "An explicit work stack merges deeply nested configuration without call-stack limits while preserving whole-value replacement behavior.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 12818,
+        "cacheReadTokens": 5376,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1904,
+        "runMs": 83212,
+        "scoreMs": 170
+      },
+      "gates": {
+        "existing-tests": "pass",
+        "recursive-plain-object-merge": "pass",
+        "replacement-and-compatibility": "pass"
+      },
+      "gateOutput": {
+        "existing-tests": {
+          "exitCode": 0,
+          "stdout": "✔ an override replaces the default value (0.547875ms)\n✔ keys only in the overrides are added (0.056375ms)\n✔ nested objects merge key by key (0.0545ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.723625\n",
+          "stderr": "",
+          "ms": 88
+        },
+        "recursive-plain-object-merge": {
+          "exitCode": 0,
+          "stdout": "recursive merge checks passed\n",
+          "stderr": "",
+          "ms": 40
+        },
+        "replacement-and-compatibility": {
+          "exitCode": 0,
+          "stdout": "compatibility checks passed\n",
+          "stderr": "",
+          "ms": 42
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 112
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "none",
+      "startSeq": 2,
+      "endSeq": 3,
+      "startCommit": "378bf8ef170c4f5d4f71579bbee9283f7b31e2a5",
+      "commit": "375ce3a15519c474b369b09744c57a280af0d96c",
+      "selfReport": "unknown",
+      "learned": "Recursive merging with fresh copies and safe data-property creation preserves nested defaults without changing whole-value replacement behavior.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 17158,
+        "cacheReadTokens": 5760,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1795,
+        "runMs": 75896,
+        "scoreMs": 169
+      },
+      "gates": {
+        "existing-tests": "pass",
+        "recursive-plain-object-merge": "pass",
+        "replacement-and-compatibility": "pass"
+      },
+      "gateOutput": {
+        "existing-tests": {
+          "exitCode": 0,
+          "stdout": "✔ an override replaces the default value (0.567041ms)\n✔ keys only in the overrides are added (0.057458ms)\n✔ nested objects merge key by key (0.053375ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.235542\n",
+          "stderr": "",
+          "ms": 86
+        },
+        "recursive-plain-object-merge": {
+          "exitCode": 0,
+          "stdout": "recursive merge checks passed\n",
+          "stderr": "",
+          "ms": 41
+        },
+        "replacement-and-compatibility": {
+          "exitCode": 0,
+          "stdout": "compatibility checks passed\n",
+          "stderr": "",
+          "ms": 42
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 98
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    },
+    {
+      "phase": "after g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    }
+  ],
+  "winner": "r2",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

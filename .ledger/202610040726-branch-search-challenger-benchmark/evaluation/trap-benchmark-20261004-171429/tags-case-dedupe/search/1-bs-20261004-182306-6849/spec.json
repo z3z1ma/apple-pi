@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags deduplicate string tags case-insensitively while preserving the first spelling and first-seen order, without mutating inputs, and retain linear-time performance for lists of 100,000 tags and more.",
+  "files": [
+    {
+      "path": "acceptance/unique-tags.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\nconst mode = process.argv[2];\nfunction check(input, expected) {\n  const before = input.slice();\n  const result = uniqueTags(input);\n  assert.ok(Array.isArray(result));\n  assert.deepEqual(result, expected);\n  assert.deepEqual(input, before, 'must not alter caller input');\n}\nfunction corpus(n) {\n  // Many distinct keys, each followed later by a differently-cased duplicate.\n  const half = Math.floor(n / 2);\n  const input = Array.from({ length: half }, (_, i) => `Tag-${i}`);\n  for (let i = half - 1; i >= 0; i--) input.push(`tAG-${i}`);\n  return input;\n}\nif (mode === 'behavior') {\n  check(['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']);\n  check(['js', 'JS', 'Node', 'node', 'NODE', 'CSS', 'css'], ['js', 'Node', 'CSS']);\n  check(['a', 'B', 'A', 'c', 'b', 'C', 'D', 'd'], ['a', 'B', 'c', 'D']);\n  check(['', '', 'x', 'X'], ['', 'x']);\n  check([' JS', 'js', 'JS ', ' js', 'Js', 'js '], [' JS', 'js', 'JS ']);\n  check(['__proto__', '__PROTO__', 'constructor', 'CONSTRUCTOR', 'toString', 'TOSTRING', 'hasOwnProperty', 'HASOWNPROPERTY'], ['__proto__', 'constructor', 'toString', 'hasOwnProperty']);\n  check(['École', 'éCOLE', 'Ä', 'ä', 'Ω', 'ω'], ['École', 'Ä', 'Ω']);\n  const input = [];\n  const expected = [];\n  for (let i = 0; i < 2500; i++) {\n    const tag = i % 2 ? `tAg-${i}` : `TAG-${i}`;\n    input.push(tag);\n    expected.push(tag);\n    if (i % 3 === 0) input.push(tag.toLowerCase(), tag.toUpperCase());\n  }\n  for (let i = 2499; i >= 0; i--) input.push(`tag-${i}`);\n  check(Object.freeze(input), expected);\n} else if (mode === 'speed' || mode === 'benchmark') {\n  for (let i = 0; i < 10; i++) uniqueTags(corpus(2000));\n  const sizes = mode === 'speed' ? [100000, 300000] : [200000];\n  let score = 0;\n  for (const n of sizes) {\n    const input = corpus(n);\n    const times = [];\n    for (let r = 0; r < 5; r++) {\n      const start = performance.now();\n      const result = uniqueTags(input);\n      times.push(performance.now() - start);\n      assert.ok(Array.isArray(result));\n    }\n    times.sort((a, b) => a - b);\n    score += times[2];\n    if (mode === 'speed') assert.ok(times[2] < 650, `${n} tags took ${times[2]} ms; expected under 650 ms`);\n  }\n  if (mode === 'benchmark') console.log(score);\n} else {\n  throw new Error('Unknown check mode');\n}\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/tags.test.js"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_seen",
+      "run": "node acceptance/unique-tags.mjs behavior",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_order_and_empty",
+      "run": "node --test --test-name-pattern='removes repeated tags|returns an empty list' test/tags.test.js",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_speed",
+      "run": "node acceptance/unique-tags.mjs speed",
+      "onBase": "pass",
+      "timeoutSec": 60
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_list_milliseconds",
+      "run": "node acceptance/unique-tags.mjs benchmark",
+      "better": "lower",
+      "timeoutSec": 60,
+      "serial": true,
+      "repeat": 5
+    }
+  ]
+}

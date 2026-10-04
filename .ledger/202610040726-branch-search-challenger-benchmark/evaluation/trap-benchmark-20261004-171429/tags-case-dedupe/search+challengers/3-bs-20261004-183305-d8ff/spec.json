@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "goal": "Make uniqueTags deduplicate string tags case-insensitively while preserving the first spelling and first-seen order, without mutating inputs, and retain linear-time performance comfortably below one second for large lists.",
+  "files": [
+    {
+      "path": "acceptance/tags-behavior.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { uniqueTags } from '../src/tags.js';\n\nconst check = (input, expected) => {\n  const snapshot = [...input];\n  const result = uniqueTags(Object.freeze(input));\n  assert.ok(Array.isArray(result));\n  assert.deepEqual(result, expected);\n  assert.deepEqual(input, snapshot, 'must not mutate the input');\n  assert.deepEqual(uniqueTags(result), expected, 'must be idempotent');\n};\n\nif (process.argv[2] === 'regression') {\n  check([], []);\n  check(['node', 'js', 'node', 'css', 'js'], ['node', 'js', 'css']);\n  check(['c', 'b', 'a', 'b', 'c', 'd'], ['c', 'b', 'a', 'd']);\n  check(['', '__proto__', 'constructor', 'toString', '', '__proto__'], ['', '__proto__', 'constructor', 'toString']);\n  check([' js', 'js', 'js ', 'j-s', 'j_s', '123'], [' js', 'js', 'js ', 'j-s', 'j_s', '123']);\n} else {\n  check(['JS', 'Node', 'js', 'NODE', 'css'], ['JS', 'Node', 'css']);\n  check(['a', 'A', 'b', 'B', 'a', 'C', 'c'], ['a', 'b', 'C']);\n  check(['CSS', 'css', 'Css', 'cSS'], ['CSS']);\n  check(['toString', 'TOSTRING', '__PROTO__', '__proto__', 'Constructor', 'constructor'], ['toString', '__PROTO__', 'Constructor']);\n  check([' js', ' JS', 'js', 'JS', 'js ', 'JS '], [' js', 'js', 'js ']);\n  // Generated varied spellings: preserve the exact first spelling and order.\n  const input = [];\n  const expected = [];\n  const seen = new Set();\n  let seed = 1729;\n  for (let i = 0; i < 20000; i++) {\n    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;\n    const id = seed % 1703;\n    const tag = (seed & 0x80000000) ? `Tag-${id}-JS` : `tag-${id}-js`;\n    input.push(tag);\n    const key = tag.toLowerCase();\n    if (!seen.has(key)) { seen.add(key); expected.push(tag); }\n  }\n  check(input, expected);\n}\n"
+    },
+    {
+      "path": "acceptance/tags-speed.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { performance } from 'node:perf_hooks';\nimport { uniqueTags } from '../src/tags.js';\n\n// Build inputs outside timed regions. Both mostly-unique and duplicate-heavy\n// lists matter: quadratic scans often look fast only with very few unique tags.\nconst distinct = Array.from({ length: 200000 }, (_, i) => `tag-${i}-JS`);\nconst mixed = Array.from({ length: 200000 }, (_, i) => i % 2 ? `TAG-${i % 50000}-JS` : `tag-${i % 50000}-js`);\nuniqueTags(distinct.slice(0, 10000));\nuniqueTags(mixed.slice(0, 10000));\nconst samples = [];\nfor (let round = 0; round < 5; round++) {\n  let total = 0;\n  for (const input of [distinct, mixed]) {\n    const start = performance.now();\n    const result = uniqueTags(input);\n    const elapsed = performance.now() - start;\n    assert.ok(Array.isArray(result));\n    if (input === distinct) {\n      assert.equal(result.length, input.length);\n      assert.equal(result[0], input[0]);\n      assert.equal(result.at(-1), input.at(-1));\n    }\n    if (process.argv[2] === 'gate') {\n      assert.ok(elapsed < 800, `200,000 tags took ${elapsed.toFixed(1)}ms; expected under 800ms`);\n    }\n    total += elapsed;\n  }\n  samples.push(total / 2);\n}\nsamples.sort((a, b) => a - b);\nconsole.log(samples[2]);\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "case_insensitive_first_spelling",
+      "run": "node acceptance/tags-behavior.mjs case",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_behavior",
+      "run": "node acceptance/tags-behavior.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "large_list_speed",
+      "run": "node acceptance/tags-speed.mjs gate",
+      "onBase": "pass",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": [
+    {
+      "id": "large_list_milliseconds",
+      "run": "node acceptance/tags-speed.mjs",
+      "better": "lower",
+      "timeoutSec": 30,
+      "serial": true,
+      "repeat": 5
+    }
+  ]
+}

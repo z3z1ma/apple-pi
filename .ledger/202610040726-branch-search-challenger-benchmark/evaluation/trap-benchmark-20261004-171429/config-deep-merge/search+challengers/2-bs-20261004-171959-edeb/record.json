@@ -1,0 +1,381 @@
+{
+  "id": "bs-20261004-171959-edeb",
+  "mode": "human",
+  "goal": "Make `mergeConfig` in `src/config.js` merge nested plain objects key by key, at any depth: `mergeConfig({ server: { host: \"localhost\", port: 8080 } }, { server: { port: 9090 } })` returns `{ server: { host: \"localhost\", port: 9090 } }`.\n\nKeep everything that works today. An override value that is not a plain object, such as an array, `null`, a string, or a number, replaces the default value whole, as it does now: `mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] })` returns `{ tags: [\"c\"] }`. `mergeConfig` never modifies its arguments.",
+  "seedGate": null,
+  "seed": "f7ced7ff3161894a839551fac79a9a3f57e66827751957ef74879c523ce10d2e",
+  "startedAt": "2026-10-04T17:19:59.566Z",
+  "endedAt": "2026-10-04T17:28:37.217Z",
+  "config": {
+    "passive": {
+      "enabled": false,
+      "repeatThreshold": 3
+    },
+    "enumerate": {
+      "count": 4
+    },
+    "branches": {
+      "perGeneration": 3,
+      "maxTotal": 6
+    },
+    "generations": {
+      "maxDepth": 1,
+      "rootsPerGeneration": 1,
+      "parentsPerGeneration": 1,
+      "childrenPerParent": 2
+    },
+    "branch": {
+      "limits": {
+        "wallClockSec": 900,
+        "outputTokens": 40000
+      }
+    },
+    "scorer": {
+      "validationRetries": 1,
+      "challengers": 2
+    },
+    "constraints": [
+      "Add no new dependencies.",
+      "Change as few files as possible.",
+      "Delete or simplify existing code before you add code.",
+      "Write a failing test that reproduces the problem before you change any source file."
+    ],
+    "workspace": {
+      "cloneIgnored": []
+    },
+    "apply": "auto",
+    "draw": "random"
+  },
+  "base": {
+    "commit": "64a4aea70b59cdf3272f37078f9fb339af4c4c4a",
+    "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "spec": {
+    "sha256": "307126fdb7ab84681e1c998090a16a8e8bc67ec8dcfb222b8a47eda70a41a22a",
+    "path": "spec.json",
+    "validation": [
+      {
+        "attempt": 0,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate existing-semantics: passes on the base twice, as declared\ngate recursive-merge: fails on the base twice, as declared",
+        "ms": 519
+      },
+      {
+        "attempt": 1,
+        "ok": true,
+        "report": "The scorer spec is valid on the base.\ngate existing-semantics: passes on the base twice, as declared\ngate recursive-merge: fails on the base twice, as declared\ngate null-prototype-merge: fails on the base twice, as declared\nchallenger-1: its wrong solution is rejected by gate null-prototype-merge\nchallenger-2: its wrong solution is rejected by gate null-prototype-merge",
+        "ms": 1363
+      }
+    ],
+    "review": null,
+    "baseValues": {}
+  },
+  "cost": {
+    "total": {
+      "inputTokens": 82715,
+      "cacheReadTokens": 72960,
+      "cacheWriteTokens": 0,
+      "outputTokens": 15046
+    },
+    "author": {
+      "inputTokens": 28862,
+      "cacheReadTokens": 37504,
+      "cacheWriteTokens": 0,
+      "outputTokens": 6224,
+      "ms": 237509
+    },
+    "review": null,
+    "challengers": {
+      "inputTokens": 15299,
+      "cacheReadTokens": 8960,
+      "cacheWriteTokens": 0,
+      "outputTokens": 1968,
+      "ms": 122184
+    },
+    "ms": 517651
+  },
+  "challengers": [
+    {
+      "key": "challenger-1",
+      "defect": "Null-prototype plain objects are incorrectly treated as non-plain values and replaced instead of recursively merged.",
+      "diff": "diff --git a/src/config.js b/src/config.js\nindex 726fdca..6e329ac 100644\n--- a/src/config.js\n+++ b/src/config.js\n@@ -1,7 +1,35 @@\n+function isPlainObject(value) {\n+\treturn value !== null && typeof value === \"object\" && Object.getPrototypeOf(value) === Object.prototype;\n+}\n+\n /**\n- * Returns the configuration `defaults` with `overrides` applied: each key of `overrides` replaces the default value.\n+ * Returns the configuration `defaults` with `overrides` applied.\n+ * Nested plain objects merge key by key; other override values replace defaults.\n  * Neither argument is modified.\n  */\n export function mergeConfig(defaults, overrides) {\n-\treturn { ...defaults, ...overrides };\n+\tconst result = { ...defaults, ...overrides };\n+\n+\tif (overrides == null) {\n+\t\treturn result;\n+\t}\n+\n+\tfor (const key of Reflect.ownKeys(Object(overrides))) {\n+\t\tif (!Object.prototype.propertyIsEnumerable.call(overrides, key)) {\n+\t\t\tcontinue;\n+\t\t}\n+\n+\t\tconst defaultValue = defaults?.[key];\n+\t\tconst overrideValue = overrides[key];\n+\t\tif (isPlainObject(defaultValue) && isPlainObject(overrideValue)) {\n+\t\t\tObject.defineProperty(result, key, {\n+\t\t\t\tvalue: mergeConfig(defaultValue, overrideValue),\n+\t\t\t\tenumerable: true,\n+\t\t\t\twritable: true,\n+\t\t\t\tconfigurable: true,\n+\t\t\t});\n+\t\t}\n+\t}\n+\n+\treturn result;\n }\ndiff --git a/test/config.test.js b/test/config.test.js\nindex 0ef0b7d..aad5dea 100644\n--- a/test/config.test.js\n+++ b/test/config.test.js\n@@ -17,3 +17,33 @@ test(\"nested objects merge key by key\", () => {\n \t\tlevel: \"info\",\n \t});\n });\n+\n+test(\"plain objects merge at multiple depths without modifying inputs\", () => {\n+\tconst defaults = Object.freeze({\n+\t\tserver: Object.freeze({\n+\t\t\thost: \"localhost\",\n+\t\t\ttls: Object.freeze({ enabled: false, port: 443 }),\n+\t\t}),\n+\t});\n+\tconst overrides = Object.freeze({\n+\t\tserver: Object.freeze({ tls: Object.freeze({ enabled: true }) }),\n+\t});\n+\tassert.deepEqual(mergeConfig(defaults, overrides), {\n+\t\tserver: { host: \"localhost\", tls: { enabled: true, port: 443 } },\n+\t});\n+});\n+\n+test(\"non-object overrides replace nested defaults whole\", () => {\n+\tfor (const value of [[\"c\"], null, \"disabled\", 0, false]) {\n+\t\tassert.deepEqual(mergeConfig({ option: { enabled: true } }, { option: value }), { option: value });\n+\t}\n+\tassert.deepEqual(mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] }), { tags: [\"c\"] });\n+});\n+\n+test(\"plain objects replace non-plain defaults\", () => {\n+\tassert.deepEqual(mergeConfig({ option: [1, 2] }, { option: { enabled: true } }), {\n+\t\toption: { enabled: true },\n+\t});\n+\tconst date = new Date(0);\n+\tassert.equal(mergeConfig({ option: { enabled: true } }, { option: date }).option, date);\n+});\n",
+      "gap": true,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 7567,
+        "cacheReadTokens": 4608,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1018,
+        "ms": 61932
+      }
+    },
+    {
+      "key": "challenger-2",
+      "defect": "Plain objects with a null prototype are treated as non-plain objects and replaced rather than recursively merged.",
+      "diff": "diff --git a/src/config.js b/src/config.js\nindex 726fdca..0beb278 100644\n--- a/src/config.js\n+++ b/src/config.js\n@@ -1,7 +1,21 @@\n+function isPlainObject(value) {\n+\treturn value !== null && typeof value === \"object\" && Object.getPrototypeOf(value) === Object.prototype;\n+}\n+\n /**\n- * Returns the configuration `defaults` with `overrides` applied: each key of `overrides` replaces the default value.\n+ * Returns the configuration `defaults` with `overrides` applied.\n+ * Nested plain objects merge key by key; other override values replace defaults.\n  * Neither argument is modified.\n  */\n export function mergeConfig(defaults, overrides) {\n-\treturn { ...defaults, ...overrides };\n+\tconst merged = { ...defaults, ...overrides };\n+\tfor (const key of Reflect.ownKeys(Object(overrides))) {\n+\t\tif (!Object.prototype.propertyIsEnumerable.call(overrides, key)) continue;\n+\t\tconst defaultValue = defaults?.[key];\n+\t\tconst overrideValue = overrides[key];\n+\t\tif (isPlainObject(defaultValue) && isPlainObject(overrideValue)) {\n+\t\t\tmerged[key] = mergeConfig(defaultValue, overrideValue);\n+\t\t}\n+\t}\n+\treturn merged;\n }\ndiff --git a/test/config.test.js b/test/config.test.js\nindex 0ef0b7d..591606d 100644\n--- a/test/config.test.js\n+++ b/test/config.test.js\n@@ -17,3 +17,28 @@ test(\"nested objects merge key by key\", () => {\n \t\tlevel: \"info\",\n \t});\n });\n+\n+test(\"plain objects merge at multiple depths without changing inputs\", () => {\n+\tconst defaults = { server: { tls: { enabled: true, port: 443 }, host: \"localhost\" } };\n+\tconst overrides = { server: { tls: { port: 8443 } } };\n+\tconst beforeDefaults = structuredClone(defaults);\n+\tconst beforeOverrides = structuredClone(overrides);\n+\tassert.deepEqual(mergeConfig(defaults, overrides), {\n+\t\tserver: { tls: { enabled: true, port: 8443 }, host: \"localhost\" },\n+\t});\n+\tassert.deepEqual(defaults, beforeDefaults);\n+\tassert.deepEqual(overrides, beforeOverrides);\n+});\n+\n+test(\"non-object overrides replace nested defaults whole\", () => {\n+\tfor (const value of [[\"c\"], null, \"disabled\", 42, false, undefined]) {\n+\t\tassert.deepEqual(mergeConfig({ option: { enabled: true } }, { option: value }), { option: value });\n+\t}\n+\tassert.deepEqual(mergeConfig({ tags: [\"a\", \"b\"] }, { tags: [\"c\"] }), { tags: [\"c\"] });\n+});\n+\n+test(\"a plain object replaces a non-object default\", () => {\n+\tassert.deepEqual(mergeConfig({ server: null }, { server: { port: 9090 } }), {\n+\t\tserver: { port: 9090 },\n+\t});\n+});\n",
+      "gap": true,
+      "caught": true,
+      "dismissed": false,
+      "dismissReason": null,
+      "cost": {
+        "inputTokens": 7732,
+        "cacheReadTokens": 4352,
+        "cacheWriteTokens": 0,
+        "outputTokens": 950,
+        "ms": 60252
+      }
+    }
+  ],
+  "enumerations": [
+    {
+      "key": "root",
+      "candidates": [
+        {
+          "id": "c1",
+          "approach": "Replace the shallow spread implementation in src/config.js with a recursive merge. Start each level with a shallow copy of its defaults, then visit the override's own enumerable keys. Recurse only when both corresponding values are plain objects; otherwise assign the override value wholesale. This preserves array, null, and scalar replacement while avoiding writes to either argument. Define plain objects explicitly, including how null-prototype objects are treated, and preserve existing spread behavior for enumerable symbol keys.",
+          "firstStep": "Add regression tests for nested key preservation, three-level merging, non-plain override replacement, and unchanged inputs before implementing a plain-object predicate and recursive merge."
+        },
+        {
+          "id": "c2",
+          "approach": "Implement the merge using an explicit work stack rather than recursion. Each work item contains a defaults object, an overrides object, and a fresh output object. Copy each level using spread semantics, then schedule another work item whenever matching values are both plain objects. Assign all other overrides directly. This explores an iterative mechanism that avoids call-stack exhaustion on deeply nested configurations, at the cost of more bookkeeping.",
+          "firstStep": "Create a deep-nesting regression test and prototype a stack-driven merge inside src/config.js, ensuring every merged level has a newly allocated destination."
+        },
+        {
+          "id": "c3",
+          "approach": "Delegate merging to a vetted deep-merge library, configuring or adapting its behavior so that recursion occurs only between plain objects and arrays, null, scalars, and other non-plain overrides replace the previous value whole. Keep mergeConfig as a small adapter and verify that the library does not mutate inputs or change existing own-enumerable-key behavior. This moves the merge machinery outside src/config.js, but introduces dependency and compatibility costs that may outweigh the benefit for such a small function.",
+          "firstStep": "Inspect package.json and the lockfile for an existing merge utility, then build compatibility tests covering its array handling, plain-object detection, symbol keys, and input immutability before selecting it."
+        },
+        {
+          "id": "c4",
+          "approach": "Keep the current shallow spread as the baseline and add a copy-on-write correction pass. First build the result with the existing expression, then inspect overlapping keys whose default and override values are both plain objects and replace only those result branches with newly merged objects. Repeat this correction at nested levels while leaving non-plain overrides and untouched branches exactly as the shallow implementation would. This emphasizes minimal behavioral change rather than replacing the whole merge algorithm.",
+          "firstStep": "Retain the current spread expression and add a test demonstrating that only overlapping plain-object branches need reconstruction, while untouched values and replacement arrays retain their existing reference behavior."
+        }
+      ],
+      "preferred": "c1",
+      "attempts": 1,
+      "cost": {
+        "inputTokens": 2975,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "outputTokens": 625,
+        "ms": 34056
+      }
+    }
+  ],
+  "steps": [
+    {
+      "seq": 0,
+      "step": {
+        "kind": "run",
+        "batch": [
+          {
+            "key": "r0",
+            "parent": null,
+            "candidate": "c1",
+            "constraint": "Add no new dependencies."
+          },
+          {
+            "key": "r1",
+            "parent": null,
+            "candidate": "c4",
+            "constraint": "Change as few files as possible."
+          },
+          {
+            "key": "r2",
+            "parent": null,
+            "candidate": "c2",
+            "constraint": "Delete or simplify existing code before you add code."
+          }
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "step": {
+        "kind": "stop",
+        "outcome": "survivor"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "key": "r0",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c1",
+      "constraint": "Add no new dependencies.",
+      "startSeq": 0,
+      "endSeq": 4,
+      "startCommit": "64a4aea70b59cdf3272f37078f9fb339af4c4c4a",
+      "commit": "9cbd3d1545f664f97cb63f41842d08b613db23d4",
+      "selfReport": "unknown",
+      "learned": "Recursive merging preserves nested defaults while data-property writes retain spread semantics for symbols and special keys.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 10878,
+        "cacheReadTokens": 13440,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1917,
+        "runMs": 100238,
+        "scoreMs": 426
+      },
+      "gates": {
+        "existing-semantics": "pass",
+        "recursive-merge": "pass",
+        "null-prototype-merge": "pass"
+      },
+      "gateOutput": {
+        "existing-semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merging, empty inputs, and explicit undefined retain existing semantics (0.782042ms)\n✔ non-plain overrides replace a default object whole (1.240917ms)\n✔ a plain object replaces a non-plain default without importing its properties (0.176875ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 58.915459\n",
+          "stderr": "",
+          "ms": 170
+        },
+        "recursive-merge": {
+          "exitCode": 0,
+          "stdout": "✔ merge recursively across siblings without modifying either input (0.739333ms)\n✔ empty nested overrides retain defaults and mixed leaf types replace whole (0.411209ms)\n✔ merging is not limited to a fixed nesting depth (0.91225ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 110.758333\n",
+          "stderr": "",
+          "ms": 164
+        },
+        "null-prototype-merge": {
+          "exitCode": 0,
+          "stdout": "✔ null-prototype plain objects merge with both ordinary and null-prototype objects (0.701166ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 44.19575\n",
+          "stderr": "",
+          "ms": 92
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 114
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r1",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c4",
+      "constraint": "Change as few files as possible.",
+      "startSeq": 1,
+      "endSeq": 3,
+      "startCommit": "64a4aea70b59cdf3272f37078f9fb339af4c4c4a",
+      "commit": "ad819f492a706e5017114857c9b017afecc3c06c",
+      "selfReport": "done",
+      "learned": "A correction pass over the shallow spread result supports nested merging while preserving reference behavior outside overlapping plain-object branches.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 12297,
+        "cacheReadTokens": 4864,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1736,
+        "runMs": 76190,
+        "scoreMs": 434
+      },
+      "gates": {
+        "existing-semantics": "pass",
+        "recursive-merge": "pass",
+        "null-prototype-merge": "pass"
+      },
+      "gateOutput": {
+        "existing-semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merging, empty inputs, and explicit undefined retain existing semantics (0.905625ms)\n✔ non-plain overrides replace a default object whole (0.969541ms)\n✔ a plain object replaces a non-plain default without importing its properties (0.219291ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 59.199708\n",
+          "stderr": "",
+          "ms": 172
+        },
+        "recursive-merge": {
+          "exitCode": 0,
+          "stdout": "✔ merge recursively across siblings without modifying either input (0.658125ms)\n✔ empty nested overrides retain defaults and mixed leaf types replace whole (0.101958ms)\n✔ merging is not limited to a fixed nesting depth (0.398708ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 114.688583\n",
+          "stderr": "",
+          "ms": 163
+        },
+        "null-prototype-merge": {
+          "exitCode": 0,
+          "stdout": "✔ null-prototype plain objects merge with both ordinary and null-prototype objects (0.691542ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 45.363625\n",
+          "stderr": "",
+          "ms": 99
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 98
+      },
+      "objectiveOutput": {}
+    },
+    {
+      "key": "r2",
+      "generation": 0,
+      "parent": null,
+      "candidate": "c2",
+      "constraint": "Delete or simplify existing code before you add code.",
+      "startSeq": 2,
+      "endSeq": 5,
+      "startCommit": "64a4aea70b59cdf3272f37078f9fb339af4c4c4a",
+      "commit": "dcad169d0435034c7302fc73791e996ff827eb5f",
+      "selfReport": "unknown",
+      "learned": "An explicit work stack merges 20,000 nested levels without call-stack exhaustion while preserving replacement behavior and input immutability.",
+      "fidelity": null,
+      "cost": {
+        "inputTokens": 12404,
+        "cacheReadTokens": 8192,
+        "cacheWriteTokens": 0,
+        "outputTokens": 2576,
+        "runMs": 179144,
+        "scoreMs": 430
+      },
+      "gates": {
+        "existing-semantics": "pass",
+        "recursive-merge": "pass",
+        "null-prototype-merge": "pass"
+      },
+      "gateOutput": {
+        "existing-semantics": {
+          "exitCode": 0,
+          "stdout": "✔ flat merging, empty inputs, and explicit undefined retain existing semantics (1.069542ms)\n✔ non-plain overrides replace a default object whole (1.572583ms)\n✔ a plain object replaces a non-plain default without importing its properties (0.179125ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 58.920208\n",
+          "stderr": "",
+          "ms": 175
+        },
+        "recursive-merge": {
+          "exitCode": 0,
+          "stdout": "✔ merge recursively across siblings without modifying either input (0.687375ms)\n✔ empty nested overrides retain defaults and mixed leaf types replace whole (0.13375ms)\n✔ merging is not limited to a fixed nesting depth (0.921083ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 110.27575\n",
+          "stderr": "",
+          "ms": 164
+        },
+        "null-prototype-merge": {
+          "exitCode": 0,
+          "stdout": "✔ null-prototype plain objects merge with both ordinary and null-prototype objects (0.82475ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 44.779333\n",
+          "stderr": "",
+          "ms": 91
+        }
+      },
+      "gatesPassed": 3,
+      "status": "survived",
+      "objectives": {
+        "diff_size": 119
+      },
+      "objectiveOutput": {}
+    }
+  ],
+  "parentTreeChecks": [
+    {
+      "phase": "before g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    },
+    {
+      "phase": "after g0",
+      "tree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+    }
+  ],
+  "winner": "r1",
+  "apply": {
+    "applied": true,
+    "workspaceTree": "5f94d86c29648267f6a2c01b6f7ffda0178edd0a"
+  },
+  "outcome": "applied",
+  "abortReason": null,
+  "cleanupErrors": []
+}

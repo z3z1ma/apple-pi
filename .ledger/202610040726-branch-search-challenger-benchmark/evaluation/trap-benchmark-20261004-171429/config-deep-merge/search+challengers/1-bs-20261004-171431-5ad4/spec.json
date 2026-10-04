@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "goal": "Make mergeConfig recursively merge nested plain objects key by key at arbitrary depth, while retaining whole-value replacement for non-plain overrides and never modifying either argument.",
+  "files": [
+    {
+      "path": "acceptance/deep-merge.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freeze(value) {\n  if (value && typeof value === 'object') {\n    for (const key of Reflect.ownKeys(value)) freeze(value[key]);\n    Object.freeze(value);\n  }\n  return value;\n}\n\nconst defaults = freeze({\n  server: { host: 'localhost', port: 8080, tls: { enabled: true, cert: { path: 'old', format: 'pem' } } },\n  logging: { level: 'info', sinks: { console: true, file: false } },\n  untouched: { value: 42 }\n});\nconst overrides = freeze({\n  server: { port: 9090, tls: { cert: { path: 'new' } } },\n  logging: { sinks: { file: true, remote: false } },\n  extra: { nested: { value: 'added' } }\n});\nconst beforeDefaults = JSON.stringify(defaults);\nconst beforeOverrides = JSON.stringify(overrides);\nassert.deepEqual(mergeConfig(defaults, overrides), {\n  server: { host: 'localhost', port: 9090, tls: { enabled: true, cert: { path: 'new', format: 'pem' } } },\n  logging: { level: 'info', sinks: { console: true, file: true, remote: false } },\n  untouched: { value: 42 },\n  extra: { nested: { value: 'added' } }\n});\nassert.equal(JSON.stringify(defaults), beforeDefaults);\nassert.equal(JSON.stringify(overrides), beforeOverrides);\nassert.deepEqual(mergeConfig({ a: { b: { c: 1 } } }, { a: {} }), { a: { b: { c: 1 } } });\nassert.deepEqual(mergeConfig({ a: { b: null, keep: 1 } }, { a: { b: { c: 2 } } }), { a: { b: { c: 2 }, keep: 1 } });\n\n// Exercise depth beyond a handful of hard-coded levels.\nlet left = { keep: 'leaf', change: 0 };\nlet right = { change: 1 };\nlet expected = { keep: 'leaf', change: 1 };\nfor (let depth = 0; depth < 40; depth++) {\n  left = { keep: depth, child: left };\n  right = { child: right };\n  expected = { keep: depth, child: expected };\n}\nassert.deepEqual(mergeConfig(freeze(left), freeze(right)), expected);\n\n// Null-prototype records are also plain configuration objects.\nconst record = Object.assign(Object.create(null), { keep: 1, change: 2 });\nconst patch = Object.assign(Object.create(null), { change: 3 });\nconst result = mergeConfig({ record }, { record: patch });\nassert.equal(result.record.keep, 1);\nassert.equal(result.record.change, 3);\nassert.equal(record.change, 2);\nassert.equal(patch.change, 3);\n"
+    },
+    {
+      "path": "acceptance/compatibility.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { mergeConfig } from '../src/config.js';\n\nassert.deepEqual(mergeConfig({ level: 'info', color: true }, { level: 'debug', file: 'app.log' }), { level: 'debug', color: true, file: 'app.log' });\nassert.deepEqual(mergeConfig({}, {}), {});\nassert.deepEqual(mergeConfig({ tags: ['a', 'b'] }, { tags: ['c'] }), { tags: ['c'] });\n\nclass Instance { constructor() { this.value = 3; } }\nconst replacements = [null, undefined, false, 0, 12, '', 'text', [9], new Date(0), /abc/, new Map([['a', 1]]), new Instance(), () => 1];\nfor (const value of replacements) {\n  const defaults = Object.freeze({ slot: Object.freeze({ keep: 1 }) });\n  const overrides = Object.freeze({ slot: value });\n  const result = mergeConfig(defaults, overrides);\n  assert.ok(Object.hasOwn(result, 'slot'));\n  assert.strictEqual(result.slot, value, 'non-plain overrides replace the value whole');\n  assert.deepEqual(defaults.slot, { keep: 1 });\n  assert.strictEqual(overrides.slot, value);\n}\n\n// A plain override must not inherit keys from a non-plain default.\nfor (const value of [null, undefined, 1, 'abc', [1, 2], new Instance()]) {\n  assert.deepEqual(mergeConfig({ slot: value }, { slot: { fresh: true } }), { slot: { fresh: true } });\n}\n\nconst shared = Object.freeze({ value: 1 });\nconst defaults = Object.freeze({ retained: shared, replaced: Object.freeze([1, 2]) });\nconst overrides = Object.freeze({ replaced: Object.freeze([3]), added: Object.freeze({ x: 1 }) });\nassert.deepEqual(mergeConfig(defaults, overrides), { retained: { value: 1 }, replaced: [3], added: { x: 1 } });\nassert.deepEqual(defaults, { retained: { value: 1 }, replaced: [1, 2] });\nassert.deepEqual(overrides, { replaced: [3], added: { x: 1 } });\n\n// Preserve spread's own-enumerable-key behavior, including explicit undefined.\nconst inherited = Object.create({ inherited: 99 });\ninherited.own = 1;\nObject.defineProperty(inherited, 'hidden', { value: 2 });\nconst symbol = Symbol('option');\nassert.deepEqual(mergeConfig(inherited, { own: undefined, [symbol]: 3 }), { own: undefined, [symbol]: 3 });\nconst special = JSON.parse('{\"__proto__\":{\"safe\":true},\"constructor\":7,\"prototype\":8}');\nconst specialResult = mergeConfig({}, special);\nassert.ok(Object.hasOwn(specialResult, '__proto__'));\nassert.deepEqual(specialResult, special);\nassert.equal(Object.getPrototypeOf(specialResult), Object.prototype);\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/config.test.js"
+  ],
+  "gates": [
+    {
+      "id": "recursive_plain_objects",
+      "run": "node acceptance/deep-merge.mjs",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "replacement_and_immutability",
+      "run": "node acceptance/compatibility.mjs",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_tests",
+      "run": "node --test test/config.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "goal": "Make slugify transliterate Latin letters with diacritics, strokes, and ligatures to their usual ASCII spelling, including decomposed accents, while preserving existing separator, lowercase, digit, and non-Latin script behavior.",
+  "files": [
+    {
+      "path": "test/acceptance-slugify.mjs",
+      "content": "import assert from 'node:assert/strict';\nimport { slugify } from '../src/slugify.js';\n\nconst mode = process.argv[2];\nconst check = (input, expected) => assert.equal(slugify(input), expected, JSON.stringify(input));\n\nif (mode === 'latin') {\n  for (const [input, expected] of [\n    ['Crème Brûlée', 'creme-brulee'], ['Łódź', 'lodz'],\n    ['  Crème, Brûlée! 2.0 ', 'creme-brulee-2-0'],\n    ['Ångström déjà vu São Tomé', 'angstrom-deja-vu-sao-tome'],\n    ['Dvořák İSTANBUL Việt Nam', 'dvorak-istanbul-viet-nam'],\n    ['Cafe\\u0301 au lait', 'cafe-au-lait'],\n    ['a\\u0308\\u0304 b\\u0327\\u0301 c\\u1ab0 d\\u1dc0 e\\ufe20', 'a-b-c-d-e'],\n    ['Ł\\u0301 æ\\u0304 ß\\u0307', 'l-ae-ss'],\n    ['Crème Ελληνικά Łódź 日本語 ø Привет', 'creme-ελληνικά-lodz-日本語-o-привет'],\n  ]) check(input, expected);\n\n  // Exercise every canonically accented Latin letter with an ASCII base,\n  // both as a precomposed code point and in decomposed spelling.\n  let covered = 0;\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const ch = String.fromCodePoint(cp);\n    if (!/\\p{L}/u.test(ch) || !/\\p{Script=Latin}/u.test(ch)) continue;\n    const decomposed = ch.normalize('NFD');\n    if (!/^[A-Za-z]\\p{M}+$/u.test(decomposed)) continue;\n    const expected = decomposed[0].toLowerCase();\n    check(ch, expected);\n    check(decomposed, expected);\n    check('x' + ch + 'y', 'x' + expected + 'y');\n    check('x' + decomposed + 'y', 'x' + expected + 'y');\n    covered++;\n  }\n  assert.ok(covered > 400, 'Unicode accent corpus must be exercised');\n} else if (mode === 'special') {\n  // Non-decomposing letters and conventional Latin ligatures.\n  const mappings = [\n    ['ø', 'o'], ['ł', 'l'], ['đ', 'd'], ['ð', 'd'], ['þ', 'th'],\n    ['æ', 'ae'], ['œ', 'oe'], ['ß', 'ss'], ['ẞ', 'ss'],\n    ['ħ', 'h'], ['ı', 'i'], ['ſ', 's'], ['ŋ', 'n'], ['ŧ', 't'],\n    ['ƒ', 'f'], ['ĳ', 'ij'],\n    ['ǽ', 'ae'], ['ǣ', 'ae'], ['ǿ', 'o'],\n    ['ﬀ', 'ff'], ['ﬁ', 'fi'], ['ﬂ', 'fl'], ['ﬃ', 'ffi'],\n    ['ﬄ', 'ffl'], ['ﬅ', 'st'], ['ﬆ', 'st'],\n  ];\n  for (const [letter, ascii] of mappings) {\n    for (const input of new Set([letter, letter.toUpperCase()])) {\n      check(input, ascii);\n      check('A' + input + 'Z', 'a' + ascii + 'z');\n      check('! ' + input + '\\u0301 ?', ascii);\n    }\n  }\n  check('smørrebrød Straße Æsir Œuvre Þingvellir', 'smorrebrod-strasse-aesir-oeuvre-thingvellir');\n} else if (mode === 'regression') {\n  for (const [input, expected] of [\n    ['', ''], ['  --___!!!  ', ''], ['Hello, World!', 'hello-world'],\n    ['  --Release 2.0--  ', 'release-2-0'], ['a_b/c\\\\d', 'a-b-c-d'],\n    ['a\\n\\tb   c', 'a-b-c'], ['a😀🚀b', 'a-b'], ['123 ٤٥६ １２３', '123-٤٥६-１２３'],\n    ['Привет мир', 'привет-мир'], ['ЙЁ йё', 'йё-йё'],\n    ['Ελληνικά ΆΈΉΊΌΎΏ ΐΰ', 'ελληνικά-άέήίόύώ-ΐΰ'],\n    ['日本語 がぎぐげご ガギグゲゴ', '日本語-がぎぐげご-ガギグゲゴ'],\n    ['한글 中文', '한글-中文'], ['Հայերեն ქართული', 'հայերեն-ქართული'],\n    ['עברית العربية', 'עברית-العربية'],\n  ]) check(input, expected);\n  // All non-Latin letters retain the old lower-case/separator behavior.\n  // In particular, canonical normalization must not rewrite other scripts.\n  const old = s => s.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');\n  let covered = 0;\n  for (let cp = 0; cp <= 0x10ffff; cp++) {\n    const ch = String.fromCodePoint(cp);\n    if (!/\\p{L}/u.test(ch) || /\\p{Script=Latin}/u.test(ch)) continue;\n    check(ch, old(ch));\n    covered++;\n  }\n  assert.ok(covered > 100000);\n} else {\n  throw new Error('Unknown acceptance mode: ' + mode);\n}\nconsole.log('Acceptance checks passed: ' + mode);\n"
+    }
+  ],
+  "protect": [
+    "package.json",
+    "test/slugify.test.js"
+  ],
+  "gates": [
+    {
+      "id": "latin_accents",
+      "run": "node test/acceptance-slugify.mjs latin",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "latin_strokes_and_ligatures",
+      "run": "node test/acceptance-slugify.mjs special",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "preserve_existing_behavior",
+      "run": "node test/acceptance-slugify.mjs regression",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "existing_tests",
+      "run": "node --test test/slugify.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}

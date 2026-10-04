@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "goal": "Make mergeConfig recursively merge nested plain objects, including null-prototype objects, key by key at any depth, while preserving whole-value replacement for non-plain values and never modifying either argument.",
+  "files": [
+    {
+      "path": "test/acceptance-regression.test.js",
+      "content": "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freeze(value) {\n  if (value && typeof value === 'object') {\n    for (const child of Object.values(value)) freeze(child);\n    Object.freeze(value);\n  }\n  return value;\n}\n\ntest('flat merging, empty inputs, and explicit undefined retain existing semantics', () => {\n  assert.deepEqual(mergeConfig({ a: 1, b: 2 }, { b: 3, c: 4 }), { a: 1, b: 3, c: 4 });\n  assert.deepEqual(mergeConfig({}, {}), {});\n  assert.deepEqual(mergeConfig({ a: 1 }, {}), { a: 1 });\n  assert.deepEqual(mergeConfig({}, { a: 1 }), { a: 1 });\n  const result = mergeConfig({ a: 1 }, { a: undefined });\n  assert.equal(Object.hasOwn(result, 'a'), true);\n  assert.equal(result.a, undefined);\n});\n\ntest('non-plain overrides replace a default object whole', () => {\n  class Box { constructor() { this.value = 7; } }\n  const values = [null, undefined, 'text', 0, false, ['c'], new Date(0), new Box()];\n  for (const value of values) {\n    const defaults = freeze({ item: { retained: 1 }, untouched: true });\n    const overrides = freeze({ item: value });\n    const result = mergeConfig(defaults, overrides);\n    assert.strictEqual(result.item, value);\n    assert.equal(result.untouched, true);\n    assert.deepEqual(defaults, { item: { retained: 1 }, untouched: true });\n    assert.strictEqual(overrides.item, value);\n  }\n  assert.deepEqual(mergeConfig({ tags: ['a', 'b'] }, { tags: ['c'] }), { tags: ['c'] });\n});\n\ntest('a plain object replaces a non-plain default without importing its properties', () => {\n  class Box { constructor() { this.old = 1; } }\n  for (const value of [null, undefined, 'abc', 3, false, ['a', 'b'], new Box()]) {\n    const defaults = freeze({ item: value });\n    const overrides = freeze({ item: { fresh: 2 } });\n    assert.deepEqual(mergeConfig(defaults, overrides), { item: { fresh: 2 } });\n    assert.strictEqual(defaults.item, value);\n    assert.deepEqual(overrides, { item: { fresh: 2 } });\n  }\n});\n"
+    },
+    {
+      "path": "test/acceptance-recursive.test.js",
+      "content": "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { mergeConfig } from '../src/config.js';\n\nfunction freeze(value) {\n  if (value && typeof value === 'object') {\n    for (const child of Object.values(value)) freeze(child);\n    Object.freeze(value);\n  }\n  return value;\n}\n\ntest('merge recursively across siblings without modifying either input', () => {\n  const defaults = freeze({\n    server: { host: 'localhost', port: 8080, tls: { enabled: false, cert: { path: 'old', mode: 420 } } },\n    client: { retries: 3, headers: { accept: 'json', auth: 'old' } },\n    level: 'info'\n  });\n  const overrides = freeze({\n    server: { port: 9090, tls: { enabled: true, cert: { path: 'new' } } },\n    client: { headers: { auth: 'new' } },\n    extra: { enabled: true }\n  });\n  const beforeDefaults = JSON.stringify(defaults);\n  const beforeOverrides = JSON.stringify(overrides);\n  assert.deepEqual(mergeConfig(defaults, overrides), {\n    server: { host: 'localhost', port: 9090, tls: { enabled: true, cert: { path: 'new', mode: 420 } } },\n    client: { retries: 3, headers: { accept: 'json', auth: 'new' } },\n    level: 'info', extra: { enabled: true }\n  });\n  assert.equal(JSON.stringify(defaults), beforeDefaults);\n  assert.equal(JSON.stringify(overrides), beforeOverrides);\n});\n\ntest('empty nested overrides retain defaults and mixed leaf types replace whole', () => {\n  const defaults = freeze({ section: { keep: { x: 1 }, tags: ['a', 'b'], disabled: { x: 1 }, text: { x: 1 }, count: { x: 1 }, unset: { x: 1 } } });\n  const overrides = freeze({ section: { keep: {}, tags: ['c'], disabled: null, text: 'new', count: 0, unset: undefined, added: { x: 2 } } });\n  assert.deepEqual(mergeConfig(defaults, overrides), {\n    section: { keep: { x: 1 }, tags: ['c'], disabled: null, text: 'new', count: 0, unset: undefined, added: { x: 2 } }\n  });\n});\n\ntest('merging is not limited to a fixed nesting depth', () => {\n  let defaults = { retained: 1, changed: 2 };\n  let overrides = { changed: 3, added: 4 };\n  let expected = { retained: 1, changed: 3, added: 4 };\n  for (let i = 0; i < 40; i++) {\n    defaults = { branch: defaults, sibling: i };\n    overrides = { branch: overrides };\n    expected = { branch: expected, sibling: i };\n  }\n  freeze(defaults);\n  freeze(overrides);\n  assert.deepEqual(mergeConfig(defaults, overrides), expected);\n});\n"
+    },
+    {
+      "path": "test/acceptance-null-prototype.test.js",
+      "content": "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { mergeConfig } from '../src/config.js';\n\nconst dictionary = entries => Object.assign(Object.create(null), entries);\n\ntest('null-prototype plain objects merge with both ordinary and null-prototype objects', () => {\n  for (const makeDefault of [entries => ({ ...entries }), dictionary]) {\n    for (const makeOverride of [entries => ({ ...entries }), dictionary]) {\n      const leafDefault = Object.freeze(makeDefault({ retained: 1, changed: 2 }));\n      const leafOverride = Object.freeze(makeOverride({ changed: 3, added: 4 }));\n      const sectionDefault = Object.freeze(makeDefault({ leaf: leafDefault, sibling: true }));\n      const sectionOverride = Object.freeze(makeOverride({ leaf: leafOverride }));\n      const defaults = Object.freeze({ section: sectionDefault });\n      const overrides = Object.freeze({ section: sectionOverride });\n      const result = mergeConfig(defaults, overrides);\n      assert.equal(result.section.sibling, true);\n      assert.deepEqual({ ...result.section.leaf }, { retained: 1, changed: 3, added: 4 });\n      assert.deepEqual({ ...leafDefault }, { retained: 1, changed: 2 });\n      assert.deepEqual({ ...leafOverride }, { changed: 3, added: 4 });\n      assert.strictEqual(defaults.section, sectionDefault);\n      assert.strictEqual(overrides.section, sectionOverride);\n    }\n  }\n});\n"
+    }
+  ],
+  "protect": [
+    "package.json"
+  ],
+  "gates": [
+    {
+      "id": "existing-semantics",
+      "run": "node --test test/acceptance-regression.test.js",
+      "onBase": "pass",
+      "timeoutSec": 30
+    },
+    {
+      "id": "recursive-merge",
+      "run": "node --test test/acceptance-recursive.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    },
+    {
+      "id": "null-prototype-merge",
+      "run": "node --test test/acceptance-null-prototype.test.js",
+      "onBase": "fail",
+      "timeoutSec": 30
+    }
+  ],
+  "objectives": []
+}
