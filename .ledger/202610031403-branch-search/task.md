@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-03
 Updated: 2026-10-03
 
@@ -29,7 +29,10 @@ Ticket 01 criterion 9 (2026-10-03): in this project's live Anthropic session (cl
 
 Tickets: `tickets/01` to `tickets/09` (approved 2026-10-03). They replace the phase table in spec section 17. Each ticket can start when the tickets it depends on are done: 01 → 02 → 03 → 04 → {05, 06}; 02 → 07 → 08; {04, 07} → 09.
 
-Ticket 01 (forks bound to their own worktree) is implemented and reviewed in the working tree, not yet committed. Its criterion 9 still needs one live fork on the new code. Next: commit ticket 01, then ticket 02.
+Progress:
+
+- 01 committed (`ccd4f5f`). Criterion 9 still needs one live fork on the new code.
+- 02 committed. Deviations: a missing or invalid configuration returns outcome `not configured`; the scorer schema check runs before git work and returns `aborted: scorer invalid`; generation 0 is capped at `branches.maxTotal`; the report adds `Merge:` and `Reason:` lines; the record adds `cleanupErrors`. The fork's working directory follows the session's subdirectory, and the repository root keeps the session's spelling of the path. Worktree forks refuse background bash. Scorer files are refused when a symlink leads them outside the worktree, and the branch dies.
 
 ## Outcome
 
