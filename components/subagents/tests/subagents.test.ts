@@ -204,8 +204,9 @@ describe("owned subagent surface", () => {
 		const manager = new AgentManager();
 		for (const status of ["queued", "running"] as const) {
 			(manager as any).agents.set(status, { id: status, status, session: {} });
-			expect(await manager.resume(status, "second prompt")).toBeUndefined();
-			expect(await manager.resume(status, "second prompt", undefined, { isBackground: true })).toBeUndefined();
+			const busy = `Agent ${status} is still running. Steer it with steer_subagent, or resume it again once its current turn ends, instead of starting another agent on the same work.`;
+			await expect(manager.resume(status, "second prompt")).rejects.toThrow(busy);
+			await expect(manager.resume(status, "second prompt", undefined, { isBackground: true })).rejects.toThrow(busy);
 		}
 		manager.dispose();
 	});
