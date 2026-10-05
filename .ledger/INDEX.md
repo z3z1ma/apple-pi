@@ -10,7 +10,5 @@
 
 - `.ledger/202610032128-coding-child-reflections/task.md` — ready — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
 
-- `.ledger/202610040735-pi-exec-work-panel/task.md` — ready — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
-
 - `.ledger/202610041515-repository-history-replay/task.md` — planning — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
 

@@ -107,3 +107,5 @@
 - `.ledger/history/202610040726-branch-search-challenger-benchmark/task.md` — done — Branch search: adversarial scorer and trap benchmark — Add a challenger pass that attacks authored checks with plausible wrong implementations, and a fast staged-trap benchmark (agent alone vs search vs search with challengers, repeated runs) to measure whether search beats one trajectory.
 
 - `.ledger/history/202610041532-branch-search-scalar-judge/task.md` — done — Simplify branch search to a scalar-judge tool — Reduce branch search to parallel worktree attempts scored by user-supplied numeric judges (plus optional gates and an optional model judge); remove the authored scorer and its machinery (tagged branch-search-v1); move the evaluation harness to its own internal component for history replay.
+
+- `.ledger/history/202610040735-pi-exec-work-panel/task.md` — done — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
