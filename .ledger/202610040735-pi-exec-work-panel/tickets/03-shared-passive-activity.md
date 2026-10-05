@@ -4,12 +4,14 @@
 
 **Blocked by:** [01 — Inspect program invocations and host calls](01-program-inspection.md).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] With a Pi Exec script active alongside a public subagent and a managed task, the shared above-editor active-work surface presents all three kinds of work through its existing width/height behavior. Pi Exec no longer mounts a separate activity widget alongside that surface.
-- [ ] The active program's passive entry identifies the invocation and updates its observed activity/timing while host calls progress. Direct snippets and saved `program_*` executions both participate without opening or focusing the work panel automatically.
-- [ ] A program running multiple model workers contributes one program unit to passive active-work presentation, not one public-agent entry per worker. Concurrent public agents and managed tasks retain their own activity and counts.
-- [ ] On success, failure, abort, or timeout, the program leaves passive active work while its outcome and available result/trace remain inspectable in Ctrl+W. Other active agents or managed tasks remain visible; if none remain, no stale active-program entry persists.
-- [ ] Session/branch lifecycle cleanup removes passive Pi Exec activity from the old context, and delayed updates from that context cannot restore it or overwrite current activity.
-- [ ] Automated integration checks render the shared passive surface during an active script and after settlement, including mixed-domain activity, saved programs, program-level worker ownership, and absence of the duplicate widget. Relevant active-work and execution regressions, formatting/lint, typecheck, package-loading and inclusion checks have recorded outcomes, with pre-existing failures identified separately.
-- [ ] A real fullscreen Pi check demonstrates one shared passive surface during script execution, intact editor input and Ctrl+W inspection, and removal of only the program's passive activity on settlement. User-facing documentation describes Pi Exec's shared passive activity and no longer describes a separate Pi Exec widget as the current behavior.
+**Completion:** `f37f281`. Closed by operator request; the task outcome records validation results and the unresolved full-suite cancellation-test failure.
+
+- [x] With a Pi Exec script active alongside a public subagent and a managed task, the shared above-editor active-work surface presents all three kinds of work through its existing width/height behavior. Pi Exec no longer mounts a separate activity widget alongside that surface.
+- [x] The active program's passive entry identifies the invocation and updates its observed activity/timing while host calls progress. Direct snippets and saved `program_*` executions both participate without opening or focusing the work panel automatically.
+- [x] A program running multiple model workers contributes one program unit to passive active-work presentation, not one public-agent entry per worker. Concurrent public agents and managed tasks retain their own activity and counts.
+- [x] On success, failure, abort, or timeout, the program leaves passive active work while its outcome and available result/trace remain inspectable in Ctrl+W. Other active agents or managed tasks remain visible; if none remain, no stale active-program entry persists.
+- [x] Session/branch lifecycle cleanup removes passive Pi Exec activity from the old context, and delayed updates from that context cannot restore it or overwrite current activity.
+- [x] Automated integration checks render the shared passive surface during an active script and after settlement, including mixed-domain activity, saved programs, program-level worker ownership, and absence of the duplicate widget. Relevant active-work and execution regressions, formatting/lint, typecheck, package-loading and inclusion checks have recorded outcomes, with pre-existing failures identified separately.
+- [x] A real fullscreen Pi check demonstrates one shared passive surface during script execution, intact editor input and Ctrl+W inspection, and removal of only the program's passive activity on settlement. User-facing documentation describes Pi Exec's shared passive activity and no longer describes a separate Pi Exec widget as the current behavior.

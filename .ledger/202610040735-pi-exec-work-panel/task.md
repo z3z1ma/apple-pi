@@ -10,10 +10,20 @@ Add a program-first Pi Exec tab to the shared Ctrl+W work panel. Expose live hos
 
 ## Current State
 
-Specification written. The operator authorized this new task and confirmed both test seams: automated execution-to-panel integration and real fullscreen Pi through tmux.
+All three implementation tickets are committed:
 
-The existing [responsive-work-panel task](../202610030836-responsive-work-panel/task.md) remains separate. No production code or tests were changed, and no implementation checks were run in this specification step.
+- `9de7433` — program and host-call inspection in Ctrl+W.
+- `0165591` — live model-worker tool inspection.
+- `f37f281` — shared passive activity for Pi Exec, public agents, and managed tasks.
+
+The operator confirmed the automated execution-to-panel and real fullscreen Pi seams before implementation. Both seams were exercised, and independent Standards and Intent reviews were reconciled. The responsive-work-panel undertaking remains separate.
 
 ## Outcome
 
-Ready for `/skill:to-tickets`: use this task's [specification](spec.md) to create implementation tickets in this bundle. Ticket generation is the next step, not yet performed or authorized by the specification write. Implementation is not started. Acceptance requires the specified behavior to pass both confirmed seams, plus relevant regression and package checks. Program/worker steering, new cancellation controls, and debugger features are outside this inspection-first scope.
+Delivered the program-first Pi Exec tab, direct and saved-program inspection, live worker tools, retained results and traces, lifecycle cleanup, and one shared passive active-work surface. Execution ownership, disclosure boundaries, and inspection-only controls remain intact.
+
+Formatting, lint, typecheck, package checks, and focused checks passed. Fullscreen checks demonstrated active inspection, worker correlation, responsive placement, preserved editor input, and selective passive cleanup.
+
+Validation limitation at closure: the latest full suite passed 1,543 of 1,544 tests. `components/tasks/tests/tasks.test.ts` failed “terminates foreground command and throws when aborted” because it expected `Command aborted` but received `This operation was aborted`. That test passed when rerun individually; timing sensitivity is suspected, not proven. The failure was not fixed or established as pre-existing. The operator explicitly requested the final commit and task closure with this limitation recorded.
+
+Program/worker steering, new cancellation controls, and debugger features remain out of scope.
