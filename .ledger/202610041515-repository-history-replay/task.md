@@ -24,6 +24,10 @@ Acceptance criteria:
 - The archived bundle in `.ledger/history/` keeps `history.json`.
 - `docs/ledger.md` describes `history.json`; the ledger system prompt stays unchanged unless the agent needs to act on it.
 
+## Step 2: REM (spec drafted 2026-10-04)
+
+The methodology is named REM (Replay, Evaluate, Mutate), run as `/rem`. Draft spec: `spec.md`. Operator decisions: a simulated user replays the original user; the scorecard is oracle tests as the gate plus turns, corrections, cost, and convention findings; variants are model-proposed; the simulated user and proposer may send transcripts to the user's own model profiles; `/rem` is a shipped Pi command; the first ticket is a tracer bullet on one world.
+
 ## Later steps (open)
 
 Re-simulation design for AGENTS.md and skills (level 2 in `notes.md` section 5: re-run real past tasks from their base commit with a changed AGENTS.md or skill, and compare against the recorded outcome): the scorecard (the four measures in the intent), the runner (building on `components/history-eval/`), choosing histories, cost limits set by the operator, and the transfer test on fresh tasks.
