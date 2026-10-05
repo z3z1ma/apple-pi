@@ -1292,6 +1292,82 @@ Answer the task.
 		}
 	}, 30_000);
 
+	it("refuses to resume a settled teammate whose session is still streaming", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-busy-resume-"));
+		temporaryDirectories.push(cwd);
+		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".pi", "agents", "busy-test.md"),
+			`---
+name: busy-test
+description: busy resume test
+tools: read
+skills: false
+pair: false
+persist_session: false
+---
+Answer the task.
+`,
+		);
+		const faux = registerFauxProvider({ provider: "faux", models: [{ id: "busy-resume", contextWindow: 200_000 }] });
+		fauxProviders.push(faux);
+		faux.setResponses([() => fauxAssistantMessage([fauxText("BUSY-INITIAL")])]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+		const manager = new AgentManager();
+		const tool = createNestedSubagentTools({
+			manager,
+			pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+			parentAgentId: "parent",
+			depth: 1,
+			maxSubagentDepth: 2,
+			allowedSubagents: "all",
+			configCwd: cwd,
+			projectTrusted: true,
+		}).find((candidate) => candidate.name === "agent")!;
+		const ctx = {
+			cwd,
+			model,
+			modelRegistry: runtime.modelRegistry,
+			getSystemPrompt: () => "parent",
+			sessionManager: { getSessionFile: () => undefined },
+			isProjectTrusted: () => true,
+		} as any;
+		try {
+			const initial = await tool.execute(
+				"busy-launch",
+				{ prompt: "answer", description: "Busy resume test", subagent_type: "busy-test" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			const id = (initial.content[0] as { text: string }).text.match(/Agent ID: ([^\s]+)/)?.[1];
+			const record = manager.getRecord(id!)!;
+			expect(record.status).toBe("completed");
+			// A pair note or follow-up keeps the settled session streaming.
+			vi.spyOn(record.session!, "isStreaming", "get").mockReturnValue(true);
+			const prompt = vi.spyOn(record.session!, "prompt");
+
+			for (const run_in_background of [false, true]) {
+				await expect(
+					tool.execute(
+						"busy-resume",
+						{ prompt: "continue", description: "Continue", subagent_type: "busy-test", resume: id!, run_in_background },
+						undefined,
+						undefined,
+						ctx,
+					),
+				).rejects.toThrow(
+					`Agent ${id} is still running. Steer it with steer_subagent, or resume it again once its current turn ends, instead of starting another agent on the same work.`,
+				);
+			}
+			expect(prompt).not.toHaveBeenCalled();
+			expect(record).toMatchObject({ status: "completed", result: "BUSY-INITIAL" });
+		} finally {
+			manager.dispose();
+		}
+	}, 30_000);
+
 	it("keeps managed orchestrator sessions fresh and unreachable through public controls", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-managed-agent-"));
 		temporaryDirectories.push(cwd);

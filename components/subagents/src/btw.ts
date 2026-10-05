@@ -144,11 +144,11 @@ async function submitBtwQuestion(manager: AgentManager, record: AgentRecord, pro
 	if (record.status === "running" || record.status === "queued") {
 		return manager.steer(record.id, prompt, BTW_OWNER);
 	}
+	// resume throws while the settled session is still streaming; treat that as not accepted.
 	return Boolean(
-		await manager.resume(record.id, prompt, undefined, {
-			isBackground: true,
-			internalOwner: BTW_OWNER,
-		}),
+		await manager
+			.resume(record.id, prompt, undefined, { isBackground: true, internalOwner: BTW_OWNER })
+			.catch(() => undefined),
 	);
 }
 

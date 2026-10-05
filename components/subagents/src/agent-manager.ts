@@ -580,7 +580,17 @@ export class AgentManager {
 		if (!record?.session || (record.internalOwner && record.internalOwner !== options?.internalOwner)) return undefined;
 		// Aborting changes visible status immediately, but the old prompt still owns
 		// session/controller/lease state until its settlement callback completes.
-		if (record.activeInvocation || record.status === "running" || record.status === "queued") return undefined;
+		// A settled invocation's session can also keep streaming (a pair note or
+		// follow-up); prompting it would fail with Pi's raw "already processing" error.
+		if (
+			record.activeInvocation ||
+			record.status === "running" ||
+			record.status === "queued" ||
+			record.session.isStreaming
+		)
+			throw new Error(
+				`Agent ${id} is still running. Steer it with steer_subagent, or resume it again once its current turn ends, instead of starting another agent on the same work.`,
+			);
 
 		// Background resume: settle asynchronously and notify on completion exactly
 		// like a background spawn, returning immediately with the record still
