@@ -103,3 +103,7 @@
 - `.ledger/history/202610031136-subagent-resume-policy/task.md` — done — Centralize public-subagent resume policy — Deepen invocation policy for root and nested public subagents: omitted fixed settings reuse stored choices, explicit changes are rejected, and caller-owned ownership and execution remain unchanged.
 
 - `.ledger/history/202610031403-branch-search/task.md` — done — Branch search: externally drawn parallel attempts scored by hidden checks — Design and build branch search: pre-registered hidden scorer, enumerated approaches drawn by seeded RNG, forked continuations in isolated git worktrees sharing the parent cache prefix, objective selection and apply. Starts with Pi integration spikes V1-V3.
+
+- `.ledger/history/202610040726-branch-search-challenger-benchmark/task.md` — done — Branch search: adversarial scorer and trap benchmark — Add a challenger pass that attacks authored checks with plausible wrong implementations, and a fast staged-trap benchmark (agent alone vs search vs search with challengers, repeated runs) to measure whether search beats one trajectory.
+
+- `.ledger/history/202610041532-branch-search-scalar-judge/task.md` — done — Simplify branch search to a scalar-judge tool — Reduce branch search to parallel worktree attempts scored by user-supplied numeric judges (plus optional gates and an optional model judge); remove the authored scorer and its machinery (tagged branch-search-v1); move the evaluation harness to its own internal component for history replay.
