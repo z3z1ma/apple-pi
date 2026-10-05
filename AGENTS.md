@@ -122,7 +122,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 
 - The ledger is a simple project-local convention: `.ledger/` contains one open-ended directory per undertaking. The repository owner decides whether it is ignored, committed, or shared.
 - `.ledger/INDEX.md` maps live tasks; closed bundles move unchanged under `.ledger/history/`. Continue an existing task when it already owns the undertaking.
-- A new task contains only `task.md` and `retrospective.md`. Skills and operators may add any useful files or directories inside the bundle; the workflow that creates an artifact owns its format, not the ledger. Existing task bundles remain valid.
+- A new task contains only `task.md` and `retrospective.md`, plus the `history.json` session and commit pointers the ledger extension maintains there. Skills and operators may add any useful files or directories inside the bundle; the workflow that creates an artifact owns its format, not the ledger. Existing task bundles remain valid.
 - `retrospective.md` distills what mattered and lessons worth retrieving without replaying the operational record. Promote durable lessons to their real owner when appropriate.
 - `ledger_add` creates a task and index entry in `planning`. `ledger_status` moves it between `planning`, `ready`, and `in-progress`, or archives it as `done` or `cancelled` without judging completeness. Read and edit existing task files with ordinary repository tools.
 - Repository documentation and tests retain durable product authority; task-specific execution context stays in the ledger.

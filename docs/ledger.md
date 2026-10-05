@@ -24,11 +24,12 @@ Every new task has `retrospective.md`. Keep it concise: it distills what mattere
 .ledger/<task-id>/
   task.md
   retrospective.md
+  history.json
 ```
 
 It also adds a searchable live-index row. It requires a one-line title and description; an optional lowercase kebab slug overrides the title-derived slug. Existing live and archived IDs are never overwritten. Index updates are atomic and add/status transactions use a project-scoped exclusive lease.
 
-The initial files are deliberately small. `task.md` provides `Status`, `Created`, `Updated`, and intent/current-state/outcome sections. `retrospective.md` provides concise what-mattered, learnings, and improvements sections. Add anything else only when useful.
+The initial files are deliberately small. `task.md` provides `Status`, `Created`, `Updated`, and intent/current-state/outcome sections. `retrospective.md` provides concise what-mattered, learnings, and improvements sections. `history.json` is described under [History](#history). Add anything else only when useful.
 
 ## Lifecycle
 
@@ -48,6 +49,27 @@ Live index rows read `` - `.ledger/<id>/task.md` — <status> — <title> — <d
 `ledger_status` moves a live task to a new status. A live status (`planning`, `ready`, `in-progress`) updates `Status` in `task.md` and the status on the live-index row, adding it to a row that has none. `done` or `cancelled` archives the task: it updates `Status` in `task.md`, moves the complete bundle to `.ledger/history/`, removes the live-index row, and appends the history row. Archive only after edits to the bundle are written and committed; an archive issued in the same batch as those edits moves the bundle out from under them. Source, destination, task, and both indexes are validated before mutation; failures roll back or report a rollback failure. In a root session with open notebook learnings, the first `done` or `cancelled` call for a task is held once so they can be placed while the retrospective is still live (see [context](context.md)).
 
 It does not judge whether work is complete. Read and edit existing ledger files with ordinary repository tools.
+
+## History
+
+The ledger extension keeps `history.json` in each task bundle so a finished task can later be studied with the sessions and commits behind it. It holds pointers only:
+
+```json
+{
+  "sessions": [{ "id": "<Pi session id>", "linkedAt": "<ISO time>", "via": "ledger_add" }],
+  "commits": [{ "event": "in-progress", "at": "<ISO time>", "repository": ".", "commit": "<HEAD>" }]
+}
+```
+
+- **Sessions.** A Pi session is linked the first time it calls `ledger_add` or `ledger_status` for the task, or changes a file inside the task's live bundle. `via` records which (`ledger_add`, `ledger_status`, or `edit`). Each session appears once.
+  - A `write` or `edit` links through its path, resolved as those tools resolve it (`~/`, `file://`, and `@` included). The ledger is the nearest `.ledger/<task-id>/` holding the file, so a session working in a repository below a parent-directory ledger links to that ledger.
+  - A `bash` or `pi_exec` call links when, after it, a live bundle has a file added, removed, or changed (by modification time, status-change time, or size) compared with just before it. Only bundles under the session's directory and its ancestors' `.ledger/` directories are compared, and `history.json` itself is ignored.
+  - Only sessions with a session file (a persisted transcript) link. Sessions without one, such as Pi Exec workers and in-memory children, link nothing, since their IDs would point at no transcript; their status changes still record commits.
+- **Commits.** When `ledger_status` moves the task to `in-progress`, `done`, or `cancelled`, it records `HEAD` with the event and time. The ledger root is the session's directory. When that directory is inside a git repository, the entry names the repository's top level relative to the ledger root (`.` when the ledger root is the top level). Otherwise each git repository directly below the ledger root (a parent-directory ledger) gets its own entry, named by its directory; deeper repositories are not scanned, and every such repository is recorded whether or not the task touched it. A repository without commits, or a ledger outside git, records no entry; the session still links.
+
+The close entry and link are written before the bundle moves to `.ledger/history/`, so the archive keeps `history.json`. Updates are atomic and share the add/status lease. A link waits while another ledger transaction holds the lease, until it is free or the session aborts. A link that was waiting when the task closed is written into the archived bundle.
+
+Nothing is derived when it is captured: turn counts, tokens, costs, and other measures come later from the transcripts, so a better measure applies to every recorded task. Transcripts stay in the local Pi session store. A shared `.ledger/` carries only session IDs and commit hashes, not transcripts.
 
 ## Boundaries
 
