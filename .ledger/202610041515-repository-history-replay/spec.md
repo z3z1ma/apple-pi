@@ -2,7 +2,7 @@
 
 Status: draft spec (2026-10-04). Decisions come from the operator; see `notes.md` sections 9 and 10. Open points are marked **Open**.
 
-REM is how the harness improves itself in a repository. Named after the sleep phase in which the brain replays the day, and inspired by Dream-RSI (https://www.dream-rsi.com/): REM **replays** past ledger tasks with a simulated user, **evaluates** the current harness against a proposed change on a fixed scorecard, and **mutates** the harness when the change is better on that evidence and the user approves it.
+REM is how the harness (Apple Pi's agent environment: its instructions, skills, and tools as they act in a repository) improves itself in a repository. Named after the sleep phase in which the brain replays the day, and inspired by Dream-RSI (https://www.dream-rsi.com/): REM **replays** past ledger tasks with a simulated user, **evaluates** the current harness against a proposed change on a fixed scorecard, and **mutates** the harness when the change is better on that evidence and the user approves it.
 
 ## 1. Goal and acceptance criteria
 
@@ -20,6 +20,7 @@ The feature is complete when:
 
 | Term | Meaning |
 |---|---|
+| `history.json` | The pointer file the ledger extension keeps in each task bundle: linked Pi session IDs and the commits at `in-progress` and close (see the History section of `docs/ledger.md`). |
 | World | One closed ledger task that REM can replay: its goal, start and close commits, linked transcripts, and oracle tests. |
 | Oracle tests | Test files the task added or changed between its start and close commits that fail on the start commit (with their final version) and pass on the close commit. |
 | Simulated user | A model that plays the original user during a replay, from the original transcript. |
@@ -92,8 +93,10 @@ Repeated replays of the same world are summarized by medians.
 
 The first ticket extends capture: `history.json` stores the `task.md` snapshot at `in-progress`. The next is a tracer bullet that proves the premise end to end on one world: `/rem` replays one closed task with the baseline harness and the simulated user, and writes its scorecard. Later tickets add variants and evaluation, the proposer, the no-regression recommendation and adoption, and the transfer check.
 
+No world exists yet: capture began on 2026-10-04, so the first world is the next ledger task that runs from `in-progress` to `done` with capture active and adds tests. Until then the tracer bullet can be proven only with scripted models.
+
 ## 10. Out of scope for this version
 
 - Changing user-level `AGENTS.md`, package skills, prompts, or tools.
-- Policies that only react to recorded events (free offline replay, level 1).
+- Policies that only react to recorded events, which a transcript replays for free without a model ("level 1" in `notes.md` section 5).
 - Proposing several changes at once.
