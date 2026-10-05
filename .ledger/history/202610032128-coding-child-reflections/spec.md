@@ -156,12 +156,12 @@ A later TDD invocation must obtain its own fresh seam confirmation before writin
 
 ### Prior art and regression coverage
 
-- [Real SDK child-runner integration](../../components/subagents/tests/subagent-runner-e2e.test.ts): real `AgentSession`, scripted provider responses, temporary state, tool scope, and persistence.
-- [Child clarification integration](../../components/subagents/tests/subagent-clarify.test.ts): parent ownership, independent sessions, cancellation, and source-bearing context.
-- [Change-reflection behavior](../../components/change-reflection/tests/change-reflection.test.ts): tracked edits, review lenses, post-change execution evidence, primary passive forks, and suppression of repeated reflection.
-- [Learning-reflection behavior](../../components/notebook/tests/learning-reflection.test.ts): journaling, failed/surprising evidence, and the unchanged primary spacing policy.
-- [Notebook mutation behavior](../../components/notebook/tests/notebook-maintenance.test.ts) and [exact recall](../../components/notebook/tests/recall-tool.test.ts): validation, notebook authority, and sourced retrieval.
-- [Pair offline harness](../../components/pair-programmer/tests/pair.test.mjs): pair lifecycle and notebook integration without an implicit network dependency.
+- [Real SDK child-runner integration](../../../components/subagents/tests/subagent-runner-e2e.test.ts): real `AgentSession`, scripted provider responses, temporary state, tool scope, and persistence.
+- [Child clarification integration](../../../components/subagents/tests/subagent-clarify.test.ts): parent ownership, independent sessions, cancellation, and source-bearing context.
+- [Change-reflection behavior](../../../components/change-reflection/tests/change-reflection.test.ts): tracked edits, review lenses, post-change execution evidence, primary passive forks, and suppression of repeated reflection.
+- [Learning-reflection behavior](../../../components/notebook/tests/learning-reflection.test.ts): journaling, failed/surprising evidence, and the unchanged primary spacing policy.
+- [Notebook mutation behavior](../../../components/notebook/tests/notebook-maintenance.test.ts) and [exact recall](../../../components/notebook/tests/recall-tool.test.ts): validation, notebook authority, and sourced retrieval.
+- [Pair offline harness](../../../components/pair-programmer/tests/pair.test.mjs): pair lifecycle and notebook integration without an implicit network dependency.
 
 These are precedents, not permission to keep tests that assert the superseded root-only child notebook boundary. Adapt executable expectations to the intentional new contract while retaining coverage of read-only/internal sessions and excluded workers.
 
@@ -189,13 +189,13 @@ The primary/child execution split is deliberate: primary automatic work stays pa
 
 ### Governing and supporting sources
 
-- [Subagent product contract](../../docs/subagents.md): interactive-child lifecycle, pairing defaults, tool scope, ownership, resumes, and result delivery. Its current child notebook exclusion is intentionally extended by this design.
-- [Change-review product contract](../../docs/change-reflection.md): lenses, successful edit/write tracking, validation evidence, completed-run trigger, and primary passive behavior. Its root-only scope is intentionally extended for eligible interactive children.
-- [Context and notebook product contract](../../docs/context.md): learning vocabulary, primary spacing, notebook authority, exact citations, archive ownership, and append-only compaction packets. Child participation is the intentional extension specified here.
-- [Forked-continuation product contract](../../docs/forked-continuations.md): the unchanged primary mechanism and why a detached fork is not the chosen child completion mechanism.
-- [Development conventions](../../docs/development.md) and [repository operating guide](../../AGENTS.md): module ownership, runtime capability guidance, package boundaries, validation, and preservation of unrelated work.
-- [Domain language](../../.wiki/pages/domain-language.md): supporting vocabulary for primary/root sessions, interactive children, Pi Exec workers, learnings, and notebook recall. The wiki supports rather than replaces product authority.
-- [Pi request internals](../../.wiki/pages/pi-request-internals.md): supporting implementation context for projections and passive forks; not the product authority for the child design.
+- [Subagent product contract](../../../docs/subagents.md): interactive-child lifecycle, pairing defaults, tool scope, ownership, resumes, and result delivery. Its current child notebook exclusion is intentionally extended by this design.
+- [Change-review product contract](../../../docs/change-reflection.md): lenses, successful edit/write tracking, validation evidence, completed-run trigger, and primary passive behavior. Its root-only scope is intentionally extended for eligible interactive children.
+- [Context and notebook product contract](../../../docs/context.md): learning vocabulary, primary spacing, notebook authority, exact citations, archive ownership, and append-only compaction packets. Child participation is the intentional extension specified here.
+- [Forked-continuation product contract](../../../docs/forked-continuations.md): the unchanged primary mechanism and why a detached fork is not the chosen child completion mechanism.
+- [Development conventions](../../../docs/development.md) and [repository operating guide](../../../AGENTS.md): module ownership, runtime capability guidance, package boundaries, validation, and preservation of unrelated work.
+- [Domain language](../../../.wiki/pages/domain-language.md): supporting vocabulary for primary/root sessions, interactive children, Pi Exec workers, learnings, and notebook recall. The wiki supports rather than replaces product authority.
+- [Pi request internals](../../../.wiki/pages/pi-request-internals.md): supporting implementation context for projections and passive forks; not the product authority for the child design.
 
 Pi's installed boundary API and run loop were inspected during the investigation: `agent_before_settle` can append entries and request a continuation, and `session.prompt()` remains awaited through that continuation. The boundary runs again before final settlement, which requires the per-invocation guards specified above.
 

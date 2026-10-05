@@ -8,7 +8,5 @@
 
 - `.ledger/202610030909-headless-fork-reflections/task.md` — in-progress — Run passive reflections in headless forks of the conversation — Change reflection and automatic learning reflection run as headless forks of the live conversation (identical request prefix) and return one passive message, instead of continuing the run in-band.
 
-- `.ledger/202610032128-coding-child-reflections/task.md` — ready — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
-
 - `.ledger/202610041515-repository-history-replay/task.md` — in-progress — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
 

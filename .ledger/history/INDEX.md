@@ -109,3 +109,5 @@
 - `.ledger/history/202610041532-branch-search-scalar-judge/task.md` — done — Simplify branch search to a scalar-judge tool — Reduce branch search to parallel worktree attempts scored by user-supplied numeric judges (plus optional gates and an optional model judge); remove the authored scorer and its machinery (tagged branch-search-v1); move the evaluation harness to its own internal component for history replay.
 
 - `.ledger/history/202610040735-pi-exec-work-panel/task.md` — done — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
+
+- `.ledger/history/202610032128-coding-child-reflections/task.md` — done — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
