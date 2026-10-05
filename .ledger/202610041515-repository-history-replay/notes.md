@@ -81,3 +81,13 @@ The branch-search evaluation harness (`components/branch-search/eval/`) already:
 2. First policy to optimize: AGENTS.md and skill text, learning injection, review and reflection cadence, or something else? This decides level 1 or level 2.
 3. Recover session links for the ~50 closed bundles from Pi's session logs, or capture from now on only?
 4. How does this relate to the controller-evolution framing (evolving how effort is allocated)? Operator's second thread: two loops — the feature loop and a controller-improvement loop replaying completed histories; the decisive test is whether a selected policy does better on fresh work.
+
+## 10. Operator decisions (2026-10-04)
+
+- **Target: all of them.** Fewer turns to an accepted change, fewer user corrections, lower cost, and first-time adherence to conventions, measured together as one scorecard.
+- **Any repository, not only apple-pi.** Every repository has its own `.ledger/` and `.wiki/`. When a user works in a parent directory with many repositories below it, the `.ledger/` one level above applies across them, which is a good pattern too. Learning happens within Apple Pi's environment, wherever it runs.
+- **First policy to optimize: AGENTS.md and skills.** This is level 2 (paid re-simulation from history).
+- **Capture from now on.** No backfill of the ~50 closed bundles.
+- **Context ablation stays a separate task.**
+
+Before this, the same day: a live check of the simplified `search_branches` on a tiny repo (timing judge `node bench.mjs`, gate `node --test`) worked end to end in 98 s for about $0.11. The agent wrote the judge from the user's suggested measure; three distinct approaches ran, all passed, and the fastest was applied. It proved the mechanics, not the value: every approach beat the baseline by more than 100x.
