@@ -37,6 +37,25 @@ const AddLearningSchema = Type.Object(
 	{ additionalProperties: false },
 );
 type AddLearningArgs = Static<typeof AddLearningSchema>;
+/** A pair cites the source entries it was shown; it has no current user turn of its own to default to. */
+const PairAddLearningSchema = Type.Object(
+	{
+		reflections: Type.Array(
+			Type.Object(
+				{
+					content: Type.String({ minLength: 1 }),
+					sourceEntryIds: Type.Array(Type.String({ minLength: 1 }), {
+						minItems: 1,
+						description: "Source entry ids from your partner's trajectory.",
+					}),
+				},
+				{ additionalProperties: false },
+			),
+			{ minItems: 1 },
+		),
+	},
+	{ additionalProperties: false },
+);
 
 export interface SharedNotebook {
 	entries(signal?: AbortSignal): Entry[];
@@ -197,6 +216,69 @@ export function registerSharedLearningSnapshots(
 	};
 	pi.on("session_start", append);
 	pi.on("session_compact", append);
+}
+
+const CHILD_PAIR_REQUEST = "apple-pi:notebook-child-pair:request";
+
+/** What a coding child's own pair receives: shared reads and exact recall over the primary notebook. */
+export interface ChildPairNotebook {
+	tools: ToolDefinition[];
+	entries(signal?: AbortSignal): Entry[];
+}
+
+/** Offer the coding child's primary-owned capability to its pair over the child's private event bus. */
+export function offerChildPairNotebook(
+	pi: ExtensionAPI,
+	notebook: SharedNotebook,
+	origin: Pick<ChildSourceOrigin, "agentType" | "agentId">,
+	childJournal: () => SessionManager,
+): void {
+	const access: ChildPairNotebook = {
+		entries: (signal) => notebook.entries(signal),
+		tools: [
+			defineTool({
+				name: "read_notebook",
+				label: "Read shared learnings",
+				description:
+					"Read the current open learnings in the primary notebook shared by your partner's delegation tree. Follow a learning id with revisit_note for its original evidence.",
+				parameters: Type.Object({}),
+				async execute(_id, _args, signal) {
+					const reflections = foldLedger(notebook.entries(signal)).currentReflections;
+					return {
+						content: [{ type: "text", text: renderSummary(reflections) || "No open shared learnings." }],
+						details: { reflections },
+					};
+				},
+			}),
+			defineTool({
+				name: "update_notebook",
+				label: "Add shared learning",
+				description:
+					"Immediately add a learning your partner experienced but missed to the primary notebook shared by their delegation tree. Cite the [Source entry id: ...] labels from your partner's trajectory or an expanded receipt, never receipt handles. Your access is add-only: the primary and its pair curate, merge, and retire existing learnings.",
+				parameters: PairAddLearningSchema,
+				async execute(_id, args, signal) {
+					const journal = childJournal();
+					return notebook.add(
+						{ ...origin, sessionId: journal.getSessionId() },
+						journal.getBranch() as Entry[],
+						args,
+						signal,
+					);
+				},
+			}),
+		],
+	};
+	pi.events.on(CHILD_PAIR_REQUEST, (reply) => {
+		if (typeof reply === "function") (reply as (value: ChildPairNotebook) => void)(access);
+	});
+}
+
+export function getChildPairNotebook(events: EventBus): ChildPairNotebook | undefined {
+	let access: ChildPairNotebook | undefined;
+	events.emit(CHILD_PAIR_REQUEST, (value: ChildPairNotebook) => {
+		access ??= value;
+	});
+	return access;
 }
 
 export function createChildNotebookTools(

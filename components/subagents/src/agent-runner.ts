@@ -28,6 +28,7 @@ import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-searc
 import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
 import {
 	createChildNotebookTools,
+	offerChildPairNotebook,
 	registerSharedLearningSnapshots,
 	type SharedNotebook,
 } from "../../notebook/src/shared-notebook.js";
@@ -484,8 +485,15 @@ export async function runAgent(
 						{
 							name: "shared-learning-snapshots",
 							hidden: true,
-							factory: (pi: ExtensionAPI) =>
-								registerSharedLearningSnapshots(pi, sharedNotebook, () => session.sessionManager),
+							factory: (pi: ExtensionAPI) => {
+								registerSharedLearningSnapshots(pi, sharedNotebook, () => session.sessionManager);
+								offerChildPairNotebook(
+									pi,
+									sharedNotebook,
+									{ agentType: type, agentId: options.agentId },
+									() => session.sessionManager,
+								);
+							},
 						},
 					]
 				: []),

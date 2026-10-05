@@ -50,7 +50,14 @@ An accepted addition retains its cited original child evidence, child identity, 
 
 Accepted additions survive later child failure or cancellation. Each shared capability belongs to the primary session and branch that issued it. Navigation, shutdown, or a stale owner rejects later access rather than writing into another session or branch. A coding child's [completion phase](change-reflection.md#interactive-coding-children) records its learnings through the same add-only path. Child-pair contributions remain outside this access.
 
-A coding child also receives the open shared learnings automatically at two boundaries: once when its session launches, before its first request, and right after each of its compactions, manual or automatic. Each snapshot is one persisted hidden `notebook.shared-snapshot` message appended to the child's journal before the next provider request, including automatic compaction during tool execution or overflow recovery. It neither queues a later update nor starts an extra turn. It is skipped when the notebook has no open learnings. Earlier messages are never edited or reordered, and no per-request context hook rebuilds them, so ordinary requests keep their sent prefix. A resume alone is not a snapshot boundary. Between boundaries, sibling and primary additions are not broadcast into running children; `read_notebook` returns the current shared learnings on request, and `revisit_note` recovers a known learning's exact sources. The tool guidance tells the child which to use.
+A coding child receives a **snapshot**, a point-in-time copy of the primary notebook's open learnings, automatically:
+
+- At launch, before its first provider request.
+- After each successful child compaction, before the next provider request. This includes manual compaction and automatic compaction during tool execution or overflow recovery.
+
+Each snapshot is a persisted hidden `notebook.shared-snapshot` message appended to the child's journal. It starts no extra turn and is skipped when there are no open learnings. Earlier surviving messages stay unchanged and in order; ordinary requests retain their sent prefix rather than rebuild it. A resume alone adds no snapshot.
+
+Between snapshots, primary and sibling additions are not broadcast into running children. Use `read_notebook` for current shared learnings and `revisit_note` for a known learning's exact sources. The tool guidance teaches the same selection.
 
 `registerNotebookCompactionPacket` appends the typed `notebook.packet` once after each compaction and skips it when the notebook is empty. Learnings recorded between compactions reach the main context at the next compaction; the pair receives them through its reseed summary. The `notebook.*` names are persistent session-record formats, not separate actors.
 

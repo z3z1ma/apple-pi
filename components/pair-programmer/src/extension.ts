@@ -61,7 +61,7 @@ import {
 	rawTokensSinceObservationCoverage,
 } from "../../notebook/src/session-ledger/index.js";
 import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
-import { registerSharedNotebook } from "../../notebook/src/shared-notebook.js";
+import { getChildPairNotebook, registerSharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
@@ -1974,6 +1974,8 @@ export default function (pi: ExtensionAPI) {
 			return builtRuntime.stageEscalation(request);
 		});
 		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
+		// A coding child's runner offers its primary-owned notebook on the child's private event bus.
+		const sharedNotebook = rootNotebook ? undefined : getChildPairNotebook(pi.events);
 		const builtReceiptStore = ensureReceiptStore(ctx.sessionManager);
 		const builtReceiptTool = createExpandReceiptTool(builtReceiptStore);
 		const builtAttentionTool = createSetPairAttentionTool({
@@ -2014,6 +2016,7 @@ export default function (pi: ExtensionAPI) {
 				receiptTool: builtReceiptTool as never,
 				attentionTool: builtAttentionTool as never,
 				...(builtNotebookTool ? { notebookTool: builtNotebookTool as never } : {}),
+				...(sharedNotebook ? { sharedNotebook } : {}),
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,

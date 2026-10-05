@@ -21,6 +21,7 @@ import {
 	registerServerCompactionReplayHooks,
 } from "../../server-compaction/src/index.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
+import type { ChildPairNotebook } from "../../notebook/src/shared-notebook.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
@@ -106,6 +107,8 @@ export async function createPairSession(opts: {
 	receiptTool: ToolDefinition;
 	attentionTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
+	/** A coding child's pair reads and recalls the primary notebook instead of its partner's session. */
+	sharedNotebook?: ChildPairNotebook;
 	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
 	modelRuntime?: unknown;
@@ -143,14 +146,29 @@ export async function createPairSession(opts: {
 	});
 	await loader.reload();
 
-	const toolNames = [...PAIR_SESSION_TOOLS, ...(opts.notebookTool ? ["update_notebook" as const] : [])];
+	const shared = opts.sharedNotebook;
+	const sharedTools = shared?.tools ?? [];
+	const toolNames: string[] = [
+		...PAIR_SESSION_TOOLS,
+		...(opts.notebookTool ? ["update_notebook"] : []),
+		...sharedTools.map((tool) => tool.name),
+	];
 	const customTools = [
 		opts.adviseTool,
 		opts.escalateTool,
 		opts.receiptTool,
 		opts.attentionTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),
-		...bindPairRecallTools(opts.primarySessionManager),
+		...sharedTools,
+		...bindPairRecallTools(
+			shared
+				? ({
+						getBranch: () => shared.entries(),
+						getEntries: () => shared.entries(),
+						getSessionFile: () => undefined,
+					} as unknown as PrimarySessionManager)
+				: opts.primarySessionManager,
+		),
 	];
 	const { session } = await createAgentSession({
 		cwd: opts.cwd,

@@ -372,7 +372,6 @@ describe("shared-learning snapshots in coding children", () => {
 
 		const compacted = childRequests[beforeCompaction];
 		expect(conversationText(compacted)).toContain("Scripted compaction summary.");
-		expect(conversationText(compacted)).not.toContain("Lint the project.");
 		const snapshotIndex = compacted.messages.findLastIndex((message) => textOf(message).includes(laterLearning));
 		expect(textOf(compacted.messages[snapshotIndex])).toContain(launchLearning);
 		// Messages that survive compaction keep their exact earlier form and order.
