@@ -32,7 +32,7 @@ The feature is complete when:
 Built from each closed bundle under `.ledger/history/`:
 
 - **Start commit**: the `in-progress` commit entry in `history.json`; **close commit**: the `done` entry. Tasks without both, or `cancelled` tasks, are skipped.
-- **Goal**: the task's `task.md` as of the start commit.
+- **Goal**: the snapshot of `task.md` that capture stores in `history.json` when the task moves to `in-progress`. A ledger can be uncommitted, ignored, or above the repository, so the snapshot is the only reliable record of the goal at the start; capture must add it (first ticket). The simulated user's first message comes from the transcript, so the snapshot serves as context.
 - **Transcripts**: the linked sessions that still exist in the local Pi session store. A world needs the root session that started the work; children are evidence for the proposer.
 - **Oracle tests**: computed as in `components/history-eval/` (fails on start with the final test version, passes on close). A world without oracle tests is skipped.
 - Parent-directory ledgers: each commit entry names its repository; a world spans the repositories its entries name.
@@ -50,7 +50,9 @@ Built from each closed bundle under `.ledger/history/`:
    - give up when the run cannot reach the goal within the limits.
 6. The run ends on accept, give-up, or a limit. Score it (section 5).
 
-The simulated user never sees the oracle tests or the close commit. **Open:** how to keep the simulated user faithful (for example, a check that it reproduces the original run's corrections when replaying the original harness).
+The simulated user never sees the oracle tests or the close commit.
+
+Fidelity (operator decision, 2026-10-04): a replay cannot reproduce the original messages, because the model is stochastic and the new run diverges. The simulated user reads the user's side of the original transcript, infers the underlying intent, and feeds that intent back as faithfully as it can. Where the run reaches nearly the same point as the original, it may send nearly the same message; elsewhere it acts on the inferred intent. There is no calibration step in this version; the gains REM looks for are large enough to show through this noise.
 
 ## 5. Scorecard
 
@@ -75,10 +77,10 @@ Repeated replays of the same world are summarized by medians.
 
 ## 7. Surface and configuration
 
-- `/rem` is a Pi command in the shipped package, root sessions only. **Open:** subcommands (for example `run`, `status`, `adopt`) and whether a run is foreground or a managed background job.
+- `/rem` is a Pi command in the shipped package, root sessions only. It runs in the foreground until done (operator decision, 2026-10-04). **Open:** subcommands (for example `run` and `adopt`).
 - The runner moves from `components/history-eval/` into the shipped REM component.
 - Configuration (user-level with trusted project override, like other features; no built-in values): model profiles for the simulated user, proposer, and reviewer; replays per world; which worlds (all, or the most recent N); per-replay limits; a spending limit per run. The operator sets every value.
-- **Open:** where a run's report and proposed patch live (a ledger task per REM run is a natural fit).
+- A run's report, scorecards, and proposed patch live in a `.rem/` directory next to the `.ledger/` it reads (operator decision, 2026-10-04), one directory per run. As with `.ledger/`, the repository owner decides whether it is committed or ignored.
 
 ## 8. Privacy and trust
 
@@ -88,7 +90,7 @@ Repeated replays of the same world are summarized by medians.
 
 ## 9. Delivery
 
-The first ticket is a tracer bullet that proves the premise end to end on one world: `/rem` replays one closed task with the baseline harness and the simulated user, and writes its scorecard. Later tickets add variants and evaluation, the proposer, the no-regression recommendation and adoption, and the transfer check.
+The first ticket extends capture: `history.json` stores the `task.md` snapshot at `in-progress`. The next is a tracer bullet that proves the premise end to end on one world: `/rem` replays one closed task with the baseline harness and the simulated user, and writes its scorecard. Later tickets add variants and evaluation, the proposer, the no-regression recommendation and adoption, and the transfer check.
 
 ## 10. Out of scope for this version
 
