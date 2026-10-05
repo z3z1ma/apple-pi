@@ -1,5 +1,11 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { EventBus, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type {
+	EventBus,
+	ExtensionAPI,
+	ExtensionContext,
+	SessionManager,
+	ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
 import { applyNotebookUpdate, commitNotebookUpdate } from "./notebook-maintenance.js";
@@ -161,6 +167,38 @@ export function getSharedNotebook(events: EventBus): SharedNotebook | undefined 
 	return notebook;
 }
 
+export const SHARED_SNAPSHOT_CUSTOM_TYPE = "notebook.shared-snapshot";
+
+/**
+ * A coding child sees the shared learnings at launch and again right after each compaction,
+ * appended as a persisted message so later requests keep an identical prefix. Sibling additions
+ * are not broadcast; read_notebook is the fresh read between those boundaries.
+ */
+export function registerSharedLearningSnapshots(
+	pi: ExtensionAPI,
+	notebook: SharedNotebook,
+	childJournal: () => SessionManager,
+): void {
+	const append = () => {
+		const summary = renderSummary(foldLedger(notebook.entries()).currentReflections);
+		if (!summary.trim()) return;
+		// At compaction, sendMessage would defer until after the next response. Pi builds that
+		// request from this journal, so append here without queuing a steer or an extra turn.
+		childJournal().appendCustomMessageEntry(
+			SHARED_SNAPSHOT_CUSTOM_TYPE,
+			[
+				{
+					type: "text",
+					text: `## Shared learnings snapshot\n\nOpen learnings in the primary notebook at this boundary. Between snapshots, use read_notebook for current learnings.\n\n${summary}`,
+				},
+			],
+			false,
+		);
+	};
+	pi.on("session_start", append);
+	pi.on("session_compact", append);
+}
+
 export function createChildNotebookTools(
 	notebook: SharedNotebook,
 	origin: Pick<ChildSourceOrigin, "agentType" | "agentId">,
@@ -173,7 +211,7 @@ export function createChildNotebookTools(
 				"Read the current open learnings in the primary notebook shared by your delegation tree. Follow a learning id with revisit_note for original evidence. This also lists your own current-turn source ids, matched to message roles and tool call ids, for selective update_notebook citations.",
 			promptSnippet: "Read fresh shared learnings from the primary notebook.",
 			promptGuidelines: [
-				"Use read_notebook to consult shared discoveries, and revisit_note when a known learning's exact sources matter.",
+				"Open shared learnings arrive automatically as a snapshot at launch and after compaction; the snapshot does not update as others add learnings. Use read_notebook when you need the current shared learnings, and revisit_note when a known learning's exact sources matter.",
 			],
 			parameters: Type.Object({}),
 			async execute(_id, _args, signal, _update, ctx) {

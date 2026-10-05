@@ -471,7 +471,8 @@ describe("shared notebook through real interactive sessions", () => {
 				if (getCurrentSystemPrompt(context.messages).includes("Notebook coding child.")) {
 					const handoff = completionHandoff(context);
 					if (handoff) return handoff;
-					const label = JSON.stringify(context.messages.filter((message) => message.role === "user")).includes("alpha")
+					// A later child's launch snapshot can quote the sibling's learning; identify each by its task.
+					const label = context.messages.some((message) => textOf(message) === "Discover alpha's address.")
 						? "alpha"
 						: "beta";
 					const step = childSteps.get(label) ?? 0;

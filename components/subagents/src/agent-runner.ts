@@ -26,7 +26,11 @@ import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../../../extensions/rtk.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
-import { createChildNotebookTools, type SharedNotebook } from "../../notebook/src/shared-notebook.js";
+import {
+	createChildNotebookTools,
+	registerSharedLearningSnapshots,
+	type SharedNotebook,
+} from "../../notebook/src/shared-notebook.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getToolNamesForType } from "./agent-types.js";
 import { runInChildSessionContext } from "./child-context.js";
 import { registerCompletionReflection, withUnfinishedCompletionNote } from "./completion-reflection.js";
@@ -432,6 +436,15 @@ export async function runAgent(
 	// Still pass noSkills: true since we don't need the skill loader to load them again.
 	const noSkills = skills === false || Array.isArray(skills);
 
+	const disallowedSet = agentConfig?.disallowedTools ? new Set(agentConfig.disallowedTools) : undefined;
+	// Shared-notebook access follows active built-in editing capability after exclusions.
+	const sharedNotebook =
+		options.notebook &&
+		options.loadStandardChildExtensions !== false &&
+		toolNames.some((name) => (name === "edit" || name === "write") && !disallowedSet?.has(name))
+			? options.notebook
+			: undefined;
+
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(configCwd, agentDir, { projectTrusted });
 
@@ -465,6 +478,16 @@ export async function runAgent(
 			...(options.loadStandardChildExtensions !== false ? [createMcpExtension(), createToolSearchExtension()] : []),
 			...(options.completionReflection
 				? [{ name: "completion-reflection", hidden: true, factory: registerCompletionReflection }]
+				: []),
+			...(sharedNotebook
+				? [
+						{
+							name: "shared-learning-snapshots",
+							hidden: true,
+							factory: (pi: ExtensionAPI) =>
+								registerSharedLearningSnapshots(pi, sharedNotebook, () => session.sessionManager),
+						},
+					]
 				: []),
 		],
 		noSkills,
@@ -507,8 +530,6 @@ export async function runAgent(
 	const model = selectAgentModel(options.model, resolvedProfile);
 	const thinkingLevel = options.thinkingLevel ?? resolvedProfile.thinkingLevel;
 
-	const disallowedSet = agentConfig?.disallowedTools ? new Set(agentConfig.disallowedTools) : undefined;
-
 	// Nested delegation tools (opt-in, ownership-scoped). Empty unless the agent
 	// set `allowed_subagents` and a nestedRuntime was provided — and never when
 	// isolated. Their names collide with CHILD_DENIED_TOOL_NAMES by design, so
@@ -535,12 +556,9 @@ export async function runAgent(
 				})
 			: [];
 	const nestedToolNames = new Set(nestedTools.map((tool) => tool.name));
-	const notebookTools =
-		options.notebook &&
-		options.loadStandardChildExtensions !== false &&
-		toolNames.some((name) => (name === "edit" || name === "write") && !disallowedSet?.has(name))
-			? createChildNotebookTools(options.notebook, { agentType: type, agentId: options.agentId })
-			: [];
+	const notebookTools = sharedNotebook
+		? createChildNotebookTools(sharedNotebook, { agentType: type, agentId: options.agentId })
+		: [];
 	const customTools = [...nestedTools, ...(options.customTools ?? []), ...notebookTools];
 	const customToolNames = new Set(customTools.map((tool) => tool.name));
 	if (customToolNames.size !== customTools.length)
