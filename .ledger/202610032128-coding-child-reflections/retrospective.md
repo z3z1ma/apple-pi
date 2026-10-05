@@ -24,6 +24,15 @@ Real SDK/provider-request tests exposed defects that mocked boundaries or idle c
 - **Scope fork suppression to the tracked session.** AsyncLocalStorage propagates a primary fork marker into a real coding child. Suppressing every descendant tool loses that child's own edits and failed-command evidence. Identify the session whose tools the fork reuses, retaining inherited workspace/process/cancellation scope and excluding only that session's fork work.
 - **Keep offline mode explicit.** `PAIR_E2E=0` still enables the opt-in pair harness. Unset it. One reviewer accidentally selected opt-in mode, timed out before `agent_start`, and cleaned up; provider-request occurrence was unconfirmed and the attempt was excluded from proof.
 
+### Supporting implementation checks
+
+- Resolve ledger ownership from both the index and the full task record. State summaries can lag the bundle; current intent and records establish ownership.
+- Check prescribed artifact shapes mechanically. The specification required a/an actor phrasing; eight initial user stories used "As the" and needed correction before readiness.
+- Exclude `*.map` when searching installed SDK source. Source maps embed whole files on a line; inspect focused `.js` and `.d.ts` evidence instead.
+- Run typecheck alongside real-SDK runtime tests. Vitest transpilation accepted synchronous `defineTool.execute` handlers and `Promise.withResolvers`, but this repository requires async handlers and targets ES2023; use a Promise-constructor latch.
+- On this host, `mktemp` resolves to GNU coreutils. Use `mktemp /tmp/prefix.XXXXXX` and verify success before redirecting validation output.
+- A verification command consumes patch stdin. Run `git apply --check -` and application in separate calls. Check index emptiness through `git diff --cached --quiet`'s exit status rather than tool-rendered diff text. Duplicate notebook observations of this pitfall are represented by this one lesson.
+
 ## Improvements
 
 The durable owners are the native SDK integration/regression suites and the product contracts in `docs/context.md`, `docs/subagents.md`, `docs/change-reflection.md`, and `docs/pair-programmer.md`. Tests now cover immediate primary visibility, original child recall after disposal, real stale rejection, direct/nested pair authority, first-request automatic compaction snapshots, compacted/rejected prompt report retention, and fork-relative tracking.
