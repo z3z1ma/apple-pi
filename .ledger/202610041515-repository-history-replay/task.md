@@ -30,7 +30,7 @@ Re-simulation design for AGENTS.md and skills (level 2 in `notes.md` section 5: 
 
 ## Current State
 
-Step 1 settled and ready to implement. Later steps still open.
+Step 1 done (`441d97c`): the ledger extension maintains `history.json` in every bundle. Review decisions: only sessions with a session file are linked (workers and in-memory children have no transcript); bash and pi_exec edits link by detecting changed bundle files around the call (can misattribute a concurrent change by another session); the ledger root for an edit comes from the edited file's location; a waiting link has no time limit and stops on session abort; a link queued behind a close lands in the archived bundle. Histories now accumulate from this commit on. Later steps still open.
 
 ## Outcome
 
