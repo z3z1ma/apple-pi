@@ -17,6 +17,11 @@ The final commit and closure were explicitly requested despite an unresolved val
 - Passive rows need single-line display text. General text sanitization preserves intentional newlines for source/detail views, so normalize passive names and objectives locally. The row regression guards physical-line bounds.
 - Parse Git patches by complete line-start hunk headers. Splitting on an unanchored `@@ ` also matches trailing header context and can produce an invalid partial patch. Scoped documentation staging used complete hunks and preserved unrelated work.
 - A rendered worker tool is not evidence that its HTTP gate has reached the test server. Await external fixture readiness before releasing or aborting it; this avoids the races exposed by full-suite concurrency.
+- Temporary-cwd loader harnesses need absolute repository extension paths. Controlled HTTP responses need a textual Content-Type for JSON-compatible fetch results. Register cleanup before imports and handle pending execution rejections so intended-red failures do not leak state.
+- A legal 10 MiB result can wrap into enough lines to exceed JavaScript's argument limit. Append wrapped rows incrementally rather than spreading the entire array into `push`, and test the supported result-size boundary.
+- RPC can report `hasUI` while ignoring widget factories. Publish factory-based passive activity only in TUI mode; the RPC integration regression guards this distinction.
+- Program timeout/abort and worker host-call outcomes are different observations. A cancelled worker host call can report `failed` with `Agent aborted`, while the program header reports its own timeout and the child tool reports `aborted`. Assert those specific fields rather than searching the whole panel for words such as `running`, which also occur in zero-count summaries.
+- For tmux proof, separate Escape/focus changes from subsequent text and verify captured command outcomes. Legacy Enter inserted a newline in the tested keyboard mode; CSI-u Enter (`\x1b[13u`) submitted correctly. Use the negotiated protocol instead of assuming carriage return submits.
 
 ## Improvements
 
