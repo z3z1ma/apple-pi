@@ -4,9 +4,9 @@
 
 **Blocked by:** 01: Contribute and recall sourced child learnings.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A direct or nested coding child's initial provider request includes a shared-learning snapshot containing the primary notebook's existing open learnings, without requiring an explicit notebook read first.
-- [ ] After a coding child compacts, its next model context contains a fresh shared-learning snapshot that includes primary learnings added since launch, while retaining Pi's ordinary compaction behavior.
-- [ ] Between launch and compaction, a sibling's new accepted learning is available through an explicit fresh read in the running child, without an unsolicited snapshot/update being broadcast into that child's conversation for each sibling addition.
-- [ ] Adding the launch/post-compaction snapshots appends guidance at those boundaries without editing or reordering prior surviving conversation messages. Ordinary requests keep the previously sent prefix unchanged as snapshots remain in history; sharing does not install a per-request context rebuild.
+- [x] A direct or nested coding child's initial provider request includes a shared-learning snapshot containing the primary notebook's existing open learnings, without requiring an explicit notebook read first.
+- [x] After a coding child compacts, its next model context contains a fresh shared-learning snapshot that includes primary learnings added since launch, while retaining Pi's ordinary compaction behavior.
+- [x] Between launch and compaction, a sibling's new accepted learning is available through an explicit fresh read in the running child, without an unsolicited snapshot/update being broadcast into that child's conversation for each sibling addition.
+- [x] Adding the launch/post-compaction snapshots appends guidance at those boundaries without editing or reordering prior surviving conversation messages. Ordinary requests keep the previously sent prefix unchanged as snapshots remain in history; sharing does not install a per-request context rebuild.

@@ -1,6 +1,6 @@
 Status: ready
 Created: 2026-10-03
-Updated: 2026-10-03
+Updated: 2026-10-05
 
 # Add coding-child reflections and shared learning
 
@@ -21,10 +21,24 @@ Keep automatic engineering discipline when implementation is delegated to write-
 
 ## Current State
 
-Design and test seam confirmed by the operator; specification written. Implementation has not started. The confirmed seam uses real Pi SDK primary/child sessions with scripted models and temporary state, plus existing reflection/pair regression coverage. A later TDD step needs fresh seam confirmation.
+All four tickets are implemented and verified. The operator confirmed fresh real-SDK primary/child/pair seams before test changes, then confirmed the additional primary-fork → public coding-child seam found during final integration review.
 
-Next hand-off: decompose the specification with `/skill:to-tickets` if requested. The live primary-owned notebook bridge and cited-evidence retention are required implementation work, not existing child capabilities.
+Implementation commits:
+
+- `2295a97` — immediate sourced child contributions and exact archived recall.
+- `9d085dd` — one in-band pre-settle review/learning continuation per coding invocation.
+- `24e247f` — launch and post-compaction shared-learning snapshots, including automatic tool-result and overflow compaction.
+- `668b7dd`, `8f89a28` — coding-child pair read/recall, immediate add-only capture, original child evidence, and lifetime revocation.
+- `fac8937` — session-relative tracking for real coding children launched inside primary forks, preserving inherited isolation/cancellation and excluding the child's own fork work.
+
+Final independent Standards and Intent/Spec reviews covered ticket 04 and the four-ticket integration boundary. Standards found the inherited fork-marker tracking defect; root reproduced and fixed it. Intent/Spec found no material defect. Corrected affected SDK/regression suites passed 62 tests. Final validation passed formatting, lint, typecheck, all 1,422 unit tests, 118 offline pair tests, extension loading, package dry run, and cache audit. The final run explicitly unset `PAIR_E2E`.
+
+Earlier full-run failures in unrelated timing-sensitive suites passed a separate 102-test rerun. A later ledger-add expectation failed while concurrent ledger-history code was landing; that lane was preserved and its 22-test rerun and the final full validation passed.
 
 ## Outcome
 
-Specification ready for ticket decomposition. No runtime implementation or tests changed.
+Delegated coding work now completes review and learning capture before handoff, with one primary-owned notebook shared across coding children and their pairs. Original cited child evidence remains exactly recallable after ephemeral disposal or later cancellation. Primary passive reflection/curation and excluded execution contexts retain their existing responsibilities.
+
+The operator authorized commits and task closure. No push, publication, or deployment was performed. Live-provider judgment and cache performance remain unverified; scripted native SDK prefix checks and the cache audit are the available evidence. One reviewer accidentally enabled the opt-in pair RPC mode with `PAIR_E2E=0`; it timed out before `agent_start`, was cleaned up, and whether a provider request occurred was unconfirmed. A correct offline rerun passed; this attempt was not counted as validation.
+
+See [retrospective.md](retrospective.md) for lessons and evidence limits.
