@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lastNumber, rank, type Scores } from "../src/judge.js";
+import { lastNumber, median, rank, type Scores } from "../src/judge.js";
 import { parseCandidates, parseChoice } from "../src/prompts.js";
 
 describe("judge numbers", () => {
@@ -10,10 +10,16 @@ describe("judge numbers", () => {
 		expect(lastNumber("")).toBeUndefined();
 	});
 
+	it("takes the middle run, or the mean of the two middle runs", () => {
+		expect(median([9, 1, 8])).toBe(8);
+		expect(median([4, 1, 3, 9])).toBe(3.5);
+		expect(median([7])).toBe(7);
+	});
+
 	it("ranks qualifying attempts by judges in order and direction, then diff size, then key", () => {
 		const scores = (pass: boolean, ...values: (number | null)[]): Scores => ({
 			gates: [{ command: "g", pass }],
-			judges: values.map((value) => ({ command: "j", value })),
+			judges: values.map((value) => ({ command: "j", value, runs: [] })),
 			failure: values.includes(null) ? "judge failed" : null,
 		});
 		const attempts = [

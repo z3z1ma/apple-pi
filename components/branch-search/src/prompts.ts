@@ -1,4 +1,4 @@
-import type { Judge } from "./judge.js";
+import { type Gate, gateCommand, type Judge } from "./judge.js";
 
 export interface Candidate {
 	id: string;
@@ -7,15 +7,20 @@ export interface Candidate {
 }
 
 /** How the attempts are judged, as the enumerator and each attempt read it. */
-function judging(judges: readonly Judge[], gates: readonly string[]): string {
+function judging(judges: readonly Judge[], gates: readonly Gate[], protect: readonly string[]): string {
 	const lines = [
 		"Each attempt is judged in its own copy of the repository, in this order:",
-		...gates.map((gate) => `- gate (must exit 0): \`${gate}\``),
+		...gates.map((gate) => `- gate (must exit 0): \`${gateCommand(gate).command}\``),
 		...judges.map(
-			({ command, better }) => `- judge (last stdout line is a number, ${better} is better): \`${command}\``,
+			({ command, better, repeat = 1 }) =>
+				`- judge (last stdout line is a number, ${better} is better${repeat > 1 ? `, median of ${repeat} runs` : ""}): \`${command}\``,
 		),
 		"Among attempts that pass every gate, the best judge numbers win, in the order listed.",
 	];
+	if (protect.length > 0)
+		lines.push(
+			`Before scoring, these paths are put back to their base content: ${protect.map((path) => `\`${path}\``).join(", ")}. Scoring and the applied winner keep that base content.`,
+		);
 	return lines.join("\n");
 }
 
@@ -27,13 +32,14 @@ export function enumeratorPrompt(
 	count: number,
 	goal: string,
 	judges: readonly Judge[],
-	gates: readonly string[],
+	gates: readonly Gate[],
+	protect: readonly string[],
 ): string {
 	return `Branch search: approach list.
 
 ${goalLine(goal)}
 
-${judging(judges, gates)}
+${judging(judges, gates, protect)}
 
 List ${count} distinct approaches to the goal. Make each approach differ from the others in mechanism, in where the change happens, or in strategy, so that every attempt explores a different direction. Put the approaches you expect to score best first.
 
@@ -52,7 +58,8 @@ export function attemptPrompt(
 	candidate: Candidate,
 	goal: string,
 	judges: readonly Judge[],
-	gates: readonly string[],
+	gates: readonly Gate[],
+	protect: readonly string[],
 ): string {
 	return `Branch search: attempt ${key}.
 
@@ -62,7 +69,7 @@ ${goalLine(goal)}
 Approach: ${candidate.approach}
 First action: ${candidate.firstStep}
 
-${judging(judges, gates)}
+${judging(judges, gates, protect)}
 
 Commit fully to this approach. Run the gates and judges yourself as you work. Make reasonable decisions on your own; the user is away. Stop when the work is done under this approach, or when you have concrete evidence that it cannot work.`;
 }

@@ -6,10 +6,11 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { abortable } from "../../shared/src/abortable.js";
 import type { ForkWorktree } from "../../shared/src/fork-context.js";
-import { git, repoRoot } from "../../shared/src/git.js";
+import { cloneIgnoredDirs, git, repoRoot } from "../../shared/src/git.js";
 import { type ForkHandle, type ForkRequest, startFork } from "../../shared/src/forked-continuation.js";
-import { type BranchSearchConfig, validateBranchSearchConfig } from "./config.js";
-import { type Judge, rank, score } from "./judge.js";
+import { relativePathsProblem } from "../../shared/src/relative-paths.js";
+import { type BranchSearchConfig, normalizePaths, validateBranchSearchConfig } from "./config.js";
+import { type Gate, type Judge, rank, type Scores, score } from "./judge.js";
 import {
 	attemptPrompt,
 	type Candidate,
@@ -30,8 +31,12 @@ import {
 	gitCommonDir,
 	hasHead,
 	PLAIN_DIFF,
+	protectedClones,
+	protectedState,
+	protectProblem,
 	pruneRefs,
 	removeWorktrees,
+	restoreProtected,
 	snapshotBase,
 } from "./workspace.js";
 
@@ -72,7 +77,9 @@ export interface SearchOptions {
 	goal: string;
 	/** At least one. */
 	judges: Judge[];
-	gates: string[];
+	gates: Gate[];
+	/** Repository-relative files or directories put back to their base content before scoring. */
+	protect: string[];
 	/**
 	 * Wraps a prompt appended to the fork point (the enumerator's first turn and every attempt).
 	 * Without it, the prompt is a hidden custom message. The tool answers its pending
@@ -133,10 +140,15 @@ async function settleAll(tasks: Promise<unknown>[]): Promise<void> {
 export async function runBranchSearch(options: SearchOptions): Promise<SearchResult> {
 	const validated = validateBranchSearchConfig(options.config);
 	if (!validated.ok) return { outcome: "not configured", report: validated.text };
+	const lexical = relativePathsProblem(options.protect);
+	if (lexical !== undefined) throw new Error(`protect: ${lexical}`);
 	if (!(await hasHead(options.cwd)))
 		return { outcome: "aborted: no git history", report: "Branch search: aborted: no git history." };
 	const root = await repoRoot(options.cwd);
-	return new Search(options, validated.config, root, await gitCommonDir(options.cwd)).run();
+	const protect = normalizePaths(options.protect);
+	const outside = protectProblem(root, protect);
+	if (outside !== undefined) throw new Error(`protect: ${outside}`);
+	return new Search({ ...options, protect }, validated.config, root, await gitCommonDir(options.cwd)).run();
 }
 
 interface LiveAttempt {
@@ -148,6 +160,8 @@ class Search {
 	readonly id = searchId(new Date());
 	readonly stateDir: string;
 	readonly recordPath: string;
+	/** Pre-fork copies of the cloned ignored directories that overlap a protected path. */
+	readonly protectedClones: string;
 	readonly record: SearchRecord;
 	/** Fork point: the parent's conversation when the search starts. */
 	readonly forkPoint: AgentMessage[];
@@ -166,12 +180,14 @@ class Search {
 	) {
 		this.stateDir = join(commonDir, "apple-pi", "branch-search", this.id);
 		this.recordPath = join(this.stateDir, "record.json");
+		this.protectedClones = join(this.stateDir, "protected");
 		this.forkPoint = options.session.sessionManager.buildSessionProjection().messages;
 		this.record = {
 			id: this.id,
 			goal: options.goal,
 			judges: options.judges,
 			gates: options.gates,
+			protect: options.protect,
 			config,
 			startedAt: new Date(this.started).toISOString(),
 			endedAt: null,
@@ -220,27 +236,62 @@ class Search {
 		const base = await snapshotBase(this.root, this.id);
 		this.record.base = base;
 		this.save();
+		// Protected cloned directories are restored from this copy, taken before any fork can write.
+		await cloneIgnoredDirs(
+			this.root,
+			this.protectedClones,
+			protectedClones(this.options.protect, this.config.workspace.cloneIgnored),
+		);
 
 		this.status("enumerate");
 		const candidates = (await this.enumerate(base.commit)).slice(0, this.config.attempts);
 
-		const runs: Promise<void>[] = [];
-		for (const [i, candidate] of candidates.entries()) {
-			const worktree = await this.worktree(`a${i + 1}`, base.commit);
-			this.options.signal.throwIfAborted();
-			runs.push(this.runAttempt(`a${i + 1}`, candidate, worktree));
-		}
+		// Every worktree exists before any attempt starts, so none clones what a running attempt wrote.
+		const worktrees: string[] = [];
+		for (const i of candidates.keys()) worktrees.push(await this.worktree(`a${i + 1}`, base.commit));
+		this.options.signal.throwIfAborted();
+		const runs = candidates.map((candidate, i) => this.runAttempt(`a${i + 1}`, candidate, worktrees[i] as string));
 		this.status("run");
 		await settleAll(runs);
 		this.options.signal.throwIfAborted();
-		for (const { record, worktree } of this.attempts)
+		const scorable: LiveAttempt[] = [];
+		/** Each scorable worktree's protected state once restored; scoring must leave it so. */
+		const restored = new Map<string, string>();
+		const { protect } = this.options;
+		for (const attempt of this.attempts) {
+			const { record, worktree } = attempt;
 			record.commit = await commitWorktree(this.root, worktree, this.id, record.key);
+			// What is scored, and applied if it wins, is the attempt with its protected paths at base.
+			try {
+				record.protectedChanged = await restoreProtected(
+					this.protectedClones,
+					worktree,
+					base.commit,
+					this.options.protect,
+					this.config.workspace.cloneIgnored,
+				);
+				if (record.protectedChanged.length > 0)
+					record.commit = await commitWorktree(this.root, worktree, this.id, record.key);
+				if (protect.length > 0) restored.set(worktree, await protectedState(worktree, protect));
+				scorable.push(attempt);
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : String(error);
+				record.scores = { gates: [], judges: [], failure: `its protected paths could not be restored: ${reason}` };
+			}
+		}
 		this.save();
 
-		// One attempt at a time, so a judge that measures time or memory is not skewed by the others.
+		// One command at a time, so a judge that measures time or memory is not skewed by the others.
 		this.status("score");
-		for (const { record, worktree } of this.attempts) {
-			record.scores = await score(worktree, this.options.gates, this.options.judges, this.options.signal);
+		const scores = await score(
+			scorable.map(({ worktree }) => worktree),
+			this.options.gates,
+			this.options.judges,
+			this.options.signal,
+			async (worktree) => protect.length === 0 || (await protectedState(worktree, protect)) === restored.get(worktree),
+		);
+		for (const [i, { record }] of scorable.entries()) record.scores = scores[i] as Scores;
+		for (const { record } of this.attempts) {
 			const stat = await diffStat(this.root, base.commit, record.commit as string);
 			record.diffSize = stat.added + stat.deleted;
 		}
@@ -309,9 +360,9 @@ class Search {
 	private async enumerate(base: string): Promise<Candidate[]> {
 		const path = await this.worktree("enumerate", base);
 		try {
-			const { goal, judges, gates } = this.options;
+			const { goal, judges, gates, protect } = this.options;
 			let messages = this.forkPoint;
-			let append = this.atForkPoint(enumeratorPrompt(this.config.attempts, goal, judges, gates));
+			let append = this.atForkPoint(enumeratorPrompt(this.config.attempts, goal, judges, gates, protect));
 			for (let turn = 1; turn <= 2; turn++) {
 				const fork = this.fork({
 					messages,
@@ -343,11 +394,12 @@ class Search {
 			commit: null,
 			diffSize: null,
 			scores: null,
+			protectedChanged: [],
 			cost: { ...emptyCost(), ms: 0 },
 		};
 		this.attempts.push({ record, worktree });
 		this.record.attempts.push(record);
-		const { goal, judges, gates } = this.options;
+		const { goal, judges, gates, protect } = this.options;
 		const { wallClockSec, outputTokens } = this.config.limits;
 		let limited = false;
 		const stop = () => {
@@ -358,7 +410,7 @@ class Search {
 		const started = Date.now();
 		const fork = this.fork({
 			messages: this.forkPoint,
-			append: this.atForkPoint(attemptPrompt(key, candidate, goal, judges, gates)),
+			append: this.atForkPoint(attemptPrompt(key, candidate, goal, judges, gates, protect)),
 			label: `Branch search ${key}`,
 			worktree: this.forkWorktree(worktree),
 			onUsage: (usage) => {
@@ -442,6 +494,7 @@ class Search {
 		await attempt(() => pruneRefs(this.root, this.id, keep));
 		await attempt(() => rmSync(join(this.stateDir, "wt"), { recursive: true, force: true }));
 		await attempt(() => rmSync(join(this.stateDir, "tmp"), { recursive: true, force: true }));
+		await attempt(() => rmSync(this.protectedClones, { recursive: true, force: true }));
 		this.record.endedAt = new Date().toISOString();
 		this.record.cleanupErrors = problems;
 		await attempt(() => this.save());

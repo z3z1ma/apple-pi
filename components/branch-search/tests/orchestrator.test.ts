@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@earendil-works/pi-ai";
@@ -7,7 +17,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
-import type { Judge } from "../src/judge.js";
+import type { Gate, Judge } from "../src/judge.js";
 import { type ProfileRequest, runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
 import {
@@ -58,7 +68,8 @@ async function search(
 	overrides: {
 		config?: Record<string, unknown>;
 		judges?: Judge[];
-		gates?: string[];
+		gates?: Gate[];
+		protect?: string[];
 		signal?: AbortSignal;
 	} & Partial<Pick<SearchOptions, "profileRequest">> = {},
 	onStatus?: (status: string | undefined) => void,
@@ -71,6 +82,7 @@ async function search(
 		goal: "Make value equal 2.",
 		judges: overrides.judges ?? [JUDGE],
 		gates: overrides.gates ?? [GATE],
+		protect: overrides.protect ?? [],
 		profileRequest: overrides.profileRequest,
 		signal: overrides.signal ?? new AbortController().signal,
 		onStatus: (status) => {
@@ -129,9 +141,10 @@ describe("branch search", { timeout: 30_000 }, () => {
 		expect(result.outcome).toBe("applied");
 		const winner = attemptOf(record, "c3");
 		expect(record.winner).toBe(winner.key);
+		// An attempt that fails a gate is not judged.
 		expect(attemptOf(record, "c1").scores).toEqual({
 			gates: [{ command: GATE, pass: false }],
-			judges: [{ command: JUDGE.command, value: 1 }],
+			judges: [],
 			failure: null,
 		});
 		expect(attemptOf(record, "c2").scores?.judges[0]?.value).toBe(5);
@@ -160,10 +173,282 @@ describe("branch search", { timeout: 30_000 }, () => {
 			`Branch search ${record.id}: applied. 2 of 3 attempts passed every gate and judge.`,
 		);
 		expect(result.report).toContain(`Winner: ${winner.key} (c3)`);
-		expect(result.report).toMatch(/a1 c1 done: failed gate `bash check.sh`; judges 1/);
+		expect(result.report).toMatch(/a1 c1 done: failed gate `bash check.sh`; diff/);
 		expect(result.report).not.toContain("Merge:");
 		expect(statuses).toEqual(["branching enumerate", "branching run", "branching score", "branching apply", undefined]);
 		expectCleanedUp(run.cwd, record, []);
+	});
+
+	it("ranks by the median of repeated judge runs, interleaved across the gate-passing attempts", async () => {
+		const run = await fixture({
+			// The best single run of all, but the worst median.
+			c1: [FIX, scoreOf("1\n9\n8", "s1"), DONE],
+			c2: [FIX, scoreOf("5\n6\n4", "s2"), DONE],
+			c3: [WRONG, scoreOf("0\n0\n0", "s3"), DONE],
+		});
+		const log = join(realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-log-"))), "runs");
+		cleanup.push(() => rmSync(join(log, ".."), { recursive: true, force: true }));
+		// Each run prints the next line of score.txt and logs which attempt ran.
+		const judge: Judge = {
+			command: `n=$(( $(cat .n 2>/dev/null || echo 0) + 1 )); echo $n > .n; echo "$(basename "$PWD")" >> ${log}; sed -n "\${n}p" score.txt`,
+			better: "lower",
+			repeat: 3,
+		};
+		const { result, record } = await search(run, { config: { attempts: 3 }, judges: [judge] });
+
+		// Run 1 of every gate-passing attempt, then run 2, then run 3; the gate-failing a3 is not judged.
+		expect(readFileSync(log, "utf8").split("\n").filter(Boolean)).toEqual(["a1", "a2", "a1", "a2", "a1", "a2"]);
+		expect(attemptOf(record, "c1").scores?.judges).toEqual([{ command: judge.command, value: 8, runs: [1, 9, 8] }]);
+		expect(attemptOf(record, "c2").scores?.judges).toEqual([{ command: judge.command, value: 5, runs: [5, 6, 4] }]);
+		expect(attemptOf(record, "c3").scores?.judges).toEqual([]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.report).toMatch(/a1 c1 done: passed 1 gates; judges 8 \(1–9\);/);
+		expect(result.report).toMatch(/a2 c2 done: passed 1 gates; judges 5 \(4–6\);/);
+	});
+
+	it("scores an attempt that edits a protected judge script with the base script", async () => {
+		const run = await fixture({
+			c1: [FIX, scoreOf("9", "s1"), write("judge.sh", "echo 0\n", "cheat"), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		writeFileSync(join(run.cwd, "judge.sh"), "cat score.txt\n");
+		const { result, record } = await search(run, {
+			judges: [{ command: "bash judge.sh", better: "lower" }],
+			protect: ["judge.sh"],
+		});
+
+		const attemptPrompts = run.requests
+			.map((request) => text(request.messages.at(-1)))
+			.filter((prompt) => prompt.startsWith("Branch search: attempt"));
+		for (const prompt of attemptPrompts)
+			expect(prompt).toContain("Before scoring, these paths are put back to their base content: `judge.sh`");
+		expect(attemptOf(record, "c1").scores?.judges[0]?.value).toBe(9);
+		expect(attemptOf(record, "c1").protectedChanged).toEqual(["judge.sh"]);
+		expect(attemptOf(record, "c2").protectedChanged).toEqual([]);
+		expect(record.protect).toEqual(["judge.sh"]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.report).toMatch(/a1 c1 done: .*; changed protected judge\.sh \(restored for scoring\)/);
+		expect(result.report).not.toMatch(/a2 c2 done: .*changed protected/);
+	});
+
+	it("fails an attempt whose scoring commands change a protected path", async () => {
+		const run = await fixture({
+			c1: [FIX, scoreOf("9", "s1"), write("setup.sh", "echo 'echo 0' > judge.sh\n", "tamper"), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		writeFileSync(join(run.cwd, "judge.sh"), "cat score.txt\n");
+		writeFileSync(join(run.cwd, "setup.sh"), "true\n");
+		writeFileSync(join(run.cwd, "gate.sh"), "bash setup.sh && grep -q 'value = 2' app.ts\n");
+		const { result, record } = await search(run, {
+			gates: ["bash gate.sh"],
+			judges: [{ command: "bash judge.sh", better: "lower" }],
+			protect: ["judge.sh", "gate.sh"],
+		});
+
+		expect(attemptOf(record, "c1").scores?.failure).toBe("scoring changed a protected path");
+		expect(attemptOf(record, "c2").scores?.failure).toBeNull();
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.outcome).toBe("applied");
+		expect(readFileSync(join(run.cwd, "judge.sh"), "utf8")).toBe("cat score.txt\n");
+	});
+
+	it("restores a protected directory for scoring and does not apply the winner's changes to it", async () => {
+		const run = await fixture({
+			c1: [
+				FIX,
+				scoreOf("1", "s1"),
+				write("tests/gate.sh", "exit 1\n", "weaken"),
+				write("tests/extra.sh", "x\n", "add"),
+				DONE,
+			],
+			c2: [WRONG, scoreOf("0", "s2"), write("tests/gate.sh", "exit 0\n", "weaken2"), DONE],
+		});
+		mkdirSync(join(run.cwd, "tests"));
+		writeFileSync(join(run.cwd, "tests", "gate.sh"), "grep -q 'value = 2' app.ts\n");
+		const { result, record } = await search(run, { gates: ["bash tests/gate.sh"], protect: ["tests"] });
+
+		// c1 passes only because its broken gate is restored; c2 weakened the gate to pass with the wrong value, and the base gate fails it.
+		expect(attemptOf(record, "c2").scores?.gates).toEqual([{ command: "bash tests/gate.sh", pass: false }]);
+		expect(attemptOf(record, "c1").protectedChanged).toEqual(["tests/extra.sh", "tests/gate.sh"]);
+		expect(record.winner).toBe(attemptOf(record, "c1").key);
+		expect(result.outcome).toBe("applied");
+		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 2;\n");
+		expect(readFileSync(join(run.cwd, "tests", "gate.sh"), "utf8")).toBe("grep -q 'value = 2' app.ts\n");
+		expect(existsSync(join(run.cwd, "tests", "extra.sh"))).toBe(false);
+	});
+
+	it("restores a protected directory replaced by a symlink and removes ignored files left under it", async () => {
+		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
+		cleanup.push(() => rmSync(outside, { recursive: true, force: true }));
+		writeFileSync(join(outside, "gate.sh"), "exit 0\n");
+		const shell = (command: string, id: string) =>
+			fauxAssistantMessage(fauxToolCall("bash", { command, verbatim: true }, { id }), { stopReason: "toolUse" });
+		const run = await fixture({
+			c1: [WRONG, scoreOf("0", "s1"), shell(`rm -rf tests && ln -s ${outside} tests`, "link"), DONE],
+			c2: [
+				FIX,
+				scoreOf("5", "s2"),
+				shell("mkdir -p tests/node_modules && touch tests/node_modules/cheat", "ign"),
+				DONE,
+			],
+		});
+		mkdirSync(join(run.cwd, "tests"));
+		writeFileSync(join(run.cwd, "tests", "gate.sh"), "test ! -e tests/node_modules && grep -q 'value = 2' app.ts\n");
+		const { result, record } = await search(run, { gates: ["bash tests/gate.sh"], protect: ["tests"] });
+
+		// The symlink is replaced by the base directory, whose gate fails the wrong value.
+		const cheat = attemptOf(record, "c1");
+		expect(cheat.protectedChanged).toEqual(["tests", "tests/gate.sh"]);
+		expect(cheat.scores?.gates).toEqual([{ command: "bash tests/gate.sh", pass: false }]);
+		expect(attemptOf(record, "c2").protectedChanged).toEqual(["tests/node_modules/"]);
+		expect(attemptOf(record, "c2").scores?.gates).toEqual([{ command: "bash tests/gate.sh", pass: true }]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.outcome).toBe("applied");
+		expect(readFileSync(join(outside, "gate.sh"), "utf8")).toBe("exit 0\n");
+	});
+
+	it("clones a protected ignored directory again before scoring, from its copy taken before the forks", async () => {
+		let parent = "";
+		// c1 also rewrites the parent's copy, which a shell reaches through a path the fork does not map to its worktree.
+		const reach = () =>
+			fauxAssistantMessage(
+				fauxToolCall(
+					"bash",
+					{
+						command: `echo 'exit 0' > "${parent.slice(0, 8)}""${parent.slice(8)}/node_modules/gate.sh"`,
+						verbatim: true,
+					},
+					{ id: "r" },
+				),
+				{ stopReason: "toolUse" },
+			);
+		const run = await fixture({
+			c1: [WRONG, scoreOf("0", "s1"), write("node_modules/gate.sh", "exit 0\n", "weaken"), async () => reach(), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		parent = run.cwd;
+		writeFileSync(join(run.cwd, "node_modules", "gate.sh"), "grep -q 'value = 2' app.ts\n");
+		const { record } = await search(run, { gates: ["bash node_modules/gate.sh"], protect: ["node_modules"] });
+
+		expect(attemptOf(record, "c1").scores?.gates).toEqual([{ command: "bash node_modules/gate.sh", pass: false }]);
+		expect(attemptOf(record, "c1").protectedChanged).toEqual(["node_modules/"]);
+		expect(attemptOf(record, "c2").protectedChanged).toEqual([]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(readFileSync(join(run.cwd, "node_modules", "gate.sh"), "utf8")).toBe("exit 0\n");
+		expect(existsSync(join(run.cwd, ".git", "apple-pi", "branch-search", record.id, "protected"))).toBe(false);
+	});
+
+	it("fails an attempt that leads a protected cloned directory outside its worktree, and touches nothing there", async () => {
+		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
+		cleanup.push(() => rmSync(outside, { recursive: true, force: true }));
+		mkdirSync(join(outside, "node_modules"));
+		writeFileSync(join(outside, "node_modules", "gate.sh"), "external\n");
+		const shell = (command: string, id: string) =>
+			fauxAssistantMessage(fauxToolCall("bash", { command, verbatim: true }, { id }), { stopReason: "toolUse" });
+		const run = await fixture({
+			c1: [FIX, scoreOf("0", "s1"), shell(`rm -rf deps && ln -s ${outside} deps`, "link"), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		mkdirSync(join(run.cwd, "deps", "node_modules"), { recursive: true });
+		writeFileSync(join(run.cwd, "deps", "node_modules", "gate.sh"), "grep -q 'value = 2' app.ts\n");
+		const { result, record } = await search(run, {
+			config: { workspace: { cloneIgnored: ["deps/node_modules"] } },
+			gates: ["bash deps/node_modules/gate.sh"],
+			protect: ["deps/node_modules"],
+		});
+
+		expect(attemptOf(record, "c1").scores?.failure).toMatch(
+			/^its protected paths could not be restored: deps\/node_modules resolves outside the attempt's worktree/,
+		);
+		expect(readdirSync(join(outside, "node_modules"))).toEqual(["gate.sh"]);
+		expect(readFileSync(join(outside, "node_modules", "gate.sh"), "utf8")).toBe("external\n");
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.outcome).toBe("applied");
+	});
+
+	it("normalizes the spelling of cloneIgnored and protected paths, so honest attempts keep their dependencies", async () => {
+		const run = await fixture({ c1: [FIX, scoreOf("1", "s1"), DONE], c2: [FIX, scoreOf("5", "s2"), DONE] });
+		writeFileSync(join(run.cwd, "node_modules", "gate.sh"), "grep -q 'value = 2' app.ts\n");
+		const { result, record } = await search(run, {
+			config: { workspace: { cloneIgnored: ["./node_modules"] } },
+			gates: ["bash node_modules/gate.sh"],
+			protect: ["./node_modules/"],
+		});
+
+		expect(record.protect).toEqual(["node_modules"]);
+		expect(record.config.workspace.cloneIgnored).toEqual(["node_modules"]);
+		for (const attempt of record.attempts) {
+			expect(attempt.scores?.gates).toEqual([{ command: "bash node_modules/gate.sh", pass: true }]);
+			expect(attempt.protectedChanged).toEqual([]);
+		}
+		expect(result.outcome).toBe("applied");
+	});
+
+	it("fails the gate of an attempt whose gate outlives its timeoutSec, and the search continues", async () => {
+		const run = await fixture({
+			c1: [FIX, scoreOf("1", "s1"), write("hang", "\n", "h1"), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		const gate = { command: "if test -f hang; then sleep 60; fi; bash check.sh", timeoutSec: 1 };
+		const started = Date.now();
+		const { result, record } = await search(run, { gates: [gate] });
+
+		expect(Date.now() - started).toBeLessThan(20_000);
+		expect(attemptOf(record, "c1").scores?.gates).toEqual([{ command: gate.command, pass: false, timedOut: true }]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(record.gates).toEqual([gate]);
+		expect(result.report).toContain(`a1 c1 done: failed gate \`${gate.command}\` (timed out)`);
+	});
+
+	it("fails an attempt whose judge outlives its timeoutSec", async () => {
+		const run = await fixture({
+			c1: [FIX, scoreOf("1", "s1"), write("hang", "\n", "h1"), DONE],
+			c2: [FIX, scoreOf("5", "s2"), DONE],
+		});
+		const judge: Judge = {
+			command: "if test -f hang; then sleep 60; fi; cat score.txt",
+			better: "lower",
+			repeat: 2,
+			timeoutSec: 1,
+		};
+		const started = Date.now();
+		const { result, record } = await search(run, { judges: [judge] });
+
+		expect(Date.now() - started).toBeLessThan(20_000);
+		expect(attemptOf(record, "c1").scores?.failure).toBe(`judge \`${judge.command}\` timed out after 1s`);
+		expect(attemptOf(record, "c1").scores?.judges).toEqual([{ command: judge.command, value: null, runs: [] }]);
+		expect(record.winner).toBe(attemptOf(record, "c2").key);
+		expect(result.outcome).toBe("applied");
+	});
+
+	it("rejects a protected path that is or goes through a symlink, naming the target to protect", async () => {
+		const run = await fixture({ c1: [FIX] });
+		mkdirSync(join(run.cwd, "tooling"));
+		writeFileSync(join(run.cwd, "tooling", "judge.sh"), "cat score.txt\n");
+		symlinkSync("tooling/judge.sh", join(run.cwd, "judge.sh"));
+		symlinkSync("src", join(run.cwd, "link"));
+		const before = run.requests.length;
+
+		await expect(search(run, { protect: ["judge.sh"] })).rejects.toThrow(
+			'protect: "judge.sh" is or goes through a symlink; protect "tooling/judge.sh" instead',
+		);
+		await expect(search(run, { protect: ["link/keep.txt"] })).rejects.toThrow(
+			'protect: "link/keep.txt" is or goes through a symlink; protect "src/keep.txt" instead',
+		);
+		expect(run.requests.length).toBe(before);
+		expect(existsSync(join(run.cwd, ".git", "apple-pi"))).toBe(false);
+	});
+
+	it("rejects an invalid protected path before any git or model work", async () => {
+		const run = await fixture({ c1: [FIX] });
+		const outside = realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-outside-")));
+		cleanup.push(() => rmSync(outside, { recursive: true, force: true }));
+		symlinkSync(outside, join(run.cwd, "link"));
+		const before = run.requests.length;
+		for (const path of ["../x", "/etc/passwd", "src/../../x", "", "link/judge.sh"])
+			await expect(search(run, { protect: [path] })).rejects.toThrow(/^protect: /);
+		expect(run.requests.length).toBe(before);
+		expect(existsSync(join(run.cwd, ".git", "apple-pi"))).toBe(false);
 	});
 
 	it("never picks an attempt that fails a gate, however good its number", async () => {

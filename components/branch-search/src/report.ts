@@ -10,11 +10,23 @@ export function mergeCommand(base: string, id: string, winner: string): string {
 function fate(attempt: AttemptRecord): string {
 	const { scores } = attempt;
 	if (!scores) return "unscored";
-	const failed = scores.gates.filter((gate) => !gate.pass).map((gate) => `\`${gate.command}\``);
-	const values = scores.judges.map(({ value }) => String(value ?? "—")).join(", ");
+	const failed = scores.gates
+		.filter((gate) => !gate.pass)
+		.map((gate) => `\`${gate.command}\`${gate.timedOut ? " (timed out)" : ""}`);
 	const verdict =
 		failed.length > 0 ? `failed gate ${failed.join(", ")}` : (scores.failure ?? `passed ${scores.gates.length} gates`);
-	return `${verdict}; judges ${values}; diff ${attempt.diffSize ?? "—"} lines`;
+	const parts = [verdict];
+	if (scores.judges.length > 0) parts.push(`judges ${scores.judges.map(judgeValue).join(", ")}`);
+	parts.push(`diff ${attempt.diffSize ?? "—"} lines`);
+	if (attempt.protectedChanged.length > 0)
+		parts.push(`changed protected ${attempt.protectedChanged.join(", ")} (restored for scoring)`);
+	return parts.join("; ");
+}
+
+/** The judge's median, with the spread of its runs when it ran more than once. */
+function judgeValue({ value, runs }: { value: number | null; runs: number[] }): string {
+	const shown = String(value ?? "—");
+	return runs.length > 1 ? `${shown} (${Math.min(...runs)}–${Math.max(...runs)})` : shown;
 }
 
 /** Plain text, summary line first. */

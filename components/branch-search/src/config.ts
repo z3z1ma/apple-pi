@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 
@@ -94,5 +94,20 @@ export function validateBranchSearchConfig(raw: unknown): ConfigResult {
 			ok: false,
 			text: `Branch search is not configured. Fix these keys in ${CONFIG_FILE}:\n${problems.map((p) => `  ${p}`).join("\n")}`,
 		};
-	return { ok: true, config: raw as BranchSearchConfig };
+	const config = raw as BranchSearchConfig;
+	return {
+		ok: true,
+		config: {
+			...config,
+			workspace: { ...config.workspace, cloneIgnored: normalizePaths(config.workspace.cloneIgnored) },
+		},
+	};
+}
+
+/**
+ * Validated relative paths in one spelling (`./a//b/` becomes `a/b`), so every consumer, such as a
+ * git exclusion pattern or an overlap check, sees the same path.
+ */
+export function normalizePaths(paths: readonly string[]): string[] {
+	return paths.map((path) => posix.normalize(path.replaceAll("\\", "/")).replace(/(.)\/+$/, "$1"));
 }

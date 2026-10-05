@@ -82,19 +82,14 @@ const SIBLING_CALL = "sibling-1";
 function searchingParent(
 	withSibling = false,
 	other?: (context: Context) => Reply | "until-aborted" | undefined,
+	args: Parameters<typeof fauxToolCall>[1] = { goal: "Make value equal 2.", judges: [JUDGE], gates: [GATE] },
 ): (context: Context) => Reply | "until-aborted" | undefined {
 	return (context) => {
 		const answer = other?.(context);
 		if (answer !== undefined) return answer;
 		const last = context.messages.at(-1);
 		if (text(last) === "Search now.") {
-			const calls = [
-				fauxToolCall(
-					"search_branches",
-					{ goal: "Make value equal 2.", judges: [JUDGE], gates: [GATE] },
-					{ id: SEARCH_CALL },
-				),
-			];
+			const calls = [fauxToolCall("search_branches", args, { id: SEARCH_CALL })];
 			if (withSibling) calls.push(fauxToolCall("read", { path: "app.ts" }, { id: SIBLING_CALL }));
 			return fauxAssistantMessage(calls, { stopReason: "toolUse" });
 		}
@@ -187,6 +182,41 @@ describe("search_branches", { timeout: 30_000 }, () => {
 			expect.arrayContaining(["branching enumerate", "branching run", "branching score", "branching apply"]),
 		);
 		for (const update of updates) expect(update).toMatch(/^branching \S+$/);
+	});
+
+	it("accepts repeat, timeoutSec, object and plain string gates, and protect", async () => {
+		configure(validConfig());
+		const args = {
+			goal: "Make value equal 2.",
+			judges: [{ ...JUDGE, repeat: 3, timeoutSec: 30 }],
+			gates: [GATE, { command: "true", timeoutSec: 30 }],
+			protect: ["check.sh"],
+		};
+		const run = await harness({ c1: FAILING, c2: PASSING }, { other: searchingParent(false, undefined, args) });
+		await run.session.prompt("Search now.");
+
+		const [result] = searchResults(run.session.messages);
+		expect(result?.isError).toBe(false);
+		const record = recordOf(text(result as never));
+		expect(record.outcome).toBe("applied");
+		expect(record.judges).toEqual(args.judges);
+		expect(record.gates).toEqual(args.gates);
+		expect(record.protect).toEqual(["check.sh"]);
+		expect(record.attempts.find((a) => a.key === record.winner)?.scores?.judges[0]?.runs).toEqual([1, 1, 1]);
+	});
+
+	it("returns an invalid protected path as an error and starts nothing", async () => {
+		configure(validConfig());
+		const args = { goal: "Make value equal 2.", judges: [JUDGE], protect: ["../outside"] };
+		const run = await harness({ c1: PASSING }, { other: searchingParent(false, undefined, args) });
+		await run.session.prompt("Search now.");
+
+		const [result] = searchResults(run.session.messages);
+		expect(result?.isError).toBe(true);
+		expect(text(result as never)).toContain(
+			'protect: must hold relative paths inside the workspace ("../outside" is not)',
+		);
+		expect(existsSync(join(run.cwd, ".git", "apple-pi"))).toBe(false);
 	});
 
 	it("cancels the search and cleans up before the aborted call returns", async () => {

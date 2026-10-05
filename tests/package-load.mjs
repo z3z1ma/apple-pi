@@ -249,7 +249,19 @@ try {
 		),
 		"branch search extension must own search_branches",
 	);
-	assert.deepEqual(Object.keys(searchBranchesTool.definition.parameters.properties), ["goal", "judges", "gates"]);
+	const searchParameters = searchBranchesTool.definition.parameters.properties;
+	assert.deepEqual(Object.keys(searchParameters), ["goal", "judges", "gates", "protect"]);
+	assert.deepEqual(Object.keys(searchParameters.judges.items.properties), [
+		"command",
+		"better",
+		"repeat",
+		"timeoutSec",
+	]);
+	assert.deepEqual(
+		searchParameters.gates.items.anyOf.map((gate) => gate.type),
+		["string", "object"],
+		"gates take plain command strings or { command, timeoutSec }",
+	);
 	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal", "judges"]);
 	assert.equal(searchBranchesTool.definition.executionMode, "sequential");
 	const searchGuidance = searchBranchesTool.definition.promptGuidelines.join("\n");
@@ -258,6 +270,9 @@ try {
 		/last stdout line is one number/,
 		/gate/,
 		/user suggests/,
+		/repeat for a noisy measure/,
+		/protect every file the judges and gates read/,
+		/timeoutSec on any command that could hang/,
 		/alone in its message/,
 	])
 		assert.match(searchGuidance, taught);

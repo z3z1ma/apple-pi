@@ -1,8 +1,10 @@
-import { lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { cloneIgnoredDirs, git } from "../../shared/src/git.js";
-import { canonical } from "../../shared/src/real-path.js";
+import { canonical, within } from "../../shared/src/real-path.js";
+import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 
 /**
  * Git plumbing for one search: the base snapshot, worktrees, attempt commits, refs, apply, and
@@ -68,6 +70,121 @@ export async function addWorktree(root: string, path: string, commit: string, cl
 	mkdirSync(dirname(path), { recursive: true });
 	await git(root, ["worktree", "add", "--detach", "-q", path, commit]);
 	await cloneIgnoredDirs(root, path, cloneIgnored);
+}
+
+/** Why `paths` cannot be protected in `root`, or undefined when each stays inside it, symlinks resolved. */
+export function protectProblem(root: string, paths: readonly string[]): string | undefined {
+	const lexical = relativePathsProblem(paths);
+	if (lexical !== undefined) return lexical;
+	const top = canonical(root);
+	const outside = paths.find((path) => {
+		try {
+			return !within(canonical(join(root, path)), top);
+		} catch {
+			return true;
+		}
+	});
+	if (outside !== undefined) return `must hold paths inside the workspace ("${outside}" resolves outside it)`;
+	// Restoring a link would leave the file it points to unprotected.
+	for (const path of paths) {
+		const parts = path.split("/");
+		const linked = parts.some((_, i) => isSymlink(join(root, ...parts.slice(0, i + 1))));
+		if (linked)
+			return `"${path}" is or goes through a symlink; protect "${relative(top, canonical(join(root, path)))}" instead`;
+	}
+	return undefined;
+}
+
+function isSymlink(path: string): boolean {
+	try {
+		return lstatSync(path).isSymbolicLink();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Put the protected paths of the worktree's committed attempt back to their base content: changed
+ * files restored, added files removed, and ignored files left there removed too. A cloned ignored
+ * directory that overlaps a protected path is cloned again from `snapshot`, its copy taken before
+ * any attempt ran. Returns what the attempt changed there; the caller commits the result.
+ */
+export async function restoreProtected(
+	snapshot: string,
+	path: string,
+	base: string,
+	protect: readonly string[],
+	cloneIgnored: readonly string[],
+): Promise<string[]> {
+	if (protect.length === 0) return [];
+	const overlapping = protectedClones(protect, cloneIgnored);
+	// The attempt may have replaced an ancestor with a symlink; removing or cloning through it would
+	// write outside the worktree, so nothing is touched unless every target stays inside.
+	const top = canonical(path);
+	for (const entry of overlapping)
+		if (!within(canonical(dirname(join(path, entry))), top))
+			throw new Error(`${entry} resolves outside the attempt's worktree`);
+	const recloned: string[] = [];
+	for (const entry of overlapping) {
+		if (await differs(join(snapshot, entry), join(path, entry))) recloned.push(`${entry}/`);
+		rmSync(join(path, entry), { recursive: true, force: true });
+	}
+	await cloneIgnoredDirs(snapshot, path, overlapping);
+	const literal = ["--literal-pathspecs"];
+	const changed = (
+		await git(path, [
+			...literal,
+			"diff",
+			...PLAIN_DIFF,
+			"--no-renames",
+			"--name-only",
+			"-z",
+			base,
+			"HEAD",
+			"--",
+			...protect,
+		])
+	)
+		.split("\0")
+		.filter(Boolean);
+	if (changed.length > 0)
+		await git(path, [...literal, "restore", `--source=${base}`, "--staged", "--worktree", "--", ...changed]);
+	// With -x, only the -e patterns still exclude: the cloned dependency directories stay.
+	const keep = cloneIgnored.flatMap((entry) => ["-e", `/${entry}`]);
+	const cleaned = (await git(path, [...literal, "clean", "-ffdx", ...keep, "--", ...protect]))
+		.split("\n")
+		.flatMap((line) => (line.startsWith("Removing ") ? [line.slice("Removing ".length)] : []));
+	return [...changed, ...cleaned, ...recloned].sort();
+}
+
+/**
+ * The state of the protected paths as git sees it: tracked content and untracked files, ignored files
+ * aside (scoring commands write caches there). Equal states mean those paths are unchanged.
+ */
+export function protectedState(path: string, protect: readonly string[]): Promise<string> {
+	return git(path, [
+		"--literal-pathspecs",
+		"status",
+		"--porcelain=v1",
+		"-z",
+		"--untracked-files=all",
+		"--",
+		...protect,
+	]);
+}
+
+/** The cloned ignored directories that overlap a protected path, either way. */
+export function protectedClones(protect: readonly string[], cloneIgnored: readonly string[]): string[] {
+	const inside = (a: string, b: string) => within(join("/", a), join("/", b));
+	return cloneIgnored.filter((entry) => protect.some((p) => inside(entry, p) || inside(p, entry)));
+}
+
+/** Whether two directories differ; a comparison that cannot finish counts as a difference. */
+function differs(a: string, b: string): Promise<boolean> {
+	if (!existsSync(a) && !existsSync(b)) return Promise.resolve(false);
+	return new Promise((resolvePromise) => {
+		execFile("diff", ["-rq", a, b], { maxBuffer: 64 * 1024 * 1024 }, (error) => resolvePromise(error !== null));
+	});
 }
 
 /** Commit everything in the worktree and point the attempt's ref at it. */

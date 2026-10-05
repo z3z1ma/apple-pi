@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import type { BranchSearchConfig } from "./config.js";
-import type { Judge, Scores } from "./judge.js";
+import type { Gate, Judge, Scores } from "./judge.js";
 import type { Candidate } from "./prompts.js";
 import type { ApplyResult } from "./workspace.js";
 
@@ -22,6 +22,8 @@ export interface AttemptRecord {
 	diffSize: number | null;
 	/** Null until scored. */
 	scores: Scores | null;
+	/** Files the attempt changed under a protected path; they were put back to base before scoring. */
+	protectedChanged: string[];
 	cost: TokenCost & { ms: number };
 }
 
@@ -29,7 +31,9 @@ export interface SearchRecord {
 	id: string;
 	goal: string;
 	judges: Judge[];
-	gates: string[];
+	gates: Gate[];
+	/** Paths put back to their base content in every attempt before scoring. */
+	protect: string[];
 	config: BranchSearchConfig;
 	startedAt: string;
 	endedAt: string | null;
