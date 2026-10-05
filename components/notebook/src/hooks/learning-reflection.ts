@@ -45,8 +45,8 @@ function describeEvidence(event: ToolResultEvent): string | undefined {
  */
 export function trackLearningEvidence(pi: ExtensionAPI): string[] {
 	const evidence: string[] = [];
-	pi.on("tool_result", (event) => {
-		if (inForkedContinuation()) return;
+	pi.on("tool_result", (event, ctx) => {
+		if (inForkedContinuation(ctx.sessionManager.getSessionId())) return;
 		const item = describeEvidence(event);
 		if (item && !evidence.includes(item)) evidence.push(item);
 	});

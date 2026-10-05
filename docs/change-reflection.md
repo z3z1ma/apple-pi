@@ -19,6 +19,8 @@ The fork applies a clear improvement and revalidates what it affects, or keeps t
 
 A public interactive child with active built-in `edit` or `write` tools reviews its own work before it hands off, in its own conversation rather than in a fork. This applies to nested children too, and to custom agents. Pairing does not affect it (`pair: false` keeps it), and there is no setting to turn it off. Children without those tools, the internal `/btw` and consultation sessions, internal managed runs, and `pi_exec` workers do not get it.
 
+A real coding child launched by a primary fork still tracks its own edits and execution evidence. A fork that reuses the child's tools remains separate from that child's tracked work; workspace isolation and cancellation remain inherited.
+
 When one invocation (a launch or a resume) completes, the child receives one instruction and keeps working before Pi settles the run:
 
 1. **Review**, only if the invocation made a successful `edit` or `write` call. It uses the same lenses and the same list of what ran after each file's last change as the root review. When the intended behavior is unclear, the child uses `clarify` if it has it. The answer is advice, not new authorization. If the question stays open, the child leaves the disputed change alone and reports the question and the verification it affects.

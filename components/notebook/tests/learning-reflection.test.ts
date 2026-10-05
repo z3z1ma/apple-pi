@@ -81,18 +81,21 @@ describe("learning reflection", () => {
 });
 
 function captureExtension() {
-	const handlers = new Map<string, (event: unknown) => unknown>();
+	const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
 	const commands = new Map<string, { handler: () => Promise<void> }>();
 	const sent: Array<{ message: { content: string }; options: unknown }> = [];
 	const pi = {
-		on: (event: string, handler: (event: unknown) => unknown) => handlers.set(event, handler),
+		on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(event, handler),
 		registerCommand: (name: string, command: { handler: () => Promise<void> }) => commands.set(name, command),
 		registerMessageRenderer: () => {},
 		sendMessage: (message: { content: string }, options: unknown) => sent.push({ message, options }),
 	} as unknown as ExtensionAPI;
 	registerLearningReflection(pi);
 	const run = (command: string, isError: boolean, expect?: "success" | "failure", surprise?: boolean) =>
-		handlers.get("tool_result")?.({ isError, toolName: "bash", input: { command, expect }, details: { surprise } });
+		handlers.get("tool_result")?.(
+			{ isError, toolName: "bash", input: { command, expect }, details: { surprise } },
+			{ sessionManager: { getSessionId: () => "primary-fixture" } },
+		);
 	const reflect = async () => {
 		await commands.get("reflect")?.handler();
 		return sent.at(-1);

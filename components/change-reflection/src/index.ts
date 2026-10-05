@@ -88,7 +88,7 @@ export function trackChanges(pi: ExtensionAPI): Map<string, string[]> {
 	const changed = new Map<string, string[]>();
 	pi.on("session_start", () => changed.clear());
 	pi.on("tool_result", (event, ctx) => {
-		if (inForkedContinuation()) return;
+		if (inForkedContinuation(ctx.sessionManager.getSessionId())) return;
 		if (EXECUTION_TOOLS.has(event.toolName)) {
 			const run = describeRun(event.toolName, event.input, event.isError);
 			for (const runs of changed.values()) if (!runs.includes(run)) runs.push(run);

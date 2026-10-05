@@ -12,6 +12,8 @@ export interface ForkWorktree {
 }
 
 interface ForkContext {
+	/** The session whose tools the fork reuses, so its trackers can distinguish real child sessions. */
+	readonly sessionId: string;
 	/** The fork's working directory, when it is bound to a worktree. */
 	readonly cwd?: string;
 	/** Process groups the fork's shell started; the fork kills them when it settles. */
@@ -30,9 +32,10 @@ export function runInFork<T>(context: ForkContext, run: () => T): T {
 	return forkScope.run(context, run);
 }
 
-/** True while a tool runs for a fork, so trackers of the main run can ignore it. */
-export function inForkedContinuation(): boolean {
-	return forkScope.getStore() !== undefined;
+/** A fork scope remains inherited for isolation; trackers can limit the check to their own session. */
+export function inForkedContinuation(sessionId?: string): boolean {
+	const scope = forkScope.getStore();
+	return scope !== undefined && (sessionId === undefined || scope.sessionId === sessionId);
 }
 
 /** The working directory of the fork whose tool is running, if that fork is bound to a worktree. */

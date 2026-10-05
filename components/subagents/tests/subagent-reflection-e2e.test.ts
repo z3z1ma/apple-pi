@@ -10,6 +10,7 @@ import compactionSafety from "../../../extensions/compaction-safety.js";
 import installPair from "../../pair-programmer/src/extension.js";
 import { registerCompletionReflection } from "../src/completion-reflection.js";
 import installSubagents from "../src/index.js";
+import { startFork } from "../../shared/src/forked-continuation.js";
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-reflection-agent-"));
@@ -80,6 +81,48 @@ const isChild = (context: Parameters<Exclude<Parameters<typeof fauxSession>[1], 
 	getCurrentSystemPrompt(context.messages).includes("Custom coding child.");
 
 describe("coding-child completion reflection through real interactive sessions", () => {
+	it("reviews a real coding child's own edits and failed commands when launched by a primary fork", async () => {
+		let parentStep = 0;
+		let childStep = 0;
+		let completion = "";
+		const root = await fauxSession(
+			[installSubagents],
+			(context) => {
+				if (isChild(context)) {
+					const instruction = textOf(context.messages.at(-1));
+					if (instruction.includes("Before you hand off")) {
+						completion = instruction;
+						return fauxAssistantMessage("Reviewed the probe; false failed; no learning added.");
+					}
+					if (childStep++ === 0)
+						return call("write", { path: "src/fork-child.ts", content: "export const probe = 42;\n" });
+					if (childStep === 2) return call("bash", { command: "false" });
+					return fauxAssistantMessage("Probe written.");
+				}
+				if (parentStep++ === 0) return fauxAssistantMessage("Ready.");
+				if (parentStep === 2)
+					return call("agent", {
+						prompt: "Write a probe and check it.",
+						description: "Fork child probe",
+						subagent_type: "reflection-coder",
+					});
+				return fauxAssistantMessage("Fork complete.");
+			},
+			["agent"],
+		);
+		roots.push(root);
+		await root.session.prompt("Prepare to delegate.");
+		const fork = await startFork(root.session, {
+			messages: root.session.messages,
+			append: { role: "user", content: "Delegate from this fork.", timestamp: Date.now() },
+			label: "child-reflection-regression",
+		}).result;
+		expect(readFileSync(join(root.cwd, "src/fork-child.ts"), "utf8")).toBe("export const probe = 42;\n");
+		expect(completion).toContain("Review your changes in `src/fork-child.ts`");
+		expect(completion).toContain("`false` (failed)");
+		expect(completion).toContain("Failed or surprising");
+		expect(textOf(fork.messages.findLast((message) => message.role === "toolResult"))).toContain("Reviewed the probe");
+	}, 30_000);
 	it.each(["error", "length", "stop"] as const)(
 		"retains the resumed report after an empty %s reflection following automatic compaction",
 		async (stopReason) => {
