@@ -158,11 +158,14 @@ export async function restoreProtected(
 }
 
 /**
- * The state of the protected paths as git sees it: tracked content and untracked files, ignored files
- * aside (scoring commands write caches there). Equal states mean those paths are unchanged.
+ * The state of the protected paths: the worktree's HEAD, which a command that commits a change
+ * would move, and their tracked content and untracked files as git sees them. Ignored files stay
+ * aside, because scoring commands write caches there (for example `__pycache__` under tests).
+ * Equal states mean those paths are unchanged.
  */
-export function protectedState(path: string, protect: readonly string[]): Promise<string> {
-	return git(path, [
+export async function protectedState(path: string, protect: readonly string[]): Promise<string> {
+	const head = await git(path, ["rev-parse", "HEAD"]);
+	const status = await git(path, [
 		"--literal-pathspecs",
 		"status",
 		"--porcelain=v1",
@@ -171,6 +174,7 @@ export function protectedState(path: string, protect: readonly string[]): Promis
 		"--",
 		...protect,
 	]);
+	return `${head}\n${status}`;
 }
 
 /** The cloned ignored directories that overlap a protected path, either way. */

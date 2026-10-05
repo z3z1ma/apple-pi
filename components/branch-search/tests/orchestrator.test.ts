@@ -252,6 +252,39 @@ describe("branch search", { timeout: 30_000 }, () => {
 		expect(readFileSync(join(run.cwd, "judge.sh"), "utf8")).toBe("cat score.txt\n");
 	});
 
+	it("fails an attempt whose scoring commits a protected change, and lets scoring write ignored caches", async () => {
+		const run = await fixture({
+			c1: [
+				FIX,
+				scoreOf("9", "s1"),
+				write("setup.sh", "echo 'echo 0' > tests/judge.sh && git add tests/judge.sh && git commit -qm t\n", "commit"),
+				DONE,
+			],
+			c2: [
+				FIX,
+				scoreOf("9", "s2"),
+				write("setup.sh", "mkdir -p tests/__pycache__ && echo cache > tests/__pycache__/x\n", "cache"),
+				DONE,
+			],
+			c3: [FIX, scoreOf("5", "s3"), DONE],
+		});
+		mkdirSync(join(run.cwd, "tests"));
+		writeFileSync(join(run.cwd, "tests", "judge.sh"), "cat score.txt\n");
+		writeFileSync(join(run.cwd, ".gitignore"), "__pycache__/\n");
+		writeFileSync(join(run.cwd, "tests", "gate.sh"), "bash setup.sh && grep -q 'value = 2' app.ts\n");
+		writeFileSync(join(run.cwd, "setup.sh"), "true\n");
+		const { record } = await search(run, {
+			config: { attempts: 3 },
+			gates: ["bash tests/gate.sh"],
+			judges: [{ command: "bash tests/judge.sh", better: "lower" }],
+			protect: ["tests"],
+		});
+
+		expect(attemptOf(record, "c1").scores?.failure).toBe("scoring changed a protected path");
+		expect(attemptOf(record, "c2").scores?.failure).toBeNull();
+		expect(record.winner).toBe(attemptOf(record, "c3").key);
+	});
+
 	it("restores a protected directory for scoring and does not apply the winner's changes to it", async () => {
 		const run = await fixture({
 			c1: [
