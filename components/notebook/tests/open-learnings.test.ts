@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
-import { ledgerCloseReminder, registerOpenLearnings } from "../src/hooks/open-learnings.js";
+import { registerOpenLearnings } from "../src/hooks/open-learnings.js";
 import type { Entry, Reflection } from "../src/session-ledger/types.js";
 
 function learning(id: string): Reflection {
@@ -46,10 +46,19 @@ describe("open learnings", () => {
 
 	it("holds the first close of each task while learnings are open", () => {
 		const { close } = harness([learning("aaaaaaaaaaaa")]);
+		const reason =
+			"This session has 1 open learning. Before you close the task, propose where each belongs; this task's retrospective.md is the default home. Write what the user approves, retire every placed or dropped learning with update_notebook, then call ledger_status again.\n\n[aaaaaaaaaaaa] learning aaaaaaaaaaaa";
 		expect(close("task-a", "in-progress")).toBeUndefined();
-		expect(close("task-a")).toEqual({ block: true, reason: ledgerCloseReminder(1) });
+		expect(close("task-a")).toEqual({ block: true, reason });
 		expect(close("task-a")).toBeUndefined();
-		expect(close("task-b", "cancelled")).toEqual({ block: true, reason: ledgerCloseReminder(1) });
+		expect(close("task-b", "cancelled")).toEqual({ block: true, reason });
+	});
+
+	it("lists every open learning's id and full text in the hold", () => {
+		const { close } = harness([learning("aaaaaaaaaaaa"), learning("bbbbbbbbbbbb")]);
+		const result = close("task-a") as { block: boolean; reason: string };
+		expect(result.reason).toMatch(/^This session has 2 open learnings\. /);
+		expect(result.reason).toContain("\n\n[aaaaaaaaaaaa] learning aaaaaaaaaaaa\n[bbbbbbbbbbbb] learning bbbbbbbbbbbb");
 	});
 
 	it("lets a task close at once when no learnings are open", () => {
