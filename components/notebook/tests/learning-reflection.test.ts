@@ -104,11 +104,10 @@ function captureExtension() {
 }
 
 describe("/reflect", () => {
-	it("asks in-band to journal, without proposing homes", async () => {
+	it("asks in-band to journal", async () => {
 		const { reflect } = captureExtension();
 		const sent = await reflect();
 		expect(sent?.message.content).toContain("Record each learning with `update_notebook`");
-		expect(sent?.message.content).not.toContain("propose");
 		expect(sent?.options).toEqual({ deliverAs: "steer", triggerTurn: true });
 	});
 

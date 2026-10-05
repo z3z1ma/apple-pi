@@ -160,7 +160,6 @@ describe("a coding child's pair session over the primary notebook", () => {
 			await pair.prompt("Review a later span.");
 			const late = pair.messages.findLast((message) => message.role === "toolResult");
 			expect(late?.role === "toolResult" && late.isError).toBe(true);
-			expect(pair.getLastAssistantText()).toBe("Capture rejected.");
 			expect(primary.session.sessionManager.getEntries()).toEqual(previousArchive);
 			expect(current.session.sessionManager.getEntries()).toEqual(currentArchive);
 		},

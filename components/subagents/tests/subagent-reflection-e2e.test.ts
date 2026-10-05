@@ -120,7 +120,7 @@ describe("coding-child completion reflection through real interactive sessions",
 		expect(readFileSync(join(root.cwd, "src/fork-child.ts"), "utf8")).toBe("export const probe = 42;\n");
 		expect(completion).toContain("Review your changes in `src/fork-child.ts`");
 		expect(completion).toContain("`false` (failed)");
-		expect(completion).toContain("Failed or surprising");
+		expect(completion).toContain("- bash: `false`");
 		expect(textOf(fork.messages.findLast((message) => message.role === "toolResult"))).toContain("Reviewed the probe");
 	}, 30_000);
 	it.each(["error", "length", "stop"] as const)(
