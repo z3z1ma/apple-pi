@@ -488,7 +488,7 @@ function createLedgerStatusTool() {
 		name: "ledger_status",
 		label: "Set ledger task status",
 		description:
-			"Move one live .ledger task to a new status. planning, ready, and in-progress update Status in task.md and on the live index row. done and cancelled archive the bundle into .ledger/history and move the row to the history index. Not for creating, inspecting, shaping, executing, or judging completeness.",
+			"Move one live .ledger task to a new status. planning, ready, and in-progress update Status in task.md and on the live index row. done and cancelled archive the bundle into .ledger/history and move the row to the history index; call them only after edits to the bundle are written and committed, never alongside those edits. Not for creating, inspecting, shaping, executing, or judging completeness.",
 		promptSnippet: "Move a ledger task between planning, ready, in-progress, done, and cancelled",
 		parameters: Type.Object({
 			task: Type.String({

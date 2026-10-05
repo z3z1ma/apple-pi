@@ -93,6 +93,7 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 - TypeScript uses NodeNext semantics, and relative TypeScript imports use `.js` suffixes because that is the runtime ESM path.
 - The root manifest's extension list, skills and prompt paths, published `files` allowlist, and dependency declarations are part of the product surface.
 - Native harness capabilities teach their concise selection, mental model, and ordinary composition patterns through runtime prompt-bearing surfaces: tool names, schemas, prompt snippets/guidelines, or explicit system-prompt injection. Repository documentation is invisible to the running model and never satisfies this requirement. Skills own repeatable engineering procedures and optional progressive disclosure; they are not prerequisite manuals for calling native tools.
+- A model-called tool takes arguments the model writes, often from what the user suggests. Teach it through the tool's description and guidelines, and add a parallel human command or flag parser only when the operator asks for one.
 - The package-load test is the executable smoke test for loading the manifest's extension entrypoints from the checkout and checking the expected tool/command boundary. It does not load the packed tarball, so inspect packaging separately.
 
 ### Context and notebook
@@ -192,6 +193,10 @@ Useful narrower commands are defined in `package.json`:
 Run the cheapest falsifying check while iterating, then the full relevant suite before declaring completion. A passing unit suite does not prove package loading, and a successful package dry run does not prove behavior. Some session-search tests write temporary session JSONL; they must not touch real Pi session files.
 
 `npm run format` writes across broad repository paths. In a dirty working tree, prefer formatting only files you changed (for example with Biome's path arguments), then run the non-writing repository check. Never use a blanket formatter as accidental cleanup of someone else's work. RTK rewrites `npx biome format --write <paths>` into a command that reports success but writes nothing; run formatters that write files with `verbatim: true`.
+
+RTK output can also report a commit that did not land. After each commit, confirm it with `git log --oneline -1` and `git reflog -3` run with `verbatim: true` before staging more work.
+
+Other lanes (the operator or other agents) edit this checkout during long runs. Commit whole files of your own work, without partial-hunk staging; slight overlap with another lane is acceptable, and their remaining files stay unstaged. When a file you own changes unexpectedly, read its test diff as well as its code diff: a green suite can hide a test that was rewritten to stop exercising a case.
 
 When adding a new source or test area, inspect all of these inclusion points:
 

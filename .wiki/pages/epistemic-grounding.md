@@ -31,10 +31,19 @@ Coding has what most open-world fields lack: an environment that executes. Compi
 - **Run list in change reflection.** For each changed code file, the prompt lists what ran after its last change. The host does not classify which runs are checks; the agent judges, and claims only what those runs check.
 - **Pair lens.** The pair treats the agent's reasoning and its own notes as claims; a result proves only what it checks.
 
+## Tried: branch search (2026-10)
+
+Branch search ran parallel attempts in isolated worktrees and picked a winner with checks that a model wrote and hid from the attempts. Evidence (`.ledger/history/202610031403-branch-search/`, `.ledger/history/202610040726-branch-search-challenger-benchmark/`): on three staged traps, the agent alone solved 15 of 15 runs, search 13 of 15, search with challengers 14 of 15, at about five times the tokens. What it showed:
+
+- **A judge written by the same model shares the attempts' blind spots.** Whatever case the model misses, neither the checks nor the attempts cover; the search then selects by luck. Only an external judge gives search its leverage. Branch search now takes model-written numeric judges (time, size, a complexity score) and nothing else.
+- **A benchmark needs headroom.** When the goal states every requirement, a single careful run solves it, and the comparison can show only cost. Include tasks where a single run actually fails.
+- **Every arm needs the same framing.** A single-run arm given a bare goal quit after 17 seconds, while attempts were told to work until done; that measures prompt wording, not search.
+- **A smallest-diff tie-break prefers the less complete survivor** when the checks miss a case.
+- **Prove the premise first.** Nine tickets came before the first minutes-long demonstration that could have shown the weakness.
+
 ## Not yet tried
 
 - **A pair that sees only actions.** If reasoning text is written after the fact, showing it to the pair anchors the pair to the driver's story. Measure the pair's precision with the address/decline dispositions that `acknowledge_pair_findings` already records.
-- **Search over candidates, only where an automatic scorer exists**, such as performance work with a benchmark. AlphaGo's search worked because evaluating a position was cheap; design choices have no cheap evaluator.
 - **A visible hypothesis list** (settled, ruled out, open, each with its evidence) in `diagnosing-bugs`, choosing the probe that would rule out the most hypotheses.
 
 ## Rejected

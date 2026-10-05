@@ -30,6 +30,8 @@ Look for opportunities to prefactor the code to make the implementation easier. 
 
 ### 3. Draft vertical slices
 
+When the design's value is still unproven, first propose a minutes-long end-to-end demonstration of its core claim (`/skill:prototype`), and ticket the work once the demonstration shows the effect. Many tickets built on an untested premise are the costliest way to learn it fails.
+
 Break the work into **tracer bullet** tickets.
 
 <vertical-slice-rules>
