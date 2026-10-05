@@ -1981,7 +1981,7 @@ export default function (pi: ExtensionAPI) {
 		const builtAttentionTool = createSetPairAttentionTool({
 			stage: (lease) => builtRuntime?.stageAttention(lease) ?? false,
 		});
-		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
+		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted, sharedNotebook !== undefined);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
 			const batch = prepareNotebookBatch(latestCtx);

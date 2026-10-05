@@ -25,14 +25,15 @@ function bindPrimarySession(
 	};
 }
 
-export function bindPairRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
+export function bindPairRecallTools(
+	sessionManager: PrimarySessionManager,
+	scope = "This revisits a known note from your partner's session, never this side conversation.",
+): ToolDefinition[] {
 	const notebook = bindPrimarySession(recallObservationTool, sessionManager);
 	return [
 		{
 			...notebook,
-			description:
-				`${recallObservationTool.description} ` +
-				"This revisits a known note from your partner's session, never this side conversation.",
+			description: `${recallObservationTool.description} ${scope}`,
 			promptGuidelines: [
 				"Use revisit_note only with a known notebook id when its exact primary-session source materially affects your judgment.",
 				"This follows one sourced notebook entry; it is neither topic search nor repository navigation.",

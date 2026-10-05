@@ -148,6 +148,16 @@ export async function createPairSession(opts: {
 
 	const shared = opts.sharedNotebook;
 	const sharedTools = shared?.tools ?? [];
+	const recallTools = shared
+		? bindPairRecallTools(
+				{
+					getBranch: () => shared.entries(),
+					getEntries: () => shared.entries(),
+					getSessionFile: () => undefined,
+				} as unknown as PrimarySessionManager,
+				"This revisits a known learning in the primary notebook shared by your partner's delegation tree, including archived evidence from child sessions.",
+			)
+		: bindPairRecallTools(opts.primarySessionManager);
 	const toolNames: string[] = [
 		...PAIR_SESSION_TOOLS,
 		...(opts.notebookTool ? ["update_notebook"] : []),
@@ -160,15 +170,7 @@ export async function createPairSession(opts: {
 		opts.attentionTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),
 		...sharedTools,
-		...bindPairRecallTools(
-			shared
-				? ({
-						getBranch: () => shared.entries(),
-						getEntries: () => shared.entries(),
-						getSessionFile: () => undefined,
-					} as unknown as PrimarySessionManager)
-				: opts.primarySessionManager,
-		),
+		...recallTools,
 	];
 	const { session } = await createAgentSession({
 		cwd: opts.cwd,

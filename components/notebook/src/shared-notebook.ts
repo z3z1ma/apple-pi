@@ -220,7 +220,7 @@ export function registerSharedLearningSnapshots(
 
 const CHILD_PAIR_REQUEST = "apple-pi:notebook-child-pair:request";
 
-/** What a coding child's own pair receives: shared reads and exact recall over the primary notebook. */
+/** A coding child's pair receives shared reads, exact recall, and add-only contributions. */
 export interface ChildPairNotebook {
 	tools: ToolDefinition[];
 	entries(signal?: AbortSignal): Entry[];
@@ -233,8 +233,14 @@ export function offerChildPairNotebook(
 	origin: Pick<ChildSourceOrigin, "agentType" | "agentId">,
 	childJournal: () => SessionManager,
 ): void {
+	// The pair can outlive its partner briefly; a late call after the child closes must not commit.
+	let live = true;
+	const entries = (signal?: AbortSignal): Entry[] => {
+		if (!live) throw new Error("The coding child that owned this notebook access has closed.");
+		return notebook.entries(signal);
+	};
 	const access: ChildPairNotebook = {
-		entries: (signal) => notebook.entries(signal),
+		entries,
 		tools: [
 			defineTool({
 				name: "read_notebook",
@@ -243,7 +249,7 @@ export function offerChildPairNotebook(
 					"Read the current open learnings in the primary notebook shared by your partner's delegation tree. Follow a learning id with revisit_note for its original evidence.",
 				parameters: Type.Object({}),
 				async execute(_id, _args, signal) {
-					const reflections = foldLedger(notebook.entries(signal)).currentReflections;
+					const reflections = foldLedger(entries(signal)).currentReflections;
 					return {
 						content: [{ type: "text", text: renderSummary(reflections) || "No open shared learnings." }],
 						details: { reflections },
@@ -254,9 +260,10 @@ export function offerChildPairNotebook(
 				name: "update_notebook",
 				label: "Add shared learning",
 				description:
-					"Immediately add a learning your partner experienced but missed to the primary notebook shared by their delegation tree. Cite the [Source entry id: ...] labels from your partner's trajectory or an expanded receipt, never receipt handles. Your access is add-only: the primary and its pair curate, merge, and retire existing learnings.",
+					"Immediately add a learning your partner experienced but missed to the primary notebook shared by their delegation tree. Cite the [Source entry id: ...] labels from your partner's trajectory or an expanded receipt; receipt handles only address folded payloads. Your access is add-only: the primary and its pair curate, merge, and retire existing learnings.",
 				parameters: PairAddLearningSchema,
 				async execute(_id, args, signal) {
+					entries(signal);
 					const journal = childJournal();
 					return notebook.add(
 						{ ...origin, sessionId: journal.getSessionId() },
@@ -268,8 +275,12 @@ export function offerChildPairNotebook(
 			}),
 		],
 	};
-	pi.events.on(CHILD_PAIR_REQUEST, (reply) => {
+	const unsubscribe = pi.events.on(CHILD_PAIR_REQUEST, (reply) => {
 		if (typeof reply === "function") (reply as (value: ChildPairNotebook) => void)(access);
+	});
+	pi.on("session_shutdown", () => {
+		live = false;
+		unsubscribe();
 	});
 }
 

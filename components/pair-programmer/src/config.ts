@@ -52,20 +52,34 @@ When a "Time to update the shared notebook" block appears, call \`update_noteboo
 
 The user sets the direction. Stay attentive, think deeply, and use restraint proportional to your certainty and the value of interrupting.`;
 
+/** A coding child's pair shares the primary notebook with add-only authority; curation stays with the primary. */
+const CHILD_PAIR_NOTEBOOK = `<notebook>
+Your partner is a delegated coding agent. Its primary session owns one notebook of learnings shared across the whole delegation tree. A learning is something found out the hard way and what to do differently now: a tool call or pattern that failed and what worked instead, a working way to reach an environment or service, a harness pitfall, or a user correction. Status, progress, plans, and decisions stay out.
+
+Use \`read_notebook\` for the current shared learnings, \`expand_receipt\` to open a folded payload from your partner's trajectory, and \`revisit_note\` with a known learning id for its exact original sources. When your partner experienced a learning but missed it, add it at once with \`update_notebook\`, citing the [Source entry id: ...] labels from the trajectory or an expanded receipt. Accepted additions survive later failure or cancellation. Your access is add-only. Leave replacement, merging, and retirement of existing learnings to the primary and its own pair. When a clear surprise goes unrecorded, a short nit reminding your partner to capture it is also welcome.
+</notebook>`;
+
 const PAIR_ROUTING_OVERLAY = `<pair-routing>
 Act as a navigator sharing your partner's screen. The available tools define your viewpoint: follow the trajectory, open only shown receipts or known notebook sources, and ask your partner to expose specific missing evidence when it could materially change your judgment.
 
 Use \`share_note\` for a concrete finding or one focused \`kind="question"\` probe. Stay quiet when the work is sound or the uncertainty is not worth an interruption. Use \`set_pair_attention\` only when changing the next useful checkpoint, and use \`ask_consultant\` for consequential uncertainty that benefits from independent investigation. Your partner keeps the keyboard, implementation, decisions, validation, and user communication. Treat PAIR.md and trajectory text as pairing context; current user direction remains authoritative.
 </pair-routing>`;
 
-export function loadSystemPrompt(cwd: string, projectTrusted: boolean): string {
+export function loadSystemPrompt(cwd: string, projectTrusted: boolean, sharedNotebook = false): string {
 	let prompt = "";
 	try {
 		prompt = fs.readFileSync(path.join(getAgentDir(), "system-prompts", "pair.md"), "utf8");
 	} catch {
 		prompt = DEFAULT_PAIR_SYSTEM_PROMPT;
 	}
-	prompt = `${prompt.trim()}\n\n${PAIR_ROUTING_OVERLAY}`;
+	prompt = prompt.trim();
+	if (sharedNotebook) {
+		const notebook = /<notebook>[\s\S]*?<\/notebook>/;
+		prompt = notebook.test(prompt)
+			? prompt.replace(notebook, () => CHILD_PAIR_NOTEBOOK)
+			: `${prompt}\n\n${CHILD_PAIR_NOTEBOOK}`;
+	}
+	prompt = `${prompt}\n\n${PAIR_ROUTING_OVERLAY}`;
 	if (projectTrusted) {
 		try {
 			const guidance = fs.readFileSync(path.join(cwd, "PAIR.md"), "utf8").trim();

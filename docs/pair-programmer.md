@@ -80,6 +80,10 @@ Free-form prose does not start a consultant consultation. The pair prompt gives 
 
 One conservative repeated-failure gate may also ask the consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
 
+### Pair of a coding child
+
+When a public interactive child with active built-in `edit` or `write` capability runs with `pair: true`, including a nested one, its partner shares the primary notebook rather than keeping one of its own. `read_notebook` shows the current shared learnings, `revisit_note` follows a known learning to its original primary or archived child evidence, and `expand_receipt` still opens only folded payloads from the child's own trajectory. Its `update_notebook` is add-only and commits immediately: it cites the child's source-entry IDs from the trajectory or an expanded receipt, never receipt handles, and the primary validates them against the child's actual session. An accepted addition stays in the primary notebook even if that review, the child, or its pair later fails or is cancelled. Supersede, retire, and retention-sweep attempts are rejected, so the primary and its own pair keep curation. Access belongs to the child session and its original primary owner; after the child closes, or the primary navigates or shuts down, a late addition is rejected. The child pair receives no maintenance prompts. See [Context and notebook](context.md#interactive-coding-children). Advisory and internal children keep the ordinary pair toolset.
+
 ## Review timing and retries
 
 The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before pair construction or model work begins. Capturing a delta does not itself invoke the pair model. A review scheduler grants one permit for the complete accumulated prefix at meaningful checkpoints inside the active run:
