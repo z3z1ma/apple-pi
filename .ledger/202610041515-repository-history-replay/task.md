@@ -26,7 +26,7 @@ Acceptance criteria:
 
 ## Later steps (open)
 
-Re-simulation design for AGENTS.md and skills (level 2): the scorecard, the runner (building on `components/history-eval/`), choosing histories, cost limits set by the operator, and the transfer test on fresh tasks.
+Re-simulation design for AGENTS.md and skills (level 2 in `notes.md` section 5: re-run real past tasks from their base commit with a changed AGENTS.md or skill, and compare against the recorded outcome): the scorecard (the four measures in the intent), the runner (building on `components/history-eval/`), choosing histories, cost limits set by the operator, and the transfer test on fresh tasks.
 
 ## Current State
 
