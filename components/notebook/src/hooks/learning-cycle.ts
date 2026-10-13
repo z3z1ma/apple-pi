@@ -2,9 +2,11 @@ import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-ag
 
 import { inForkedContinuation } from "../../../shared/src/fork-context.js";
 import { registerForkedContinuation } from "../../../shared/src/forked-continuation.js";
-import { LEARNING_PLACEMENT } from "../learning-placement.js";
+import { distillPrompt } from "../distillation.js";
+import { openLearnings } from "./open-learnings.js";
 
 export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
+export const LEARNING_DISTILLATION_MESSAGE_TYPE = "notebook.learning-distillation";
 
 /** New tokens between automatic reflections; chosen by the user, to be tuned from real use. */
 export const LEARNING_REFLECTION_SPACING_TOKENS = 500_000;
@@ -18,10 +20,7 @@ function withEvidence(prompt: string, evidence: readonly string[]): string {
 }
 
 export function learningReflectionPrompt(evidence: readonly string[]): string {
-	return withEvidence(
-		`${QUESTIONS} Then place every open learning. ${LEARNING_PLACEMENT} Reply in one line: what you placed where, or that nothing was worth keeping.`,
-		evidence,
-	);
+	return withEvidence(`${QUESTIONS} If nothing is worth keeping, say so in one line.`, evidence);
 }
 
 /** The learning questions and evidence, for a caller that supplies its own closing instruction. */
@@ -57,13 +56,33 @@ export function trackLearningEvidence(pi: ExtensionAPI): string[] {
 	return evidence;
 }
 
+/** Reflection and distillation forks run one at a time, so a distill sees what a reflection captured. */
+function forkLane(pi: ExtensionAPI): (start: () => Promise<void>) => void {
+	let lane = Promise.resolve();
+	let generation = 0;
+	const invalidate = () => {
+		generation++;
+	};
+	pi.on("session_start", invalidate);
+	pi.on("session_tree", invalidate);
+	pi.on("session_shutdown", invalidate);
+	return (start) => {
+		const queuedIn = generation;
+		lane = lane.then(() => (queuedIn === generation ? start() : undefined));
+	};
+}
+
 /**
- * Once enough new tokens have passed, reflect in a headless fork after a completed
- * run, with the failed or surprising tool calls of that stretch as evidence.
- * `/reflect` asks the main agent in-band at any time.
+ * Capture: once enough new tokens have passed, reflect in a headless fork after a
+ * completed run, with the failed or surprising tool calls of that stretch as evidence.
+ * Distill: right after each compaction, while the context has room, a headless fork
+ * moves durable open learnings to project files and retires stale ones.
+ * `/reflect` and `/distill` ask the main agent in-band at any time.
  */
-export function registerLearningReflection(pi: ExtensionAPI): void {
+export function registerLearningCycle(pi: ExtensionAPI): void {
 	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Reflection");
+	const distill = registerForkedContinuation(pi, LEARNING_DISTILLATION_MESSAGE_TYPE, "Distill");
+	const enqueue = forkLane(pi);
 	let newTokens = 0;
 	let completed = false;
 	const evidence = trackLearningEvidence(pi);
@@ -91,7 +110,17 @@ export function registerLearningReflection(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_settled", (_event, ctx) => {
-		if (completed && newTokens >= LEARNING_REFLECTION_SPACING_TOKENS) reflect(ctx, takePrompt());
+		if (!completed || newTokens < LEARNING_REFLECTION_SPACING_TOKENS) return;
+		const prompt = takePrompt();
+		enqueue(() => reflect(ctx, prompt));
+	});
+
+	pi.on("session_compact", (_event, ctx) => {
+		enqueue(() => {
+			const learnings = openLearnings(ctx);
+			if (learnings.length === 0) return Promise.resolve();
+			return distill(ctx, distillPrompt(learnings));
+		});
 	});
 
 	pi.registerCommand("reflect", {
@@ -99,6 +128,21 @@ export function registerLearningReflection(pi: ExtensionAPI): void {
 		handler: async () => {
 			pi.sendMessage(
 				{ customType: LEARNING_REFLECTION_MESSAGE_TYPE, content: takePrompt(), display: true },
+				{ deliverAs: "steer", triggerTurn: true },
+			);
+		},
+	});
+
+	pi.registerCommand("distill", {
+		description: "Ask the agent to move durable learnings from the notebook to project files",
+		handler: async (_args, ctx) => {
+			const learnings = openLearnings(ctx);
+			if (learnings.length === 0) {
+				ctx.ui.notify("No open learnings to distill.", "info");
+				return;
+			}
+			pi.sendMessage(
+				{ customType: LEARNING_DISTILLATION_MESSAGE_TYPE, content: distillPrompt(learnings), display: true },
 				{ deliverAs: "steer", triggerTurn: true },
 			);
 		},

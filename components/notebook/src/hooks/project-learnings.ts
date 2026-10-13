@@ -9,20 +9,13 @@ export const PROJECT_LEARNINGS_PATH = ".pi/LEARNINGS.md";
 export const PROJECT_LEARNINGS_TAG = "project-learnings";
 
 /**
- * Adds `.pi/LEARNINGS.md` to the system prompt as read at session start or the last
- * compaction, so the prompt prefix stays cached between compactions.
+ * Adds `.pi/LEARNINGS.md` to the system prompt at each run. Pi appends a changed
+ * section as a system message, so the cached prefix stays intact.
  */
 export function registerProjectLearnings(pi: ExtensionAPI): void {
-	let learnings: string | undefined;
-	const read = (_event: unknown, ctx: { cwd: string }) => {
+	pi.on("before_agent_start", (event, ctx) => {
 		const path = join(ctx.cwd, PROJECT_LEARNINGS_PATH);
-		learnings = existsSync(path) ? readFileSync(path, "utf8").trim() || undefined : undefined;
-	};
-
-	pi.on("session_start", read);
-	pi.on("session_compact", read);
-
-	pi.on("before_agent_start", (event) => {
+		const learnings = existsSync(path) ? readFileSync(path, "utf8").trim() : "";
 		if (!learnings) return;
 		setSystemPromptSection(
 			event.systemPromptOptions,

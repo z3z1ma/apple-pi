@@ -1,15 +1,15 @@
 # Forked continuations
 
-A forked continuation runs a prompt in a separate, in-memory copy of a live conversation without continuing or steering that session. Change review and automatic learning reflection use it for passive prompts, shown as `Change review:` and `Reflection:`. Branch search and child clarification use the same fork implementation with their own result delivery and tool restrictions, described below. Prompts such as `/reflect` and `/distill` stay in the main conversation.
+A forked continuation runs a prompt in a separate, in-memory copy of a live conversation without continuing or steering that session. Change review, automatic learning reflection, and distillation after compaction use it for passive prompts, shown as `Change review:`, `Reflection:`, and `Distill:`. Branch search and child clarification use the same fork implementation with their own result delivery and tool restrictions, described below. Prompts such as `/reflect` and `/distill` stay in the main conversation.
 
 ## Passive reflection behavior
 
-- After a run fully settles (Pi's `agent_settled`), the consumer starts a headless fork of the live conversation. The fork is the same conversation: the same system prompt, tool loadout, model, thinking level, provider session ID (prompt cache key), and messages. The consumer's prompt is added at the end. Its provider requests therefore share the parent's cached prefix.
+- After a run fully settles (Pi's `agent_settled`), or right after a compaction for distillation, the consumer starts a headless fork of the live conversation. The fork is the same conversation: the same system prompt, tool loadout, model, thinking level, provider session ID (prompt cache key), and messages. The consumer's prompt is added at the end. Its provider requests therefore share the parent's cached prefix.
 - The fork runs the parent's tools through the parent's hooks, so the search root guard and RTK rewriting still apply. Its file edits and notebook updates are real. `ask_user_question` is blocked because no user is present.
 - The fork writes nothing to the parent transcript. Its tool calls do not count as changes or evidence for the parent's change and learning reflections.
 - When the fork finishes, its one-line reply becomes one custom message in the parent session, shown as one line in the chat (expand it to read the full text). The message does not start or steer a turn. When the parent is idle, it is appended at once and the model sees it on the next turn. When a run is streaming, it is appended at the end of the current turn, and the model sees it on its next request.
 - The editor status shows `reflecting…` while a fork runs. If a fork fails, a warning appears and no message is added.
-- Forks of the same kind can run at the same time. Starting a new session, switching session, or moving in the session tree cancels all running forks.
+- Forks of the same kind can run at the same time; the returned function's promise settles when its fork does, so a consumer can run forks one at a time (learning reflection and distillation do). Starting a new session, switching session, or moving in the session tree cancels all running forks.
 
 ## Limits
 

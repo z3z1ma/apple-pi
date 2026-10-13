@@ -346,17 +346,17 @@ try {
 	assert.deepEqual(promptDiagnostics, []);
 	assert.deepEqual(
 		promptTemplates.map((template) => template.name),
-		["distill", "interrogate"],
+		["interrogate", "promote"],
 	);
-	const distillTemplate = promptTemplates.find((template) => template.name === "distill");
-	assert(distillTemplate);
-	assert.equal(distillTemplate.argumentHint, "[focus]");
-	assert.match(distillTemplate.description, /machine-owned project files into human-owned/);
-	assert.match(expandPromptTemplate("/distill", promptTemplates), /the most recent meaningful body of work/);
-	assert.match(expandPromptTemplate("/distill debugging workflow", promptTemplates), /focused on: debugging workflow/);
-	assert.match(distillTemplate.content, /AGENTS\.md/);
-	assert.match(distillTemplate.content, /change no human-owned file/i);
-	assert.match(distillTemplate.content, /\.pi\/LEARNINGS\.md/);
+	const promoteTemplate = promptTemplates.find((template) => template.name === "promote");
+	assert(promoteTemplate);
+	assert.equal(promoteTemplate.argumentHint, "[focus]");
+	assert.match(promoteTemplate.description, /machine-owned project files into human-owned/);
+	assert.match(expandPromptTemplate("/promote", promptTemplates), /the most recent meaningful body of work/);
+	assert.match(expandPromptTemplate("/promote debugging workflow", promptTemplates), /focused on: debugging workflow/);
+	assert.match(promoteTemplate.content, /AGENTS\.md/);
+	assert.match(promoteTemplate.content, /change no human-owned file/i);
+	assert.match(promoteTemplate.content, /\.pi\/LEARNINGS\.md/);
 	const interrogateTemplate = promptTemplates.find((template) => template.name === "interrogate");
 	assert(interrogateTemplate);
 	assert.equal(interrogateTemplate.argumentHint, "[subject]");

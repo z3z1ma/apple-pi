@@ -3290,7 +3290,7 @@ async function lifecycleHarness() {
 		emit,
 		ack: ext.tools.get("acknowledge_pair_findings").definition,
 		cmd: ext.commands.get("pair").handler,
-		uiCtx: { ui: { notify: () => {} } },
+		uiCtx: { cwd: tmpdir(), ui: { notify: () => {} } },
 		turnCtx: { model: undefined, cwd: HERE },
 	};
 }
@@ -3359,7 +3359,6 @@ test("lifecycle: primary compact leaves the pair alone; identity change does not
 	const x = await lifecycleHarness();
 	let builds = 0;
 	const ctx = {
-		cwd: tmpdir(),
 		sessionManager: {
 			buildContextEntries() {
 				builds++;

@@ -270,12 +270,13 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
  * Register a passive continuation that runs in a headless fork and returns one
  * message. The message joins the parent's context without starting or steering a
  * turn: at once when idle, or at the end of the current turn while one streams.
+ * The returned promise settles once that fork does; it never rejects.
  */
 export function registerForkedContinuation(
 	pi: ExtensionAPI,
 	customType: string,
 	label: string,
-): (ctx: ExtensionContext, prompt: string) => void {
+): (ctx: ExtensionContext, prompt: string) => Promise<void> {
 	liveSessions();
 	const running = new Set<ForkHandle>();
 	const cancelAll = (_event: unknown, ctx: ExtensionContext) => {
@@ -293,7 +294,7 @@ export function registerForkedContinuation(
 		const session = liveSession(ctx);
 		if (!session) {
 			ctx.ui.notify(`${label} skipped: the live session is not available.`, "warning");
-			return;
+			return Promise.resolve();
 		}
 		const fork = startFork(session, {
 			messages: session.sessionManager.buildSessionProjection().messages,
@@ -308,7 +309,7 @@ export function registerForkedContinuation(
 		});
 		running.add(fork);
 		ctx.ui.setStatus(customType, "reflecting…");
-		fork.result
+		return fork.result
 			.then(({ messages }) => {
 				const last = messages.at(-1);
 				if (last?.role === "assistant" && (last.stopReason === "error" || last.stopReason === "aborted"))

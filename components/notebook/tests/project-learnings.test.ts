@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import {
 	PROJECT_LEARNINGS_PATH,
 	PROJECT_LEARNINGS_TAG,
@@ -15,47 +15,45 @@ afterEach(() => {
 	for (const dispose of cleanup.splice(0)) dispose();
 });
 
-function project(learnings?: string) {
+async function project(learnings?: string) {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-project-learnings-"));
 	cleanup.push(() => rmSync(cwd, { recursive: true, force: true }));
-	if (learnings !== undefined) {
-		mkdirSync(join(cwd, ".pi"));
-		writeFileSync(join(cwd, PROJECT_LEARNINGS_PATH), learnings);
-	}
-	const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-	registerProjectLearnings({
-		on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(event, handler),
-	} as unknown as ExtensionAPI);
-	const startSession = () => handlers.get("session_start")?.({}, { cwd });
-	const compact = () => handlers.get("session_compact")?.({}, { cwd });
-	const prompt = () => {
-		const systemPromptOptions = { sections: {} as Record<string, string> };
-		handlers.get("before_agent_start")?.({ systemPromptOptions }, { cwd });
-		return systemPromptOptions.sections[PROJECT_LEARNINGS_TAG];
-	};
-	const rewrite = (text: string) => writeFileSync(join(cwd, PROJECT_LEARNINGS_PATH), text);
-	return { startSession, compact, prompt, rewrite };
+	mkdirSync(join(cwd, ".pi"));
+	const write = (text: string) => writeFileSync(join(cwd, PROJECT_LEARNINGS_PATH), text);
+	if (learnings !== undefined) write(learnings);
+	const run = await fauxSession([registerProjectLearnings], [], [], { cwd });
+	cleanup.push(run.dispose);
+	const sections = (request: number) =>
+		(run.requests[request]?.messages ?? []).flatMap((message) =>
+			message.role === "system" && message.sections?.[PROJECT_LEARNINGS_TAG]
+				? [message.sections[PROJECT_LEARNINGS_TAG]]
+				: [],
+		);
+	return { session: run.session, write, sections };
 }
 
 describe("project learnings", () => {
-	it("adds the learnings file as read at session start, and rereads it after compaction", () => {
-		const { startSession, compact, prompt, rewrite } = project("- Use perl -pi -e for in-place edits.\n");
+	it("adds the learnings file to the system prompt and appends a later change", async () => {
+		const { session, write, sections } = await project("- Use perl -pi -e for in-place edits.\n");
 
-		startSession();
-		const first = prompt();
-		rewrite("- Changed during the session.\n");
+		await session.prompt("First.");
+		await session.prompt("Second.");
+		write("- Changed during the session.\n");
+		await session.prompt("Third.");
 
-		expect(first).toContain("- Use perl -pi -e for in-place edits.");
-		expect(prompt()).toBe(first);
-		compact();
-		expect(prompt()).toContain("- Changed during the session.");
+		expect(sections(0)).toHaveLength(1);
+		expect(sections(0)[0]).toContain("- Use perl -pi -e for in-place edits.");
+		expect(sections(1)).toEqual(sections(0));
+		expect(sections(2)).toHaveLength(2);
+		expect(sections(2)[0]).toBe(sections(0)[0]);
+		expect(sections(2)[1]).toContain("- Changed during the session.");
 	});
 
-	it("adds nothing when the project has no learnings file", () => {
-		const { startSession, prompt } = project();
+	it("adds nothing when the project has no learnings file", async () => {
+		const { session, sections } = await project();
 
-		startSession();
+		await session.prompt("Hello.");
 
-		expect(prompt()).toBeUndefined();
+		expect(sections(0)).toEqual([]);
 	});
 });

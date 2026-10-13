@@ -10,7 +10,7 @@
 import type { ExtensionAPI, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { extractText } from "./context.js";
 import { reflectionPrompt, trackChanges } from "../../change-reflection/src/index.js";
-import { learningQuestions, trackLearningEvidence } from "../../notebook/src/hooks/learning-reflection.js";
+import { learningQuestions, trackLearningEvidence } from "../../notebook/src/hooks/learning-cycle.js";
 
 export const COMPLETION_REFLECTION_MESSAGE_TYPE = "subagents.completion-reflection";
 

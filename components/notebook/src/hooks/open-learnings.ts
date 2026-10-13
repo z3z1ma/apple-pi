@@ -1,11 +1,11 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { LEARNING_PLACEMENT } from "../learning-placement.js";
-import { type Entry, foldLedger, type Reflection, reflectionToSummaryLine } from "../session-ledger/index.js";
+import { distillPrompt } from "../distillation.js";
+import { type Entry, foldLedger, type Reflection } from "../session-ledger/index.js";
 
 export const OPEN_LEARNINGS_STATUS_KEY = "learnings";
 
-function openLearnings(ctx: ExtensionContext): readonly Reflection[] {
+export function openLearnings(ctx: ExtensionContext): readonly Reflection[] {
 	return foldLedger((ctx.sessionManager?.getBranch?.() ?? []) as Entry[]).currentReflections;
 }
 
@@ -15,15 +15,13 @@ export function showOpenLearnings(ctx: ExtensionContext): void {
 	ctx.ui?.setStatus?.(OPEN_LEARNINGS_STATUS_KEY, count > 0 ? `learnings:${count}` : undefined);
 }
 
-/** Lists each open learning by id, since the caller may not have seen learnings recorded by forked continuations. */
 export function ledgerCloseReminder(learnings: readonly Reflection[]): string {
-	const count = learnings.length;
-	return `This session has ${count} open learning${count === 1 ? "" : "s"}. Before you close the task, place them; this task's retrospective.md is the default home. ${LEARNING_PLACEMENT} Then call ledger_status again.\n\n${learnings.map(reflectionToSummaryLine).join("\n")}`;
+	return `Before you close the task, distill this session's open learnings, then call ledger_status again. Lessons about this task belong in its retrospective.md.\n\n${distillPrompt(learnings)}`;
 }
 
 /**
  * Show the open-learning count, and hold the first close of each ledger task
- * while learnings are open, so they are placed while the retrospective is live.
+ * while learnings are open, so they are distilled while the retrospective is live.
  */
 export function registerOpenLearnings(pi: ExtensionAPI): void {
 	const reminded = new Set<string>();

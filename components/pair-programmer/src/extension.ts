@@ -40,7 +40,7 @@ import { Type } from "typebox";
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
 import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
-import { registerLearningReflection } from "../../notebook/src/hooks/learning-reflection.js";
+import { registerLearningCycle } from "../../notebook/src/hooks/learning-cycle.js";
 import { registerOpenLearnings, showOpenLearnings } from "../../notebook/src/hooks/open-learnings.js";
 import { registerProjectLearnings } from "../../notebook/src/hooks/project-learnings.js";
 import {
@@ -1339,7 +1339,7 @@ export default function (pi: ExtensionAPI) {
 		registerNotebookSourceTool(pi);
 		registerMainNotebookTool(pi, rootNotebook);
 		registerSharedNotebook(pi, rootNotebook);
-		registerLearningReflection(pi);
+		registerLearningCycle(pi);
 		registerOpenLearnings(pi);
 		registerProjectLearnings(pi);
 	}

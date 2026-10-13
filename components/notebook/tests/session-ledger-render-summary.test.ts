@@ -14,8 +14,7 @@ describe("notebook summary rendering", () => {
 		const summary = renderSummary([ref]);
 
 		expect(summary).toContain("Learnings last for this session only");
-		expect(summary).toContain("Retire each placed learning with update_notebook");
-		expect(summary).toContain(".pi/LEARNINGS.md");
+		expect(summary).toContain("After each compaction, at ledger close, and on /distill");
 		expect(summary).toContain("use revisit_note");
 		expect(summary).toContain("search_session");
 		expect(summary).not.toContain("Current law");
