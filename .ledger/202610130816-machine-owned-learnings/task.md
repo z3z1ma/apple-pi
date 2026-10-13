@@ -63,7 +63,7 @@ Lifecycle:
 - An automatic placement that targets a path outside the machine zone is rejected (test).
 - Injected learnings are marked advisory and cannot override human or harness instructions in the prompt order (test on the assembled system prompt).
 - Writing `.pi/LEARNINGS.md` during a session does not change that session's system prompt (test; `npm run audit:cache` on real sessions).
-- After about a week of use, most recorded learnings end placed or retired (baseline: 286 of 587 in idle files), measured with the same session parse.
+- After about a week of use, most recorded learnings end placed or retired (baseline: 286 of 587 in idle files), counted by the rule in Evidence.
 - After the same week, `.pi/LEARNINGS.md` has no duplicate or contradicting lines (manual review).
 - `/distill` proposes promotions from the machine zone to human-zone owners and writes only what the user approves.
 - `docs/context.md` and `prompts/distill.md` describe the new lifecycle.
