@@ -3359,6 +3359,7 @@ test("lifecycle: primary compact leaves the pair alone; identity change does not
 	const x = await lifecycleHarness();
 	let builds = 0;
 	const ctx = {
+		cwd: tmpdir(),
 		sessionManager: {
 			buildContextEntries() {
 				builds++;

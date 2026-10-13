@@ -1,9 +1,10 @@
+import { LEARNING_PLACEMENT } from "../learning-placement.js";
 import type { Observation, Reflection } from "./types.js";
 
 const CONTEXT_USAGE_INSTRUCTIONS = `You and your pair programming partner record learnings from this session here: things found out the hard way and what to do differently now. This live view replaces earlier notebook snapshots; historical notes remain available through source recall.
 
 - Apply each learning to the work while it holds. Its id appears in brackets.
-- Learnings last for this session only. Place each one where it improves future work once the user approves: a wiki page, the governing task's retrospective, AGENTS.md, a skill, a saved program in .pi/programs/, or a test or doc. Then retire it with update_notebook, and retire a learning that is not worth keeping.
+- Learnings last for this session only. ${LEARNING_PLACEMENT}
 
 When a learning is too compressed for an important decision, use revisit_note with its id to see the original source context. Use search_session to search earlier conversation or recover a file written during this session.`;
 

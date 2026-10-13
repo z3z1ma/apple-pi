@@ -1,20 +1,15 @@
 # Distill
 
-`/distill [focus]` is an explicitly invoked prompt template for turning recent work into proposed durable knowledge and reusable harness artifacts. It runs as a normal model turn with the current conversation and available tools; there is no distillation extension, background service, or separate state store.
+`/distill [focus]` is an explicitly invoked prompt template that promotes learnings from machine-owned project files into human-owned ones. It runs as a normal model turn with the current conversation and available tools; there is no distillation extension, background service, or separate state store.
 
-Distillation is broader than summarization. The model reviews the most recent meaningful work, uses the pair programmer's notebook and transcript recall when needed, and looks for lessons worth carrying into future sessions. ledger records, repository state, diffs, documentation, and existing artifacts are optional evidence rather than required inputs. Credentials, private transcript text, and notebook records remain in session storage; durable artifacts receive only non-sensitive synthesis. When sensitive details cannot be removed without invalidating a lesson, the model proposes no artifact.
+The harness already places session learnings without asking in machine-owned files: `.pi/LEARNINGS.md`, `.wiki/`, ledger task retrospectives, and `.pi/programs/` (see [Context and notebook](context.md#pair-programmer-notebook)). A distill pass:
 
-A pass can propose multiple destinations:
+- places any open notebook learnings the same way;
+- keeps `.pi/LEARNINGS.md` lean: merges duplicates, removes stale or promoted lines, and moves long explanations to the wiki, without asking;
+- proposes promotions to human-owned files: the project `AGENTS.md`, a skill, or authoritative docs, tests, runbooks, or code; and
+- after the user approves, writes only the approved changes and removes each promoted line from `.pi/LEARNINGS.md`.
 
-- `AGENTS.md` for strongly evidenced, broadly applicable instructions or boundaries that must remain in every agent context;
-- `.wiki/` for durable project-local knowledge and sourced synthesis;
-- the clearly governing ledger task's `retrospective.md` for bounded undertaking-specific learning;
-- a skill for a recurring model procedure;
-- `.pi/programs/` for a demonstrated reusable `pi_exec` composition;
-- authoritative documentation, tests, runbooks, code, or decisions when they are the real owner; or
-- no artifact when a lesson is transient, duplicated, weakly supported, or not worth maintaining.
-
-The command is proposal-first. Its initial turn inspects likely existing owners, explains each candidate and its evidence, recommends against low-value retention, and asks the operator what to approve. Invocation alone does not authorize writes. After approval, the model creates only the agreed artifacts using the relevant existing procedures and local conventions.
+Project files are the default scope. User-level files such as `~/.pi/agent/AGENTS.md` are proposed only when the user asks. Credentials, private transcript text, and notebook records stay in session storage; durable files receive only non-sensitive synthesis.
 
 An optional focus narrows the inquiry without changing the behavior:
 

@@ -2,6 +2,7 @@ import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-ag
 
 import { inForkedContinuation } from "../../../shared/src/fork-context.js";
 import { registerForkedContinuation } from "../../../shared/src/forked-continuation.js";
+import { LEARNING_PLACEMENT } from "../learning-placement.js";
 
 export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
 
@@ -17,7 +18,10 @@ function withEvidence(prompt: string, evidence: readonly string[]): string {
 }
 
 export function learningReflectionPrompt(evidence: readonly string[]): string {
-	return withEvidence(`${QUESTIONS} If nothing is worth keeping, say so in one line.`, evidence);
+	return withEvidence(
+		`${QUESTIONS} Then place every open learning. ${LEARNING_PLACEMENT} Reply in one line: what you placed where, or that nothing was worth keeping.`,
+		evidence,
+	);
 }
 
 /** The learning questions and evidence, for a caller that supplies its own closing instruction. */

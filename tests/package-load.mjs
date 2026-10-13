@@ -351,11 +351,12 @@ try {
 	const distillTemplate = promptTemplates.find((template) => template.name === "distill");
 	assert(distillTemplate);
 	assert.equal(distillTemplate.argumentHint, "[focus]");
-	assert.match(distillTemplate.description, /durable knowledge and reusable harness artifacts/);
+	assert.match(distillTemplate.description, /machine-owned project files into human-owned/);
 	assert.match(expandPromptTemplate("/distill", promptTemplates), /the most recent meaningful body of work/);
 	assert.match(expandPromptTemplate("/distill debugging workflow", promptTemplates), /focused on: debugging workflow/);
 	assert.match(distillTemplate.content, /AGENTS\.md/);
-	assert.match(distillTemplate.content, /do not create or modify artifacts/i);
+	assert.match(distillTemplate.content, /change no human-owned file/i);
+	assert.match(distillTemplate.content, /\.pi\/LEARNINGS\.md/);
 	const interrogateTemplate = promptTemplates.find((template) => template.name === "interrogate");
 	assert(interrogateTemplate);
 	assert.equal(interrogateTemplate.argumentHint, "[subject]");

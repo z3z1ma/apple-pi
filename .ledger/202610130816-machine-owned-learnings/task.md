@@ -1,4 +1,4 @@
-Status: planning
+Status: in-progress
 Created: 2026-10-13
 Updated: 2026-10-13
 
@@ -8,7 +8,7 @@ Updated: 2026-10-13
 
 Take the user out of the placement loop so the harness can improve itself without a human bottleneck. Learnings must still never reach a place the user does not want: the home directory, or a file the repository shares that the user did not choose to share.
 
-The gate moves from a per-learning human decision to a fixed write boundary. Git ignore state, which the user controls per repository, decides what is shared; paths a repository already tracks are an open question below. This works the same in a personal repository (track the machine zone) and in a large team repository where nobody else uses apple-pi (ignore the machine zone).
+The gate moves from a per-learning human decision to a fixed write boundary. Git ignore state, which the user controls per repository, decides what is shared. This works the same in a personal repository (track the machine zone) and in a large team repository where nobody else uses apple-pi (ignore the machine zone).
 
 Successor of `.ledger/history/202610022036-notebook-learning-loop/`, whose capture and reflection slices stay.
 
@@ -45,33 +45,29 @@ Lifecycle:
 - Automatic placement never writes outside the project. A learning that looks global stays project-local; the user promotes it by hand if wanted (user, 2026-10-13).
 - Recorded as a new task; the learning-loop task closes on its delivered scope (user, 2026-10-13).
 
-## Open questions
-
-- Enforcement: a path guard on the placement fork's `edit`/`write` (like the search-root guard), or prompt only. Recommendation: enforce. A path guard limits where placement writes; it does not limit what a learned line later makes an agent do.
-- Authority: `.pi/LEARNINGS.md` turns model-made text into lasting instructions for every later session. A learned line such as "stage all generated changes" could undo the sharing rule without any write outside the zone. Options: inject it under a harness-owned frame that marks it advisory and below human and harness policy (lowers the risk; not a sandbox); guard `git add`/`commit` of machine-zone paths in code instead of trusting learned text; make unframed system-level learnings an explicit opt-in. Recommendation: frame plus code-level sharing rules; decide the opt-in with the user.
-- Revisions: an ignored `.pi/LEARNINGS.md` has no git history. Check whether session file-operation recall (`search_session` `#N:path`) is enough to recover a bad rewrite, or whether placement must keep its own revisions.
-- Trust: inject `.pi/LEARNINGS.md` only in trusted projects, matching Pi's `.pi/APPEND_SYSTEM.md`.
-- Already-tracked machine-zone paths: `.git/info/exclude` hides only untracked files. If a team repository already tracks `.wiki/`, `.ledger/`, or `.pi/`, automatic writes would land in shared files. Decide whether a tracked path counts as the user's choice to share or whether placement skips tracked files the user did not opt into.
-- Children: which child sessions receive `.pi/LEARNINGS.md`. Today children suppress `AGENTS.md` and `APPEND_SYSTEM.md` (`components/subagents/src/agent-runner.ts`).
-- Ledger close: the held-once reminder (`components/notebook/src/hooks/open-learnings.ts`) places automatically instead of asking.
-- Format of `.pi/LEARNINGS.md`: plain instructions, or instructions plus a short provenance marker so consolidation can judge staleness.
-- Where the injection and guard code live (notebook component, a new owner, or an existing extension).
+- No path guard and no sharing machinery. The prompts name the machine-owned files; the user controls sharing with `.gitignore`, including paths a repository already tracks (user, 2026-10-13).
+- `/distill` advises keeping `.pi/LEARNINGS.md` short; the model otherwise edits it freely with normal tools (user, 2026-10-13).
+- Injection lives in the notebook component (`components/notebook/src/hooks/project-learnings.ts`), root session only, read at session start, under one line saying the user's instructions and `AGENTS.md` take precedence. No trust check, matching `AGENTS.md` loading.
+- `.pi/LEARNINGS.md` holds plain instructions; no provenance format.
 
 ## Acceptance criteria
 
-- A learning recorded in one session appears in `.pi/LEARNINGS.md` and in the next session's system prompt with no user action.
-- An automatic placement that targets a path outside the machine zone is rejected (test).
-- Injected learnings are marked advisory and cannot override human or harness instructions in the prompt order (test on the assembled system prompt).
-- Writing `.pi/LEARNINGS.md` during a session does not change that session's system prompt (test; `npm run audit:cache` on real sessions).
-- After about a week of use, most recorded learnings end placed or retired (baseline: 286 of 587 in idle files), counted by the rule in Evidence.
-- After the same week, `.pi/LEARNINGS.md` has no duplicate or contradicting lines (manual review).
-- `/distill` proposes promotions from the machine zone to human-zone owners and writes only what the user approves.
-- `docs/context.md` and `prompts/distill.md` describe the new lifecycle.
+- A learning placed in `.pi/LEARNINGS.md` appears in the next session's system prompt with no user action (test).
+- Writing `.pi/LEARNINGS.md` during a session does not change that session's system prompt (test).
+- The automatic reflection and the ledger-close hold place learnings without asking the user (prompt text; tests).
+- `/distill` proposes promotions from machine-owned to human-owned files and writes only what the user approves.
+- `docs/context.md`, `docs/distill.md`, and `prompts/distill.md` describe the new lifecycle.
+- Observed in real use, not before closing: most recorded learnings end placed or retired (baseline: 286 of 587 in idle files, counted by the rule in Evidence), and `.pi/LEARNINGS.md` stays free of duplicates.
+
+## Known limits
+
+- Placement runs at the token-spaced reflection, at ledger close, on `/reflect`, and on `/distill`. Learnings recorded after the last of these in a session are lost at session end.
+- Child sessions do not load `.pi/LEARNINGS.md`.
 
 ## Current State
 
-Planning. Direction and the decisions above settled with the user on 2026-10-13. Next: answer the open questions, then move to `ready`.
+Implemented 2026-10-13: `components/notebook/src/learning-placement.ts` (shared placement text), `hooks/project-learnings.ts` (injection), reflection, ledger-close, and notebook-summary prompts, `/distill` prompt and docs. Format, lint, typecheck, unit, pair, and loader suites pass.
 
 ## Outcome
 
-Pending.
+Delivered. Placement no longer waits for the user; `/distill` is an optional promotion step. Real-use effects are not yet observed.

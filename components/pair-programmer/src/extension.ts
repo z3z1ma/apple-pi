@@ -42,6 +42,7 @@ import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-t
 import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
 import { registerLearningReflection } from "../../notebook/src/hooks/learning-reflection.js";
 import { registerOpenLearnings, showOpenLearnings } from "../../notebook/src/hooks/open-learnings.js";
+import { registerProjectLearnings } from "../../notebook/src/hooks/project-learnings.js";
 import {
 	type PairNotebookBatch,
 	type PairNotebookUpdate,
@@ -1340,6 +1341,7 @@ export default function (pi: ExtensionAPI) {
 		registerSharedNotebook(pi, rootNotebook);
 		registerLearningReflection(pi);
 		registerOpenLearnings(pi);
+		registerProjectLearnings(pi);
 	}
 
 	let enabled = loadEnabled();
