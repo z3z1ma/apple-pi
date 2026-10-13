@@ -232,17 +232,20 @@ describe("input editor rendering", () => {
 		expect(output.split("\n").some((line) => /^─+$/.test(line))).toBe(false);
 	});
 
-	it("shows fast mode beside thinking without adding a status", () => {
-		const snapshot: FooterSnapshot = {
-			...completeSnapshot,
-			model: { ...completeSnapshot.model!, provider: "openai-codex" },
-			fastModeEnabled: true,
-			statuses: [...completeSnapshot.statuses, { key: "fast-mode", text: "fast" }],
-		};
-		const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
-		expect(output).toContain("OpenAI high ⚡");
-		expect(output).not.toMatch(/\bfast\b/);
-	});
+	it.each(["openai", "openai-codex", "xai"])(
+		"shows fast mode beside thinking for %s without adding a status",
+		(provider) => {
+			const snapshot: FooterSnapshot = {
+				...completeSnapshot,
+				model: { ...completeSnapshot.model!, provider },
+				fastModeEnabled: true,
+				statuses: [...completeSnapshot.statuses, { key: "fast-mode", text: "fast" }],
+			};
+			const output = stripTerminalSequences(renderInputCard(snapshot, theme, 120, [""]).join("\n"));
+			expect(output).toContain("OpenAI high ⚡");
+			expect(output).not.toMatch(/\bfast\b/);
+		},
+	);
 
 	it("leaves native prompt text styling unchanged", () => {
 		const nativePrompt = "hello \u001b[7mworld\u001b[0m again";

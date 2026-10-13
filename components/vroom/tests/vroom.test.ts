@@ -132,6 +132,26 @@ describe("vroom fast mode", () => {
 		);
 	});
 
+	it("activates fast mode for OpenAI requests without an inactive warning", async () => {
+		let enabled = false;
+		const storage: FastModeStorage = {
+			load: async () => enabled,
+			save: async (value) => {
+				enabled = value;
+			},
+		};
+		const extension = harness(storage);
+		const { ctx, notify, setStatus } = context("openai");
+		await extension.handler("session_start")({}, ctx);
+		await extension.command()("", ctx);
+
+		expect(notify).toHaveBeenCalledWith("Fast mode is on for OpenAI (service_tier: priority).", "info");
+		expect(setStatus).toHaveBeenLastCalledWith("fast-mode", "fast");
+		await expect(extension.handler("before_provider_request")({ payload: { model: "gpt-5.4" } }, ctx)).resolves.toEqual(
+			{ model: "gpt-5.4", service_tier: "priority" },
+		);
+	});
+
 	it("applies priority service tier to xAI requests", async () => {
 		const storage: FastModeStorage = { load: async () => true, save: async () => undefined };
 		const extension = harness(storage);

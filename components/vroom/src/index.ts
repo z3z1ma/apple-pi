@@ -6,6 +6,7 @@ const STATUS_ID = "fast-mode";
 const CODEX_PROVIDER = "openai-codex";
 const XAI_PROVIDER = "xai";
 const PROVIDER_LABELS: Record<string, string> = {
+	openai: "OpenAI",
 	[CODEX_PROVIDER]: "OpenAI Codex",
 	[XAI_PROVIDER]: "xAI",
 };
@@ -101,7 +102,7 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 		if (!enabled) return "Fast mode is off.";
 		const label = activeProviderLabel(ctx);
 		if (label) return `Fast mode is on for ${label} (service_tier: priority).`;
-		return "Fast mode is on but inactive; select an OpenAI Codex or xAI model to use it.";
+		return "Fast mode is on but inactive; select an OpenAI or xAI model to use it.";
 	}
 
 	async function setEnabled(nextEnabled: boolean, ctx: ExtensionContext): Promise<void> {
@@ -124,7 +125,7 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 	}
 
 	pi.registerCommand("fast", {
-		description: "Toggle priority service tier for OpenAI Codex and xAI (fast mode)",
+		description: "Toggle priority service tier for OpenAI and xAI (fast mode)",
 		handler: async (args, ctx) => {
 			if (args.trim() !== "") {
 				ctx.ui.notify("Usage: /fast", "error");

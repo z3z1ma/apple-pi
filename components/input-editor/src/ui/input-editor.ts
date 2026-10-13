@@ -18,7 +18,7 @@ import {
 import type { EmptyFooterFactory, FooterSnapshot } from "../types.js";
 
 const FAST_MODE_STATUS = "fast-mode";
-const VROOM_PROVIDERS = new Set(["openai-codex", "xai"]);
+const VROOM_PROVIDERS = new Set(["openai", "openai-codex", "xai"]);
 const RAIL_GLYPH = "│";
 const RAIL_WIDTH = 2;
 

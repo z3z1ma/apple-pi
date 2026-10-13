@@ -1,7 +1,7 @@
 # Vroom (fast mode)
 
-`/fast` toggles priority service tier globally for both OpenAI Codex and xAI. When enabled,
-every `openai-codex` or `xai` request receives:
+`/fast` toggles priority service tier globally for OpenAI and xAI. When enabled,
+every `openai`, `openai-codex`, or `xai` request receives:
 
 ```json
 { "service_tier": "priority" }
@@ -18,10 +18,11 @@ immediately, and already-running subagents refresh the shared setting before eac
 continuation. An HTTP request already in flight cannot be changed; the next request in the
 same agentic run uses the new mode.
 
-When fast mode is active on an OpenAI Codex or xAI model, the input card shows `⚡` beside
+When fast mode is active on an OpenAI or xAI model, the input card shows `⚡` beside
 the thinking level. Fast mode has no effect on other providers.
 
-Fast mode consumes Codex credits, or bills xAI tokens, at a higher rate than standard mode.
+Fast mode bills OpenAI tokens, consumes Codex credits, or bills xAI tokens at a higher rate
+than standard mode.
 xAI's Grok 4.6 priority rate is 2x standard input/cached-input/output pricing; see
 [docs/research/xai-grok-4.6-priority-processing.md](research/xai-grok-4.6-priority-processing.md)
 for sourced pricing detail.
