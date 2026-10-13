@@ -117,3 +117,5 @@
 - `.ledger/history/202610130816-machine-owned-learnings/task.md` — done — Place learnings automatically in a machine-owned zone — Replace per-learning user approval with a fixed write boundary: the agent places, merges, and prunes learnings in machine-owned paths (.wiki, retrospectives, .pi/programs, .pi/LEARNINGS.md injected at session start); git ignore state decides sharing; /distill promotes to human-owned files on request.
 
 - `.ledger/history/202610131235-post-compaction-distill/task.md` — done — Distill learnings in a fork after compaction — Split the learning loop into capture (reflection, notebook), distill (post-compaction fork, ledger close, /distill: notebook to .pi/LEARNINGS.md, wiki, retrospectives, programs), and promote (/promote with approval to AGENTS.md, skills, docs).
+
+- `.ledger/history/202610131309-pi-1-2-upgrade/task.md` — done — Upgrade to Pi 1.2 and adopt its native integration points — Move dev/peer deps to Pi 1.2; fix start-event union handling; add reachesTools to pi_exec and programs; move pi_exec nested calls to ctx.executeTool with structuredContent/isError; show schema constraints; use public render data; schema examples.

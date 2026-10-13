@@ -8,4 +8,3 @@
 
 - `.ledger/202610041515-repository-history-replay/task.md` — in-progress — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
 
-- `.ledger/202610131309-pi-1-2-upgrade/task.md` — in-progress — Upgrade to Pi 1.2 and adopt its native integration points — Move dev/peer deps to Pi 1.2; fix start-event union handling; add reachesTools to pi_exec and programs; move pi_exec nested calls to ctx.executeTool with structuredContent/isError; show schema constraints; use public render data; schema examples.
