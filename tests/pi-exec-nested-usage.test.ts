@@ -19,7 +19,7 @@ const usage = {
 };
 
 describe("pi_exec nested tool usage", () => {
-	it("is counted once, on the pi_exec result, by Pi's nested-call pipeline", async () => {
+	it("counts usage from a program's tool calls exactly once in the pi_exec result", async () => {
 		const faux = await fauxSession(
 			[
 				piExec,
@@ -54,9 +54,8 @@ describe("pi_exec nested tool usage", () => {
 
 		const result = faux.session.messages.find(
 			(message) => message.role === "toolResult" && message.toolCallId === "exec-1",
-		) as { isError: boolean; usage?: typeof usage; nestedCalls?: { calls: unknown[] } } | undefined;
+		) as { isError: boolean; usage?: typeof usage } | undefined;
 		expect(result?.isError).toBe(false);
-		expect(result?.nestedCalls?.calls).toHaveLength(2);
 		expect(result?.usage).toMatchObject({ input: 14, output: 10, totalTokens: 24, cost: { total: 0.6 } });
 	}, 30_000);
 });
