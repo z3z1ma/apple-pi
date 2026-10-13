@@ -2,3 +2,5 @@
 - Retire notebook learnings in one call and wait for it before `ledger_status` `done`; in the same parallel batch, the ledger-close hold still sees them open.
 - Vitest in this repo hides `console.log` from passing tests. To inspect values in a scratch test, write them to a temporary file and read it, or assert on them.
 - Faux-session compaction (`tests/helpers/faux-session.ts`) needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".
+- For exact upstream Pi API or release facts, fetch the tagged file from `raw.githubusercontent.com` (for example with `pi_exec` `fetch`) and read it; search summaries can be truncated or secondhand.
+- Test fakes of `ExtensionToolContext` need `tools` and `executeTool`; `ctx.executeTool()` also needs an assistant message that issued the parent call, so drive nested calls through a real faux-model turn.

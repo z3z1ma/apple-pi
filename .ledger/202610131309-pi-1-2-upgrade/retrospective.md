@@ -14,6 +14,8 @@ Updated: 2026-10-13
 
 - `ctx.executeTool()` needs an assistant message that issued the parent call. Tests that call a tool's `execute` directly outside a turn get "No assistant message issued this call"; drive the nested path through a real (faux-model) turn instead.
 - Pi's text print mode exits 1 on output-token truncation, but `--mode json` does not; Pi Exec workers use JSON mode, so they must read `stopReason: "length"` themselves.
+- Before adding stub annotations, check that the model sees those stubs. Extension signatures reach the model only through `tools_describe()`, whose JSON Schema already carries constraints.
+- Assert MCP's effective tool exposure separately from the configured exposure that selects `codemode` or `tool_search`.
 - npm hoisted Pi's dependencies under 1.2, which broke the pair harness's probe for a nested `node_modules`; probe the enclosing `node_modules` too.
 
 ## Improvements
