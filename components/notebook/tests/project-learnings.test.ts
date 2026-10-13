@@ -27,18 +27,19 @@ function project(learnings?: string) {
 		on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(event, handler),
 	} as unknown as ExtensionAPI);
 	const startSession = () => handlers.get("session_start")?.({}, { cwd });
+	const compact = () => handlers.get("session_compact")?.({}, { cwd });
 	const prompt = () => {
 		const systemPromptOptions = { sections: {} as Record<string, string> };
 		handlers.get("before_agent_start")?.({ systemPromptOptions }, { cwd });
 		return systemPromptOptions.sections[PROJECT_LEARNINGS_TAG];
 	};
 	const rewrite = (text: string) => writeFileSync(join(cwd, PROJECT_LEARNINGS_PATH), text);
-	return { startSession, prompt, rewrite };
+	return { startSession, compact, prompt, rewrite };
 }
 
 describe("project learnings", () => {
-	it("adds the learnings file to the system prompt as read at session start", () => {
-		const { startSession, prompt, rewrite } = project("- Use perl -pi -e for in-place edits.\n");
+	it("adds the learnings file as read at session start, and rereads it after compaction", () => {
+		const { startSession, compact, prompt, rewrite } = project("- Use perl -pi -e for in-place edits.\n");
 
 		startSession();
 		const first = prompt();
@@ -46,7 +47,7 @@ describe("project learnings", () => {
 
 		expect(first).toContain("- Use perl -pi -e for in-place edits.");
 		expect(prompt()).toBe(first);
-		startSession();
+		compact();
 		expect(prompt()).toContain("- Changed during the session.");
 	});
 
