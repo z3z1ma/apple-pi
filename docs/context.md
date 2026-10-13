@@ -35,7 +35,7 @@ Learnings last for one session. The main agent places each one without asking th
 - the governing task's `retrospective.md`;
 - `.pi/programs/` for a reusable `pi_exec` composition.
 
-`AGENTS.md`, docs, skills, code, and files outside the project change only through [`/distill`](../prompts/distill.md), which proposes promotions and writes what the user approves. Git decides what is shared: ignore these paths in a repository where nobody else uses apple-pi, or track them in your own.
+`AGENTS.md`, docs, skills, code, and files outside the project change only when the user asks, usually through [`/distill`](distill.md), which proposes promotions and writes what the user approves. Git decides what is shared: ignore these paths in a repository where nobody else uses apple-pi, or track them in your own.
 
 At session start the root session adds `.pi/LEARNINGS.md` to the system prompt under a note that the user's instructions and `AGENTS.md` take precedence. Changes during a session apply from the next session, so the prompt prefix stays cached. Child sessions do not load it.
 
