@@ -110,6 +110,15 @@ describe("child tool guidance", () => {
 		});
 	});
 
+	it("leaves out tools whose declarations Pi hides", () => {
+		const options = { ...base, hiddenTools: ["search_session"], customPrompt: "You are a teammate.", sections: {} };
+		addToolGuidanceSections(options);
+		expect(options.sections).toEqual({
+			tools: "- read: Read files",
+			rules: "- Use search_session for earlier work.\n- Keep reports short.",
+		});
+	});
+
 	it("leaves Pi's default prompt and an inherited parent prompt unchanged", () => {
 		const defaultPrompt = { ...base, sections: {} };
 		addToolGuidanceSections(defaultPrompt);
