@@ -260,12 +260,11 @@ export interface RunResult {
 	steered: boolean;
 	/**
 	 * A failure message for the run's FINAL assistant turn, when that turn failed:
-	 * a provider error (stopReason "error"), or a "length" stop that produced no
-	 * text (a silent max-token death). pi resolves an exhausted-retries failure
-	 * normally instead of rejecting, so without this the manager would report such
-	 * a run as completed — with an empty result, or worse, an earlier turn's text
-	 * presented as the answer (#144). Undefined for a clean stop, or a "length"
-	 * stop that produced text (a legitimate truncated answer).
+	 * a provider error (stopReason "error"), or a "length" stop at the output-token
+	 * limit. pi resolves an exhausted-retries failure normally instead of
+	 * rejecting, so without this the manager would report such a run as completed —
+	 * with an empty or truncated result, or worse, an earlier turn's text presented
+	 * as the answer (#144). Undefined for a clean stop.
 	 */
 	failure?: string;
 }
@@ -327,13 +326,12 @@ function getAssistantResponse(
  * failed. Three failure shapes, all keyed off how the final turn STOPPED:
  *   - stopReason "error": a provider failure pi resolved instead of rejecting
  *     (any text; partial output is surfaced separately).
- *   - stopReason "length" with NO text: a silent max-token death — the run hit
- *     the output-token ceiling before writing anything, which would otherwise
- *     land as a "completed" run with an empty result (the #144 symptom).
+ *   - stopReason "length": the run hit the output-token ceiling; any text is a
+ *     partial report, kept as the result but not presented as a completion.
  *   - any non-"toolUse" stop with NO text: a clean terminal stop that must not
  *     report completed with an earlier message as its final answer.
- * Everything else completes: a "toolUse" stop (which is not terminal), and —
- * crucially — a "length" or "stop" stop that DID produce text.
+ * Everything else completes: a "toolUse" stop (which is not terminal), and a
+ * "stop" stop that produced text.
  * "aborted" is handled by the manager's abort flag / "stopped" guard, not here.
  * Invocation-local canonical entries keep prior stop reasons out even after compaction.
  */
@@ -346,8 +344,10 @@ function finalTurnError(entries: readonly SessionEntry[]): string | undefined {
 			return (msg as { errorMessage?: string }).errorMessage?.trim() || "provider error with no output";
 		}
 		const text = extractText(msg.content).trim();
-		if (msg.stopReason === "length" && !text) {
-			return "run hit the output token limit before producing any text";
+		if (msg.stopReason === "length") {
+			return text
+				? "run hit the output token limit; its report is partial"
+				: "run hit the output token limit before producing any text";
 		}
 		if (msg.stopReason !== "toolUse" && !text) {
 			return "run ended without producing any text";

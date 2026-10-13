@@ -10,7 +10,7 @@ import { isOwnedMontyWorker } from "../src/program.js";
 function harness(manager: SessionManager) {
 	const tools = new Map<string, any>();
 	const handlers = new Map<string, Array<(event: any, ctx: any) => unknown>>();
-	const ctx = { cwd: process.cwd(), sessionManager: manager, hasUI: false, isProjectTrusted: () => false };
+	const ctx = { cwd: process.cwd(), sessionManager: manager, hasUI: false, isProjectTrusted: () => false, tools: [] };
 	runtime({
 		registerTool(tool: any) {
 			tools.set(tool.name, tool);

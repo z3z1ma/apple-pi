@@ -1,5 +1,6 @@
 import { CORE_TOOL_NAMES, coreToolDefinition, ENVELOPE_TOOL_NAMES } from "./core-tools.js";
 import { evidencePythonStubs } from "./evidence.js";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { extensionPythonTools, HOST_FUNCTION_STUBS } from "./guest-functions.js";
 
 type Schema = {
@@ -66,13 +67,18 @@ function toolSignature(name: string, schema: Schema, output: string, declaration
 	return `async def ${name}(${fields.length ? `*, ${fields.join(", ")}` : ""}) -> ${output}: ...`;
 }
 
-/** The same schema-derived signatures are supplied to ty and shown to the model. */
-export function corePythonStubs(cwd = "."): string {
+/**
+ * Core tool signatures. Pi runs an active core tool other than bash, so its registered schema wins for type
+ * checking; the model-facing text uses Pi's own definitions.
+ */
+export function corePythonStubs(cwd = ".", callable: readonly AgentTool[] = []): string {
 	const declarations: string[] = [];
 	const signatures: string[] = [];
 	for (const name of CORE_TOOL_NAMES) {
 		const output = ENVELOPE_TOOL_NAMES.has(name) ? "dict[str, Any]" : "str";
-		signatures.push(toolSignature(name, coreToolDefinition(name, cwd).parameters as Schema, output, declarations));
+		const active = name !== "bash" ? callable.find((tool) => tool.name === name) : undefined;
+		const parameters = (active ?? coreToolDefinition(name, cwd)).parameters as Schema;
+		signatures.push(toolSignature(name, parameters, output, declarations));
 	}
 	return [
 		"from typing import Any, Literal, NotRequired, TypedDict",
@@ -84,13 +90,19 @@ export function corePythonStubs(cwd = "."): string {
 
 const HOST_PYTHON_STUBS = ["def schema(shape: Any) -> dict[str, Any]: ...", ...HOST_FUNCTION_STUBS];
 
-/** Complete type-checking stubs, including every captured extension tool signature. */
-export function guestPythonStubs(cwd = "."): string {
+/** Complete type-checking stubs, including the signature of every callable extension tool. */
+export function guestPythonStubs(cwd: string, callable: readonly AgentTool[]): string {
 	const declarations: string[] = [];
-	const extensions = extensionPythonTools().map((tool) =>
+	const extensions = extensionPythonTools(callable).map((tool) =>
 		toolSignature(tool.name, tool.parameters as Schema, "dict[str, Any]", declarations),
 	);
-	return [corePythonStubs(cwd), ...declarations, ...extensions, ...HOST_PYTHON_STUBS, evidencePythonStubs()].join("\n");
+	return [
+		corePythonStubs(cwd, callable),
+		...declarations,
+		...extensions,
+		...HOST_PYTHON_STUBS,
+		evidencePythonStubs(),
+	].join("\n");
 }
 
 /** Model-facing stubs: full core and host signatures; extension tools are discovered on demand so this text stays stable. */

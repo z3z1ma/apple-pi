@@ -195,7 +195,7 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 	expect(commands.has("notify-test")).toBe(true);
 
 	handlers.get("input")?.({ text: "help me build notifications", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "expanded prompt" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "expanded prompt" });
 	handlers.get("message_end")?.({
 		message: {
 			role: "assistant",
@@ -222,7 +222,7 @@ test("registers lifecycle handlers and sends after agent_settled", async () => {
 test("suppresses the settle notification when the operator is already viewing the pane", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness({ focused: true });
 	handlers.get("input")?.({ text: "do the thing", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "do the thing" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "do the thing" });
 	handlers.get("message_end")?.({
 		message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
 	});
@@ -238,7 +238,7 @@ test("suppresses the settle notification when the operator is already viewing th
 test("notifies when ask_user_question starts but not for other tools", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "help me pick a backend", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "help me pick a backend" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "help me pick a backend" });
 
 	// A non-ask tool must never notify, even though it also starts mid-turn.
 	handlers.get("tool_execution_start")?.({ toolName: "read", args: { path: "README.md" } }, ctx);
@@ -260,7 +260,7 @@ test("notifies when ask_user_question starts but not for other tools", async () 
 test("reports terminal cyber_policy errors instead of completion", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "continue the current task" });
 	handlers.get("message_end")?.({
 		message: {
 			role: "assistant",
@@ -287,7 +287,7 @@ test("reports terminal cyber_policy errors instead of completion", async () => {
 test("reports an aborted task instead of completion", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "stop the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "stop the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "stop the current task" });
 	handlers.get("message_end")?.({
 		message: {
 			role: "assistant",
@@ -297,7 +297,7 @@ test("reports an aborted task instead of completion", async () => {
 		},
 	});
 
-	handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+	handlers.get("agent_settled")?.({ type: "agent_settled", aborted: true }, ctx);
 	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
@@ -308,7 +308,7 @@ test("reports an aborted task instead of completion", async () => {
 test("reports a failed compaction instead of a stale successful assistant response", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "continue the current task" });
 	handlers.get("message_end")?.({
 		message: { role: "assistant", content: [{ type: "text", text: "Stale success." }], stopReason: "stop" },
 	});
@@ -332,7 +332,7 @@ test("reports a failed compaction instead of a stale successful assistant respon
 test("reports cancelled compaction instead of a stale successful assistant response", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "continue the current task" });
 	handlers.get("message_end")?.({
 		message: { role: "assistant", content: [{ type: "text", text: "Stale success." }], stopReason: "stop" },
 	});
@@ -355,7 +355,7 @@ test("reports cancelled compaction instead of a stale successful assistant respo
 test("clears a provisional compaction failure when a later assistant response succeeds", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "continue the current task" });
 	handlers.get("session_compact_failed")?.({
 		type: "session_compact_failed",
 		reason: "overflow",
@@ -383,7 +383,7 @@ test("clears a provisional compaction failure when a later assistant response su
 test("clears a transient error when an automatic retry succeeds", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });
-	handlers.get("before_agent_start")?.({ prompt: "continue the current task" });
+	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "continue the current task" });
 	handlers.get("message_end")?.({
 		message: {
 			role: "assistant",
@@ -406,6 +406,24 @@ test("clears a transient error when an automatic retry succeeds", async () => {
 	const call = notifierCall(calls);
 	assert.ok(call, "custom Pi notifier should be selected");
 	expect(call.args.slice(4, 6)).toEqual(["-message", "Task completed after automatic retry."]);
+});
+
+test("labels a run started by a custom message with that message", async () => {
+	const { calls, ctx, handlers } = createLifecycleHarness();
+	handlers.get("before_agent_start")?.({
+		messageType: "custom",
+		message: { role: "custom", customType: "task", content: "Task build finished", display: true },
+	});
+	handlers.get("message_end")?.({
+		message: { role: "assistant", content: [{ type: "text", text: "Reviewed the build." }], stopReason: "stop" },
+	});
+
+	handlers.get("agent_settled")?.({ type: "agent_settled", aborted: false }, ctx);
+	await flushUntil(() => Boolean(notifierCall(calls)));
+
+	const call = notifierCall(calls);
+	assert.ok(call, "custom Pi notifier should be selected");
+	expect(call.args.slice(2, 6)).toEqual(["-subtitle", "Task build finished", "-message", "Reviewed the build."]);
 });
 
 test("/notify-test always delivers, ignoring pane focus", async () => {

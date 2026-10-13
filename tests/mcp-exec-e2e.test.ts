@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import {
 	createAgentSession,
 	createCodemodeExtension,
@@ -62,6 +62,16 @@ describe("native MCP through Python pi_exec", () => {
 					{ name: "mcp", builtin: true, replaceable: true, factory: createMcpExtension() },
 					{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension() },
 					{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension() },
+					{
+						name: "deny-policy",
+						factory: (pi) => {
+							pi.on("tool_call", (event) =>
+								(event.input as { value?: unknown }).value === "DENY"
+									? { block: true, reason: "denied by policy" }
+									: undefined,
+							);
+						},
+					},
 				],
 				additionalExtensionPaths: [
 					join(process.cwd(), "extensions", "pi-exec.ts"),
@@ -93,34 +103,61 @@ describe("native MCP through Python pi_exec", () => {
 				await expect.poll(() => session.getAllTools().some((tool) => tool.name === "mcp__test__echo")).toBe(true);
 				const nativeTool = session.getAllTools().find((tool) => tool.name === "mcp__test__echo");
 				expect(nativeTool?.sourceInfo?.path).toBe("builtin:mcp");
-				expect(nativeTool?.exposure).toBe(exposure === "codemode-deferred" ? "deferred" : exposure);
+				// Pi registers both indirect MCP exposures as deferred tools; they differ only in which reaching tool it activates.
+				expect(nativeTool?.exposure).toBe(exposure === "direct" ? "direct" : "deferred");
 				expect(session.getAllTools().map((tool) => tool.name)).not.toContain("mcp");
 				if (exposure === "codemode" || exposure === "codemode-deferred")
 					expect(session.getActiveToolNames()).toContain("codemode");
 				if (exposure === "deferred") expect(session.getActiveToolNames()).toContain("tool_search");
 
-				session.setActiveToolsByName(["pi_exec"]);
+				expect(session.getActiveToolNames()).toContain("pi_exec");
+				// MCP waits for every server before a program runs.
+				expect(
+					session
+						.getAllTools()
+						.find((tool) => tool.name === "pi_exec")
+						?.reachesTools?.({}),
+				).toBe("all");
 				const exec = session.agent.state.tools.find((tool) => tool.name === "pi_exec");
-				expect(exec).toBeDefined();
 				const codeDescription = String((exec?.parameters as any)?.properties.code.description ?? "");
 				expect(codeDescription).toContain("tools_search(query)");
 				expect(codeDescription).not.toContain("mcp__test__echo");
-				const composed = await exec!.execute(
-					"mcp-python-test",
-					{ code: 'response = await mcp__test__echo(value="APPLE")\nresponse["text"]' },
-					undefined,
-					() => {},
-				);
-				expect(composed.content.find((part) => part.type === "text")?.text).toContain("echo:APPLE");
-				expect((composed.details as any).trace.operations).toEqual([
+
+				// A real turn: pi_exec reaches the MCP tool through Pi's nested tool pipeline.
+				faux.setResponses([
+					fauxAssistantMessage(
+						fauxToolCall(
+							"pi_exec",
+							{ code: 'response = await mcp__test__echo(value="APPLE")\nresponse["text"]' },
+							{ id: "mcp-python" },
+						),
+						{ stopReason: "toolUse" },
+					),
+					fauxAssistantMessage(
+						fauxToolCall(
+							"pi_exec",
+							{
+								code: 'try:\n    await mcp__test__echo(value="DENY")\n    outcome = "allowed"\nexcept Exception as error:\n    outcome = str(error)\noutcome',
+							},
+							{ id: "mcp-denied" },
+						),
+						{ stopReason: "toolUse" },
+					),
+					fauxAssistantMessage("done"),
+				]);
+				await session.prompt("echo through python");
+				const results = session.sessionManager
+					.getBranch()
+					.flatMap((entry) => (entry.type === "message" && entry.message.role === "toolResult" ? [entry.message] : []));
+				const composed = results.find((message) => message.toolCallId === "mcp-python");
+				expect(composed?.isError).toBe(false);
+				expect(composed?.content.find((part) => part.type === "text")?.text).toContain("echo:APPLE");
+				expect((composed?.details as any)?.trace.operations).toEqual([
 					expect.objectContaining({ ref: "extensions.mcp__test__echo", outcome: "succeeded" }),
 				]);
-
-				session.setActiveToolsByName(["mcp__test__echo"]);
-				const direct = session.agent.state.tools.find((tool) => tool.name === "mcp__test__echo");
-				expect(direct).toBeDefined();
-				const result = await direct!.execute("mcp-direct-test", { value: "DIRECT" }, undefined, () => {});
-				expect(result.content.find((part) => part.type === "text")?.text).toContain("echo:DIRECT");
+				// Session tool_call hooks govern nested calls from Python too.
+				const denied = results.find((message) => message.toolCallId === "mcp-denied");
+				expect(denied?.content.find((part) => part.type === "text")?.text).toContain("denied by policy");
 			} finally {
 				await disposeAgentSession(session);
 			}

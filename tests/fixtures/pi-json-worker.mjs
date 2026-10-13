@@ -62,6 +62,11 @@ if (controlled) {
 		type: "message_end",
 		message: { role: "assistant", stopReason: "stop", usage, content: [{ type: "text", text: `done:${body}` }] },
 	});
+} else if (task === "truncated") {
+	send({
+		type: "message_end",
+		message: { role: "assistant", stopReason: "length", usage, content: [{ type: "text", text: "first half" }] },
+	});
 } else if (task === "bad") {
 	process.stderr.write("worker failed\n");
 	process.exitCode = 1;

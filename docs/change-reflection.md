@@ -33,4 +33,4 @@ Each invocation gets this phase once. Edits made during the review do not start 
 
 The passive fork described above loads only in the root session. Interactive coding children run the in-band phase described above. `pi_exec` workers get neither.
 
-Each session tracks only its own successful built-in `edit` and `write` calls. Changes made through `bash` or `pi_exec` are outside that tracker. A subagent's edits do not trigger the primary's passive review; eligible coding children review their own tracked edits through the in-band phase.
+Each session tracks only its own successful built-in `edit` and `write` calls, including those a `pi_exec` program makes while those tools are active, because Pi runs them through its tool pipeline. Changes made through `bash`, or through a program's `edit` or `write` while the tool is inactive, are outside that tracker. A subagent's edits do not trigger the primary's passive review; eligible coding children review their own tracked edits through the in-band phase.

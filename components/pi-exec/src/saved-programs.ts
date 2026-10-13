@@ -223,6 +223,7 @@ export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRu
 					promptSnippet: program.description,
 					promptGuidelines: [SAVED_PROGRAM_PROMPT_GUIDELINE],
 					parameters,
+					reachesTools: () => "all",
 					async execute(toolCallId, rawParams, signal, onUpdate, ctx) {
 						if (typeof ctx.isProjectTrusted !== "function" || !ctx.isProjectTrusted()) {
 							throw new Error("pi_exec saved programs require a trusted project");

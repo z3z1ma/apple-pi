@@ -1,6 +1,6 @@
 # MCP
 
-Apple Pi uses Pi 0.99's built-in MCP support. It no longer installs `pi-mcp-adapter` or registers an MCP gateway. Pi owns server connections, stdio and streamable HTTP transports, OAuth, resources, tool discovery, and the `/mcp` manager.
+Apple Pi uses Pi's built-in MCP support. It no longer installs `pi-mcp-adapter` or registers an MCP gateway. Pi owns server connections, stdio and streamable HTTP transports, OAuth, resources, tool discovery, and the `/mcp` manager.
 
 ## Configure and connect
 
@@ -44,7 +44,7 @@ Apple Pi recommends turning native `codemode` off and composing tools with `pi_e
 { "mcpServers": { "docs": { "url": "https://example.com/mcp", "exposure": "deferred" } } }
 ```
 
-The `pi_exec` bridge captures connected native MCP tools. Use their registered names and schema-checked keyword arguments:
+`pi_exec` calls connected native MCP tools through Pi's tool pipeline. Use their registered names and schema-checked keyword arguments:
 
 ```python
 result = await mcp__docs__search(query="sessions")
@@ -53,7 +53,7 @@ result["text"]
 
 Discover tools with `tools_search(query)`, inspect them with `tools_describe(name)`, and invoke dynamically with `tools_call(name, args)` inside Python. The old `mcp(tool=..., args=...)` gateway and adapter namespace proxies are gone. MCP tools become available after the server connects; Python signatures refresh at cache-safe boundaries.
 
-**Current Pi Exec limitation:** its bridge invokes captured definitions directly. It does not enforce Pi 0.99's exposure rules or dispatch nested `tool_call`/`tool_result` permission hooks. Use ordinary native tool calls when those gates are required. Moving Pi Exec to `ctx.tools`/`ctx.executeTool()` is deferred; native MCP connectivity tests do not establish permission parity.
+Nested calls from `pi_exec` go through Pi's tool pipeline, so exposure rules and `tool_call`/`tool_result` permission hooks apply to them as to native calls. `pi_exec` and saved `program_*` tools declare `reachesTools`, so a program waits for servers that are still connecting. Pi registers both `codemode` and `deferred` server tools as deferred tools; the exposure only selects whether Pi activates native `codemode` or `tool_search`. Pi does not treat `pi_exec` as a replacement for `codemode`, so keep servers on `deferred` or `direct` exposure. In Python, an MCP call's `structuredContent` holds the whole `CallToolResult`.
 
 ## Children and SDK sessions
 

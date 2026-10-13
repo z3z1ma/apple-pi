@@ -542,7 +542,8 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", (event) => {
-		latestPrompt = pendingRawPrompt ?? event.prompt;
+		latestPrompt =
+			event.messageType === "user" ? (pendingRawPrompt ?? event.prompt) : extractMessageText(event.message);
 		pendingRawPrompt = undefined;
 		latestAssistant = "";
 		latestError = undefined;
@@ -558,7 +559,6 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		}
 		if (event.message.stopReason === "aborted") {
 			latestError = undefined;
-			latestAborted = true;
 			return;
 		}
 		latestError = undefined;
@@ -589,7 +589,7 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		);
 	});
 
-	pi.on("agent_settled", (_event, ctx) => {
+	pi.on("agent_settled", (event, ctx) => {
 		if (process.platform !== "darwin" || notificationsDisabled() || ctx.mode !== "tui" || !ctx.isIdle()) return;
 
 		const sessionId = ctx.sessionManager.getSessionId();
@@ -602,7 +602,7 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 		const answer =
 			latestError !== undefined
 				? notificationErrorSummary(latestError)
-				: latestAborted
+				: latestAborted || event.aborted
 					? "Task cancelled."
 					: latestAssistant || latestBranchText(ctx, "assistant");
 		// Event handlers participate in settlement; delivery must continue independently.

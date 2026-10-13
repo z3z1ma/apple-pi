@@ -7,7 +7,9 @@ single popup. Adapted from
 (MIT, Takuya Matsuyama) and retargeted to Pi; see `THIRD_PARTY_NOTICES.md`.
 
 Claude Code publishes agent status through `claude agents --json`. Pi has no
-such command, so this integration has two halves:
+such command. Pi's program status reports (OSC 7501) reach terminals that
+support them, but tmux does not forward them, and they carry no session
+identity or pane. So this integration has two halves:
 
 - A Pi **extension** (`components/tmux-sessions/src/`, registered from
   `extensions/tmux-sessions.ts`) that publishes each session's live status to

@@ -79,11 +79,12 @@ You are a coding agent handling a specific delegated task.`;
  */
 export function addToolGuidanceSections(options: NormalizedBuildSystemPromptOptions): void {
 	if (options.customPrompt === undefined) return;
-	const tools = options.selectedTools
+	const declared = options.selectedTools.filter((name) => !options.hiddenTools.includes(name));
+	const tools = declared
 		.filter((name) => options.toolSnippets[name])
 		.map((name) => `- ${name}: ${options.toolSnippets[name]}`);
 	const rules = new Set(
-		[...options.selectedTools.flatMap((name) => options.toolGuidelines[name] ?? []), ...options.promptGuidelines]
+		[...declared.flatMap((name) => options.toolGuidelines[name] ?? []), ...options.promptGuidelines]
 			.map((rule) => rule.trim())
 			.filter(Boolean),
 	);

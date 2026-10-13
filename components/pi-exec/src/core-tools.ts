@@ -8,7 +8,6 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
-import { capturedTool } from "./tool-capture.js";
 
 const CORE_TOOL_FACTORIES = {
 	read: createReadToolDefinition,
@@ -36,12 +35,8 @@ export function isCoreToolName(name: string): name is CoreToolName {
 
 const builtDefinitions = new Map<string, Partial<Record<CoreToolName, ToolDefinition<any, any>>>>();
 
-/** Programs always use pi_exec's bash; other core tools prefer the registered definition so extension overrides apply. */
+/** Pi's own definition of a core tool, for signatures and for calls Pi cannot run because the tool is inactive. */
 export function coreToolDefinition(name: CoreToolName, cwd: string): ToolDefinition<any, any> {
-	if (name !== "bash") {
-		const registered = capturedTool(name)?.definition;
-		if (registered) return registered;
-	}
 	let built = builtDefinitions.get(cwd);
 	if (!built) {
 		built = {};

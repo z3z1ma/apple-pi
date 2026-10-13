@@ -64,6 +64,7 @@ async function harness(
 		hasUI: true,
 		mode: "tui",
 		isProjectTrusted: () => true,
+		tools: [],
 		getSystemPrompt: () => "parent",
 		...context,
 		ui: {

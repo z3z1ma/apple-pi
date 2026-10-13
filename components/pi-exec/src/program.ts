@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
 	CollectString,
 	Monty,
@@ -71,6 +72,7 @@ export async function executeProgram(
 	signal?: AbortSignal,
 	onLog?: (values: unknown[]) => void,
 	onInterrupt?: () => void,
+	extensionTools: readonly AgentTool[] = [],
 ): Promise<ProgramExecution> {
 	if (signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted", sessionUsable: false };
 	const controller = new AbortController();
@@ -116,7 +118,11 @@ export async function executeProgram(
 				.finally(() => pending.delete(reject));
 		});
 	};
-	const externalLookup = guestFunctions(invoke, () => (controller.signal.aborted ? keyboardInterrupt() : undefined));
+	const externalLookup = guestFunctions(
+		invoke,
+		() => (controller.signal.aborted ? keyboardInterrupt() : undefined),
+		extensionTools,
+	);
 	try {
 		if (controller.signal.aborted) throw keyboardInterrupt();
 		const feed = session.feedRun(code, { inputs: { inputs }, externalLookup, printCallback: collector });

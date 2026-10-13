@@ -34,6 +34,7 @@ function registeredRuntime(cwd: string) {
 		cwd,
 		hasUI: false,
 		isProjectTrusted: () => trusted,
+		tools: [],
 		sessionManager: {
 			getSessionId: () => "saved-program-test",
 			getBranch: () => branch,

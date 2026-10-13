@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
+import { callableTools } from "./callable-tools.js";
 import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
 import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import { guestPythonStubs } from "./guest-api.js";
+import { extensionPythonTools } from "./guest-functions.js";
 import { createProgramSession, executeProgram, isOwnedMontyWorker } from "./program.js";
 import type { ProgramExecution, ProgramHostCall } from "./types.js";
 
@@ -60,7 +63,7 @@ async function close(live: LiveSession): Promise<void> {
  * restores that branch's latest checkpoint. An unusable run rolls back to the last checkpoint.
  */
 export function installProgramSession(pi: ExtensionAPI): {
-	run(ctx: ExtensionContext, request: ProgramRunRequest): Promise<ProgramRun>;
+	run(ctx: ExtensionToolContext, request: ProgramRunRequest): Promise<ProgramRun>;
 } {
 	let owner: LiveSession | undefined;
 	let ownerHash: string | undefined;
@@ -99,9 +102,9 @@ export function installProgramSession(pi: ExtensionAPI): {
 		selected = undefined;
 	});
 
-	const checkout = async (ctx: ExtensionContext): Promise<LiveSession> => {
+	const checkout = async (ctx: ExtensionContext, callable: readonly AgentTool[]): Promise<LiveSession> => {
 		if (owner) return owner;
-		const stubs = guestPythonStubs(ctx.cwd);
+		const stubs = guestPythonStubs(ctx.cwd, callable);
 		const hash = createHash("sha256").update(stubs).digest("hex");
 		const checkpoint = selected ?? branchCheckpoint(ctx);
 		selected = undefined;
@@ -144,7 +147,8 @@ export function installProgramSession(pi: ExtensionAPI): {
 				selected = branchCheckpoint(ctx);
 			}
 			const runGeneration = generation;
-			const live = await checkout(ctx);
+			const callable = callableTools(ctx);
+			const live = await checkout(ctx, callable);
 			if (runGeneration !== generation) {
 				await abandon(live);
 				throw new Error("pi_exec session changed during checkout");
@@ -176,6 +180,7 @@ export function installProgramSession(pi: ExtensionAPI): {
 					signal,
 					request.onLog,
 					() => stopWorker(live, workerPid),
+					extensionPythonTools(callable),
 				);
 				hostCalls += calls;
 				if (execution.sessionUsable && runGeneration === generation && owner === live) {

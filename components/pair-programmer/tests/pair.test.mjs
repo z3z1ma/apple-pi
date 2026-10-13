@@ -47,11 +47,13 @@ const { initTheme } = await import(`${DIST}/modes/interactive/theme/theme.js`);
 const piRequire = createRequire(`${DIST}/index.js`);
 const jitiDir = dirname(piRequire.resolve("jiti/package.json"));
 const { createJiti } = await import(`${jitiDir}/lib/jiti-static.mjs`);
-// node_modules sits beside dist in an npm install, but is hoisted to the repo
-// root in a pi-mono checkout — probe both.
-const NM = [resolve(DIST, "..", "node_modules"), resolve(DIST, "..", "..", "..", "node_modules")].find((d) =>
-	existsSync(join(d, "@earendil-works")),
-);
+// Pi's dependencies sit beside dist when npm nests them, in the enclosing node_modules when it
+// hoists them, or at the repo root in a pi-mono checkout — probe all three.
+const NM = [
+	resolve(DIST, "..", "node_modules"),
+	resolve(DIST, "..", "..", ".."),
+	resolve(DIST, "..", "..", "..", "node_modules"),
+].find((d) => existsSync(join(d, "@earendil-works")));
 const pkgEntry = (pkg) => resolve(NM, "@earendil-works", pkg, "dist/index.js");
 const { Agent: CoreAgent } = await import(pkgEntry("pi-agent-core"));
 const { EventStream } = await import(resolve(NM, "@earendil-works", "pi-ai", "dist/compat.js"));

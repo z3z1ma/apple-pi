@@ -17,7 +17,6 @@ import {
 import { createHostCalls } from "./host-calls.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { installProgramSession } from "./session.js";
-import { installRegisteredToolCapture } from "./tool-capture.js";
 import { type ExecActivitySnapshot, renderExecCall, renderExecResult } from "./ui.js";
 
 function errorText(error: unknown): string {
@@ -40,12 +39,6 @@ function displayValue(value: unknown): string {
 }
 
 export default function piExec(pi: ExtensionAPI): void {
-	let captureError: string | undefined;
-	try {
-		installRegisteredToolCapture();
-	} catch (error) {
-		captureError = errorText(error);
-	}
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
 	let executing = false;
 	const programSession = installProgramSession(pi);
@@ -91,6 +84,8 @@ export default function piExec(pi: ExtensionAPI): void {
 		label: "Pi Exec",
 		executionMode: "sequential",
 		description: PI_EXEC_DESCRIPTION,
+		// Programs discover and call tools by name, so MCP waits for every server before one runs.
+		reachesTools: () => "all",
 		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
 		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 		parameters: Type.Object({
@@ -194,7 +189,7 @@ export default function piExec(pi: ExtensionAPI): void {
 					},
 				});
 			};
-			const host = createHostCalls({ ctx, toolCallId, envelope, captureError, onChange: emit });
+			const host = createHostCalls({ ctx, toolCallId, envelope, onChange: emit });
 			activeWork.update();
 
 			try {

@@ -67,7 +67,7 @@ texts = await asyncio.gather(*[read(path=path) for path in paths])
 {path: len(text) for path, text in zip(paths, texts)}
 ```
 
-The guest also composes model workers, captured extension tools, HTTP, Git and test evidence, and saved Python programs. Its globals follow Pi's session tree through Monty checkpoints.
+The guest also composes model workers, extension and MCP tools (through Pi's own tool pipeline), HTTP, Git and test evidence, and saved Python programs. Its globals follow Pi's session tree through Monty checkpoints.
 
 ### 2. Dual-Hemisphere Pairing & The Escalation Ladder
 
@@ -134,7 +134,7 @@ A great harness must feel like an extension of your nervous system. Apple Pi inc
 - **[Change Review (`change-reflection`)](docs/change-reflection.md)**: After a run that edited files, a headless [fork of the conversation](docs/forked-continuations.md) asks one question for each kind of file: can the code be simpler, does each changed test assert behavior the user wants now, and can the intended reader understand the prose without this conversation? It applies a clear improvement and returns one passive line to the chat. Interactive coding children run the same review, plus learning capture, in their own conversation before they hand off, so their final report describes the reviewed result.
 - **[Branch Search (`search_branches`)](docs/branch-search.md)**: When several approaches are plausible and a command can measure which result is better (a benchmark, a size, a complexity score), the main agent calls `search_branches` with judge commands it writes, often from a measure you suggest. Each approach runs as a fork in its own git worktree; among the attempts that pass the gate commands, the best judge number wins (or, with `judge.profile`, a model chooses) and is applied to the workspace. The tool returns the report. Off until `branch-search.json` sets every required key.
 - **[Structured Questionnaires (`ask_user_question`)](docs/ask-user-question.md)**: Allows the model to group up to four related decisions into a clean tabbed TUI questionnaire with described options, multi-select, and custom text inputs.
-- **[Native MCP](docs/mcp.md)**: Pi owns server connections, OAuth, resources, `/mcp`, and tool discovery. Connected tools are available through `tool_search` and the `pi_exec` bridge. Apple Pi recommends disabling native codemode in favor of `pi_exec`; see the settings and the documented Pi Exec permission limitations.
+- **[Native MCP](docs/mcp.md)**: Pi owns server connections, OAuth, resources, `/mcp`, and tool discovery. Connected tools are available through `tool_search` and the `pi_exec` bridge. Apple Pi recommends disabling native codemode in favor of `pi_exec`, whose nested calls obey the same exposure rules and permission hooks.
 - **[Managed Tasks, Scheduling & Reactive Execution (`tasks`)](docs/tasks.md)**: Start quiet background commands, schedule one-shot prompts and commands, or run `monitor` event adapters whose completed stdout lines steer the agent immediately. Every task terminal outcome—including failure, cancellation, and external termination—also steers an XML notification to the main agent. Active work appears above the editor and in `tasks:N` metadata; the `/work` Tasks tab provides focused inspection and confirmed cancellation. Root-only `schedule`, `monitor`, and `task` stay outside `pi_exec`.
 - **[xAI Hosted Tools](docs/xai-hosted-tools.md)**: Transparent provider-request transformation for Grok Responses API, injecting `{ type: "web_search" }` and `{ type: "x_search" }` without duplicating tool definitions.
 
@@ -191,7 +191,7 @@ Architecture is defined by what you choose *not* to build. Consult [`docs/bounda
 ### Requirements
 - **Host**: macOS recommended (for native notifications and Ghostty/tmux focus scripts).
 - **Node.js**: `>= 22.19.0`
-- **Pi**: `>= 0.99.0` (`npm install -g @earendil-works/pi-coding-agent`)
+- **Pi**: `>= 1.2.0` (`npm install -g @earendil-works/pi-coding-agent`)
 - **Optional Tools**: `tmux` (≥ 3.2), `terminal-notifier`, `fzf`, `jq`, `ghostty`, [`rtk`](docs/rtk.md) (≥ 0.23.0 for token-efficient bash execution).
 
 ### Installation

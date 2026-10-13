@@ -5,7 +5,6 @@ import type { ProgramEnvelope } from "./envelope.js";
 import { type HostCallScope, hostFunction } from "./guest-functions.js";
 import { serializeJsonValue } from "./json.js";
 import { aggregateUsage, resultText, traceValue } from "./results.js";
-import { capturedTools } from "./tool-capture.js";
 import type { ExecutionOperation, ExecutionOutcome, ProgramHostCall } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 
@@ -13,17 +12,15 @@ export interface HostCallsOptions {
 	ctx: ExtensionToolContext;
 	toolCallId: string;
 	envelope: ProgramEnvelope;
-	/** Why Pi's registered-tool catalog could not be captured, if it could not. */
-	captureError: string | undefined;
 	onChange(): void;
 }
 
 /**
  * Serve one program run's host calls: enforce the call, agent, and concurrency budgets, run the host function,
- * and keep the operation trace, activity rows, and nested usage.
+ * and keep the operation trace, activity rows, and model-worker usage.
  */
 export function createHostCalls(options: HostCallsOptions) {
-	const { ctx, toolCallId, envelope, captureError, onChange } = options;
+	const { ctx, toolCallId, envelope, onChange } = options;
 	const operations: ExecutionOperation[] = [];
 	const pending = new Set<ExecutionOperation>();
 	const running = new Set<ExecutionOperation>();
@@ -60,12 +57,10 @@ export function createHostCalls(options: HostCallsOptions) {
 		active--;
 		waiters.shift()?.();
 	};
-	const extensionTools = () => {
-		if (captureError) throw new Error(`extension tools unavailable: ${captureError}`);
-		const tools = capturedTools();
-		if (tools.length === 0)
-			throw new Error("extension tools unavailable: Pi's registered-tool catalog was not captured");
-		return tools;
+	const progress = (operation: ExecutionOperation) => (partial: unknown) => {
+		const line = resultText(partial).split("\n").find(Boolean);
+		operation.activity = line?.slice(0, 120) || "running";
+		onChange();
 	};
 	const scopeFor = (operation: ExecutionOperation, signal: AbortSignal): HostCallScope => ({
 		ctx,
@@ -78,7 +73,6 @@ export function createHostCalls(options: HostCallsOptions) {
 			children.set(operation, next);
 			onChange();
 		},
-		extensionTools,
 		addUsage: (usage) => usages.push(usage),
 		claimAgent: () => {
 			agentCalls++;
@@ -95,20 +89,16 @@ export function createHostCalls(options: HostCallsOptions) {
 					.join("; ");
 				throw new Error(`Invalid ${operation.ref} arguments: ${issues}`);
 			}
-			const result = await definition.execute(
+			return definition.execute(
 				`${toolCallId}_nested_${operation.sequence + 1}`,
 				prepared as any,
 				signal,
-				(partial) => {
-					const progress = resultText(partial).split("\n").find(Boolean);
-					operation.activity = progress?.slice(0, 120) || "running";
-					onChange();
-				},
+				progress(operation),
 				ctx,
 			);
-			if (result.usage) usages.push(result.usage);
-			return result;
 		},
+		// Pi validates, runs tool_call/tool_result hooks, and adds nested usage to pi_exec's own result.
+		executeTool: (name, args) => ctx.executeTool(name, args, { signal, onUpdate: progress(operation) }),
 	});
 
 	const hostCall: ProgramHostCall = async (ref, args, signal) => {

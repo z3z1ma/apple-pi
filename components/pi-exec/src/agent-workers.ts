@@ -630,6 +630,8 @@ async function runWorkerProcess(
 				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
 					error = stderr.trim() || `Agent stopped with ${stopReason}`;
 				}
+				// JSON mode exits 0 at the output-token limit; the text is a partial report.
+				if (!error && stopReason === "length") error = "Agent hit its output token limit; its text is partial";
 				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
 				if (!error && structured.error) error = structured.error;
 				const output =

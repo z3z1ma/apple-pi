@@ -21,7 +21,7 @@ async function run(
 	cwd = process.cwd(),
 	skill = "code-review",
 ): Promise<any> {
-	const live = await createProgramSession(guestPythonStubs(cwd));
+	const live = await createProgramSession(guestPythonStubs(cwd, []));
 	let hostError: unknown;
 	try {
 		const execution = await executeProgram(

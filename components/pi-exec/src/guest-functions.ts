@@ -1,9 +1,11 @@
 import { homedir } from "node:os";
+import type { AgentTool, AgentToolCallOutcome } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
 import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
+import { callableTools } from "./callable-tools.js";
 import {
 	CORE_TOOL_NAMES,
 	type CoreToolName,
@@ -16,7 +18,6 @@ import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import { fromPythonValue, serializeJsonValue } from "./json.js";
 import { bounded, resultText, traceValue } from "./results.js";
 import { listSkills, readSkillBody } from "./skills.js";
-import { capturedTool, capturedTools } from "./tool-capture.js";
 import type { ExecutionOperation } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 
@@ -33,10 +34,12 @@ export interface HostCallScope {
 	changed(): void;
 	/** Publish a detached live snapshot of a model worker's child tools for inspection. */
 	setChildren(children: ExecActivityCall[]): void;
+	/** Run a definition Pi does not list as callable, such as pi_exec's own bash. */
 	runTool(definition: ToolDefinition<any, any>, args: Args): Promise<any>;
+	/** Run a callable tool through Pi's tool pipeline. */
+	executeTool(name: string, args: Args): Promise<AgentToolCallOutcome>;
 	claimAgent(): number;
 	addUsage(usage: Usage): void;
-	extensionTools(): ReturnType<typeof capturedTools>;
 }
 
 type PythonCallable = (...actuals: any[]) => unknown;
@@ -80,7 +83,7 @@ function portableSchema(value: unknown): unknown {
 const stringArg = (args: Args, key: string): string => (typeof args[key] === "string" ? (args[key] as string) : "");
 
 function toolDescriptors(scope: HostCallScope, withParameters = false) {
-	return scope.extensionTools().map((tool) => ({
+	return callableTools(scope.ctx).map((tool) => ({
 		name: tool.name,
 		description: tool.description,
 		...(withParameters ? { parameters: portableSchema(tool.parameters) } : {}),
@@ -237,23 +240,31 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 			},
 		],
 		async run(args, scope) {
-			scope.extensionTools();
 			const name = stringArg(args, "name");
 			const toolArgs =
 				args.args && typeof args.args === "object" && !Array.isArray(args.args) ? (args.args as Args) : {};
-			const tool = capturedTool(name);
-			if (!tool) throw new Error(`Unknown extension tool: ${name || "(missing name)"}`);
+			if (!callableTools(scope.ctx).some((tool) => tool.name === name))
+				throw new Error(`Unknown extension tool: ${name || "(missing name)"}`);
 			scope.operation.ref = `extensions.${name}`;
 			scope.operation.args = toolArgs;
 			scope.changed();
-			const result = await scope.runTool(tool.definition, toolArgs);
+			const { result, isError } = await scope.executeTool(name, toolArgs);
+			const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${scope.operation.ref} output`).value;
+			// Like Pi's codemode: a failure raises unless the tool returned structured data with it.
+			if (isError && result.structuredContent === undefined) throw new Error(text || `${name} failed`);
+			if (isError) {
+				scope.operation.outcome = "failed";
+				scope.operation.error = text.slice(0, 500);
+			}
 			const content = portableValue(result.content);
 			const details = portableValue(result.details);
+			const structuredContent = portableValue(result.structuredContent);
 			return {
-				text: bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${scope.operation.ref} output`).value,
+				text,
+				isError,
 				...(content !== undefined ? { content } : {}),
 				...(details !== undefined ? { details } : {}),
-				...(result.usage ? { usage: result.usage } : {}),
+				...(structuredContent !== undefined ? { structuredContent } : {}),
 			};
 		},
 	},
@@ -325,7 +336,11 @@ function coreToolFunction(name: CoreToolName): HostFunction {
 				const config = loadSearchRootGuardConfig(scope.ctx.cwd, scope.ctx.isProjectTrusted?.() ?? false);
 				const blocked = searchRootBlockReason(name, args, scope.ctx.cwd, { home: homedir(), ...config });
 				if (blocked) throw new Error(blocked);
-				const result = await scope.runTool(coreToolDefinition(name, scope.ctx.cwd), args);
+				// pi_exec keeps its own bash: the registered one can start root-owned background tasks.
+				const native = name !== "bash" && scope.ctx.tools.some((tool) => tool.name === name);
+				const result = native
+					? await nativeResult(scope, name, args)
+					: await scope.runTool(coreToolDefinition(name, scope.ctx.cwd), args);
 				const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${ref} output`).value;
 				return ENVELOPE_TOOL_NAMES.has(name) ? { ok: true, output: text } : text;
 			} catch (error) {
@@ -337,6 +352,12 @@ function coreToolFunction(name: CoreToolName): HostFunction {
 			}
 		},
 	};
+}
+
+async function nativeResult(scope: HostCallScope, name: string, args: Args) {
+	const { result, isError } = await scope.executeTool(name, args);
+	if (isError) throw new Error(resultText(result) || `${name} failed`);
+	return result;
 }
 
 export function hostFunction(ref: string): HostFunction | undefined {
@@ -354,8 +375,8 @@ export function hostFunction(ref: string): HostFunction | undefined {
 }
 
 /** Captured extension tools callable as Python functions; core tools and evidence functions keep their own names. */
-export function extensionPythonTools(): ReturnType<typeof capturedTools> {
-	return capturedTools().filter(
+export function extensionPythonTools(tools: readonly AgentTool[]): readonly AgentTool[] {
+	return tools.filter(
 		(tool) =>
 			!CORE_TOOL_NAMES.includes(tool.name as CoreToolName) &&
 			!EVIDENCE_FUNCTION_NAMES.includes(tool.name as (typeof EVIDENCE_FUNCTION_NAMES)[number]) &&
@@ -370,6 +391,7 @@ export function extensionPythonTools(): ReturnType<typeof capturedTools> {
 export function guestFunctions(
 	invoke: (ref: string, args?: Args) => Promise<unknown>,
 	interruption: () => Error | undefined,
+	extensionTools: readonly AgentTool[],
 ): Record<string, PythonCallable> {
 	const keywordCall =
 		(ref: string) =>
@@ -384,10 +406,7 @@ export function guestFunctions(
 		...Object.fromEntries(CORE_TOOL_NAMES.map((name) => [name, keywordCall(`pi.${name}`)])),
 		...Object.fromEntries(EVIDENCE_FUNCTION_NAMES.map((name) => [name, keywordCall(`evidence.${name}`)])),
 		...Object.fromEntries(
-			extensionPythonTools().map((tool) => [
-				tool.name,
-				(args: Args = {}) => invoke("tools.call", { name: tool.name, args }),
-			]),
+			extensionTools.map((tool) => [tool.name, (args: Args = {}) => invoke("tools.call", { name: tool.name, args })]),
 		),
 	};
 }

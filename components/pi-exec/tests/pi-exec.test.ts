@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { join } from "node:path";
-import { ExtensionRunner, SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
@@ -424,6 +424,30 @@ describe("pi_exec agent binding", () => {
 	});
 });
 
+/** Pi's tool context: the callable tools and a nested-call pipeline that never rejects for tool failures. */
+function toolContext(ctx: any, calls: string[] = []) {
+	const tools = ctx.tools ?? [];
+	return {
+		...ctx,
+		tools,
+		executeTool:
+			ctx.executeTool ??
+			(async (name: string, args: Record<string, unknown>) => {
+				calls.push(name);
+				const toolCall = { type: "toolCall", id: `nested-${calls.length}`, name, arguments: args };
+				const tool = tools.find((candidate: any) => candidate.name === name);
+				if (!tool)
+					return { toolCall, result: { content: [{ type: "text", text: `Tool ${name} not found` }] }, isError: true };
+				try {
+					const result = await tool.execute(toolCall.id, args);
+					return { toolCall, result, isError: result.isError === true };
+				} catch (error) {
+					return { toolCall, result: { content: [{ type: "text", text: (error as Error).message }] }, isError: true };
+				}
+			}),
+	};
+}
+
 describe("pi_exec tool", () => {
 	const register = () => {
 		const tools = new Map<string, any>();
@@ -449,7 +473,7 @@ describe("pi_exec tool", () => {
 		const tool = tools.get("pi_exec");
 		const execute = tool.execute.bind(tool);
 		tool.execute = (id: string, params: unknown, signal: AbortSignal | undefined, onUpdate: unknown, ctx: any) =>
-			execute(id, params, signal, onUpdate, { ...ctx, sessionManager: manager });
+			execute(id, params, signal, onUpdate, toolContext({ ...ctx, sessionManager: manager }));
 		return {
 			tools,
 			tool,
@@ -628,6 +652,28 @@ describe("pi_exec tool", () => {
 		}
 	});
 
+	it("reports a worker that hit its output token limit as failed with its partial text", async () => {
+		const previous = process.argv[1];
+		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+		try {
+			const { tool } = register();
+			const result = await tool.execute(
+				"worker-truncated",
+				{ code: 'await agent_run(task="truncated")' },
+				undefined,
+				undefined,
+				{ cwd: process.cwd(), sessionManager: { getSessionId: () => "worker-truncated" } },
+			);
+			expect(JSON.parse(result.content[0].text)).toMatchObject({
+				status: "failed",
+				error: "Agent hit its output token limit; its text is partial",
+				text: "first half",
+			});
+		} finally {
+			process.argv[1] = previous;
+		}
+	});
+
 	it("fits marked agent contexts before binding them to a worker", async () => {
 		const previous = process.argv[1];
 		process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
@@ -725,7 +771,7 @@ describe("pi_exec tool", () => {
 		expect(failure.details.trace.operations).toEqual([]);
 	});
 
-	it("type-checks captured extension tools before any host call", async () => {
+	it("type-checks callable extension tools before any host call", async () => {
 		const { tool, resultHandler } = register();
 		let calls = 0;
 		const mirror = {
@@ -738,49 +784,34 @@ describe("pi_exec tool", () => {
 				return { content: [{ type: "text", text: `echo:${args.value}` }] };
 			},
 		};
-		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [
-			{
-				tools: new Map([
-					["mirror", { definition: mirror }],
-					["pi_exec", { definition: { ...mirror, name: "pi_exec" } }],
-				]),
-			},
-		];
-		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		try {
-			expect(tool.parameters.properties.code.description).toContain("tools_describe");
-			expect(tool.parameters.properties.code.description).not.toContain("async def mirror(");
-			const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "mirror" } };
-			await expect(
-				tool.execute(
-					"mirror-invalid",
-					{ code: 'await mirror(value="first")\nawait mirror(vlaue="second")' },
-					undefined,
-					undefined,
-					ctx,
-				),
-			).rejects.toThrow(/unknown-argument/);
-			expect(
-				resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "mirror-invalid" }).details.trace.operations,
-			).toEqual([]);
-			expect(calls).toBe(0);
-			const result = await tool.execute(
-				"mirror-valid",
-				{ code: 'response = await mirror(value="ok")\nresponse["text"]' },
+		expect(tool.parameters.properties.code.description).toContain("tools_describe");
+		expect(tool.parameters.properties.code.description).not.toContain("async def mirror(");
+		const ctx = { cwd: process.cwd(), tools: [mirror], sessionManager: { getSessionId: () => "mirror" } };
+		await expect(
+			tool.execute(
+				"mirror-invalid",
+				{ code: 'await mirror(value="first")\nawait mirror(vlaue="second")' },
 				undefined,
 				undefined,
 				ctx,
-			);
-			expect(result.content[0].text).toBe("echo:ok");
-			expect(calls).toBe(1);
-		} finally {
-			runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...mirror, name: "pi_exec" } }]]) }];
-			ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		}
+			),
+		).rejects.toThrow(/unknown-argument/);
+		expect(
+			resultHandler({ toolName: "pi_exec", isError: true, toolCallId: "mirror-invalid" }).details.trace.operations,
+		).toEqual([]);
+		expect(calls).toBe(0);
+		const result = await tool.execute(
+			"mirror-valid",
+			{ code: 'response = await mirror(value="ok")\nresponse["text"]' },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(result.content[0].text).toBe("echo:ok");
+		expect(calls).toBe(1);
 	});
 
-	it("discovers and calls a captured extension through the dynamic tool API", async () => {
+	it("discovers and calls an extension tool through the dynamic tool API", async () => {
 		const { tool } = register();
 		const mirror = {
 			name: "mirror",
@@ -791,28 +822,51 @@ describe("pi_exec tool", () => {
 				return { content: [{ type: "text", text: `echo:${args.value}` }] };
 			},
 		};
-		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [
-			{
-				tools: new Map([
-					["mirror", { definition: mirror }],
-					["pi_exec", { definition: { ...mirror, name: "pi_exec" } }],
-				]),
+		const code =
+			'names = [t["name"] for t in await tools_search(query="Echo a value")]\nfound = await tools_describe(name="mirror")\nreply = await tools_call(name="mirror", args={"value": "dynamic"})\n[names, found["name"] if found is not None else "", reply["text"]]';
+		const result = await tool.execute("dynamic-tools", { code }, undefined, undefined, {
+			cwd: process.cwd(),
+			tools: [mirror],
+			sessionManager: { getSessionId: () => "dynamic-tools" },
+		});
+		expect(JSON.parse(result.content[0].text)).toEqual([["mirror"], "mirror", "echo:dynamic"]);
+	});
+
+	it("returns structured data and error state, and raises for failures without data", async () => {
+		const { tool } = register();
+		const lookup = {
+			name: "lookup",
+			label: "Lookup",
+			description: "Look up rows",
+			parameters: Type.Object({ key: Type.String() }),
+			async execute(_id: string, args: { key: string }) {
+				if (args.key === "missing")
+					return { content: [{ type: "text", text: "no rows" }], structuredContent: [], isError: true };
+				if (args.key === "broken") throw new Error("lookup backend down");
+				return { content: [{ type: "text", text: "1 row" }], structuredContent: [{ key: args.key }] };
 			},
-		];
-		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		try {
-			const code =
-				'names = [t["name"] for t in await tools_search(query="Echo a value")]\nfound = await tools_describe(name="mirror")\nreply = await tools_call(name="mirror", args={"value": "dynamic"})\n[names, found["name"] if found is not None else "", reply["text"]]';
-			const result = await tool.execute("dynamic-tools", { code }, undefined, undefined, {
-				cwd: process.cwd(),
-				sessionManager: { getSessionId: () => "dynamic-tools" },
-			});
-			expect(JSON.parse(result.content[0].text)).toEqual([["mirror"], "mirror", "echo:dynamic"]);
-		} finally {
-			runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...mirror, name: "pi_exec" } }]]) }];
-			ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		}
+		};
+		const code = [
+			'found = await lookup(key="a")',
+			'missing = await lookup(key="missing")',
+			"try:",
+			'    await lookup(key="broken")',
+			'    raised = ""',
+			"except Exception as error:",
+			"    raised = str(error)",
+			'[found["structuredContent"], found["isError"], missing["structuredContent"], missing["isError"], raised]',
+		].join("\n");
+		const result = await tool.execute("structured", { code }, undefined, undefined, {
+			cwd: process.cwd(),
+			tools: [lookup],
+			sessionManager: { getSessionId: () => "structured" },
+		});
+		expect(JSON.parse(result.content[0].text)).toEqual([[{ key: "a" }], false, [], true, "lookup backend down"]);
+		expect(result.details.trace.operations.map((operation: any) => operation.outcome)).toEqual([
+			"succeeded",
+			"failed",
+			"failed",
+		]);
 	});
 
 	it("rejects root-only and interactive manager tools at the Python type-check boundary", async () => {
@@ -830,44 +884,31 @@ describe("pi_exec tool", () => {
 		expect(resultHandler({ toolName: "pi_exec", isError: true, toolCallId: id }).details.trace.operations).toEqual([]);
 	});
 
-	it("type-checks against the active parent core-tool schema", async () => {
+	it("type-checks and runs an active core tool through Pi's tool pipeline with its registered schema", async () => {
 		const { tool } = register();
-		let calls = 0;
+		const nested: string[] = [];
 		const read = {
 			name: "read",
 			label: "Read",
 			description: "Read a location",
 			parameters: Type.Object({ location: Type.String() }),
 			async execute(_id: string, args: { location: string }) {
-				calls++;
-				return { content: [{ type: "text", text: args.location }] };
+				return { content: [{ type: "text", text: `native:${args.location}` }] };
 			},
 		};
-		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [
-			{
-				tools: new Map([
-					["read", { definition: read }],
-					["pi_exec", { definition: { ...read, name: "pi_exec" } }],
-				]),
-			},
-		];
-		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		try {
-			expect(tool.parameters.properties.code.description).toContain("async def read(*, location: str)");
-			const result = await tool.execute(
-				"custom-core",
-				{ code: 'await read(location="example.txt")' },
-				undefined,
-				undefined,
-				{ cwd: process.cwd(), sessionManager: { getSessionId: () => "custom-core" } },
-			);
-			expect(result.content[0].text).toBe("example.txt");
-			expect(calls).toBe(1);
-		} finally {
-			runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...read, name: "pi_exec" } }]]) }];
-			ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
-		}
+		const ctx = toolContext(
+			{ cwd: process.cwd(), tools: [read], sessionManager: { getSessionId: () => "native-core" } },
+			nested,
+		);
+		const result = await tool.execute(
+			"native-core",
+			{ code: 'await read(location="example.txt")' },
+			undefined,
+			undefined,
+			ctx,
+		);
+		expect(result.content[0].text).toBe("native:example.txt");
+		expect(nested).toEqual(["read"]);
 	});
 
 	it("type-checks nested edit arguments before the preceding write", async () => {
@@ -912,16 +953,6 @@ describe("pi_exec tool", () => {
 				return { content: [{ type: "text", text: args.path }] };
 			},
 		};
-		const runner = Object.create(ExtensionRunner.prototype) as any;
-		runner.extensions = [
-			{
-				tools: new Map([
-					["read", { definition: read }],
-					["pi_exec", { definition: { ...read, name: "pi_exec" } }],
-				]),
-			},
-		];
-		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 		const result = await tool.execute(
 			"gather-core",
 			{
@@ -930,13 +961,11 @@ describe("pi_exec tool", () => {
 			},
 			undefined,
 			undefined,
-			{ cwd: process.cwd(), sessionManager: { getSessionId: () => "gather-core" } },
+			{ cwd: process.cwd(), tools: [read], sessionManager: { getSessionId: () => "gather-core" } },
 		);
 		expect(JSON.parse(result.content[0].text)).toEqual(["0", "1", "2", "3", "4"]);
 		expect(peak).toBe(2);
 		expect(result.details.trace.operations).toHaveLength(5);
-		runner.extensions = [{ tools: new Map([["pi_exec", { definition: { ...read, name: "pi_exec" } }]]) }];
-		ExtensionRunner.prototype.getAllRegisteredTools.call(runner);
 	});
 
 	it("cancels a pending core call even when Python catches Exception", async () => {

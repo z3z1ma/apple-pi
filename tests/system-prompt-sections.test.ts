@@ -44,7 +44,10 @@ async function runBeforeAgentStart(cwd: string, options: Partial<BuildSystemProm
 		getAll: () => [],
 		find: () => undefined,
 	} as never);
-	const { systemPromptOptions } = await runner.emitBeforeAgentStart("hello", undefined, { cwd, ...options });
+	const { systemPromptOptions } = await runner.emitBeforeAgentStart(
+		{ messageType: "user", prompt: "hello" },
+		{ cwd, ...options },
+	);
 	return systemPromptOptions;
 }
 
@@ -89,6 +92,7 @@ describe("child tool guidance", () => {
 	const base = {
 		cwd: "/repo",
 		selectedTools: ["read", "search_session"],
+		hiddenTools: [],
 		toolSnippets: { read: "Read files", search_session: "Recover earlier conversation" },
 		toolGuidelines: { search_session: ["Use search_session for earlier work."] },
 		promptGuidelines: ["Use search_session for earlier work.", "Keep reports short."],

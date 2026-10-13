@@ -327,6 +327,49 @@ describe("subagent runner with Pi's real AgentSession", () => {
 		result.session.dispose();
 	}, 30_000);
 
+	it("reports a truncated answer as a failure that keeps its partial text", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-length-stop-"));
+		temporaryDirectories.push(cwd);
+		const faux = registerFauxProvider({
+			provider: "faux",
+			models: [{ id: "faux-length-stop", contextWindow: 200_000 }],
+		});
+		fauxProviders.push(faux);
+		faux.setResponses([() => fauxAssistantMessage([fauxText("First half of the report")], { stopReason: "length" })]);
+		const model = faux.getModel();
+		const runtime = fauxModelBackend(model);
+
+		const result = await runAgent(
+			{
+				cwd,
+				model,
+				modelRegistry: runtime.modelRegistry,
+				getSystemPrompt: () => "parent",
+				sessionManager: { getSessionFile: () => undefined },
+			} as any,
+			"length-stop",
+			"answer",
+			{
+				pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as any,
+				model,
+				agentConfig: {
+					name: "length-stop",
+					description: "test",
+					builtinToolNames: ["read"],
+					extensions: false,
+					skills: false,
+					persistSession: false,
+					systemPrompt: "Answer.",
+					promptMode: "replace",
+				},
+			},
+		);
+
+		expect(result.responseText).toBe("First half of the report");
+		expect(result.failure).toBe("run hit the output token limit; its report is partial");
+		result.session.dispose();
+	}, 30_000);
+
 	it("admits a controller-supplied typed tool in an extensionless session", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-custom-tool-"));
 		temporaryDirectories.push(cwd);
