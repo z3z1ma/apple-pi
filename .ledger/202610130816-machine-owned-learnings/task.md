@@ -8,13 +8,13 @@ Updated: 2026-10-13
 
 Take the user out of the placement loop so the harness can improve itself without a human bottleneck. Learnings must still never reach a place the user does not want: the home directory, or a file the repository shares that the user did not choose to share.
 
-The gate moves from a per-learning human decision to a fixed write boundary. Git ignore state, which the user controls per repository, decides what is shared. This works the same in a personal repository (track the machine zone) and in a large team repository where nobody else uses apple-pi (ignore the machine zone).
+The gate moves from a per-learning human decision to a fixed write boundary. Git ignore state, which the user controls per repository, decides what is shared; paths a repository already tracks are an open question below. This works the same in a personal repository (track the machine zone) and in a large team repository where nobody else uses apple-pi (ignore the machine zone).
 
 Successor of `.ledger/history/202610022036-notebook-learning-loop/`, whose capture and reflection slices stay.
 
 ## Evidence
 
-Rough snapshot from `notebook.maintenance` entries in `~/.pi/agent/sessions`, 2026-10-13. Only session files idle for more than a day count, so that active sessions are excluded. A file is not exactly one session (branches, resumes), and an open learning may have been placed without being retired.
+Rough snapshot taken 2026-10-13 from session files in `~/.pi/agent/sessions` modified since 2026-10-03 and idle for more than a day, so that active sessions are excluded. Per file, recorded = the `reflections` across all `notebook.maintenance` entries; open = recorded minus the union of their `retiredReflectionIds` and each reflection's `supersedes`. A file is not exactly one session (branches, resumes), and an open learning may have been placed without being retired.
 
 - 28 idle session files: 587 learnings recorded, 286 retired or merged, 301 still open at the last record.
 - Open per file: median 2.5. 1 file had zero open. A few long work sessions had 35–81 open.
@@ -70,7 +70,7 @@ Lifecycle:
 
 ## Current State
 
-Planning. Direction and three decisions settled with the user on 2026-10-13. Next: answer the open questions, then move to `ready`.
+Planning. Direction and the decisions above settled with the user on 2026-10-13. Next: answer the open questions, then move to `ready`.
 
 ## Outcome
 
