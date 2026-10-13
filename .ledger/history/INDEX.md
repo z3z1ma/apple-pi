@@ -111,3 +111,5 @@
 - `.ledger/history/202610040735-pi-exec-work-panel/task.md` — done — Expose Pi Exec work in the shared work panel — Add a program-first Pi Exec tab to Ctrl+W with live host calls and worker tool detail, settled results, saved-program support, and shared passive activity.
 
 - `.ledger/history/202610032128-coding-child-reflections/task.md` — done — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
+
+- `.ledger/history/202610022036-notebook-learning-loop/task.md` — done — Refocus the notebook on in-session learning and its distillation — Notebook holds session learnings (failures, workarounds, environment access, user corrections), captured by agent and pair, placed by the main agent at token-spaced run-end reflections into wiki, retrospectives, AGENTS.md, skills, or .pi/programs.
