@@ -113,3 +113,5 @@
 - `.ledger/history/202610032128-coding-child-reflections/task.md` — done — Add coding-child reflections and shared learning — Give write-capable interactive children one in-band pre-settle review/learning continuation and add-only access to the primary notebook, retaining cited child evidence for exact recall.
 
 - `.ledger/history/202610022036-notebook-learning-loop/task.md` — done — Refocus the notebook on in-session learning and its distillation — Notebook holds session learnings (failures, workarounds, environment access, user corrections), captured by agent and pair, placed by the main agent at token-spaced run-end reflections into wiki, retrospectives, AGENTS.md, skills, or .pi/programs.
+
+- `.ledger/history/202610130816-machine-owned-learnings/task.md` — done — Place learnings automatically in a machine-owned zone — Replace per-learning user approval with a fixed write boundary: the agent places, merges, and prunes learnings in machine-owned paths (.wiki, retrospectives, .pi/programs, .pi/LEARNINGS.md injected at session start); git ignore state decides sharing; /distill promotes to human-owned files on request.
