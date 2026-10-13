@@ -10,3 +10,4 @@
 
 - `.ledger/202610041515-repository-history-replay/task.md` — in-progress — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
 
+- `.ledger/202610130816-machine-owned-learnings/task.md` — planning — Place learnings automatically in a machine-owned zone — Replace per-learning user approval with a fixed write boundary: the agent places, merges, and prunes learnings in machine-owned paths (.wiki, retrospectives, .pi/programs, .pi/LEARNINGS.md injected at session start); git ignore state decides sharing; /distill promotes to human-owned files on request.

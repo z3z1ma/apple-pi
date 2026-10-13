@@ -1,6 +1,6 @@
 Status: in-progress
 Created: 2026-10-02
-Updated: 2026-10-02
+Updated: 2026-10-13
 
 # Refocus the notebook on in-session learning and its distillation
 
@@ -57,4 +57,6 @@ Implementation is complete; real-use acceptance remains open. Next: use the harn
 
 ## Outcome
 
-Implementation delivered. Closure awaits the real-use evaluation described above.
+Closed 2026-10-13 on its delivered scope; succeeded by `.ledger/202610130816-machine-owned-learnings/`.
+
+Capture works: guidance, run-end learning reflection, `/reflect`, `learnings:N`, the ledger-close sweep, and bash `expect` all shipped and stay. Placement does not: a rough snapshot of 28 idle session files shows 587 learnings recorded and 301 still open at the last record. The criterion "most learnings end promoted or deliberately dropped" is not met. The user's per-learning approval is the bottleneck, so the successor replaces it with a fixed machine-owned write zone and makes `/distill` an optional promotion step.
