@@ -47,7 +47,9 @@ Lifecycle:
 
 ## Open questions
 
-- Enforcement: a path guard on the placement fork's `edit`/`write` (like the search-root guard), or prompt only. Recommendation: enforce.
+- Enforcement: a path guard on the placement fork's `edit`/`write` (like the search-root guard), or prompt only. Recommendation: enforce. A path guard limits where placement writes; it does not limit what a learned line later makes an agent do.
+- Authority: `.pi/LEARNINGS.md` turns model-made text into lasting instructions for every later session. A learned line such as "stage all generated changes" could undo the sharing rule without any write outside the zone. Options: inject it under a harness-owned frame that marks it advisory and below human and harness policy (lowers the risk; not a sandbox); guard `git add`/`commit` of machine-zone paths in code instead of trusting learned text; make unframed system-level learnings an explicit opt-in. Recommendation: frame plus code-level sharing rules; decide the opt-in with the user.
+- Revisions: an ignored `.pi/LEARNINGS.md` has no git history. Check whether session file-operation recall (`search_session` `#N:path`) is enough to recover a bad rewrite, or whether placement must keep its own revisions.
 - Trust: inject `.pi/LEARNINGS.md` only in trusted projects, matching Pi's `.pi/APPEND_SYSTEM.md`.
 - Already-tracked machine-zone paths: `.git/info/exclude` hides only untracked files. If a team repository already tracks `.wiki/`, `.ledger/`, or `.pi/`, automatic writes would land in shared files. Decide whether a tracked path counts as the user's choice to share or whether placement skips tracked files the user did not opt into.
 - Children: which child sessions receive `.pi/LEARNINGS.md`. Today children suppress `AGENTS.md` and `APPEND_SYSTEM.md` (`components/subagents/src/agent-runner.ts`).
@@ -59,6 +61,7 @@ Lifecycle:
 
 - A learning recorded in one session appears in `.pi/LEARNINGS.md` and in the next session's system prompt with no user action.
 - An automatic placement that targets a path outside the machine zone is rejected (test).
+- Injected learnings are marked advisory and cannot override human or harness instructions in the prompt order (test on the assembled system prompt).
 - Writing `.pi/LEARNINGS.md` during a session does not change that session's system prompt (test; `npm run audit:cache` on real sessions).
 - After about a week of use, most recorded learnings end placed or retired (baseline: 286 of 587 in idle files), measured with the same session parse.
 - After the same week, `.pi/LEARNINGS.md` has no duplicate or contradicting lines (manual review).
