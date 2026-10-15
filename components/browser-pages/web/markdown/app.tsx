@@ -326,17 +326,20 @@ export function MarkdownReview({ page }: { page: MarkdownReviewPage }) {
 				<div className={`md-body ${s.panel ? "with-panel" : ""}`}>
 					<nav className="outline">
 						<div className="o-k">Outline</div>
-						{headings.map((h) => (
-							<button
-								type="button"
-								key={h.id}
-								className={`o-item d${h.heading?.depth} ${current === h.id ? "on" : ""}`}
-								onClick={() => goTo(h.id)}
-							>
-								{h.heading?.text}
-								{sectionCount(h.id) ? <span className="o-n">{sectionCount(h.id)}</span> : null}
-							</button>
-						))}
+						{headings.map((h) => {
+							const n = sectionCount(h.id);
+							return (
+								<button
+									type="button"
+									key={h.id}
+									className={`o-item d${h.heading?.depth} ${current === h.id ? "on" : ""}`}
+									onClick={() => goTo(h.id)}
+								>
+									{h.heading?.text}
+									{n ? <span className="o-n">{n}</span> : null}
+								</button>
+							);
+						})}
 						<div className="o-keys">
 							<Kbd>J</Kbd> <Kbd>K</Kbd> sections
 						</div>

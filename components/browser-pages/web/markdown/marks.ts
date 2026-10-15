@@ -14,7 +14,7 @@ function textNodes(content: Element): Text[] {
 const contentOf = (block: string) => document.querySelector(`[data-content="${block}"]`);
 
 /** The text offset in `content` of a selection boundary, which may sit in a text node or between an element's children. */
-export function offsetIn(content: Element, node: Node, offset: number): number {
+function offsetIn(content: Element, node: Node, offset: number): number {
 	const boundary = document.createRange();
 	boundary.setStart(node, offset);
 	let n = 0;

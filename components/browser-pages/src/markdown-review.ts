@@ -73,15 +73,15 @@ export async function buildMarkdownPage(
 	const source = await readFile(file, "utf8");
 	const root = (await repositoryRoot(dirname(file))) ?? (await realpath(cwd));
 	const inRoot = relative(root, file);
-	const heading = marked.lexer(source).find((t) => t.type === "heading" && t.depth === 1);
+	const blocks = await blocksOf(source);
 	return {
 		page: {
 			kind: "markdown-review",
-			title: heading?.type === "heading" ? heading.text : basename(file),
+			title: blocks.find((b) => b.heading?.depth === 1)?.heading?.text ?? basename(file),
 			path: inRoot && !inRoot.startsWith("..") ? inRoot : file,
 			note: params.note?.trim() || undefined,
 			createdAt: new Date().toISOString(),
-			blocks: await blocksOf(source),
+			blocks,
 			session: { token, live: true, ask: false },
 		},
 		root,

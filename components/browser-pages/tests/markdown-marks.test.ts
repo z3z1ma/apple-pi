@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { annotationsAt, applyMarks, offsetIn, readSelection } from "../web/markdown/marks.ts";
+import { annotationsAt, applyMarks, readSelection } from "../web/markdown/marks.ts";
 
 beforeEach(() => {
 	document.body.innerHTML = `
@@ -18,18 +18,15 @@ const select = (start: [Node, number], end: [Node, number]) => {
 };
 
 describe("selection offsets", () => {
-	it("counts an element boundary by the children before it", () => {
+	it("places a selection that starts between elements at the text after them", () => {
 		const p = content("b1").querySelector("p")!;
-		expect(offsetIn(content("b1"), p, 0)).toBe(0);
-		expect(offsetIn(content("b1"), p, 1)).toBe(2);
-		expect(offsetIn(content("b1"), p, 2)).toBe(4);
-		expect(offsetIn(content("b1"), p, 3)).toBe(6);
-		expect(offsetIn(content("b1"), p.querySelector("em")!.firstChild!, 1)).toBe(3);
+		select([p, 1], [p.querySelector("em")!.firstChild!, 1]);
+		expect(readSelection()).toMatchObject({ spans: [{ block: "b1", start: 2, end: 3 }], quote: "c" });
 	});
 
-	it("skips page decorations such as a code block's language tag", () => {
-		const code = content("b2").querySelector("code")!;
-		expect(offsetIn(content("b2"), code.firstChild!, 1)).toBe(3);
+	it("leaves page decorations, such as a code block's language tag, out of the text", () => {
+		select([content("b2").querySelector("p")!.firstChild!, 0], [content("b2").querySelector("code")!.firstChild!, 2]);
+		expect(readSelection()).toMatchObject({ spans: [{ block: "b2", start: 0, end: 4 }], quote: "ghij" });
 	});
 
 	it("splits a selection across blocks, including one that ends on an element boundary", () => {
