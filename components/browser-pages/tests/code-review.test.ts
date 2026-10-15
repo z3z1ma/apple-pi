@@ -202,7 +202,12 @@ describe("review_code tool", () => {
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		try {
 			let tool: any;
-			browserPages({ registerTool: (definition: unknown) => (tool = definition), on: () => {} } as any);
+			browserPages({
+				registerTool: (definition: any) => {
+					if (definition.name === "review_code") tool = definition;
+				},
+				on: () => {},
+			} as any);
 			const updates: string[] = [];
 			const result = await tool.execute("call", params(), undefined, (u: any) => updates.push(u.content[0].text), {
 				hasUI: true,
@@ -226,7 +231,12 @@ describe("review_code tool", () => {
 
 	it("opens nothing when no user is attached", async () => {
 		let tool: any;
-		browserPages({ registerTool: (definition: unknown) => (tool = definition), on: () => {} } as any);
+		browserPages({
+			registerTool: (definition: any) => {
+				if (definition.name === "review_code") tool = definition;
+			},
+			on: () => {},
+		} as any);
 		const result = await tool.execute("call", params(), undefined, undefined, { hasUI: false, cwd: repo });
 		expect(result.content[0].text).toContain("no review page was opened");
 	});

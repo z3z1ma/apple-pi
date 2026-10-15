@@ -92,7 +92,9 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 ## Browser page dependencies
 
 - Shiki (<https://github.com/shikijs/shiki>), MIT: a runtime npm dependency that highlights code for `review_code`. No source is copied.
-- React and React DOM (<https://github.com/facebook/react>), MIT, Copyright (c) Meta Platforms, Inc. and affiliates: bundled with the page into `components/browser-pages/dist/index.html` by Vite.
+- React and React DOM (<https://github.com/facebook/react>), MIT, Copyright (c) Meta Platforms, Inc. and affiliates: bundled with the pages into `components/browser-pages/dist/` by Vite.
+- marked (<https://github.com/markedjs/marked>), MIT, Copyright (c) 2018+ MarkedJS and (c) 2011-2018 Christopher Jeffrey; its license also carries John Gruber's original Markdown license: a runtime npm dependency that splits documents for `review_markdown`, and bundled into `components/browser-pages/dist/markdown-review.html` to render them.
+- Mermaid (<https://github.com/mermaid-js/mermaid>), MIT, Copyright (c) 2014 - 2022 Knut Sveidqvist: bundled into `components/browser-pages/dist/markdown-review.html` to draw diagrams.
 
 ## tmux-claude-session-manager → Tmux sessions
 

@@ -10,3 +10,5 @@ rm components/browser-pages/tests/demo.local.test.ts   # it waits for a submissi
 ```
 
 `/tmp/bp/result.txt` holds the text the agent receives; `/tmp/bp/saved.html` is the saved page.
+
+The Markdown review has the same pair: `demo-markdown.test.ts` (a retry spec with Mermaid, alerts, a table, hostile HTML and links, and long appendices) and `drive-markdown.py` (every annotation kind, ask, rewrite, `J`/`K`, dark theme, submit, saved page, `?`). Use `/tmp/bpm` in place of `/tmp/bp`.

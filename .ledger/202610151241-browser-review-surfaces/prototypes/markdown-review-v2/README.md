@@ -26,6 +26,6 @@ It loads `marked` and `mermaid` from jsDelivr, so it needs the network; the prod
 
 Driven in system Chrome with Playwright: Mermaid renders, type-to-comment, a selection across a paragraph, a heading, and a paragraph (one annotation, three source lines), suggest, delete, 👍, a block edit with its diff, and Finish review. The result JSON was read back. There were no page errors.
 
-## Verdict
+## Verdict (2026-10-15)
 
-Pending operator review.
+Approved: "This is incredible." Addition for the build: `J`/`K` jump between outline sections.

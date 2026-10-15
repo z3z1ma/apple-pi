@@ -4,13 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-import { PAGE_DATA_MARKER } from "./page-data.js";
+import { PAGE_DATA_MARKER, type PageData } from "./page-data.js";
 
-const TEMPLATE = fileURLToPath(new URL("../dist/index.html", import.meta.url));
-
-/** The built single-file page app. */
-export function readTemplate(): Promise<string> {
-	return readFile(TEMPLATE, "utf8");
+/** The built single-file app for one kind of page. */
+export function readTemplate(kind: PageData["kind"]): Promise<string> {
+	return readFile(fileURLToPath(new URL(`../dist/${kind}.html`, import.meta.url)), "utf8");
 }
 
 /** Inlines page data into the app, escaped so the JSON cannot close its script element. */

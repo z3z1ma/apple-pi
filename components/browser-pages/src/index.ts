@@ -1,19 +1,31 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
+import { askAgent, type Passage } from "./ask-agent.js";
 import {
 	buildCodeReviewPage,
 	formatReviewResult,
 	parseQuestion,
 	parseReviewResult,
+	questionPassage,
 	REVIEW_CODE_TOOL_NAME,
 	ReviewCodeParamsSchema,
 	type ReviewCodeParams,
 } from "./code-review.js";
-import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
-import { askAgent } from "./ask-agent.js";
+import {
+	buildMarkdownPage,
+	formatMarkdownResult,
+	markdownPassage,
+	parseMarkdownQuestion,
+	parseMarkdownResult,
+	REVIEW_MARKDOWN_TOOL_NAME,
+	ReviewMarkdownParamsSchema,
+	type ReviewMarkdownParams,
+} from "./markdown-review.js";
+import type { PageData } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, readTemplate, savePage } from "./saved-page.js";
 
@@ -23,10 +35,54 @@ function openInBrowser(url: string): void {
 }
 
 const text = (value: string) => [{ type: "text" as const, text: value }];
+const NO_USER = "No user is attached to this run, so no review page was opened.";
+
+interface PageRun<P extends PageData, R extends { verdict: string }> {
+	page: P;
+	root: string;
+	parse: (body: unknown) => R | undefined;
+	/** The passage and question a page asks about, or undefined for a malformed question. */
+	question: (body: unknown) => { passage: Passage; question: string } | undefined;
+	format: (result: R, saved: string) => string;
+}
 
 export default function browserPages(pi: ExtensionAPI): void {
 	const sessions = new Set<() => void>();
 	trackLiveSessions();
+
+	/** Serves one page until the reviewer submits, saves it with the result, and returns the text for the model. */
+	async function review<P extends PageData, R extends { verdict: string }>(
+		run: PageRun<P, R>,
+		ctx: ExtensionContext,
+		signal: AbortSignal | undefined,
+		onUpdate: ((update: { content: ReturnType<typeof text>; details: undefined }) => void) | undefined,
+	) {
+		const { page } = run;
+		const template = await readTemplate(page.kind);
+		page.session.ask = !!liveSession(ctx);
+		const session = await openPageSession(embedPage(template, page), page.session.token, run.parse, {
+			signal,
+			ask: async (body, stop) => {
+				const asked = run.question(body);
+				return asked && askAgent(ctx, asked.passage, asked.question, stop);
+			},
+		});
+		sessions.add(session.close);
+		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
+		openInBrowser(session.url);
+		try {
+			const result = await session.result;
+			const saved = await savePage(
+				embedPage(template, { ...page, session: { token: "", live: false, ask: false }, result }),
+				run.root,
+				page.title,
+			);
+			return { content: text(run.format(result, saved)), details: { verdict: result.verdict, saved } };
+		} finally {
+			session.close();
+			sessions.delete(session.close);
+		}
+	}
 
 	pi.registerTool({
 		name: REVIEW_CODE_TOOL_NAME,
@@ -42,39 +98,66 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ReviewCodeParamsSchema,
 		executionMode: "sequential",
-
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			if (!ctx.hasUI)
-				return { content: text("No user is attached to this run, so no review page was opened."), details: undefined };
-			const token = randomBytes(24).toString("hex");
-			const { page, root } = await buildCodeReviewPage(params as ReviewCodeParams, ctx.cwd, token);
-			const template = await readTemplate();
-			page.session.ask = !!liveSession(ctx);
-			const session = await openPageSession(embedPage(template, page), token, (body) => parseReviewResult(body, page), {
-				signal,
-				ask: async (body, stop) => {
-					const question = parseQuestion(body, page);
-					return question && askAgent(ctx, page, question, stop);
-				},
-			});
-			sessions.add(session.close);
-			onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
-			openInBrowser(session.url);
-			try {
-				const result = await session.result;
-				const saved = await savePage(
-					embedPage(template, { ...page, session: { token: "", live: false, ask: false }, result }),
+			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
+			const { page, root } = await buildCodeReviewPage(
+				params as ReviewCodeParams,
+				ctx.cwd,
+				randomBytes(24).toString("hex"),
+			);
+			return review(
+				{
+					page,
 					root,
-					page.title,
-				);
-				return {
-					content: text(formatReviewResult(page, result, saved)),
-					details: { verdict: result.verdict, comments: result.comments.length, saved },
-				};
-			} finally {
-				session.close();
-				sessions.delete(session.close);
-			}
+					parse: (body) => parseReviewResult(body, page),
+					question: (body) => {
+						const q = parseQuestion(body, page);
+						return q && { passage: questionPassage(page, q), question: q.question };
+					},
+					format: (result, saved) => formatReviewResult(page, result, saved),
+				},
+				ctx,
+				signal,
+				onUpdate,
+			);
+		},
+	});
+
+	pi.registerTool({
+		name: REVIEW_MARKDOWN_TOOL_NAME,
+		label: "Review Markdown",
+		description:
+			"Open a Markdown file in the user's browser for review and wait for their verdict. The page renders the document (outline, code, tables, Mermaid diagrams); the user annotates passages by selecting them: comments, deletions, suggested rewrites, labels, questions, and rewritten blocks. Returns the verdict and each annotation with its source lines and quoted text. The file is never changed by the page.",
+		promptSnippet: "Open a Markdown document in the user's browser for passage-level review and sign-off",
+		promptGuidelines: [
+			"Use review_markdown when a document you wrote or revised, such as a spec, plan, or README, needs the user's sign-off or feedback before you continue. It blocks until they submit.",
+			"Pass `note` only when one sentence of context helps, such as what changed since their last review or what you need decided.",
+			"Apply the returned annotations to the file yourself; suggested rewrites and rewritten blocks are feedback, not edits already made.",
+		],
+		parameters: ReviewMarkdownParamsSchema,
+		executionMode: "sequential",
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
+			const { page, root } = await buildMarkdownPage(
+				params as ReviewMarkdownParams,
+				ctx.cwd,
+				randomBytes(24).toString("hex"),
+			);
+			return review(
+				{
+					page,
+					root,
+					parse: (body) => parseMarkdownResult(body, page),
+					question: (body) => {
+						const q = parseMarkdownQuestion(body, page);
+						return q && { passage: markdownPassage(page, q.spans, q.quote), question: q.question };
+					},
+					format: (result, saved) => formatMarkdownResult(page, result, saved),
+				},
+				ctx,
+				signal,
+				onUpdate,
+			);
 		},
 	});
 

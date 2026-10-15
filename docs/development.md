@@ -51,7 +51,7 @@ npm test
 npm run pack:check
 ```
 
-After changing `components/browser-pages/web/`, run `npm run build:web` and commit `components/browser-pages/dist/index.html`. `npm test` fails while the committed page is stale. `npm run typecheck` checks the page with `tsconfig.web.json`.
+After changing `components/browser-pages/web/`, run `npm run build:web` and commit the pages it writes to `components/browser-pages/dist/`. `npm test` fails while the committed page is stale. `npm run typecheck` checks the page with `tsconfig.web.json`.
 
 Biome is the repository formatter and lint runner. It formats all TypeScript and JavaScript with tabs through one shared configuration. `format:check` is the no-write CI check; `lint` enables Biome's recommended correctness rules, high-signal debugger and loose-equality checks, and a function-level cognitive-complexity limit of 50. `noExplicitAny` remains off for the Pi API's intentionally untyped generic boundary, non-null assertions remain off in existing test setup, and control-character regex detection remains off because ANSI/control-character sanitizers are intentional. Any complexity suppression must document the specific cohesive state-machine or algorithm boundary it protects.
 

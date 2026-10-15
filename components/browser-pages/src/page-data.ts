@@ -147,4 +147,59 @@ export interface ReviewResult {
 	submittedAt: string;
 }
 
+/** One top-level Markdown block, as the server's lexer split the file. */
+export interface MarkdownBlock {
+	id: string;
+	raw: string;
+	/** First and last source line, 1-based. */
+	line: number;
+	endLine: number;
+	/** Code fences arrive highlighted, so the page needs no grammars. */
+	code?: { lang: string; lines: Segment[][] };
+	mermaid?: boolean;
+	heading?: { depth: number; text: string };
+}
+
+export interface MarkdownReviewPage {
+	kind: "markdown-review";
+	title: string;
+	path: string;
+	/** One optional line from the agent, shown above the document. */
+	note?: string;
+	createdAt: string;
+	blocks: MarkdownBlock[];
+	session: { token: string; live: boolean; ask: boolean };
+	result?: MarkdownResult;
+}
+
+/** Part of an annotation inside one block; without offsets it covers the whole block. */
+export interface TextSpan {
+	block: string;
+	start?: number;
+	end?: number;
+}
+
+export type MarkdownLabel = "good" | "clarify";
+
+export interface MarkdownAnnotation {
+	type: "comment" | "delete" | "suggest" | "label" | "ask";
+	spans: TextSpan[];
+	quote?: string;
+	text?: string;
+	replacement?: string;
+	label?: MarkdownLabel;
+	answer?: string;
+}
+
+export interface MarkdownResult {
+	verdict: Verdict;
+	overall?: string;
+	annotations: MarkdownAnnotation[];
+	/** Blocks the reviewer rewrote in the page; the file itself is unchanged. */
+	edits: { block: string; after: string }[];
+	submittedAt: string;
+}
+
+export type PageData = CodeReviewPage | MarkdownReviewPage;
+
 export const PAGE_DATA_MARKER = '<script id="page-data" type="application/json">null</script>';

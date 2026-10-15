@@ -650,6 +650,20 @@ export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewRe
 // ---------------------------------------------------------------------------- result for the model
 
 /** The `file:41-43` anchor of lines in a hunk, and the first non-blank line they cover. */
+/** The lines a question is about, for the read-only fork's prompt. */
+export function questionPassage(page: CodeReviewPage, q: Question) {
+	const hunk = page.hunks[q.hunk];
+	const chapter = page.chapters.find((c) => c.changes.some((change) => change.id === q.hunk));
+	return {
+		where: anchorText(hunk, q.start, q.end).where,
+		excerpt: hunk.lines
+			.slice(q.start, q.end + 1)
+			.map((l) => `${l.t}${l.s.map((seg) => seg.t).join("")}`)
+			.join("\n"),
+		context: chapter ? `chapter "${chapter.title}"` : undefined,
+	};
+}
+
 export function anchorText(hunk: Hunk, start: number, end: number): { where: string; quote: string } {
 	const lines = hunk.lines.slice(start, end + 1);
 	const news = lines.map((l) => l.n).filter((n): n is number => n !== undefined);

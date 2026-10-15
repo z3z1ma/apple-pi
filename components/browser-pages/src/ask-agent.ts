@@ -1,40 +1,34 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { closePendingCalls, liveSession, startFork } from "../../shared/src/forked-continuation.js";
-import { anchorText, type Question } from "./code-review.js";
-import type { CodeReviewPage } from "./page-data.js";
 
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
-const FRAME = `You are an ephemeral read-only fork of the agent that opened a code review page for the user. The user is reviewing your change in that page and asks about the lines below. Answer the question directly and briefly, grounded in this conversation, the code, and the repository. You can use read, grep, find, and ls; every other tool is blocked. Say plainly when you are not sure.
-Your answer appears next to those lines in the page. It is not a message in the main conversation and it changes no code. The review_code call is still waiting for the user's verdict.`;
+const FRAME = `You are an ephemeral read-only fork of the agent that opened a review page for the user. The user is reviewing your work in that page and asks about the passage below. Answer the question directly and briefly, grounded in this conversation, the files, and the repository. You can use read, grep, find, and ls; every other tool is blocked. Say plainly when you are not sure.
+Your answer appears next to that passage in the page. It is not a message in the main conversation and it changes no files. The review call is still waiting for the user's verdict.`;
 
-function excerpt(page: CodeReviewPage, q: Question): { where: string; code: string } {
-	const hunk = page.hunks[q.hunk];
-	const code = hunk.lines
-		.slice(q.start, q.end + 1)
-		.map((l) => `${l.t}${l.s.map((seg) => seg.t).join("")}`)
-		.join("\n");
-	return { where: anchorText(hunk, q.start, q.end).where, code };
+/** What a question is about: where it is, the text itself, and optional context such as the chapter. */
+export interface Passage {
+	where: string;
+	excerpt: string;
+	context?: string;
 }
 
 /**
  * Answers a reviewer's question from a read-only fork of the live conversation, the way `clarify` does: the
- * fork shares the session's request prefix, the pending `review_code` call gets a placeholder result, and only
- * the answer leaves the fork. Its usage is recorded in the session as "Review question".
+ * fork shares the session's request prefix, the pending review call gets a placeholder result, and only the
+ * answer leaves the fork. Its usage is recorded in the session as "Review question".
  */
-export async function askAgent(ctx: ExtensionContext, page: CodeReviewPage, q: Question, signal: AbortSignal) {
+export async function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal) {
 	const session = liveSession(ctx);
 	if (!session) throw new Error("The live session is not available, so the agent cannot answer.");
 	const messages = structuredClone(session.sessionManager.buildSessionProjection().messages);
 	closePendingCalls(messages, "The review page is still open; the user has not submitted a verdict yet.");
-	const { where, code } = excerpt(page, q);
-	const chapter = page.chapters.find((c) => c.changes.some((change) => change.id === q.hunk));
 	const fork = startFork(session, {
 		messages,
 		append: {
 			role: "custom",
 			customType: "review-question",
-			content: `${FRAME}\n\nLines: ${where}${chapter ? ` (chapter "${chapter.title}")` : ""}\n\n\`\`\`\n${code}\n\`\`\`\n\nQuestion: ${q.question}`,
+			content: `${FRAME}\n\nPassage: ${passage.where}${passage.context ? ` (${passage.context})` : ""}\n\n\`\`\`\n${passage.excerpt}\n\`\`\`\n\nQuestion: ${question}`,
 			display: false,
 			timestamp: Date.now(),
 		},

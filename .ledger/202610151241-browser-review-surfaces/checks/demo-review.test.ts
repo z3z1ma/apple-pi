@@ -187,7 +187,7 @@ it("serves a demo review and records the submission", { timeout: 600_000 }, asyn
 		"demo-token",
 	);
 	mkdirSync(out, { recursive: true });
-	const template = await readTemplate();
+	const template = await readTemplate("code-review");
 	writeFileSync(join(out, "warnings.json"), JSON.stringify(page.warnings, null, 2));
 	page.session.ask = true;
 	const session = await openPageSession(embedPage(template, page), "demo-token", (body) => parseReviewResult(body, page), {

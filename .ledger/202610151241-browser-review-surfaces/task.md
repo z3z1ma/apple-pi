@@ -53,18 +53,20 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are committed; `4b3fcf6` shares the anchor format and adds the 🥧 logo.
+In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are committed; `4b3fcf6` shares the anchor format and adds the 🥧 logo. `review_markdown` is built (slice 3).
 
-- Design: [round 1](prototypes/code-review/README.md) and [round 2](prototypes/code-review-v2/README.md) prototypes; round 2 approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
-- Code: `components/browser-pages/` (`src/` server, tool, and ask fork; `web/` React page; committed `dist/index.html`), `extensions/browser-pages.ts`. Contract: `docs/browser-pages.md`.
-- Slice 2: the composer's "Ask the agent" mode (`A`) posts to `/ask`; a read-only fork of the live conversation answers it, the way `clarify` does (the shared helper `closePendingCalls` now serves both). Answers render inline; questions with answers return in the tool result and the saved page.
-- Checks: browser-pages tests (ask fork in a real faux session, including a blocked `bash` call; `/ask` token, failure, and close rules), format, lint, both typechecks, loader, pack. The full `npm test` had two timeouts in `components/tasks` under load; they pass when run alone. Manual check in Chrome with a canned answer: ask, pending, answer, result text, saved page.
-- Not yet checked: asking with a real model in a live session; large real diffs for performance.
+- Design: code review [round 2](prototypes/code-review-v2/README.md) and Markdown review [round 2](prototypes/markdown-review-v2/README.md) approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
+- Code: `components/browser-pages/` (`src/` servers, tools, and ask fork; `web/` one React app per kind; committed `dist/<kind>.html`), `extensions/browser-pages.ts`. Contract: `docs/browser-pages.md`.
+- Slice 3: `review_markdown` splits the file into top-level blocks with source lines (`marked` lexer, Shiki for fences); the page renders each block (raw HTML as text, unsafe URLs dropped, Mermaid strict), takes selection annotations (comment, 👍/❓, delete, suggest, ask), whole-block comments, block rewrites, an overall comment, and a verdict; `J`/`K` sections, `?` keys. Overlapping highlights nest and open together. Rewritten blocks take no text marks. The server checks span shape only: rendered text can be longer than the source (marked's newlines), so a raw-length bound rejected real selections.
+- Checks: browser-pages tests, including hostile Markdown, DOM selection and marks under happy-dom, result validation and model text, and the tool end to end; manual drive in Chrome ([checks](checks/README.md)): hostile input inert, every annotation kind, ask answer, rewrite diff, J/K, dark Mermaid, submission, saved page.
+- Not yet checked: asking with a real model in a live session; very large documents for performance.
+- Known cost: the Markdown page is 3.7 MB because Mermaid bundles every diagram type; every saved Markdown review is that size.
 
 Next:
 
-1. Operator tries asking in a real review.
-2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass and operator verdict before implementation. Design pass 1: [Markdown review round 1](prototypes/markdown-review/README.md) was rejected (agent curation before the document); [round 2](prototypes/markdown-review-v2/README.md), Plannotator-style selection annotation, awaits the verdict.
+1. Operator tries `review_markdown` on a real document.
+2. Design pass 2: `review_ledger_task` (reuse the Markdown reader; file tree, ticket DAG from `Blocked by:`, sign-off), then its operator verdict and build.
+3. Design pass 3: `explain_change`.
 
 ## Outcome
 

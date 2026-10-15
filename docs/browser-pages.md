@@ -1,8 +1,11 @@
 # Browser pages
 
-`review_code` opens a code review page in the user's browser and waits for the verdict. The agent writes the structure; the page shows the real diff from git. Root sessions only; a run without an attached user gets a message instead of a page.
+Two tools open a page in the user's browser and wait for the verdict:
 
-The same runtime will serve the Markdown review, ledger task review, and change explanation pages. Their tools are not built yet.
+- `review_code`: a code review. The agent writes the structure; the page shows the real diff from git.
+- `review_markdown`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
+
+Root sessions only; a run without an attached user gets a message instead of a page. The same runtime will serve the ledger task review and change explanation pages. Their tools are not built yet.
 
 ## What the agent supplies
 
@@ -73,6 +76,22 @@ The tool blocks until the reviewer submits. The agent then receives:
 
 Aborting the tool call or ending the session closes the page server.
 
+## Markdown review
+
+`review_markdown` takes the `path` of a Markdown file and an optional one-sentence `note` shown above the document, such as what changed since the last review. The page renders the document first: an outline with section counts, code fences highlighted like the code review, tables, task lists, GitHub alerts, and Mermaid diagrams drawn in the page's colours.
+
+The reviewer gives feedback on the text itself:
+
+- **Select text** to open a toolbar above it. Type to comment straight away, or choose 👍 looks good, ❓ clarify this, mark for deletion, suggest a rewrite (shown as a tracked change), or ask the agent. A selection can span several blocks.
+- **Hover a block** to comment on it as a whole, or to rewrite its Markdown source. A rewritten block shows the rewrite, with a diff and a way to revert.
+- **Click a highlight** to see what it holds or remove it. Overlapping highlights show together.
+- **Overall comment** in the top bar, and **Annotations** for the list of everything so far.
+- **Keys:** `J`/`K` move between sections, `⌘↵` saves the open note or finishes the review, `Esc` closes, `?` lists the keys.
+
+Questions go to a read-only fork, as in the code review. Text annotations point into the original document, so a rewritten block takes no new text annotations; comment on it as a whole instead.
+
+The agent receives the verdict, the overall comment, each annotation with its kind, `path:line` range, and quoted text (with the replacement, label, or question and answer), and each rewritten block as before and after. The file itself never changes; the agent applies the feedback.
+
 ## Saved pages
 
 Every submitted review is saved as one self-contained HTML file in `<agent dir>/artifacts/<repository>/<date>-<title>.html`; the agent directory defaults to `~/.pi/agent`. The file opens offline and shows the review read-only, with the verdict and comments. Attach it to a pull request, a Confluence page, or a Jira ticket.
@@ -81,6 +100,8 @@ Every submitted review is saved as one self-contained HTML file in `<agent dir>/
 
 The server listens on 127.0.0.1 on a random port. It serves the page, answers questions, and accepts a submission only for requests that carry the session token and name the loopback host. It accepts one submission, and closing the page server stops any answer still running.
 
+A Markdown document is untrusted content in a page that holds the token, so it never runs script: raw HTML shows as text, links keep only relative, `http`, `https`, and `mailto` targets, images load only over `http` or `https`, and Mermaid runs in its strict security mode.
+
 ## Maintaining the page
 
-The page is a React app in `components/browser-pages/web/`, built by Vite into one file, `components/browser-pages/dist/index.html`. Pi installs git packages without dev dependencies, so the built file is committed. After changing `web/`, run `npm run build:web`. A test fails when the committed file does not match a fresh build.
+Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html` and `dist/markdown-review.html`. Only the Markdown page bundles Mermaid, which makes it about 3.7 MB; the code review page stays near 300 KB. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.

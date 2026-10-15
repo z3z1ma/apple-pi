@@ -12,7 +12,7 @@ import { afterEach, expect, it } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { askAgent } from "../src/ask-agent.js";
-import { buildCodeReviewPage } from "../src/code-review.js";
+import { buildCodeReviewPage, questionPassage } from "../src/code-review.js";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -61,12 +61,8 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 				);
 				const hunk = page.order[0];
 				const added = page.hunks[hunk].lines.findIndex((l) => l.t === "+");
-				answer = await askAgent(
-					ctx,
-					page,
-					{ hunk, start: added, end: added, question: "Why five?" },
-					new AbortController().signal,
-				);
+				const passage = questionPassage(page, { hunk, start: added, end: added, question: "Why five?" });
+				answer = await askAgent(ctx, passage, "Why five?", new AbortController().signal);
 				return { content: [{ type: "text", text: "reviewed" }], details: {} };
 			},
 		});
