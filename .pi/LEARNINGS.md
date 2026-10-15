@@ -4,3 +4,10 @@
 - Faux-session compaction (`tests/helpers/faux-session.ts`) needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".
 - For exact upstream Pi API or release facts, fetch the tagged file from `raw.githubusercontent.com` (for example with `pi_exec` `fetch`) and read it; search summaries can be truncated or secondhand.
 - Test fakes of `ExtensionToolContext` need `tools` and `executeTool`; `ctx.executeTool()` also needs an assistant message that issued the parent call, so drive nested calls through a real faux-model turn.
+- Before you say a reference project lacks a feature, check its ADRs, specs, and tool contract, not only its README.
+- When a design choice confuses the user, restate the options with a small concrete example, such as the tool-call JSON and what the server then does.
+- In `edit` oldText, write non-ASCII characters (·, −, ↵) literally. A `\uXXXX` escape stays literal text, does not match, and fails the whole edit batch.
+- To start a long-lived server and poll it in the same bash call, run it as `(cmd > log 2>&1 &)`; a plain trailing `&` keeps the call attached until it times out. For longer waits, use `run_in_background`.
+- There is no tsx, jiti, or vite-node here. To run one-off TypeScript against repo sources, write a temporary `*.test.ts` in a Vitest-included directory, run `npx vitest run <file>`, and delete it before the full suite. Keep checks that wait for a human or browser outside the test tree; copy them in only to run them.
+- For browser visual checks, run `uv run -q -w playwright python` with `p.chromium.launch(executable_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")`. Wait for a rendered selector before key presses, take screenshots with `animations="disabled"`, and collect `pageerror` and console errors.
+- If the full `npm test` times out in `components/tasks` or `pi-exec-work-panel`, rerun that file alone before you treat it as a regression; these tests are flaky under full-suite load.
