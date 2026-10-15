@@ -29,6 +29,6 @@ The agent revised a spec after an earlier review and asks for sign-off before wr
 | A | Inline | Under the block they belong to, in the reading column, like the code review page | Outline rail on the left, with read state, changes, open questions, and comment counts per section |
 | B | Margin | In a margin column beside the block, at the same height | A slim bar of section ticks on the left edge |
 
-## Verdict
+## Verdict (2026-10-15)
 
-Pending operator review. Points to settle: inline or margin threads; whether section read-tracking earns its place for documents; the changes view; and anything the agent should be able to add to the framing.
+Rejected. The page put the agent's curation first (framing card, notes, decisions, section read-tracking, a changes view) and the document second; it felt hand-curated and oddly structured. The operator wants something close to Plannotator in our design system: render the Markdown well (outline, code fences, Mermaid), and give feedback by selecting text and annotating it from a toolbar above the selection. Editing a block, with the diff returned as feedback rather than written to the file, is welcome as a secondary path. Round 2: [markdown-review-v2](../markdown-review-v2/README.md).

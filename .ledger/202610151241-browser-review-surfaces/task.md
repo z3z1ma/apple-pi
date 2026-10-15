@@ -64,7 +64,7 @@ In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are com
 Next:
 
 1. Operator tries asking in a real review.
-2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass and operator verdict before implementation. Design pass 1: [Markdown review prototype](prototypes/markdown-review/README.md), awaiting the verdict.
+2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass and operator verdict before implementation. Design pass 1: [Markdown review round 1](prototypes/markdown-review/README.md) was rejected (agent curation before the document); [round 2](prototypes/markdown-review-v2/README.md), Plannotator-style selection annotation, awaits the verdict.
 
 ## Outcome
 
