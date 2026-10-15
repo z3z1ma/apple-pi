@@ -3,24 +3,24 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
-/** Sidecars mirror the project tree: `app/main.py` is governed by `.context/app/main.py.md`. */
+/** Context files mirror the project tree: `app/main.py` is governed by `.context/app/main.py.md`. */
 export const CONTEXT_DIRECTORY = ".context";
-export const SIDECAR_EXTENSION = ".md";
+export const CONTEXT_FILE_EXTENSION = ".md";
 
 /** Tool results that can carry a marker; anything else that quotes one does not count as delivery. */
 const DELIVERING_TOOLS = new Set(["read", "edit", "write"]);
 
-type SidecarStatus = "no_sidecar" | "live" | "missing" | "malformed";
+type ContextFileStatus = "no_context_file" | "live" | "missing" | "malformed";
 
-export interface SidecarContext {
-	status: SidecarStatus;
-	/** Whether the resolved path was the sidecar rather than the source file. */
-	isSidecar: boolean;
+export interface ResolvedContext {
+	status: ContextFileStatus;
+	/** Whether the resolved path was the context file rather than the source file. */
+	isContextFile: boolean;
 	sourcePath: string;
-	sidecarPath: string;
+	contextFilePath: string;
 	/** Source path as markers and messages show it: relative to the working directory when inside it. */
 	displayPath: string;
-	sidecarDisplayPath: string;
+	contextFileDisplayPath: string;
 	content?: string;
 	marker?: string;
 	diagnostic?: string;
@@ -43,16 +43,16 @@ function displayPath(path: string, cwd: string): string {
 	return inside(cwd, path)?.split(sep).join("/") ?? path;
 }
 
-/** The source and sidecar paths for `path`, which may be either; undefined outside the project or for other files under `.context/`. */
-function sidecarPair(path: string, root: string): { sourcePath: string; sidecarPath: string } | undefined {
+/** The source and context file paths for `path`, which may be either; undefined outside the project or for other files under `.context/`. */
+function contextFilePair(path: string, root: string): { sourcePath: string; contextFilePath: string } | undefined {
 	const local = inside(root, path);
 	if (!local) return undefined;
 	const [top, ...rest] = local.split(sep);
 	if (top !== CONTEXT_DIRECTORY)
-		return { sourcePath: path, sidecarPath: join(root, CONTEXT_DIRECTORY, `${local}${SIDECAR_EXTENSION}`) };
+		return { sourcePath: path, contextFilePath: join(root, CONTEXT_DIRECTORY, `${local}${CONTEXT_FILE_EXTENSION}`) };
 	const mirrored = rest.join(sep);
-	if (!mirrored.endsWith(SIDECAR_EXTENSION) || mirrored.length === SIDECAR_EXTENSION.length) return undefined;
-	return { sourcePath: join(root, mirrored.slice(0, -SIDECAR_EXTENSION.length)), sidecarPath: path };
+	if (!mirrored.endsWith(CONTEXT_FILE_EXTENSION) || mirrored.length === CONTEXT_FILE_EXTENSION.length) return undefined;
+	return { sourcePath: join(root, mirrored.slice(0, -CONTEXT_FILE_EXTENSION.length)), contextFilePath: path };
 }
 
 function contextRef(displayPath: string, content: string): string {
@@ -69,10 +69,10 @@ function isMarkerLive(marker: string, messages: readonly AgentMessage[]): boolea
 	);
 }
 
-function loadSidecar(sidecarPath: string): { content?: string; diagnostic?: string } | undefined {
+function loadContextFile(contextFilePath: string): { content?: string; diagnostic?: string } | undefined {
 	let bytes: Buffer;
 	try {
-		bytes = readFileSync(sidecarPath);
+		bytes = readFileSync(contextFilePath);
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
 		if (code === "ENOENT" || code === "ENOTDIR") return undefined;
@@ -88,41 +88,41 @@ function loadSidecar(sidecarPath: string): { content?: string; diagnostic?: stri
 	return content ? { content } : { diagnostic: "it is empty" };
 }
 
-/** The sidecar that governs `path` (a source file or its sidecar) and whether its current marker is in `messages`. */
+/** The context file that governs `path` (a source file or its context file) and whether its current marker is in `messages`. */
 export function resolveContext(
 	path: string,
 	cwd: string,
 	messages: readonly AgentMessage[],
-): SidecarContext | undefined {
-	const pair = sidecarPair(path, projectRoot(cwd));
+): ResolvedContext | undefined {
+	const pair = contextFilePair(path, projectRoot(cwd));
 	if (!pair) return undefined;
 	const shown = displayPath(pair.sourcePath, cwd);
 	const base = {
 		...pair,
-		isSidecar: pair.sidecarPath === path,
+		isContextFile: pair.contextFilePath === path,
 		displayPath: shown,
-		sidecarDisplayPath: displayPath(pair.sidecarPath, cwd),
+		contextFileDisplayPath: displayPath(pair.contextFilePath, cwd),
 	};
-	const loaded = loadSidecar(pair.sidecarPath);
-	if (!loaded) return { ...base, status: "no_sidecar" };
+	const loaded = loadContextFile(pair.contextFilePath);
+	if (!loaded) return { ...base, status: "no_context_file" };
 	if (loaded.content === undefined) return { ...base, status: "malformed", diagnostic: loaded.diagnostic };
 	const marker = contextRef(shown, loaded.content);
 	return { ...base, status: isMarkerLive(marker, messages) ? "live" : "missing", content: loaded.content, marker };
 }
 
-export function contextBlock(context: SidecarContext): string {
-	return `--- CONTEXT: ${context.sidecarDisplayPath} ---\n${context.content}\n\n${context.marker}`;
+export function contextBlock(context: ResolvedContext): string {
+	return `--- CONTEXT: ${context.contextFileDisplayPath} ---\n${context.content}\n\n${context.marker}`;
 }
 
-export function malformedNotice(context: SidecarContext): string {
-	return `--- CONTEXT: ${context.sidecarDisplayPath} could not be loaded because ${context.diagnostic}. Its constraints are not enforced until it is fixed. ---`;
+export function malformedNotice(context: ResolvedContext): string {
+	return `--- CONTEXT: ${context.contextFileDisplayPath} could not be loaded because ${context.diagnostic}. Its constraints are not enforced until it is fixed. ---`;
 }
 
-export function gateRefusal(context: SidecarContext): string {
-	const sidecar = context.sidecarDisplayPath;
-	const target = context.isSidecar ? sidecar : context.displayPath;
+export function gateRefusal(context: ResolvedContext): string {
+	const contextFile = context.contextFileDisplayPath;
+	const target = context.isContextFile ? contextFile : context.displayPath;
 	return [
-		`Context Gate Blocked: Cannot modify \`${target}\` because its architectural constraints in \`${sidecar}\` are not loaded (or are out of date) in your current context.`,
-		`Action required: Call \`read\` on \`${sidecar}\` (or \`${context.displayPath}\`) first, review its invariants and hazards, and then retry your modification.`,
+		`Context Gate Blocked: Cannot modify \`${target}\` because its architectural constraints in \`${contextFile}\` are not loaded (or are out of date) in your current context.`,
+		`Action required: Call \`read\` on \`${contextFile}\` (or \`${context.displayPath}\`) first, review its invariants and hazards, and then retry your modification.`,
 	].join("\n");
 }

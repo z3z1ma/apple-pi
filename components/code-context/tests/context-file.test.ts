@@ -3,19 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveContext } from "../src/sidecar.js";
+import { resolveContext } from "../src/context-file.js";
 
 const directories: string[] = [];
 afterEach(() => {
 	for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-function project(sidecar: string | Buffer): string {
+function project(contextFile: string | Buffer): string {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-code-context-"));
 	directories.push(cwd);
 	writeFileSync(join(cwd, "main.py"), "def create_app(): pass\n");
 	mkdirSync(join(cwd, ".context"));
-	writeFileSync(join(cwd, ".context", "main.py.md"), sidecar);
+	writeFileSync(join(cwd, ".context", "main.py.md"), contextFile);
 	return cwd;
 }
 
@@ -31,7 +31,7 @@ function toolResult(toolName: string, text: string): AgentMessage {
 }
 
 describe("resolveContext", () => {
-	it("hashes line endings and trailing whitespace away, from either the source or the sidecar path", () => {
+	it("hashes line endings and trailing whitespace away, from either the source or the context file path", () => {
 		const unixCwd = project("## file\n\nKeep it.\n");
 		const unix = resolveContext(join(unixCwd, "main.py"), unixCwd, []);
 		const cwd = project("## file\r\n\r\nKeep it.  \r\n\r\n");
@@ -53,9 +53,9 @@ describe("resolveContext", () => {
 		expect(resolveContext(join(cwd, "main.py"), cwd, [toolResult("read", `x\n${marker}`)])?.status).toBe("live");
 	});
 
-	it("reports files without a sidecar and sidecars that are not UTF-8", () => {
+	it("reports files without a context file and context files that are not UTF-8", () => {
 		const cwd = project(Buffer.from([0xff, 0xfe, 0x00]));
-		expect(resolveContext(join(cwd, "other.py"), cwd, [])?.status).toBe("no_sidecar");
+		expect(resolveContext(join(cwd, "other.py"), cwd, [])?.status).toBe("no_context_file");
 		expect(resolveContext(join(cwd, "main.py"), cwd, [])).toMatchObject({
 			status: "malformed",
 			diagnostic: "it is not valid UTF-8",
@@ -73,12 +73,12 @@ describe("resolveContext", () => {
 
 		expect(resolveContext(join(cwd, "main.py"), cwd, [])).toMatchObject({
 			status: "missing",
-			isSidecar: false,
+			isContextFile: false,
 			displayPath: "main.py",
-			sidecarPath: join(root, ".context", "app", "main.py.md"),
+			contextFilePath: join(root, ".context", "app", "main.py.md"),
 		});
 		expect(resolveContext(join(root, ".context", "app", "main.py.md"), cwd, [])).toMatchObject({
-			isSidecar: true,
+			isContextFile: true,
 			sourcePath: join(cwd, "main.py"),
 		});
 		expect(resolveContext(join(root, ".context", "notes.txt"), cwd, [])).toBeUndefined();

@@ -2,10 +2,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 import { wikiPageExists } from "../../wiki/src/graph.js";
-import { CONTEXT_DIRECTORY, projectRoot, SIDECAR_EXTENSION } from "./sidecar.js";
+import { CONTEXT_DIRECTORY, projectRoot, CONTEXT_FILE_EXTENSION } from "./context-file.js";
 
 export type ContextFindingKind =
-	| "orphaned-sidecar"
+	| "orphaned-context-file"
 	| "invalid-heading"
 	| "duplicate-heading"
 	| "missing-symbol"
@@ -15,14 +15,14 @@ export type ContextFindingKind =
 
 export interface ContextFinding {
 	kind: ContextFindingKind;
-	/** Project-relative sidecar path, under `.context/`. */
+	/** Project-relative context file path, under `.context/`. */
 	path: string;
 	line?: number;
 	message: string;
 }
 
 export interface ContextLintResult {
-	sidecarCount: number;
+	contextFileCount: number;
 	findings: ContextFinding[];
 }
 
@@ -37,16 +37,16 @@ function escapeRegExp(value: string): string {
 }
 
 /** Project-relative paths of the Markdown files under `.context/`. */
-function sidecarPaths(root: string): string[] {
+function contextFilePaths(root: string): string[] {
 	const directory = join(root, CONTEXT_DIRECTORY);
 	if (!existsSync(directory)) return [];
 	return readdirSync(directory, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && entry.name.endsWith(SIDECAR_EXTENSION))
+		.filter((entry) => entry.isFile() && entry.name.endsWith(CONTEXT_FILE_EXTENSION))
 		.map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/"))
 		.sort();
 }
 
-interface SidecarFile {
+interface LintedContextFile {
 	path: string;
 	sourcePath: string;
 	/** The source text, or undefined when the source file is gone. */
@@ -54,7 +54,7 @@ interface SidecarFile {
 	seen: Set<string>;
 }
 
-function headingFindings(sidecar: SidecarFile, line: string, at: { path: string; line: number }): ContextFinding[] {
+function headingFindings(file: LintedContextFile, line: string, at: { path: string; line: number }): ContextFinding[] {
 	const where = `${at.path}:${at.line}`;
 	const section = SECTION.exec(line);
 	if (!section)
@@ -62,15 +62,15 @@ function headingFindings(sidecar: SidecarFile, line: string, at: { path: string;
 			{ kind: "invalid-heading", ...at, message: `${where}: "${line}" is neither "## file" nor "## symbol:<name>"` },
 		];
 	const findings: ContextFinding[] = [];
-	if (sidecar.seen.has(line))
+	if (file.seen.has(line))
 		findings.push({ kind: "duplicate-heading", ...at, message: `${where}: "${line}" appears more than once` });
-	sidecar.seen.add(line);
+	file.seen.add(line);
 	const leaf = section[2]?.split(".").pop();
-	if (sidecar.source !== undefined && leaf && !new RegExp(`\\b${escapeRegExp(leaf)}\\b`).test(sidecar.source))
+	if (file.source !== undefined && leaf && !new RegExp(`\\b${escapeRegExp(leaf)}\\b`).test(file.source))
 		findings.push({
 			kind: "missing-symbol",
 			...at,
-			message: `${where}: "${leaf}" does not appear in ${sidecar.sourcePath}`,
+			message: `${where}: "${leaf}" does not appear in ${file.sourcePath}`,
 		});
 	return findings;
 }
@@ -99,17 +99,17 @@ function referenceFindings(
 	return findings;
 }
 
-function lintSidecar(root: string, path: string, isWikiPage: (target: string) => boolean): ContextFinding[] {
-	const sourcePath = path.slice(CONTEXT_DIRECTORY.length + 1, -SIDECAR_EXTENSION.length);
+function lintContextFile(root: string, path: string, isWikiPage: (target: string) => boolean): ContextFinding[] {
+	const sourcePath = path.slice(CONTEXT_DIRECTORY.length + 1, -CONTEXT_FILE_EXTENSION.length);
 	const source = statSync(join(root, sourcePath), { throwIfNoEntry: false })?.isFile()
 		? readFileSync(join(root, sourcePath), "utf8")
 		: undefined;
-	const sidecar: SidecarFile = { path, sourcePath, source, seen: new Set() };
+	const file: LintedContextFile = { path, sourcePath, source, seen: new Set() };
 	const findings: ContextFinding[] =
 		source === undefined
 			? [
 					{
-						kind: "orphaned-sidecar",
+						kind: "orphaned-context-file",
 						path,
 						message: `${path}: source file ${sourcePath} does not exist or is not a file`,
 					},
@@ -122,21 +122,21 @@ function lintSidecar(root: string, path: string, isWikiPage: (target: string) =>
 		if (FENCE.test(line)) fenced = !fenced;
 		if (fenced) continue;
 		findings.push(
-			...(HEADING.test(line) ? headingFindings(sidecar, line, at) : referenceFindings(root, line, at, isWikiPage)),
+			...(HEADING.test(line) ? headingFindings(file, line, at) : referenceFindings(root, line, at, isWikiPage)),
 		);
 	}
 	return findings;
 }
 
-/** Check every sidecar of the project holding `cwd` for structure and references that no longer hold. */
+/** Check every context file of the project holding `cwd` for structure and references that no longer hold. */
 export async function lintContext(cwd: string, signal?: AbortSignal): Promise<ContextLintResult> {
 	const root = projectRoot(cwd);
-	const paths = sidecarPaths(root);
+	const paths = contextFilePaths(root);
 	const isWikiPage = existsSync(join(root, ".wiki")) ? await wikiPageExists(root, signal) : () => false;
 	const findings: ContextFinding[] = [];
 	for (const path of paths) {
 		signal?.throwIfAborted();
-		findings.push(...lintSidecar(root, path, isWikiPage));
+		findings.push(...lintContextFile(root, path, isWikiPage));
 	}
-	return { sidecarCount: paths.length, findings };
+	return { contextFileCount: paths.length, findings };
 }

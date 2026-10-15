@@ -10,7 +10,7 @@ const MUTATION_TOOLS = new Set(["edit", "write"]);
 const EXECUTION_TOOLS = new Set(["bash", "pi_exec", "agent", "get_subagent_result"]);
 const PROSE_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc"]);
 
-const SIDECAR_UPKEEP = `Keep the \`.context/<path>.md\` sidecars of these files true to the changes. Record an invariant, ordering hazard, or cross-file coupling this work revealed that the code cannot show; update a constraint this work changed on purpose; move a sidecar with its renamed file. Run \`context_lint\` after sidecar changes. When you change or remove an existing invariant, name it in your reply as \`Changed invariant: <file>#<section>, because <reason>\`.`;
+const CONTEXT_FILE_UPKEEP = `Keep the context files of these files, \`.context/<path>.md\`, true to the changes. Record a non-obvious invariant, ordering hazard, or cross-file coupling this work revealed that the code cannot show, with its reason as \`Why:\`; create the context file when it is missing. Add \`Coupled:\` or \`Verify:\` when they apply. Update a constraint this work changed on purpose, and move a context file with its renamed file. Run \`context_lint\` after context file changes. In your reply, name each context file you create as \`Created context file: <path>\` and each existing invariant you change or remove as \`Changed invariant: <file>#<section>, because <reason>\`.`;
 
 const TEST_DIRECTORY = /(^|\/)(tests?|__tests__)\//;
 const TEST_FILE = /(\.(test|spec)\.[^/]+|_test\.[^/]+|(^|\/)test_[^/]+\.py)$/;
@@ -70,7 +70,7 @@ export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMa
 		lenses.push(
 			`Review your changes in ${pathList(code)}. Is there a simpler way to preserve the required behavior and fit the surrounding code?`,
 			runsAfterChanges(code, runsAfter),
-			SIDECAR_UPKEEP,
+			CONTEXT_FILE_UPKEEP,
 		);
 	if (prose.length > 0)
 		lenses.push(

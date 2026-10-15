@@ -124,8 +124,9 @@ describe("reflectionPrompt", () => {
 			expect(reflectionPrompt([path], none)).not.toContain("observable behavior");
 	});
 
-	it("asks for sidecar upkeep and named invariant changes after code changes", () => {
+	it("asks for context file upkeep, named creations, and named invariant changes after code changes", () => {
 		const none = new Map<string, string[]>();
+		expect(reflectionPrompt(["src/a.ts"], none)).toContain("Created context file: <path>");
 		expect(reflectionPrompt(["src/a.ts"], none)).toContain("Changed invariant: <file>#<section>");
 		expect(reflectionPrompt([".context/src/a.ts.md"], none)).toContain("intended reader");
 		expect(reflectionPrompt([".context/src/a.ts.md"], none)).not.toContain("Changed invariant");

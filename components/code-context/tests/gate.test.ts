@@ -8,7 +8,7 @@ import piExec from "../../../extensions/pi-exec.js";
 import { startFork } from "../../shared/src/forked-continuation.js";
 import installCodeContext from "../src/index.js";
 
-const SIDECAR = "## file\n\nInvariant: value stays a number.\n";
+const CONTEXT_FILE = "## file\n\nInvariant: value stays a number.\n";
 const EDIT = { path: "app.ts", edits: [{ oldText: "value = 1", newText: "value = 2" }] };
 
 const sessions: Array<{ dispose(): void }> = [];
@@ -33,13 +33,13 @@ async function session(replies: Reply[], extensions = [installCodeContext]) {
 	const faux = await fauxSession(extensions, replies, ["read", "edit", "write", "pi_exec"]);
 	sessions.push(faux);
 	mkdirSync(join(faux.cwd, ".context"));
-	writeFileSync(join(faux.cwd, ".context/app.ts.md"), SIDECAR);
+	writeFileSync(join(faux.cwd, ".context/app.ts.md"), CONTEXT_FILE);
 	const text = (id: string) => resultText(faux.session.messages, id);
 	return { ...faux, replies, text };
 }
 
-describe("code context sidecars", () => {
-	it("delivers the whole sidecar once on a windowed read and then unlocks edits", async () => {
+describe("code context files", () => {
+	it("delivers the whole context file once on a windowed read and then unlocks edits", async () => {
 		const faux = await session([
 			call("edit", EDIT, "edit-before"),
 			call("read", { path: "app.ts", offset: 1, limit: 1 }, "read-1"),
@@ -63,7 +63,7 @@ describe("code context sidecars", () => {
 		expect(readFileSync(join(faux.cwd, "app.ts"), "utf8")).toContain("value = 2");
 	});
 
-	it("invalidates a delivered marker when the sidecar changes on disk", async () => {
+	it("invalidates a delivered marker when the context file changes on disk", async () => {
 		let faux: Awaited<ReturnType<typeof session>> | undefined;
 		faux = await session([
 			call("read", { path: "app.ts" }, "read-1"),
@@ -76,7 +76,7 @@ describe("code context sidecars", () => {
 		]);
 		faux.session.subscribe((event) => {
 			if (event.type === "tool_execution_end" && event.toolCallId === "touch" && faux)
-				writeFileSync(join(faux.cwd, ".context/app.ts.md"), `${SIDECAR}\nHazard: new.\n`);
+				writeFileSync(join(faux.cwd, ".context/app.ts.md"), `${CONTEXT_FILE}\nHazard: new.\n`);
 		});
 		await faux.session.prompt("change value");
 
@@ -85,28 +85,28 @@ describe("code context sidecars", () => {
 		expect(faux.text("edit-fresh").isError).toBe(false);
 	});
 
-	it("unlocks edits from a direct sidecar read and re-marks the sidecar after its own edit", async () => {
+	it("unlocks edits from a direct context file read and re-marks the context file after its own edit", async () => {
 		const faux = await session([
-			call("read", { path: ".context/app.ts.md" }, "read-sidecar"),
+			call("read", { path: ".context/app.ts.md" }, "read-context-file"),
 			call(
 				"edit",
 				{ path: ".context/app.ts.md", edits: [{ oldText: "a number", newText: "an integer" }] },
-				"edit-sidecar",
+				"edit-context-file",
 			),
 			call("edit", EDIT, "edit-source"),
 		]);
 		await faux.session.prompt("change value");
 
-		const read = faux.text("read-sidecar").text;
+		const read = faux.text("read-context-file").text;
 		expect(read).not.toContain("--- CONTEXT");
 		expect(read).toMatch(/value stays a number\.[\s\S]*<context-ref path="app\.ts" hash="sha256:/);
-		const edited = faux.text("edit-sidecar");
+		const edited = faux.text("edit-context-file");
 		expect(edited.isError).toBe(false);
 		expect(edited.text).toMatch(/<context-ref path="app\.ts" hash="sha256:[0-9a-f]{64}" \/>$/);
 		expect(faux.text("edit-source").isError).toBe(false);
 	});
 
-	it("leaves files without a sidecar and unreadable sidecars ungated", async () => {
+	it("leaves files without a context file and unreadable context files ungated", async () => {
 		const faux = await session([
 			call("write", { path: "free.ts", content: "free\n" }, "write-free"),
 			call("edit", EDIT, "edit-empty"),

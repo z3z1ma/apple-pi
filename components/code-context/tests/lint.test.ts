@@ -22,7 +22,7 @@ function repository(files: Record<string, string>): string {
 }
 
 describe("lintContext", () => {
-	it("passes a sidecar whose sections, paths, and wiki links resolve", async () => {
+	it("passes a context file whose sections, paths, and wiki links resolve", async () => {
 		const root = repository({
 			"app/main.py": "class Router:\n    def get(self): pass\n",
 			"app/auth.py": "",
@@ -45,10 +45,10 @@ describe("lintContext", () => {
 			].join("\n"),
 		});
 
-		await expect(lintContext(join(root, "app"))).resolves.toEqual({ sidecarCount: 1, findings: [] });
+		await expect(lintContext(join(root, "app"))).resolves.toEqual({ contextFileCount: 1, findings: [] });
 	});
 
-	it("reports every kind of broken sidecar", async () => {
+	it("reports every kind of broken context file", async () => {
 		const root = repository({
 			"app/main.py": "def create_app(): pass\n",
 			".context/app/gone.py.md": "## file\n",
@@ -64,10 +64,10 @@ describe("lintContext", () => {
 			].join("\n"),
 		});
 
-		const { sidecarCount, findings } = await lintContext(root);
-		expect(sidecarCount).toBe(2);
+		const { contextFileCount, findings } = await lintContext(root);
+		expect(contextFileCount).toBe(2);
 		expect(findings.map((finding) => [finding.kind, finding.path, finding.line])).toEqual([
-			["orphaned-sidecar", ".context/app/gone.py.md", undefined],
+			["orphaned-context-file", ".context/app/gone.py.md", undefined],
 			["invalid-heading", ".context/app/main.py.md", 2],
 			["duplicate-heading", ".context/app/main.py.md", 4],
 			["missing-symbol", ".context/app/main.py.md", 5],

@@ -89,7 +89,7 @@ try {
 				(extension.handlers.get("tool_call")?.length ?? 0) > 0 &&
 				(extension.handlers.get("tool_result")?.length ?? 0) > 0,
 		),
-		"missing code context sidecar delivery and edit gate",
+		"missing code context file delivery and edit gate",
 	);
 	assert(
 		result.extensions.some(
