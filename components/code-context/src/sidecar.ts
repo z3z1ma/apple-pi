@@ -10,7 +10,7 @@ export const SIDECAR_EXTENSION = ".md";
 /** Tool results that can carry a marker; anything else that quotes one does not count as delivery. */
 const DELIVERING_TOOLS = new Set(["read", "edit", "write"]);
 
-export type SidecarStatus = "no_sidecar" | "live" | "missing" | "malformed";
+type SidecarStatus = "no_sidecar" | "live" | "missing" | "malformed";
 
 export interface SidecarContext {
 	status: SidecarStatus;
@@ -44,7 +44,7 @@ function displayPath(path: string, cwd: string): string {
 }
 
 /** The source and sidecar paths for `path`, which may be either; undefined outside the project or for other files under `.context/`. */
-export function sidecarPair(path: string, root: string): { sourcePath: string; sidecarPath: string } | undefined {
+function sidecarPair(path: string, root: string): { sourcePath: string; sidecarPath: string } | undefined {
 	const local = inside(root, path);
 	if (!local) return undefined;
 	const [top, ...rest] = local.split(sep);
@@ -55,12 +55,12 @@ export function sidecarPair(path: string, root: string): { sourcePath: string; s
 	return { sourcePath: join(root, mirrored.slice(0, -SIDECAR_EXTENSION.length)), sidecarPath: path };
 }
 
-export function contextRef(displayPath: string, content: string): string {
+function contextRef(displayPath: string, content: string): string {
 	const hash = createHash("sha256").update(content).digest("hex");
 	return `<context-ref path="${displayPath}" hash="sha256:${hash}" />`;
 }
 
-export function isMarkerLive(marker: string, messages: readonly AgentMessage[]): boolean {
+function isMarkerLive(marker: string, messages: readonly AgentMessage[]): boolean {
 	return messages.some(
 		(message) =>
 			message.role === "toolResult" &&
