@@ -28,7 +28,7 @@ describe("lintContext", () => {
 			"app/auth.py": "",
 			"tests/test_main.py": "",
 			".wiki/application-bootstrap.md": "# Bootstrap\n",
-			"app/main.py.context": [
+			".context/app/main.py.md": [
 				"## file",
 				"",
 				"See [[Application-Bootstrap#Order|bootstrap]].",
@@ -51,8 +51,8 @@ describe("lintContext", () => {
 	it("reports every kind of broken sidecar", async () => {
 		const root = repository({
 			"app/main.py": "def create_app(): pass\n",
-			"app/gone.py.context": "## file\n",
-			"app/main.py.context": [
+			".context/app/gone.py.md": "## file\n",
+			".context/app/main.py.md": [
 				"## file",
 				"### Notes",
 				"## symbol:create_app",
@@ -67,13 +67,13 @@ describe("lintContext", () => {
 		const { sidecarCount, findings } = await lintContext(root);
 		expect(sidecarCount).toBe(2);
 		expect(findings.map((finding) => [finding.kind, finding.path, finding.line])).toEqual([
-			["orphaned-sidecar", "app/gone.py.context", undefined],
-			["invalid-heading", "app/main.py.context", 2],
-			["duplicate-heading", "app/main.py.context", 4],
-			["missing-symbol", "app/main.py.context", 5],
-			["broken-coupled", "app/main.py.context", 6],
-			["broken-verify", "app/main.py.context", 7],
-			["broken-wiki-link", "app/main.py.context", 8],
+			["orphaned-sidecar", ".context/app/gone.py.md", undefined],
+			["invalid-heading", ".context/app/main.py.md", 2],
+			["duplicate-heading", ".context/app/main.py.md", 4],
+			["missing-symbol", ".context/app/main.py.md", 5],
+			["broken-coupled", ".context/app/main.py.md", 6],
+			["broken-verify", ".context/app/main.py.md", 7],
+			["broken-wiki-link", ".context/app/main.py.md", 8],
 		]);
 	});
 });

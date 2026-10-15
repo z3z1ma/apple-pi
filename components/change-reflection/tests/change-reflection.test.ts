@@ -127,8 +127,8 @@ describe("reflectionPrompt", () => {
 	it("asks for sidecar upkeep and named invariant changes after code changes", () => {
 		const none = new Map<string, string[]>();
 		expect(reflectionPrompt(["src/a.ts"], none)).toContain("Changed invariant: <file>#<section>");
-		expect(reflectionPrompt(["src/a.ts.context"], none)).toContain("intended reader");
-		expect(reflectionPrompt(["src/a.ts.context"], none)).not.toContain("Changed invariant");
+		expect(reflectionPrompt([".context/src/a.ts.md"], none)).toContain("intended reader");
+		expect(reflectionPrompt([".context/src/a.ts.md"], none)).not.toContain("Changed invariant");
 	});
 
 	it("groups code paths that share the same runs", () => {

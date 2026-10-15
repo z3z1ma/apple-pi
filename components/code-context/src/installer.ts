@@ -7,7 +7,7 @@ import { abortable } from "../../shared/src/abortable.js";
 import { forkCwd, forkMessages } from "../../shared/src/fork-context.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import { type ContextLintResult, lintContext } from "./lint.js";
-import { contextBlock, gateRefusal, isSidecarPath, malformedNotice, resolveContext } from "./sidecar.js";
+import { contextBlock, gateRefusal, malformedNotice, resolveContext } from "./sidecar.js";
 
 export const CONTEXT_LINT_TOOL_NAME = "context_lint";
 
@@ -38,10 +38,10 @@ function createContextLintTool() {
 		name: CONTEXT_LINT_TOOL_NAME,
 		label: "Lint context sidecars",
 		description:
-			"Read-only check of every `<file>.context` sidecar in the repository: orphaned sidecars, headings other than `## file` or `## symbol:<name>`, duplicate headings, symbols absent from the source file, missing `Coupled:` and `Verify:` paths, and `[[wiki-links]]` that name no .wiki page.",
-		promptSnippet: "Check `.context` sidecars for broken structure and references",
+			"Read-only check of every sidecar under the project's `.context/` directory: orphaned sidecars, headings other than `## file` or `## symbol:<name>`, duplicate headings, symbols absent from the source file, missing `Coupled:` and `Verify:` paths, and `[[wiki-links]]` that name no .wiki page.",
+		promptSnippet: "Check `.context/` sidecars for broken structure and references",
 		promptGuidelines: [
-			"A `<file>.context` Markdown sidecar beside a source file (for example `app/main.py.context`) holds knowledge the code cannot show: invariants, hazards, rationale, cross-file couplings. Reading the file appends its sidecar; edit and write stay blocked until the current sidecar is in your context.",
+			"A Markdown sidecar under the project's `.context/` directory mirrors a source file's path (`app/main.py` has `.context/app/main.py.md`) and holds knowledge the code cannot show: invariants, hazards, rationale, cross-file couplings. Reading the file appends its sidecar; edit and write stay blocked until the current sidecar is in your context.",
 			"Sidecar sections are `## file` or `## symbol:<name>` (for example `## symbol:Router.get`). A section may list `Coupled: path, path` for files whose contracts depend on it, `Verify: path` for tests that check it, and `[[wiki-page]]` links for cross-cutting explanations. Leave out what the code already shows.",
 			"Run `context_lint` after you change a sidecar or rename, move, or delete a file that has one.",
 		],
@@ -71,7 +71,7 @@ function createContextLintTool() {
 }
 
 /**
- * Deliver each source file's `.context` sidecar on a top-level read and block a top-level edit or
+ * Deliver each source file's `.context/` sidecar on a top-level read and block a top-level edit or
  * write until the sidecar's current marker is in the model's context. Calls a tool such as
  * `pi_exec` makes carry `parentToolCallId`; they get raw reads and no gate.
  */
@@ -81,7 +81,7 @@ export function installCodeContext(pi: ExtensionAPI): void {
 		const target = targetOf(event.input, ctx);
 		if (!target) return;
 		const context = resolveContext(target.path, target.cwd, effectiveMessages(ctx));
-		if (context.status === "missing") return { block: true, reason: gateRefusal(context, isSidecarPath(target.path)) };
+		if (context?.status === "missing") return { block: true, reason: gateRefusal(context) };
 	});
 
 	pi.on("tool_result", (event, ctx) => {
@@ -90,14 +90,13 @@ export function installCodeContext(pi: ExtensionAPI): void {
 		if (!reading && !MUTATION_TOOLS.has(event.toolName)) return;
 		const target = targetOf(event.input, ctx);
 		if (!target) return;
-		const sidecar = isSidecarPath(target.path);
-		if (!reading && !sidecar) return;
 		const context = resolveContext(target.path, target.cwd, effectiveMessages(ctx));
+		if (!context || (!reading && !context.isSidecar)) return;
 		let text: string | undefined;
 		if (context.status === "malformed" && reading) text = malformedNotice(context);
 		else if (context.status === "missing") {
 			// A whole read of the sidecar already shows its content, and a mutation of it was just made.
-			const wholeSidecarRead = sidecar && event.input.offset === undefined && event.input.limit === undefined;
+			const wholeSidecarRead = context.isSidecar && event.input.offset === undefined && event.input.limit === undefined;
 			text = reading && !wholeSidecarRead ? contextBlock(context) : context.marker;
 		}
 		if (text) return { content: [...event.content, { type: "text", text }] };

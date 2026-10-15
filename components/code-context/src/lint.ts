@@ -1,9 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
-import { git, repoRoot } from "../../shared/src/git.js";
 import { wikiPageExists } from "../../wiki/src/graph.js";
-import { SIDECAR_SUFFIX } from "./sidecar.js";
+import { CONTEXT_DIRECTORY, projectRoot, SIDECAR_EXTENSION } from "./sidecar.js";
 
 export type ContextFindingKind =
 	| "orphaned-sidecar"
@@ -16,7 +15,7 @@ export type ContextFindingKind =
 
 export interface ContextFinding {
 	kind: ContextFindingKind;
-	/** Repository-relative sidecar path. */
+	/** Project-relative sidecar path, under `.context/`. */
 	path: string;
 	line?: number;
 	message: string;
@@ -37,19 +36,14 @@ function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function sidecarPaths(root: string, signal?: AbortSignal): Promise<string[]> {
-	signal?.throwIfAborted();
-	const listed = await git(root, [
-		"ls-files",
-		"-z",
-		"--cached",
-		"--others",
-		"--exclude-standard",
-		"--",
-		`*${SIDECAR_SUFFIX}`,
-	]);
-	const paths = new Set(listed.split("\0").filter((path) => path.endsWith(SIDECAR_SUFFIX) && path !== SIDECAR_SUFFIX));
-	return [...paths].filter((path) => existsSync(join(root, path))).sort();
+/** Project-relative paths of the Markdown files under `.context/`. */
+function sidecarPaths(root: string): string[] {
+	const directory = join(root, CONTEXT_DIRECTORY);
+	if (!existsSync(directory)) return [];
+	return readdirSync(directory, { recursive: true, withFileTypes: true })
+		.filter((entry) => entry.isFile() && entry.name.endsWith(SIDECAR_EXTENSION))
+		.map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/"))
+		.sort();
 }
 
 interface SidecarFile {
@@ -106,12 +100,20 @@ function referenceFindings(
 }
 
 function lintSidecar(root: string, path: string, isWikiPage: (target: string) => boolean): ContextFinding[] {
-	const sourcePath = path.slice(0, -SIDECAR_SUFFIX.length);
-	const source = existsSync(join(root, sourcePath)) ? readFileSync(join(root, sourcePath), "utf8") : undefined;
+	const sourcePath = path.slice(CONTEXT_DIRECTORY.length + 1, -SIDECAR_EXTENSION.length);
+	const source = statSync(join(root, sourcePath), { throwIfNoEntry: false })?.isFile()
+		? readFileSync(join(root, sourcePath), "utf8")
+		: undefined;
 	const sidecar: SidecarFile = { path, sourcePath, source, seen: new Set() };
 	const findings: ContextFinding[] =
 		source === undefined
-			? [{ kind: "orphaned-sidecar", path, message: `${path}: source file ${sourcePath} does not exist` }]
+			? [
+					{
+						kind: "orphaned-sidecar",
+						path,
+						message: `${path}: source file ${sourcePath} does not exist or is not a file`,
+					},
+				]
 			: [];
 	let fenced = false;
 	for (const [index, raw] of readFileSync(join(root, path), "utf8").split(/\r?\n/).entries()) {
@@ -126,10 +128,10 @@ function lintSidecar(root: string, path: string, isWikiPage: (target: string) =>
 	return findings;
 }
 
-/** Check every sidecar in the repository holding `cwd` for structure and references that no longer hold. */
+/** Check every sidecar of the project holding `cwd` for structure and references that no longer hold. */
 export async function lintContext(cwd: string, signal?: AbortSignal): Promise<ContextLintResult> {
-	const root = await repoRoot(cwd);
-	const paths = await sidecarPaths(root, signal);
+	const root = projectRoot(cwd);
+	const paths = sidecarPaths(root);
 	const isWikiPage = existsSync(join(root, ".wiki")) ? await wikiPageExists(root, signal) : () => false;
 	const findings: ContextFinding[] = [];
 	for (const path of paths) {

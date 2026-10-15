@@ -7,7 +7,7 @@ const DISTILL_INSTRUCTION = `Distill the open learnings of this session. Decide 
   - A \`.wiki/\` page is found only by search. Use it for project knowledge, under a name a search would match.
   - A ledger task's \`retrospective.md\` is read when someone works on a related task. Use it for lessons about that undertaking.
   - \`.pi/programs/\` holds a reusable \`pi_exec\` composition, which becomes a tool.
-  - A source file's \`<file>.context\` sidecar is delivered whenever an agent reads or edits that file. Use it for an invariant, hazard, or cross-file coupling of that one file that its code cannot show, and run \`context_lint\` after you change it. When you change or remove an existing invariant, name it in your reply as \`Changed invariant: <file>#<section>, because <reason>\`.
+  - A source file's sidecar, \`.context/<path>.md\` mirroring its path, is delivered whenever an agent reads or edits that file. Use it for an invariant, hazard, or cross-file coupling of that one file that its code cannot show, and run \`context_lint\` after you change it. When you change or remove an existing invariant, name it in your reply as \`Changed invariant: <file>#<section>, because <reason>\`.
 - **Current:** it still guides the work now but will not matter later. Keep it open.
 - **Stale:** it no longer holds or is not worth keeping. Retire it.
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -32,7 +32,8 @@ function resultText(messages: readonly AgentMessage[], id: string): { text: stri
 async function session(replies: Reply[], extensions = [installCodeContext]) {
 	const faux = await fauxSession(extensions, replies, ["read", "edit", "write", "pi_exec"]);
 	sessions.push(faux);
-	writeFileSync(join(faux.cwd, "app.ts.context"), SIDECAR);
+	mkdirSync(join(faux.cwd, ".context"));
+	writeFileSync(join(faux.cwd, ".context/app.ts.md"), SIDECAR);
 	const text = (id: string) => resultText(faux.session.messages, id);
 	return { ...faux, replies, text };
 }
@@ -50,11 +51,11 @@ describe("code context sidecars", () => {
 		const blocked = faux.text("edit-before");
 		expect(blocked.isError).toBe(true);
 		expect(blocked.text).toContain("Context Gate Blocked: Cannot modify `app.ts`");
-		expect(blocked.text).toContain("Call `read` on `app.ts.context` (or `app.ts`)");
+		expect(blocked.text).toContain("Call `read` on `.context/app.ts.md` (or `app.ts`)");
 		expect(blocked.text).not.toContain("value stays a number");
 
 		const first = faux.text("read-1").text;
-		expect(first).toContain("--- CONTEXT: app.ts.context ---\n## file\n\nInvariant: value stays a number.");
+		expect(first).toContain("--- CONTEXT: .context/app.ts.md ---\n## file\n\nInvariant: value stays a number.");
 		expect(first).toMatch(/<context-ref path="app\.ts" hash="sha256:[0-9a-f]{64}" \/>$/);
 		expect(faux.text("read-2").text).not.toContain("CONTEXT");
 
@@ -75,7 +76,7 @@ describe("code context sidecars", () => {
 		]);
 		faux.session.subscribe((event) => {
 			if (event.type === "tool_execution_end" && event.toolCallId === "touch" && faux)
-				writeFileSync(join(faux.cwd, "app.ts.context"), `${SIDECAR}\nHazard: new.\n`);
+				writeFileSync(join(faux.cwd, ".context/app.ts.md"), `${SIDECAR}\nHazard: new.\n`);
 		});
 		await faux.session.prompt("change value");
 
@@ -86,8 +87,12 @@ describe("code context sidecars", () => {
 
 	it("unlocks edits from a direct sidecar read and re-marks the sidecar after its own edit", async () => {
 		const faux = await session([
-			call("read", { path: "app.ts.context" }, "read-sidecar"),
-			call("edit", { path: "app.ts.context", edits: [{ oldText: "a number", newText: "an integer" }] }, "edit-sidecar"),
+			call("read", { path: ".context/app.ts.md" }, "read-sidecar"),
+			call(
+				"edit",
+				{ path: ".context/app.ts.md", edits: [{ oldText: "a number", newText: "an integer" }] },
+				"edit-sidecar",
+			),
 			call("edit", EDIT, "edit-source"),
 		]);
 		await faux.session.prompt("change value");
@@ -107,12 +112,12 @@ describe("code context sidecars", () => {
 			call("edit", EDIT, "edit-empty"),
 			call("read", { path: "app.ts" }, "read-empty"),
 		]);
-		writeFileSync(join(faux.cwd, "app.ts.context"), "  \r\n");
+		writeFileSync(join(faux.cwd, ".context/app.ts.md"), "  \r\n");
 		await faux.session.prompt("change value");
 
 		expect(faux.text("write-free").isError).toBe(false);
 		expect(faux.text("edit-empty").isError).toBe(false);
-		expect(faux.text("read-empty").text).toContain("app.ts.context could not be loaded because it is empty");
+		expect(faux.text("read-empty").text).toContain(".context/app.ts.md could not be loaded because it is empty");
 	});
 
 	it("returns raw file content to pi_exec programs and does not gate their mutations", async () => {
@@ -173,7 +178,7 @@ describe("code context sidecars", () => {
 		}).result;
 
 		expect(resultText(messages, "fork-edit-before").text).toContain("Context Gate Blocked");
-		expect(resultText(messages, "fork-read").text).toContain("--- CONTEXT: app.ts.context ---");
+		expect(resultText(messages, "fork-read").text).toContain("--- CONTEXT: .context/app.ts.md ---");
 		expect(resultText(messages, "fork-edit-after").isError).toBe(false);
 	});
 });

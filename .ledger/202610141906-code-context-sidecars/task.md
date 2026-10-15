@@ -6,7 +6,7 @@ Updated: 2026-10-14
 
 ## Intent
 
-Store non-derivable architectural knowledge (invariants, hazards, couplings, rationale) in `<source-filename>.context` Markdown sidecars next to source files, and deliver it when the agent works on the file:
+Store non-derivable architectural knowledge (invariants, hazards, couplings, rationale) in Markdown sidecars under the project root's `.context/` directory, mirroring the source tree (`app/main.py` → `.context/app/main.py.md`), and deliver it when the agent works on the file:
 
 - A top-level `read` of a covered file or its sidecar appends the whole sidecar and one `<context-ref path="…" hash="sha256:…" />` marker, unless that exact marker is already live in the effective context.
 - A top-level `edit`/`write` of a covered file is blocked until the current marker is live; the block tells the agent to `read` first.
@@ -37,14 +37,15 @@ Source brief: the operator's "Code Context Sidecars with Block-and-Retry Awarene
 
 ## Decisions
 
+- Operator changed the layout (2026-10-15): sidecars live in a mirrored `.context/` tree as `<path>.md`, not as `<file>.context` beside the source. The project root is the nearest Git worktree root of the working directory, else the working directory; `context_lint` walks `.context/` instead of `git ls-files`.
 - Operator chose: load in root sessions, ordinary children, and `pi_exec` workers; change reflection may start sidecars in any repository; Phase 5 evaluation moved to `.ledger/202610150034-code-context-evaluation/`.
 - Markers count only inside `read`/`edit`/`write` tool results.
 - A whole `read` of the sidecar appends only the marker; a windowed one appends the full block.
-- `.context` files get change reflection's prose lens; the code lens carries sidecar upkeep and the `Changed invariant:` report.
+- Sidecars are `.md`, so they get change reflection's prose lens; the code lens carries sidecar upkeep and the `Changed invariant:` report.
 
 ## Current State
 
-Phases 0–4 implemented. Format, lint, typecheck, pair, loader, pack, and the touched suites pass. No full unit run has exited clean since the child/worker wiring: three runs each failed one different timing test (`tasks` scheduled command, `tmux-sessions` temp cleanup, `pi-exec-work-panel` 5 s timeout), each of which passes alone. The pre-change commit `aff1140` shows the same kind of flakes (1 and 4 failures in two full runs), so they predate this work.
+Phases 0–4 implemented; layout moved to `.context/<path>.md` on 2026-10-15. After the move: format, lint, typecheck, pair, loader, pack pass; two full unit runs each failed one different timing test (`pi-exec-work-panel` 5 s timeout, `pi-exec` evidence test), both pass alone. Earlier: Format, lint, typecheck, pair, loader, pack, and the touched suites pass. No full unit run has exited clean since the child/worker wiring: three runs each failed one different timing test (`tasks` scheduled command, `tmux-sessions` temp cleanup, `pi-exec-work-panel` 5 s timeout), each of which passes alone. The pre-change commit `aff1140` shows the same kind of flakes (1 and 4 failures in two full runs), so they predate this work.
 
 ## Outcome
 

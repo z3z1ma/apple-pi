@@ -8,9 +8,9 @@ export const CHANGE_REFLECTION_MESSAGE_TYPE = "change-reflection";
 
 const MUTATION_TOOLS = new Set(["edit", "write"]);
 const EXECUTION_TOOLS = new Set(["bash", "pi_exec", "agent", "get_subagent_result"]);
-const PROSE_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc", ".context"]);
+const PROSE_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc"]);
 
-const SIDECAR_UPKEEP = `Keep \`<file>.context\` sidecars true to these changes. Record an invariant, ordering hazard, or cross-file coupling this work revealed that the code cannot show; update a constraint this work changed on purpose; move a sidecar with its renamed file. Run \`context_lint\` after sidecar changes. When you change or remove an existing invariant, name it in your reply as \`Changed invariant: <file>#<section>, because <reason>\`.`;
+const SIDECAR_UPKEEP = `Keep the \`.context/<path>.md\` sidecars of these files true to the changes. Record an invariant, ordering hazard, or cross-file coupling this work revealed that the code cannot show; update a constraint this work changed on purpose; move a sidecar with its renamed file. Run \`context_lint\` after sidecar changes. When you change or remove an existing invariant, name it in your reply as \`Changed invariant: <file>#<section>, because <reason>\`.`;
 
 const TEST_DIRECTORY = /(^|\/)(tests?|__tests__)\//;
 const TEST_FILE = /(\.(test|spec)\.[^/]+|_test\.[^/]+|(^|\/)test_[^/]+\.py)$/;
