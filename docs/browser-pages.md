@@ -1,0 +1,83 @@
+# Browser pages
+
+`review_code` opens a code review page in the user's browser and waits for the verdict. The agent writes the structure; the page shows the real diff from git. Root sessions only; a run without an attached user gets a message instead of a page.
+
+The same runtime will serve the Markdown review, ledger task review, and change explanation pages. Their tools are not built yet.
+
+## What the agent supplies
+
+The tool call carries structure and prose, never code:
+
+- `title`, `intent`, and optional `base`: the git ref to compare with (default `HEAD`).
+- `focus`: the two-minute path, with references to the changes to read first.
+- `verification`: what was run or checked, and what was not verified.
+- `chapters`: the change in reasoning order. Each chapter has a `kind` (`core`, `consequence`, `support`), an `attention` level (`high`, `medium`, `low`), a Markdown `brief`, optional `callouts`, and `changes`.
+- Each change names a `file` and an optional new-side `lines` range such as `"41-53"`, with a one-sentence `summary`. A change repeated in several places lists them under `places` instead.
+- `notes`: short notes pinned to a file and line.
+- `decisions`: real judgment calls, with options and the agent's `chosen` index. Omit `chosen` to ask the reviewer.
+
+## How the page is built
+
+- **The diff:** the working tree (staged, unstaged, and untracked files) against the merge base of `base` and `HEAD`, which is how a pull request compares a branch with its target.
+- **Code comes from git:** the server reads it, highlights it with Shiki (light and dark themes), and marks the changed words in each edited line.
+- **Hunks follow the story:** each git hunk is split into runs of changed lines, and a run of added lines (a new file, for example) is also cut at every entry's range boundaries. A run belongs to the first chapter entry whose range overlaps it, and a hunk is cut wherever the owning entry changes, so one git hunk or one new file can span several chapters.
+- **Nothing is hidden:** a run that no entry claims goes to "Not in the story".
+- **Bad references are reported:** a reference that names no change, overlaps no changed lines, or repeats lines already placed becomes a warning. The page shows the warnings on its overview, and the tool result returns them to the agent.
+- **Repeated changes:** the first place is shown in full as the example, and the other places are listed under it. A place is open and flagged when it is more than a consistent rename of the example (for example `invoice` → `tax`, taken from the file names). A changed keyword, value, number, or operator always counts as a difference. The check compares tokens; it is a hint, not proof that the code behaves the same.
+- **Generated files:** lockfiles and paths marked `linguist-generated` in `.gitattributes` start collapsed and are not highlighted. Long hunks are folded.
+
+## The page
+
+- **Overview:** the intent, the two-minute focus, verification, a map with one row per directory and one block per hunk, changes grouped by attention, and the agent's decisions.
+- **Chapters:** each one opens with the agent's brief, followed by its files and hunks. File and hunk headers stay visible while scrolling.
+- **Review state:** hunks marked seen collapse. Agent notes show as one line until opened. Decisions sit as one line where they apply in the code. The top bar counts open questions; it, the overview's decision list, and `Q` take you straight to each question, opening and unfolding whatever hides it.
+- **Two lenses:** Story follows the chapters. Attention steps through Read closely, Worth a look, and Skim, and counts a repeated change as one step.
+- **Keyboard:**
+
+  | Key | Action |
+  | --- | --- |
+  | `J`/`K` | Next or previous hunk |
+  | `[`/`]` | Previous or next chapter |
+  | `↵` | Mark the hunk seen and go to the next unseen one |
+  | `⇧↵` | Mark every place of a repeated change seen |
+  | `R` | Mark the chapter seen |
+  | `X`/`⇧X` | Collapse or expand one hunk, or every hunk on the page |
+  | `C` | Comment |
+  | `B` | Brief |
+  | `N` | Notes |
+  | `Q` | Next open question: opens its hunk, unfolds its lines, and scrolls to it |
+  | `⇧Q` | Next judgment call |
+  | `L` | Switch lens |
+  | `O` | Overview |
+  | `Space`/`D`/`U` | Scroll |
+  | `⌘↵` | Finish |
+  | `?` | Show all keys |
+
+- **Comments:** click a line number to comment on it, and shift-click another to extend the range. Each comment has a kind: change, question, concern, nit, or praise. A comment can also reply to an agent note.
+
+## The result
+
+The tool blocks until the reviewer submits. The agent then receives:
+
+- the verdict: approve, approve with notes, request changes, or closed without a verdict;
+- the reviewer's summary;
+- each comment with its kind, its `file:line` anchor, and the first line of the code it covers;
+- the answers to decisions, saying whether the reviewer kept or overrode the agent's choice;
+- unanswered questions;
+- how many hunks were marked seen;
+- any reference warnings;
+- the path of the saved page.
+
+Aborting the tool call or ending the session closes the page server.
+
+## Saved pages
+
+Every submitted review is saved as one self-contained HTML file in `<agent dir>/artifacts/<repository>/<date>-<title>.html`; the agent directory defaults to `~/.pi/agent`. The file opens offline and shows the review read-only, with the verdict and comments. Attach it to a pull request, a Confluence page, or a Jira ticket.
+
+## Security
+
+The server listens on 127.0.0.1 on a random port. It serves the page only to requests that carry the session token and name the loopback host, and it accepts one submission.
+
+## Maintaining the page
+
+The page is a React app in `components/browser-pages/web/`, built by Vite into one file, `components/browser-pages/dist/index.html`. Pi installs git packages without dev dependencies, so the built file is committed. After changing `web/`, run `npm run build:web`. A test fails when the committed file does not match a fresh build.

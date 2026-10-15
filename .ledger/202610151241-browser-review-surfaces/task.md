@@ -1,4 +1,4 @@
-Status: planning
+Status: in-progress
 Created: 2026-10-15
 Updated: 2026-10-15
 
@@ -28,6 +28,10 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 - **Model curates, cannot hide or invent code.** Code and diffs are referenced by file and range and read from git/disk by the server; hunks the model does not place appear in an "Unplaced" lane.
 - **Rendered artifacts are saved** as one self-contained HTML file (app, content, and submitted result inline) that reopens offline. The agent can attach it to PRs, Confluence pages, and Jira tickets.
 - **In-page "ask about this".** The human selects code or text and asks; a side conversation with the main agent's context answers inline, as `/btw` does, because the main agent is blocked on the review.
+- **Hunk references are file + line range in the call.** Each chapter entry is JSON such as `{"file": "src/http/client.ts", "lines": "41-53"}` (new-side lines; omit `lines` for the whole file). The server maps it to every git hunk it overlaps; unclaimed hunks go to "Not in the story". One call, no hunk ids. Chosen over a two-call id flow after a plain explanation, 2026-10-15.
+- **One tool per page** (`review_code`, `review_markdown`, `review_ledger_task`, `explain_change`) over one shared runtime. Decided 2026-10-15.
+- **In-page ask ships in the second slice.** The first slice is runtime, `review_code`, the page, the result, and the saved page. Decided 2026-10-15.
+- **Build directly:** implement the first slice now and record decisions here as they are made. Decided 2026-10-15.
 - **Saved pages live in** `~/.pi/agent/artifacts/<project>/<date>-<slug>.html`; the agent copies or attaches a file where it is needed. Approved 2026-10-15.
 - **Code review design: the [round 2 prototype](prototypes/code-review-v2/README.md),** approved 2026-10-15 without changes.
 - **Code review direction (prototype round 1 verdict).** Build on B (Cockpit) keyboard stepping; bring in C (Triage)'s "two minutes" focus, change map, and changes-by-attention view. Move the brief out of the right rail into the reading line. Make files, hunks, and agent notes collapsible. Decisions are secondary to review and need code context. Every view must scale to large diffs. A (Essay) is dropped.
@@ -35,9 +39,6 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Open questions
 
-- Tool surface: one tool per page or fewer tools with a page kind.
-- How the agent refers to hunks in the tool call before it knows the server's hunk ids.
-- Whether in-page ask ships in the first slice or the next.
 
 ## Draft acceptance criteria
 
@@ -52,18 +53,21 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-Planning. Goal and core decisions agreed with the operator on 2026-10-15; open questions above remain.
+In progress. Slice 1 (shared runtime + `review_code`) is implemented and validated; it is not committed yet.
 
-- Step 1 artifact: [code review prototype, round 1](prototypes/code-review/README.md), three variants (Essay, Cockpit, Triage). Verdict recorded above.
-- Step 2 artifact: [frontend stack](frontend-stack.md). Approved.
-- Round 2 artifact: [code review prototype, round 2](prototypes/code-review-v2/README.md): the hybrid, with a large generated change and repeated-change groups. Approved.
+- Design: [round 1](prototypes/code-review/README.md) and [round 2](prototypes/code-review-v2/README.md) prototypes; round 2 approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
+- Code: `components/browser-pages/` (`src/` server and tool, `web/` React page, committed `dist/index.html`), `extensions/browser-pages.ts`, `tsconfig.web.json`, `npm run build:web`. Contract: `docs/browser-pages.md`.
+- Hunks follow the agent's story: git hunks are split into runs of changed lines and cut where the owning chapter entry changes, so one git hunk can sit in two chapters. Found during the demo: git merged a whole file into one hunk, so line-range references all hit the same hunk.
+- Validation on 2026-10-15: format, lint, both typechecks, `npm test` (138 files, 1470 tests, pair harness, loader), `pack:check`. The tool test drives `execute` end to end with a stand-in browser script. [checks/](checks/README.md) holds the manual visual check (demo repository + Playwright); its screenshots and submit round trip were reviewed.
+- First real review (2026-10-15): the operator reviewed slice 1 itself in a live session, base `main`, 108 hunks, all marked seen. Verdict: approved with notes. Saved page: `~/.pi/agent/artifacts/apple-pi/2026-10-15-slice-1-of-browser-pages-the-review-code-tool-and-its-page.html`.
+- Notes acted on: map rows scroll their hunk blocks sideways while the +/- counts stay pinned; `Q` jumps to the next open question and `⇧Q` to the next judgment call; the top bar shows an open-question count; "Show in code", brief links, and the comment list open, unfold, and scroll to their target. Decision taken in that review: runs of added lines (new files) are cut at the agent's ranges.
+- Not yet checked: large real diffs for performance.
 
-Next steps, approved by the operator on 2026-10-15. The main agent designs and builds the UI itself; the designer teammate may later build one-shot components inside the established architecture.
+Next:
 
-1. Done: round 1 prototype (three variants) and the frontend stack proposal; both reviewed.
-2. Round 2 prototype (`prototypes/code-review-v2/`): one hybrid of B and C. Cockpit stepping at hunk and chapter level with more shortcuts; an overview page with the two-minute focus, the change map, changes by attention, and a compact decision list; the brief at the top of each chapter, collapsible; collapsible files, hunks, and agent notes; decisions anchored in the code and compact; in-page ask with simulated answers; an attention lens in the rail. It ships a small dataset and a large generated one (tens of files, about a hundred hunks) to test scale.
-3. Done: operator approved round 2.
-4. Settle the remaining open questions, write the spec for the first vertical slice (shared runtime plus the code review page), and finish the acceptance criteria; then the task moves to `ready`.
+1. Operator checks the fixes and commits slice 1.
+2. Slice 2: in-page "ask the agent" (live connection plus a side conversation with the agent's context).
+3. Then `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass.
 
 ## Outcome
 

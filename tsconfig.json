@@ -12,5 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["extensions/**/*.ts", "components/**/*.ts", "optional-extensions/**/*.ts", "tests/**/*.ts"]
+  "include": ["extensions/**/*.ts", "components/**/*.ts", "optional-extensions/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["components/browser-pages/web"]
 }

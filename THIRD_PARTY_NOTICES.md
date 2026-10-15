@@ -89,6 +89,11 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Integration: `pi_exec` executes type-checked Python snippets in Monty's local subprocess pool. The upstream package and platform-specific worker binaries remain normal npm dependencies; no Monty source is copied into apple-pi.
 - Monty supplies the Python subset, worker isolation, and resource limits. apple-pi owns the Pi tool bridge, tool-call policy, cancellation, result conversion, and traces. Monty's local worker is not an OS-level security boundary.
 
+## Browser page dependencies
+
+- Shiki (<https://github.com/shikijs/shiki>), MIT: a runtime npm dependency that highlights code for `review_code`. No source is copied.
+- React and React DOM (<https://github.com/facebook/react>), MIT, Copyright (c) Meta Platforms, Inc. and affiliates: bundled with the page into `components/browser-pages/dist/index.html` by Vite.
+
 ## tmux-claude-session-manager → Tmux sessions
 
 - Source: <https://github.com/craftzdog/tmux-claude-session-manager>
@@ -156,4 +161,5 @@ No source code was copied from these projects:
 - `pi-blackhole` (`49ab560`) and Sting8k's `pi-vcc` (`09c4a74`) informed the single compaction owner and progressive touched-file / `#N:path` recall design. Their unified and reverse-recall implementations were not adopted.
 - `pi-fabric` (`843dadb`) informed `pi_exec`'s guest program, host-tool and registered-extension bridge, programmable subagents, durable nested traces, code preview, live-call rendering, and activity-widget concepts. apple-pi independently implements the execution-focused runtime with Node's standard worker and VM modules.
 - `pi-btw` (`763850adf8c51e1dbc13765ad1197e20853ab631`, <https://github.com/QuangThai/pi-btw>) informed the private `/btw` side-conversation, answer-first UI, and explicit injection behavior. apple-pi independently implements them on the existing owned child-session manager and Pi TUI primitives; no upstream source code, RPC process layer, slot system, settings, logs, fallback inference, or history store was copied.
+- Plannotator (<https://github.com/backnotprop/plannotator>) informed the browser review pages: a local page that returns anchored feedback to the agent, and the rule that every changed file appears in a guide. No source code was copied.
 - Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-increment-per-loop, deterministic-stack, backpressure, and outer-harness model. No source code was copied.

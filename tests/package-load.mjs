@@ -62,6 +62,15 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
+				extension.path.endsWith("browser-pages.ts") &&
+				extension.tools.has("review_code") &&
+				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+		),
+		"missing review_code browser page tool",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
 				extension.path.endsWith("change-reflection.ts") &&
 				(extension.handlers.get("agent_before_settle")?.length ?? 0) > 0,
 		),
