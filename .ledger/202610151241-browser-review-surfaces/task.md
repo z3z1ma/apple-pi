@@ -53,7 +53,7 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-In progress. Slice 1 (shared runtime + `review_code`) committed as `2d76315` after a real review by the operator. Slice 2 (ask the agent in the page) implemented and validated.
+In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are committed; `4b3fcf6` shares the anchor format and adds the 🥧 logo.
 
 - Design: [round 1](prototypes/code-review/README.md) and [round 2](prototypes/code-review-v2/README.md) prototypes; round 2 approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
 - Code: `components/browser-pages/` (`src/` server, tool, and ask fork; `web/` React page; committed `dist/index.html`), `extensions/browser-pages.ts`. Contract: `docs/browser-pages.md`.
@@ -64,7 +64,7 @@ In progress. Slice 1 (shared runtime + `review_code`) committed as `2d76315` aft
 Next:
 
 1. Operator tries asking in a real review.
-2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass first.
+2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass and operator verdict before implementation. Design pass 1: [Markdown review prototype](prototypes/markdown-review/README.md), awaiting the verdict.
 
 ## Outcome
 
