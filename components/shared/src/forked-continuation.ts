@@ -82,6 +82,25 @@ export function trackLiveSessions(): void {
 	liveSessions();
 }
 
+/** Keeps the parent's prefix intact and closes only its still-unanswered tool calls, at the end, with `note`. */
+export function closePendingCalls(messages: AgentMessage[], note: string): void {
+	const pending = new Map<string, { id: string; name: string }>();
+	for (const message of messages) {
+		if (message.role === "assistant") {
+			for (const block of message.content) if (block.type === "toolCall") pending.set(block.id, block);
+		} else if (message.role === "toolResult") pending.delete(message.toolCallId);
+	}
+	for (const call of pending.values())
+		messages.push({
+			role: "toolResult",
+			toolCallId: call.id,
+			toolName: call.name,
+			content: [{ type: "text", text: note }],
+			isError: true,
+			timestamp: Date.now(),
+		});
+}
+
 /** Render a passive message as its first line, collapsed, and its whole text, expanded. */
 function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
 	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {

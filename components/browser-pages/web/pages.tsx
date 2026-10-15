@@ -982,6 +982,7 @@ const KEYS: [string, string][] = [
 	["X", "Collapse or expand the hunk"],
 	["⇧X", "Collapse or expand every hunk on the page"],
 	["C", "Comment on the hunk"],
+	["A", "Ask the agent about the hunk"],
 	["B", "Hide or show the brief"],
 	["N", "Compact or full agent notes"],
 	["Space / ⇧Space", "Scroll a screen"],

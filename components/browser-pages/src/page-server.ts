@@ -21,15 +21,20 @@ function send(res: ServerResponse, status: number, body: string, type = "text/pl
 
 /**
  * Serves one page on 127.0.0.1 until the reviewer submits or the session closes. Every request must carry the
- * session token (query `t` for the page, header `x-page-token` for the submission) and address the server by
- * its loopback host, so other local origins cannot read the page or answer for the reviewer.
+ * session token (query `t` for the page, header `x-page-token` for posts) and address the server by its
+ * loopback host, so other local origins cannot read the page or answer for the reviewer.
+ *
+ * `ask` answers questions posted to `/ask` while the page is open. It returns the answer, or undefined for a
+ * malformed question; its signal aborts when the page stops waiting or the session closes.
  */
 export async function openPageSession<R>(
 	html: string,
 	token: string,
 	parse: (body: unknown) => R | undefined,
-	signal?: AbortSignal,
+	options: { signal?: AbortSignal; ask?: (body: unknown, signal: AbortSignal) => Promise<string | undefined> } = {},
 ): Promise<PageSession<R>> {
+	const { signal, ask } = options;
+	const asking = new AbortController();
 	let settle: { resolve: (value: R) => void; reject: (error: Error) => void } | undefined;
 	const result = new Promise<R>((resolve, reject) => {
 		settle = { resolve, reject };
@@ -61,6 +66,30 @@ export async function openPageSession<R>(
 			settle?.resolve(value);
 			return;
 		}
+		if (req.method === "POST" && url.pathname === "/ask" && ask) {
+			if (req.headers["x-page-token"] !== token) return send(res, 403, "Forbidden");
+			if (done) return send(res, 409, "This review was already closed.");
+			const stop = new AbortController();
+			const abort = () => stop.abort();
+			asking.signal.addEventListener("abort", abort, { once: true });
+			res.on("close", () => {
+				if (!res.writableFinished) abort();
+				asking.signal.removeEventListener("abort", abort);
+			});
+			let body: unknown;
+			try {
+				body = JSON.parse(await readBody(req));
+			} catch {
+				return send(res, 400, "Invalid question.");
+			}
+			try {
+				const answer = await ask(body, stop.signal);
+				if (answer === undefined) return send(res, 400, "Invalid question.");
+				return send(res, 200, JSON.stringify({ answer }), "application/json");
+			} catch (error) {
+				return send(res, 502, error instanceof Error ? error.message : String(error));
+			}
+		}
 		send(res, 404, "Not found");
 	});
 
@@ -70,6 +99,7 @@ export async function openPageSession<R>(
 			settle?.reject(new Error("The page was closed before the reviewer submitted."));
 		}
 		signal?.removeEventListener("abort", close);
+		asking.abort();
 		server.close();
 		server.closeAllConnections();
 	};

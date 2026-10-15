@@ -53,21 +53,18 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-In progress. Slice 1 (shared runtime + `review_code`) is implemented and validated; it is not committed yet.
+In progress. Slice 1 (shared runtime + `review_code`) committed as `2d76315` after a real review by the operator. Slice 2 (ask the agent in the page) implemented and validated.
 
 - Design: [round 1](prototypes/code-review/README.md) and [round 2](prototypes/code-review-v2/README.md) prototypes; round 2 approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
-- Code: `components/browser-pages/` (`src/` server and tool, `web/` React page, committed `dist/index.html`), `extensions/browser-pages.ts`, `tsconfig.web.json`, `npm run build:web`. Contract: `docs/browser-pages.md`.
-- Hunks follow the agent's story: git hunks are split into runs of changed lines and cut where the owning chapter entry changes, so one git hunk can sit in two chapters. Found during the demo: git merged a whole file into one hunk, so line-range references all hit the same hunk.
-- Validation on 2026-10-15: format, lint, both typechecks, `npm test` (138 files, 1470 tests, pair harness, loader), `pack:check`. The tool test drives `execute` end to end with a stand-in browser script. [checks/](checks/README.md) holds the manual visual check (demo repository + Playwright); its screenshots and submit round trip were reviewed.
-- First real review (2026-10-15): the operator reviewed slice 1 itself in a live session, base `main`, 108 hunks, all marked seen. Verdict: approved with notes. Saved page: `~/.pi/agent/artifacts/apple-pi/2026-10-15-slice-1-of-browser-pages-the-review-code-tool-and-its-page.html`.
-- Notes acted on: map rows scroll their hunk blocks sideways while the +/- counts stay pinned; `Q` jumps to the next open question and `⇧Q` to the next judgment call; the top bar shows an open-question count; "Show in code", brief links, and the comment list open, unfold, and scroll to their target. Decision taken in that review: runs of added lines (new files) are cut at the agent's ranges.
-- Not yet checked: large real diffs for performance.
+- Code: `components/browser-pages/` (`src/` server, tool, and ask fork; `web/` React page; committed `dist/index.html`), `extensions/browser-pages.ts`. Contract: `docs/browser-pages.md`.
+- Slice 2: the composer's "Ask the agent" mode (`A`) posts to `/ask`; a read-only fork of the live conversation answers it, the way `clarify` does (the shared helper `closePendingCalls` now serves both). Answers render inline; questions with answers return in the tool result and the saved page.
+- Checks: browser-pages tests (ask fork in a real faux session, including a blocked `bash` call; `/ask` token, failure, and close rules), format, lint, both typechecks, loader, pack. The full `npm test` had two timeouts in `components/tasks` under load; they pass when run alone. Manual check in Chrome with a canned answer: ask, pending, answer, result text, saved page.
+- Not yet checked: asking with a real model in a live session; large real diffs for performance.
 
 Next:
 
-1. Operator checks the fixes and commits slice 1.
-2. Slice 2: in-page "ask the agent" (live connection plus a side conversation with the agent's context).
-3. Then `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass.
+1. Operator tries asking in a real review.
+2. `review_markdown`, `review_ledger_task`, and `explain_change` over the same runtime, each with its own design pass first.
 
 ## Outcome
 

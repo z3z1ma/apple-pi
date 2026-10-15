@@ -4,7 +4,7 @@ import type { CommentKind, Decision, Hunk as HunkData, Note as NoteData } from "
 import { useReview } from "./context";
 import { anchorLabel, ATT_LABEL, hunkRange } from "./model";
 import { isOpen, markPatternSeen, saveComposer, type State } from "./state";
-import { baseName, CodeLine, Diamond, dirName, Icon, Kbd, Md, plural } from "./ui";
+import { Answer, baseName, CodeLine, Diamond, dirName, Icon, Kbd, Md, plural } from "./ui";
 
 export const COMMENT_KINDS: Record<CommentKind, string> = {
 	change: "Change",
@@ -54,50 +54,82 @@ function Comment({ comment }: { comment: State["comments"][number] }) {
 	);
 }
 
+/** Keeps focus in the composer's text when a mode or kind button is pressed, so typing continues there. */
+const keepTyping = (e: MouseEvent) => e.preventDefault();
+
 export function Composer() {
-	const { m, s, update } = useReview();
+	const { m, s, update, ask, readOnly } = useReview();
 	const c = s.composer;
 	if (!c) return null;
 	const set = (change: (draft: NonNullable<State["composer"]>) => void) =>
 		update((draft) => {
 			if (draft.composer) change(draft.composer);
 		});
+	const asking = c.mode === "ask";
+	const canAsk = m.page.session.ask && !readOnly && !c.replyTo;
+	const submit = () => (asking ? ask() : update(saveComposer));
 	return (
-		<div className={`composer ${c.replyTo ? "" : "inl"}`}>
+		<div className={`composer ${asking ? "ask" : ""} ${c.replyTo ? "" : "inl"}`}>
 			<div className="composer-top">
 				{c.replyTo ? (
 					<span>Reply to the agent</span>
 				) : (
 					<>
+						{canAsk ? (
+							<div className="seg">
+								{(["comment", "ask"] as const).map((mode) => (
+									<button
+										type="button"
+										key={mode}
+										className={c.mode === mode ? "on" : ""}
+										onMouseDown={keepTyping}
+										onClick={() =>
+											set((draft) => {
+												draft.mode = mode;
+											})
+										}
+									>
+										{mode === "ask" ? <Icon.spark /> : <Icon.bubble />} {mode === "ask" ? "Ask the agent" : "Comment"}
+									</button>
+								))}
+							</div>
+						) : null}
 						<span>
-							Comment on <b>{anchorLabel(m.page, c.hunk, c.start, c.end)}</b>
+							{canAsk ? "on" : "Comment on"} <b>{anchorLabel(m.page, c.hunk, c.start, c.end)}</b>
 						</span>
 						<span className="kbd-hint">Shift-click a line number to extend</span>
 					</>
 				)}
 			</div>
-			<div className="kinds">
-				{(Object.keys(COMMENT_KINDS) as CommentKind[]).map((k) => (
-					<button
-						type="button"
-						key={k}
-						className={`kind-chip k-${k} ${c.kind === k ? "on" : ""}`}
-						onClick={() =>
-							set((draft) => {
-								draft.kind = k;
-							})
-						}
-					>
-						{COMMENT_KINDS[k]}
-					</button>
-				))}
-			</div>
+			{asking ? null : (
+				<div className="kinds">
+					{(Object.keys(COMMENT_KINDS) as CommentKind[]).map((k) => (
+						<button
+							type="button"
+							key={k}
+							className={`kind-chip k-${k} ${c.kind === k ? "on" : ""}`}
+							onMouseDown={keepTyping}
+							onClick={() =>
+								set((draft) => {
+									draft.kind = k;
+								})
+							}
+						>
+							{COMMENT_KINDS[k]}
+						</button>
+					))}
+				</div>
+			)}
 			<textarea
 				id="composer-text"
 				// biome-ignore lint/a11y/noAutofocus: the composer opens because the reviewer asked to write.
 				autoFocus
 				rows={3}
-				placeholder={PLACEHOLDER[c.kind]}
+				placeholder={
+					asking
+						? "What do you want to know about these lines? The answer appears here; the agent's main task is not interrupted."
+						: PLACEHOLDER[c.kind]
+				}
 				value={c.text}
 				onChange={(e) => {
 					const value = e.target.value;
@@ -109,7 +141,7 @@ export function Composer() {
 			<div className="composer-foot">
 				<span className="kbd-hint">
 					<Kbd>⌘</Kbd>
-					<Kbd>↵</Kbd> save · <Kbd>esc</Kbd> cancel
+					<Kbd>↵</Kbd> {asking ? "ask" : "save"} · <Kbd>esc</Kbd> cancel
 				</span>
 				<span className="sp" />
 				<button
@@ -123,10 +155,82 @@ export function Composer() {
 				>
 					Cancel
 				</button>
-				<button type="button" className="btn primary" onClick={() => update(saveComposer)}>
-					Comment
+				<button type="button" className="btn primary" onClick={submit}>
+					{asking ? "Ask" : "Comment"}
 				</button>
 			</div>
+		</div>
+	);
+}
+
+function AskThread({ entry }: { entry: State["asks"][number] }) {
+	const { m, update, retry, readOnly } = useReview();
+	return (
+		<div className="ask-t inl" id={`ask-${entry.id}`}>
+			<div className="ask-q">
+				<span className="av">You</span>
+				<Md text={entry.question} />
+				<span className="where">{anchorLabel(m.page, entry.hunk, entry.start, entry.end)}</span>
+			</div>
+			<div className="ask-a">
+				<Icon.spark />
+				{entry.answer ? (
+					<Answer text={entry.answer} />
+				) : entry.error ? (
+					<span className="warn">{entry.error}</span>
+				) : (
+					<span className="thinking">
+						<span className="dots">
+							<i />
+							<i />
+							<i />
+						</span>
+						The agent is answering from a copy of its conversation…
+					</span>
+				)}
+			</div>
+			{readOnly || (!entry.answer && !entry.error) ? null : (
+				<div className="ask-actions">
+					<span className="ask-k">Answered in the page; the agent's main task was not interrupted</span>
+					<span className="sp" />
+					{entry.error ? (
+						<button type="button" className="link" onClick={() => retry(entry.id)}>
+							Try again
+						</button>
+					) : (
+						<button
+							type="button"
+							className="link"
+							onClick={() =>
+								update((d) => {
+									d.composer = {
+										hunk: entry.hunk,
+										anchor: entry.start,
+										start: entry.start,
+										end: entry.end,
+										kind: "question",
+										text: "",
+										mode: "comment",
+									};
+								})
+							}
+						>
+							<Icon.bubble /> Comment on this
+						</button>
+					)}
+					<button
+						type="button"
+						className="link"
+						onClick={() =>
+							update((d) => {
+								d.asks = d.asks.filter((a) => a.id !== entry.id);
+							})
+						}
+					>
+						Dismiss
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -180,6 +284,7 @@ function Note({ note }: { note: NoteData }) {
 										kind: "question",
 										text: "",
 										replyTo: note.id,
+										mode: "comment",
 									};
 								})
 							}
@@ -319,6 +424,7 @@ function Rows({ hunk }: { hunk: HunkData }) {
 	const notes = m.notesIn[hunk.id] ?? [];
 	const decisions = m.decisionsIn[hunk.id] ?? [];
 	const comments = s.comments.filter((x) => !x.replyTo && x.hunk === hunk.id);
+	const asks = s.asks.filter((a) => a.hunk === hunk.id);
 	const clickLine = (i: number) => (e: MouseEvent) => {
 		if (readOnly) return;
 		const shift = e.shiftKey;
@@ -327,7 +433,16 @@ function Rows({ hunk }: { hunk: HunkData }) {
 			if (current && !current.replyTo && current.hunk === hunk.id && shift) {
 				current.start = Math.min(current.anchor, i);
 				current.end = Math.max(current.anchor, i);
-			} else d.composer = { hunk: hunk.id, anchor: i, start: i, end: i, kind: "change", text: "" };
+			} else
+				d.composer = {
+					hunk: hunk.id,
+					anchor: i,
+					start: i,
+					end: i,
+					kind: "change",
+					text: "",
+					mode: current?.mode ?? "comment",
+				};
 			d.focus = hunk.id;
 		});
 	};
@@ -365,6 +480,11 @@ function Rows({ hunk }: { hunk: HunkData }) {
 							.filter((x) => x.end === i)
 							.map((x) => (
 								<Comment key={x.id} comment={x} />
+							))}
+						{asks
+							.filter((a) => a.end === i)
+							.map((a) => (
+								<AskThread key={a.id} entry={a} />
 							))}
 						{lineComposer && lineComposer.end === i ? <Composer /> : null}
 					</div>

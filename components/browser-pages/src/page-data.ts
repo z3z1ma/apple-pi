@@ -109,7 +109,8 @@ export interface CodeReviewPage {
 	decisions: Decision[];
 	/** Problems with the agent's references, shown to the reviewer as well as returned to the agent. */
 	warnings: string[];
-	session: { token: string; live: boolean };
+	/** `live` pages accept a verdict; `ask` says whether the page can ask the agent questions. */
+	session: { token: string; live: boolean; ask: boolean };
 	/** Present on a saved page: the review as submitted. */
 	result?: ReviewResult;
 }
@@ -127,10 +128,20 @@ export interface ReviewComment {
 	replyTo?: string;
 }
 
+/** A question the reviewer asked in the page, with the answer a read-only fork of the agent gave. */
+export interface AskedQuestion {
+	hunk: string;
+	start: number;
+	end: number;
+	question: string;
+	answer: string;
+}
+
 export interface ReviewResult {
 	verdict: Verdict;
 	summary?: string;
 	comments: ReviewComment[];
+	asked: AskedQuestion[];
 	decisions: { id: string; choice: number; note?: string }[];
 	seen: string[];
 	submittedAt: string;

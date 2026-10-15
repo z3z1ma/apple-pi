@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 
 import { it } from "vitest";
 
+import { parseQuestion } from "../src/ask-agent.js";
 import { buildCodeReviewPage, formatReviewResult, parseReviewResult } from "../src/code-review.js";
 import { openPageSession } from "../src/page-server.js";
 import { embedPage, readTemplate } from "../src/saved-page.js";
@@ -189,12 +190,18 @@ it("serves a demo review and records the submission", { timeout: 600_000 }, asyn
 	mkdirSync(out, { recursive: true });
 	const template = await readTemplate();
 	writeFileSync(join(out, "warnings.json"), JSON.stringify(page.warnings, null, 2));
-	const session = await openPageSession(embedPage(template, page), "demo-token", (body) =>
-		parseReviewResult(body, page),
-	);
+	page.session.ask = true;
+	const session = await openPageSession(embedPage(template, page), "demo-token", (body) => parseReviewResult(body, page), {
+		// A canned answer stands in for the read-only fork that answers in a live session.
+		ask: async (body) => {
+			if (!parseQuestion(body, page)) return undefined;
+			await new Promise((resolve) => setTimeout(resolve, 600));
+			return "The loop stops for four reasons:\n\n1. No attempts are left.\n2. The status is not retryable.\n3. The request is not idempotent.\n4. The wait would overrun `budgetMs`.\n\n```ts\nif (Date.now() - started + delay > policy.budgetMs) throw new HttpError(response);\n```";
+		},
+	});
 	writeFileSync(join(out, "url.txt"), session.url);
 	const result = await session.result;
 	session.close();
 	writeFileSync(join(out, "result.txt"), formatReviewResult(page, result, "/tmp/saved.html"));
-	writeFileSync(join(out, "saved.html"), embedPage(template, { ...page, session: { token: "", live: false }, result }));
+	writeFileSync(join(out, "saved.html"), embedPage(template, { ...page, session: { token: "", live: false, ask: false }, result }));
 });

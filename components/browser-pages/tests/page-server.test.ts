@@ -15,8 +15,8 @@ afterEach(() => {
 	for (const close of closers.splice(0)) close();
 });
 
-async function open(signal?: AbortSignal) {
-	const session = await openPageSession("<p>page</p>", "secret", parse, signal);
+async function open(signal?: AbortSignal, ask?: (body: unknown, signal: AbortSignal) => Promise<string | undefined>) {
+	const session = await openPageSession("<p>page</p>", "secret", parse, { signal, ask });
 	closers.push(session.close);
 	return session;
 }
@@ -41,6 +41,48 @@ describe("openPageSession", () => {
 		expect((await post("secret", { ok: true })).status).toBe(200);
 		await expect(session.result).resolves.toEqual({ ok: true });
 		expect((await post("secret", { ok: true })).status).toBe(409);
+	});
+
+	it("answers questions with the token, rejects malformed ones, and reports failures", async () => {
+		const session = await open(undefined, async (body) => {
+			const { question } = body as { question?: string };
+			if (question === "boom") throw new Error("fork failed");
+			return question ? `answer to ${question}` : undefined;
+		});
+		const ask = (token: string, body: unknown) =>
+			fetch(new URL("/ask", session.url), {
+				method: "POST",
+				headers: { "x-page-token": token, "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+		expect((await ask("wrong", { question: "why" })).status).toBe(403);
+		expect(await (await ask("secret", { question: "why" })).json()).toEqual({ answer: "answer to why" });
+		expect((await ask("secret", {})).status).toBe(400);
+		const failed = await ask("secret", { question: "boom" });
+		expect([failed.status, await failed.text()]).toEqual([502, "fork failed"]);
+	});
+
+	it("stops a pending answer when the session closes", async () => {
+		let stopped = false;
+		const session = await open(
+			undefined,
+			(_body, stop) =>
+				new Promise((_resolve, reject) =>
+					stop.addEventListener("abort", () => {
+						stopped = true;
+						reject(new Error("stopped"));
+					}),
+				),
+		);
+		const pending = fetch(new URL("/ask", session.url), {
+			method: "POST",
+			headers: { "x-page-token": "secret" },
+			body: JSON.stringify({ question: "slow" }),
+		}).catch(() => undefined);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		session.close();
+		await pending;
+		expect(stopped).toBe(true);
 	});
 
 	it("rejects the result when the caller aborts", async () => {

@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { type Static, Type } from "typebox";
 
 import { generatedPaths, readBaseFile, readRepoDiff, type RawLine } from "./git-diff.js";
+import { parseQuestion } from "./ask-agent.js";
 import { highlightLines, markRange } from "./highlight.js";
 import type {
 	Attention,
@@ -552,7 +553,7 @@ export async function buildCodeReviewPage(
 		notes,
 		decisions,
 		warnings,
-		session: { token, live: true },
+		session: { token, live: true, ask: false },
 	};
 	return { page, root: diff.root };
 }
@@ -610,11 +611,18 @@ export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewRe
 			note: typeof d.note === "string" && d.note.trim() ? d.note.trim() : undefined,
 		});
 	}
+	const asked: ReviewResult["asked"] = [];
+	for (const a of Array.isArray(body.asked) ? body.asked : []) {
+		const q = parseQuestion(a, page);
+		if (!q || !isObject(a) || typeof a.answer !== "string") return undefined;
+		asked.push({ ...q, answer: a.answer });
+	}
 	const seen = body.seen.filter((id): id is string => typeof id === "string" && id in page.hunks);
 	return {
 		verdict: body.verdict as ReviewResult["verdict"],
 		summary: typeof body.summary === "string" && body.summary.trim() ? body.summary.trim() : undefined,
 		comments,
+		asked,
 		decisions,
 		seen,
 		submittedAt: new Date().toISOString(),
@@ -654,6 +662,18 @@ export function formatReviewResult(page: CodeReviewPage, result: ReviewResult, s
 			const reply = c.replyTo && notes.get(c.replyTo);
 			out.push(`- ${c.kind} · ${where}${reply ? ` · reply to your note "${reply.text}"` : ""}: ${c.text}`);
 			if (quote && !reply) out.push(`  > ${quote}`);
+		}
+	}
+	if (result.asked.length > 0) {
+		out.push(
+			"",
+			`Questions the reviewer asked in the page, answered there by a read-only fork of you (${result.asked.length}):`,
+		);
+		for (const a of result.asked) {
+			const hunk = page.hunks[a.hunk];
+			if (!hunk) continue;
+			out.push(`- ${anchorText(hunk, a.start, a.end).where}: ${a.question}`);
+			out.push(...a.answer.split("\n").map((line) => `  > ${line}`));
 		}
 	}
 	const answered = result.decisions.filter((d) => page.decisions.some((x) => x.id === d.id));

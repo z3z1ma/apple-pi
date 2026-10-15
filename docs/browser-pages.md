@@ -43,6 +43,7 @@ The tool call carries structure and prose, never code:
   | `R` | Mark the chapter seen |
   | `X`/`⇧X` | Collapse or expand one hunk, or every hunk on the page |
   | `C` | Comment |
+  | `A` | Ask the agent |
   | `B` | Brief |
   | `N` | Notes |
   | `Q` | Next open question: opens its hunk, unfolds its lines, and scrolls to it |
@@ -54,6 +55,7 @@ The tool call carries structure and prose, never code:
   | `?` | Show all keys |
 
 - **Comments:** click a line number to comment on it, and shift-click another to extend the range. Each comment has a kind: change, question, concern, nit, or praise. A comment can also reply to an agent note.
+- **Ask the agent:** the composer's second mode (or `A` on a hunk) asks a question about the selected lines. A read-only fork of the live conversation answers it, the way `clarify` does: it shares the session's request prefix, sees the pending `review_code` call as a placeholder, can use only `read`, `grep`, `find`, and `ls`, and records its usage as "Review question". The answer appears under the lines; the agent's main task is not interrupted. An answer can become a comment, or be dismissed. A page opened from a session that cannot fork has no ask mode.
 
 ## The result
 
@@ -62,6 +64,7 @@ The tool blocks until the reviewer submits. The agent then receives:
 - the verdict: approve, approve with notes, request changes, or closed without a verdict;
 - the reviewer's summary;
 - each comment with its kind, its `file:line` anchor, and the first line of the code it covers;
+- each question asked in the page that was not dismissed, with the answer the fork gave;
 - the answers to decisions, saying whether the reviewer kept or overrode the agent's choice;
 - unanswered questions;
 - how many hunks were marked seen;
@@ -76,7 +79,7 @@ Every submitted review is saved as one self-contained HTML file in `<agent dir>/
 
 ## Security
 
-The server listens on 127.0.0.1 on a random port. It serves the page only to requests that carry the session token and name the loopback host, and it accepts one submission.
+The server listens on 127.0.0.1 on a random port. It serves the page, answers questions, and accepts a submission only for requests that carry the session token and name the loopback host. It accepts one submission, and closing the page server stops any answer still running.
 
 ## Maintaining the page
 

@@ -11,6 +11,8 @@ import {
 	ReviewCodeParamsSchema,
 	type ReviewCodeParams,
 } from "./code-review.js";
+import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
+import { askAgent, parseQuestion } from "./ask-agent.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, readTemplate, savePage } from "./saved-page.js";
 
@@ -23,6 +25,7 @@ const text = (value: string) => [{ type: "text" as const, text: value }];
 
 export default function browserPages(pi: ExtensionAPI): void {
 	const sessions = new Set<() => void>();
+	trackLiveSessions();
 
 	pi.registerTool({
 		name: REVIEW_CODE_TOOL_NAME,
@@ -45,19 +48,21 @@ export default function browserPages(pi: ExtensionAPI): void {
 			const token = randomBytes(24).toString("hex");
 			const { page, root } = await buildCodeReviewPage(params as ReviewCodeParams, ctx.cwd, token);
 			const template = await readTemplate();
-			const session = await openPageSession(
-				embedPage(template, page),
-				token,
-				(body) => parseReviewResult(body, page),
+			page.session.ask = !!liveSession(ctx);
+			const session = await openPageSession(embedPage(template, page), token, (body) => parseReviewResult(body, page), {
 				signal,
-			);
+				ask: async (body, stop) => {
+					const question = parseQuestion(body, page);
+					return question && askAgent(ctx, page, question, stop);
+				},
+			});
 			sessions.add(session.close);
 			onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
 			openInBrowser(session.url);
 			try {
 				const result = await session.result;
 				const saved = await savePage(
-					embedPage(template, { ...page, session: { token: "", live: false }, result }),
+					embedPage(template, { ...page, session: { token: "", live: false, ask: false }, result }),
 					root,
 					page.title,
 				);

@@ -56,6 +56,10 @@ function keyChange(key: string, shift: boolean, st: State, m: Model, readOnly: b
 				: undefined;
 		case "c":
 			return f && st.page !== "overview" && !readOnly ? (d) => composeOn(m, d, f) : undefined;
+		case "a":
+			return f && st.page !== "overview" && !readOnly && m.page.session.ask
+				? (d) => composeOn(m, d, f, "ask")
+				: undefined;
 		case "b": {
 			if (st.page === "overview") return undefined;
 			const chapter = f ? m.chapterOf[f] : undefined;
@@ -118,6 +122,57 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 		[m, page.session.token, update],
 	);
 
+	const askQuestion = useCallback(
+		async (entry: { id: string; hunk: string; start: number; end: number; question: string }) => {
+			update((d) => {
+				d.asks = [...d.asks.filter((a) => a.id !== entry.id), entry];
+			});
+			let answer: string | undefined;
+			let error: string | undefined;
+			try {
+				const response = await fetch("/ask", {
+					method: "POST",
+					headers: { "content-type": "application/json", "x-page-token": page.session.token },
+					body: JSON.stringify({ hunk: entry.hunk, start: entry.start, end: entry.end, question: entry.question }),
+				});
+				if (response.ok) answer = ((await response.json()) as { answer?: string }).answer;
+				else error = (await response.text()) || `The agent could not answer (${response.status}).`;
+			} catch {
+				error = "Could not reach the agent. Is the session still open?";
+			}
+			update((d) => {
+				const target = d.asks.find((a) => a.id === entry.id);
+				if (!target) return;
+				if (answer) target.answer = answer;
+				else target.error = error ?? "The agent gave no answer.";
+			});
+		},
+		[page.session.token, update],
+	);
+	const ask = useCallback(() => {
+		const c = stateRef.current.composer;
+		if (!c?.text.trim()) return;
+		const entry = {
+			id: `q${Date.now().toString(36)}`,
+			hunk: c.hunk,
+			start: c.start,
+			end: c.end,
+			question: c.text.trim(),
+		};
+		update((d) => {
+			d.composer = null;
+		});
+		void askQuestion(entry);
+	}, [askQuestion, update]);
+	const retry = useCallback(
+		(id: string) => {
+			const entry = stateRef.current.asks.find((a) => a.id === id);
+			if (entry)
+				void askQuestion({ id, hunk: entry.hunk, start: entry.start, end: entry.end, question: entry.question });
+		},
+		[askQuestion],
+	);
+
 	useEffect(() => {
 		document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
@@ -154,8 +209,10 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 			if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 				e.preventDefault();
 				if (readOnly) return;
-				if (target.id === "composer-text") update(saveComposer);
-				else if (st.modal === "verdict" && st.verdict && st.verdict !== "dismissed") void submit(st.verdict);
+				if (target.id === "composer-text") {
+					if (st.composer?.mode === "ask") ask();
+					else update(saveComposer);
+				} else if (st.modal === "verdict" && st.verdict && st.verdict !== "dismissed") void submit(st.verdict);
 				else
 					update((d) => {
 						d.modal = "verdict";
@@ -186,9 +243,9 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [m, readOnly, submit, update]);
+	}, [ask, m, readOnly, submit, update]);
 
-	const review: Review = { m, s, update, readOnly };
+	const review: Review = { m, s, update, readOnly, ask, retry };
 	const body = s.page === "overview" ? <Overview /> : s.page === "hunk" ? <HunkPage /> : <ChapterPage />;
 	return (
 		<ReviewContext.Provider value={review}>

@@ -1,9 +1,8 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { abortable } from "../../shared/src/abortable.js";
-import { liveSession, startFork } from "../../shared/src/forked-continuation.js";
+import { closePendingCalls, liveSession, startFork } from "../../shared/src/forked-continuation.js";
 
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const CLARIFICATION_FRAME = `You are an ephemeral read-only fork of the agent that delegated work to the questioner.
@@ -11,30 +10,6 @@ Answer only the child's clarification question, using the existing user intent, 
 Distinguish settled decisions from your own recommendations and uncertainty. Requests that need new user authorization remain unresolved and should be raised with the live parent. Your answer is advice to the child, not a new user instruction or approval.
 The parent continues independently. Its unfinished tool calls have snapshot placeholders rather than results. Repository reads see current files, which may have changed since the snapshot.
 Return a direct, self-contained answer to the child. Your messages stay in this fork and only your answer returns to the child.`;
-
-/** Keep the parent's prefix intact and close only its still-unanswered calls at the end. */
-function closePendingCalls(messages: AgentMessage[]): void {
-	const pending = new Map<string, { id: string; name: string }>();
-	for (const message of messages) {
-		if (message.role === "assistant") {
-			for (const block of message.content) if (block.type === "toolCall") pending.set(block.id, block);
-		} else if (message.role === "toolResult") pending.delete(message.toolCallId);
-	}
-	for (const call of pending.values())
-		messages.push({
-			role: "toolResult",
-			toolCallId: call.id,
-			toolName: call.name,
-			content: [
-				{
-					type: "text",
-					text: "Parent tool result unavailable at clarification snapshot time. The fork has not executed this call.",
-				},
-			],
-			isError: true,
-			timestamp: Date.now(),
-		});
-}
 
 export function createClarifyTool(parent: ExtensionContext) {
 	return defineTool({
@@ -55,7 +30,10 @@ export function createClarifyTool(parent: ExtensionContext) {
 			if (!session) throw new Error("Cannot clarify: the live parent session is not available.");
 			const model = session.agent.state.model;
 			const messages = structuredClone(session.sessionManager.buildSessionProjection().messages);
-			closePendingCalls(messages);
+			closePendingCalls(
+				messages,
+				"Parent tool result unavailable at clarification snapshot time. The fork has not executed this call.",
+			);
 			const fork = startFork(session, {
 				messages,
 				append: {

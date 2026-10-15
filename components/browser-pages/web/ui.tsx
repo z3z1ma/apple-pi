@@ -15,6 +15,44 @@ export function inlineMarkdown(text: string): string {
 
 export const plain = (text: string) => text.replace(/[`*]/g, "");
 
+/** Block Markdown for agent answers: fenced code, lists, headings as bold lines, and paragraphs. Escapes first. */
+export function blockMarkdown(text: string): string {
+	const out: string[] = [];
+	const lines = text.replace(/\r\n/g, "\n").split("\n");
+	let i = 0;
+	while (i < lines.length) {
+		const line = lines[i];
+		if (line.startsWith("```")) {
+			const code: string[] = [];
+			for (i++; i < lines.length && !lines[i].startsWith("```"); i++) code.push(lines[i]);
+			i++;
+			out.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+		} else if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+			const ordered = /^\s*\d+\./.test(line);
+			const items: string[] = [];
+			for (; i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i]); i++)
+				items.push(`<li>${inlineMarkdown(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""))}</li>`);
+			out.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
+		} else if (line.trim()) {
+			const para: string[] = [];
+			for (; i < lines.length && lines[i].trim() && !/^(```|\s*([-*]|\d+\.)\s+)/.test(lines[i]); i++)
+				para.push(lines[i].replace(/^#+\s*/, ""));
+			const heading = /^#+\s/.test(line);
+			out.push(
+				heading
+					? `<p><strong>${inlineMarkdown(para.join(" "))}</strong></p>`
+					: `<p>${inlineMarkdown(para.join(" "))}</p>`,
+			);
+		} else i++;
+	}
+	return out.join("");
+}
+
+export function Answer({ text }: { text: string }) {
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: blockMarkdown escapes the text before adding tags.
+	return <div className="answer" dangerouslySetInnerHTML={{ __html: blockMarkdown(text) }} />;
+}
+
 export function Md({
 	text,
 	as: Tag = "span",

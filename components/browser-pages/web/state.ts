@@ -9,6 +9,19 @@ export interface Composer {
 	kind: CommentKind;
 	text: string;
 	replyTo?: string;
+	/** "ask" sends the text to the agent as a question instead of saving a comment. */
+	mode: "comment" | "ask";
+}
+
+/** A question asked in the page; `answer` or `error` arrives later. */
+export interface Ask {
+	id: string;
+	hunk: string;
+	start: number;
+	end: number;
+	question: string;
+	answer?: string;
+	error?: string;
 }
 
 export interface State {
@@ -28,6 +41,7 @@ export interface State {
 	groupClosed: Record<string, boolean>;
 	decisions: Record<string, { choice: number; note?: string }>;
 	comments: (ReviewComment & { id: string })[];
+	asks: Ask[];
 	composer: Composer | null;
 	verdict: Verdict | null;
 	summary: string;
@@ -60,6 +74,7 @@ export function initialState(result: ReviewResult | undefined): State {
 		groupClosed: {},
 		decisions: Object.fromEntries((result?.decisions ?? []).map((d) => [d.id, { choice: d.choice, note: d.note }])),
 		comments: (result?.comments ?? []).map((c, i) => ({ ...c, id: `r${i}` })),
+		asks: (result?.asked ?? []).map((a, i) => ({ ...a, id: `q${i}` })),
 		composer: null,
 		verdict: result?.verdict ?? null,
 		summary: result?.summary ?? "",
@@ -236,14 +251,14 @@ export function setLens(m: Model, s: State, lens: State["lens"]): void {
 	else s.page = "overview";
 }
 
-export function composeOn(m: Model, s: State, id: string): void {
+export function composeOn(m: Model, s: State, id: string, mode: Composer["mode"] = "comment"): void {
 	focusHunk(m, s, id, { scroll: false });
 	s.open[id] = true;
 	const i = Math.max(
 		0,
 		m.page.hunks[id].lines.findIndex((l) => l.t !== " "),
 	);
-	s.composer = { hunk: id, anchor: i, start: i, end: i, kind: "change", text: "" };
+	s.composer = { hunk: id, anchor: i, start: i, end: i, kind: "change", text: "", mode };
 }
 
 export function saveComposer(s: State): void {
@@ -266,6 +281,7 @@ export function toResult(m: Model, s: State, verdict: Verdict) {
 		verdict,
 		summary: s.summary.trim() || undefined,
 		comments: s.comments.map(({ id: _id, ...c }) => c),
+		asked: s.asks.flatMap(({ id: _id, error: _error, answer, ...a }) => (answer ? [{ ...a, answer }] : [])),
 		decisions: Object.entries(s.decisions).map(([id, d]) => ({ id, choice: d.choice, note: d.note })),
 		seen: m.page.order.filter((id) => s.seen[id]),
 	};
