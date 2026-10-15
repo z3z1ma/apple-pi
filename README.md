@@ -295,7 +295,7 @@ flowchart TB
         Parent["Primary Agent"] -->|Spawns scoped teammate| Child["Subagent Session<br/>(agent-manager.ts / agent-runner.ts)"]
         Parent -.->|Private read-only side conversation| BTW["/btw<br/>(btw.ts / btw-viewer.ts)"]
         Child -->|Works in its own persisted Pi session| Child
-        Child -->|Final report after in-band review<br/>(completion-reflection.ts / outcome-framing.ts)| Parent
+        Child -->|"Final report after in-band review<br/>(completion-reflection.ts / outcome-framing.ts)"| Parent
     end
 
     subgraph Tournament["B. Speculative Tournaments (components/branch-search)"]
