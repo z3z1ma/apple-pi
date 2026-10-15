@@ -27,7 +27,9 @@ export function TopBar() {
 	return (
 		<header className="top">
 			<div className="top-id">
-				<span className="logo" />
+				<span className="logo" aria-hidden="true">
+					🥧
+				</span>
 				<Md className="top-title" text={m.page.title} />
 				<span className="branch">{m.page.head}</span>
 			</div>

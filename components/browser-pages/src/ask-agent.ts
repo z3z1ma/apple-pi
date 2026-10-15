@@ -1,40 +1,20 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { closePendingCalls, liveSession, startFork } from "../../shared/src/forked-continuation.js";
+import { anchorText, type Question } from "./code-review.js";
 import type { CodeReviewPage } from "./page-data.js";
 
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const FRAME = `You are an ephemeral read-only fork of the agent that opened a code review page for the user. The user is reviewing your change in that page and asks about the lines below. Answer the question directly and briefly, grounded in this conversation, the code, and the repository. You can use read, grep, find, and ls; every other tool is blocked. Say plainly when you are not sure.
 Your answer appears next to those lines in the page. It is not a message in the main conversation and it changes no code. The review_code call is still waiting for the user's verdict.`;
 
-export interface Question {
-	hunk: string;
-	start: number;
-	end: number;
-	question: string;
-}
-
-/** A question about lines the page actually shows, or undefined. */
-export function parseQuestion(body: unknown, page: CodeReviewPage): Question | undefined {
-	if (typeof body !== "object" || body === null) return undefined;
-	const { hunk, start, end, question } = body as Record<string, unknown>;
-	if (typeof hunk !== "string" || typeof question !== "string" || !question.trim()) return undefined;
-	const lines = page.hunks[hunk]?.lines;
-	if (!lines || !Number.isInteger(start) || !Number.isInteger(end)) return undefined;
-	if ((start as number) < 0 || (end as number) < (start as number) || (end as number) >= Math.max(1, lines.length))
-		return undefined;
-	return { hunk, start: start as number, end: end as number, question: question.trim() };
-}
-
 function excerpt(page: CodeReviewPage, q: Question): { where: string; code: string } {
 	const hunk = page.hunks[q.hunk];
-	const lines = hunk.lines.slice(q.start, q.end + 1);
-	const numbers = lines.map((l) => l.n).filter((n): n is number => n !== undefined);
-	const where = numbers.length
-		? `${hunk.file}:${numbers[0]}${numbers.length > 1 ? `-${numbers[numbers.length - 1]}` : ""}`
-		: `${hunk.file}:old ${lines[0]?.o ?? "?"}`;
-	const code = lines.map((l) => `${l.t}${l.s.map((seg) => seg.t).join("")}`).join("\n");
-	return { where, code };
+	const code = hunk.lines
+		.slice(q.start, q.end + 1)
+		.map((l) => `${l.t}${l.s.map((seg) => seg.t).join("")}`)
+		.join("\n");
+	return { where: anchorText(hunk, q.start, q.end).where, code };
 }
 
 /**

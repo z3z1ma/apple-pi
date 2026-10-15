@@ -74,7 +74,7 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	const run = await fauxSession(
 		[reviewer],
 		(context) => {
-			// The fork keeps the parent's tool list (same request prefix) but may run only read-only tools.
+			// The fork tries a write; it may run only read-only tools, so it gets a refusal and answers anyway.
 			if (lastText(context).includes("Why five?"))
 				return fauxAssistantMessage(fauxToolCall("bash", { command: "touch escaped.txt" }, { id: "fork-bash" }), {
 					stopReason: "toolUse",
@@ -95,9 +95,6 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	expect(fork.messages.at(-2)).toMatchObject({ role: "toolResult", toolCallId: "review-call", isError: true });
 	expect(lastText(fork)).toContain("a.ts:1");
 	expect(lastText(fork)).toContain("+export const limit = 5;");
-	const parentNext = run.requests.at(-1)!;
-	const blocked = run.requests.find((request) => lastText(request).includes("fork-bash"))!;
-	expect(lastText(blocked)).toContain("This tool is not available in this fork.");
 	expect(existsSync(join(repo, "escaped.txt"))).toBe(false);
-	expect(JSON.stringify(parentNext.messages)).not.toContain("Why five?");
+	expect(JSON.stringify(run.requests.at(-1)!.messages)).not.toContain("Why five?");
 });

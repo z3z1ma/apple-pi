@@ -267,10 +267,8 @@ h2 code,
 	white-space: nowrap;
 }
 .logo {
-	width: 18px;
-	height: 18px;
-	border-radius: 6px;
-	background: conic-gradient(from 210deg, var(--agent), var(--accent), var(--add-ink), var(--agent));
+	font-size: 18px;
+	line-height: 1;
 	flex: none;
 }
 .chev {

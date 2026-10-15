@@ -7,8 +7,7 @@ import { dirname, join } from "node:path";
 
 import { it } from "vitest";
 
-import { parseQuestion } from "../src/ask-agent.js";
-import { buildCodeReviewPage, formatReviewResult, parseReviewResult } from "../src/code-review.js";
+import { buildCodeReviewPage, formatReviewResult, parseQuestion, parseReviewResult } from "../src/code-review.js";
 import { openPageSession } from "../src/page-server.js";
 import { embedPage, readTemplate } from "../src/saved-page.js";
 

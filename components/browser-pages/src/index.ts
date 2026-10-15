@@ -6,13 +6,14 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	buildCodeReviewPage,
 	formatReviewResult,
+	parseQuestion,
 	parseReviewResult,
 	REVIEW_CODE_TOOL_NAME,
 	ReviewCodeParamsSchema,
 	type ReviewCodeParams,
 } from "./code-review.js";
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
-import { askAgent, parseQuestion } from "./ask-agent.js";
+import { askAgent } from "./ask-agent.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, readTemplate, savePage } from "./saved-page.js";
 

@@ -4,7 +4,6 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { type Static, Type } from "typebox";
 
 import { generatedPaths, readBaseFile, readRepoDiff, type RawLine } from "./git-diff.js";
-import { parseQuestion } from "./ask-agent.js";
 import { highlightLines, markRange } from "./highlight.js";
 import type {
 	Attention,
@@ -564,6 +563,25 @@ const VERDICTS = new Set(["approve", "approve_notes", "changes", "dismissed"]);
 const KINDS = new Set(["change", "question", "concern", "nit", "praise"]);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
+export interface Question {
+	hunk: string;
+	start: number;
+	end: number;
+	question: string;
+}
+
+/** A question about lines the page actually shows, or undefined. */
+export function parseQuestion(body: unknown, page: CodeReviewPage): Question | undefined {
+	if (!isObject(body) || typeof body.hunk !== "string" || typeof body.question !== "string" || !body.question.trim())
+		return undefined;
+	const lines = page.hunks[body.hunk]?.lines;
+	const start = Number(body.start);
+	const end = Number(body.end);
+	if (!lines || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) return undefined;
+	if (end >= Math.max(1, lines.length)) return undefined;
+	return { hunk: body.hunk, start, end, question: body.question.trim() };
+}
+
 /** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewResult | undefined {
 	if (!isObject(body) || !VERDICTS.has(body.verdict as string)) return undefined;
@@ -631,7 +649,8 @@ export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewRe
 
 // ---------------------------------------------------------------------------- result for the model
 
-function anchorText(hunk: Hunk, start: number, end: number): { where: string; quote: string } {
+/** The `file:41-43` anchor of lines in a hunk, and the first non-blank line they cover. */
+export function anchorText(hunk: Hunk, start: number, end: number): { where: string; quote: string } {
 	const lines = hunk.lines.slice(start, end + 1);
 	const news = lines.map((l) => l.n).filter((n): n is number => n !== undefined);
 	const where = news.length
