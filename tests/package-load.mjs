@@ -85,6 +85,15 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
+				extension.path.endsWith("code-context.ts") &&
+				(extension.handlers.get("tool_call")?.length ?? 0) > 0 &&
+				(extension.handlers.get("tool_result")?.length ?? 0) > 0,
+		),
+		"missing code context sidecar delivery and edit gate",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
 				extension.path.endsWith("vroom.ts") && (extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
 		),
 		"missing vroom (fast mode) provider hook",
@@ -183,6 +192,7 @@ try {
 		"ledger_status",
 		"wiki_lint",
 		"wiki_references",
+		"context_lint",
 		"task",
 		"bash",
 		"search_branches",
@@ -318,6 +328,7 @@ try {
 		"package manifest must not include removed reminders source",
 	);
 	assert(manifest.files.includes("components/wiki/src/"), "package manifest omits wiki source");
+	assert(manifest.files.includes("components/code-context/src/"), "package manifest omits code context source");
 	assert(manifest.files.includes("components/tasks/src/"), "package manifest omits tasks source");
 	assert(manifest.files.includes("components/prompt-stash/src/"), "package manifest omits prompt-stash source");
 	assert(

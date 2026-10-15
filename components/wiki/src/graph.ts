@@ -497,6 +497,13 @@ export async function lintWiki(start: string, signal?: AbortSignal): Promise<Wik
 	};
 }
 
+/** Whether each Obsidian link target names a wiki page, for checking links from outside `.wiki/`. */
+export async function wikiPageExists(start: string, signal?: AbortSignal): Promise<(target: string) => boolean> {
+	const graph = await loadWikiGraph(start, signal);
+	const keys = new Set(graph.pages.map((page) => page.key));
+	return (target) => keys.has(slugKey(target));
+}
+
 function normalizeTargetPath(target: string): string {
 	const normalized = target.replace(/^@/, "").replaceAll("\\", "/").replace(/^\.\//, "");
 	if (normalized.startsWith("/") || normalized.split("/").includes("..")) {

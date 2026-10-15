@@ -11,6 +11,7 @@ import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
 import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
+import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
 
 const marker = `<${WIKI_SYSTEM_PROMPT_TAG}>`;
 describe("wiki workbench distribution", () => {
@@ -21,13 +22,14 @@ describe("wiki workbench distribution", () => {
 		);
 		const guidance = args[args.indexOf("--append-system-prompt") + 1];
 		expect(guidance).not.toContain(marker);
-		expect(args[args.indexOf("--tools") + 1]).toBe("read,wiki_lint,wiki_references");
+		expect(args[args.indexOf("--tools") + 1]).toBe("read,wiki_lint,wiki_references,context_lint");
 		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
 			AUTO_COMPACT_EXTENSION_PATH,
 			VROOM_EXTENSION_PATH,
 			HOME_SEARCH_GUARD_EXTENSION_PATH,
 			LEDGER_EXTENSION_PATH,
 			WIKI_EXTENSION_PATH,
+			CODE_CONTEXT_EXTENSION_PATH,
 			SESSION_SEARCH_EXTENSION_PATH,
 		]);
 	});
@@ -45,6 +47,7 @@ describe("wiki workbench distribution", () => {
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
+				CODE_CONTEXT_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				RTK_EXTENSION_PATH,
 			],
@@ -67,6 +70,7 @@ describe("wiki workbench distribution", () => {
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
+				CODE_CONTEXT_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				RTK_EXTENSION_PATH,
 				PAIR_EXTENSION_PATH,

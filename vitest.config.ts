@@ -19,6 +19,7 @@ export default defineConfig({
 			"components/tmux-sessions/tests/**/*.test.ts",
 			"components/input-editor/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",
+			"components/code-context/tests/**/*.test.ts",
 			"components/tasks/tests/**/*.test.ts",
 			"components/prompt-stash/tests/**/*.test.ts",
 			"components/terse-tools/tests/**/*.test.ts",

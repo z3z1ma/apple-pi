@@ -249,7 +249,13 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 	const processGroups = worktree && new Set<number>();
 	if (worktree) mkdirSync(worktree.tmp, { recursive: true, mode: 0o700 });
 	const result = runInFork(
-		{ sessionId: session.sessionManager.getSessionId(), cwd, processGroups, tmp: worktree?.tmp },
+		{
+			sessionId: session.sessionManager.getSessionId(),
+			cwd,
+			processGroups,
+			tmp: worktree?.tmp,
+			messages: () => fork.state.messages,
+		},
 		() => fork.prompt(request.append),
 	)
 		.finally(async () => {

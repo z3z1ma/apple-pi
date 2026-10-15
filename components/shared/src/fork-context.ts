@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 /**
  * A fork's own copy of the repository, the parent workspace whose paths map onto it, and the fork's
@@ -20,6 +21,8 @@ interface ForkContext {
 	readonly processGroups?: Set<number>;
 	/** The fork's private temporary directory, when it is bound to a worktree. */
 	readonly tmp?: string;
+	/** The fork's own conversation; the session manager its tool hooks see holds the parent's. */
+	readonly messages?: () => readonly AgentMessage[];
 }
 
 // Shared through globalThis so every module copy (reloads, tests, child loaders) sees one scope.
@@ -36,6 +39,12 @@ export function runInFork<T>(context: ForkContext, run: () => T): T {
 export function inForkedContinuation(sessionId?: string): boolean {
 	const scope = forkScope.getStore();
 	return scope !== undefined && (sessionId === undefined || scope.sessionId === sessionId);
+}
+
+/** The conversation of the fork whose tool is running, when that fork reuses the given session's tools. */
+export function forkMessages(sessionId: string): readonly AgentMessage[] | undefined {
+	const scope = forkScope.getStore();
+	return scope?.sessionId === sessionId ? scope.messages?.() : undefined;
 }
 
 /** The working directory of the fork whose tool is running, if that fork is bound to a worktree. */

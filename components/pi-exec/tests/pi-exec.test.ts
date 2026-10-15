@@ -28,6 +28,8 @@ import {
 	serializeAgentContext,
 	WIKI_EXTENSION_PATH,
 	WIKI_TOOL_NAMES,
+	CODE_CONTEXT_EXTENSION_PATH,
+	CONTEXT_LINT_TOOL_NAME,
 	WORKER_RETURN_EXTENSION_PATH,
 } from "../src/agent-workers.js";
 import { renderExecCall, renderExecResult } from "../src/ui.js";
@@ -337,7 +339,9 @@ describe("pi_exec agent binding", () => {
 		);
 		try {
 			const toolsFlag = prepared.args.indexOf("--tools");
-			expect(prepared.args[toolsFlag + 1]).toBe([`read`, `edit`, PI_EXEC_RETURN_TOOL, ...WIKI_TOOL_NAMES].join(","));
+			expect(prepared.args[toolsFlag + 1]).toBe(
+				[`read`, `edit`, PI_EXEC_RETURN_TOOL, ...WIKI_TOOL_NAMES, CONTEXT_LINT_TOOL_NAME].join(","),
+			);
 			expect(prepared.args).toContain("--no-extensions");
 			expect(prepared.args).toContain("--no-approve");
 			expect(prepared.args.filter((_, index, args) => args[index - 1] === "--extension")).toEqual([
@@ -346,6 +350,7 @@ describe("pi_exec agent binding", () => {
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
+				CODE_CONTEXT_EXTENSION_PATH,
 				SESSION_SEARCH_EXTENSION_PATH,
 				PAIR_EXTENSION_PATH,
 				WORKER_RETURN_EXTENSION_PATH,

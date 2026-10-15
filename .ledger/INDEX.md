@@ -8,3 +8,6 @@
 
 - `.ledger/202610041515-repository-history-replay/task.md` — in-progress — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
 
+- `.ledger/202610141906-code-context-sidecars/task.md` — in-progress — Code context sidecars with read injection and block-and-retry edit gate — `<file>.context` Markdown sidecars hold invariants and hazards; top-level reads append the whole sidecar plus a hash marker, and edit/write are blocked until the current marker is in the effective context. Includes context_lint and reflection/distill upkeep.
+
+- `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.

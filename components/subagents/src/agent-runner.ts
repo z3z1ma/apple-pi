@@ -19,6 +19,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
+import { CODE_CONTEXT_EXTENSION_PATH } from "../../../extensions/code-context.js";
 import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
@@ -96,6 +97,7 @@ export function childSessionExtensions(
 		additionalExtensionPaths.push(
 			LEDGER_EXTENSION_PATH,
 			WIKI_EXTENSION_PATH,
+			CODE_CONTEXT_EXTENSION_PATH,
 			SESSION_SEARCH_EXTENSION_PATH,
 			RTK_EXTENSION_PATH,
 		);

@@ -37,6 +37,7 @@ import type { ExecActivityCall } from "./ui.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
+import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../extensions/code-context.js";
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 
@@ -57,6 +58,8 @@ export {
 	SESSION_SEARCH_EXTENSION_PATH,
 	WIKI_EXTENSION_PATH,
 	WIKI_TOOL_NAMES,
+	CODE_CONTEXT_EXTENSION_PATH,
+	CONTEXT_LINT_TOOL_NAME,
 };
 
 export interface AgentRequest {
@@ -353,7 +356,7 @@ export function buildAgentCliArgs(
 	]
 		.filter(Boolean)
 		.join("\n\n");
-	const workerTools = [...new Set([...options.tools, ...WIKI_TOOL_NAMES])];
+	const workerTools = [...new Set([...options.tools, ...WIKI_TOOL_NAMES, CONTEXT_LINT_TOOL_NAME])];
 	const args = [
 		"--mode",
 		"json",
@@ -376,6 +379,8 @@ export function buildAgentCliArgs(
 		LEDGER_EXTENSION_PATH,
 		"--extension",
 		WIKI_EXTENSION_PATH,
+		"--extension",
+		CODE_CONTEXT_EXTENSION_PATH,
 		"--extension",
 		SESSION_SEARCH_EXTENSION_PATH,
 	];

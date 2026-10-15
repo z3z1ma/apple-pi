@@ -14,7 +14,7 @@ A forked continuation runs a prompt in a separate, in-memory copy of a live conv
 ## Limits
 
 - Pi gives extensions no handle on their `AgentSession`, so the harness records each session when it receives a prompt through `AgentSession.prompt`. A session that has never received a prompt cannot fork.
-- The fork has no runtime of its own. Pi has no detached session clone, so the fork reuses the parent's tools, extension hooks, UI, and services. The request is identical, but every tool and hook acts as if it ran in the parent session. A tool that reads the session (such as `update_notebook`) sees the parent branch, not the fork's messages. Subagents or tasks a fork starts appear in the parent's work panel. This sharing is intended for file edits and notebook updates.
+- The fork has no runtime of its own. Pi has no detached session clone, so the fork reuses the parent's tools, extension hooks, UI, and services. The request is identical, but every tool and hook acts as if it ran in the parent session. A tool that reads the session (such as `update_notebook`) sees the parent branch, not the fork's messages. A hook that needs the fork's own conversation reads it with `forkMessages(sessionId)`, as the [code context](code-context.md) edit gate does. Subagents or tasks a fork starts appear in the parent's work panel. This sharing is intended for file edits and notebook updates.
 - The fork does not use the parent's request preparation. It does not compact automatically, does not route virtual models, and does not retry automatically. A fork request also replaces the parent's pending Pi cache-warming run until the parent's next request.
 - A fork that edits files runs at the same time as any new user run. Edits to the same file can conflict.
 
