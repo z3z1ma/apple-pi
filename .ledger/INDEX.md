@@ -11,3 +11,5 @@
 - `.ledger/202610141906-code-context-sidecars/task.md` — in-progress — Code context sidecars with read injection and block-and-retry edit gate — `<file>.context` Markdown sidecars hold invariants and hazards; top-level reads append the whole sidecar plus a hash marker, and edit/write are blocked until the current marker is in the effective context. Includes context_lint and reflection/distill upkeep.
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
+
+- `.ledger/202610151241-browser-review-surfaces/task.md` — planning — Agent-structured browser review and understanding surfaces — Tool calls open ephemeral local web pages for code review, Markdown review, ledger task review, and human understanding; the agent structures content from blocks and review pages return anchored annotations plus a verdict.

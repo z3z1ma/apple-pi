@@ -1,0 +1,1313 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · Code review surface</title>
+<!--
+  PROTOTYPE. Throwaway. Three structurally different variants of the code review page on one file,
+  switchable with the bottom bar, the ←/→ keys, or ?variant=A|B|C. Fake data, in-memory state, no harness.
+-->
+<style>
+:root {
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  --font-serif: ui-serif, "New York", "Iowan Old Style", Charter, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f5f1; --surface: #fff; --surface-2: #fbfaf7; --surface-3: #f0eee8;
+  --ink: #1d1c19; --ink-2: #55524b; --ink-3: #8b877f; --ink-4: #bdb9b0;
+  --line: #e9e6df; --line-2: #d9d5cb;
+  --accent: #3b5bdb; --accent-bg: #eef2ff;
+  --agent: #6e4ee6; --agent-bg: #f6f3ff; --agent-line: #e4dcfd;
+  --add-bg: #edf8ef; --add-gutter: #dff2e3; --add-strong: #bfe6c8; --add-ink: #2b8a3e;
+  --del-bg: #fdf1f1; --del-gutter: #f9e2e2; --del-strong: #f5c6c6; --del-ink: #c92a2a;
+  --hunk-bg: #f8f7f3; --code-bg: #f0eee8;
+  --att-high: #e8590c; --att-medium: #e9a100; --att-low: #a8a49b;
+  --k-change: #e8590c; --k-question: #1c7ed6; --k-concern: #e9a100; --k-nit: #8b877f; --k-praise: #2f9e44;
+  --pass: #2f9e44; --fail: #e03131; --unverified: #e9a100;
+  --shadow: 0 1px 2px rgba(28, 24, 16, .04), 0 6px 20px rgba(28, 24, 16, .05);
+  --shadow-lg: 0 2px 6px rgba(28, 24, 16, .06), 0 24px 64px rgba(28, 24, 16, .16);
+  --tk-k: #a626a4; --tk-s: #3f8f3a; --tk-n: #986801; --tk-t: #b97a00; --tk-f: #4078f2; --tk-c: #a0a1a7; --tk-p: #0184bc;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0f11; --surface: #15161a; --surface-2: #18191e; --surface-3: #1f2026;
+  --ink: #ecebe7; --ink-2: #a9a7a1; --ink-3: #76746f; --ink-4: #4a4946;
+  --line: #25262c; --line-2: #33343c;
+  --accent: #7b93ff; --accent-bg: rgba(123, 147, 255, .12);
+  --agent: #a98bfa; --agent-bg: rgba(169, 139, 250, .07); --agent-line: rgba(169, 139, 250, .2);
+  --add-bg: rgba(46, 160, 67, .09); --add-gutter: rgba(46, 160, 67, .15); --add-strong: rgba(46, 160, 67, .34); --add-ink: #57d377;
+  --del-bg: rgba(248, 81, 73, .08); --del-gutter: rgba(248, 81, 73, .13); --del-strong: rgba(248, 81, 73, .32); --del-ink: #ff7b72;
+  --hunk-bg: #121317; --code-bg: #22232a;
+  --att-high: #ff8a4c; --att-medium: #f5c04a; --att-low: #6b6a66;
+  --k-change: #ff8a4c; --k-question: #5aa9ff; --k-concern: #f5c04a; --k-nit: #8b8984; --k-praise: #57d377;
+  --pass: #57d377; --fail: #ff6b6b; --unverified: #f5c04a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, .4), 0 30px 80px rgba(0, 0, 0, .55);
+  --tk-k: #c678dd; --tk-s: #98c379; --tk-n: #d19a66; --tk-t: #e5c07b; --tk-f: #61afef; --tk-c: #7f848e; --tk-p: #56b6c2;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+body[data-variant="B"] { overflow: hidden; }
+button { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+kbd { font: 500 10.5px var(--font-ui); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-2); border-bottom-width: 2px; color: var(--ink-3); background: var(--surface); margin-left: 2px; }
+.sp { flex: 1; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic-fill { fill: currentColor; stroke: none; }
+
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-weight: 500; font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; white-space: nowrap; }
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: transparent; }
+.btn.primary:hover { opacity: .88; }
+.btn.primary kbd { background: transparent; color: inherit; border-color: color-mix(in srgb, var(--bg) 35%, transparent); opacity: .8; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--surface-3); }
+.btn.lg { height: 40px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
+.btn.done { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 35%, var(--line-2)); }
+.btn[disabled] { opacity: .35; pointer-events: none; }
+.btn.block { width: 100%; justify-content: center; }
+.icon-btn { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+.icon-btn:hover { background: var(--surface-3); color: var(--ink); }
+.icon-btn[disabled] { opacity: .3; pointer-events: none; }
+.link { border: 0; background: none; padding: 0; color: var(--ink-3); font-size: 12.5px; cursor: pointer; }
+.link:hover { color: var(--ink); }
+.kbd-hint { font-size: 12px; color: var(--ink-3); }
+.count { font: 600 11px var(--font-ui); color: var(--ink-3); background: var(--surface-3); border-radius: 99px; padding: 1px 7px; }
+.n-add { color: var(--add-ink); font: 500 12px var(--font-mono); }
+.n-del { color: var(--del-ink); font: 500 12px var(--font-mono); }
+.branch { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); }
+.eyebrow { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-3); }
+.logo { width: 18px; height: 18px; border-radius: 6px; background: conic-gradient(from 210deg, var(--agent), var(--accent), var(--add-ink), var(--agent)); flex: none; }
+.progress { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.progress > div { height: 100%; background: var(--pass); border-radius: 4px; transition: width .4s var(--ease); }
+.att-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--att-low); display: inline-block; }
+.att-dot.att-high { background: var(--att-high); } .att-dot.att-medium { background: var(--att-medium); }
+.att-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-ui); letter-spacing: .02em; padding: 2px 8px 2px 7px; border-radius: 99px; color: var(--att-low); background: color-mix(in srgb, var(--att-low) 14%, transparent); text-transform: none; }
+.att-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.att-pill.att-high { color: var(--att-high); background: color-mix(in srgb, var(--att-high) 12%, transparent); }
+.att-pill.att-medium { color: var(--att-medium); background: color-mix(in srgb, var(--att-medium) 14%, transparent); }
+.att-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.att-bars i { width: 3px; border-radius: 1px; background: var(--line-2); }
+.att-bars i:nth-child(1) { height: 5px; } .att-bars i:nth-child(2) { height: 8.5px; } .att-bars i:nth-child(3) { height: 12px; }
+.att-bars.att-low i:nth-child(1) { background: var(--att-low); }
+.att-bars.att-medium i:nth-child(-n+2) { background: var(--att-medium); }
+.att-bars.att-high i { background: var(--att-high); }
+
+/* ---------- diff ---------- */
+.diff { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: var(--shadow); margin: 0 0 18px; }
+.diff-h { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.diff-h .path { font: 12.5px var(--font-mono); color: var(--ink-3); }
+.diff-h .path b { color: var(--ink); font-weight: 600; }
+.st { font: 600 10.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; color: var(--ink-3); background: var(--surface-3); }
+.st-A { color: var(--add-ink); background: var(--add-bg); }
+.hunk + .hunk { border-top: 1px solid var(--line); }
+.hunk-h { display: flex; align-items: baseline; gap: 12px; padding: 8px 14px 8px 102px; background: var(--hunk-bg); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.hunk-h .hs { flex: 1; }
+.hunk-h .hs code, p code, li code, .dec-q code, .dec-detail code, .co-b code, .note-b code, .cmt-b code, .v-l code, .vc-card-sum code, h2 code, .vb-tt code { font: .88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.hunk-h .hr { font: 11.5px var(--font-mono); color: var(--ink-3); white-space: nowrap; }
+.hunk-h.un .hs { color: var(--att-high); }
+.dl { display: grid; grid-template-columns: 84px 18px minmax(0, 1fr); font: 12.5px/1.7 var(--font-mono); position: relative; }
+.dl .g { display: grid; grid-template-columns: 1fr 1fr; border: 0; padding: 0 6px 0 0; background: transparent; color: var(--ink-4); font: inherit; text-align: right; cursor: pointer; position: relative; user-select: none; }
+.dl .g span { padding-right: 4px; }
+.dl .g:hover { color: var(--ink-2); }
+.dl:hover .g::before { content: "+"; position: absolute; left: 6px; top: 3px; width: 16px; height: 16px; border-radius: 5px; background: var(--accent); color: #fff; display: grid; place-items: center; font: 600 13px/1 var(--font-ui); box-shadow: 0 1px 3px rgba(0, 0, 0, .2); }
+.dl .sg { text-align: center; color: var(--ink-4); user-select: none; }
+.dl code { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 18px 0 4ch; text-indent: -4ch; tab-size: 2; }
+.diff.new .dl.add, .diff.new .dl.add .g { background: transparent; }
+.diff.new .dl.add .g { color: var(--ink-4); }
+.diff.new .dl .sg { visibility: hidden; }
+.diff.new .hunk { box-shadow: inset 3px 0 0 var(--add-strong); }
+.dl.add { background: var(--add-bg); } .dl.add .g { background: var(--add-gutter); color: color-mix(in srgb, var(--add-ink) 55%, transparent); } .dl.add .sg { color: var(--add-ink); }
+.dl.del { background: var(--del-bg); } .dl.del .g { background: var(--del-gutter); color: color-mix(in srgb, var(--del-ink) 55%, transparent); } .dl.del .sg { color: var(--del-ink); }
+.dl.has-c .g::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--k-change); }
+.dl.sel { background: var(--accent-bg); } .dl.sel .g { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.dl.sel .g::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+mark { color: inherit; border-radius: 3px; padding: 1px 0; }
+mark.wa { background: var(--add-strong); } mark.wd { background: var(--del-strong); }
+.tk-k { color: var(--tk-k); } .tk-s { color: var(--tk-s); } .tk-n { color: var(--tk-n); } .tk-t { color: var(--tk-t); }
+.tk-f { color: var(--tk-f); } .tk-c { color: var(--tk-c); font-style: italic; } .tk-p { color: var(--tk-p); } .tk-h { font-weight: 700; }
+
+/* inline blocks inside a diff: agent notes, comments, composer */
+.inl { margin: 8px 18px 10px 102px; font: 13.5px/1.55 var(--font-ui); }
+.note { padding: 10px 14px 10px 13px; border-radius: 10px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.note-h, .cmt-h { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-3); margin-bottom: 3px; }
+.note-h .who { color: var(--agent); font-weight: 600; }
+.note-h .ic { color: var(--agent); width: 13px; height: 13px; }
+.note-b { color: var(--ink); }
+.note .replies { margin-top: 10px; display: grid; gap: 8px; }
+.note .replies .cmt, .note .replies .composer { margin: 0; background: var(--surface); }
+.note-actions { margin-top: 6px; }
+.cmt { padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); border-left: 3px solid var(--k-change); box-shadow: var(--shadow); }
+.cmt-h .who { color: var(--ink); font-weight: 600; }
+.kind { font-weight: 600; font-size: 11px; letter-spacing: .02em; color: var(--k-change); }
+.k-question { --k: var(--k-question); } .k-change { --k: var(--k-change); } .k-concern { --k: var(--k-concern); } .k-nit { --k: var(--k-nit); } .k-praise { --k: var(--k-praise); }
+.cmt.k-question, .cmt.k-concern, .cmt.k-nit, .cmt.k-praise, .cmt.k-change { border-left-color: var(--k); }
+.cmt .kind { color: var(--k); }
+.cmt-h .where { font-family: var(--font-mono); font-size: 11.5px; }
+.av { width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 700 10px/18px var(--font-ui); text-align: center; }
+.composer { padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-2)); box-shadow: 0 0 0 4px var(--accent-bg), var(--shadow); }
+.composer-top { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; }
+.composer-top b { font-weight: 600; color: var(--ink); }
+.composer-top .kbd-hint { margin-left: auto; }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.kind-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--line-2); background: transparent; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.kind-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+.kind-chip.on { border-color: var(--k); color: var(--ink); background: color-mix(in srgb, var(--k) 10%, transparent); }
+textarea { width: 100%; resize: vertical; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: 14px/1.5 var(--font-ui); padding: 9px 11px; outline: none; transition: border-color .15s, box-shadow .15s; }
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); background: var(--surface); }
+.composer-foot, .vd-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+
+/* ---------- shared content blocks ---------- */
+.callout { display: flex; gap: 12px; padding: 13px 16px; border-radius: 12px; background: color-mix(in srgb, var(--att-medium) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--att-medium) 30%, var(--line)); margin: 18px 0; }
+.callout .co-ic { color: var(--att-medium); padding-top: 2px; }
+.co-t { font: 600 12px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; color: var(--att-medium); margin-bottom: 2px; }
+.co-b { font-size: 14px; line-height: 1.6; }
+.decision { padding: 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); margin: 18px 0; }
+.decision.open { border-color: color-mix(in srgb, var(--k-question) 40%, var(--line)); }
+.dec-h { display: flex; align-items: center; gap: 7px; font: 600 11.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); margin-bottom: 6px; }
+.decision.open .dec-h { color: var(--k-question); }
+.dec-h .ic { width: 14px; height: 14px; }
+.dec-done { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; color: var(--pass); text-transform: none; letter-spacing: 0; font-size: 12px; }
+.dec-q { font: 600 16px/1.4 var(--font-ui); margin-bottom: 4px; }
+.dec-ctx { margin: 0 0 12px; color: var(--ink-2); font-size: 13.5px; }
+.dec-opts { display: grid; gap: 6px; }
+.dec-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.dec-opt:hover { border-color: var(--line-2); background: var(--surface-3); }
+.dec-opt .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--ink-4); margin-top: 2px; flex: none; transition: all .15s; }
+.dec-opt.on { border-color: var(--accent); background: var(--accent-bg); }
+.dec-opt.on .radio { border: 5px solid var(--accent); }
+.dec-body { display: grid; gap: 2px; }
+.dec-label { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.dec-detail { color: var(--ink-2); font-size: 13px; }
+.tag-agent { display: inline-flex; align-items: center; gap: 4px; font: 600 10.5px var(--font-ui); color: var(--agent); background: var(--agent-bg); border: 1px solid var(--agent-line); padding: 1px 7px; border-radius: 99px; }
+.tag-agent .ic { width: 10px; height: 10px; }
+.dec-note { margin-top: 10px; font-size: 13.5px; }
+.verif { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.verif li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; font-size: 13.5px; line-height: 1.5; }
+.verif .v-ic { padding-top: 2px; }
+.v-d { margin-left: 6px; }
+.verif .v-ic .ic { width: 15px; height: 15px; }
+.v-pass .v-ic { color: var(--pass); } .v-fail .v-ic { color: var(--fail); } .v-unverified .v-ic { color: var(--unverified); }
+.v-l { font-weight: 500; }
+.v-d { color: var(--ink-3); font-size: 12.5px; }
+.verdict { display: grid; gap: 14px; }
+.vd-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-3); }
+.vd-stats b { color: var(--ink); font-weight: 600; }
+.vd-stats .warn { color: var(--att-medium); }
+.vd-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.vd-opt { display: grid; gap: 3px; text-align: left; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; transition: all .15s; }
+.vd-opt:hover { background: var(--surface-3); }
+.vd-l { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.vd-l::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--vc); }
+.vd-d { color: var(--ink-3); font-size: 12.5px; }
+.vd-approve { --vc: var(--pass); } .vd-approve_notes { --vc: var(--att-medium); } .vd-changes { --vc: var(--k-change); }
+.vd-opt.on { border-color: var(--vc); background: color-mix(in srgb, var(--vc) 9%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc) 14%, transparent); }
+
+/* ---------- overlays ---------- */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); animation: fade .18s var(--ease); }
+.modal { width: min(760px, calc(100vw - 48px)); max-height: calc(100vh - 96px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 22px 24px 24px; animation: rise .22s var(--ease); }
+.modal-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.modal-h h3 { margin: 0; font-size: 17px; font-weight: 650; }
+.modal-sub { color: var(--ink-3); font-size: 13px; margin: -8px 0 14px; }
+.sim { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-3); color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+pre.json { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 12px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.j-k { color: var(--tk-p); } .j-s { color: var(--tk-s); } .j-n { color: var(--tk-n); } .j-b { color: var(--tk-k); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes slide { from { transform: translateX(40px); opacity: 0; } }
+
+/* ---------- prototype switcher (not part of the design) ---------- */
+.proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 4px; padding: 5px 6px 5px 12px; border-radius: 99px; background: #111; color: #f2f2f2; box-shadow: 0 8px 30px rgba(0, 0, 0, .35); font: 12.5px var(--font-ui); }
+.proto-bar button { border: 0; background: transparent; color: #cfcfcf; height: 28px; min-width: 28px; padding: 0 9px; border-radius: 99px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.proto-bar button:hover { background: #2a2a2a; color: #fff; }
+.proto-tag { font: 700 10px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: #ffb547; margin-right: 6px; }
+.proto-v { min-width: 150px; text-align: center; }
+.proto-v b { color: #fff; margin-right: 4px; }
+.proto-sep { width: 1px; height: 18px; background: #333; margin: 0 4px; }
+
+/* ================= Variant A · Essay ================= */
+.va { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
+.va-toc { position: sticky; top: 0; height: 100vh; padding: 26px 18px 22px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.va-brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 14px; margin: 0 6px 22px; }
+.toc-label { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 0 8px 6px; }
+.toc { display: grid; gap: 1px; }
+.toc-i { display: grid; grid-template-columns: 22px 1fr 16px; gap: 8px; align-items: baseline; padding: 7px 8px; border-radius: 8px; font-size: 13.5px; color: var(--ink-2); transition: background .15s, color .15s; }
+.toc-i:hover { background: var(--surface-3); color: var(--ink); }
+.toc-i.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.toc-n { font: 11.5px var(--font-mono); color: var(--ink-4); }
+.toc-s { display: grid; place-items: center; align-self: center; }
+.toc-i.done { color: var(--ink-3); }
+.toc-i.done .toc-s { color: var(--pass); }
+.toc-i.done .toc-t { text-decoration: line-through; text-decoration-color: var(--ink-4); }
+.toc-sep { height: 1px; background: var(--line); margin: 10px 8px; }
+.toc-foot { margin-top: auto; padding: 0 8px; display: grid; gap: 8px; }
+.toc-meta { font-size: 12px; color: var(--ink-3); }
+.va-main { padding: 72px 56px 180px; }
+.va-col { max-width: 700px; margin: 0 auto; }
+.va-wide { max-width: 940px; margin: 26px auto 0; }
+.va-title { font: 600 42px/1.12 var(--font-serif); letter-spacing: -.012em; margin: 14px 0 18px; text-wrap: balance; }
+.va-lede { font: 19.5px/1.62 var(--font-serif); color: var(--ink-2); margin: 0 0 22px; text-wrap: pretty; }
+.va-meta { display: flex; gap: 16px; align-items: baseline; font-size: 13px; color: var(--ink-3); padding-bottom: 30px; border-bottom: 1px solid var(--line); }
+.va-brief { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 30px; }
+.brief-card { padding: 16px 18px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.brief-k { display: flex; align-items: center; gap: 7px; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 9px; }
+.brief-k .ic { color: var(--agent); width: 13px; height: 13px; }
+.brief-card p { margin: 0; font-size: 14px; line-height: 1.6; }
+.va-ch { padding-top: 104px; scroll-margin-top: 0; }
+.va-kick { display: flex; align-items: center; gap: 10px; font: 600 11.5px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.kick-n { font: 600 12px var(--font-mono); color: var(--ink-2); letter-spacing: 0; }
+.va-h2 { font: 600 30px/1.2 var(--font-serif); letter-spacing: -.01em; margin: 12px 0 16px; text-wrap: balance; }
+.va-prose p { font: 17.5px/1.72 var(--font-serif); margin: 0 0 16px; text-wrap: pretty; }
+.va-prose p code { font-size: .8em; }
+.va-ch-foot { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+.next-link { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 13.5px; }
+.next-link:hover { color: var(--ink); }
+.va-un-note { display: flex; gap: 10px; padding: 12px 16px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--att-high) 45%, var(--line-2)); color: var(--ink-2); font-size: 14px; }
+.va-un-note .ic { color: var(--att-high); margin-top: 2px; }
+
+/* ================= Variant B · Cockpit ================= */
+.vb { display: grid; grid-template-columns: 284px minmax(0, 1fr) 392px; grid-template-rows: 54px minmax(0, 1fr); height: 100vh; }
+.vb-top { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.vb-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vb-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vb-cov { flex: 1; display: flex; gap: 3px; height: 8px; max-width: 520px; margin-left: auto; }
+.vb-cov i { border-radius: 3px; background: var(--line); transition: background .3s; position: relative; }
+.vb-cov i.cov { background: var(--pass); }
+.vb-cov i.cur { box-shadow: 0 0 0 1.5px var(--ink); }
+.vb-cov-l { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.vb-nav { overflow: auto; padding: 16px 10px 90px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.vb-sec-k { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 6px 10px 8px; }
+.vb-ch { display: grid; grid-template-columns: 24px 1fr 18px; gap: 8px; align-items: start; text-align: left; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; transition: background .15s; }
+.vb-ch:hover { background: var(--surface-3); }
+.vb-ch.on { background: var(--surface); box-shadow: var(--shadow), inset 0 0 0 1px var(--line); }
+.vb-n { font: 600 12px/20px var(--font-mono); color: var(--ink-4); }
+.vb-ch.on .vb-n { color: var(--ink); }
+.vb-t { display: grid; gap: 2px; min-width: 0; }
+.vb-tt { font-size: 13.5px; font-weight: 550; line-height: 1.35; }
+.vb-ts { font-size: 12px; color: var(--ink-3); display: flex; gap: 5px; align-items: center; }
+.vb-ts .ic { width: 12px; height: 12px; }
+.vb-st { padding-top: 3px; display: grid; justify-items: end; }
+.vb-ch.done .vb-st { color: var(--pass); }
+.vb-ch.done .vb-tt { color: var(--ink-3); }
+.vb-files { display: grid; gap: 1px; }
+.vb-file { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; background: transparent; border-radius: 8px; text-align: left; cursor: pointer; font: 12px var(--font-mono); color: var(--ink-3); }
+.vb-file:hover { background: var(--surface-3); color: var(--ink); }
+.vb-file b { color: var(--ink-2); font-weight: 500; }
+.vb-file .chs { margin-left: auto; display: flex; gap: 3px; }
+.vb-file .chs span { font-size: 10.5px; padding: 0 4px; border-radius: 4px; background: var(--surface-3); color: var(--ink-3); }
+.vb-file .chs span.un { background: color-mix(in srgb, var(--att-high) 15%, transparent); color: var(--att-high); }
+.vb-stage { overflow: auto; padding: 28px 32px 120px; background: var(--bg); }
+.vb-stage-h { display: flex; gap: 20px; align-items: flex-start; margin: 4px 0 24px; }
+.vb-big { font: 600 44px/1 var(--font-mono); letter-spacing: -.04em; color: var(--ink); }
+.vb-big span { font-size: 15px; color: var(--ink-4); letter-spacing: 0; margin-left: 4px; }
+.vb-stage-h h2 { margin: 8px 0 0; font-size: 24px; font-weight: 650; letter-spacing: -.015em; line-height: 1.25; }
+.vb-chips { display: flex; gap: 8px; align-items: center; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.vb-stage-foot { display: flex; gap: 10px; margin-top: 8px; }
+.vb-brief { overflow: auto; border-left: 1px solid var(--line); background: var(--surface); padding: 0 22px 100px; }
+.tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 12px 0 10px; background: var(--surface); border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tabs button { border: 0; background: transparent; height: 30px; padding: 0 11px; border-radius: 8px; font-size: 13px; font-weight: 550; color: var(--ink-3); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.tabs button:hover { color: var(--ink); }
+.tabs button.on { background: var(--surface-3); color: var(--ink); }
+.vb-brief-k { display: flex; align-items: center; gap: 7px; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--agent); margin-bottom: 10px; }
+.vb-brief-k .ic { width: 13px; height: 13px; }
+.vb-prose p { margin: 0 0 12px; font-size: 14px; line-height: 1.65; color: var(--ink); }
+.vb-brief .callout, .vb-brief .decision { margin: 14px 0; }
+.vb-brief .vd-opts { grid-template-columns: 1fr; }
+.vb-sec { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+.vb-sec .vb-sec-k { margin: 0 0 10px; }
+.cl-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; margin-bottom: 8px; }
+.cl-item:hover { border-color: var(--line-2); }
+.cl-meta { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--ink-3); }
+.cl-meta .kind { color: var(--k); }
+.cl-text { font-size: 13.5px; }
+.empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 0; text-align: center; }
+
+/* ================= Variant C · Triage ================= */
+.vc { min-height: 100vh; padding-bottom: 140px; }
+.vc-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 24px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px) saturate(1.4); border-bottom: 1px solid var(--line); }
+.vc-bar-t { font-weight: 600; font-size: 14px; }
+.vc-prog { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-3); }
+.vc-prog .progress { width: 140px; }
+.vc-wrap { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+.vc-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; padding: 48px 0 32px; align-items: start; }
+.vc-hero h1 { font-size: 34px; line-height: 1.15; letter-spacing: -.025em; font-weight: 680; margin: 12px 0 14px; text-wrap: balance; }
+.vc-intent { font-size: 16px; line-height: 1.65; color: var(--ink-2); margin: 0 0 20px; text-wrap: pretty; }
+.vc-focus { display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.vc-focus .ic { color: var(--agent); margin-top: 2px; }
+.vc-focus .k, .vc-card-k { font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--agent); margin-bottom: 3px; }
+.vc-focus p { margin: 0; font-size: 14px; line-height: 1.6; }
+.vc-mapcard { padding: 18px 20px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.vc-mapcard-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.vc-mapcard-h h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.vc-mapcard-h span { color: var(--ink-3); font-size: 12px; }
+.map-row { display: grid; grid-template-columns: 180px 1fr 70px; gap: 12px; align-items: center; padding: 5px 0; }
+.map-path { font: 12px var(--font-mono); color: var(--ink-3); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; }
+.map-path b { color: var(--ink); font-weight: 500; }
+.map-blocks { display: flex; gap: 4px; align-items: center; }
+.map-b { height: 22px; border-radius: 6px; border: 1.5px solid var(--a); background: color-mix(in srgb, var(--a) 12%, transparent); cursor: pointer; display: grid; place-items: center; color: var(--surface); transition: transform .12s, background .2s; padding: 0; }
+.map-b:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--a) 26%, transparent); }
+.map-b.seen { background: var(--a); }
+.map-b .ic { width: 12px; height: 12px; stroke-width: 2.2; }
+.map-b.un { border-style: dashed; }
+.a-high { --a: var(--att-high); } .a-medium { --a: var(--att-medium); } .a-low { --a: var(--att-low); }
+.map-n { display: flex; gap: 6px; justify-content: flex-end; }
+.map-legend { display: flex; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.map-legend span { display: inline-flex; gap: 6px; align-items: center; }
+.map-legend i { width: 12px; height: 10px; border-radius: 3px; border: 1.5px solid var(--a); background: color-mix(in srgb, var(--a) 14%, transparent); }
+.vc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 40px; }
+.vc-panel { padding: 16px 18px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.vc-panel .k { font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+.vc-sec-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; }
+.vc-sec-h h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.vc-sec-h span { color: var(--ink-3); font-size: 13px; }
+.vc-qs { margin-bottom: 44px; }
+.vc-q-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.vc-q-grid .decision { margin: 0; }
+.vc-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.vc-col { display: grid; gap: 10px; }
+.vc-col-h { display: flex; align-items: center; gap: 9px; }
+.vc-col-h h3 { margin: 0; font-size: 15px; font-weight: 650; }
+.vc-col-d { margin: -4px 0 4px; color: var(--ink-3); font-size: 13px; }
+.vc-card { display: grid; gap: 10px; text-align: left; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); cursor: pointer; transition: transform .15s var(--ease), box-shadow .15s, border-color .15s; position: relative; }
+.vc-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--line-2); }
+.vc-card.seen { box-shadow: none; background: var(--surface-2); }
+.vc-card.seen .vc-card-sum, .vc-card.seen .vc-card-code { opacity: .55; }
+.vc-card.un { border-style: dashed; border-color: color-mix(in srgb, var(--att-high) 50%, var(--line-2)); }
+.vc-card-top { display: flex; align-items: center; gap: 8px; }
+.tag-ch { font: 600 11px var(--font-ui); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag-un { font: 600 11px var(--font-ui); color: var(--att-high); background: color-mix(in srgb, var(--att-high) 12%, transparent); padding: 2px 8px; border-radius: 99px; }
+.seen-ic { width: 20px; height: 20px; border-radius: 50%; background: var(--pass); color: #fff; display: grid; place-items: center; flex: none; }
+.seen-ic .ic { width: 12px; height: 12px; stroke-width: 2.4; }
+.vc-card-sum { font-size: 14px; line-height: 1.5; font-weight: 500; }
+.vc-card-code { border-radius: 8px; overflow: hidden; border: 1px solid var(--line); font: 11px/1.6 var(--font-mono); }
+.mini { display: grid; grid-template-columns: 16px minmax(0, 1fr); }
+.mini span { text-align: center; color: var(--ink-4); }
+.mini code { white-space: pre; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+.mini.add { background: var(--add-bg); } .mini.add span { color: var(--add-ink); }
+.mini.del { background: var(--del-bg); } .mini.del span { color: var(--del-ink); }
+.vc-card-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-3); }
+.vc-card-meta .path { font: 12px var(--font-mono); color: var(--ink-2); }
+.vc-card-meta .m { display: inline-flex; gap: 4px; align-items: center; }
+.vc-card-meta .m .ic { width: 12px; height: 12px; }
+.vc-card-meta .m.agent { color: var(--agent); }
+.scrim { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--bg) 50%, transparent); backdrop-filter: blur(3px); animation: fade .2s var(--ease); }
+.vc-sheet { position: fixed; top: 10px; right: 10px; bottom: 10px; z-index: 41; width: min(900px, calc(100vw - 80px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-lg); animation: slide .25s var(--ease); overflow: hidden; }
+.sheet-top { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.sheet-pos { font-size: 12.5px; color: var(--ink-3); }
+.sheet-body { overflow: auto; padding: 22px 26px 30px; }
+.sheet-kick { display: flex; gap: 10px; align-items: center; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.sheet-body h2 { font-size: 22px; line-height: 1.3; letter-spacing: -.015em; font-weight: 650; margin: 10px 0 14px; text-wrap: balance; }
+details.ctx { margin: 0 0 18px; border-radius: 12px; background: var(--agent-bg); border: 1px solid var(--agent-line); padding: 0 16px; }
+details.ctx summary { cursor: pointer; padding: 11px 0; font: 600 12.5px var(--font-ui); color: var(--agent); display: flex; gap: 7px; align-items: center; list-style: none; }
+details.ctx summary .ic { width: 13px; height: 13px; }
+details.ctx[open] summary { padding-bottom: 4px; }
+details.ctx p { font-size: 14px; line-height: 1.65; margin: 6px 0 12px; }
+.sheet-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-2); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="proto"></div>
+<script>
+"use strict";
+// ---------------------------------------------------------------- helpers
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const md = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>");
+const pad = (n) => String(n).padStart(2, "0");
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const svg = (d, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 16 16">${d}</svg>`;
+const I = {
+  check: svg('<path d="M3.5 8.5l2.8 2.8L12.5 5"/>'),
+  spark: svg('<path d="M8 1.2l1.7 5.1 5.1 1.7-5.1 1.7L8 14.8l-1.7-5.1L1.2 8l5.1-1.7z"/>', "ic-fill"),
+  warn: svg('<path d="M8 2.3l6.3 11.1H1.7z"/><path d="M8 6.6v3.1M8 11.6v.1"/>'),
+  chevL: svg('<path d="M10 3.5L5.5 8l4.5 4.5"/>'),
+  chevR: svg('<path d="M6 3.5L10.5 8 6 12.5"/>'),
+  arrowR: svg('<path d="M3 8h10M9 4l4 4-4 4"/>'),
+  circle: svg('<circle cx="8" cy="8" r="5.2"/>'),
+  x: svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>'),
+  bubble: svg('<path d="M2.6 4.3c0-1 .8-1.8 1.8-1.8h7.2c1 0 1.8.8 1.8 1.8v5c0 1-.8 1.8-1.8 1.8H7.2l-3.1 2.4v-2.4h0c-.9-.1-1.5-.8-1.5-1.8z"/>'),
+  moon: svg('<path d="M13.2 9.6A5.6 5.6 0 016.4 2.8a5.6 5.6 0 106.8 6.8z"/>'),
+  sun: svg('<circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3"/>'),
+  q: svg('<circle cx="8" cy="8" r="6.2"/><path d="M6.3 6.2a1.8 1.8 0 113 1.4c-.7.5-1.3.9-1.3 1.8M8 11.4v.1"/>'),
+  send: svg('<path d="M2.2 7.7L13.6 2.6 9.8 13.8 7.6 9.1z"/><path d="M7.6 9.1l6-6.5"/>'),
+};
+
+// ---------------------------------------------------------------- fake diff (what git would give the server)
+const FILES = [
+  { path: "src/http/retry.ts", status: "A", lang: "ts" },
+  { path: "src/http/client.ts", status: "M", lang: "ts" },
+  { path: "src/util/sleep.ts", status: "M", lang: "ts" },
+  { path: "tests/http/retry.test.ts", status: "A", lang: "ts" },
+  { path: "docs/http.md", status: "M", lang: "md" },
+  { path: "src/util/format.ts", status: "M", lang: "ts" },
+];
+const RAW = [
+["h1", "src/http/retry.ts", 0, 1, `
++export interface RetryPolicy {
++  maxAttempts: number;
++  baseDelayMs: number;
++  maxDelayMs: number;
++  budgetMs: number;
++}
++
++export const defaultRetryPolicy: RetryPolicy = {
++  maxAttempts: 4,
++  baseDelayMs: 250,
++  maxDelayMs: 8_000,
++  budgetMs: 30_000,
++};
++
++const RETRYABLE_STATUS = new Set([408, 429, 502, 503, 504]);
++
++export function isRetryable(response: Response): boolean {
++  return RETRYABLE_STATUS.has(response.status);
++}
++
++export function retryAfterMs(response: Response, now = Date.now()): number | undefined {
++  const header = response.headers.get("retry-after");
++  if (!header) return undefined;
++  const seconds = Number(header);
++  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
++  const date = Date.parse(header);
++  return Number.isNaN(date) ? undefined : Math.max(0, date - now);
++}
++
++export function backoffMs(attempt: number, policy: RetryPolicy, random = Math.random): number {
++  const ceiling = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** attempt);
++  return Math.round(random() * ceiling);
++}`],
+["h2", "src/http/client.ts", 1, 1, `
+ import { HttpError } from "./errors.js";
++import { backoffMs, defaultRetryPolicy, isRetryable, retryAfterMs, type RetryPolicy } from "./retry.js";
++import { sleep } from "../util/sleep.js";
+ 
+ export interface ClientOptions {
+   baseUrl: string;
+   timeoutMs?: number;
++  retry?: Partial<RetryPolicy> | false;
+ }`],
+["h3", "src/http/client.ts", 38, 41, `
+   async request(path: string, init: RequestInit = {}): Promise<Response> {
+-    const response = await fetch(this.url(path), { ...init, signal: this.signal(init) });
+-    if (!response.ok) throw new HttpError(response);
+-    return response;
++    const policy = this.retryPolicy();
++    const started = Date.now();
++    for (let attempt = 0; ; attempt++) {
++      const response = await fetch(this.url(path), { ...init, signal: this.signal(init) });
++      if (response.ok) return response;
++      const last = !policy || attempt + 1 >= policy.maxAttempts || !isRetryable(response) || !isIdempotent(init);
++      if (last) throw new HttpError(response);
++      const delay = retryAfterMs(response) ?? backoffMs(attempt, policy);
++      if (Date.now() - started + delay > policy.budgetMs) throw new HttpError(response);
++      await sleep(delay, init.signal ?? undefined);
++    }
+   }`],
+["h5", "src/http/client.ts", 58, 68, `
+   private url(path: string): string {
+     return new URL(path, this.options.baseUrl).toString();
+   }
++
++  private retryPolicy(): RetryPolicy | undefined {
++    if (this.options.retry === false) return undefined;
++    return { ...defaultRetryPolicy, ...this.options.retry };
++  }
+ }`],
+["h4", "src/http/client.ts", 66, 81, `
+ }
++
++const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
++
++function isIdempotent(init: RequestInit): boolean {
++  const method = (init.method ?? "GET").toUpperCase();
++  if (IDEMPOTENT_METHODS.has(method)) return true;
++  return new Headers(init.headers).has("idempotency-key");
++}`],
+["h6", "src/util/sleep.ts", 1, 1, `
+-export function sleep(ms: number): Promise<void> {
+-  return new Promise((resolve) => setTimeout(resolve, ms));
++export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
++  return new Promise((resolve, reject) => {
++    if (signal?.aborted) return reject(signal.reason);
++    const timer = setTimeout(resolve, ms);
++    signal?.addEventListener(
++      "abort",
++      () => {
++        clearTimeout(timer);
++        reject(signal.reason);
++      },
++      { once: true },
++    );
++  });
+ }`],
+["h7", "tests/http/retry.test.ts", 0, 1, `
++import { describe, expect, it } from "vitest";
++import { backoffMs, defaultRetryPolicy, retryAfterMs } from "../../src/http/retry.js";
++import { createClient } from "../../src/http/client.js";
++import { stubServer } from "../helpers/stub-server.js";
++
++describe("retry", () => {
++  it("waits for Retry-After given in seconds", () => {
++    const response = new Response(null, { status: 429, headers: { "retry-after": "2" } });
++    expect(retryAfterMs(response)).toBe(2000);
++  });
++
++  it("waits for Retry-After given as an HTTP date", () => {
++    const now = Date.parse("2026-10-15T12:00:00Z");
++    const response = new Response(null, { status: 503, headers: { "retry-after": "Thu, 15 Oct 2026 12:00:05 GMT" } });
++    expect(retryAfterMs(response, now)).toBe(5000);
++  });
++
++  it("caps backoff at maxDelayMs", () => {
++    expect(backoffMs(10, defaultRetryPolicy, () => 1)).toBe(8000);
++  });
++
++  it("never retries a POST without an Idempotency-Key", async () => {
++    const server = stubServer([503, 200]);
++    const client = createClient({ baseUrl: server.url });
++    await expect(client.request("/orders", { method: "POST" })).rejects.toThrow("503");
++    expect(server.calls).toBe(1);
++  });
++
++  it("stops waiting when the request is cancelled", async () => {
++    const server = stubServer([503, 200]);
++    const client = createClient({ baseUrl: server.url, retry: { baseDelayMs: 60_000 } });
++    const controller = new AbortController();
++    const pending = client.request("/items", { signal: controller.signal });
++    controller.abort(new Error("cancelled"));
++    await expect(pending).rejects.toThrow("cancelled");
++  });
++});`],
+["h8", "docs/http.md", 12, 12, `
+ ## Options
+ 
+ - \`baseUrl\`: the API root.
+ - \`timeoutMs\`: abort a single attempt after this many milliseconds.
++- \`retry\`: override the retry policy, or \`false\` to turn retries off.
++
++## Retries
++
++Responses with status 408, 429, 502, 503 or 504 are retried with jittered
++exponential backoff, up to 4 attempts and 30 seconds in total. A \`Retry-After\`
++header takes precedence over the computed delay.
++
++Only idempotent requests are retried: \`GET\`, \`HEAD\`, \`OPTIONS\`, \`PUT\` and
++\`DELETE\`, or any request that carries an \`Idempotency-Key\` header.`],
+["h9", "src/util/format.ts", 3, 3, `
+ export function formatBytes(bytes: number): string {
+-  const units = ['B', 'KB', 'MB', 'GB'];
++  const units = ["B", "KB", "MB", "GB"];
+   let value = bytes;`],
+];
+
+// ---------------------------------------------------------------- agent payload (what the tool call would carry)
+const PAYLOAD = {
+  title: "Retry transient HTTP failures with backoff",
+  intent: "The billing sync fails a few times a day when the upstream API sheds load with 429 and 503. The HTTP client now retries those responses with jittered exponential backoff, follows `Retry-After`, and never repeats a request that is unsafe to repeat.",
+  base: "main",
+  head: "feat/http-retry",
+  focus: "Read the request loop in `client.ts` (L41–53) and the idempotency rule first. Everything else follows from those two.",
+  verification: [
+    { status: "pass", label: "`npm test`", detail: "52 passed, 5 new" },
+    { status: "pass", label: "`npm run typecheck`", detail: "Clean" },
+    { status: "unverified", label: "A real 429 from the billing API", detail: "Only simulated with a stub server" },
+  ],
+  chapters: [
+    {
+      id: "c1", kind: "core", attention: "high",
+      title: "A retry policy that listens to the server",
+      narrative: [
+        "Everything about *when* to retry lives in one new module, `retry.ts`. The client only has to ask three questions: is this response retryable, how long should I wait, and is there budget left?",
+        "Waits use **full jitter**: a random delay between zero and a ceiling that doubles with each attempt. When many workers fail at the same moment, this spreads their retries out instead of sending them back in lockstep.",
+        "If the server sends `Retry-After`, it wins over the computed delay. The header can hold seconds or an HTTP date, and both are parsed.",
+      ],
+      hunks: [{ id: "h1", summary: "New module: which responses to retry, how long to wait, and the total budget." }],
+      notes: [
+        { id: "n1", hunk: "h1", line: 12, text: "The budget includes the waits. 30 s keeps a fully retried request inside the job runner's 60 s step timeout." },
+        { id: "n2", hunk: "h1", line: 15, text: "500 is deliberately absent. A 500 usually means a bug on their side, and retrying would hide it from our alerts." },
+      ],
+      decisions: [{
+        id: "d1", question: "How should waits be randomised?", chosen: 0,
+        context: "This decides how retries from many workers spread out after a shared failure.",
+        options: [
+          { label: "Full jitter", detail: "`random(0, ceiling)`. The widest spread under contention; occasionally retries almost at once." },
+          { label: "Equal jitter", detail: "`ceiling/2 + random(0, ceiling/2)`. Never retries immediately, but spreads less." },
+          { label: "No jitter", detail: "Exactly the ceiling. Predictable, but workers that failed together retry together." },
+        ],
+      }],
+    },
+    {
+      id: "c2", kind: "core", attention: "high",
+      title: "Only retry what is safe to repeat",
+      narrative: [
+        "`request()` becomes a loop. Before each wait it checks four things: attempts are left, the status is retryable, the request is idempotent, and the wait fits in the budget. If any check fails, it throws the same `HttpError` as before.",
+        "The idempotency rule needs the closest look. Methods that are safe to repeat by definition are retried. A `POST` or `PATCH` is retried only when the caller sent an `Idempotency-Key`, because the server then promises to deduplicate it.",
+      ],
+      hunks: [
+        { id: "h3", summary: "`request()` becomes a loop: retry while the response is retryable, the request is idempotent, and budget remains." },
+        { id: "h4", summary: "GET, HEAD, OPTIONS, PUT and DELETE repeat safely; anything else only with an `Idempotency-Key`." },
+        { id: "h2", summary: "New `retry` option: tune the policy, or pass `false` to turn retries off.", attention: "medium" },
+        { id: "h5", summary: "Merges the caller's overrides onto the defaults.", attention: "low" },
+      ],
+      notes: [
+        { id: "n3", hunk: "h3", line: 47, text: "One condition per reason to stop. I kept them on one line so the four rules read together; I can split it if you prefer." },
+        { id: "n4", hunk: "h3", line: 51, text: "Passes the caller's signal, so cancelling the request also cancels the wait (chapter 3)." },
+      ],
+      callouts: [{ type: "caveat", title: "Behaviour change", text: "The payments client already sends `POST /charges` with an `Idempotency-Key`. Charges will now be retried. I believe that is what the key is for, but it changes behaviour for calls that move money." }],
+      decisions: [{
+        id: "d2", question: "Should payment charges be retried?", chosen: null,
+        context: "I could not confirm that the payment provider deduplicates on `Idempotency-Key` for every endpoint.",
+        options: [
+          { label: "Yes, retry them", detail: "The key makes a repeat safe; the provider deduplicates." },
+          { label: "No, exclude `/charges`", detail: "Add a per-route opt-out and keep charges single-shot until the provider confirms." },
+        ],
+      }],
+    },
+    {
+      id: "c3", kind: "consequence", attention: "medium",
+      title: "Cancelling a request also cancels its wait",
+      narrative: [
+        "Before this change, `sleep` could not be interrupted. A request cancelled during its backoff sat idle for up to 8 seconds and only then threw.",
+        "`sleep` now takes an optional `AbortSignal` and rejects with the signal's reason as soon as it fires. The one other caller, the poller in `sync/poll.ts`, passes no signal and behaves as before.",
+      ],
+      hunks: [{ id: "h6", summary: "`sleep` accepts an `AbortSignal` and rejects with its reason." }],
+      notes: [{ id: "n5", hunk: "h6", line: 11, text: "If the timer fires first, the abort listener stays attached until the signal is collected. That is harmless here because each request makes its own signal, but it would leak with a long-lived shared signal." }],
+    },
+    {
+      id: "c4", kind: "support", attention: "low",
+      title: "Tests and documentation",
+      narrative: ["The tests use a stub server that replays a scripted list of statuses, and none of them actually waits: the slow paths are driven through the policy or cancelled first."],
+      hunks: [
+        { id: "h7", summary: "Five tests: Retry-After in both forms, the backoff cap, idempotency, and cancellation." },
+        { id: "h8", summary: "Documents the `retry` option and which requests are retried." },
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------- derived model
+const FILE = Object.fromEntries(FILES.map((f) => [f.path, f]));
+const KW = new Set("import export from const let var function return if else for while do async await new throw try catch finally type interface extends implements class private public protected readonly as of in typeof keyof instanceof null undefined true false void this default break continue switch case static".split(" "));
+
+function tokens(code, lang) {
+  if (lang === "md") {
+    if (/^#/.test(code)) return [{ text: code, cls: "h" }];
+    return (code.match(/`[^`]*`|[^`]+/g) || []).map((t) => ({ text: t, cls: t[0] === "`" ? "s" : "" }));
+  }
+  const re = /\/\/.*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\d[\d_]*(?:\.\d+)?|[A-Za-z_$][\w$]*|\s+|./g;
+  const out = [];
+  let m, prev = "";
+  while ((m = re.exec(code))) {
+    const t = m[0];
+    let cls = "";
+    if (t.startsWith("//")) cls = "c";
+    else if (/^["'`]/.test(t)) cls = "s";
+    else if (/^\d/.test(t)) cls = "n";
+    else if (/^[A-Za-z_$]/.test(t)) {
+      if (KW.has(t)) cls = "k";
+      else if (/^[A-Z]/.test(t)) cls = "t";
+      else if (/^\s*[(<]/.test(code.slice(re.lastIndex)) && !/^\s*<\s/.test(code.slice(re.lastIndex))) cls = "f";
+      else if (prev === ".") cls = "p";
+    }
+    out.push({ text: t, cls });
+    if (!/^\s+$/.test(t)) prev = t;
+  }
+  return out;
+}
+
+function codeHtml(code, lang, mark, t) {
+  let pos = 0, out = "";
+  const markCls = t === "+" ? "wa" : "wd";
+  for (const tk of tokens(code, lang)) {
+    const start = pos, end = pos + tk.text.length;
+    pos = end;
+    const cuts = [start, end];
+    if (mark) for (const c of mark) if (c > start && c < end) cuts.push(c);
+    cuts.sort((a, b) => a - b);
+    for (let k = 0; k < cuts.length - 1; k++) {
+      const a = cuts[k], b = cuts[k + 1];
+      if (a === b) continue;
+      if (mark && a === mark[0]) out += `<mark class="${markCls}">`;
+      out += tk.cls ? `<span class="tk-${tk.cls}">${esc(code.slice(a, b))}</span>` : esc(code.slice(a, b));
+      if (mark && b === mark[1]) out += "</mark>";
+    }
+  }
+  return out || " ";
+}
+
+function markWords(lines) {
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].t !== "-") { i++; continue; }
+    const dels = [], adds = [];
+    while (i < lines.length && lines[i].t === "-") dels.push(lines[i++]);
+    while (i < lines.length && lines[i].t === "+") adds.push(lines[i++]);
+    for (let k = 0; k < Math.min(dels.length, adds.length); k++) {
+      const a = dels[k].code, b = adds[k].code;
+      let p = 0;
+      while (p < a.length && p < b.length && a[p] === b[p]) p++;
+      let s = 0;
+      while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+      if ((p + s) / Math.max(a.length, b.length) < 0.45) continue;
+      if (p < a.length - s) dels[k].mark = [p, a.length - s];
+      if (p < b.length - s) adds[k].mark = [p, b.length - s];
+    }
+  }
+}
+
+const HUNK = {};
+for (const [id, file, oldStart, newStart, body] of RAW) {
+  let o = oldStart, n = newStart;
+  const lines = body.replace(/^\n/, "").split("\n").map((raw) => {
+    const t = raw[0] === "+" || raw[0] === "-" ? raw[0] : " ";
+    const l = { t, code: raw.slice(1) };
+    if (t !== "+") l.o = o++;
+    if (t !== "-") l.n = n++;
+    return l;
+  });
+  markWords(lines);
+  for (const l of lines) l.html = codeHtml(l.code, FILE[file].lang, l.mark, l.t);
+  HUNK[id] = { id, file, lines, adds: lines.filter((l) => l.t === "+").length, dels: lines.filter((l) => l.t === "-").length };
+}
+const ALL = RAW.map((r) => r[0]);
+const CHAPTERS = PAYLOAD.chapters;
+const CH = Object.fromEntries(CHAPTERS.map((c) => [c.id, c]));
+const CHAPTER_OF = {}, REF = {}, NOTE = {}, NOTES_IN = {};
+for (const c of CHAPTERS) {
+  for (const r of c.hunks) { CHAPTER_OF[r.id] = c; REF[r.id] = r; }
+  for (const n of c.notes || []) {
+    n.idx = HUNK[n.hunk].lines.findIndex((l) => l.n === n.line);
+    NOTE[n.id] = n;
+    (NOTES_IN[n.hunk] ||= []).push(n);
+  }
+}
+const UNPLACED = ALL.filter((id) => !CHAPTER_OF[id]);
+const DECISIONS = CHAPTERS.flatMap((c) => c.decisions || []);
+const ATT = { high: "Read closely", medium: "Worth a look", low: "Skim" };
+const KIND = { core: "Core", consequence: "Consequence", support: "Support" };
+const KINDS = { change: "Change", question: "Question", concern: "Concern", nit: "Nit", praise: "Praise" };
+const PLACEHOLDER = { change: "What should change?", question: "What would you like to know?", concern: "What worries you?", nit: "A small thing…", praise: "What is good here?" };
+const attOf = (id) => (CHAPTER_OF[id] ? REF[id].attention || CHAPTER_OF[id].attention : "high");
+
+// ---------------------------------------------------------------- state
+const params = new URLSearchParams(location.search);
+const state = {
+  variant: ["A", "B", "C"].includes(params.get("variant")) ? params.get("variant") : "A",
+  theme: params.get("theme") === "dark" ? "dark" : "light",
+  reviewed: {}, seen: {}, decisions: {}, comments: [], composer: null,
+  verdict: null, summary: "", modal: null, submitted: false,
+  current: "c1", tab: "brief", openHunk: null,
+};
+let seq = 0;
+
+const covered = (id) => !!(state.seen[id] || (CHAPTER_OF[id] && state.reviewed[CHAPTER_OF[id].id]));
+function anchorOf(hid, s, e) {
+  const ls = HUNK[hid].lines.slice(s, e + 1);
+  const ns = ls.filter((l) => l.n != null).map((l) => l.n);
+  if (ns.length) return { side: "new", from: ns[0], to: ns[ns.length - 1] };
+  return { side: "old", from: ls[0].o, to: ls[ls.length - 1].o };
+}
+const fmtRange = (a) => `${a.side === "old" ? "old " : ""}L${a.from}${a.to !== a.from ? `–${a.to}` : ""}`;
+const hunkRange = (id) => {
+  const ns = HUNK[id].lines.filter((l) => l.n != null).map((l) => l.n);
+  return `L${ns[0]}–${ns[ns.length - 1]}`;
+};
+function stats() {
+  const hs = ALL.map((id) => HUNK[id]);
+  const changed = hs.reduce((a, h) => a + h.adds + h.dels, 0);
+  return {
+    adds: hs.reduce((a, h) => a + h.adds, 0),
+    dels: hs.reduce((a, h) => a + h.dels, 0),
+    reviewed: CHAPTERS.filter((c) => state.reviewed[c.id]).length,
+    comments: state.comments.length,
+    answered: DECISIONS.filter((d) => state.decisions[d.id]?.choice != null).length,
+    openQuestions: DECISIONS.filter((d) => d.chosen == null && state.decisions[d.id]?.choice == null).length,
+    covered: ALL.filter(covered).length,
+    minutes: Math.max(2, Math.round(changed / 18)),
+  };
+}
+
+// ---------------------------------------------------------------- shared renderers
+function renderComment(m) {
+  return `<div class="cmt k-${m.kind} ${m.replyTo ? "" : "inl"}">
+    <div class="cmt-h"><span class="av">A</span><span class="who">You</span><span class="kind">${KINDS[m.kind]}</span>${m.replyTo ? "" : `<span class="where">${fmtRange(anchorOf(m.hunk, m.start, m.end))}</span>`}<span class="sp"></span><button class="link" data-action="del" data-id="${m.id}">Delete</button></div>
+    <div class="cmt-b">${md(m.text)}</div></div>`;
+}
+function renderComposer() {
+  const c = state.composer;
+  const where = c.replyTo ? "Reply to the agent" : `Comment on <b>${fmtRange(anchorOf(c.hunk, c.start, c.end))}</b>`;
+  return `<div class="composer ${c.replyTo ? "" : "inl"}">
+    <div class="composer-top"><span>${where}</span>${c.replyTo ? "" : `<span class="kbd-hint">Shift-click a line number to extend</span>`}</div>
+    <div class="kinds">${Object.entries(KINDS).map(([k, label]) => `<button class="kind-chip k-${k} ${c.kind === k ? "on" : ""}" data-action="kind" data-kind="${k}">${label}</button>`).join("")}</div>
+    <textarea id="composer-text" rows="3" placeholder="${PLACEHOLDER[c.kind]}">${esc(c.text)}</textarea>
+    <div class="composer-foot"><span class="kbd-hint"><kbd>⌘</kbd><kbd>↵</kbd> save &nbsp;·&nbsp; <kbd>esc</kbd> cancel</span><span class="sp"></span><button class="btn ghost" data-action="cancel">Cancel</button><button class="btn primary" data-action="save">Comment</button></div>
+  </div>`;
+}
+function renderNote(n) {
+  const replies = state.comments.filter((m) => m.replyTo === n.id);
+  const replying = state.composer?.replyTo === n.id;
+  return `<div class="note inl">
+    <div class="note-h">${I.spark}<span class="who">Agent</span><span>· note on L${n.line}</span></div>
+    <div class="note-b">${md(n.text)}</div>
+    ${replies.length || replying ? `<div class="replies">${replies.map(renderComment).join("")}${replying ? renderComposer() : ""}</div>` : ""}
+    ${replying ? "" : `<div class="note-actions"><button class="link" data-action="reply" data-note="${n.id}">Reply</button></div>`}
+  </div>`;
+}
+function renderRows(h) {
+  const c = state.composer;
+  const lineComposer = c && !c.replyTo && c.hunk === h.id;
+  let out = "";
+  h.lines.forEach((l, i) => {
+    const sel = lineComposer && i >= c.start && i <= c.end;
+    const hasC = state.comments.some((m) => !m.replyTo && m.hunk === h.id && i >= m.start && i <= m.end);
+    out += `<div class="dl ${l.t === "+" ? "add" : l.t === "-" ? "del" : ""} ${sel ? "sel" : hasC ? "has-c" : ""}"><button class="g" data-action="line" data-hunk="${h.id}" data-i="${i}" tabindex="-1"><span>${l.o ?? ""}</span><span>${l.n ?? ""}</span></button><span class="sg">${l.t === "-" ? "−" : l.t === "+" ? "+" : ""}</span><code>${l.html}</code></div>`;
+    for (const n of NOTES_IN[h.id] || []) if (n.idx === i) out += renderNote(n);
+    for (const m of state.comments) if (!m.replyTo && m.hunk === h.id && m.end === i) out += renderComment(m);
+    if (lineComposer && c.end === i) out += renderComposer();
+  });
+  return out;
+}
+function renderFiles(ids, opts = {}) {
+  const groups = [];
+  for (const id of ids) {
+    let g = groups.find((x) => x.file === HUNK[id].file);
+    if (!g) groups.push((g = { file: HUNK[id].file, ids: [] }));
+    g.ids.push(id);
+  }
+  return groups.map(({ file, ids }) => {
+    const f = FILE[file];
+    const cut = file.lastIndexOf("/") + 1;
+    const adds = ids.reduce((a, id) => a + HUNK[id].adds, 0), dels = ids.reduce((a, id) => a + HUNK[id].dels, 0);
+    return `<figure class="diff ${f.status === "A" ? "new" : ""}">
+      <figcaption class="diff-h"><span class="st st-${f.status}">${f.status === "A" ? "New" : "Edited"}</span><span class="path">${file.slice(0, cut)}<b>${file.slice(cut)}</b></span><span class="sp"></span><span class="n-add">+${adds}</span><span class="n-del">−${dels}</span></figcaption>
+      ${ids.map((id) => `<div class="hunk" id="hunk-${id}">${opts.captions === false ? "" : `<div class="hunk-h ${REF[id] ? "" : "un"}"><span class="hs">${REF[id] ? md(REF[id].summary) : "Not explained by the agent"}</span><span class="hr">${hunkRange(id)}</span></div>`}${renderRows(HUNK[id])}</div>`).join("")}
+    </figure>`;
+  }).join("");
+}
+const renderCallout = (c) => `<div class="callout"><span class="co-ic">${I.warn}</span><div><div class="co-t">${esc(c.title)}</div><div class="co-b">${md(c.text)}</div></div></div>`;
+function renderDecision(d) {
+  const st = state.decisions[d.id] || {};
+  const open = d.chosen == null;
+  return `<div class="decision ${open ? "open" : ""}">
+    <div class="dec-h">${open ? I.q : I.spark}<span>${open ? "Question for you" : "Judgment call"}</span>${st.choice != null ? `<span class="dec-done">${I.check} Answered</span>` : ""}</div>
+    <div class="dec-q">${md(d.question)}</div>
+    <p class="dec-ctx">${md(d.context)}</p>
+    <div class="dec-opts">${d.options.map((o, i) => `<button class="dec-opt ${st.choice === i ? "on" : ""}" data-action="decide" data-dec="${d.id}" data-i="${i}"><span class="radio"></span><span class="dec-body"><span class="dec-label">${md(o.label)}${d.chosen === i ? `<span class="tag-agent">${I.spark} Agent's choice</span>` : ""}</span><span class="dec-detail">${md(o.detail)}</span></span></button>`).join("")}</div>
+    ${st.choice != null ? `<textarea class="dec-note" id="note-${d.id}" data-dec-note="${d.id}" rows="2" placeholder="Add a note for the agent (optional)">${esc(st.note || "")}</textarea>` : ""}
+  </div>`;
+}
+const renderVerification = () => `<ul class="verif">${PAYLOAD.verification.map((v) => `<li class="v-${v.status}"><span class="v-ic">${v.status === "pass" ? I.check : v.status === "fail" ? I.x : I.circle}</span><span><span class="v-l">${md(v.label)}</span><span class="v-d">${md(v.detail)}</span></span></li>`).join("")}</ul>`;
+const VERDICTS = [
+  { id: "approve", label: "Approve", detail: "Ship it as it is." },
+  { id: "approve_notes", label: "Approve with notes", detail: "Ship it, and act on my comments." },
+  { id: "changes", label: "Request changes", detail: "Address my comments, then ask again." },
+];
+function renderVerdict() {
+  const s = stats();
+  return `<div class="verdict">
+    <div class="vd-stats"><span><b>${s.reviewed}</b> of ${CHAPTERS.length} chapters reviewed</span><span><b>${s.comments}</b> ${s.comments === 1 ? "comment" : "comments"}</span><span><b>${s.answered}</b> of ${DECISIONS.length} decisions answered</span>${s.openQuestions ? `<span class="warn">${plural(s.openQuestions, "question")} still open</span>` : ""}</div>
+    <div class="vd-opts">${VERDICTS.map((v) => `<button class="vd-opt vd-${v.id} ${state.verdict === v.id ? "on" : ""}" data-action="verdict" data-v="${v.id}"><span class="vd-l">${v.label}</span><span class="vd-d">${v.detail}</span></button>`).join("")}</div>
+    <textarea id="summary" rows="3" placeholder="Anything else the agent should know? (optional)">${esc(state.summary)}</textarea>
+    <div class="vd-foot"><span class="kbd-hint"><kbd>⌘</kbd><kbd>↵</kbd> to send</span><span class="sp"></span><button class="btn primary lg" data-action="submit" ${state.verdict ? "" : "disabled"}>${I.send} Send to agent</button></div>
+  </div>`;
+}
+function buildResult() {
+  return {
+    verdict: state.verdict,
+    summary: state.summary.trim() || undefined,
+    annotations: state.comments.map((m) => {
+      const a = anchorOf(m.hunk, m.start, m.end);
+      return { file: HUNK[m.hunk].file, side: a.side, lines: a.from === a.to ? a.from : [a.from, a.to], kind: m.kind, text: m.text, replyTo: m.replyTo };
+    }),
+    decisions: DECISIONS.map((d) => {
+      const st = state.decisions[d.id];
+      return { id: d.id, answer: st?.choice != null ? d.options[st.choice].label : null, agrees: d.chosen != null && st?.choice != null ? st.choice === d.chosen : undefined, note: st?.note || undefined };
+    }),
+    chapters: CHAPTERS.map((c) => ({ id: c.id, reviewed: !!state.reviewed[c.id] })),
+    unplaced: UNPLACED.map((id) => ({ file: HUNK[id].file, lines: hunkRange(id), seen: covered(id) })),
+  };
+}
+const jsonHtml = (v) => esc(JSON.stringify(v, null, 2))
+  .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)/g, '<span class="j-k">$1</span>$2')
+  .replace(/(:\s*|\[\s*|,\s*)(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, '$1<span class="j-s">$2</span>')
+  .replace(/(:\s*)(true|false|null)\b/g, '$1<span class="j-b">$2</span>')
+  .replace(/(:\s*)(-?\d+)/g, '$1<span class="j-n">$2</span>');
+function renderModal() {
+  if (!state.modal) return "";
+  let head = "", body = "";
+  if (state.modal === "verdict") { head = "Finish review"; body = renderVerdict(); }
+  if (state.modal === "result") {
+    head = state.submitted ? "Review sent (simulated)" : "What the agent would receive";
+    body = `<div class="sim">${I.circle}<span>Prototype: nothing is sent. In the real tool this JSON is the tool result.</span></div><pre class="json">${jsonHtml(buildResult())}</pre>`;
+  }
+  if (state.modal === "payload") {
+    head = "What the agent sent";
+    body = `<p class="modal-sub">The tool call input. It holds structure and prose only: hunks are referenced by id, and the server reads the code from git.</p><pre class="json">${jsonHtml(PAYLOAD)}</pre>`;
+  }
+  return `<div class="overlay" data-action="close-modal"><div class="modal" data-action="noop"><div class="modal-h"><h3>${head}</h3><span class="sp"></span><button class="icon-btn" data-action="close-modal">${I.x}</button></div>${body}</div></div>`;
+}
+
+// ================================================================ Variant A · Essay
+function renderA() {
+  const s = stats();
+  const nextOf = (i) => CHAPTERS[i + 1] ? { id: CHAPTERS[i + 1].id, title: CHAPTERS[i + 1].title } : UNPLACED.length ? { id: "unplaced", title: "Not in the story" } : { id: "verdict", title: "Your verdict" };
+  return `<div class="va">
+    <aside class="va-toc">
+      <div class="va-brand"><span class="logo"></span>Code review</div>
+      <div class="toc-label">Chapters</div>
+      <nav class="toc">
+        ${CHAPTERS.map((c, i) => `<a class="toc-i ${state.reviewed[c.id] ? "done" : ""}" data-action="goto" data-id="${c.id}" data-toc="${c.id}"><span class="toc-n">${pad(i + 1)}</span><span class="toc-t">${md(c.title)}</span><span class="toc-s">${state.reviewed[c.id] ? I.check : `<span class="att-dot att-${c.attention}"></span>`}</span></a>`).join("")}
+        <div class="toc-sep"></div>
+        ${UNPLACED.length ? `<a class="toc-i" data-action="goto" data-id="unplaced" data-toc="unplaced"><span class="toc-n">··</span><span class="toc-t">Not in the story</span><span class="toc-s"><span class="att-dot att-high"></span></span></a>` : ""}
+        <a class="toc-i" data-action="goto" data-id="verdict" data-toc="verdict"><span class="toc-n">→</span><span class="toc-t">Your verdict</span><span class="toc-s"></span></a>
+      </nav>
+      <div class="toc-foot"><div class="progress"><div style="width:${(s.reviewed / CHAPTERS.length) * 100}%"></div></div><div class="toc-meta">${s.reviewed} of ${CHAPTERS.length} reviewed · ${plural(s.comments, "comment")}</div></div>
+    </aside>
+    <main class="va-main">
+      <header class="va-col">
+        <div class="eyebrow"><span class="branch">${PAYLOAD.head}</span><span>into</span><span class="branch">${PAYLOAD.base}</span></div>
+        <h1 class="va-title">${md(PAYLOAD.title)}</h1>
+        <p class="va-lede">${md(PAYLOAD.intent)}</p>
+        <div class="va-meta"><span>${plural(FILES.length, "file")}</span><span class="n-add">+${s.adds}</span><span class="n-del">−${s.dels}</span><span>${CHAPTERS.length} chapters</span><span>about ${s.minutes} min</span></div>
+      </header>
+      <div class="va-brief va-col">
+        <div class="brief-card"><div class="brief-k">${I.spark} Where to look</div><p>${md(PAYLOAD.focus)}</p></div>
+        <div class="brief-card"><div class="brief-k">Verification</div>${renderVerification()}</div>
+      </div>
+      ${CHAPTERS.map((c, i) => {
+        const done = state.reviewed[c.id], next = nextOf(i);
+        return `<section class="va-ch" id="ch-${c.id}">
+          <div class="va-col">
+            <div class="va-kick"><span class="kick-n">${pad(i + 1)}</span><span>${KIND[c.kind]}</span><span class="att-pill att-${c.attention}">${ATT[c.attention]}</span></div>
+            <h2 class="va-h2">${md(c.title)}</h2>
+            <div class="va-prose">${c.narrative.map((p) => `<p>${md(p)}</p>`).join("")}</div>
+            ${(c.callouts || []).map(renderCallout).join("")}
+            ${(c.decisions || []).map(renderDecision).join("")}
+          </div>
+          <div class="va-wide">${renderFiles(c.hunks.map((r) => r.id))}</div>
+          <div class="va-col va-ch-foot">
+            <button class="btn ${done ? "done" : ""}" data-action="review" data-id="${c.id}">${done ? `${I.check} Reviewed` : "Mark chapter reviewed"}</button>
+            <a class="next-link" data-action="goto" data-id="${next.id}">Next: ${md(next.title)} ${I.arrowR}</a>
+          </div>
+        </section>`;
+      }).join("")}
+      ${UNPLACED.length ? `<section class="va-ch va-un" id="ch-unplaced">
+        <div class="va-col">
+          <div class="va-kick"><span class="kick-n">··</span><span>Not in the story</span></div>
+          <h2 class="va-h2">Changes the agent did not explain</h2>
+          <div class="va-un-note">${I.warn}<span>These hunks are in the diff but in no chapter. They are shown so that nothing is hidden. Check that each one belongs in this change.</span></div>
+        </div>
+        <div class="va-wide">${renderFiles(UNPLACED)}</div>
+        <div class="va-col va-ch-foot"><button class="btn ${UNPLACED.every(covered) ? "done" : ""}" data-action="seen-unplaced">${UNPLACED.every(covered) ? `${I.check} Seen` : "Mark as seen"}</button></div>
+      </section>` : ""}
+      <section class="va-ch" id="ch-verdict"><div class="va-col">
+        <div class="va-kick"><span class="kick-n">→</span><span>Conclusion</span></div>
+        <h2 class="va-h2">Your verdict</h2>
+        ${renderVerdict()}
+      </div></section>
+    </main>
+    ${renderModal()}
+  </div>`;
+}
+function scrollSpyA() {
+  if (state.variant !== "A") return;
+  const ids = [...CHAPTERS.map((c) => c.id), "unplaced", "verdict"];
+  let cur = ids[0];
+  for (const id of ids) {
+    const el = document.getElementById(`ch-${id}`);
+    if (el && el.getBoundingClientRect().top < window.innerHeight * 0.35) cur = id;
+  }
+  document.querySelectorAll("[data-toc]").forEach((el) => el.classList.toggle("on", el.dataset.toc === cur));
+}
+
+// ================================================================ Variant B · Cockpit
+function renderB() {
+  const s = stats();
+  const cur = state.current;
+  const un = cur === "unplaced";
+  const c = CH[cur];
+  const idx = CHAPTERS.indexOf(c);
+  const ids = un ? UNPLACED : c.hunks.map((r) => r.id);
+  const commentsIn = (hids) => state.comments.filter((m) => hids.includes(m.hunk));
+  const done = un ? UNPLACED.every(covered) : state.reviewed[cur];
+  const fileChips = (path) => ALL.filter((id) => HUNK[id].file === path).map((id) => CHAPTER_OF[id] ? pad(CHAPTERS.indexOf(CHAPTER_OF[id]) + 1) : "··");
+  return `<div class="vb">
+    <header class="vb-top">
+      <div class="vb-id"><span class="logo"></span><span class="vb-title">${md(PAYLOAD.title)}</span><span class="branch">${PAYLOAD.head}</span></div>
+      <div class="vb-cov" title="Every hunk in the diff">${ALL.map((id) => `<i class="${covered(id) ? "cov" : ""} ${ids.includes(id) ? "cur" : ""}" style="flex:${Math.max(4, HUNK[id].lines.length)}"></i>`).join("")}</div>
+      <span class="vb-cov-l">${s.covered} of ${ALL.length} hunks covered</span>
+      <button class="btn primary" data-action="modal" data-m="verdict">Finish review</button>
+    </header>
+    <nav class="vb-nav">
+      <div class="vb-sec-k">Chapters</div>
+      ${CHAPTERS.map((ch, i) => {
+        const n = commentsIn(ch.hunks.map((r) => r.id)).length;
+        return `<button class="vb-ch ${cur === ch.id ? "on" : ""} ${state.reviewed[ch.id] ? "done" : ""}" data-action="select" data-id="${ch.id}"><span class="vb-n">${pad(i + 1)}</span><span class="vb-t"><span class="vb-tt">${md(ch.title)}</span><span class="vb-ts">${KIND[ch.kind]} · ${plural(ch.hunks.length, "hunk")}${n ? ` · ${I.bubble}${n}` : ""}</span></span><span class="vb-st">${state.reviewed[ch.id] ? I.check : `<span class="att-bars att-${ch.attention}"><i></i><i></i><i></i></span>`}</span></button>`;
+      }).join("")}
+      ${UNPLACED.length ? `<button class="vb-ch ${un ? "on" : ""} ${UNPLACED.every(covered) ? "done" : ""}" data-action="select" data-id="unplaced"><span class="vb-n">··</span><span class="vb-t"><span class="vb-tt">Not in the story</span><span class="vb-ts">Unexplained · ${plural(UNPLACED.length, "hunk")}</span></span><span class="vb-st">${UNPLACED.every(covered) ? I.check : `<span class="att-bars att-high"><i></i><i></i><i></i></span>`}</span></button>` : ""}
+      <div class="vb-sec-k" style="margin-top:22px">Files</div>
+      <div class="vb-files">${FILES.map((f) => {
+        const first = ALL.find((id) => HUNK[id].file === f.path);
+        const target = CHAPTER_OF[first] ? CHAPTER_OF[first].id : "unplaced";
+        const cut = f.path.lastIndexOf("/") + 1;
+        return `<button class="vb-file" data-action="select" data-id="${target}"><span>${f.path.slice(0, cut)}<b>${f.path.slice(cut)}</b></span><span class="chs">${fileChips(f.path).map((n) => `<span class="${n === "··" ? "un" : ""}">${n}</span>`).join("")}</span></button>`;
+      }).join("")}</div>
+    </nav>
+    <main class="vb-stage" data-scroll="stage">
+      <div class="vb-stage-h">
+        <div class="vb-big">${un ? "··" : pad(idx + 1)}<span>/ ${pad(CHAPTERS.length)}</span></div>
+        <div><div class="vb-chips">${un ? `<span class="att-pill att-high">Unexplained</span>` : `<span>${KIND[c.kind]}</span><span class="att-pill att-${c.attention}">${ATT[c.attention]}</span>`}</div><h2>${un ? "Changes the agent did not explain" : md(c.title)}</h2></div>
+      </div>
+      ${renderFiles(ids)}
+      <div class="vb-stage-foot">
+        <button class="btn" data-action="step" data-d="-1" ${idx <= 0 && !un ? "disabled" : ""}>${I.chevL} Previous</button><span class="sp"></span>
+        <button class="btn ${done ? "" : "primary"}" data-action="review-next">${done ? "Next chapter" : "Mark reviewed and continue"} <kbd>R</kbd></button>
+      </div>
+    </main>
+    <aside class="vb-brief" data-scroll="brief">
+      <div class="tabs"><button class="${state.tab === "brief" ? "on" : ""}" data-action="tab" data-tab="brief">Briefing</button><button class="${state.tab === "comments" ? "on" : ""}" data-action="tab" data-tab="comments">Your comments <span class="count">${state.comments.length}</span></button></div>
+      ${state.tab === "brief" ? (un ? `<div class="vb-prose"><p>These hunks are in the diff but in no chapter. The agent did not mention them. Check that each one belongs in this change.</p></div>` : `
+        <div class="vb-brief-k">${I.spark} The agent's briefing</div>
+        <div class="vb-prose">${c.narrative.map((p) => `<p>${md(p)}</p>`).join("")}</div>
+        ${(c.callouts || []).map(renderCallout).join("")}
+        ${(c.decisions || []).map(renderDecision).join("")}`) + `
+        <div class="vb-sec"><div class="vb-sec-k">Where to look · whole change</div><div class="vb-prose"><p>${md(PAYLOAD.focus)}</p></div></div>
+        <div class="vb-sec"><div class="vb-sec-k">Verification · whole change</div>${renderVerification()}</div>`
+      : state.comments.length ? state.comments.map((m) => {
+        const a = anchorOf(m.hunk, m.start, m.end);
+        const ch = CHAPTER_OF[m.hunk];
+        return `<button class="cl-item k-${m.kind}" data-action="jump" data-hunk="${m.hunk}"><span class="cl-meta"><span class="kind">${KINDS[m.kind]}</span><span>${HUNK[m.hunk].file.split("/").pop()} ${fmtRange(a)}</span><span class="sp"></span><span>${ch ? pad(CHAPTERS.indexOf(ch) + 1) : "··"}</span></span><span class="cl-text">${md(m.text)}</span></button>`;
+      }).join("") : `<div class="empty">No comments yet. Click a line number in the diff to add one.</div>`}
+    </aside>
+    ${renderModal()}
+  </div>`;
+}
+
+// ================================================================ Variant C · Triage
+const COLUMNS = [
+  { att: "high", label: "Read closely", detail: "Where a mistake would hurt." },
+  { att: "medium", label: "Worth a look", detail: "Follows from the core change." },
+  { att: "low", label: "Skim", detail: "Tests, docs and wiring." },
+];
+const boardOrder = () => COLUMNS.flatMap((col) => [...UNPLACED, ...CHAPTERS.flatMap((c) => c.hunks.map((r) => r.id))].filter((id) => attOf(id) === col.att));
+function renderCard(id) {
+  const h = HUNK[id], ch = CHAPTER_OF[id], seen = covered(id);
+  const nComments = state.comments.filter((m) => m.hunk === id).length;
+  const nNotes = (NOTES_IN[id] || []).length;
+  const preview = h.lines.filter((l) => l.t !== " " && l.code.trim()).slice(0, 4);
+  return `<button class="vc-card ${seen ? "seen" : ""} ${ch ? "" : "un"}" data-action="open-hunk" data-hunk="${id}">
+    <div class="vc-card-top">${ch ? `<span class="tag-ch">${pad(CHAPTERS.indexOf(ch) + 1)} · ${md(ch.title)}</span>` : `<span class="tag-un">Not explained by the agent</span>`}<span class="sp"></span>${seen ? `<span class="seen-ic">${I.check}</span>` : ""}</div>
+    <div class="vc-card-sum">${ch ? md(REF[id].summary) : "A change outside every chapter."}</div>
+    <div class="vc-card-code">${preview.map((l) => `<div class="mini ${l.t === "+" ? "add" : "del"}"><span>${l.t === "+" ? "+" : "−"}</span><code>${l.html}</code></div>`).join("")}</div>
+    <div class="vc-card-meta"><span class="path">${h.file.split("/").pop()}</span><span>${hunkRange(id)}</span><span class="sp"></span>${nNotes ? `<span class="m agent">${I.spark}${nNotes}</span>` : ""}${nComments ? `<span class="m">${I.bubble}${nComments}</span>` : ""}<span class="n-add">+${h.adds}</span><span class="n-del">−${h.dels}</span></div>
+  </button>`;
+}
+function renderSheet() {
+  const id = state.openHunk, ch = CHAPTER_OF[id];
+  const order = boardOrder(), i = order.indexOf(id);
+  return `<div class="scrim" data-action="close-sheet"></div>
+  <aside class="vc-sheet">
+    <div class="sheet-top"><button class="icon-btn" data-action="sheet-nav" data-d="-1" ${i === 0 ? "disabled" : ""}>${I.chevL}</button><span class="sheet-pos">${i + 1} of ${order.length}</span><button class="icon-btn" data-action="sheet-nav" data-d="1" ${i === order.length - 1 ? "disabled" : ""}>${I.chevR}</button><span class="sp"></span><button class="icon-btn" data-action="close-sheet">${I.x}</button></div>
+    <div class="sheet-body" data-scroll="sheet">
+      <div class="sheet-kick">${ch ? `<span>${pad(CHAPTERS.indexOf(ch) + 1)} · ${md(ch.title)}</span><span class="att-pill att-${attOf(id)}">${ATT[attOf(id)]}</span>` : `<span class="att-pill att-high">Not explained by the agent</span>`}</div>
+      <h2>${ch ? md(REF[id].summary) : "A change outside every chapter"}</h2>
+      ${ch ? `<details class="ctx"><summary>${I.spark} Chapter context from the agent</summary>${ch.narrative.map((p) => `<p>${md(p)}</p>`).join("")}</details>${(ch.callouts || []).map(renderCallout).join("")}` : `<div class="va-un-note" style="margin-bottom:18px">${I.warn}<span>This hunk is in the diff but in no chapter. Check that it belongs in this change.</span></div>`}
+      ${renderFiles([id], { captions: false })}
+    </div>
+    <div class="sheet-foot"><span class="kbd-hint">Click a line number to comment · <kbd>J</kbd> <kbd>K</kbd> move · <kbd>esc</kbd> close</span><span class="sp"></span><button class="btn primary" data-action="seen-next">${I.check} Looks good <kbd>↵</kbd></button></div>
+  </aside>`;
+}
+function renderC() {
+  const s = stats();
+  const order = boardOrder();
+  const fileRows = FILES.map((f) => {
+    const ids = ALL.filter((id) => HUNK[id].file === f.path);
+    const cut = f.path.lastIndexOf("/") + 1;
+    const adds = ids.reduce((a, id) => a + HUNK[id].adds, 0), dels = ids.reduce((a, id) => a + HUNK[id].dels, 0);
+    return `<div class="map-row"><span class="map-path"><bdi>${f.path.slice(0, cut)}<b>${f.path.slice(cut)}</b></bdi></span><div class="map-blocks">${ids.map((id) => `<button class="map-b a-${attOf(id)} ${covered(id) ? "seen" : ""} ${CHAPTER_OF[id] ? "" : "un"}" style="width:${Math.max(18, (HUNK[id].adds + HUNK[id].dels) * 6)}px" data-action="open-hunk" data-hunk="${id}" title="${esc(REF[id]?.summary.replace(/`/g, "") || "Not explained by the agent")}">${covered(id) ? I.check : ""}</button>`).join("")}</div><span class="map-n"><span class="n-add">+${adds}</span><span class="n-del">−${dels}</span></span></div>`;
+  }).join("");
+  return `<div class="vc">
+    <header class="vc-bar"><span class="logo"></span><span class="vc-bar-t">Code review</span><span class="branch">${PAYLOAD.head}</span><span class="sp"></span>
+      <span class="vc-prog"><span class="progress"><div style="width:${(s.covered / ALL.length) * 100}%"></div></span>${s.covered} of ${ALL.length} seen</span>
+      <button class="btn primary" data-action="modal" data-m="verdict">Finish review</button></header>
+    <div class="vc-wrap">
+      <section class="vc-hero">
+        <div>
+          <div class="eyebrow"><span class="branch">${PAYLOAD.head}</span><span>into</span><span class="branch">${PAYLOAD.base}</span><span>· about ${s.minutes} min</span></div>
+          <h1>${md(PAYLOAD.title)}</h1>
+          <p class="vc-intent">${md(PAYLOAD.intent)}</p>
+          <div class="vc-focus">${I.spark}<div><div class="k">If you only have two minutes</div><p>${md(PAYLOAD.focus)}</p></div></div>
+        </div>
+        <div class="vc-mapcard">
+          <div class="vc-mapcard-h"><h3>Where the change is</h3><span>One block per hunk, sized by lines changed</span></div>
+          ${fileRows}
+          <div class="map-legend"><span><i class="a-high"></i>Read closely</span><span><i class="a-medium"></i>Worth a look</span><span><i class="a-low"></i>Skim</span><span><i class="a-high" style="border-style:dashed"></i>Unexplained</span></div>
+        </div>
+      </section>
+      <div class="vc-row">
+        <div class="vc-panel"><div class="k">Verification</div>${renderVerification()}</div>
+        <div class="vc-panel"><div class="k">Coverage</div><div class="vd-stats" style="font-size:14px"><span><b>${s.covered}</b> of ${ALL.length} hunks seen</span><span><b>${s.comments}</b> ${s.comments === 1 ? "comment" : "comments"}</span><span><b>${s.answered}</b> of ${DECISIONS.length} decisions answered</span></div><div class="progress" style="margin-top:12px"><div style="width:${(s.covered / ALL.length) * 100}%"></div></div></div>
+      </div>
+      <section class="vc-qs">
+        <div class="vc-sec-h"><h2>Decisions to confirm</h2><span>${s.answered} of ${DECISIONS.length} answered</span></div>
+        <div class="vc-q-grid">${DECISIONS.map(renderDecision).join("")}</div>
+      </section>
+      <div class="vc-sec-h"><h2>Changes by attention</h2><span>${ALL.length} hunks</span></div>
+      <section class="vc-board">${COLUMNS.map((col) => {
+        const ids = order.filter((id) => attOf(id) === col.att);
+        return `<div class="vc-col"><div class="vc-col-h"><span class="att-bars att-${col.att}"><i></i><i></i><i></i></span><h3>${col.label}</h3><span class="count">${ids.length}</span></div><p class="vc-col-d">${col.detail}</p>${ids.map(renderCard).join("")}${col.att === "low" ? `<button class="btn ghost block" data-action="seen-all-low">${I.check} Mark all as seen</button>` : ""}</div>`;
+      }).join("")}</section>
+    </div>
+    ${state.openHunk ? renderSheet() : ""}
+    ${renderModal()}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- render loop
+const VARIANTS = { A: { name: "Essay", render: renderA }, B: { name: "Cockpit", render: renderB }, C: { name: "Triage", render: renderC } };
+const app = document.getElementById("app");
+let focusComposer = false, resetScroll = null;
+function render() {
+  const scrolls = {};
+  document.querySelectorAll("[data-scroll]").forEach((el) => (scrolls[el.dataset.scroll] = el.scrollTop));
+  const y = window.scrollY;
+  const active = document.activeElement;
+  const focusId = active && active.id;
+  const caret = focusId && "selectionStart" in active ? [active.selectionStart, active.selectionEnd] : null;
+  document.documentElement.dataset.theme = state.theme;
+  document.body.dataset.variant = state.variant;
+  app.innerHTML = VARIANTS[state.variant].render();
+  document.getElementById("proto").innerHTML = `<div class="proto-bar"><span class="proto-tag">Prototype</span><button data-action="variant" data-d="-1">${I.chevL}</button><span class="proto-v"><b>${state.variant}</b>${VARIANTS[state.variant].name}</span><button data-action="variant" data-d="1">${I.chevR}</button><span class="proto-sep"></span><button data-action="theme">${state.theme === "dark" ? I.sun : I.moon}</button><button data-action="modal" data-m="payload">Agent input</button><button data-action="modal" data-m="result">Result</button></div>`;
+  document.querySelectorAll("[data-scroll]").forEach((el) => { if (el.dataset.scroll !== resetScroll && scrolls[el.dataset.scroll] != null) el.scrollTop = scrolls[el.dataset.scroll]; });
+  if (resetScroll !== "window") window.scrollTo(0, y); else window.scrollTo(0, 0);
+  resetScroll = null;
+  const comp = document.getElementById("composer-text");
+  if (focusComposer && comp) { comp.focus(); comp.setSelectionRange(comp.value.length, comp.value.length); }
+  else if (focusId && document.getElementById(focusId)) {
+    const el = document.getElementById(focusId);
+    el.focus({ preventScroll: true });
+    if (caret) try { el.setSelectionRange(caret[0], caret[1]); } catch {}
+  }
+  focusComposer = false;
+  scrollSpyA();
+}
+function setUrl() {
+  const p = new URLSearchParams({ variant: state.variant });
+  if (state.theme === "dark") p.set("theme", "dark");
+  history.replaceState(null, "", `?${p}`);
+}
+function saveComposer() {
+  const c = state.composer;
+  if (!c || !c.text.trim()) return;
+  state.comments.push({ id: `m${++seq}`, hunk: c.hunk, start: c.start, end: c.end, kind: c.kind, text: c.text.trim(), replyTo: c.replyTo });
+  state.composer = null;
+}
+function step(d) {
+  const ids = [...CHAPTERS.map((c) => c.id), ...(UNPLACED.length ? ["unplaced"] : [])];
+  const i = ids.indexOf(state.current) + d;
+  if (i >= 0 && i < ids.length) { state.current = ids[i]; resetScroll = "stage"; }
+  else if (i >= ids.length) state.modal = "verdict";
+}
+function sheetNav(d) {
+  const order = boardOrder(), i = order.indexOf(state.openHunk) + d;
+  if (i >= 0 && i < order.length) { state.openHunk = order[i]; resetScroll = "sheet"; state.composer = null; }
+  else state.openHunk = null;
+}
+const ACTIONS = {
+  noop: () => false,
+  line(d, e) {
+    const i = +d.i, c = state.composer;
+    if (c && !c.replyTo && c.hunk === d.hunk && e.shiftKey) { c.start = Math.min(c.anchor, i); c.end = Math.max(c.anchor, i); }
+    else state.composer = { hunk: d.hunk, anchor: i, start: i, end: i, kind: "change", text: "" };
+    focusComposer = true;
+  },
+  reply(d) { const n = NOTE[d.note]; state.composer = { hunk: n.hunk, anchor: n.idx, start: n.idx, end: n.idx, kind: "question", text: "", replyTo: n.id }; focusComposer = true; },
+  kind(d) { state.composer.kind = d.kind; focusComposer = true; },
+  cancel() { state.composer = null; },
+  save: saveComposer,
+  del(d) { state.comments = state.comments.filter((m) => m.id !== d.id); },
+  decide(d) { const st = (state.decisions[d.dec] ||= {}); st.choice = +d.i; },
+  review(d) { state.reviewed[d.id] = !state.reviewed[d.id]; },
+  "seen-unplaced"() { const all = UNPLACED.every(covered); for (const id of UNPLACED) state.seen[id] = !all; },
+  goto(d) { document.getElementById(`ch-${d.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return false; },
+  select(d) { state.current = d.id; resetScroll = "stage"; },
+  step(d) { step(+d.d); },
+  "review-next"() {
+    if (state.current === "unplaced") for (const id of UNPLACED) state.seen[id] = true;
+    else state.reviewed[state.current] = true;
+    step(1);
+  },
+  tab(d) { state.tab = d.tab; },
+  jump(d) {
+    state.current = CHAPTER_OF[d.hunk]?.id || "unplaced";
+    render();
+    document.getElementById(`hunk-${d.hunk}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return false;
+  },
+  verdict(d) { state.verdict = d.v; },
+  submit() { if (!state.verdict) return false; state.submitted = true; state.modal = "result"; },
+  modal(d) { state.modal = d.m; },
+  "close-modal"() { state.modal = null; },
+  "open-hunk"(d) { state.openHunk = d.hunk; state.composer = null; resetScroll = "sheet"; },
+  "close-sheet"() { state.openHunk = null; state.composer = null; },
+  "sheet-nav"(d) { sheetNav(+d.d); },
+  "seen-next"() { state.seen[state.openHunk] = true; sheetNav(1); },
+  "seen-all-low"() { for (const id of ALL) if (attOf(id) === "low" && CHAPTER_OF[id]) state.seen[id] = true; },
+  variant(d) {
+    const keys = Object.keys(VARIANTS);
+    state.variant = keys[(keys.indexOf(state.variant) + +d.d + keys.length) % keys.length];
+    state.composer = null; state.openHunk = null; state.modal = null; resetScroll = "window";
+    setUrl();
+  },
+  theme() { state.theme = state.theme === "dark" ? "light" : "dark"; setUrl(); },
+};
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  if (el.tagName === "A") e.preventDefault();
+  if (ACTIONS[el.dataset.action](el.dataset, e) !== false) render();
+});
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t.id === "composer-text") state.composer.text = t.value;
+  else if (t.id === "summary") state.summary = t.value;
+  else if (t.dataset.decNote) state.decisions[t.dataset.decNote].note = t.value;
+});
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.closest?.("textarea, input");
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if (e.target.id === "composer-text") { saveComposer(); render(); }
+    else if (e.target.id === "summary" && state.verdict) { ACTIONS.submit(); render(); }
+    return;
+  }
+  if (e.key === "Escape") {
+    if (state.composer) state.composer = null;
+    else if (state.modal) state.modal = null;
+    else if (state.openHunk) state.openHunk = null;
+    else return;
+    render();
+    return;
+  }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") ACTIONS.variant({ d: e.key === "ArrowLeft" ? -1 : 1 });
+  else if (state.variant === "B" && (key === "j" || key === "k")) step(key === "j" ? 1 : -1);
+  else if (state.variant === "B" && key === "r") ACTIONS["review-next"]();
+  else if (state.variant === "C" && state.openHunk && (key === "j" || key === "k")) sheetNav(key === "j" ? 1 : -1);
+  else if (state.variant === "C" && state.openHunk && e.key === "Enter") ACTIONS["seen-next"]();
+  else return;
+  e.preventDefault();
+  render();
+});
+window.addEventListener("scroll", scrollSpyA, { passive: true });
+render();
+</script>
+</body>
+</html>
