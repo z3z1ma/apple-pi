@@ -44,7 +44,7 @@ Source brief: the operator's "Code Context Sidecars with Block-and-Retry Awarene
 
 ## Current State
 
-Phases 0–4 implemented and validated (format, lint, typecheck, unit, pair, loader, pack). Two unrelated timing flakes seen once each (`tasks.test.ts` scheduled command, `tmux-sessions` temp cleanup); both pass in isolation.
+Phases 0–4 implemented. Format, lint, typecheck, pair, loader, pack, and the touched suites pass. No full unit run has exited clean since the child/worker wiring: three runs each failed one different timing test (`tasks` scheduled command, `tmux-sessions` temp cleanup, `pi-exec-work-panel` 5 s timeout), each of which passes alone. The pre-change commit `aff1140` shows the same kind of flakes (1 and 4 failures in two full runs), so they predate this work.
 
 ## Outcome
 
