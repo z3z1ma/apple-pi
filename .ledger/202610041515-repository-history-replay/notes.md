@@ -91,3 +91,24 @@ The branch-search evaluation harness (`components/branch-search/eval/`) already:
 - **Context ablation stays a separate task.**
 
 Before this, the same day: a live check of the simplified `search_branches` on a tiny repo (timing judge `node bench.mjs`, gate `node --test`) worked end to end in 98 s for about $0.11. The agent wrote the judge from the user's suggested measure; three distinct approaches ran, all passed, and the fastest was applied. It proved the mechanics, not the value: every approach beat the baseline by more than 100x.
+
+## 11. Repository binding, discussed and not settled (2026-10-04)
+
+The operator proposed that work be attributable to exactly one ledger task, so histories are clean. The design reached:
+
+- **Rule:** at most one ledger task `in-progress` per repository path (a worktree root). Two worktrees of one repository are two paths, so parallel work moves into worktrees. A task may bind one or more repository paths (operator decision).
+- **Binding:** at `in-progress`, the task binds the paths named in an optional `repositories` argument (local paths; a remote URL alone cannot pick a worktree), or the repository of the session's directory. A session in a parent directory that is no repository must name at least one path, or the transition is refused. Another live task already in progress on a path refuses the transition, naming that task.
+- **Attribution:** sessions whose directory lies in a bound path, or that change files there through `write` or `edit`, link to that task. Changes made through `bash` or `pi_exec` are not detected (a `git status` around every command was declined for its cost).
+- **Unbound work, open:** allow silently, nudge (reliable only for `write` and `edit`, plus a prompt reminder), or block (risks junk tasks that pollute histories). The operator wanted to deliberate this in prose, not settle it in a questionnaire.
+- **Implications, open:** this replaces the deliberate "no active-task pointer" boundary in `AGENTS.md`, `docs/ledger.md`, and `docs/boundaries.md`; it needs worktrees to be easy, possibly a minimal "start this task in a new worktree" workflow shipped with it; this checkout had four tasks in progress at once and two lanes editing it, which the rule forbids; tasks may need to declare acceptance tests, because REM can only replay tasks that have them.
+
+## 12. Shelved (2026-10-04)
+
+The operator judged the replay plumbing half-baked and shelved the task. What changed:
+
+- **Removed:** the `components/history-eval/` harness, its launcher `scripts/eval-run.mjs`, `vitest.eval.config.ts`, the `eval:history` script, `docs/history-eval.md`, and the README sections (commit `bce75c1`). The removed code is in git history at `bce75c1^`: task extraction from cited commits, base-only clones, isolated real SDK sessions with cancellation, oracle scoring, and a cost report. Earlier branch-search evaluation code is at tag `branch-search-v1`.
+- **Kept:** `history.json` session links in every ledger bundle, because the tmux sidebar titles agent cards from them (another lane's feature).
+- **To remove once the other lane's uncommitted ledger edits land:** the start and close commit recording in `history.json`, which only replay used.
+- **Kept here:** this file and `spec.md` (the REM design: Replay, Evaluate, Mutate, run as `/rem`).
+
+To pick this up again: read `task.md`, this file (sections 3-6, 10, 11), and `spec.md`; settle section 11 first, because REM's worlds depend on clean attribution.

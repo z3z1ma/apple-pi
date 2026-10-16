@@ -1,4 +1,4 @@
-Status: in-progress
+Status: planning
 Created: 2026-10-04
 Updated: 2026-10-04
 
@@ -34,7 +34,7 @@ Re-simulation design for AGENTS.md and skills (level 2 in `notes.md` section 5: 
 
 ## Current State
 
-Step 1 done (`441d97c`): the ledger extension maintains `history.json` in every bundle. Review decisions: only sessions with a session file are linked (workers and in-memory children have no transcript); bash and pi_exec edits link by detecting changed bundle files around the call (can misattribute a concurrent change by another session); the ledger root for an edit comes from the edited file's location; a waiting link has no time limit and stops on session abort; a link queued behind a close lands in the archived bundle. Histories now accumulate from this commit on. Later steps still open.
+Shelved by the operator (2026-10-04): the replay plumbing was half-baked. The harness is removed; session links in `history.json` stay for the tmux sidebar; commit recording goes once the other lane's ledger edits land. Everything needed to resume is in `notes.md` (sections 11 and 12 first) and `spec.md`.
 
 ## Outcome
 
