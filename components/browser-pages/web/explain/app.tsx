@@ -23,7 +23,7 @@ const words = (parts: ExplainPart[]) =>
 		0,
 	);
 
-/** Opens with the stage scrolled so `el` sits near the top; long jumps land at once. */
+/** Scrolls the stage so `el` sits near the top; long jumps land at once. */
 function scrollStage(stage: HTMLElement | null, el: Element | null) {
 	if (!stage || !el) return;
 	const to = el.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop - 24;

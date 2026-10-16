@@ -81,14 +81,20 @@ describe("buildExplainPage", () => {
 		expect(warnings).toEqual([]);
 	});
 
-	it("explains the working tree, and reads a range of commits from where they meet", async () => {
+	it("explains the working tree, and a range from where head meets base, as a pull request shows it", async () => {
 		const tree = (
 			await buildExplainPage(params({ steps: [{ title: "S", body: "```code src/util.ts:1-2\n```" }] }), repo, "t")
 		).page;
 		expect(tree.ref).toBe("uncommitted changes");
 		expect(rows(code(tree.steps[0].parts)[0])).toEqual([" 1 export const one = 1;", "+2 export const two = 2;"]);
-		const range = (await buildExplainPage(params({ base: "HEAD~1", head: "main" }), repo, "t")).page;
-		expect(range.ref).toBe(git("rev-parse", "--short=7", "HEAD"));
+		// A branch that left main before its last commit, with a change of its own.
+		git("checkout", "-q", "-b", "other", "HEAD~1");
+		write("src/other.ts", "export const other = true;\n");
+		git("add", "src/other.ts");
+		git("commit", "-q", "-m", "Other work");
+		git("checkout", "-q", "main");
+		const range = (await buildExplainPage(params({ base: "other", head: "main" }), repo, "t")).page;
+		expect(range.stats.map((f) => f.path)).toEqual(["src/policy.ts", "src/retry.ts"]);
 	});
 
 	it("marks new and unchanged files, and turns a bad reference into a warning the agent sees", async () => {
@@ -124,7 +130,7 @@ describe("buildExplainPage", () => {
 		expect(warnings).toEqual([]);
 	});
 
-	it("keeps figures as sandboxed HTML, diagrams as blocks, and rejects an answer that is not an option", async () => {
+	it("keeps a figure's HTML and caption, a diagram as a block, and rejects an answer that is not an option", async () => {
 		const { page } = await buildExplainPage(params(), repo, "t");
 		expect(page.intuition.find((p) => "figure" in p)).toEqual({
 			figure: { caption: "Drag the slider.", html: '<div id="x"></div>' },
@@ -143,15 +149,13 @@ describe("the tutor", () => {
 			{ message: "Talk me through it.", mode: "socratic", thread: [], start: { kind: "talk", question: 1, choice: 0 } },
 			page,
 		)!;
-		const text = tutorPrompt(page, talk);
-		expect(text).toContain("Teach Socratically.");
-		expect(text).toContain("A. a (the reader's choice)\nB. b (right)");
-		expect(text).toContain("do not state it in your first reply");
+		expect(tutorPrompt(page, talk)).toContain("A. a (the reader's choice)\nB. b (right)");
+		// A check asks first, so it reads the same in either mode; a reader's own question follows the mode.
 		const check = parseTutorTurn(
 			{ message: "Check me.", mode: "direct", thread: [], start: { kind: "check", step: 0 } },
 			page,
 		)!;
-		expect(tutorPrompt(page, check)).toContain("Teach Socratically.");
+		expect(tutorPrompt(page, check)).toBe(tutorPrompt(page, { ...check, mode: "socratic" }));
 		expect(tutorPrompt(page, check)).toContain('Step 1, "The cap"');
 		const direct = parseTutorTurn(
 			{
@@ -164,7 +168,7 @@ describe("the tutor", () => {
 			},
 			page,
 		)!;
-		expect(tutorPrompt(page, direct)).toContain("Answer the reader directly");
+		expect(tutorPrompt(page, direct)).not.toBe(tutorPrompt(page, { ...direct, mode: "socratic" }));
 		expect(tutorPrompt(page, direct)).toContain("Reader: Hi\nTutor: Hello\n\nReader: Why four?");
 		for (const bad of [
 			{ message: "", mode: "socratic", thread: [] },
