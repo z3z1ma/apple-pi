@@ -79,6 +79,8 @@ All met.
 
 Done. Committed on `main` (unpushed): `ce1d31c`, `bb2b520`, `08f4829`, `e2f6094`, `4a2ffa1`, `5e2d86a`, `b53f4e1`, `fc281a6`, `c125688`, `cf825e3`. The plugin is loaded in the operator's live tmux server (`prefix + u`, `y`, `A`; `#{@pi_agents}` in `status-right`).
 
+Follow-up: `02117ba` makes title stages queue in order, so a fast first turn still applies its provisional title before the refined one (the real-model run above showed only the refined title because the refined stage used to abort the provisional request).
+
 Not verified: the production sidebar and dashboard drawn by Ghostty itself (verified through tmux `capture-pane` and Textual screenshots), and a reply typed into a real agent from the dashboard (tested with a fake tmux). Running Pi agents started before these commits still use the old extension until restarted (no titles, no `tmuxSocket`), which the views tolerate.
 
 Prototype: `prototype/` (see its README), verdict "Cards in lanes". Textual research notes: `notes/textual-capabilities.md`.
