@@ -30,6 +30,17 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 		theme: "base",
 		fontFamily: v("--font-ui"),
 		flowchart: { useMaxWidth: false, nodeSpacing: 36, rankSpacing: 46, padding: 14, curve: "basis" },
+		// By default a sequence diagram takes `width: 100%`, which a centred box turns into 300px of unreadable text.
+		sequence: {
+			useMaxWidth: false,
+			wrap: true,
+			width: 170,
+			actorMargin: 60,
+			mirrorActors: false,
+			actorFontSize: 14,
+			messageFontSize: 14,
+			noteFontSize: 13,
+		},
 		themeVariables: {
 			fontSize: "15px",
 			primaryColor: v("--surface"),
@@ -39,6 +50,14 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 			secondaryColor: v("--surface-3"),
 			tertiaryColor: v("--surface-2"),
 			edgeLabelBackground: v("--surface-2"),
+			actorBkg: v("--surface"),
+			actorBorder: v("--line-2"),
+			actorTextColor: v("--ink"),
+			signalColor: v("--ink-2"),
+			signalTextColor: v("--ink"),
+			noteBkgColor: v("--surface-3"),
+			noteTextColor: v("--ink-2"),
+			noteBorderColor: v("--line-2"),
 		},
 	});
 	// A diagram that does not parse shows Mermaid's error in its place; the rest still draw.
