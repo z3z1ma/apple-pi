@@ -65,7 +65,7 @@ In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are com
 Next:
 
 1. Operator tries `review_markdown` on a real document (first look at `docs/browser-pages.md`: closed without a verdict).
-2. Design pass 2: `review_ledger_task` (reuse the Markdown reader; file tree, ticket DAG from `Blocked by:`, sign-off), then its operator verdict and build.
+2. Design pass 2: `review_ledger_task` [round 1 prototype](prototypes/ledger-task-review/README.md) (bundle tree, overview with ticket graph and graph checks, ticket neighbourhood, evidence files on demand, the Markdown reader for every document) awaits the operator's verdict; then build.
 3. Design pass 3: `explain_change`.
 
 ## Outcome

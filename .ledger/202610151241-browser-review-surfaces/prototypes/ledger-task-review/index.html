@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · Ledger task review · round 1</title>
+<!--
+  PROTOTYPE. Throwaway. Round 1 of the review_ledger_task design pass. Two real closed ledger bundles are embedded;
+  the bar at the bottom switches bundle, the moment the review happens, and a broken ticket graph. Loads marked from
+  jsDelivr (network needed).
+-->
+<style>
+
+:root {
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f5f1; --surface: #fff; --surface-2: #fbfaf7; --surface-3: #f0eee8;
+  --ink: #1d1c19; --ink-2: #55524b; --ink-3: #8b877f; --ink-4: #bdb9b0;
+  --line: #e9e6df; --line-2: #d9d5cb;
+  --accent: #3b5bdb; --accent-bg: #eef2ff;
+  --agent: #6e4ee6; --agent-bg: #f6f3ff; --agent-line: #e4dcfd;
+  --add-bg: #edf8ef; --add-gutter: #dff2e3; --add-strong: #bfe6c8; --add-ink: #2b8a3e;
+  --del-bg: #fdf1f1; --del-gutter: #f9e2e2; --del-strong: #f5c6c6; --del-ink: #c92a2a;
+  --code-bg: #f0eee8;
+  --att-high: #e8590c; --att-medium: #e9a100; --att-low: #a8a49b;
+  --k-change: #e8590c; --k-question: #1c7ed6; --k-concern: #e9a100; --k-nit: #8b877f; --k-praise: #2f9e44;
+  --pass: #2f9e44; --fail: #e03131; --unverified: #e9a100;
+  --shadow: 0 1px 2px rgba(28, 24, 16, .04), 0 6px 20px rgba(28, 24, 16, .05);
+  --shadow-lg: 0 2px 6px rgba(28, 24, 16, .06), 0 24px 64px rgba(28, 24, 16, .16);
+  --tk-k: #a626a4; --tk-s: #3f8f3a; --tk-n: #986801; --tk-t: #b97a00; --tk-f: #4078f2; --tk-c: #a0a1a7; --tk-p: #0184bc;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0f11; --surface: #15161a; --surface-2: #18191e; --surface-3: #1f2026;
+  --ink: #ecebe7; --ink-2: #a9a7a1; --ink-3: #76746f; --ink-4: #4a4946;
+  --line: #25262c; --line-2: #33343c;
+  --accent: #7b93ff; --accent-bg: rgba(123, 147, 255, .12);
+  --agent: #a98bfa; --agent-bg: rgba(169, 139, 250, .07); --agent-line: rgba(169, 139, 250, .2);
+  --add-bg: rgba(46, 160, 67, .09); --add-gutter: rgba(46, 160, 67, .15); --add-strong: rgba(46, 160, 67, .34); --add-ink: #57d377;
+  --del-bg: rgba(248, 81, 73, .08); --del-gutter: rgba(248, 81, 73, .13); --del-strong: rgba(248, 81, 73, .32); --del-ink: #ff7b72;
+  --code-bg: #22232a;
+  --att-high: #ff8a4c; --att-medium: #f5c04a; --att-low: #6b6a66;
+  --k-change: #ff8a4c; --k-question: #5aa9ff; --k-concern: #f5c04a; --k-nit: #8b8984; --k-praise: #57d377;
+  --pass: #57d377; --fail: #ff6b6b; --unverified: #f5c04a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, .4), 0 30px 80px rgba(0, 0, 0, .55);
+  --tk-k: #c678dd; --tk-s: #98c379; --tk-n: #d19a66; --tk-t: #e5c07b; --tk-f: #61afef; --tk-c: #7f848e; --tk-p: #56b6c2;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; overflow: hidden; }
+button { font: inherit; color: inherit; }
+kbd { font: 500 10.5px var(--font-ui); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-2); border-bottom-width: 2px; color: var(--ink-3); background: var(--surface); margin-left: 2px; }
+.sp { flex: 1; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic-fill { fill: currentColor; stroke: none; }
+p code, li code, h1 code, h2 code, .md code { font: .88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-weight: 500; font-size: 13px; cursor: pointer; transition: background .15s, transform .1s; white-space: nowrap; }
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: transparent; }
+.btn.primary:hover { opacity: .88; }
+.btn.primary kbd { background: transparent; color: inherit; border-color: color-mix(in srgb, var(--bg) 35%, transparent); opacity: .8; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--surface-3); color: var(--ink); }
+.btn.ghost.on { color: var(--agent); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.btn.lg { height: 40px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
+.btn.block { width: 100%; justify-content: center; }
+.btn[disabled] { opacity: .35; pointer-events: none; }
+.icon-btn { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; font-weight: 600; }
+.icon-btn:hover { background: var(--surface-3); color: var(--ink); }
+.link { border: 0; background: none; padding: 0; color: var(--ink-3); font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.link:hover { color: var(--ink); }
+.kbd-hint { font-size: 12px; color: var(--ink-3); }
+.count { font: 600 11px var(--font-ui); color: var(--ink-3); background: var(--surface-3); border-radius: 99px; padding: 1px 7px; }
+.n-add { color: var(--add-ink); font: 500 12px var(--font-mono); }
+.n-del { color: var(--del-ink); font: 500 12px var(--font-mono); }
+.branch { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; }
+.logo { width: 18px; height: 18px; border-radius: 6px; background: conic-gradient(from 210deg, var(--agent), var(--accent), var(--add-ink), var(--agent)); flex: none; }
+.chev { transition: transform .15s var(--ease); width: 14px; height: 14px; color: var(--ink-3); }
+.chev.closed { transform: rotate(-90deg); }
+.att-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--att-low); display: inline-block; flex: none; }
+.att-dot.att-high { background: var(--att-high); } .att-dot.att-medium { background: var(--att-medium); }
+.att-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-ui); letter-spacing: .02em; padding: 2px 8px 2px 7px; border-radius: 99px; color: var(--att-low); background: color-mix(in srgb, var(--att-low) 14%, transparent); text-transform: none; }
+.att-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.att-pill.att-high { color: var(--att-high); background: color-mix(in srgb, var(--att-high) 12%, transparent); }
+.att-pill.att-medium { color: var(--att-medium); background: color-mix(in srgb, var(--att-medium) 14%, transparent); }
+.att-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.att-bars i { width: 3px; border-radius: 1px; background: var(--line-2); }
+.att-bars i:nth-child(1) { height: 5px; } .att-bars i:nth-child(2) { height: 8.5px; } .att-bars i:nth-child(3) { height: 12px; }
+.att-bars.att-low i:nth-child(1) { background: var(--att-low); }
+.att-bars.att-medium i:nth-child(-n+2) { background: var(--att-medium); }
+.att-bars.att-high i { background: var(--att-high); }
+.a-high { --a: var(--att-high); } .a-medium { --a: var(--att-medium); } .a-low { --a: var(--att-low); }
+
+/* inline blocks in the diff */
+.inl { margin: 6px 18px 8px 102px; font: 13.5px/1.55 var(--font-ui); }
+.note-c { display: flex; align-items: center; gap: 8px; width: calc(100% - 120px); height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--agent-line); background: var(--agent-bg); color: var(--ink-2); cursor: pointer; text-align: left; font-size: 12.5px; }
+.note-c:hover { color: var(--ink); }
+.note-c .ic { width: 12px; height: 12px; color: var(--agent); }
+.note-c-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-c-more { color: var(--agent); font-weight: 600; font-size: 12px; }
+.note { padding: 10px 14px 10px 13px; border-radius: 10px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.note-h, .cmt-h { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-3); margin-bottom: 3px; }
+.note-h .who { color: var(--agent); font-weight: 600; }
+.note-h .ic { color: var(--agent); width: 13px; height: 13px; }
+.replies { margin-top: 10px; display: grid; gap: 8px; }
+.replies .cmt, .replies .composer { margin: 0; background: var(--surface); }
+.note-actions { margin-top: 6px; display: flex; gap: 14px; }
+.cmt { padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); border-left: 3px solid var(--k); box-shadow: var(--shadow); }
+.cmt-h .who { color: var(--ink); font-weight: 600; }
+.kind { font-weight: 600; font-size: 11px; letter-spacing: .02em; color: var(--k); }
+.k-question { --k: var(--k-question); } .k-change { --k: var(--k-change); } .k-concern { --k: var(--k-concern); } .k-nit { --k: var(--k-nit); } .k-praise { --k: var(--k-praise); }
+.where { font-family: var(--font-mono); font-size: 11.5px; }
+.av { width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 700 10px/18px var(--font-ui); text-align: center; flex: none; }
+.composer { padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-2)); box-shadow: 0 0 0 4px var(--accent-bg), var(--shadow); }
+.composer.ask { border-color: color-mix(in srgb, var(--agent) 50%, var(--line-2)); box-shadow: 0 0 0 4px var(--agent-bg), var(--shadow); }
+.composer-top { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px; }
+.composer-top b { font-weight: 600; color: var(--ink); }
+.composer-top .kbd-hint { margin-left: auto; }
+.seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--surface-3); }
+.seg button { border: 0; background: transparent; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.seg button .ic { width: 13px; height: 13px; }
+.seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.composer.ask .seg button.on { color: var(--agent); }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.kind-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--line-2); background: transparent; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.kind-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+.kind-chip.on { border-color: var(--k); color: var(--ink); background: color-mix(in srgb, var(--k) 10%, transparent); }
+textarea { width: 100%; resize: vertical; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: 14px/1.5 var(--font-ui); padding: 9px 11px; outline: none; transition: border-color .15s, box-shadow .15s; }
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); background: var(--surface); }
+.composer-foot, .vd-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.ask-t { border-radius: 12px; border: 1px solid var(--agent-line); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+.ask-q { display: flex; gap: 9px; align-items: flex-start; padding: 10px 14px; border-bottom: 1px solid var(--agent-line); }
+.ask-q .where { margin-left: auto; color: var(--ink-3); white-space: nowrap; }
+.ask-a { display: flex; gap: 9px; padding: 11px 14px; background: var(--agent-bg); }
+.ask-a > .ic { color: var(--agent); margin-top: 3px; width: 14px; height: 14px; }
+.ask-a p { margin: 0 0 8px; } .ask-a p:last-child { margin: 0; }
+.ask-actions { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--agent-line); background: var(--agent-bg); }
+.sim-tag { font: 600 10.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.thinking { color: var(--ink-3); display: inline-flex; align-items: center; gap: 8px; }
+.dots { display: inline-flex; gap: 3px; } .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--agent); animation: blink 1s infinite; } .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 50% { opacity: .2; } }
+.dec-c { display: flex; align-items: center; gap: 9px; width: calc(100% - 120px); min-height: 32px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--agent-line); background: var(--surface); cursor: pointer; text-align: left; font-size: 13px; }
+.dec-c.q { border-color: color-mix(in srgb, var(--k-question) 45%, var(--line)); background: color-mix(in srgb, var(--k-question) 5%, var(--surface)); }
+.dec-c .di { color: var(--agent); font-size: 12px; }
+.dec-c.q .di, .dec-c.q .dec-c-k { color: var(--k-question); }
+.dec-c-k { font: 600 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); white-space: nowrap; }
+.dec-c-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550; }
+.dec-c-a { color: var(--ink-3); white-space: nowrap; font-size: 12.5px; }
+.dec-c-a b { color: var(--ink); font-weight: 600; }
+
+/* ---------- shared blocks ---------- */
+.callout { display: flex; gap: 12px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--att-medium) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--att-medium) 30%, var(--line)); }
+.callout .co-ic { color: var(--att-medium); padding-top: 2px; }
+.co-t { font: 600 12px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; color: var(--att-medium); margin-bottom: 2px; }
+.co-b { font-size: 14px; line-height: 1.6; }
+.decision { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.decision.open { border-color: color-mix(in srgb, var(--k-question) 40%, var(--line)); }
+.dec-h { display: flex; align-items: center; gap: 7px; font: 600 11.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); margin-bottom: 6px; }
+.decision.open .dec-h { color: var(--k-question); }
+.dec-h .ic { width: 14px; height: 14px; }
+.dec-h .link { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.dec-q { font: 600 15px/1.4 var(--font-ui); margin-bottom: 2px; }
+.dec-ctx { margin: 0 0 10px; color: var(--ink-2); font-size: 13.5px; }
+.dec-opts { display: grid; gap: 6px; }
+.dec-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.dec-opt:hover { background: var(--surface-3); }
+.dec-opt .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--ink-4); margin-top: 2px; flex: none; }
+.dec-opt.on { border-color: var(--accent); background: var(--accent-bg); }
+.dec-opt.on .radio { border: 5px solid var(--accent); }
+.dec-body { display: grid; gap: 2px; }
+.dec-label { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.dec-detail { color: var(--ink-2); font-size: 13px; }
+.tag-agent { font: 600 10.5px var(--font-ui); color: var(--agent); background: var(--agent-bg); border: 1px solid var(--agent-line); padding: 1px 7px; border-radius: 99px; }
+.dec-note { margin-top: 10px; font-size: 13.5px; }
+.verif { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.verif li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; font-size: 13.5px; line-height: 1.5; }
+.verif .v-ic { padding-top: 2px; }
+.verif .ic { width: 15px; height: 15px; }
+.v-pass .v-ic { color: var(--pass); } .v-fail .v-ic { color: var(--fail); } .v-unverified .v-ic { color: var(--unverified); }
+.v-l { font-weight: 500; } .v-d { color: var(--ink-3); font-size: 12.5px; margin-left: 6px; }
+.verdict { display: grid; gap: 14px; }
+.vd-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-3); }
+.vd-stats b { color: var(--ink); font-weight: 600; }
+.vd-stats .warn { color: var(--att-medium); }
+.vd-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.vd-opt { display: grid; gap: 3px; text-align: left; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; }
+.vd-opt:hover { background: var(--surface-3); }
+.vd-l { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.vd-l::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--vc); }
+.vd-d { color: var(--ink-3); font-size: 12.5px; }
+.vd-approve { --vc: var(--pass); } .vd-approve_notes { --vc: var(--att-medium); } .vd-changes { --vc: var(--k-change); }
+.vd-opt.on { border-color: var(--vc); background: color-mix(in srgb, var(--vc) 9%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc) 14%, transparent); }
+
+/* ---------- overlays ---------- */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); animation: fade .18s var(--ease); }
+.modal { width: min(760px, calc(100vw - 48px)); max-height: calc(100vh - 96px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 22px 24px 24px; animation: rise .22s var(--ease); }
+.modal-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.modal-h h3 { margin: 0; font-size: 17px; font-weight: 650; }
+.modal-sub { color: var(--ink-3); font-size: 13px; margin: -8px 0 14px; }
+.sim { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-3); color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+pre.json { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 12px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.j-k { color: var(--tk-p); } .j-s { color: var(--tk-s); } .j-n { color: var(--tk-n); } .j-b { color: var(--tk-k); }
+.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 28px; }
+.keys div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.keys kbd { font-size: 11.5px; }
+.cl-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; margin-bottom: 8px; }
+.cl-item:hover { border-color: var(--line-2); }
+.cl-meta { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--ink-3); }
+.empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 0; text-align: center; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+
+/* ---------- prototype bar (not part of the design) ---------- */
+.proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 4px; padding: 5px 6px 5px 12px; border-radius: 99px; background: #111; color: #f2f2f2; box-shadow: 0 8px 30px rgba(0, 0, 0, .35), 0 0 0 1px #2a2a2a; font: 12.5px var(--font-ui); }
+.proto-bar button { border: 0; background: transparent; color: #cfcfcf; height: 28px; min-width: 28px; padding: 0 10px; border-radius: 99px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.proto-bar button:hover { background: #2a2a2a; color: #fff; }
+.proto-bar button.on { background: #f2f2f2; color: #111; }
+.proto-tag { font: 700 10px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: #ffb547; margin-right: 6px; }
+.proto-sep { width: 1px; height: 18px; background: #333; margin: 0 4px; }
+
+
+html, body { height: 100%; }
+body { overflow: hidden; }
+.logo { width: auto; height: auto; background: none; border-radius: 0; font-size: 18px; line-height: 1; flex: none; }
+.app { display: grid; grid-template-rows: 54px minmax(0, 1fr); height: 100vh; }
+.top { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.top-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.path-chip { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.count-pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.count-pill.on { background: var(--surface-3); color: var(--ink); }
+.count-pill .n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--ink); color: var(--bg); font-size: 11px; display: grid; place-items: center; }
+.body { display: grid; grid-template-columns: 240px minmax(0, 1fr) 0; min-height: 0; transition: grid-template-columns .2s var(--ease); }
+.body.panel { grid-template-columns: 240px minmax(0, 1fr) 360px; }
+.stage { overflow: auto; position: relative; }
+
+/* outline */
+.outline { overflow: auto; padding: 18px 10px 90px; border-right: 1px solid var(--line); }
+.o-k { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 4px 10px 8px; }
+.o-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font-size: 13.5px; color: var(--ink-2); line-height: 1.35; }
+.o-item.d3 { padding-left: 22px; font-size: 13px; }
+.o-item.d4 { padding-left: 34px; font-size: 12.5px; }
+.o-item:hover { background: var(--surface-3); color: var(--ink); }
+.o-item.on { color: var(--ink); background: var(--surface); box-shadow: var(--shadow), inset 0 0 0 1px var(--line); }
+.o-item .o-n { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--k-change); }
+
+/* document */
+.paper { max-width: 800px; margin: 28px auto 160px; padding: 44px 64px 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+.agent-line { display: flex; gap: 10px; align-items: flex-start; margin: -6px 0 26px; padding: 10px 14px; border-radius: 12px; background: var(--agent-bg); border: 1px solid var(--agent-line); font-size: 14px; line-height: 1.55; color: var(--ink-2); }
+.agent-line .ic { color: var(--agent); margin-top: 3px; width: 13px; height: 13px; }
+.doc { font-size: 16px; line-height: 1.75; color: var(--ink); }
+.blk { position: relative; }
+.blk > :first-child { margin-top: 0; }
+.blk > :last-child { margin-bottom: 0; }
+.blk + .blk { margin-top: 16px; }
+.gut { position: absolute; left: -46px; top: 2px; display: flex; flex-direction: column; gap: 4px; opacity: 0; transition: opacity .12s; }
+.blk:hover .gut { opacity: 1; }
+.gut button { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-3); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.gut button:hover { color: var(--ink); border-color: var(--ink-4); }
+.gut .ic { width: 13px; height: 13px; }
+.doc h1 { font-size: 34px; line-height: 1.18; letter-spacing: -.025em; font-weight: 720; margin: 0 0 12px; }
+.doc h2 { font-size: 23px; line-height: 1.3; letter-spacing: -.015em; font-weight: 680; margin: 34px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.doc h3 { font-size: 18px; font-weight: 660; margin: 22px 0 4px; }
+.doc h4 { font-size: 15px; font-weight: 660; margin: 18px 0 4px; }
+.doc p { margin: 0; }
+.doc a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: 3px; }
+.doc ul, .doc ol { margin: 0; padding-left: 26px; }
+.doc li { margin: 4px 0; }
+.doc li > ul, .doc li > ol { margin: 2px 0; }
+.doc li:has(> input[type="checkbox"]) { list-style: none; margin-left: -22px; }
+.doc input[type="checkbox"] { margin: 0 8px 0 0; accent-color: var(--pass); transform: translateY(1px); }
+.doc code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.doc pre { position: relative; margin: 0; padding: 16px 18px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 13px/1.65 var(--font-mono); white-space: pre; overflow-x: auto; }
+.doc pre code { background: none; padding: 0; font-size: inherit; }
+.doc pre .lang { position: absolute; top: 8px; right: 12px; font: 600 10.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-4); }
+.doc blockquote { margin: 0; padding: 4px 18px; border-left: 3px solid var(--line-2); color: var(--ink-2); }
+.doc table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.doc th, .doc td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.doc th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); font-weight: 650; border-bottom-color: var(--line-2); }
+.doc hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+.alert { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--a-line); background: var(--a-bg); }
+.alert .alert-t { display: flex; align-items: center; gap: 7px; font: 650 12.5px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; color: var(--a-ink); margin-bottom: 4px; }
+.alert .alert-t .ic { width: 14px; height: 14px; }
+.alert p { color: var(--ink); }
+.alert.note { --a-ink: var(--accent); --a-bg: var(--accent-bg); --a-line: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.alert.warning { --a-ink: var(--att-medium); --a-bg: color-mix(in srgb, var(--att-medium) 9%, var(--surface)); --a-line: color-mix(in srgb, var(--att-medium) 32%, var(--line)); }
+.alert.important { --a-ink: var(--agent); --a-bg: var(--agent-bg); --a-line: var(--agent-line); }
+.mermaid-box { display: grid; place-items: center; padding: 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); overflow-x: auto; }
+.mermaid-box svg { max-width: 100%; height: auto; }
+.mermaid-box pre.mermaid { margin: 0; padding: 0; border: 0; background: none; white-space: normal; }
+.tk-k { color: var(--tk-k); } .tk-s { color: var(--tk-s); } .tk-n { color: var(--tk-n); } .tk-t { color: var(--tk-t); } .tk-f { color: var(--tk-f); } .tk-c { color: var(--tk-c); font-style: italic; }
+
+/* annotations in the text */
+mark.an { color: inherit; padding: 1px 0; border-radius: 3px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+mark.an.comment { background: color-mix(in srgb, var(--att-medium) 26%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--att-medium) 70%, transparent); }
+mark.an.delete { background: var(--del-bg); color: var(--del-ink); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+mark.an.suggest { background: var(--del-bg); color: var(--del-ink); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+mark.an.label { background: color-mix(in srgb, var(--k-question) 14%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--k-question) 55%, transparent); }
+mark.an.label.good { background: color-mix(in srgb, var(--pass) 14%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--pass) 55%, transparent); }
+mark.an.ask { background: var(--agent-bg); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--agent) 55%, transparent); }
+mark.an.flash { animation: flash 1.1s var(--ease); }
+@keyframes flash { 0%, 40% { background: color-mix(in srgb, var(--accent) 40%, transparent); } }
+.deco-ins { background: var(--add-strong); color: var(--add-ink); border-radius: 3px; padding: 1px 2px; margin-left: 2px; text-decoration: none; }
+.deco-badge { display: inline-block; font-size: 12px; line-height: 1; padding: 2px 5px; margin-left: 3px; border-radius: 99px; background: var(--surface-3); vertical-align: 1px; cursor: pointer; }
+.blk.block-noted::before { content: ""; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 3px; background: var(--att-medium); }
+.blk.edited::before { content: ""; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 3px; background: var(--add-ink); }
+.edit-tag { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12.5px; color: var(--add-ink); font-weight: 600; }
+.src-diff { margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; font: 12.5px/1.6 var(--font-mono); }
+.src-diff div { padding: 0 12px; white-space: pre-wrap; }
+.src-diff .a { background: var(--add-bg); color: var(--add-ink); }
+.src-diff .d { background: var(--del-bg); color: var(--del-ink); }
+.block-editor textarea { font: 13.5px/1.6 var(--font-mono); min-height: 120px; }
+.block-editor .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+
+/* floating toolbar and popovers */
+.tbar { position: fixed; z-index: 40; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; background: #141414; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: pop .14s var(--ease); }
+.tbar button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #eee; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.tbar button:hover { background: #2b2b2b; }
+.tbar .sep { width: 1px; height: 18px; background: #333; margin: 0 2px; }
+.tbar .ic { width: 14px; height: 14px; }
+.tbar .hint { color: #888; font-size: 11px; padding: 0 6px 0 2px; white-space: nowrap; }
+.tbar button.main { background: #f2f2f2; color: #111; }
+.tbar button.main:hover { background: #fff; }
+.tbar button.icon { width: 30px; padding: 0; justify-content: center; font-size: 14px; }
+.pop { position: fixed; z-index: 41; width: 380px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); animation: pop .14s var(--ease); }
+.pop .quote { font-size: 12.5px; color: var(--ink-3); border-left: 2px solid var(--line-2); padding-left: 8px; margin: 0 0 8px; max-height: 60px; overflow: hidden; }
+.pop-h { display: flex; align-items: center; gap: 8px; font: 600 12px var(--font-ui); color: var(--ink-2); margin-bottom: 8px; }
+.pop-h .ic { width: 13px; height: 13px; }
+.pop .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pop .answer { font-size: 14px; line-height: 1.6; padding: 10px 12px; border-radius: 10px; background: var(--agent-bg); border: 1px solid var(--agent-line); margin-top: 8px; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+
+/* annotations panel */
+.panel { overflow: auto; border-left: 1px solid var(--line); background: var(--surface); padding: 0 14px 90px; }
+.panel-h { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 14px 0 10px; background: var(--surface); }
+.panel-h h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.an-card { display: grid; gap: 6px; width: 100%; text-align: left; padding: 11px 12px; margin-bottom: 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-size: 13.5px; line-height: 1.5; }
+.an-card:hover { border-color: var(--line-2); }
+.an-card .t { display: flex; align-items: center; gap: 7px; font: 650 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; }
+.an-card .t .ic { width: 12px; height: 12px; }
+.an-card .t.comment { color: var(--att-medium); } .an-card .t.delete, .an-card .t.suggest { color: var(--del-ink); } .an-card .t.label { color: var(--k-question); } .an-card .t.ask { color: var(--agent); } .an-card .t.edit { color: var(--add-ink); } .an-card .t.global { color: var(--ink-2); }
+.an-card .q { color: var(--ink-3); font-size: 12.5px; border-left: 2px solid var(--line-2); padding-left: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.an-card .rep ins { text-decoration: none; background: var(--add-strong); border-radius: 3px; padding: 0 2px; }
+.panel .empty { padding: 30px 8px; text-align: center; color: var(--ink-3); font-size: 13.5px; line-height: 1.6; }
+.av { width: auto; height: 18px; padding: 0 6px; border-radius: 99px; background: var(--ink); color: var(--bg); font: 700 10px/18px var(--font-ui); flex: none; }
+.loading { padding: 80px; text-align: center; color: var(--ink-3); }
+
+/* ================================================================ ledger task review (round 1) */
+.body { grid-template-columns: 290px minmax(0, 1fr) 0; }
+.body.panel { grid-template-columns: 290px minmax(0, 1fr) 380px; }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-ui); padding: 3px 9px; border-radius: 99px; color: var(--st); background: color-mix(in srgb, var(--st) 12%, transparent); white-space: nowrap; }
+.status-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* status colours */
+.s-done { --st: var(--pass); }
+.s-progress { --st: var(--att-medium); }
+.s-frontier { --st: var(--accent); }
+.s-blocked { --st: var(--ink-4); }
+.s-task { --st: var(--accent); }
+
+/* bundle tree */
+.tree { overflow: auto; padding: 12px 10px 90px; border-right: 1px solid var(--line); }
+.t-sec { display: flex; align-items: center; gap: 6px; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 16px 10px 6px; }
+.t-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; text-align: left; padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font-size: 13.5px; color: var(--ink-2); line-height: 1.35; }
+.t-row:hover { background: var(--surface-3); color: var(--ink); }
+.t-row.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow), inset 0 0 0 1px var(--line); }
+.t-row .fi { width: 15px; height: 15px; color: var(--ink-3); }
+.t-row.on .fi { color: var(--accent); }
+.t-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-row .file { font: 500 12.5px var(--font-mono); }
+.t-row.in1 { padding-left: 22px; }
+.t-row.in2 { padding-left: 36px; }
+.t-tid { font: 600 11.5px var(--font-mono); color: var(--ink-3); flex: none; width: 18px; }
+.t-row.on .t-tid { color: var(--ink); }
+.st-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--st); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st) 16%, transparent); }
+.s-blocked .st-dot, .st-dot.s-blocked { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-4); }
+.t-meta { font-size: 11px; color: var(--ink-4); flex: none; font-variant-numeric: tabular-nums; }
+.t-n { font-size: 11px; font-weight: 700; color: var(--k-change); flex: none; }
+.t-seen { color: var(--ink-4); flex: none; display: inline-flex; }
+.t-seen .ic { width: 12px; height: 12px; }
+.t-sub { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; padding: 4px 10px 4px 40px; font-size: 12.5px; color: var(--ink-3); line-height: 1.35; border-radius: 6px; position: relative; }
+.t-sub.d3 { padding-left: 52px; }
+.t-sub:hover { color: var(--ink); background: var(--surface-3); }
+.t-sub.on { color: var(--ink); }
+.t-sub.on::before { content: ""; position: absolute; left: 30px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--accent); }
+.t-sub .o-n { margin-left: 6px; }
+.t-folder .chev { margin-left: -2px; }
+.t-more { font-size: 12px; color: var(--ink-3); padding: 4px 10px 4px 36px; }
+.t-keys { margin: 18px 10px 0; display: grid; gap: 6px; font-size: 12px; color: var(--ink-3); }
+
+/* stage */
+.wide { max-width: 1080px; margin: 0 auto; padding: 28px 36px 160px; }
+.ov-k { font: 600 11.5px var(--font-mono); color: var(--ink-3); margin-bottom: 8px; }
+.ov-title { font-size: 32px; line-height: 1.18; letter-spacing: -.025em; font-weight: 720; margin: 0 0 10px; }
+.ov-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--ink-3); font-size: 13px; margin-bottom: 22px; }
+.ov-intent { position: relative; padding: 20px 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 15px; line-height: 1.7; margin-bottom: 18px; }
+.ov-intent p { margin: 0; } .ov-intent p + p { margin-top: 10px; }
+.ov-intent code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.ov-intent .fade { max-height: 168px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.card-k { display: flex; align-items: center; gap: 10px; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+.card-k .link { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+/* ticket graph */
+.graph-card { padding: 20px 24px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 18px; }
+.gc-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.gc-h h2 { margin: 0; font-size: 17px; font-weight: 680; letter-spacing: -.01em; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-3); margin-left: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.checks { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--pass); font-weight: 550; }
+.checks .ic { width: 14px; height: 14px; }
+.checks.bad { color: var(--fail); }
+.problems { margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--fail) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--fail) 28%, var(--line)); font-size: 13px; display: grid; gap: 4px; }
+.problems div { display: flex; gap: 8px; align-items: baseline; }
+.problems div::before { content: "•"; color: var(--fail); }
+.graph-wrap { overflow-x: auto; margin: 14px -24px 0; padding: 6px 24px 10px; }
+.graph { position: relative; margin: 0 auto; }
+.graph > svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.edge { fill: none; stroke: var(--line-2); stroke-width: 1.6; transition: opacity .15s, stroke .15s; }
+.edge-head { fill: var(--line-2); stroke: none; transition: opacity .15s, fill .15s; }
+.edge.done { stroke: color-mix(in srgb, var(--pass) 50%, var(--line-2)); }
+.edge-head.done { fill: color-mix(in srgb, var(--pass) 50%, var(--line-2)); }
+.edge.bad { stroke: var(--fail); stroke-dasharray: 5 4; }
+.edge-head.bad { fill: var(--fail); }
+.graph.hovering .edge, .graph.hovering .edge-head { opacity: .18; }
+.graph.hovering .edge.hot, .graph.hovering .edge-head.hot { opacity: 1; stroke: var(--accent); }
+.graph.hovering .edge-head.hot { fill: var(--accent); }
+.node { position: absolute; display: grid; gap: 7px; align-content: start; text-align: left; padding: 11px 13px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); cursor: pointer; transition: opacity .15s, transform .15s, border-color .15s, box-shadow .15s; }
+.node:hover { transform: translateY(-1px); border-color: var(--line-2); }
+.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.node.s-frontier { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 4px var(--accent-bg), var(--shadow); }
+.node.s-done { background: color-mix(in srgb, var(--pass) 4%, var(--surface)); }
+.node.s-blocked .n-title { color: var(--ink-2); }
+.graph.hovering .node { opacity: .38; }
+.graph.hovering .node.hot { opacity: 1; }
+.n-top { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.n-id { font: 650 12px var(--font-mono); color: var(--ink-2); }
+.n-st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--st); }
+.n-st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.s-blocked .n-st { color: var(--ink-3); }
+.s-blocked .n-st::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-4); }
+.n-an { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--k-change); }
+.n-an .ic { width: 12px; height: 12px; }
+.n-title { font: 600 14px/1.35 var(--font-ui); color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 38px; }
+.n-crit { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.bar { flex: 1; height: 4px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 99px; background: var(--pass); }
+.gc-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.gc-foot b { font-weight: 600; color: var(--ink); }
+.chip { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px 0 8px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-size: 12.5px; color: var(--ink); cursor: pointer; white-space: nowrap; max-width: 280px; }
+.chip:hover { border-color: var(--ink-4); }
+.chip .cid { font: 650 11.5px var(--font-mono); color: var(--ink-2); }
+.chip .ct { overflow: hidden; text-overflow: ellipsis; }
+
+/* documents row on the overview */
+.docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.doc-card { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; box-shadow: var(--shadow); }
+.doc-card:hover { border-color: var(--line-2); }
+.doc-card .dp { display: flex; align-items: center; gap: 7px; font: 500 12px var(--font-mono); color: var(--ink-3); }
+.doc-card .dp .ic { width: 13px; height: 13px; flex: none; }
+.doc-card .dp .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto-bar { width: max-content; }
+.proto-bar button { white-space: nowrap; }
+.node.s-blocked { background: var(--surface-2); }
+.doc-card .dt { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.doc-card .dm { font-size: 12px; color: var(--ink-3); }
+
+/* ticket strip above a ticket */
+.tk-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; margin: -8px 0 28px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); }
+.tk-col { display: grid; gap: 6px; min-width: 0; justify-items: start; }
+.tk-col.in { justify-items: end; }
+.tk-col .chip { max-width: 100%; min-width: 0; }
+.chip .ct { min-width: 0; }
+.tk-mid { display: flex; align-items: center; gap: 10px; }
+.tk-none { font-size: 12.5px; color: var(--ink-3); }
+.tk-arrow { color: var(--ink-4); }
+.tk-arrow .ic { width: 16px; height: 16px; }
+.tk-self { display: grid; gap: 4px; justify-items: center; padding: 8px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
+.tk-self .cid { font: 650 13px var(--font-mono); }
+.tk-lbl { font: 600 10.5px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.doc-path { display: flex; align-items: center; gap: 10px; margin: -14px 0 22px; font: 500 12px var(--font-mono); color: var(--ink-3); }
+.doc-path .sp { flex: 1; }
+.pager { display: flex; gap: 10px; margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); }
+.pager button { flex: 1; display: grid; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.pager button:hover { border-color: var(--line-2); }
+.pager button.next { text-align: right; }
+.pager .pk { font-size: 11.5px; color: var(--ink-3); }
+.pager .pt { font-weight: 600; font-size: 14px; }
+
+/* evidence files */
+.codeview { padding: 14px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); overflow-x: auto; font: 12.5px/1.7 var(--font-mono); }
+.codeview .blk + .blk { margin-top: 0; }
+.cvl { display: grid; grid-template-columns: 56px max-content; padding-right: 18px; white-space: pre; }
+.cv-n { color: var(--ink-4); text-align: right; padding-right: 16px; user-select: none; }
+.tk-p { color: var(--tk-p); }
+.ondemand { display: grid; gap: 8px; justify-items: start; padding: 22px 24px; border-radius: 14px; border: 1px dashed var(--line-2); color: var(--ink-2); font-size: 14px; }
+.ondemand b { color: var(--ink); }
+
+/* annotation panel groups and finish dialog */
+.pg-file { display: flex; align-items: center; gap: 8px; margin: 14px 2px 8px; font: 600 12px var(--font-mono); color: var(--ink-2); cursor: pointer; }
+.pg-file:hover { color: var(--ink); }
+.pg-file .count { font-family: var(--font-ui); }
+.unopened { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--att-medium) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--att-medium) 28%, var(--line)); font-size: 13px; }
+.unopened .row { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="float"></div>
+<div id="proto"></div>
+<script type="module">
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@14/lib/marked.esm.js";
+
+// ================================================================ helpers
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const svg = (d, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 16 16">${d}</svg>`;
+const I = {
+  bubble: svg('<path d="M2.6 4.3c0-1 .8-1.8 1.8-1.8h7.2c1 0 1.8.8 1.8 1.8v5c0 1-.8 1.8-1.8 1.8H7.2l-3.1 2.4v-2.4h0c-.9-.1-1.5-.8-1.5-1.8z"/>'),
+  pencil: svg('<path d="M10.8 2.7l2.5 2.5L6 12.5l-3 .5.5-3z"/>'),
+  strike: svg('<path d="M3 8h10M5.5 5.5c0-1.4 1.2-2.3 2.6-2.3 1.2 0 2.2.5 2.6 1.4M10.5 10.5c0 1.4-1.2 2.3-2.6 2.3-1.3 0-2.4-.6-2.8-1.6"/>'),
+  spark: svg('<path d="M8 1.2l1.7 5.1 5.1 1.7-5.1 1.7L8 14.8l-1.7-5.1L1.2 8l5.1-1.7z"/>', "ic-fill"),
+  x: svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>'),
+  warn: svg('<path d="M8 2.3l6.3 11.1H1.7z"/><path d="M8 6.6v3.1M8 11.6v.1"/>'),
+  moon: svg('<path d="M13.2 9.6A5.6 5.6 0 016.4 2.8a5.6 5.6 0 106.8 6.8z"/>'),
+  sun: svg('<circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3"/>'),
+  send: svg('<path d="M2.2 7.7L13.6 2.6 9.8 13.8 7.6 9.1z"/><path d="M7.6 9.1l6-6.5"/>'),
+  check: svg('<path d="M3.5 8.5l2.8 2.8L12.5 5"/>'),
+  graph: svg('<rect x="1.8" y="2.5" width="4.4" height="3.6" rx="1"/><rect x="9.8" y="2.5" width="4.4" height="3.6" rx="1"/><rect x="5.8" y="9.9" width="4.4" height="3.6" rx="1"/><path d="M4 6.1v1.6c0 .6.4 1 1 1h1.8M12 6.1v1.6c0 .6-.4 1-1 1H9.2M8 8.7v1.2"/>'),
+  doc: svg('<path d="M4 1.8h5.2L12.4 5v9.2H4z"/><path d="M9 1.8V5h3.4M6 8h4.4M6 10.6h4.4"/>'),
+  ticket: svg('<path d="M2 4.5h12v2.2a1.4 1.4 0 000 2.6v2.2H2V9.3a1.4 1.4 0 000-2.6z"/><path d="M10 4.5v7" stroke-dasharray="1.2 1.4"/>'),
+  folder: svg('<path d="M1.8 4.2c0-.6.4-1 1-1h3.4l1.4 1.5h5.6c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H2.8c-.6 0-1-.4-1-1z"/>'),
+  data: svg('<path d="M5 2.5c-1.2 0-1.8.6-1.8 1.8v1.6c0 .9-.5 1.6-1.4 1.8.9.2 1.4.9 1.4 1.8v1.6c0 1.2.6 1.8 1.8 1.8M11 2.5c1.2 0 1.8.6 1.8 1.8v1.6c0 .9.5 1.6 1.4 1.8-.9.2-1.4.9-1.4 1.8v1.6c0 1.2-.6 1.8-1.8 1.8"/>'),
+  arrow: svg('<path d="M3 8h10M9.5 4.5L13 8l-3.5 3.5"/>'),
+  chev: (closed) => `<svg class="ic chev ${closed ? "closed" : ""}" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>`,
+};
+const pad = (n) => String(n).padStart(2, "0");
+const kb = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`);
+function highlightJson(line) {
+  return esc(line)
+    .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)/g, '<span class="tk-p">$1</span>$2')
+    .replace(/(:\s*|^\s*|\[\s*|,\s*)(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, '$1<span class="tk-s">$2</span>')
+    .replace(/\b(-?\d+(?:\.\d+)?)\b(?![^<]*>)/g, '<span class="tk-n">$1</span>')
+    .replace(/\b(true|false|null)\b(?![^<]*>)/g, '<span class="tk-k">$1</span>');
+}
+
+// ================================================================ the bundles: real ledger tasks, as the server would read them
+const DATA = {"bench": {"id": "202610040726-branch-search-challenger-benchmark", "path": ".ledger/202610040726-branch-search-challenger-benchmark", "note": "I split the benchmark into four tickets. Please check the graph and the acceptance criteria before I start ticket 01.", "files": [{"path": "evaluation/trap-benchmark-20261004-171429.md", "bytes": 8577, "source": "# Trap benchmark, 2026-10-04T17:14:29.394Z\n\n- Model: openai/gpt-6.1-sol (profile balanced, thinking medium)\n- Configuration: `/Users/alexanderbut/code_projects/personal/apple-pi/.ledger/202610040726-branch-search-challenger-benchmark/evaluation/traps-balanced.json`\n- Ran from 2026-10-04T17:14:29.394Z to 2026-10-04T18:45:37.512Z\n- Traps: `config-deep-merge`, `slugify-diacritics`, `tags-case-dedupe`; 5 runs per arm, 3 at once\n- Runs finished: 45 of 45\n- Arms: alone is one prompt (the goal with a branch directive's commitment framing, `branch.limits` as its budget); search runs branch search with an authored scorer and no challengers; search+challengers adds `scorer.challengers`. Each run starts from a fresh repository holding only the trap's base. A search's final state is its winner, applied or not, else the base. Every final state is scored with the trap's hidden oracle; solved means it passes.\n- Scorer kill rate: after each search, the trap's known-wrong solution is put on a fresh copy of the base, the search's frozen scorer is installed, and its gates run; it is killed when any gate fails. The rate counts every run of the arm, so a search without a frozen scorer (say, `aborted: scorer invalid`) counts as no kill.\n- Wall-clock is the run alone (the trajectory, or the whole search with its own scoring), without staging and oracle scoring. Tokens are input + cache read + cache write + output; fidelity tags (`fidelity.profile`) are outside them. Est. cost prices every token at the evaluated model's rates (USD per million: input 2, output 10, cache read 0.1, cache write 2.5), including a scorer review on another profile.\n\n## Results\n\n| Trap | Arm | Solved | Median wall-clock | Total tokens | Est. cost (USD) | Scorer kill rate |\n|---|---|---|---|---|---|---|\n| config-deep-merge | alone | 5 of 5 (100%) | 95.6 s | 150,127 | 0.223172 | \u2014 |\n| config-deep-merge | search | 5 of 5 (100%) | 307.6 s | 895,360 | 1.263794 | 5 of 5 (100%) |\n| config-deep-merge | search+challengers | 5 of 5 (100%) | 402.5 s | 825,875 | 1.490950 | 5 of 5 (100%) |\n| slugify-diacritics | alone | 5 of 5 (100%) | 289.7 s | 1,174,145 | 0.719863 | \u2014 |\n| slugify-diacritics | search | 3 of 5 (60%) | 718.1 s | 5,621,170 | 3.239842 | 5 of 5 (100%) |\n| slugify-diacritics | search+challengers | 4 of 5 (80%) | 730.8 s | 4,222,044 | 3.249499 | 5 of 5 (100%) |\n| tags-case-dedupe | alone | 5 of 5 (100%) | 57.5 s | 120,301 | 0.155698 | \u2014 |\n| tags-case-dedupe | search | 5 of 5 (100%) | 219.2 s | 336,593 | 0.702872 | 5 of 5 (100%) |\n| tags-case-dedupe | search+challengers | 5 of 5 (100%) | 273.4 s | 484,995 | 0.926902 | 5 of 5 (100%) |\n\n## Scorer kill rate\n\n- search: 15 of 15 (100%)\n- search+challengers: 15 of 15 (100%)\n\n## Overall\n\n| Arm | Solved | Total tokens | Est. cost (USD) |\n|---|---|---|---|\n| alone | 15 of 15 (100%) | 1,444,573 | 1.098733 |\n| search | 13 of 15 (87%) | 6,853,123 | 5.206508 |\n| search+challengers | 14 of 15 (93%) | 5,532,914 | 5.667351 |\n\n## Win bar\n\n- [ ] Not met: search+challengers solved 14 of 15 (93%), alone 15 of 15 (100%): -7 percentage points (bar: +20).\n\n## Runs\n\n| Trap | Arm | Run | Solved | Oracle | Outcome | Wall-clock | Total tokens | Est. cost (USD) | Killed known-wrong | Search |\n|---|---|---|---|---|---|---|---|---|---|---|\n| config-deep-merge | alone | 1 | yes | pass | stop | 95.6 s | 29,546 | 0.046030 | \u2014 | \u2014 |\n| config-deep-merge | alone | 2 | yes | pass | stop | 88.3 s | 31,166 | 0.033722 | \u2014 | \u2014 |\n| config-deep-merge | alone | 3 | yes | pass | stop | 86.6 s | 25,816 | 0.043118 | \u2014 | \u2014 |\n| config-deep-merge | alone | 4 | yes | pass | stop | 98.5 s | 34,906 | 0.049535 | \u2014 | \u2014 |\n| config-deep-merge | alone | 5 | yes | pass | stop | 97.6 s | 28,693 | 0.050767 | \u2014 | \u2014 |\n| config-deep-merge | search | 1 | yes | pass | applied | 327.7 s | 139,699 | 0.250686 | yes | `bs-20261004-171431-1a30` |\n| config-deep-merge | search | 2 | yes | pass | applied | 266.0 s | 95,054 | 0.214729 | yes | `bs-20261004-171734-dbd1` |\n| config-deep-merge | search | 3 | yes | pass | applied | 307.6 s | 103,332 | 0.237347 | yes | `bs-20261004-172201-d126` |\n| config-deep-merge | search | 4 | yes | pass | applied | 677.3 s | 474,595 | 0.366096 | yes | `bs-20261004-172838-8991` |\n| config-deep-merge | search | 5 | yes | pass | applied | 274.4 s | 82,680 | 0.194936 | yes | `bs-20261004-173028-58d4` |\n| config-deep-merge | search+challengers | 1 | yes | pass | applied | 368.3 s | 136,693 | 0.282824 | yes | `bs-20261004-171431-5ad4` |\n| config-deep-merge | search+challengers | 2 | yes | pass | applied | 517.7 s | 170,721 | 0.323186 | yes | `bs-20261004-171959-edeb` |\n| config-deep-merge | search+challengers | 3 | yes | pass | applied | 402.5 s | 152,958 | 0.277690 | yes | `bs-20261004-172207-953f` |\n| config-deep-merge | search+challengers | 4 | yes | pass | applied | 417.7 s | 233,361 | 0.308076 | yes | `bs-20261004-172848-a013` |\n| config-deep-merge | search+challengers | 5 | yes | pass | applied | 355.2 s | 132,142 | 0.299174 | yes | `bs-20261004-173503-3d4d` |\n| slugify-diacritics | alone | 1 | yes | pass | stop | 289.7 s | 262,768 | 0.154630 | \u2014 | \u2014 |\n| slugify-diacritics | alone | 2 | yes | pass | stop | 291.7 s | 235,278 | 0.143025 | \u2014 | \u2014 |\n| slugify-diacritics | alone | 3 | yes | pass | stop | 256.4 s | 219,437 | 0.145736 | \u2014 | \u2014 |\n| slugify-diacritics | alone | 4 | yes | pass | stop | 340.4 s | 307,700 | 0.166858 | \u2014 | \u2014 |\n| slugify-diacritics | alone | 5 | yes | pass | stop | 200.9 s | 148,962 | 0.109614 | \u2014 | \u2014 |\n| slugify-diacritics | search | 1 | no | fail | no survivor | 952.3 s | 1,640,867 | 0.800251 | yes | `bs-20261004-173956-42ef` |\n| slugify-diacritics | search | 2 | yes | pass | applied | 743.3 s | 1,320,894 | 0.694898 | yes | `bs-20261004-174551-0693` |\n| slugify-diacritics | search | 3 | yes | pass | applied | 718.1 s | 908,381 | 0.663975 | yes | `bs-20261004-175815-f404` |\n| slugify-diacritics | search | 4 | no | fail | applied | 485.5 s | 562,379 | 0.408619 | yes | `bs-20261004-180859-8de6` |\n| slugify-diacritics | search | 5 | yes | pass | applied | 623.3 s | 1,188,649 | 0.672100 | yes | `bs-20261004-181559-0f0c` |\n| slugify-diacritics | search+challengers | 1 | yes | pass | applied | 730.8 s | 915,062 | 0.699842 | yes | `bs-20261004-174037-bfab` |\n| slugify-diacritics | search+challengers | 2 | yes | pass | applied | 629.7 s | 670,582 | 0.565711 | yes | `bs-20261004-175248-de7f` |\n| slugify-diacritics | search+challengers | 3 | no | fail | applied | 751.3 s | 957,295 | 0.658566 | yes | `bs-20261004-180005-5498` |\n| slugify-diacritics | search+challengers | 4 | yes | pass | applied | 625.2 s | 865,091 | 0.705848 | yes | `bs-20261004-181014-23dc` |\n| slugify-diacritics | search+challengers | 5 | yes | pass | applied | 753.3 s | 814,014 | 0.619532 | yes | `bs-20261004-181705-3c53` |\n| tags-case-dedupe | alone | 1 | yes | pass | stop | 146.1 s | 24,686 | 0.036774 | \u2014 | \u2014 |\n| tags-case-dedupe | alone | 2 | yes | pass | stop | 56.8 s | 24,831 | 0.030406 | \u2014 | \u2014 |\n| tags-case-dedupe | alone | 3 | yes | pass | stop | 65.0 s | 24,009 | 0.027920 | \u2014 | \u2014 |\n| tags-case-dedupe | alone | 4 | yes | pass | stop | 55.9 s | 24,521 | 0.033492 | \u2014 | \u2014 |\n| tags-case-dedupe | alone | 5 | yes | pass | stop | 57.5 s | 22,254 | 0.027106 | \u2014 | \u2014 |\n| tags-case-dedupe | search | 1 | yes | pass | applied | 206.4 s | 72,739 | 0.149228 | yes | `bs-20261004-182306-6849` |\n| tags-case-dedupe | search | 2 | yes | pass | applied | 223.4 s | 65,306 | 0.146521 | yes | `bs-20261004-182831-1961` |\n| tags-case-dedupe | search | 3 | yes | pass | applied | 243.9 s | 70,191 | 0.136441 | yes | `bs-20261004-183248-b5e5` |\n| tags-case-dedupe | search | 4 | yes | pass | applied | 219.2 s | 67,777 | 0.135140 | yes | `bs-20261004-183609-f68f` |\n| tags-case-dedupe | search | 5 | yes | pass | applied | 184.6 s | 60,580 | 0.135542 | yes | `bs-20261004-183914-2cf3` |\n| tags-case-dedupe | search+challengers | 1 | yes | pass | applied | 274.3 s | 93,140 | 0.177925 | yes | `bs-20261004-182623-0410` |\n| tags-case-dedupe | search+challengers | 2 | yes | pass | applied | 302.7 s | 105,245 | 0.206330 | yes | `bs-20261004-182939-0b0e` |\n| tags-case-dedupe | search+challengers | 3 | yes | pass | applied | 271.0 s | 98,598 | 0.192711 | yes | `bs-20261004-183305-d8ff` |\n| tags-case-dedupe | search+challengers | 4 | yes | pass | applied | 242.3 s | 88,792 | 0.178002 | yes | `bs-20261004-183808-1458` |\n| tags-case-dedupe | search+challengers | 5 | yes | pass | applied | 273.4 s | 99,220 | 0.171934 | yes | `bs-20261004-184033-ee6f` |\n"}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/1-bs-20261004-171431-5ad4/record.json", "bytes": 18483, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/1-bs-20261004-171431-5ad4/spec.json", "bytes": 5648, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/2-bs-20261004-171959-edeb/record.json", "bytes": 21501, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/2-bs-20261004-171959-edeb/spec.json", "bytes": 6978, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/3-bs-20261004-172207-953f/record.json", "bytes": 23693, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/3-bs-20261004-172207-953f/spec.json", "bytes": 6271, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/4-bs-20261004-172848-a013/record.json", "bytes": 21179, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/4-bs-20261004-172848-a013/spec.json", "bytes": 5398, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/5-bs-20261004-173503-3d4d/record.json", "bytes": 19466, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search+challengers/5-bs-20261004-173503-3d4d/spec.json", "bytes": 5141, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/1-bs-20261004-171431-1a30/record.json", "bytes": 11505, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/1-bs-20261004-171431-1a30/spec.json", "bytes": 5094, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/2-bs-20261004-171734-dbd1/record.json", "bytes": 11186, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/2-bs-20261004-171734-dbd1/spec.json", "bytes": 4611, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/3-bs-20261004-172201-d126/record.json", "bytes": 12894, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/3-bs-20261004-172201-d126/spec.json", "bytes": 5448, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/4-bs-20261004-172838-8991/record.json", "bytes": 13665, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/4-bs-20261004-172838-8991/spec.json", "bytes": 5149, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/5-bs-20261004-173028-58d4/record.json", "bytes": 32277, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/config-deep-merge/search/5-bs-20261004-173028-58d4/spec.json", "bytes": 5983, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/1-bs-20261004-174037-bfab/record.json", "bytes": 19229, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/1-bs-20261004-174037-bfab/spec.json", "bytes": 5151, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/2-bs-20261004-175248-de7f/record.json", "bytes": 21539, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/2-bs-20261004-175248-de7f/spec.json", "bytes": 4162, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/3-bs-20261004-180005-5498/record.json", "bytes": 23908, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/3-bs-20261004-180005-5498/spec.json", "bytes": 3931, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/4-bs-20261004-181014-23dc/record.json", "bytes": 20021, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/4-bs-20261004-181014-23dc/spec.json", "bytes": 3933, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/5-bs-20261004-181705-3c53/record.json", "bytes": 20947, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search+challengers/5-bs-20261004-181705-3c53/spec.json", "bytes": 4336, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/1-bs-20261004-173956-42ef/record.json", "bytes": 29777, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/1-bs-20261004-173956-42ef/spec.json", "bytes": 4274, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/2-bs-20261004-174551-0693/record.json", "bytes": 13365, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/2-bs-20261004-174551-0693/spec.json", "bytes": 5295, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/3-bs-20261004-175815-f404/record.json", "bytes": 12683, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/3-bs-20261004-175815-f404/spec.json", "bytes": 3895, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/4-bs-20261004-180859-8de6/record.json", "bytes": 14699, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/4-bs-20261004-180859-8de6/spec.json", "bytes": 4993, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/5-bs-20261004-181559-0f0c/record.json", "bytes": 13526, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/slugify-diacritics/search/5-bs-20261004-181559-0f0c/spec.json", "bytes": 3768, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/1-bs-20261004-182623-0410/record.json", "bytes": 16131, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/1-bs-20261004-182623-0410/spec.json", "bytes": 3824, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/2-bs-20261004-182939-0b0e/record.json", "bytes": 15099, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/2-bs-20261004-182939-0b0e/spec.json", "bytes": 4131, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/3-bs-20261004-183305-d8ff/record.json", "bytes": 15234, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/3-bs-20261004-183305-d8ff/spec.json", "bytes": 4215, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/4-bs-20261004-183808-1458/record.json", "bytes": 15215, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/4-bs-20261004-183808-1458/spec.json", "bytes": 3680, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/5-bs-20261004-184033-ee6f/record.json", "bytes": 16427, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search+challengers/5-bs-20261004-184033-ee6f/spec.json", "bytes": 3944, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/1-bs-20261004-182306-6849/record.json", "bytes": 13340, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/1-bs-20261004-182306-6849/spec.json", "bytes": 3629, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/2-bs-20261004-182831-1961/record.json", "bytes": 13355, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/2-bs-20261004-182831-1961/spec.json", "bytes": 3833, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/3-bs-20261004-183248-b5e5/record.json", "bytes": 12661, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/3-bs-20261004-183248-b5e5/spec.json", "bytes": 3720, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/4-bs-20261004-183609-f68f/record.json", "bytes": 12674, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/4-bs-20261004-183609-f68f/spec.json", "bytes": 3457, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/5-bs-20261004-183914-2cf3/record.json", "bytes": 12322, "source": null}, {"path": "evaluation/trap-benchmark-20261004-171429/tags-case-dedupe/search/5-bs-20261004-183914-2cf3/spec.json", "bytes": 3765, "source": null}, {"path": "evaluation/traps-balanced.json", "bytes": 1060, "source": "{\n  \"model\": \"balanced\",\n  \"traps\": [\n    \"config-deep-merge\",\n    \"slugify-diacritics\",\n    \"tags-case-dedupe\"\n  ],\n  \"runsPerArm\": 5,\n  \"concurrency\": 3,\n  \"oracle\": {\n    \"timeoutSec\": 60\n  },\n  \"search\": {\n    \"passive\": {\n      \"enabled\": false,\n      \"repeatThreshold\": 3\n    },\n    \"enumerate\": {\n      \"count\": 4\n    },\n    \"branches\": {\n      \"perGeneration\": 3,\n      \"maxTotal\": 6\n    },\n    \"generations\": {\n      \"maxDepth\": 1,\n      \"rootsPerGeneration\": 1,\n      \"parentsPerGeneration\": 1,\n      \"childrenPerParent\": 2\n    },\n    \"branch\": {\n      \"limits\": {\n        \"wallClockSec\": 900,\n        \"outputTokens\": 40000\n      }\n    },\n    \"scorer\": {\n      \"validationRetries\": 1,\n      \"challengers\": 2\n    },\n    \"constraints\": [\n      \"Add no new dependencies.\",\n      \"Change as few files as possible.\",\n      \"Delete or simplify existing code before you add code.\",\n      \"Write a failing test that reproduces the problem before you change any source file.\"\n    ],\n    \"workspace\": {\n      \"cloneIgnored\": []\n    },\n    \"apply\": \"auto\"\n  }\n}"}, {"path": "retrospective.md", "bytes": 915, "source": "Status: complete\nCreated: 2026-10-04\nUpdated: 2026-10-04\n\n# Retrospective\n\n## What Mattered\n\n- The benchmark answered the real question in 91 minutes for about $12: with explicit goals, a single agent solves the traps, so search had no headroom.\n- Scorer kill rate on known-wrong solutions was 100% with or without challengers; the authored checks were not the limit on these traps, their blind spots were (the slugify misses).\n\n## Learnings\n\n- Benchmark tasks must include ones where a single run actually fails; otherwise only cost can show.\n- A judge written by the same model as the attempts cannot select for what that model misses.\n- Smallest-diff tie-breaks prefer the less complete of two survivors under incomplete checks.\n- The eval harness hid catalog-only models until the downloaded catalog was copied into its isolated state.\n\n## Improvements\n\n- Run a cheap end-to-end demo before ticketing a design.\n"}, {"path": "task.md", "bytes": 5510, "source": "Status: done\nCreated: 2026-10-04\nUpdated: 2026-10-04\n\n# Branch search: adversarial scorer and trap benchmark\n\n## Intent\n\nThe slugify demo (2026-10-04; a throwaway repository, not kept: `slugify` keeps every script, and the goal is to turn Latin letters with diacritics into ASCII) showed that the search works live in about 6 minutes, but its authored checks missed ligatures (`\u00e6`, `\u00df`, `\u0153`). No attempt died, and the search beat the agent alone by luck. The checks are the weak link. This task makes the checks adversarial and measures, on fast staged traps, whether search beats one trajectory.\n\nPrior work: `.ledger/history/202610031403-branch-search/` (spec, tickets, pilot evaluation). Product behavior: `docs/branch-search.md`.\n\n## Approach (draft)\n\n1. **Challenger pass.** After the authored scorer validates, one or more challenger forks each write a plausible but wrong implementation of the goal in a base worktree, and name the defect they planted. Challengers never see the checks. The harness runs the gates on each challenger implementation. A challenger that passes every gate exposes a gap: the author gets the challenger's diff and defect claim, adds a check, and validation must then show the new check fails on the base and on that challenger implementation. Challenger content never reaches branches (phase separation, spec 8.4). The record keeps each challenger's diff, claim, and whether the gates caught it. The number of challengers is a configuration key with no built-in value.\n2. **Trap benchmark.** 3 to 5 staged traps checked into the repo: each a tiny repository, a goal, and an oracle test that runs in seconds. In each, the obvious fix passes the visible tests but fails a hidden case. Arms: agent alone (framed like a branch directive), search, and search with challengers. Each arm runs N times per trap, in parallel. The report gives per trap and arm the solve rate, median time, and cost, plus how often the authored checks killed a known-wrong reference implementation stored with the trap.\n\n## Acceptance criteria (draft)\n\n- With challengers configured, a challenger implementation that passes every gate makes the author add a check, and the frozen scorer fails on that implementation. A test proves it with scripted replies.\n- No challenger diff, claim, or check content appears in any branch prompt or on disk while a branch runs.\n- Each trap's known-wrong reference implementation fails its oracle and passes its visible tests; its correct reference passes both.\n- The benchmark command runs all arms N times per trap and writes one report with solve rate, median time, cost, and the scorer-kill rate per arm.\n- The first benchmark report exists in this bundle.\n\n## Decisions (operator, 2026-10-04)\n\n- First benchmark: 3 traps, 5 runs per arm (45 runs; roughly $10-20).\n- 2 challenger forks per search; `branch-search.example.json` gets the same value.\n- Win bar, fixed before the run: search with challengers solves at least 20 percentage points more trap runs than the agent alone, over all traps.\n\n## Current State\n\nTickets 01-04 done. First benchmark (2026-10-04, `evaluation/trap-benchmark-20261004-171429.md`, operator chose the `balanced` profile, openai/gpt-6.1-sol, medium): 45 of 45 runs, about $12 estimated, 91 minutes.\n\n- Solved: alone 15 of 15, search 13 of 15, search+challengers 14 of 15. Win bar not met (-7 points against +20).\n- Scorer kill rate on the known-wrong solutions: 100% in both search arms.\n- Cost: search arms about 5x the tokens and 3-4x the wall-clock of the agent alone.\n- All search misses were on slugify: two survivors passed the authored checks with nearly equal diffs, and the smaller one missed hidden cases; one search had no survivor.\n- Reading: the goals state every requirement the oracle checks, so a careful single agent solved everything; the benchmark had no headroom for search to show a gain. The smallest-diff tie-break can prefer the less complete of two survivors when the checks miss a case.\n\n- 01 `fbe4e45` (+ `586b270`): challenger pass. Decisions in review: an open gap after the repair rounds ends `aborted: scorer invalid`; the author may dismiss a claimed defect with a recorded reason; author and challenger forks write git objects to a private store; scorer-phase refs are restored except changes whose objects the shared store holds (user work). A ref deleted during the phase is recreated. Documented residuals: a fork that deliberately bypasses the private store; a user stash pushed on top of a challenger stash in the same phase leaves the challenger's entry.\n- 02 `ecebfa0` (+ `edf6af1`): traps slugify-diacritics (input coverage), config-deep-merge (regression), tags-case-dedupe (performance).\n- 03 `7137f2c`: `npm run eval:traps` with `BRANCH_SEARCH_TRAPS_CONFIG` and `BRANCH_SEARCH_TRAPS_OUT`; example `components/branch-search/eval/traps.example.json`. A shared launcher (`scripts/eval-run.mjs`) owns cancellation for both evaluation commands.\n- Cost: the builder estimates about 1,800 requests for 45 runs, roughly $40-150 on an Opus-class profile, well above the planned $10-20.\n\n## Outcome\n\nWin bar not met; the agent alone solved every trap. Conclusion with the operator (2026-10-04): a model-authored scorer shares the attempts' blind spots, so the authored-scorer path adds cost without value; branching stays only for user-defined scalar judges. Branch search is to be simplified, and the follow-up idea moved to `.ledger/202610041515-repository-history-replay/` (see its `notes.md`).\n"}, {"path": "tickets/01-challenger-pass.md", "bytes": 1903, "source": "# 01: Challenger pass\n\n**What to build:** When the configuration sets `scorer.challengers`, the search attacks its own authored checks before any attempt runs. That many challenger forks each write a plausible but wrong solution to the goal in a copy of the base, and state the defect they planted; they never see the checks. The harness runs the gates on each challenger solution. A challenger solution that passes every gate exposes a gap: the author receives that solution's diff and stated defect, adds or sharpens a check, and the scorer is validated again, which now also requires that the gates reject that challenger solution. Only then does the scorer freeze and the enumerator start. Challenger content stays out of every attempt's reach, like the rest of the scorer. The record keeps each challenger's diff, stated defect, and whether the gates caught it. `branch-search.example.json` sets 2 challengers, and the branch-search docs describe the pass.\n\n**Blocked by:** None (can start immediately).\n\n**Status:** ready-for-agent\n\n- [ ] With challengers configured and scripted replies, a challenger solution that passes every authored gate sends the author its diff and stated defect, and the frozen scorer's gates reject that challenger solution.\n- [ ] A challenger solution that the authored gates already reject causes no author round, and the record marks it caught.\n- [ ] Without `scorer.challengers`, no challenger fork starts and no challenger request is sent.\n- [ ] No challenger diff, stated defect, or check content appears in any enumerator or attempt request, or on disk while an enumerator or attempt runs.\n- [ ] The record holds each challenger's diff, stated defect, and caught or not, and its token cost counts in the search's cost.\n- [ ] `branch-search.example.json` passes the configuration validator with 2 challengers, and the docs describe the challenger pass and its key.\n"}, {"path": "tickets/02-trap-puzzles.md", "bytes": 1053, "source": "# 02: Three trap puzzles with reference solutions\n\n**What to build:** Three staged trap puzzles checked into the repository for the benchmark: the slugify diacritics puzzle from the 2026-10-04 demo plus two new kinds of trap. Each puzzle is a tiny repository with a goal text, visible tests, a hidden oracle test that runs in seconds, a known-wrong solution (the obvious fix that passes the visible tests), and a known-right solution. A check proves each puzzle is a real trap.\n\n**Blocked by:** None (can start immediately).\n\n**Status:** ready-for-agent\n\n- [ ] For every puzzle, the base fails the oracle, the known-wrong solution passes the visible tests and fails the oracle, and the known-right solution passes both; a test asserts all three.\n- [ ] Every puzzle's oracle runs in under 5 seconds and needs no network or package install.\n- [ ] The three puzzles trap in different ways (not three variants of one input-coverage gap), and each puzzle's goal names only interfaces an attempt can know.\n- [ ] The puzzles stay out of the published package.\n"}, {"path": "tickets/03-benchmark-runner.md", "bytes": 1681, "source": "# 03: Benchmark runner and report\n\n**What to build:** One command runs the trap benchmark: for each puzzle, each arm runs N times in parallel, each run in a fresh copy of the puzzle. The arms are the agent alone (prompted to work until done, like an attempt directive), search, and search with challengers. Every final state is scored with the puzzle's oracle. Separately, each search's frozen checks are run against the puzzle's known-wrong solution to measure whether they kill it. The command writes one report: per puzzle and arm the solve rate, median time, and cost; the scorer kill rate per search arm; overall solve rates; and whether the win bar holds (search with challengers solves at least 20 percentage points more runs than the agent alone over all puzzles). Run count, model, and search configuration come from an operator-supplied file; nothing is built in.\n\n**Blocked by:** 01 (Challenger pass), 02 (Three trap puzzles with reference solutions).\n\n**Status:** ready-for-agent\n\n- [ ] With the fake model and scripted replies, the command runs all three arms N times on each puzzle in fresh copies and scores every final state with that puzzle's oracle.\n- [ ] The report lists per puzzle and arm the solve rate, median time, and cost, the scorer kill rate on the known-wrong solution for each search arm, and the win-bar verdict computed from the overall solve rates.\n- [ ] A missing configuration file or key prints what to fix and starts no model request.\n- [ ] Cancelling the command stops running arms, removes their copies, and writes the report of what finished.\n- [ ] The command never runs in the default test suite, and nothing it adds ships in the package.\n"}, {"path": "tickets/04-first-benchmark-run.md", "bytes": 689, "source": "# 04: First benchmark run\n\n**What to build:** Run the trap benchmark for real with the operator's decided scale (3 puzzles, 5 runs per arm, 3 arms) on the operator's chosen model, and store the report and its search records in this task bundle.\n\n**Blocked by:** 03 (Benchmark runner and report).\n\n**Status:** ready-for-agent\n\n- [ ] The report for 45 runs exists in this task bundle, with every arm's solve rate, median time, cost, and scorer kill rate.\n- [ ] The report states whether the win bar (+20 percentage points for search with challengers over the agent alone) holds.\n- [ ] The task records the total spend and any run that failed for a harness reason rather than a model reason.\n"}]}, "monty": {"id": "202609251319-monty-pi-exec", "path": ".ledger/202609251319-monty-pi-exec", "note": "Plan and tickets for the Monty rewrite. I need your sign-off on the slicing before I implement.", "files": [{"path": "plan.md", "bytes": 10742, "source": "# Plan: rebuild pi_exec on Monty\n\n## 1. What Monty is\n\n`@pydantic/monty` 1.0.0 (MIT, Node >= 20) is a Python 3.14 subset interpreter written in Rust. The Node binding is a napi addon that drives a pool of `monty` worker subprocesses. The sandbox has no filesystem, network, env, or process access. It reaches the host only through `externalLookup` functions and explicit mounts. Every host call is a suspension: the worker stops, the host answers, and the worker resumes.\n\nPlatforms: darwin x64/arm64, linux gnu x64/arm64, win32 x64 (no musl). Unpacked package is about 24 MB plus one platform binary. Pydantic AI \"Code Mode\" runs on it.\n\nCore API: `Monty.create(poolOpts)` \u2192 `pool.checkout({ limits, typeCheck, typeCheckStubs, osPolicy })` \u2192 `session.feedRun(code, { inputs, externalLookup, printCallback })`. Also `feedStart`/`snapshot.resume*`, `session.dump()` / `loadSession()` / `loadSnapshot()`.\n\n## 2. Proven by spike (`/tmp/monty-probe`, Node 26, macOS arm64)\n\n| Question | Result |\n| --- | --- |\n| Concurrent async host calls | `asyncio.gather` over 20 host calls of 50 ms each: 53 ms total, peak in-flight 20. The host sees every call at once, so the existing envelope can throttle it. |\n| Kwargs shape | Python `read(path=\"x\")` reaches the host as a trailing plain object `{ path: \"x\" }`. This maps 1:1 to our one-object tool args. |\n| Pre-flight type check | Stub `async def bash(*, command: str, ...)`. `bash(cmd=\"ls\")` is rejected before execution with ty diagnostics `missing-argument` / `unknown-argument`, including source spans. First check took 13.5 ms. A warm feed took 0.8 ms. |\n| Host error \u2192 Python | Setting JS `error.name = \"FileNotFoundError\"` gives a real Python exception and a clean traceback. |\n| Runaway compute | `while True: pass` with `maxTurnDurationSecs: 1` stops at 1000 ms with `TimeoutError`. |\n| Cancellation | `session.close()` during a pending host call does **not** settle the feed promise (it stays pending forever). Rejecting the pending host promise with `name = \"KeyboardInterrupt\"` ends the feed. `except Exception` does not catch it, because it is a BaseException. |\n| Output values | Python dicts return as JS `Map`, and tuples return as arrays. A deep converter is needed for the JSON boundary. |\n| Persistence | Session globals persist across feeds. A dump with a 1000-item list is 7.3 KB, and `loadSession` restores it into another worker. |\n| Latency | Warm checkout < 1 ms; cold checkout with a pre-spawned pool is 5 ms. The first run on this machine was about 600 ms, probably first-exec of the binary. |\n\n## 3. Why this is materially better (not only different)\n\n1. **Wrong calls fail before any side effect.** Today a typo in the arguments of the 5th call runs calls 1\u20134 (bash/edit/write) and fails mid-program. With Monty, one generated `.pyi` stub (from the same Typebox schemas that render the `code` parameter today) is checked by ty in milliseconds before execution. The stub is also the documentation. One source gives both the contract and the checker.\n2. **A real sandbox instead of hardening.** Node says `node:vm` \"is not a security mechanism\". We carry escape-hardening code and tests (\"blocks string-generated escapes\", \"keeps host promises hidden when guest intrinsics are modified\", \"does not expose Node globals\"). Monty isolates at the language level and puts the worker in a separate process. Memory, recursion, and time limits are enforced inside the VM.\n3. **We stop building a JS runtime.** Web polyfills (fetch/URL/Headers/Request/Response/AbortController/TextEncoder\u2026), timers, the worker message protocol, call ids, and the strict-JSON realm crossing all go away. Each guest capability becomes one async host function.\n4. **Python for orchestration code.** Comprehensions, sets, `collections`, `re`, `json`, `itertools`. `std.coverage` / `std.reconcile` become one-liners, and `parallel`/`pipeline` become `asyncio.gather` plus a plain loop.\n5. **Optional: a REPL that follows the session tree.** A session dump is a few KB. If we persist it as a Pi custom session entry after each call, variables survive across calls, restarts, and forks, and follow `/tree` navigation. This replaces the `state` ID store (in-memory, 200 KB, 32 snapshots, lost on restart).\n\n## 4. Honest limits and costs\n\n- **The language changes to Python.** This breaks every JS program: `.pi/programs/*.js`, skill references (`code-review/references/*.js`, `ralph/references/*.js`), and system-prompt examples. A dual runtime would be a compatibility layer, so the plan is a clean cut.\n- **The subset is small.** It has no class inheritance, no `create_task` / `Semaphore` / `as_completed` / `wait_for`, no `async for` / `async with`, no `enum`, `contextlib`, `hashlib`, or `uuid`, and no third-party imports. Orchestration code rarely needs these, and the type checker flags most of them before a run.\n- **No top-level `return`.** The result is the trailing expression (REPL semantics, as in Pydantic AI Code Mode). Wrapping the code in `async def main()` would keep `return` but loses REPL globals, so choose one.\n- **Some output values become strings.** Functions, classes, and regex patterns silently become strings on output. A strict converter can reject Map keys that are not strings, and Set, BigInt, and Buffer. It cannot see the stringified values.\n- **Cancellation is ours to own** (proven above). On abort, reject every pending host promise with KeyboardInterrupt. Later host calls reject immediately. Pure compute is bounded by `maxTurnDurationSecs`, with the pool `requestTimeout` as a kill backstop.\n- **`maxSuspensions` cannot be disabled** (default 1000). It counts calls and future resolutions, so it must be derived from `callBudget`, not guessed.\n- **A native dependency and a new 1.0.** Pin the exact version. `npm run pack:check` must show that the platform packages resolve through `optionalDependencies`.\n- **Code reduction is about 30%, not 70%.** Agents, UI, traces, the envelope, tool capture, and saved programs are harness semantics, and they stay.\n\n## 5. Size estimate (`extensions/runtime-*`, 4327 lines today)\n\n| Goes | Lines | Replacement | Lines (est.) |\n| --- | --- | --- | --- |\n| `runtime-worker.mjs` | 411 | `runtime-monty.ts`: pool lifecycle, feed drive, abort, converter | ~200 |\n| `runtime-web.mjs` | 705 | `fetch(url, method=, headers=, body=)` host function in `runtime-fetch.ts` | ~60 |\n| `runtime-program.ts` | 147 | (merged above) | 0 |\n| `runtime-json.ts` | 43 | (converter above) | 0 |\n| `runtime-stdlib.mjs` | 413 | host-side TS for git/repo/dev/context/schema; drop coverage/reconcile | ~250 |\n| `runtime-api.ts` JS signature formatter + ECMAScript list | ~200 | `.pyi` stub generator from Typebox | ~120 |\n| `state` store in `runtime-implementation.ts` | ~90 | none, or a dump entry if \u00a77 D2 is approved | 0\u201360 |\n\nNet: about \u22121300 lines of runtime, and about \u2212600 lines of VM/polyfill/escape tests in `tests/runtime.test.ts`.\n\n## 6. Guest surface (proposal)\n\nFlat async functions, named after the tools, with kwargs matching the tool schema:\n\n```python\nimport asyncio\nnames = [n for n in (await ls(path=\"extensions\")).splitlines() if n.endswith(\".ts\")]\n\nasync def judge(name):\n    r = await agent_run(\n        task=\"Name the riskiest export and quote the evidence.\",\n        name=name,\n        context={\"path\": f\"extensions/{name}\"},\n        output_schema=schema({\"export\": \"str\", \"evidence\": \"str\"}),\n    )\n    return {\"file\": name, \"status\": r[\"status\"], **(r.get(\"value\") or {})}\n\nawait asyncio.gather(*[judge(n) for n in names])\n```\n\n- Core: `read grep find ls bash edit write`. Extensions: `mcp(...)`, `ledger_add(...)`, \u2026 captured as today. `agent`/`agent_run`, `fetch`, `skills_list`/`skills_body`, and `std` functions as flat `git_change`, `context_fit`, and so on.\n- `inputs` are bound as the global `inputs`. `print` goes to a capped collector.\n- `limits.concurrency` is still enforced host-side (the gather fans out, the envelope queues).\n- `display` / `limits` stay tool parameters.\n\n## 7. Decisions for the operator\n\n- **D1 Language cut:** rewrite all JS programs to Python in one change, with no JS fallback (recommended), or keep both runtimes.\n- **D2 Persistence:** (a) stateless feeds plus the current `state` IDs; (b) one live Monty session per root session, dumped to the session JSONL after each call and restored on fork/tree/restart (recommended; it reverses the `prime-agent` \"persistent kernels\" rejection in `docs/boundaries.md`). The dump size policy needs an operator decision; no guessed cap.\n- **D3 Type check:** always on (recommended; this is the main correctness win), or opt-in.\n- **D4 boundaries.md:** the `pi-fabric` row rejects \"QuickJS/WASM, compile-time TypeScript checking, alternate runtimes\". Monty is a replacement runtime with compile-time checking, so the row must be rewritten.\n\n## 8. Phases (each ends green on `format:check lint typecheck test pack:check`)\n\n0. **Close the spike gaps.** Measure suspensions per host call. Measure ty latency with a full stub (about 40 extension tools). Check `maxMemory` behavior. Check `pack:check` and a checkout install of the platform packages. Check the 256 MiB dump and 10 MiB print caps.\n1. **Tracer bullet.** `runtime-monty.ts` behind the existing `pi_exec` tool: core tools, `agent`/`agent_run`, and extension tools as host functions; the stub generator; abort; the converter. Delete worker/web/program/json. Rewrite the runtime tests that assert tool behavior (budget, concurrency, traces, cancel, errors, saved programs).\n2. **Library and callers.** Move std to the host side (drop coverage/reconcile). Rewrite the skill reference programs and saved-program discovery (`.py`, docstring/`@param` header). Update the system-prompt guidance and examples in `runtime-api.ts`.\n3. **Persistence** (if D2b). Custom entry per call, restore on `session_start`/fork/tree, remove the `state` parameter and store.\n4. **Documentation.** `docs/exec.md`, `docs/boundaries.md`, `README.md`, the AGENTS.md execution-context paragraph, `THIRD_PARTY_NOTICES.md`.\n\n## 9. Acceptance criteria\n\n- The same observable `pi_exec` behavior that the retained tests assert: envelope, fan-out queueing, traces, usage, cancellation, saved-program tools, and the search root guard on core tools.\n- A program with a wrong keyword argument fails with a ty diagnostic, and zero host calls are dispatched.\n- Abort during a pending host call ends the program within one host round trip. Runaway compute ends at the turn limit.\n- `extensions/runtime-*` is smaller by at least 1000 lines, and there are no Node-VM escape tests left, because there is no Node VM.\n- `pack:check` lists `@pydantic/monty` with platform optional dependencies, and the loader test passes.\n"}, {"path": "retrospective.md", "bytes": 1197, "source": "Status: done\nCreated: 2026-09-25\nUpdated: 2026-09-27\n\n# Retrospective\n\n## What Mattered\n\nThe type-checker, host-call budgets, and Pi session tree had to remain one coherent execution boundary. Public tests through the registered tool caught failures that a standalone Monty probe did not: cross-feed typing, branch restore, authenticated reload, terminal rollback, and cancellation of gathered host work.\n\n## Learnings\n\nMonty infers an unannotated global such as `x = 1` as a literal type; annotate `x: int` if later feeds will assign other integers. Its suspension limit accumulates per checkout, so rotate from the last checkpoint before host-call usage reaches the limit. `session.close()` alone does not interrupt an in-flight feed; abort pending host calls, stop the active worker, and await cleanup. Session JSONL can be imported, so verify a dump's authentication and stub compatibility before calling Monty's `loadSession`.\n\n## Improvements\n\nA public Monty worker-termination API would remove the need to stop the owned in-flight worker by its captured PID. Until then, restrict that fallback to a feed known to be in flight and keep the timeout, rollback, and orphan-process regressions.\n"}, {"path": "task.md", "bytes": 1744, "source": "Status: done\nCreated: 2026-09-25\nUpdated: 2026-09-27\n\n# Replace pi_exec JavaScript VM with Monty Python sandbox\n\n## Intent\n\nReplace the node:vm JavaScript guest of `pi_exec` with a Monty Python sandbox. Keep the harness semantics (envelope, agents, traces, UI, saved programs) and remove the self-built JS runtime.\n\n## Current State\n\nResearch and spike done; see `plan.md`. Operator decisions (2026-09-25):\n\n- D1: clean rewrite to Python, no JS fallback.\n- D2: one live session per root session, with a way to reset it and to recover it when a bound is hit.\n- D3: type checking always on.\n- D4: rewrite the `pi-fabric` row in `docs/boundaries.md`.\n\nTickets 01\u201306 are complete. The tree and `reset` are the only restore points; Monty's own dump limit is the only size bound. Spike scripts live in `/tmp/monty-probe` (not in the repo).\n\n## Outcome\n\n`pi_exec` now runs type-checked Monty Python with core and extension tools, model workers, HTTP, evidence helpers, and typed saved programs. One live interpreter follows the root Pi session tree; authenticated checkpoints restore after reload and navigation. Terminal failures report rollback without claiming to undo completed external effects. Python review and Ralph programs replace the JavaScript references. The prior Node VM and explicit JSON state IDs are removed. See each ticket for acceptance evidence and `docs/exec.md` for the user contract.\n\nValidation on 2026-09-27: format check, lint, typecheck, 1,096 unit tests, 121 pair checks, package-loader smoke, package dry-run, and an extracted-tarball loader smoke passed. An isolated offline tarball install was blocked by an uncached transitive dependency; the extracted tarball loaded against the checkout's installed dependencies.\n"}, {"path": "tickets/01-python-programs-on-monty.md", "bytes": 2686, "source": "# 01: Python programs run on Monty with the core tools\n\n**What to build:** `pi_exec` runs Python in a Monty sandbox instead of JavaScript in a Node VM. A program is Python with top-level `await`, and its result is the value of the last expression. The core tools `read grep find ls bash edit write` are async functions whose keyword arguments match the parent tool schemas. Their signatures are generated from those schemas: they render the live `code` parameter contract and also feed the Monty type checker, which is always on, so a wrong call fails before any host call runs. The harness semantics stay: the call budget, concurrency queueing (a gathered fan-out waits on the host side), the wall deadline, abort, durable nested traces, capped `print` output, `inputs`, `display`, `limits`, and a strict JSON result (Python dicts return as JS `Map` and must be converted, and lossy values are rejected). Cancellation belongs to the host: on abort, reject every pending host call with a `KeyboardInterrupt`-named error. The spike showed that `session.close()` does not settle a pending feed. Derive Monty's suspension limit from the call budget, not from a guess. The JavaScript worker, the web polyfills, the realm-crossing JSON code, and the VM-escape tests are deleted, with no JS fallback. This ticket also adds the pinned dependency, records its provenance, rewrites the `pi-fabric` row in the boundaries document, and updates the exec documentation and system-prompt guidance for the Python core surface. Model workers, extension tools, fetch, std, saved programs, and persistence follow in later tickets.\n\n**Blocked by:** None (can start immediately).\n\n**Status:** done\n\n- [x] A program with a wrong keyword argument to a core tool fails with a type diagnostic that names the argument, and its trace records zero host calls.\n- [x] `asyncio.gather` over more core-tool calls than `limits.concurrency` completes with every result, and the observed peak of calls in flight equals the limit.\n- [x] Abort during a pending `bash` call ends the program promptly with a cancelled result. A bare `except Exception` in the program does not stop it.\n- [x] `while True: pass` stops at the configured deadline with a timeout error, and the next `pi_exec` call succeeds.\n- [x] A returned dict, list, and nested structure appear as plain JSON in the tool result. A returned set, or a dict with non-string keys, fails with a boundary error.\n- [x] A program that uses a JavaScript global such as `setTimeout` or `pi.read` fails with a Python `NameError` or a type diagnostic.\n- [x] `npm run pack:check` lists the Monty package, the loader test passes, and the full validation sequence is green.\n"}, {"path": "tickets/02-model-workers-from-python.md", "bytes": 1397, "source": "# 02: Model workers from Python\n\n**What to build:** Python programs can start model workers with `agent(...)` (returns text, or the typed value when `output_schema` is set) and `agent_run(...)` (returns status, text, value, error, usage, and context-fit info, and does not raise on failure). The options are the same as today: task, type, name, profile, tools, pair, system prompt, context, output schema. A `schema(...)` shorthand compiles strict JSON Schema from terse shapes. Bound context is still attached as a file, not interpolated into the task. Worker usage is aggregated into the outer tool result, and nested worker tool calls stay in the trace. The signatures are part of the type-checked contract. The exec documentation and prompt examples show the gather-based fan-out pattern.\n\n**Blocked by:** 01: Python programs run on Monty with the core tools.\n\n**Status:** done\n\n- [x] A gathered fan-out of three `agent_run` calls with an `output_schema` returns three values that match the schema.\n- [x] One worker that fails returns `status: \"failed\"` with an error, and its siblings still return values.\n- [x] `agent(...)` with an `output_schema` returns the typed value itself, and without one returns text.\n- [x] The usage in the outer tool result is the sum of every worker model turn.\n- [x] An `agent_run` call with an unknown option name fails the type check before any worker starts.\n"}, {"path": "tickets/03-extension-tools-fetch-skills.md", "bytes": 1196, "source": "# 03: Extension tools, fetch, and skills from Python\n\n**What to build:** Python programs can call every captured extension tool (including the MCP gateway) as a type-checked function named after the tool. `tools_list`, `tools_search`, `tools_describe`, and `tools_call` give dynamic discovery. Interactive subagent tools and root-only tools stay excluded. `fetch(url, method=, headers=, body=)` returns status, headers, and text or bytes. It shares the call budget, concurrency, deadline, abort, and trace (header values and request bodies are left out of trace summaries). `skills_list` and `skills_body` return model-invocable skills. The exec documentation covers this surface.\n\n**Blocked by:** 01: Python programs run on Monty with the core tools.\n\n**Status:** done\n\n- [x] A Python program calls the `mcp` gateway and returns its result text.\n- [x] Calling an interactive subagent tool or a root-only tool by name fails the type check.\n- [x] `fetch` against a local test server returns status, headers, and body. An abort while it is in flight ends the program as cancelled.\n- [x] `skills_body` returns a packaged skill body without frontmatter, and fails for an unknown or human-only skill.\n"}, {"path": "tickets/04-evidence-library-and-skill-programs.md", "bytes": 1448, "source": "# 04: Evidence library in Python, and the review and Ralph programs rewritten\n\n**What to build:** The deliberately small evidence library is available to Python as host functions: git change and patch, change-neighborhood evidence, the required/clippable/droppable context marks with fit and pack, strict schema shorthand if 02 did not cover it, and relevant-test discovery and bounded execution. The coverage and reconcile helpers are removed, because Python sets and dicts express them directly. Marked contexts passed to `agent_run` are fitted automatically, as today. The code-review and Ralph reference programs are rewritten in Python against the live signatures, and their skill instructions describe the Python programs. The exec documentation's library section is updated.\n\n**Blocked by:** 02: Model workers from Python.\n\n**Status:** done\n\n- [x] `git_change` on a dirty checkout returns the changed paths, the patch, and line totals that match `git diff`.\n- [x] A marked `agent_run` context that is larger than the channel budget is fitted, and `context.truncated` lists the clipped paths.\n- [x] `dev_run_relevant_tests` with no discovered tests returns `not_run` with a reason.\n- [x] Every rewritten code-review and Ralph reference program passes the type check against the live signatures.\n- [x] A multi-lens review run on a small real diff returns findings with evidence.\n- [x] The guest contract has no coverage or reconcile function.\n"}, {"path": "tickets/05-saved-python-programs.md", "bytes": 1285, "source": "# 05: Saved Python programs become typed tools\n\n**What to build:** A saved project program is a Python file in the project programs directory. Its leading docstring gives a one-line description and `@param` tags that declare typed, optional, defaulted parameters. Each file appears as a `program_<name>` tool with a synthesized parameter schema, and its arguments reach the program as `inputs`. The current rules stay: sync only at cache-safe boundaries, project trust required, re-read from disk on each call, name and path confinement, and reject a malformed description. JavaScript program files are no longer discovered. The saved-programs documentation and prompt guidance describe the Python format.\n\n**Blocked by:** 01: Python programs run on Monty with the core tools.\n\n**Status:** done\n\n- [x] A trusted project with a Python program that declares a `@param` exposes `program_<name>` with that typed parameter at session start, and calling it returns the program result that uses the argument.\n- [x] A `.js` file in the programs directory is not listed as a tool.\n- [x] An untrusted project cannot run a saved program.\n- [x] Editing a program in the middle of a turn changes its behavior on the next call but not the registered tool schema, until the next cache-safe boundary.\n"}, {"path": "tickets/06-branch-aligned-live-session.md", "bytes": 1863, "source": "# 06: A live session that follows the session tree, with reset and recovery\n\n**What to build:** Each root Pi session has one live Monty session, so variables and functions persist across `pi_exec` calls. After every call that leaves the Monty session usable (success or an ordinary Python exception), its dump is saved as a Pi session entry. Monty's own dump size limit is the only size bound. When a session starts, reloads, forks, or moves to another point with `/tree`, the live session is rebuilt from the dump nearest to the current branch leaf. A `reset: true` tool parameter starts an empty session. A terminal failure (memory or time limit, worker crash) throws away the live session. The next call restores the last saved dump, and the failed call's result states that the state was rolled back. A dump that cannot be loaded (for example, after a Monty version change) gives an empty session with a notice. The tree and `reset` are the only restore points; there are no named save points. The `state` parameter and snapshot store are removed. The exec documentation, the boundaries entry that rejected persistent kernels, and the execution-context description in the agent guide are updated.\n\n**Blocked by:** 01: Python programs run on Monty with the core tools.\n\n**Status:** done\n\n- [x] `x = 1` in one call, then `x + 1` in the next call, returns 2, and still returns 2 after an extension reload.\n- [x] After `/tree` navigation back to a point before `x = 2` was assigned, `x` has its value from that point.\n- [x] A call with `reset: true` makes `x` a `NameError`.\n- [x] A call that exceeds the memory limit reports the rollback, and the next call still sees the `x` from before the failed call.\n- [x] A stored dump that cannot be loaded gives an empty session and a notice, not a failed call.\n- [x] The `state` parameter no longer exists on `pi_exec`.\n"}]}};
+const MID = { bench: { 2: "done", 1: "in-progress" }, monty: { 1: "done", 3: "done", 2: "in-progress", 6: "in-progress" } };
+const BROKEN = { bench: [2, "**Blocked by:** 04: First benchmark run; 07: Report template."], monty: [3, "**Blocked by:** 05: Saved Python programs become typed tools; 09: Tool catalog."] };
+const params = new URLSearchParams(location.search);
+const state = {
+  bundle: params.get("bundle") === "monty" ? "monty" : "bench",
+  moment: params.get("moment") === "mid" ? "mid" : "written",
+  broken: params.get("broken") === "1",
+  theme: params.get("theme") === "dark" ? "dark" : "light",
+  view: "overview",
+  panel: false, annotations: [], seq: 0, global: "", verdict: null, modal: null, submitted: false,
+  edits: {}, editing: null, diffOpen: {}, noteHidden: false, folders: {}, seen: new Set(),
+};
+let files = [], tickets = [], blocks = [], tbar = null, pop = null;
+
+/** Ticket files as they would read at the chosen moment: just written (nothing done) or part way through. */
+function atMoment(path, source) {
+  const m = /^tickets\/(\d+)/.exec(path);
+  if (!m) return source;
+  const n = Number(m[1]);
+  const status = state.moment === "mid" ? MID[state.bundle][n] ?? "ready-for-agent" : "ready-for-agent";
+  const boxes = (source.match(/^- \[[ x]\]/gm) || []).length;
+  const ticked = status === "done" ? boxes : status === "in-progress" ? Math.floor(boxes / 2) : 0;
+  let i = 0;
+  let out = source.replace(/\*\*Status:\*\*[^\n]*/, `**Status:** ${status}`).replace(/^- \[[ x]\]/gm, () => (i++ < ticked ? "- [x]" : "- [ ]"));
+  if (state.broken && BROKEN[state.bundle][0] === n) out = out.replace(/\*\*Blocked by:\*\*[^\n]*/, BROKEN[state.bundle][1]);
+  return out;
+}
+const RANK = (p) => (p === "task.md" ? 0 : /^(spec|plan)\.md$/.test(p) ? 1 : /^[^/]+\.md$/.test(p) && p !== "retrospective.md" ? 2 : p.startsWith("tickets/") ? 3 : p === "retrospective.md" ? 4 : 5);
+function loadFiles() {
+  files = DATA[state.bundle].files
+    .map((f) => ({ ...f, source: f.source == null ? null : atMoment(f.path, f.source), md: f.path.endsWith(".md") }))
+    .sort((a, b) => RANK(a.path) - RANK(b.path) || a.path.localeCompare(b.path, undefined, { numeric: true }));
+}
+
+// ================================================================ tickets and the graph they form
+function parseTickets() {
+  const tf = files.filter((f) => /^tickets\/\d+[-_].*\.md$/.test(f.path));
+  const ids = new Set(tf.map((f) => Number(/^tickets\/(\d+)/.exec(f.path)[1])));
+  tickets = tf.map((f) => {
+    const id = Number(/^tickets\/(\d+)/.exec(f.path)[1]);
+    const h1 = /^#\s+(.+)$/m.exec(f.source)?.[1] ?? f.path;
+    const by = /\*\*Blocked by:\*\*\s*([^\n]*)/.exec(f.source)?.[1] ?? "";
+    const refs = [...new Set([...by.matchAll(/(?:^|[\s,;(])(\d{1,3})(?=\s*[:(),;.]|\s*$|\s+and\b)/g)].map((m) => Number(m[1])))];
+    return {
+      id, path: f.path, title: h1.replace(/^\d+\s*[:.\-–]\s*/, ""),
+      status: (/\*\*Status:\*\*\s*([^\n]+)/.exec(f.source)?.[1] ?? "").trim().replace(/\.$/, ""),
+      blockers: refs.filter((r) => ids.has(r) && r !== id), unknown: refs.filter((r) => !ids.has(r)),
+      done: (f.source.match(/^\s*- \[x\]/gim) || []).length, total: (f.source.match(/^\s*- \[[ x]\]/gim) || []).length,
+    };
+  }).sort((a, b) => a.id - b.id);
+}
+const byId = (id) => tickets.find((t) => t.id === id);
+const dependents = (t) => tickets.filter((x) => x.blockers.includes(t.id));
+function stateOf(t) {
+  if (/^done$/i.test(t.status)) return "done";
+  if (/progress/i.test(t.status)) return "progress";
+  return t.blockers.some((b) => !/^done$/i.test(byId(b).status)) ? "blocked" : "frontier";
+}
+const STATE_LABEL = { done: "Done", progress: "In progress", frontier: "Ready", blocked: "Blocked" };
+function graphProblems() {
+  const out = [];
+  for (const t of tickets) for (const u of t.unknown) out.push(`<b>${pad(t.id)}</b> waits on <b>${pad(u)}</b>, which is not a ticket in this bundle.`);
+  for (const t of tickets) for (const b of t.blockers) if (b > t.id) out.push(`<b>${pad(t.id)}</b> waits on a later ticket, <b>${pad(b)}</b>; blockers come first in the numbering.`);
+  const color = new Map();
+  const walk = (t, path) => {
+    color.set(t.id, 1);
+    for (const b of t.blockers) {
+      if (color.get(b) === 1) { const loop = [...path.slice(path.indexOf(b)), b].map(pad).join(" → "); out.push(`Cycle: <b>${loop}</b>. None of these can start.`); }
+      else if (!color.get(b)) walk(byId(b), [...path, b]);
+    }
+    color.set(t.id, 2);
+  };
+  for (const t of tickets) if (!color.get(t.id)) walk(t, [t.id]);
+  if (tickets.length && !tickets.some((t) => !t.blockers.length)) out.push("No ticket can start: every ticket waits on another.");
+  return out;
+}
+const NODE = { w: 236, h: 108, gx: 76, gy: 16 };
+function layout() {
+  const depth = new Map(), visiting = new Set();
+  const d = (t) => {
+    if (depth.has(t.id)) return depth.get(t.id);
+    if (visiting.has(t.id)) return 0;
+    visiting.add(t.id);
+    const v = t.blockers.length ? 1 + Math.max(...t.blockers.map((b) => d(byId(b)))) : 0;
+    visiting.delete(t.id);
+    depth.set(t.id, v);
+    return v;
+  };
+  tickets.forEach(d);
+  const cols = [];
+  for (const t of tickets) (cols[depth.get(t.id)] ??= []).push(t);
+  const rows = Math.max(...cols.map((c) => c.length));
+  const height = rows * NODE.h + (rows - 1) * NODE.gy;
+  const pos = new Map();
+  cols.forEach((col, c) => {
+    // Order each column by where its blockers sit, so edges cross as little as possible.
+    const y = (t) => (t.blockers.length ? t.blockers.reduce((s, b) => s + (pos.get(b)?.y ?? 0), 0) / t.blockers.length : t.id);
+    if (c > 0) col.sort((a, b) => y(a) - y(b) || a.id - b.id);
+    const h = col.length * NODE.h + (col.length - 1) * NODE.gy;
+    col.forEach((t, r) => pos.set(t.id, { x: c * (NODE.w + NODE.gx), y: (height - h) / 2 + r * (NODE.h + NODE.gy) }));
+  });
+  return { pos, width: cols.length * NODE.w + (cols.length - 1) * NODE.gx, height };
+}
+
+// ================================================================ Markdown blocks with source lines
+function renderToken(token) {
+  if (token.type === "code") return { kind: "code", html: `<pre>${token.lang ? `<span class="lang">${esc(token.lang)}</span>` : ""}<code>${esc(token.text)}</code></pre>` };
+  return { kind: token.type, html: marked.parser([token]) };
+}
+function buildBlocks(source) {
+  let line = 1;
+  const out = [];
+  marked.lexer(source).forEach((t, i) => {
+    const start = line;
+    line += (t.raw.match(/\n/g) || []).length;
+    if (t.type === "space") return;
+    out.push({ id: `b${i}`, raw: t.raw.replace(/\n+$/, ""), line: start, ...renderToken(t), heading: t.type === "heading" ? { depth: t.depth, text: t.text } : null });
+  });
+  return out;
+}
+const codeBlocks = (source) => source.replace(/\n$/, "").split("\n").map((l, i) => ({ id: `l${i + 1}`, raw: l, line: i + 1, kind: "line" }));
+const sectionsOf = (f) => (f?.md ? buildBlocks(f.source).filter((b) => b.heading && b.heading.depth > 1 && b.heading.depth < 4) : []);
+const titleOf = (f) => (f.md ? /^#\s+(.+)$/m.exec(f.source)?.[1] ?? f.path : f.path);
+const readingOrder = () => files.filter((f) => f.md);
+
+// ================================================================ text offsets and marks (as in review_markdown)
+const isDeco = (node) => node.parentElement?.closest(".deco-ins, .deco-badge, .gut, .edit-tag, .src-diff, .block-editor, .cv-n, .lang");
+function textNodes(el) {
+  const out = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) if (!isDeco(n) && !(n.parentElement.classList.contains("blk") && !n.textContent.trim())) out.push(n);
+  return out;
+}
+function offsetIn(block, node, offset) {
+  const boundary = document.createRange();
+  boundary.setStart(node, offset);
+  let n = 0;
+  for (const t of textNodes(block)) {
+    if (t === node) return n + offset;
+    if (boundary.comparePoint(t, t.length) > 0) break;
+    n += t.length;
+  }
+  return n;
+}
+function wrap(block, start, end, make) {
+  let n = 0;
+  for (const t of textNodes(block)) {
+    const len = t.textContent.length, a = Math.max(start, n), b = Math.min(end, n + len);
+    if (a < b) {
+      const piece = t.splitText(a - n);
+      piece.splitText(b - a);
+      const mark = make();
+      piece.parentNode.insertBefore(mark, piece);
+      mark.appendChild(piece);
+    }
+    n += len;
+  }
+}
+const TYPES = {
+  comment: { label: "Comment", icon: I.bubble }, delete: { label: "Delete", icon: I.strike }, suggest: { label: "Suggested rewrite", icon: I.pencil },
+  label: { label: "Label", icon: "" }, ask: { label: "Asked the agent", icon: I.spark }, edit: { label: "Rewritten block", icon: I.pencil },
+};
+const LABELS = [{ id: "good", emoji: "👍", text: "Looks good" }, { id: "clarify", emoji: "❓", text: "Clarify this" }];
+const here = () => state.annotations.filter((a) => a.file === state.view);
+const countIn = (path) => state.annotations.filter((a) => a.file === path).length;
+function applyMarks() {
+  const doc = document.getElementById("doc");
+  if (!doc) return;
+  for (const m of doc.querySelectorAll("mark.an")) m.replaceWith(...m.childNodes);
+  for (const d of doc.querySelectorAll(".deco-ins, .deco-badge")) d.remove();
+  doc.normalize();
+  for (const el of doc.querySelectorAll(".blk.block-noted")) el.classList.remove("block-noted");
+  for (const a of here()) {
+    if (a.type === "edit") continue;
+    if (!a.spans) { doc.querySelector(`[data-block="${a.block}"]`)?.classList.add("block-noted"); continue; }
+    let last = null;
+    for (const span of a.spans) {
+      const block = doc.querySelector(`[data-block="${span.block}"]`);
+      if (!block) continue;
+      wrap(block, span.start, span.end, () => { const m = document.createElement("mark"); m.className = `an ${a.type} ${a.label === "good" ? "good" : ""}`; m.dataset.an = a.id; last = m; return m; });
+    }
+    if (last && a.type === "suggest") last.insertAdjacentHTML("afterend", `<ins class="deco-ins" data-an="${a.id}">${esc(a.replacement)}</ins>`);
+    if (last && a.type === "label") last.insertAdjacentHTML("afterend", `<span class="deco-badge" data-an="${a.id}">${LABELS.find((l) => l.id === a.label).emoji}</span>`);
+  }
+}
+function addAnnotation(a) {
+  state.annotations.push({ id: `a${++state.seq}`, file: state.view, ...a });
+  const at = (x) => [RANK(x.file), x.file, blocks.findIndex((b) => b.id === x.block), x.spans?.[0].start ?? -1];
+  state.annotations.sort((x, y) => { const p = at(x), q = at(y); return p[0] - q[0] || p[1].localeCompare(q[1], undefined, { numeric: true }) || p[2] - q[2] || p[3] - q[3]; });
+}
+
+// ================================================================ frame
+function renderTop() {
+  const task = files.find((f) => f.path === "task.md");
+  const status = state.moment === "mid" ? "in-progress" : "ready";
+  const n = state.annotations.length + (state.global.trim() ? 1 : 0);
+  return `<header class="top"><span class="logo">🥧</span><span class="top-title">${esc(task ? titleOf(task) : DATA[state.bundle].id)}</span><span class="status-chip s-task">${esc(status)}</span><span class="path-chip">${esc(DATA[state.bundle].path)}</span><span class="sp"></span>
+    <button class="btn ghost" data-action="global">${I.bubble} Overall comment</button>
+    <button class="count-pill ${state.panel ? "on" : ""}" data-action="panel">Annotations <span class="n">${n}</span></button>
+    <button class="icon-btn" data-action="theme" title="Theme">${state.theme === "dark" ? I.sun : I.moon}</button>
+    <button class="icon-btn" data-action="modal" data-m="keys" title="Keyboard (?)">?</button>
+    <button class="btn primary" data-action="finish">Finish review <kbd>⌘↵</kbd></button></header>`;
+}
+function fileRow(f, indent = 0) {
+  const t = tickets.find((x) => x.path === f.path);
+  const on = state.view === f.path;
+  const n = countIn(f.path);
+  const tail = `${n ? `<span class="t-n">${n}</span>` : state.seen.has(f.path) ? `<span class="t-seen" title="Opened">${I.check}</span>` : ""}`;
+  const row = t
+    ? `<button class="t-row in${indent} s-${stateOf(t)} ${on ? "on" : ""}" data-action="open" data-path="${esc(f.path)}" title="${esc(f.path)}"><span class="t-tid">${pad(t.id)}</span><span class="nm">${esc(t.title)}</span>${t.total ? `<span class="t-meta">${t.done}/${t.total}</span>` : ""}<span class="st-dot" title="${STATE_LABEL[stateOf(t)]}"></span>${tail}</button>`
+    : `<button class="t-row in${indent} ${on ? "on" : ""}" data-action="open" data-path="${esc(f.path)}">${f.md ? I.doc : I.data}<span class="nm file">${esc(f.path.split("/").pop())}</span>${f.md ? "" : `<span class="t-meta">${kb(f.bytes)}</span>`}${tail}</button>`;
+  if (!on || !f.md) return row;
+  const counts = (h) => {
+    const i = blocks.indexOf(blocks.find((b) => b.id === h.id));
+    const next = blocks.findIndex((b, k) => k > i && b.heading && b.heading.depth <= h.heading.depth);
+    const ids = blocks.slice(i, next < 0 ? undefined : next).map((b) => b.id);
+    return here().filter((a) => ids.includes(a.block) || a.spans?.some((s) => ids.includes(s.block))).length;
+  };
+  return row + blocks.filter((b) => b.heading && b.heading.depth > 1 && b.heading.depth < 4).map((h) => { const c = counts(h); return `<button class="t-sub d${h.heading.depth}" data-action="goto" data-id="${h.id}" data-toc="${h.id}">${esc(h.heading.text)}${c ? `<span class="o-n">${c}</span>` : ""}</button>`; }).join("");
+}
+function renderTree() {
+  const top = files.filter((f) => !f.path.includes("/"));
+  const dirs = [...new Set(files.filter((f) => f.path.includes("/")).map((f) => f.path.split("/")[0]))];
+  const parts = [`<nav class="tree"><button class="t-row ${state.view === "overview" ? "on" : ""}" data-action="open" data-path="overview">${I.graph}<span class="nm">Overview</span><kbd>G</kbd></button>`];
+  parts.push(`<div class="t-sec">Bundle</div>`);
+  for (const f of top.filter((f) => RANK(f.path) < 3)) parts.push(fileRow(f));
+  for (const dir of dirs.sort((a, b) => (a === "tickets" ? -1 : b === "tickets" ? 1 : a.localeCompare(b)))) {
+    const inDir = files.filter((f) => f.path.startsWith(`${dir}/`));
+    const closed = state.folders[dir] ?? dir !== "tickets";
+    const n = inDir.reduce((s, f) => s + countIn(f.path), 0);
+    parts.push(`<button class="t-row t-folder" data-action="folder" data-dir="${esc(dir)}">${I.chev(closed)}${I.folder}<span class="nm file">${esc(dir)}/</span><span class="t-meta">${inDir.length}</span>${n ? `<span class="t-n">${n}</span>` : ""}</button>`);
+    if (!closed) {
+      const shown = dir === "tickets" ? inDir : inDir.filter((f) => f.path.split("/").length === 2 || f.md || state.folders[`${dir}/*`]);
+      for (const f of shown) parts.push(fileRow(f, 1));
+      const hidden = inDir.length - shown.length;
+      if (hidden) parts.push(`<button class="t-sub" data-action="folder" data-dir="${esc(dir)}/*">${hidden} more in subfolders</button>`);
+    }
+    if (dir === "tickets") for (const f of top.filter((f) => RANK(f.path) === 4)) parts.push(fileRow(f));
+  }
+  if (!dirs.includes("tickets")) for (const f of top.filter((f) => RANK(f.path) === 4)) parts.push(fileRow(f));
+  parts.push(`<div class="t-keys"><span><kbd>[</kbd> <kbd>]</kbd> previous / next document</span><span><kbd>J</kbd> <kbd>K</kbd> sections</span></div></nav>`);
+  return parts.join("");
+}
+
+// ================================================================ overview: intent, the ticket graph, documents
+function renderGraph() {
+  if (!tickets.length) return "";
+  const { pos, width, height } = layout();
+  const problems = graphProblems();
+  const edges = [];
+  let loops = false;
+  for (const t of tickets) for (const b of t.blockers) {
+    const p = pos.get(b), q = pos.get(t.id);
+    const x1 = p.x + NODE.w, y1 = p.y + NODE.h / 2, x2 = q.x, y2 = q.y + NODE.h / 2;
+    const back = x2 <= x1;
+    if (back) loops = true;
+    const d = back ? `M ${x1} ${y1} C ${x1 + 60} ${y1 + 120}, ${x2 - 60} ${y2 + 120}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1 + NODE.gx / 2} ${y1}, ${x2 - NODE.gx / 2} ${y2}, ${x2 - 6} ${y2}`;
+    const cls = back || b > t.id ? "bad" : /^done$/i.test(byId(b).status) ? "done" : "";
+    edges.push(`<path class="edge ${cls}" data-from="${b}" data-to="${t.id}" d="${d}"/><path class="edge-head ${cls}" data-from="${b}" data-to="${t.id}" d="M ${x2 - 7} ${y2 - 4.5} L ${x2} ${y2} L ${x2 - 7} ${y2 + 4.5} Z"/>`);
+  }
+  const nodes = tickets.map((t) => {
+    const s = stateOf(t), p = pos.get(t.id), n = countIn(t.path);
+    return `<button class="node s-${s}" data-action="open" data-path="${esc(t.path)}" data-tid="${t.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE.w}px;height:${NODE.h}px">
+      <span class="n-top"><span class="n-id">${pad(t.id)}</span><span class="n-st">${STATE_LABEL[s]}</span>${n ? `<span class="n-an">${I.bubble}${n}</span>` : ""}</span>
+      <span class="n-title">${esc(t.title)}</span>
+      <span class="n-crit"><span class="bar"><i style="width:${t.total ? (100 * t.done) / t.total : 0}%"></i></span>${t.done}/${t.total} criteria</span></button>`;
+  });
+  const frontier = tickets.filter((t) => stateOf(t) === "frontier");
+  return `<section class="graph-card"><div class="gc-h"><h2>Tickets</h2><span class="count">${tickets.length}</span>
+      <span class="legend">${["frontier", "progress", "blocked", "done"].map((s) => `<span class="s-${s}"><span class="st-dot"></span>${STATE_LABEL[s]}</span>`).join("")}</span>
+      ${problems.length ? `<span class="checks bad">${I.warn} ${problems.length} graph ${problems.length === 1 ? "problem" : "problems"}</span>` : `<span class="checks">${I.check} Graph checks pass</span>`}</div>
+    ${problems.length ? `<div class="problems">${problems.map((p) => `<div><span>${p}</span></div>`).join("")}</div>` : ""}
+    <div class="graph-wrap"><div class="graph" id="graph" style="width:${width}px;height:${height + (loops ? 130 : 0)}px"><svg>${edges.join("")}</svg>${nodes.join("")}</div></div>
+    <div class="gc-foot">${frontier.length ? `<b>Can start now:</b>${frontier.map((t) => chip(t)).join("")}` : tickets.every((t) => stateOf(t) === "done") ? "<b>Every ticket is done.</b>" : "<b>Nothing can start now.</b> Every open ticket waits on another."}</div></section>`;
+}
+const chip = (t) => `<button class="chip s-${stateOf(t)}" data-action="open" data-path="${esc(t.path)}"><span class="st-dot"></span><span class="cid">${pad(t.id)}</span><span class="ct">${esc(t.title)}</span></button>`;
+function renderOverview() {
+  const b = DATA[state.bundle];
+  const task = files.find((f) => f.path === "task.md");
+  const intent = /^## Intent\s*\n([\s\S]*?)(?=^## )/m.exec(task?.source ?? "")?.[1].trim();
+  const created = /^Created:\s*(.+)$/m.exec(task?.source ?? "")?.[1], updated = /^Updated:\s*(.+)$/m.exec(task?.source ?? "")?.[1];
+  const docs = readingOrder().filter((f) => !f.path.startsWith("tickets/"));
+  const other = files.filter((f) => !f.md);
+  return `<div class="wide">
+    ${b.note && !state.noteHidden ? `<div class="agent-line">${I.spark}<span>${esc(b.note)}</span><span class="sp"></span><button class="link" data-action="hide-note">Hide</button></div>` : ""}
+    <div class="ov-k">${esc(b.path)}</div>
+    <h1 class="ov-title">${esc(task ? titleOf(task) : b.id)}</h1>
+    <div class="ov-meta"><span>Created ${esc(created ?? "?")}</span><span>Updated ${esc(updated ?? "?")}</span><span>${files.filter((f) => f.md).length} documents${other.length ? ` · ${other.length} evidence files` : ""}</span></div>
+    ${intent ? `<section class="ov-intent"><div class="card-k">Intent<button class="link" data-action="open" data-path="task.md">Read task.md ${I.arrow}</button></div><div class="${intent.length > 900 ? "fade" : ""}">${marked.parse(intent)}</div></section>` : ""}
+    ${renderGraph()}
+    <div class="card-k" style="margin-top:26px">Documents</div>
+    <div class="docs">${docs.map((f) => `<button class="doc-card" data-action="open" data-path="${esc(f.path)}"><span class="dp">${I.doc}<span class="nm">${esc(f.path)}</span>${countIn(f.path) ? `<span class="t-n">${countIn(f.path)}</span>` : ""}</span><span class="dt">${esc(titleOf(f))}</span><span class="dm">${f.source.split("\n").length} lines · ${sectionsOf(f).length} sections</span></button>`).join("")}</div>
+  </div>`;
+}
+
+// ================================================================ a document: Markdown, a ticket, or an evidence file
+function srcDiff(before, after) {
+  const a = before.split("\n"), b = after.split("\n"), rows = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (a[i] === b[j]) { rows.push(`<div>  ${esc(a[i])}</div>`); i++; j++; }
+    else if (j < b.length && !a.slice(i).includes(b[j])) rows.push(`<div class="a">+ ${esc(b[j++])}</div>`);
+    else rows.push(`<div class="d">- ${esc(a[i++])}</div>`);
+  }
+  return `<div class="src-diff">${rows.join("")}</div>`;
+}
+const editKey = (id) => `${state.view}#${id}`;
+function renderBlock(b) {
+  const edit = state.edits[editKey(b.id)];
+  if (state.editing === b.id)
+    return `<div class="blk block-editor" data-block="${b.id}"><textarea id="block-src" rows="${Math.max(4, (edit ?? b.raw).split("\n").length + 1)}">${esc(edit ?? b.raw)}</textarea><div class="row"><span class="kbd-hint">Your rewrite goes back to the agent as feedback; the file is not changed.</span><span class="sp"></span><button class="btn ghost" data-action="edit-cancel">Cancel</button><button class="btn primary" data-action="edit-save">Save rewrite</button></div></div>`;
+  const html = edit !== undefined ? marked.parse(edit) : b.html;
+  return `<div class="blk ${edit !== undefined ? "edited" : ""}" data-block="${edit !== undefined ? "" : b.id}" id="${b.id}">
+    <div class="gut"><button data-action="block-comment" data-id="${b.id}" title="Comment on this block">${I.bubble}</button>${b.kind === "code" ? "" : `<button data-action="edit" data-id="${b.id}" title="Rewrite this block">${I.pencil}</button>`}</div>
+    ${html}
+    ${edit !== undefined ? `<div class="edit-tag">${I.pencil} Your rewrite <button class="link" data-action="diff" data-id="${b.id}">${state.diffOpen[editKey(b.id)] ? "Hide" : "Show"} diff</button><button class="link" data-action="edit-revert" data-id="${b.id}">Revert</button></div>${state.diffOpen[editKey(b.id)] ? srcDiff(b.raw, edit) : ""}` : ""}
+  </div>`;
+}
+function ticketFlow(t) {
+  const before = t.blockers.map(byId), after = dependents(t);
+  return `<div class="tk-flow">
+    <div class="tk-col in"><span class="tk-lbl">Blocked by</span>${before.length ? before.map(chip).join("") : '<span class="tk-none">Nothing: it can start first</span>'}${t.unknown.map((u) => `<span class="chip s-blocked" style="border-color:var(--fail)"><span class="cid">${pad(u)}</span><span class="ct" style="color:var(--fail)">not in this bundle</span></span>`).join("")}</div>
+    <div class="tk-mid"><span class="tk-arrow">${I.arrow}</span><div class="tk-self s-${stateOf(t)}"><span class="cid">${pad(t.id)}</span><span class="status-chip">${STATE_LABEL[stateOf(t)]}</span></div><span class="tk-arrow">${I.arrow}</span></div>
+    <div class="tk-col"><span class="tk-lbl">Unblocks</span>${after.length ? after.map(chip).join("") : '<span class="tk-none">Nothing: it ends the graph</span>'}</div></div>`;
+}
+function renderDoc(f) {
+  const order = readingOrder(), i = order.indexOf(f);
+  const t = tickets.find((x) => x.path === f.path);
+  const pager = f.md ? `<div class="pager">${i > 0 ? `<button data-action="open" data-path="${esc(order[i - 1].path)}"><span class="pk">‹ Previous · [</span><span class="pt">${esc(titleOf(order[i - 1]))}</span></button>` : "<span style='flex:1'></span>"}${i < order.length - 1 ? `<button class="next" data-action="open" data-path="${esc(order[i + 1].path)}"><span class="pk">] · Next ›</span><span class="pt">${esc(titleOf(order[i + 1]))}</span></button>` : "<span style='flex:1'></span>"}</div>` : "";
+  let body;
+  if (f.md) body = `<div class="doc" id="doc">${blocks.map(renderBlock).join("")}</div>`;
+  else if (f.source != null) body = `<div class="doc codeview" id="doc">${blocks.map((b) => `<div class="blk cvl" data-block="${b.id}" id="${b.id}"><span class="cv-n">${b.line}</span><span>${highlightJson(b.raw) || " "}</span></div>`).join("")}</div>`;
+  else body = `<div class="ondemand"><b>${esc(f.path)}</b><span>${kb(f.bytes)}. The live page reads an evidence file from disk when you open it, so a bundle with hundreds of records stays fast. Annotate it like any document.</span><span class="kbd-hint">Prototype: only a few evidence files are embedded.</span></div>`;
+  return `<article class="paper" ${f.md ? "" : 'style="max-width:980px;padding:36px 40px 44px"'}>
+    <div class="doc-path">${f.md ? I.doc : I.data}<span>${esc(f.path)}</span><span class="sp"></span><span>${f.source != null ? `${f.source.split("\n").length} lines` : kb(f.bytes)}</span></div>
+    ${t ? ticketFlow(t) : ""}${body}${pager}</article>`;
+}
+function renderPanel() {
+  const cards = [];
+  if (state.global.trim()) cards.push(`<button class="an-card" data-action="global"><span class="t global">${I.bubble} Overall comment</span><span>${esc(state.global)}</span></button>`);
+  let file = null;
+  for (const a of state.annotations) {
+    if (a.file !== file) { file = a.file; cards.push(`<div class="pg-file" data-action="open" data-path="${esc(file)}">${esc(file)}<span class="count">${countIn(file)}</span></div>`); }
+    const lab = a.type === "label" ? LABELS.find((l) => l.id === a.label) : null;
+    cards.push(`<button class="an-card" data-action="jump" data-id="${a.id}"><span class="t ${a.type}">${lab ? `${lab.emoji} ${esc(lab.text)}` : `${TYPES[a.type].icon} ${TYPES[a.type].label}`}<span class="sp"></span><span style="color:var(--ink-4);font-weight:500;text-transform:none;letter-spacing:0">L${a.line}</span></span>
+      ${a.quote ? `<span class="q">${esc(a.quote)}</span>` : a.type === "edit" ? "" : '<span class="q">Whole block</span>'}
+      ${a.type === "suggest" ? `<span class="rep">→ <ins>${esc(a.replacement)}</ins></span>` : ""}${a.text ? `<span>${esc(a.text)}</span>` : ""}
+      ${a.type === "ask" ? `<span style="color:var(--ink-2)">${a.answer ? esc(a.answer) : "Answering…"}</span>` : ""}</button>`);
+  }
+  return `<aside class="panel"><div class="panel-h"><h3>Annotations</h3><span class="count">${state.annotations.length + (state.global.trim() ? 1 : 0)}</span><span class="sp"></span><button class="icon-btn" data-action="panel">${I.x}</button></div>
+    ${cards.length ? cards.join("") : '<div class="empty">Open any document in the bundle and select text to comment, suggest a rewrite, strike it, or label it. Hover a block to comment on it whole or rewrite it.</div>'}</aside>`;
+}
+function render() {
+  loadFiles();
+  parseTickets();
+  const f = state.view === "overview" ? null : files.find((x) => x.path === state.view);
+  if (!f) state.view = "overview";
+  blocks = f?.md ? buildBlocks(f.source) : f?.source != null ? codeBlocks(f.source) : [];
+  const stage = document.getElementById("stage");
+  const keep = stage?.dataset.view === state.view ? stage.scrollTop : 0;
+  document.documentElement.dataset.theme = state.theme;
+  document.getElementById("app").innerHTML = `<div class="app">${renderTop()}<div class="body ${state.panel ? "panel" : ""}">${renderTree()}<main class="stage" id="stage" data-view="${esc(state.view)}">${f ? renderDoc(f) : renderOverview()}</main>${state.panel ? renderPanel() : "<div></div>"}</div></div>${renderModal()}`;
+  document.getElementById("stage").scrollTop = keep;
+  applyMarks();
+  renderFloat();
+  renderProto();
+  spy();
+  const src = document.getElementById("block-src");
+  if (src && document.activeElement !== src) src.focus({ preventScroll: true });
+}
+function renderFloat() {
+  let html = "";
+  if (tbar) html += `<div class="tbar" style="left:${tbar.x}px;top:${tbar.y}px"><button class="main" data-action="t-comment">${I.bubble} Comment</button><span class="hint">or just type</span><span class="sep"></span>
+    ${LABELS.map((l) => `<button class="icon" data-action="t-label" data-id="${l.id}" title="${esc(l.text)}">${l.emoji}</button>`).join("")}<span class="sep"></span>
+    <button class="icon" data-action="t-delete" title="Mark for deletion">${I.strike}</button><button class="icon" data-action="t-suggest" title="Suggest a rewrite">${I.pencil}</button><button class="icon" data-action="t-ask" title="Ask the agent">${I.spark}</button></div>`;
+  if (pop?.kind === "view") {
+    const a = state.annotations.find((x) => x.id === pop.id);
+    if (a) {
+      const lab = a.type === "label" ? LABELS.find((l) => l.id === a.label) : null;
+      html += `<div class="pop" style="left:${pop.x}px;top:${pop.y}px" data-keep="1"><div class="pop-h">${lab ? `${lab.emoji} ${esc(lab.text)}` : `${TYPES[a.type].icon} ${TYPES[a.type].label}`}<span class="sp"></span><button class="link" data-action="an-delete" data-id="${a.id}">Remove</button></div>
+        ${a.quote ? `<div class="quote">${esc(a.quote)}</div>` : ""}${a.type === "suggest" ? `<div>→ <ins class="deco-ins">${esc(a.replacement)}</ins></div>` : ""}${a.text ? `<div style="font-size:14px;line-height:1.55">${esc(a.text)}</div>` : ""}
+        ${a.type === "ask" ? `<div class="answer">${a.answer ? esc(a.answer) : "The agent is answering…"}</div>` : ""}</div>`;
+    }
+  } else if (pop) {
+    const p = pop;
+    const titles = { comment: `${I.bubble} Comment`, suggest: `${I.pencil} Suggest a rewrite`, ask: `${I.spark} Ask the agent`, block: `${I.bubble} Comment on the whole block`, global: `${I.bubble} Overall comment` };
+    const value = p.kind === "suggest" ? p.sel.quote : p.kind === "global" ? state.global : p.initial ?? "";
+    html += `<div class="pop" style="left:${p.x}px;top:${p.y}px" data-keep="1"><div class="pop-h">${titles[p.kind]}</div>${p.sel?.quote ? `<div class="quote">${esc(p.sel.quote)}</div>` : ""}
+      ${p.kind === "suggest" ? '<div class="pop-h" style="margin:0 0 6px">Replace with</div>' : ""}
+      <textarea id="pop-text" rows="${p.kind === "suggest" ? 2 : 3}" placeholder="${p.kind === "ask" ? "What do you want to know?" : p.kind === "global" ? "Feedback on the whole task" : "Your comment"}">${esc(value)}</textarea>
+      ${p.kind === "suggest" ? '<textarea id="pop-why" rows="2" placeholder="Why (optional)" style="margin-top:6px"></textarea>' : ""}
+      <div class="row"><span class="kbd-hint"><kbd>⌘</kbd><kbd>↵</kbd> save · <kbd>esc</kbd> cancel</span><span class="sp"></span><button class="btn primary sm" data-action="pop-save">${p.kind === "ask" ? "Ask" : "Save"}</button></div></div>`;
+  }
+  document.getElementById("float").innerHTML = html;
+  const ta = document.getElementById("pop-text");
+  if (ta && pop?.fresh) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); pop.fresh = false; }
+}
+const VERDICTS = [
+  { id: "approve", label: "Approve", detail: "Ready as written. Go ahead." },
+  { id: "approve_notes", label: "Approve with notes", detail: "Go ahead once you apply my annotations." },
+  { id: "changes", label: "Request changes", detail: "Revise the bundle and ask me again." },
+];
+function buildResult() {
+  return {
+    verdict: state.verdict, overall: state.global.trim() || undefined,
+    annotations: state.annotations.filter((a) => a.type !== "edit").map((a) => ({ file: a.file, line: a.line, type: a.type, quote: a.quote, comment: a.text || undefined, replacement: a.replacement, label: a.label, answer: a.answer })),
+    rewrites: Object.entries(state.edits).map(([k, after]) => ({ file: k.split("#")[0], after })),
+    opened: [...state.seen],
+  };
+}
+const KEYS = [["G", "Overview and ticket graph"], ["[ / ]", "Previous / next document"], ["J / K", "Next / previous section"], ["Type over a selection", "Comment on it"], ["⌘↵", "Save the open note, or finish the review"], ["Esc", "Close"], ["?", "Show or hide this list"]];
+function renderModal() {
+  if (!state.modal) return "";
+  let head = "", body = "";
+  if (state.modal === "verdict") {
+    head = "Finish review";
+    const unopened = readingOrder().filter((f) => !state.seen.has(f.path));
+    const touched = new Set(state.annotations.map((a) => a.file)).size;
+    body = `<div class="verdict"><div class="vd-stats"><span><b>${state.annotations.length}</b> annotations in <b>${touched}</b> ${touched === 1 ? "file" : "files"}</span><span><b>${Object.keys(state.edits).length}</b> rewritten blocks</span><span><b>${readingOrder().length - unopened.length}</b> of ${readingOrder().length} documents opened</span></div>
+      ${unopened.length ? `<div class="unopened"><span>You have not opened:</span><div class="row">${unopened.map((f) => { const t = tickets.find((x) => x.path === f.path); return t ? chip(t) : `<button class="chip" data-action="open" data-path="${esc(f.path)}"><span class="ct">${esc(f.path)}</span></button>`; }).join("")}</div></div>` : ""}
+      <div class="vd-opts">${VERDICTS.map((v) => `<button class="vd-opt vd-${v.id} ${state.verdict === v.id ? "on" : ""}" data-action="verdict" data-v="${v.id}"><span class="vd-l">${v.label}</span><span class="vd-d">${v.detail}</span></button>`).join("")}</div>
+      <div class="vd-foot"><span class="sp"></span><button class="btn primary lg" data-action="submit" ${state.verdict ? "" : "disabled"}>${I.send} Send to agent</button></div></div>`;
+  }
+  if (state.modal === "keys") { head = "Keyboard"; body = `<div class="keys">${KEYS.map(([k, v]) => `<div><span>${v}</span><kbd>${k}</kbd></div>`).join("")}</div>`; }
+  if (state.modal === "result") { head = state.submitted ? "Review sent (simulated)" : "What the agent would receive"; body = `<div class="sim">Prototype: nothing is sent.</div><pre class="json">${esc(JSON.stringify(buildResult(), null, 2))}</pre>`; }
+  return `<div class="overlay" data-action="close-modal"><div class="modal" data-action="noop"><div class="modal-h"><h3>${head}</h3><span class="sp"></span><button class="icon-btn" data-action="close-modal">${I.x}</button></div>${body}</div></div>`;
+}
+function spy() {
+  const stage = document.getElementById("stage");
+  if (!stage) return;
+  const heads = [...document.querySelectorAll(".doc .blk")].filter((el) => el.querySelector("h2, h3"));
+  let cur = heads[0]?.id;
+  for (const h of heads) if (h.getBoundingClientRect().top < stage.getBoundingClientRect().top + 140) cur = h.id;
+  for (const el of document.querySelectorAll("[data-toc]")) el.classList.toggle("on", el.dataset.toc === cur);
+}
+
+// ================================================================ interactions
+function selectionInfo() {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed) return null;
+  const range = sel.getRangeAt(0);
+  const spans = [];
+  for (const el of document.querySelectorAll("#doc .blk[data-block]:not([data-block=''])")) {
+    if (!range.intersectsNode(el)) continue;
+    const length = textNodes(el).reduce((n, t) => n + t.length, 0);
+    const start = el.contains(range.startContainer) ? offsetIn(el, range.startContainer, range.startOffset) : 0;
+    const end = el.contains(range.endContainer) ? offsetIn(el, range.endContainer, range.endOffset) : length;
+    if (end > start) spans.push({ block: el.dataset.block, start, end });
+  }
+  const text = (s) => textNodes(document.querySelector(`[data-block="${s.block}"]`)).map((t) => t.textContent).join("").slice(s.start, s.end);
+  const quote = spans.map((s) => text(s).replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+  if (!spans.length || !quote) return null;
+  return { block: spans[0].block, spans, quote, rect: range.getBoundingClientRect() };
+}
+const lineOf = (id) => blocks.find((b) => b.id === id)?.line;
+function openPop(kind, sel, extra = {}) {
+  const r = sel?.rect;
+  pop = { kind, sel, x: r ? Math.min(Math.max(12, r.left + r.width / 2 - 190), innerWidth - 400) : innerWidth / 2 - 190, y: r ? Math.min(r.bottom + 10, innerHeight - 260) : 90, fresh: true, ...extra };
+  tbar = null;
+  getSelection().removeAllRanges();
+  renderFloat();
+}
+function savePop() {
+  const p = pop, text = document.getElementById("pop-text")?.value.trim() ?? "";
+  const at = (sel) => ({ block: sel.block, line: lineOf(sel.block), spans: sel.spans, quote: sel.quote });
+  if (p.kind === "global") state.global = text;
+  else if (p.kind === "block") { if (text) addAnnotation({ type: "comment", block: p.block, line: lineOf(p.block), text }); }
+  else if (p.kind === "comment") { if (text) addAnnotation({ type: "comment", ...at(p.sel), text }); }
+  else if (p.kind === "suggest") { if (text && text !== p.sel.quote) addAnnotation({ type: "suggest", ...at(p.sel), replacement: text, text: document.getElementById("pop-why")?.value.trim() || undefined }); }
+  else if (p.kind === "ask" && text) {
+    addAnnotation({ type: "ask", ...at(p.sel), text });
+    const a = state.annotations.find((x) => x.text === text && !x.answer);
+    setTimeout(() => { a.answer = "Ticket 03 needs both: the runner has nothing to run without the traps (02), and the third arm needs the challenger pass (01). Without 01 it could still measure two arms."; render(); }, 1300);
+  }
+  pop = null;
+  render();
+}
+function open(path) {
+  state.view = path;
+  if (path !== "overview") state.seen.add(path);
+  state.editing = null;
+  tbar = null;
+  pop = null;
+}
+function step(d) {
+  const order = readingOrder();
+  const i = order.findIndex((f) => f.path === state.view);
+  const next = i < 0 ? (d > 0 ? order[0] : null) : order[i + d];
+  if (next) open(next.path);
+  else if (i === 0 && d < 0) open("overview");
+}
+function scrollToEl(el, offset = 24) {
+  const stage = document.getElementById("stage");
+  if (!el || !stage) return;
+  const to = el.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop - offset;
+  stage.scrollTo({ top: to, behavior: Math.abs(to - stage.scrollTop) > stage.clientHeight * 2 ? "auto" : "smooth" });
+}
+function section(d) {
+  const heads = [...document.querySelectorAll("[data-toc]")];
+  const i = heads.findIndex((h) => h.classList.contains("on"));
+  const next = heads[Math.max(0, Math.min(heads.length - 1, i + d))];
+  if (next) scrollToEl(document.getElementById(next.dataset.toc));
+}
+const ACTIONS = {
+  noop: () => false,
+  open: (d) => open(d.path),
+  folder: (d) => { state.folders[d.dir] = !(state.folders[d.dir] ?? d.dir !== "tickets"); if (d.dir.endsWith("/*")) state.folders[d.dir] = true; },
+  "t-comment": () => { openPop("comment", tbar.sel); return false; },
+  "t-suggest": () => { openPop("suggest", tbar.sel); return false; },
+  "t-ask": () => { openPop("ask", tbar.sel); return false; },
+  "t-delete": () => { addAnnotation({ type: "delete", block: tbar.sel.block, line: lineOf(tbar.sel.block), spans: tbar.sel.spans, quote: tbar.sel.quote }); tbar = null; getSelection().removeAllRanges(); },
+  "t-label": (d) => { addAnnotation({ type: "label", label: d.id, block: tbar.sel.block, line: lineOf(tbar.sel.block), spans: tbar.sel.spans, quote: tbar.sel.quote }); tbar = null; getSelection().removeAllRanges(); },
+  "block-comment": (d) => { const r = document.getElementById(d.id).getBoundingClientRect(); openPop("block", { rect: { left: r.left, width: Math.min(r.width, 400), bottom: r.top + 30 } }, { block: d.id }); return false; },
+  global: () => { openPop("global", null); return false; },
+  "pop-save": () => { savePop(); return false; },
+  "an-delete": (d) => { state.annotations = state.annotations.filter((a) => a.id !== d.id); pop = null; },
+  jump: (d) => {
+    const a = state.annotations.find((x) => x.id === d.id);
+    if (state.view !== a.file) { open(a.file); render(); }
+    const target = document.querySelector(`mark[data-an="${a.id}"]`) || document.getElementById(a.block);
+    scrollToEl(target, document.getElementById("stage").clientHeight / 3);
+    for (const m of document.querySelectorAll(`mark[data-an="${a.id}"]`)) { m.classList.remove("flash"); void m.offsetWidth; m.classList.add("flash"); }
+    return false;
+  },
+  goto: (d) => { scrollToEl(document.getElementById(d.id)); return false; },
+  edit: (d) => { state.editing = d.id; },
+  "edit-cancel": () => { state.editing = null; },
+  "edit-save": () => {
+    const id = state.editing, value = document.getElementById("block-src").value.replace(/\n+$/, "");
+    const raw = blocks.find((b) => b.id === id).raw;
+    if (value !== raw) { state.edits[editKey(id)] = value; if (!state.annotations.some((a) => a.type === "edit" && a.file === state.view && a.block === id)) addAnnotation({ type: "edit", block: id, line: lineOf(id) }); }
+    state.editing = null;
+  },
+  "edit-revert": (d) => { delete state.edits[editKey(d.id)]; state.annotations = state.annotations.filter((a) => !(a.type === "edit" && a.file === state.view && a.block === d.id)); },
+  diff: (d) => { state.diffOpen[editKey(d.id)] = !state.diffOpen[editKey(d.id)]; },
+  panel: () => { state.panel = !state.panel; },
+  theme: () => { state.theme = state.theme === "dark" ? "light" : "dark"; },
+  "hide-note": () => { state.noteHidden = true; },
+  finish: () => { state.modal = "verdict"; },
+  verdict: (d) => { state.verdict = d.v; },
+  submit: () => { state.submitted = true; state.modal = "result"; },
+  modal: (d) => { state.modal = state.modal === d.m ? null : d.m; },
+  "close-modal": () => { state.modal = null; },
+  bundle: (d) => { state.bundle = d.v; state.view = "overview"; state.annotations = []; state.edits = {}; state.seen = new Set(); state.folders = {}; },
+  moment: (d) => { state.moment = d.v; },
+  broken: () => { state.broken = !state.broken; state.view = "overview"; },
+};
+document.addEventListener("mousedown", (e) => { if (e.target.closest(".tbar")) e.preventDefault(); });
+document.addEventListener("click", (e) => {
+  const mark = e.target.closest("mark.an, .deco-ins, .deco-badge");
+  if (mark && !e.target.closest("[data-action]") && getSelection().isCollapsed) {
+    const r = mark.getBoundingClientRect();
+    pop = { kind: "view", id: mark.dataset.an, x: Math.min(r.left, innerWidth - 400), y: r.bottom + 8 };
+    renderFloat();
+    return;
+  }
+  const el = e.target.closest("[data-action]");
+  if (!el) { if (pop && !e.target.closest("[data-keep]")) { pop = null; renderFloat(); } return; }
+  if (ACTIONS[el.dataset.action](el.dataset, e) !== false) render();
+});
+// Hovering a ticket lights its chain: what it waits on and what waits on it.
+document.addEventListener("mouseover", (e) => {
+  const graph = document.getElementById("graph");
+  if (!graph) return;
+  const node = e.target.closest(".node");
+  graph.classList.toggle("hovering", !!node);
+  for (const el of graph.querySelectorAll(".hot")) el.classList.remove("hot");
+  if (!node) return;
+  const id = Number(node.dataset.tid), up = new Set([id]), down = new Set([id]);
+  for (let grew = true; grew; ) { grew = false; for (const t of tickets) { if (up.has(t.id)) for (const b of t.blockers) if (!up.has(b)) { up.add(b); grew = true; } if (t.blockers.some((b) => down.has(b)) && !down.has(t.id)) { down.add(t.id); grew = true; } } }
+  for (const n of graph.querySelectorAll(".node")) if (up.has(Number(n.dataset.tid)) || down.has(Number(n.dataset.tid))) n.classList.add("hot");
+  for (const p of graph.querySelectorAll("[data-from]")) { const f = Number(p.dataset.from), t = Number(p.dataset.to); if ((up.has(f) && up.has(t)) || (down.has(f) && down.has(t))) p.classList.add("hot"); }
+});
+document.addEventListener("mouseup", (e) => {
+  if (e.target.closest(".tbar, .pop, .modal, .proto-bar, textarea, .tree, .gut")) return;
+  setTimeout(() => {
+    const sel = selectionInfo();
+    if (!sel) { if (tbar) { tbar = null; renderFloat(); } return; }
+    tbar = { sel, x: Math.min(Math.max(12, sel.rect.left + sel.rect.width / 2 - 170), innerWidth - 360), y: Math.max(60, sel.rect.top - 48) };
+    pop = null;
+    renderFloat();
+  });
+});
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.closest?.("textarea, input");
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    if (pop && pop.kind !== "view") savePop();
+    else if (state.editing) { ACTIONS["edit-save"](); render(); }
+    else { state.modal = "verdict"; render(); }
+    return;
+  }
+  if (e.key === "Escape") { if (pop || tbar) { pop = null; tbar = null; renderFloat(); } else if (state.editing) { state.editing = null; render(); } else if (state.modal) { state.modal = null; render(); } return; }
+  if (tbar && !typing && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openPop("comment", tbar.sel, { initial: e.key }); return; }
+  if (typing || pop || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "?") { ACTIONS.modal({ m: "keys" }); render(); return; }
+  if (state.modal) return;
+  if (e.key === "g") { open("overview"); render(); }
+  else if (e.key === "]" || e.key === "[") { step(e.key === "]" ? 1 : -1); render(); }
+  else if (e.key === "j" || e.key === "k") section(e.key === "j" ? 1 : -1);
+});
+document.getElementById("app").addEventListener("scroll", () => { if (tbar || pop) { tbar = null; pop = null; renderFloat(); } spy(); }, true);
+function renderProto() {
+  const b = (action, v, label, on) => `<button class="${on ? "on" : ""}" data-action="${action}" data-v="${v}">${label}</button>`;
+  document.getElementById("proto").innerHTML = `<div class="proto-bar"><span class="proto-tag">Prototype · Ledger task R1</span>
+    ${b("bundle", "bench", "Benchmark bundle", state.bundle === "bench")}${b("bundle", "monty", "Monty bundle", state.bundle === "monty")}<span class="proto-sep"></span>
+    ${b("moment", "written", "Just written", state.moment === "written")}${b("moment", "mid", "Mid-flight", state.moment === "mid")}<span class="proto-sep"></span>
+    ${b("broken", "", "Broken graph", state.broken)}<span class="proto-sep"></span><button data-action="modal" data-m="result">Result</button></div>`;
+}
+render();
+
+</script>
+</body>
+</html>
