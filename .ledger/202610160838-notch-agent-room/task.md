@@ -73,7 +73,16 @@ Acceptance:
 
 ## Current State
 
-Round 3 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
+Round 4 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
+
+Operator feedback on round 3 ("I like it. The room size is better."), and what changed:
+
+- "Workers … 5-10% smaller": `AGENT_PIXEL` 10 → 11 in `clean.py`, about 9 % smaller, still on the sprite-pixel grid.
+- "Scale the room larger … with more workers", with the round-3 size as the minimum: workers keep 2.5 css px per pixel (`SPRITE`). The room scale starts there and grows in 0.5 steps until no two workers stand closer than 0.8 of the widest worker's width (`CROWDING`). It stops at the largest step that fits the shell window (3.5 for 1100×500). One scale serves every session, taken from the most crowded room, so the panel and its arrows stay put while cycling. A per-room scale made the panel shrink under the pointer and collapse. At 3.5 the room's pixels (7 device px) are visibly larger than the workers' (5 device px).
+- "A few more varieties of sprites": office workers beanie, hijab and senior (wheelchair), and the cozy cat-hoodie worker. Office now has 5 workers and cozy has 2. The cozy "sweater" worker failed on image quota; its prompt is the same pattern. The magenta key now goes by hue (285–315°), so purple props such as the wheelchair frame stay.
+- "Vibe … tied to the specific tmux session": vibes are stored per session (`notch-vibes` in localStorage), defaulting to office.
+
+Checked in headless Chrome with 8 mock agents in 2 sessions: the 6-worker room opens at 3.5, the 2-worker room keeps the same size, the vibe toggle changes only the shown session, a forwarded pointer opens the tooltip, and there are no page errors.
 
 Operator feedback on round 2 ("Better"), and what changed:
 
@@ -93,7 +102,7 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
-Next: get the operator's verdict on round 3. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
+Next: get the operator's verdict on round 4, and generate the cozy sweater worker when the image quota allows. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
 
 ## Outcome
 

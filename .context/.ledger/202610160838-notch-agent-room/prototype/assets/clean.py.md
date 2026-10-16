@@ -7,6 +7,11 @@ The crop takes the lowest clear rectangle, so the front edge of the floor is at 
 Why: `FLOOR` in `room.html` stands the workers at fixed fractions of the room height (front row at 0.95). A crop placed higher would stand them on the wall.
 Coupled: .ledger/202610160838-notch-agent-room/prototype/web/room.html
 
+## symbol:worker_frames
+
+Worker sheets must not put magenta-hued props (285–315°) on the worker. Purple props, such as a wheelchair frame, stay.
+Why: the background key removes every saturated pixel in that hue band, not only the flat `#FF00FF` backdrop. The band covers the darker magenta shadows that generations draw under desks.
+
 ## symbol:recolor
 
 Worker sheets must show a blue shirt with hair that is not blue. The prompts say "bright blue t-shirt" or "blue vest".

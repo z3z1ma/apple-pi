@@ -18,7 +18,7 @@ here = Path(__file__).resolve().parent
 raw, out = here / "raw", here.parent / "web" / "assets"
 
 ROOM_SIZE = (208, 116)  # about 5.5 raw pixels per art pixel once a 1376×768 generation is cropped to its interior
-AGENT_PIXEL = 10  # agents drawn at half their generated detail so several fit in one room
+AGENT_PIXEL = 11  # agents drawn at about half their generated detail so several fit in one room
 COLORS = 48
 STATES = ["working", "quiet", "waiting", "done"]  # sheet order: left to right, top to bottom
 SHIRT_HUES = [None, 0, 120, 280, 330, 170]  # None keeps the generated blue; others are target hues in degrees
@@ -73,10 +73,11 @@ def interior(image: Image.Image) -> Image.Image:
 
 
 def worker_frames(path: Path) -> list[Image.Image]:
-    sheet = np.asarray(Image.open(path).convert("RGBA")).copy()
-    r, g, b = (sheet[..., i].astype(int) for i in range(3))
-    # Magenta and its darker shadow tones: red and blue high, green well below both.
-    sheet[(r > 110) & (b > 110) & (g < np.minimum(r, b) * 0.55), 3] = 0
+    source = Image.open(path)
+    sheet = np.asarray(source.convert("RGBA")).copy()
+    h, s, v = (np.asarray(source.convert("RGB").convert("HSV"))[..., i].astype(int) for i in range(3))
+    # Magenta and its darker shadow tones (hue 285-315 degrees); purple props such as a wheelchair frame sit lower and stay.
+    sheet[(h >= 202) & (h <= 223) & (s > 120) & (v > 70), 3] = 0
     image = Image.fromarray(sheet)
     cell = image.width // 2
     frames = []
