@@ -127,3 +127,5 @@
 - `.ledger/history/202610160804-audit-vitest-tests-for-observable-behavior-value/task.md` — done — Audit Vitest tests for observable behavior value — Review the Vitest suite for vacuous assertions, implementation locks, duplicated coverage, and non-observable negatives; produce evidence-backed removal and rewrite recommendations.
 
 - `.ledger/history/202610160838-notch-agent-room/task.md` — done — Notch agent room: a Mac notch UI that shows pi agents as a cozy pixel room — Clean-room take on Agent Shrine for pi/tmux: a thin Swift notch shell hosting a web renderer (reusable later in a local web app and Tauri/Electron), fed by the tmux-sessions agent store. Starts with a throwaway prototype.
+
+- `.ledger/history/202610161427-session-mailbox/task.md` — done — Session mailbox: durable per-session inbox that steers the agent — Every root Pi session gets a durable mailbox keyed by its session id; anything (agents, scripts, headless runs) appends messages, and the session receives them as steers with at-least-once delivery recorded in the session itself.
