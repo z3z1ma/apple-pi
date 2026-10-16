@@ -103,6 +103,8 @@ I never call these tools by hand. I ask in plain words ("walk me through this br
 
 ![explain_change: an interactive figure beside a Socratic tutor that answers a question with a question](media/readme/explain-change-tutor.webp)
 
+<sub>These screenshots come from demo runs. The tutor's replies above are scripted for the demo, not written by a live model.</sub>
+
 ### `review_code`: The Change as a Story
 
 ![review_code: the agent's chapters, brief, and line notes over the real diff, with word-level marks](media/readme/review-code.webp)
