@@ -43,14 +43,16 @@ Evolve `components/tmux-sessions/` to solve these. When this task began, its Pi 
 
 Later phases: status-bar summary with a jump key; dashboard window.
 
-## Open questions
+## Resolved questions
 
-- Status bar mechanics: polling script in `#(...)` versus the extension writing a pane option (`@pi_status`) that formats aggregate with `#{P:…}`/`#{W:…}`/`#{S:…}` (tmux 3.5; untested). A pane option outlives a SIGKILL'd Pi when its shell pane survives, so that path needs reconciliation against live pids; otherwise keep the summary on the pid-validated record path.
+- Status bar mechanics: neither polling nor pane options. Every record write, removal, and pane focus runs `sidebar.sh status`, which sets the server option `@pi_agents` from the pid- and tty-validated records; `status-right` shows `#{@pi_agents}`.
 
 ## Findings
 
 - The tmux plugin was not loaded in the operator's tmux (`~/.config/tmux/tmux.conf` and `conf/keybinds.conf` have no `run-shell` for it), so `prefix + u` was unbound.
-- Stale record not pruned: record for pane `%266` has pid 58159, which tmux no longer has as a pane and which the OS reused for `nvim`. The old `agents.sh` hid it (pane missing) but pruned only on a dead pid, so the file stays. Resolution kept in the sidebar: hide records whose pane is missing, but delete only on a dead pid, because `tmux list-panes -a` sees one tmux server and a Pi on another server would otherwise lose its record.
+- Stale record not pruned: record for pane `%266` had pid 58159, which tmux no longer had as a pane and which the OS reused for `nvim`. Resolution: records now carry `tmuxSocket`, and an agent is shown only when its pane exists on this server with the same `paneTty`; a record naming this server whose pane is gone is deleted. Records without `tmuxSocket` are never deleted for a missing pane: treating them as local let a scratch tmux server delete every live agent's record on 2026-10-16 (rebuilt from the running Pi processes the same hour).
+- tmux 3.5a crashes on `new-window` in a detached session with `window-size manual`; scratch tests avoid that option.
+- tmux gives a leaving full-height pane's space to the rightmost pane and shrinks unevenly on arrival, so the following sidebar made splits drift; `sidebar/layout.py` rewrites layouts proportionally (exact round trip) and needs the sidebar to be the window's last pane.
 
 ## Runtime analysis
 
@@ -62,33 +64,25 @@ The TUIs run as separate processes in tmux panes, outside Pi's extension loader.
 
 ## Acceptance criteria
 
-Phase 1:
+All met.
 
-- With N live root Pi panes, the sidebar lists exactly those N agents; stale state (dead pid or missing pane) never appears, and records with a dead pid are deleted.
-- Each agent shows a distinguishing name without manual `/name` after its first turn, and its ledger task when one is linked.
-- With the sidebar on, switching window or session moves the one sidebar pane into the new current window without taking focus; `prefix + u` turns it on and off; no `tmux.conf` line is needed once a Pi agent has started in tmux.
-- The fzf picker, launcher, and bell relay, with `fzf`/`jq` requirements and their options, are gone from code, docs, and tests.
-- An agent that settled while unfocused shows as needing attention until its pane is focused; a `waiting` agent shows as needing attention until its prompt resolves.
-
-Later phases:
-
-- One key jumps to the agent that has needed attention longest.
+- [x] With N live root Pi panes, the sidebar and dashboard list exactly those N agents; stale state never appears; dead-pid records and same-server paneless records are deleted. (pytest pruning and collision tests; live check: 6 Pi panes, 6 records, 6 agents.)
+- [x] Each agent shows a distinguishing name without manual `/name` after its first turn, and its ledger task when one is linked. (session-title Vitest suite; real Pi + real model on a scratch server titled itself "Explain tmux panes in one sentence".)
+- [x] With the sidebar on, switching window or session moves the one sidebar pane into the new current window without taking focus; `prefix + u` turns it on and off; no `tmux.conf` line is needed once a Pi agent has started in tmux. (scratch server with an attached client; the real Pi self-loaded the plugin and stamped `@pi_sessions_plugin`.)
+- [x] The fzf picker, launcher, and bell relay, with `fzf`/`jq` requirements and their options, are gone from code, docs, and tests.
+- [x] An agent that settled while unfocused needs attention until its pane is focused; a `waiting` agent until its prompt resolves. (pytest; real Pi: `✓ 1` until a client focused the pane, then `· 1`.)
+- [x] One key (`prefix + y`) jumps to the agent that has needed attention longest.
+- [x] A status-line summary of agents by state.
+- [x] A dashboard window: attention-ordered table, details, activity graph, live pane view, reply, seen-by-reading. (pytest Pilot suite; scratch-server toggle test.)
 
 ## Current State
 
-In progress: phase 1 implemented and checked; not committed; not yet tried by the operator in the live tmux server.
+Done. Committed on `main` (unpushed): `ce1d31c`, `bb2b520`, `08f4829`, `e2f6094`, `4a2ffa1`, `5e2d86a`, `b53f4e1`, `fc281a6`, `c125688`, `cf825e3`. The plugin is loaded in the operator's live tmux server (`prefix + u`, `y`, `A`; `#{@pi_agents}` in `status-right`).
 
-- Built: `components/tmux-sessions/sidebar/` (production sidebar and its pytest suite), `scripts/sidebar.sh` and `pi_session_manager.tmux` (toggle, follow hooks, seen stamping, first-run baseline), plugin self-loading in `src/index.ts`, removal of the picker, launcher, and bell relay, and the docs (`docs/tmux-sessions.md`, `docs/setup.md`, README, notices). Session titles are in `components/session-title/` (provisional title on the first prompt, refined after the first reply, retitled when the session adds or starts a ledger task).
-- Checked: `npm run test:sidebar` (6 pass; one mutation confirmed a test fails), the tmux-sessions Vitest file, Ruff, `context_lint`; on a scratch tmux server with an attached pty client: plugin load, toggle open/close, follow on new window, window select, and session switch, `pane-focus-in` stamping, and the first-run baseline.
-- Full gate passed: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (unit, sidebar, pair, loader), `npm pack --dry-run` lists the sidebar, plugin, and session-title files.
-- Remaining: operator tries it in the live tmux server (start a new Pi, or `tmux run-shell` the plugin once); session titles not yet seen against a real model or the real ledger tools; commit.
+Not verified: the production sidebar and dashboard drawn by Ghostty itself (verified through tmux `capture-pane` and Textual screenshots), and a reply typed into a real agent from the dashboard (tested with a fake tmux). Running Pi agents started before these commits still use the old extension until restarted (no titles, no `tmuxSocket`), which the views tolerate.
 
-Sidebar prototype in `prototype/` (see its README for variants A Cards, B Lanes, and the cut C Pulse): Python + Textual 8.2.8 via `uv run --script`, on live data, toggled into a real full-height pane by `prototype/run.sh`. Its default is the merged "Cards in lanes" (B's count and lanes with A's cards), with A and B kept for comparison. Verified in a scratch tmux session: renders on the terminal's default background (translucent Ghostty), j/k/x/v work, a fake record flipping busy to waiting to idle moves the card to the top and flashes it, toggle opens and closes the pane, ~3% CPU / 97 MB. Not verified: click-to-jump and `enter` against the operator's live client (deliberately not exercised from the agent), hover, and Nerd Font/glyph widths in Ghostty.
-
-Verdict (operator, 2026-10-16): **Cards in lanes** wins: B's big count and lane headings with A's cards inside, a blank row under each heading. C cut. Operator verified click-to-jump live.
-
-Textual research notes: `notes/textual-capabilities.md`.
+Prototype: `prototype/` (see its README), verdict "Cards in lanes". Textual research notes: `notes/textual-capabilities.md`.
 
 ## Outcome
 
-Pending.
+The fzf picker became an always-available agent cockpit: a Textual sidebar that follows you between tmux windows and sorts agents into NEEDS YOU / WORKING / QUIET lanes; a `π agents` dashboard window with a live view of any agent's pane and inline replies; a status-line count; a jump key; automatic session titles; and seen tracking from tmux focus. It needs only `uv` and loads itself into tmux.
