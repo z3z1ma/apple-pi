@@ -93,6 +93,44 @@ flowchart TB
 
 ---
 
+## Out of the Terminal: Pages for the Moments That Need a Human
+
+Everything above keeps the *model's* attention clean. This section is about the other half of the loop: the moments where I have to judge, sign off on, or genuinely understand what the agent did. Those moments are visual, and a terminal is a hostile place for them. A nine-hunk change reviewed as a `git diff` scroll, a spec signed off by squinting at raw Markdown in a pager, a ticket graph reconstructed by grepping `Blocked by:` lines: that is how judgment quietly degrades into rubber-stamping.
+
+So the harness grows a second surface. Four tools open a purpose-built page in the browser: one tool call, one self-contained HTML file, served on `127.0.0.1` behind a token (`components/browser-pages`). The division of labour is the whole trick. **The agent supplies the structure from what it knows; the page supplies the truth from git and disk.** The agent can tell the story of a change, order it, annotate it, and quiz me on it, but every line of code on the page is read by the server, so it can neither hide a hunk nor invent one.
+
+![explain_change: an interactive figure beside a Socratic tutor that answers a question with a question](media/readme/explain-change-tutor.webp)
+
+### `review_code`: The Change as a Story
+
+![review_code: the agent's chapters, brief, and line notes over the real diff, with word-level marks](media/readme/review-code.webp)
+
+A raw diff is a pile of files in alphabetical order. `review_code` makes the agent tell the change the way it reasoned about it: chapters (core first, consequences next, tests and docs last), a brief for each, notes pinned to the lines where the code cannot speak for itself, and decisions for the judgment calls I may want to override. The server reads every hunk from git (`git-diff.ts`) and highlights it with Shiki (`highlight.ts`); any hunk the agent did not place lands in **Not in the story**, so a narrative can never launder a change past me. `J` and `K` step through hunks, `↵` marks one seen and moves on, and `A` on any lines **asks the agent** without leaving the page: a read-only fork of the live conversation answers inline (`ask-agent.ts`). The tool call blocks until I finish, and my verdict, line-anchored comments, and decision answers come back as its result.
+
+### `review_markdown`: Annotate the Document, Not a Diff of It
+
+![review_markdown: a rendered spec with a Mermaid diagram, a selection toolbar, tracked changes, and the annotations panel](media/readme/review-markdown.webp)
+
+Specs and plans deserve to be read rendered, not reviewed as patches. The page shows the document as a document (outline, highlighted code, tables, GitHub alerts, Mermaid diagrams), and feedback means selecting text: comment (or just start typing), 👍 or ❓, strike it, suggest a rewrite as a tracked change, or rewrite a whole block and leave the diff for the agent. Every annotation returns with its `path:line` and the exact quote, and the file itself is never touched. Untrusted Markdown never runs script in a page that holds the session token (`render.ts`).
+
+### `review_ledger_task`: The Shape of the Work
+
+![review_ledger_task: the task's intent and its ticket graph, with the hovered ticket's chain lit](media/readme/review-ledger-task.webp)
+
+A ledger task is a folder of documents plus a dependency graph that only exists in prose. `review_ledger_task` reads the whole bundle and draws that graph: tickets in columns by dependency depth, the frontier ringed, and a hover lighting everything a ticket waits on and everything waiting on it. Graph checks catch what `to-tickets` must never produce: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, a graph with nowhere to start (`tickets.ts`). Every document opens in the same annotation reader, evidence files load only when opened, and the result tells the agent which documents I never opened, so it knows exactly what my approval does not cover.
+
+### `explain_change`: Understanding Is the New Bottleneck
+
+![explain_change: the quiz, with instant feedback and an explanation for every answer](media/readme/explain-change-quiz.webp)
+
+Geoffrey Litt put it better than I can: [understanding is the new bottleneck](https://www.geoffreylitt.com/2026/07/02/understanding-is-the-new-bottleneck). Verifying an agent's work is a thumbs-up or a thumbs-down; *participating* in what comes next requires actually understanding the system it just changed. `explain_change` turns any change (uncommitted work, a branch, or any commit or range in history) into an explanation packet: background with a primer for newcomers, intuition before details (toy data, Mermaid, and sandboxed interactive figures with no network access), a literate walkthrough over real lines from git, a list of every file the walkthrough skipped, and a five-question quiz written so that a skimmer fails and an understander passes.
+
+The quiz is a speed regulator; the sidebar is a tutor. While the session lives, **Talk it through** opens a Socratic conversation with the agent that wrote the explanation: it answers with questions, offers hints before answers, starts from the misconception behind a missed question, and links back to the step that holds the answer. When I leave the page, a note of what I missed and what I asked waits for the agent's next turn.
+
+**Every page is also an artifact.** Each one is saved as a single self-contained HTML file under `~/.pi/agent/artifacts/`, ready to attach to a pull request or a Confluence page. And every page degrades gracefully: opened without a live session behind it, a page hides whatever needs the agent and reads as a plain document. A shared explanation keeps its figures and its quiz; a saved review keeps its verdict. The full contract lives in [`docs/browser-pages.md`](docs/browser-pages.md).
+
+---
+
 ## Deep Dive: Subsystems, Mechanics, and Emergent Implications
 
 Every directory in `components/` exists because a specific recurring dysfunction forced me to write it. Below is how each subsystem works in the source code—followed by what happens when these mechanisms compound in practice.
