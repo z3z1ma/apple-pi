@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agents import STATUS_STYLE, Agent, AgentStore, live, mark_seen, tmux  # noqa: E402
-from presentation import STATE_LABEL, ago, details, glyph, state, tokens, use_theme  # noqa: E402
+from presentation import STATE_LABEL, ago, details, glyph, show, state, tokens, use_theme  # noqa: E402
 from rich.text import Text  # noqa: E402
 from textual import on, work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
@@ -27,7 +27,7 @@ from textual.widgets import DataTable, Input, Sparkline, Static  # noqa: E402
 
 POLL_SECONDS = 1.0
 PREVIEW_SECONDS = 0.5
-TICK_SECONDS = 0.1
+TICK_SECONDS = 0.25
 # Reading a finished agent's pane in the preview for this long counts as having seen it.
 SEEN_AFTER_SECONDS = 3.0
 NARROW_COLUMNS = 140
@@ -109,6 +109,9 @@ class Dashboard(App):
         self.selected: str | None = None
         self.selected_since = 0.0
         self.frame = 0
+        self.watched = True
+        self.shown_cells: dict[tuple[str, str], Text] = {}
+        self.shown_screen: tuple[str, str, int] | None = None
         self.last_error = ""
 
     def compose(self) -> ComposeResult:
@@ -169,16 +172,18 @@ class Dashboard(App):
         order = [agent.session_id for agent in agents]
         if order != self.order:
             table.clear()
+            self.shown_cells = {}
             for agent in agents:
                 row = cells(agent, now, self.frame)
                 table.add_row(*(row[key] for key, _, _ in COLUMNS), key=agent.session_id)
+                self.shown_cells.update({(agent.session_id, key): value for key, value in row.items()})
             self.order = order
             if self.selected in order:
                 table.move_cursor(row=order.index(self.selected), animate=False)
         else:
             for agent in agents:
                 for key, value in cells(agent, now, self.frame).items():
-                    table.update_cell(agent.session_id, key, value)
+                    self.put_cell(agent.session_id, key, value)
         self.query_one("#empty").display = not agents
         self.query_one("#body").display = bool(agents)
         if agents and self.selected not in order:
@@ -209,7 +214,13 @@ class Dashboard(App):
         parts.append(
             Content.from_markup("[$text-muted]$total agents · $$$cost[/]", total=len(agents), cost=f"{cost:.2f}")
         )
-        self.query_one("#header", Static).update(Content("   ").join(parts))
+        show(self.query_one("#header", Static), Content("   ").join(parts))
+
+    def put_cell(self, session_id: str, key: str, value: Text) -> None:
+        """Change one table cell only when its text changed: every update redraws the whole table."""
+        if self.shown_cells.get((session_id, key)) != value:
+            self.shown_cells[(session_id, key)] = value
+            self.query_one(DataTable).update_cell(session_id, key, value)
 
     def selected_agent(self) -> Agent | None:
         return next((agent for agent in self.agents if agent.session_id == self.selected), None)
@@ -227,10 +238,12 @@ class Dashboard(App):
         for name in ("waiting", "done", "working"):
             detail.set_class(agent is not None and state(agent) == name, f"-{name}")
         if agent is None:
-            detail.update("")
+            show(detail, "")
             return
-        detail.border_title = f"{glyph(agent, self.frame)} {STATE_LABEL[state(agent)]}"
-        detail.update(details(agent, now))
+        title = f"{glyph(agent, self.frame)} {STATE_LABEL[state(agent)]}"
+        if detail.border_title != title:
+            detail.border_title = title
+        show(detail, details(agent, now))
         self.query_one(Sparkline).data = agent.spark(now)
 
     @on(DataTable.RowHighlighted)
@@ -248,33 +261,37 @@ class Dashboard(App):
             tmux("select-pane", "-t", agent.pane_id)
 
     def tick(self) -> None:
+        # Spinners animate only while someone can see them.
+        if not self.watched:
+            return
         self.frame += 1
-        table = self.query_one(DataTable)
         for agent in self.agents:
             if state(agent) == "working" and agent.session_id in self.order:
-                table.update_cell(agent.session_id, "state", cells(agent, time.time(), self.frame)["state"])
+                self.put_cell(agent.session_id, "state", cells(agent, time.time(), self.frame)["state"])
 
     @work(thread=True, exclusive=True, group="preview")
     def refresh_preview(self) -> None:
-        agent = self.selected_agent()
-        if agent is None:
-            return
-        screen = tmux("capture-pane", "-e", "-p", "-t", agent.pane_id)
         # Terminal focus alone is not enough: a dashboard in a window no client shows never gets a focus-out.
         own_window = tmux("display-message", "-p", "-t", os.environ.get("TMUX_PANE", ""), "#{window_id}").strip()
         watched = own_window in tmux("list-clients", "-F", "#{window_id}").split()
+        agent = self.selected_agent()
+        # An unwatched dashboard stops capturing panes; it catches up as soon as a client shows it again.
+        screen = tmux("capture-pane", "-e", "-p", "-t", agent.pane_id) if agent and watched else ""
         self.call_from_thread(self.show_preview, agent, screen, watched)
 
-    def show_preview(self, agent: Agent, screen: str, watched: bool) -> None:
-        if agent.session_id != self.selected:
+    def show_preview(self, agent: Agent | None, screen: str, watched: bool) -> None:
+        self.watched = watched
+        if agent is None or not watched or agent.session_id != self.selected:
             return
         preview = self.query_one("#preview", Static)
         rows = max(1, preview.content_size.height)
-        lines = screen.rstrip("\n").split("\n")[-rows:]
-        preview.update(Text.from_ansi("\n".join(lines), no_wrap=True, overflow="crop"))
-        preview.border_title = f"Live view · {agent.name}"
-        preview.border_subtitle = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index}"
-        if agent.unseen and watched and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
+        if (agent.session_id, screen, rows) != self.shown_screen:
+            self.shown_screen = (agent.session_id, screen, rows)
+            lines = screen.rstrip("\n").split("\n")[-rows:]
+            preview.update(Text.from_ansi("\n".join(lines), no_wrap=True, overflow="crop"))
+            preview.border_title = f"Live view · {agent.name}"
+            preview.border_subtitle = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index}"
+        if agent.unseen and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
             mark_seen(agent.pane_id)
             self.poll()
 

@@ -33,10 +33,11 @@ class FakeTmux:
 
     def __call__(self, *args: str) -> str:
         if args[0] == "list-panes":
-            return "".join(
-                f"{SOCKET}\t{pane}\t{p['session']}\t{p['window']}\t{p['index']}\t{p['seen']}\n"
+            panes = "".join(
+                f"pane\t{SOCKET}\t{pane}\t/dev/tty{pane[1:]}\t{p['session']}\t{p['window']}\t{p['index']}\t{p['seen']}\n"
                 for pane, p in self.panes.items()
             )
+            return panes + "".join(f"client\t{pane}\n" for pane in self.focused)
         if args[:3] == ("list-clients", "-F", "#{window_id}"):
             return "@1\n" if self.watched else ""
         if args[0] == "list-clients":
@@ -75,6 +76,7 @@ def record(state: Path, session_id: str, pane: str, status: str, updated_at: int
         "cwd": extra.get("cwd", "/tmp/project"),
         "sessionName": extra.get("name", ""),
         "paneId": pane,
+        "paneTty": extra.get("tty", f"/dev/tty{pane[1:]}"),
         "updatedAt": updated_at,
         "tmuxSocket": extra.get("socket", SOCKET),
     }

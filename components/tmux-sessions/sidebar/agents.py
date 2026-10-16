@@ -240,16 +240,25 @@ def live() -> list[Agent]:
     and quiet agents, most recently changed first.
     """
     panes: dict[str, list[str]] = {}
+    focused: set[str] = set()
     socket = ""
+    # One tmux call for both lists: hooks run this on every focus change.
     for line in tmux(
         "list-panes",
         "-a",
         "-F",
-        f"#{{socket_path}}\t#{{pane_id}}\t#{{session_name}}\t#{{window_index}}\t#{{pane_index}}\t#{{{SEEN_OPTION}}}",
+        f"pane\t#{{socket_path}}\t#{{pane_id}}\t#{{pane_tty}}\t#{{session_name}}\t#{{window_index}}\t#{{pane_index}}\t#{{{SEEN_OPTION}}}",
+        ";",
+        "list-clients",
+        "-F",
+        "client\t#{pane_id}",
     ).splitlines():
-        socket, pane_id, *fields = line.split("\t")
-        panes[pane_id] = fields
-    focused = {line for line in tmux("list-clients", "-F", "#{pane_id}").splitlines() if line}
+        kind, *fields = line.split("\t")
+        if kind == "pane":
+            socket, pane_id, *pane = fields
+            panes[pane_id] = pane
+        elif kind == "client" and fields:
+            focused.add(fields[0])
     agents: list[Agent] = []
     for path in STATE_DIR.glob("*.json"):
         try:
@@ -260,16 +269,19 @@ def live() -> list[Agent]:
         if not pid_alive(pid):
             path.unlink(missing_ok=True)
             continue
-        # Another tmux server's agent is not ours to show or delete: its pane ids can collide with ours. Records
-        # written before tmuxSocket existed all came from the one server people run, so they count as this one's.
-        if socket and (record.get("tmuxSocket") or socket) != socket:
+        # Pane ids are per tmux server and collide across servers, so a record is this server's agent only when
+        # its pane exists here with the same tty. Only a record that names this server may be deleted for a
+        # missing pane (a Pi killed without its shutdown hook, whose pid the OS may have reused); a record from
+        # another server, or written before records named their server, is skipped and left alone.
+        own = bool(socket) and record.get("tmuxSocket") == socket
+        if socket and record.get("tmuxSocket") not in (None, socket):
             continue
         pane = panes.get(pane_id)
-        if pane is None:
-            # On its own server a missing pane proves the Pi is gone, even when the OS has reused its pid.
-            if socket:
+        if pane is None or (record.get("paneTty") and pane[0] != record["paneTty"]):
+            if own:
                 path.unlink(missing_ok=True)
             continue
+        pane = pane[1:]
         agent = Agent(
             session_id=session_id,
             status=str(record.get("status", "idle")),

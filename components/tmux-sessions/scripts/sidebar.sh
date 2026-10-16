@@ -13,6 +13,12 @@ exec >/dev/null 2>&1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WIDTH=42
 
+# The pane command for an always-on view: a crash restarts it after a moment, a normal exit (q) closes the pane.
+# Wrapped in sh because tmux runs pane commands through the operator's shell, which may not be POSIX (fish).
+keep_running() {
+  printf 'sh -c "while ! uv run -q --script \x27%s\x27; do sleep 2; done"' "$ROOT/sidebar/$1"
+}
+
 py() {
   PI_TMUX_STATE_DIR="$(tmux show-option -gqv @pi_state_dir)" uv run -q --no-project python "$ROOT/sidebar/$@"
 }
@@ -62,7 +68,7 @@ open() {
   before="$(layout_of "$1")"
   pane="$(tmux split-window -h -f -d -l "$WIDTH" -t "$(last_pane "$1")" -P -F '#{pane_id}' \
     -e "PI_TMUX_STATE_DIR=$(tmux show-option -gqv @pi_state_dir)" \
-    "uv run --script '$ROOT/sidebar/sidebar.py'")"
+    "$(keep_running sidebar.py)")"
   if [ -z "$pane" ]; then
     tmux display-message "No room for the Pi sidebar in this window"
     return
@@ -137,7 +143,7 @@ dashboard)
     # Created detached and marked before it is shown, so the sidebar's follow hook already sees the mark.
     window="$(tmux new-window -d -t "$4:" -n "π agents" -P -F '#{window_id}' \
       -e "PI_TMUX_STATE_DIR=$(tmux show-option -gqv @pi_state_dir)" \
-      "uv run --script '$ROOT/sidebar/dashboard.py'")"
+      "$(keep_running dashboard.py)")"
     tmux set-option -w -t "$window" @pi_dashboard 1
     tmux set-option -w -t "$window" automatic-rename off
     tmux switch-client -c "$2" -t "$window"

@@ -1,7 +1,7 @@
 ## symbol:live
 
-A record whose `tmuxSocket` names another tmux server is skipped before its pane is looked up, and never deleted. A record without `tmuxSocket` counts as this server's. Delete a record when its pid is dead, or when it is this server's and its pane is missing.
-Why: pane ids are per server, so another server's `%3` can collide with ours and would show (and take replies for) the wrong pane. A missing pane on the record's own server proves the Pi is gone, including a SIGKILL'd Pi whose pid the OS has reused. Records written before `tmuxSocket` existed came from the one server people run.
+A record is this server's agent only when its pane exists here with the same `paneTty`. A record whose `tmuxSocket` names another server is skipped before its pane is looked up. Only a record whose `tmuxSocket` is this server's may be deleted for a missing pane; a record without `tmuxSocket` (written by a Pi from before the field) is skipped and left alone. A dead pid always deletes.
+Why: pane ids are per server and collide across servers, so another server's `%3` would otherwise show, and take dashboard replies for, the wrong pane. Treating records without `tmuxSocket` as local once let a scratch tmux server delete every live agent's record. A missing pane on the record's own server does prove the Pi is gone, including a SIGKILL'd Pi whose pid the OS has reused.
 Coupled: components/tmux-sessions/src/state.ts
 
 An idle agent whose pane is focused in a client counts as seen, and the read stamps `@pi_seen_at` for it.

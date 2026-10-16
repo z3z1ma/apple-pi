@@ -18,3 +18,8 @@ Coupled: components/tmux-sessions/sidebar/layout.py
 Every path that adds the sidebar to a window (`open`, `follow` in) reads that window's layout before the split or join and passes it to `layout.py add`; every path that removes it (`follow` away, `close`) reads the layout with the sidebar still in it and passes it to `layout.py remove`.
 Why: the layout after tmux's own join or removal is already distorted (uneven shrink, all space to the rightmost pane), so scaling it would keep the drift.
 Coupled: components/tmux-sessions/sidebar/layout.py
+
+## symbol:keep_running
+
+The sidebar and dashboard panes run `sh -c "while ! uv run …; do sleep 2; done"`: a crash restarts the app, a normal exit (`q`) ends the loop and closes the pane.
+Why: these views are meant to stay open around the clock. tmux runs pane commands through the operator's login shell, which may be fish, so the loop is wrapped in `sh`.

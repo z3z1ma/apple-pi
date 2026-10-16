@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agents import Agent, AgentStore, mark_seen, tmux  # noqa: E402
-from presentation import STATES, activity, ago, details, glyph, state, task_line, tokens, use_theme  # noqa: E402
+from presentation import STATES, activity, ago, details, glyph, show, state, task_line, tokens, use_theme  # noqa: E402
 from textual import work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.binding import Binding  # noqa: E402
@@ -41,6 +41,8 @@ class Card(Widget):
     def __init__(self, agent: Agent) -> None:
         super().__init__()
         self.agent = agent
+        self.shown_title: Content | None = None
+        self.shown_subtitle: Content | None = None
 
     def compose(self) -> ComposeResult:
         yield Static(classes="line task")
@@ -65,25 +67,31 @@ class Card(Widget):
 
     def paint(self, now: float, frame: int) -> None:
         agent = self.agent
-        self.border_title = Content.from_markup("[b]$glyph  $name[/b]", glyph=glyph(agent, frame), name=agent.name)
+        self.paint_title(frame)
         where = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index} · {ago(agent.updated_at, now)}"
-        self.border_subtitle = (
+        subtitle = (
             Content.from_markup("[b $text-accent]◂ here[/]  $where", where=where)
             if agent.focused
             else Content.from_markup("$where", where=where)
         )
-        self.query_one(".task", Static).update(task_line(agent), layout=False)
-        self.query_one(".act", Static).update(activity(agent), layout=False)
+        if subtitle != self.shown_subtitle:
+            self.shown_subtitle = self.border_subtitle = subtitle
+        show(self.query_one(".task", Static), task_line(agent))
+        show(self.query_one(".act", Static), activity(agent))
         spark = agent.spark(now)
         self.set_class(not any(spark), "-flat")
         self.query_one(Sparkline).data = spark
         act = agent.activity
-        meta = f"{tokens(act.context_tokens)} ${act.cost:.2f}" if act.model else ""
-        self.query_one(".meta", Static).update(meta, layout=False)
+        show(self.query_one(".meta", Static), f"{tokens(act.context_tokens)} ${act.cost:.2f}" if act.model else "")
+
+    def paint_title(self, frame: int) -> None:
+        title = Content.from_markup("[b]$glyph  $name[/b]", glyph=glyph(self.agent, frame), name=self.agent.name)
+        if title != self.shown_title:
+            self.shown_title = self.border_title = title
 
     def tick(self, frame: int) -> None:
         if state(self.agent) == "working":
-            self.paint(time.time(), frame)
+            self.paint_title(frame)
 
     def on_click(self) -> None:
         self.app.jump(self.agent)

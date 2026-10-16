@@ -17,14 +17,16 @@ def test_lists_live_agents_and_prunes_dead_or_paneless_records_of_this_tmux_serv
     paneless = record(state, "paneless", "%9", "idle", 100)
     legacy = record(state, "legacy", "%8", "idle", 100, socket=None)
     other_server = record(state, "other-server", "%9", "idle", 100, socket="/tmp/tmux-test/other")
-    # Another server's agent whose pane id happens to exist here too must not pose as a local agent.
+    # Another server's agent whose pane id happens to exist here too must not pose as a local agent,
+    # whether its record names that server or predates server names (then its pane tty gives it away).
     colliding = record(state, "colliding", "%1", "waiting", 100, socket="/tmp/tmux-test/other")
+    colliding_legacy = record(state, "colliding-legacy", "%1", "waiting", 100, socket=None, tty="/dev/ttys999")
 
     found = agents.AgentStore().poll()
 
     assert [agent.session_id for agent in found] == ["live"]
-    assert live.exists() and other_server.exists() and colliding.exists()
-    assert not dead.exists() and not paneless.exists() and not legacy.exists()
+    assert all(path.exists() for path in (live, other_server, colliding, colliding_legacy, legacy))
+    assert not dead.exists() and not paneless.exists()
 
 
 def test_an_agent_that_settled_after_you_last_looked_needs_you_until_seen(env):

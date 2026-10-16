@@ -9,6 +9,7 @@ from agents import Agent
 from textual.app import App
 from textual.content import Content
 from textual.theme import BUILTIN_THEMES
+from textual.widgets import Static
 
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 STATES = ("waiting", "done", "working", "quiet")
@@ -92,6 +93,13 @@ def details(agent: Agent, now: float) -> Content:
         ),
     ]
     return Content("\n").join(lines)
+
+
+def show(static: Static, content: Content | str) -> None:
+    """Update a Static only when its content changed; an always-on view would otherwise repaint every poll."""
+    if getattr(static, "shown", None) != content:
+        static.shown = content
+        static.update(content, layout=False)
 
 
 def use_theme(app: App) -> None:
