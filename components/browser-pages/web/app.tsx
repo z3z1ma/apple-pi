@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { CodeReviewPage, Verdict } from "../src/page-data";
+import { useConnected } from "./connected";
 import { type Review, ReviewContext } from "./context";
 import { buildModel, type Model } from "./model";
 import { ChapterPage, HunkPage, Modal, Overview, Rail, submitReview, TopBar, VERDICT_LABEL } from "./pages";
@@ -26,7 +27,14 @@ import { Icon } from "./ui";
 type Change = (draft: State) => void;
 
 /** The state change a key asks for in the current state, or undefined when the key does nothing here. */
-function keyChange(key: string, shift: boolean, st: State, m: Model, readOnly: boolean): Change | undefined {
+function keyChange(
+	key: string,
+	shift: boolean,
+	st: State,
+	m: Model,
+	readOnly: boolean,
+	canAsk: boolean,
+): Change | undefined {
 	const f = st.focus;
 	switch (key) {
 		case "j":
@@ -57,9 +65,7 @@ function keyChange(key: string, shift: boolean, st: State, m: Model, readOnly: b
 		case "c":
 			return f && st.page !== "overview" && !readOnly ? (d) => composeOn(m, d, f) : undefined;
 		case "a":
-			return f && st.page !== "overview" && !readOnly && m.page.session.ask
-				? (d) => composeOn(m, d, f, "ask")
-				: undefined;
+			return f && st.page !== "overview" && canAsk ? (d) => composeOn(m, d, f, "ask") : undefined;
 		case "b": {
 			if (st.page === "overview") return undefined;
 			const chapter = f ? m.chapterOf[f] : undefined;
@@ -93,7 +99,10 @@ function keyChange(key: string, shift: boolean, st: State, m: Model, readOnly: b
 
 export function CodeReview({ page }: { page: CodeReviewPage }) {
 	const m = useMemo(() => buildModel(page), [page]);
-	const readOnly = !page.session.live;
+	// A page that cannot reach its session (a saved copy, or one whose session ended) reads, but takes no review.
+	const { connected, agent, recheck } = useConnected(page.session);
+	const readOnly = !connected;
+	const canAsk = page.session.ask && agent && !readOnly;
 	const [s, setState] = useState<State>(() => initialState(page.result));
 	const update = useCallback((change: (draft: State) => void) => {
 		setState((previous) => {
@@ -111,6 +120,7 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 				d.submit = "sending";
 			});
 			const ok = await submitReview(page.session.token, toResult(m, stateRef.current, verdict));
+			if (!ok) recheck();
 			update((d) => {
 				d.submit = ok ? "sent" : "failed";
 				if (ok) {
@@ -119,7 +129,7 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 				}
 			});
 		},
-		[m, page.session.token, update],
+		[m, page.session.token, update, recheck],
 	);
 
 	const askQuestion = useCallback(
@@ -136,9 +146,13 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 					body: JSON.stringify({ hunk: entry.hunk, start: entry.start, end: entry.end, question: entry.question }),
 				});
 				if (response.ok) answer = ((await response.json()) as { answer?: string }).answer;
-				else error = (await response.text()) || `The agent could not answer (${response.status}).`;
+				else {
+					error = (await response.text()) || `The agent could not answer (${response.status}).`;
+					recheck();
+				}
 			} catch {
 				error = "Could not reach the agent. Is the session still open?";
+				recheck();
 			}
 			update((d) => {
 				const target = d.asks.find((a) => a.id === entry.id);
@@ -147,7 +161,7 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 				else target.error = error ?? "The agent gave no answer.";
 			});
 		},
-		[page.session.token, update],
+		[page.session.token, update, recheck],
 	);
 	const ask = useCallback(() => {
 		const c = stateRef.current.composer;
@@ -236,16 +250,16 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 				e.preventDefault();
 				return;
 			}
-			const change = keyChange(k, e.shiftKey, st, m, readOnly);
+			const change = keyChange(k, e.shiftKey, st, m, readOnly, canAsk);
 			if (!change) return;
 			e.preventDefault();
 			update(change);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [ask, m, readOnly, submit, update]);
+	}, [ask, m, readOnly, canAsk, submit, update]);
 
-	const review: Review = { m, s, update, readOnly, ask, retry };
+	const review: Review = { m, s, update, readOnly, canAsk, ask, retry };
 	const body = s.page === "overview" ? <Overview /> : s.page === "hunk" ? <HunkPage /> : <ChapterPage />;
 	return (
 		<ReviewContext.Provider value={review}>
@@ -266,7 +280,12 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 				</main>
 			</div>
 			<Modal onSubmit={(verdict) => void submit(verdict)} />
-			{s.submit === "sent" && !readOnly ? (
+			{page.session.live && !connected && s.submit !== "sent" ? (
+				<div className="lost-note">
+					The session that opened this page has ended, so this review can no longer be sent.
+				</div>
+			) : null}
+			{s.submit === "sent" && page.session.live ? (
 				<div className="overlay sent">
 					<div className="modal sent-card">
 						<div className="sent-ic">

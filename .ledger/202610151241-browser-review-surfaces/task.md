@@ -57,18 +57,19 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-In progress. Built and committed: `review_code` (slices 1–2), `review_markdown` (slice 3), and `review_ledger_task` (slice 4). Next is design pass 3, `explain_change`.
+In progress. All four pages are built: `review_code`, `review_markdown`, `review_ledger_task`, and `explain_change` (slice 5). Every page degrades gracefully. What remains is a real-model check of the Socratic tutor.
 
-- Design: code review [round 2](prototypes/code-review-v2/README.md), Markdown review [round 2](prototypes/markdown-review-v2/README.md), and ledger task review [round 1](prototypes/ledger-task-review/README.md) are approved. Stack: [frontend-stack.md](frontend-stack.md).
-- Code: `components/browser-pages/`: `src/` servers, tools, ask fork, and `tickets.ts` (ticket parsing and graph checks, shared with the page); `web/` one React app per kind, with one document reader in `web/markdown/` that the Markdown and ledger pages share; committed `dist/<kind>.html` and `dist/mermaid.min.js`. Contract: `docs/browser-pages.md`.
-- Slice 4: `review_ledger_task` reads a bundle by id or path (live or history): documents in reading order, tickets from `Blocked by:` (known ids anywhere, unknown ids only where they read as references; a self-reference is a cycle; a missing blocker blocks), evidence files listed and served on demand through `GET /file` from the bundle's own list, kept in the saved page once opened. Results carry `file`, and the model gets repository paths with lines and the documents not opened.
-- Checks: browser-pages tests (67), including tickets, ledger build, evidence serving, result validation, model text, and the tool end to end; manual drive in Chrome on a real closed bundle ([checks](checks/README.md)): graph, hover, ticket strip, annotation, ask, evidence highlight, `[`/`]`, grouped panel, finish with unopened list, saved page with evidence.
-- Not yet checked: asking with a real model in a live session; very large documents or bundles; a graph with more than about 15 tickets (it scrolls sideways).
+- Design: code review [round 2](prototypes/code-review-v2/README.md), Markdown review [round 2](prototypes/markdown-review-v2/README.md), ledger task review [round 1](prototypes/ledger-task-review/README.md), and explain change [round 2](prototypes/explain-change-v2/README.md) are approved. Stack: [frontend-stack.md](frontend-stack.md).
+- Code: `components/browser-pages/`: `src/` servers, tools, the read-only fork (`askFork`), `tickets.ts`, and `explain-change.ts`; `web/` one React app per kind, the shared document reader in `web/markdown/`, the explanation in `web/explain/`, and `web/connected.ts`; committed `dist/<kind>.html` and `dist/mermaid.min.js`. Contract: `docs/browser-pages.md`.
+- Slice 5: `explain_change` reads any change (`base`, and `head` for history, merge-base like a pull request), turns `code path:FROM-TO` fences into real highlighted lines with removed lines in place (deleted files from their old lines), keeps figures sandboxed with network blocked, and checks the five-question quiz. It saves a clean shareable copy, opens the live page, and returns at once. The live page server takes tutor turns (a Socratic or direct frame for a read-only fork) and a note on what the reader missed and asked, delivered with the agent's next turn.
+- Graceful degradation: `/health` answers whether the agent can answer (`ask: !!liveSession`). Pages check it on open, on focus, and after a failed request. Saved copies show no agent features; a live review whose session ends turns read-only with one note; an explanation keeps everything but the tutor.
+- Checks: browser-pages tests (78), including the explanation's ranges, excerpts, deletions, figures, quiz, tutor prompts, note, and the tool end to end. Chrome drives on real data for all four pages: the explanation's saved copy (no agent features), the live page (sidebar, citations, step checks, selection, talk-it-through, note on leaving), the session ending (controls disappear, quiz works), the dark-mode figure, and the review pages after the readOnly change (Markdown, ledger, code review, and a review page losing its session).
+- Not yet checked: the Socratic tutor with a real model (needs a reload of the tools); very large changes.
 
 Next:
 
-1. Operator tries `review_markdown` and `review_ledger_task` on real work (dogfood on this task: approved without annotations; it listed the five prototype READMEs as not opened).
-2. Build `explain_change` from the approved [round 2 prototype](prototypes/explain-change-v2/README.md), with graceful degradation on every page, and check the Socratic tutor with a real model.
+1. After a reload: run `explain_change` on a real change and judge the tutor's Socratic replies with a real model; tune the frame in `tutorPrompt` if they fall short.
+2. Operator tries the four tools on real work.
 
 ## Outcome
 

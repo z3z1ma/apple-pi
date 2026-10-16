@@ -66,9 +66,10 @@ try {
 				extension.tools.has("review_code") &&
 				extension.tools.has("review_markdown") &&
 				extension.tools.has("review_ledger_task") &&
+				extension.tools.has("explain_change") &&
 				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
 		),
-		"missing a browser page tool (review_code, review_markdown, review_ledger_task)",
+		"missing a browser page tool (review_code, review_markdown, review_ledger_task, explain_change)",
 	);
 	assert(
 		result.extensions.some(

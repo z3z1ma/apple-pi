@@ -426,8 +426,8 @@ export function Keys({ keys }: { keys: [string, string][] }) {
 
 /** The verdict sheet; `children` adds page-specific notes above the verdicts. */
 export function Finish({ children }: { children?: ReactNode }) {
-	const { s, update, submit, readOnly } = useDocReview();
-	if (s.submit === "sent" && !readOnly)
+	const { s, update, submit, session } = useDocReview();
+	if (s.submit === "sent" && session.live)
 		return (
 			<div className="overlay sent">
 				<div className="modal sent-card">

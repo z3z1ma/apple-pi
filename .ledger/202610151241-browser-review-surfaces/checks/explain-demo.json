@@ -1,0 +1,92 @@
+{
+ "title": "How review_ledger_task turns a bundle into a reviewable graph",
+ "base": "72c7ad3^",
+ "head": "72c7ad3",
+ "summary": "`review_ledger_task` opens a whole ledger task in the browser. The server reads the bundle from disk, turns each ticket's `**Blocked by:**` line into a dependency graph, checks that graph against the rules `to-tickets` writes by, and serves every other file only when the reviewer opens it. Every document reuses the Markdown reader, so the new ideas are three: reading ticket numbers out of prose, checking the graph, and evidence on demand.",
+ "primer": "A **ledger task** is a folder, `.ledger/<id>/`, that holds one piece of work. It always has `task.md` (intent, status, current state) and `retrospective.md`. Anything else is optional: a `spec.md` or `plan.md`, a `tickets/` folder, and whatever evidence the work produced, such as benchmark records or prototypes. Closed tasks move unchanged to `.ledger/history/<id>/`.\n\nThe `to-tickets` skill splits decided work into **tickets**, one file each, numbered in dependency order: `tickets/01-challenger-pass.md`, `tickets/02-trap-puzzles.md`, and so on. Each ticket follows one template:\n\n```markdown\n# 03: Benchmark runner and report\n\n**What to build:** One command runs the trap benchmark \u2026\n\n**Blocked by:** 01 (Challenger pass), 02 (Three trap puzzles with reference solutions).\n\n**Status:** ready-for-agent\n\n- [ ] With the fake model and scripted replies, the command runs all three arms \u2026\n```\n\nThe **frontier** is every ticket whose blockers are all done: the work that can start now.",
+ "background": "Two pages already shared one runtime. A tool call builds the page's data, a small server on `127.0.0.1` serves it behind a token, and the tool call waits until the page posts its result to `/result`. The server then saves a self-contained copy of the page and returns the review to the model as text.\n\n`review_markdown` added a **document reader**: the server splits a file into top-level blocks with their source lines, and the page lets the reviewer select text in a block and annotate it. Just before this change, that reader was made multi-document: every annotation now carries its `file`, so a page can hold many documents and still send back one list of annotations.\n\nA ledger task is exactly that: many documents. What the reader cannot do alone is show how the tickets depend on each other, or deal with a bundle that holds 60 JSON records next to its four tickets.",
+ "intuition": "Think of the bundle as a small website with one map. The documents are the pages; the tickets are the map's nodes; and each `**Blocked by:**` line draws arrows into its ticket. Lay the nodes out in columns by how deep their dependencies go, and the shape of the work appears: what can start now, what waits, and what waits on what.\n\nThe graph is only as good as the lines it reads, so the page checks it against the rules `to-tickets` writes by. Try it: edit a `Blocked by` line below, or pick a broken case.\n\n```figure Edit a ticket's Blocked by line and watch the frontier and the graph checks follow. This toy repeats the page's rules in a few lines.\n<div class=\"fig\">\n  <div class=\"presets\">\n    <button data-p=\"written\" class=\"on\">As written</button>\n    <button data-p=\"cycle\">Add a cycle</button>\n    <button data-p=\"missing\">Name a missing ticket</button>\n    <button data-p=\"later\">Wait on a later ticket</button>\n  </div>\n  <div class=\"cols\">\n    <div class=\"rows\" id=\"rows\"></div>\n    <div class=\"out\"><svg id=\"edges\"></svg><div id=\"graph\"></div></div>\n  </div>\n  <div class=\"foot\"><div id=\"front\"></div><div id=\"checks\"></div></div>\n</div>\n<style>\n  .fig { font: 13.5px/1.5 var(--font-ui); color: var(--ink); }\n  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }\n  .presets button { font: inherit; font-size: 12.5px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); border-radius: 99px; padding: 4px 11px; cursor: pointer; }\n  .presets button.on { background: var(--ink); color: var(--bg); border-color: transparent; }\n  .cols { display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: start; }\n  .row { display: grid; grid-template-columns: 26px 1fr; gap: 2px 8px; margin-bottom: 9px; }\n  .row b { font: 650 12px var(--font-mono); color: var(--ink-2); padding-top: 6px; }\n  .row span { font-weight: 600; font-size: 13px; }\n  .row label { grid-column: 2; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); }\n  .row input { flex: 1; min-width: 0; font: 12.5px var(--font-mono); padding: 4px 7px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--ink); }\n  .out { position: relative; min-height: 200px; }\n  #edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }\n  #edges path { fill: none; stroke: var(--line-2); stroke-width: 1.6; }\n  #edges path.bad { stroke: var(--fail); stroke-dasharray: 5 4; }\n  .node { position: absolute; width: 112px; line-height: 1.3; padding: 7px 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); font-size: 12px; transition: left .25s, top .25s; }\n  .node i { font: normal 650 11px var(--font-mono); color: var(--ink-3); display: block; }\n  .node.frontier { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }\n  .node.blocked { background: var(--surface-2); color: var(--ink-2); }\n  .foot { display: grid; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }\n  #checks div { color: var(--fail); } #checks .ok { color: var(--pass); font-weight: 600; }\n</style>\n<script>\n  const TITLES = { 1: \"Challenger pass\", 2: \"Trap puzzles\", 3: \"Benchmark runner\", 4: \"First benchmark run\" };\n  const PRESETS = {\n    written: { 1: \"\", 2: \"\", 3: \"01, 02\", 4: \"03\" },\n    cycle: { 1: \"\", 2: \"04\", 3: \"01, 02\", 4: \"03\" },\n    missing: { 1: \"\", 2: \"\", 3: \"01, 02, 07\", 4: \"03\" },\n    later: { 1: \"\", 2: \"\", 3: \"01, 04\", 4: \"02\" },\n  };\n  let by = { ...PRESETS.written };\n  const pad = (n) => String(n).padStart(2, \"0\");\n  const rows = document.getElementById(\"rows\");\n  function drawRows() {\n    rows.innerHTML = Object.keys(TITLES).map((id) => `<div class=\"row\"><b>${pad(id)}</b><span>${TITLES[id]}</span><label>Blocked by <input data-id=\"${id}\" value=\"${by[id]}\" placeholder=\"none\"></label></div>`).join(\"\");\n  }\n  function draw() {\n    const ids = Object.keys(TITLES).map(Number);\n    const named = Object.fromEntries(ids.map((id) => [id, [...new Set((by[id].match(/\\d{2,3}/g) || []).map(Number))]]));\n    const blockers = Object.fromEntries(ids.map((id) => [id, named[id].filter((n) => ids.includes(n))]));\n    const depth = {}, visiting = new Set();\n    const d = (id) => { if (id in depth) return depth[id]; if (visiting.has(id)) return 0; visiting.add(id); const v = blockers[id].length ? 1 + Math.max(...blockers[id].map(d)) : 0; visiting.delete(id); return (depth[id] = v); };\n    ids.forEach(d);\n    const cols = {}; ids.forEach((id) => (cols[depth[id]] ??= []).push(id));\n    const ncols = Object.keys(cols).length, width = document.querySelector(\".out\").clientWidth || 380;\n    const step = ncols > 1 ? Math.min(150, (width - 112) / (ncols - 1)) : 0;\n    const pos = {}; Object.entries(cols).forEach(([c, list]) => list.forEach((id, r) => (pos[id] = { x: c * step, y: r * 64 + (Math.max(...Object.values(cols).map((l) => l.length)) - list.length) * 32 })));\n    const problems = [];\n    ids.forEach((id) => named[id].filter((n) => !ids.includes(n)).forEach((n) => problems.push(`${pad(id)} waits on ${pad(n)}, which is not a ticket here.`)));\n    ids.forEach((id) => blockers[id].filter((b) => b > id).forEach((b) => problems.push(`${pad(id)} waits on a later ticket, ${pad(b)}.`)));\n    const state = {}; const walk = (id, path) => { state[id] = 1; for (const b of blockers[id]) { if (state[b] === 1) problems.push(`Cycle: ${[...path.slice(path.indexOf(b)), b].map(pad).join(\" \u2192 \")}.`); else if (!state[b]) walk(b, [...path, b]); } state[id] = 2; };\n    ids.forEach((id) => state[id] || walk(id, [id]));\n    const frontier = ids.filter((id) => named[id].length === blockers[id].length && blockers[id].length === 0);\n    document.getElementById(\"graph\").innerHTML = ids.map((id) => `<div class=\"node ${frontier.includes(id) ? \"frontier\" : \"blocked\"}\" style=\"left:${pos[id].x}px;top:${pos[id].y}px\"><i>${pad(id)}</i>${TITLES[id]}</div>`).join(\"\");\n    document.getElementById(\"edges\").innerHTML = ids.flatMap((id) => blockers[id].map((b) => { const p = pos[b], q = pos[id]; const x1 = p.x + 112, y1 = p.y + 22, x2 = q.x, y2 = q.y + 22; const back = x2 <= x1; return `<path class=\"${back || b > id ? \"bad\" : \"\"}\" d=\"${back ? `M${x1} ${y1} C${x1 + 50} ${y1 + 90}, ${x2 - 50} ${y2 + 90}, ${x2} ${y2}` : `M${x1} ${y1} C${x1 + 20} ${y1}, ${x2 - 20} ${y2}, ${x2} ${y2}`}\"/>`; })).join(\"\");\n    document.getElementById(\"front\").innerHTML = `<b>Can start now:</b> ${frontier.length ? frontier.map(pad).join(\", \") : \"nothing\"}`;\n    document.getElementById(\"checks\").innerHTML = problems.length ? problems.map((p) => `<div>${p}</div>`).join(\"\") : '<span class=\"ok\">\u2713 Graph checks pass</span>';\n  }\n  rows.addEventListener(\"input\", (e) => { by[e.target.dataset.id] = e.target.value; draw(); });\n  document.querySelector(\".presets\").addEventListener(\"click\", (e) => {\n    const p = e.target.dataset.p; if (!p) return;\n    by = { ...PRESETS[p] };\n    document.querySelectorAll(\".presets button\").forEach((b) => b.classList.toggle(\"on\", b === e.target));\n    drawRows(); draw();\n  });\n  drawRows(); draw();\n  new ResizeObserver(draw).observe(document.querySelector(\".out\"));\n</script>\n```\n\n> [!NOTE]\n> A ticket that waits on a missing ticket counts as **blocked**, not ready. The page cannot know that the missing ticket is done, so it must not offer the work as startable.\n\nEverything that is not Markdown is **evidence**: records, logs, prototypes. A bundle can hold hundreds of them, and the reviewer opens a few at most. So the page lists them by name and size, and asks the server for a file only when the reviewer opens it:\n\n```mermaid\nsequenceDiagram\n  participant P as Page\n  participant S as Page server\n  participant D as Bundle on disk\n  P->>S: GET /file?path=evidence/run.json (with the token)\n  S->>S: Is this path on the page's own list?\n  S->>D: read the file\n  D-->>S: bytes\n  S->>S: not text? say so. Text? highlight it, keep the lines on the page\n  S-->>P: { lines }\n```\n\n> [!IMPORTANT]\n> The server answers only paths from the list it built itself. The page cannot name a file outside the bundle, so a token in the wrong hands cannot read the rest of the disk.",
+ "steps": [
+  {
+   "title": "Reading ticket numbers out of prose",
+   "body": "`**Blocked by:**` lines are written by people and agents, in many forms: `01: Title.`, `03 (Title)`, `01 (A), 02 (B).`, a Markdown link, `#04`. They also quote titles, and titles hold numbers of their own: \"Retry 408 and 429 in phase 2\".\n\nTwo patterns split the problem. `NUMBER` finds any two- or three-digit number, the way ticket numbers are written; a single digit is prose. `REFERENCE` finds only numbers that *read* as a reference: at the start of the line or of a list item, after `#`, `[`, `and`, or `ticket`.\n\n```code components/browser-pages/src/tickets.ts:3-10\n```\n\n`parseTickets` combines them. A number that is a ticket of this bundle counts wherever it appears. A number that is *not* a ticket here counts only when it reads as a reference, and then it becomes an `unknown` blocker. So \"Retry 408\" is just a title, while \"07: Report template\" is a missing ticket the page should warn about.\n\n```code components/browser-pages/src/tickets.ts:18-46\n```\n\nA ticket that names itself stays in its own `blockers` on purpose: the cycle check then catches it."
+  },
+  {
+   "title": "Checking the graph",
+   "body": "A ticket's state depends on the others. It is **done** or **in progress** by its own `Status:` line; otherwise it is **ready** only if every blocker is done *and* it names no missing ticket.\n\n```code components/browser-pages/src/tickets.ts:52-58\n```\n\n`graphProblems` reports where the graph breaks the rules: an unknown blocker, a blocker numbered after the ticket it blocks (numbers follow dependency order), a cycle, and a graph where no ticket can start. The cycle search is a depth-first walk that marks a ticket *open* while it walks that ticket's blockers; reaching an open ticket again closes a loop.\n\n```code components/browser-pages/src/tickets.ts:62-95\n```\n\nBoth functions are pure and import nothing from Node, so the server uses them to read the bundle and the page imports the same code to colour the graph. One rule set, two places."
+  },
+  {
+   "title": "Finding the bundle and its reading order",
+   "body": "The agent passes `task` as whatever it has at hand: the id, `.ledger/<id>`, or a path inside the bundle. `bundleDir` tries the given path, then the id under `.ledger/`, then under `.ledger/history/`, and walks up from whatever exists to the folder directly under one of them.\n\n```code components/browser-pages/src/ledger-review.ts:39-62\n```\n\nDocuments come in the order a reviewer reads them: the task, its spec or plan, other documents, the tickets, the retrospective, then everything in folders. `[` and `]` in the page follow this order.\n\n```code components/browser-pages/src/ledger-review.ts:74-82\n```"
+  },
+  {
+   "title": "Evidence on demand",
+   "body": "The page server gains one route. Like `/ask` and `/result`, it requires the token; unlike them, it is a `GET` that returns JSON, and it exists only when the tool passes a `file` handler.\n\n```code components/browser-pages/src/page-server.ts:94-117\n```\n\nThe ledger tool's handler is `serveEvidence`. It looks the path up in the page's own list, reads the file once, marks it binary if it holds a zero byte, and otherwise highlights its lines. The lines stay on the page object, which is why the saved copy shows every file the reviewer opened.\n\n```code components/browser-pages/src/ledger-review.ts:130-143\n```\n\nAnnotations on evidence point at lines (`l3`). The server accepts them only for a file it has served, so a submission cannot point at lines of a file nobody opened.\n\n```code components/browser-pages/src/ledger-review.ts:147-157\n```"
+  },
+  {
+   "title": "Laying out the graph",
+   "body": "The page places each ticket in a column by its depth: tickets with no blockers in column 0, and every other ticket one column right of its deepest blocker. Within a column, tickets sort by the average height of their blockers, which keeps arrows from crossing. A cycle has no depth, so the `visiting` set breaks it and the back edge is drawn as a red loop under the graph.\n\n```code components/browser-pages/web/ledger/graph.ts:15-54\n```"
+  },
+  {
+   "title": "What the agent reads back",
+   "body": "The result is plain text for the model. Every annotation names its file by repository path and lines, so the agent can open it directly; rewritten blocks come as before and after; and the documents the reviewer did not open are listed, so the agent knows what the approval did not cover.\n\n```code components/browser-pages/src/ledger-review.ts:226-245\n```"
+  }
+ ],
+ "quiz": [
+  {
+   "question": "A ticket's line reads `**Blocked by:** 02: Retry 408 and 429 in phase 2.` The bundle holds tickets 01 to 05. What does the ticket wait on?",
+   "options": [
+    "Ticket 02 only",
+    "Ticket 02, plus missing tickets 408 and 429",
+    "Tickets 02 and 2",
+    "Nothing: the line quotes a title"
+   ],
+   "answer": 0,
+   "why": "02 is a ticket of the bundle, so it counts wherever it appears. 408 and 429 are not tickets and do not read as references (they follow \"Retry\" and \"and\" mid-phrase), and a single digit such as 2 is prose."
+  },
+  {
+   "question": "Ticket 03 is `ready-for-agent`, and its only blocker is 07, which is not in the bundle. How does the page show 03?",
+   "options": [
+    "Ready: nothing in the bundle blocks it",
+    "Blocked, and the graph checks report the missing 07",
+    "Done",
+    "It is left out of the graph"
+   ],
+   "answer": 1,
+   "why": "A missing blocker cannot be known to be done, so `ticketState` returns blocked, and `graphProblems` reports that 03 waits on 07, which is not a ticket here."
+  },
+  {
+   "question": "Why does the server answer `GET /file` only for paths on the page's own evidence list?",
+   "options": [
+    "It makes Shiki faster",
+    "So nothing holding the token can read files outside the bundle",
+    "Because the browser cannot send other paths",
+    "To keep the saved page small"
+   ],
+   "answer": 1,
+   "why": "The list is built by the server from the bundle folder. Answering only those paths means a request cannot name `../../.ssh/id_rsa` or any other file, even with the token."
+  },
+  {
+   "question": "A submission includes an annotation on line 3 of `evidence/run.json`, but the page never opened that file. What happens?",
+   "options": [
+    "The annotation is kept",
+    "Only that annotation is dropped",
+    "The whole submission is rejected",
+    "The server reads the file, then accepts it"
+   ],
+   "answer": 2,
+   "why": "Evidence lines are accepted only for a file the server has served (`blocksIn` returns nothing otherwise), and any malformed part rejects the whole submission."
+  },
+  {
+   "question": "Ticket 04 waits on 02 and 03. Ticket 02 waits on 01. Tickets 01 and 03 wait on nothing. Which column holds 04, counting from 0?",
+   "options": [
+    "Column 0",
+    "Column 1",
+    "Column 2",
+    "Column 3"
+   ],
+   "answer": 2,
+   "why": "01 and 03 have depth 0, 02 has depth 1, and 04 sits one column right of its deepest blocker, 02: column 2."
+  }
+ ]
+}

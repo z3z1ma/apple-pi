@@ -26,19 +26,23 @@ function send(res: ServerResponse, status: number, body: string, type = "text/pl
  *
  * `ask` answers questions posted to `/ask` while the page is open. It returns the answer, or undefined for a
  * malformed question; its signal aborts when the page stops waiting or the session closes. `file` answers
- * `GET /file?path=…` with JSON, or undefined for a path the page may not read.
+ * `GET /file?path=…` with JSON, or undefined for a path the page may not read. `note` takes what the page posts
+ * to `/note`. `GET /health` answers `health()` while the server runs, so a page knows whether its agent features can work. A page
+ * without `parse` takes no submission, and its `result` never settles.
  */
 export async function openPageSession<R>(
 	html: string,
 	token: string,
-	parse: (body: unknown) => R | undefined,
+	parse: ((body: unknown) => R | undefined) | undefined,
 	options: {
 		signal?: AbortSignal;
 		ask?: (body: unknown, signal: AbortSignal) => Promise<string | undefined>;
 		file?: (path: string) => Promise<unknown | undefined>;
+		note?: (body: unknown) => void;
+		health?: () => unknown;
 	} = {},
 ): Promise<PageSession<R>> {
-	const { signal, ask, file } = options;
+	const { signal, ask, file, note, health } = options;
 	const asking = new AbortController();
 	let settle: { resolve: (value: R) => void; reject: (error: Error) => void } | undefined;
 	const result = new Promise<R>((resolve, reject) => {
@@ -49,7 +53,7 @@ export async function openPageSession<R>(
 	let done = false;
 	let host = "";
 
-	const settleWith = async (req: IncomingMessage, res: ServerResponse) => {
+	const settleWith = async (req: IncomingMessage, res: ServerResponse, parse: (body: unknown) => R | undefined) => {
 		if (done) return send(res, 409, "This review was already closed.");
 		let value: R | undefined;
 		try {
@@ -109,7 +113,17 @@ export async function openPageSession<R>(
 			return send(res, 200, html, "text/html; charset=utf-8");
 		}
 		if (req.headers["x-page-token"] !== token) return send(res, 403, "Forbidden");
-		if (req.method === "POST" && url.pathname === "/result") return settleWith(req, res);
+		if (req.method === "GET" && url.pathname === "/health")
+			return send(res, 200, JSON.stringify(health?.() ?? {}), "application/json");
+		if (req.method === "POST" && url.pathname === "/result" && parse) return settleWith(req, res, parse);
+		if (req.method === "POST" && url.pathname === "/note" && note) {
+			try {
+				note(JSON.parse(await readBody(req)));
+			} catch {
+				return send(res, 400, "Invalid note.");
+			}
+			return send(res, 200, "{}", "application/json");
+		}
 		if (req.method === "POST" && url.pathname === "/ask" && ask) return answer(req, res, ask);
 		if (req.method === "GET" && url.pathname === "/file" && file)
 			return serveFile(res, url.searchParams.get("path") ?? "", file);

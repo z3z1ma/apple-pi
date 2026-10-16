@@ -7,7 +7,7 @@ import { build } from "vite";
 import { expect, it } from "vitest";
 
 // Git installs omit dev dependencies, so the package ships the built page. It must match its source.
-it.each(["code-review", "markdown-review", "ledger-review"])(
+it.each(["code-review", "markdown-review", "ledger-review", "explain-change"])(
 	"the committed %s page matches a fresh build of web/ (run npm run build:web)",
 	{ timeout: 120_000 },
 	async (kind) => {

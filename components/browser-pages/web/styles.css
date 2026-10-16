@@ -2493,3 +2493,20 @@ textarea:focus {
 		opacity: 0.2;
 	}
 }
+
+/* a live page whose session ended: it still reads, but takes nothing */
+.lost-note {
+	position: fixed;
+	left: 50%;
+	bottom: 18px;
+	transform: translateX(-50%);
+	z-index: 45;
+	padding: 9px 16px;
+	border-radius: 99px;
+	background: var(--surface);
+	border: 1px solid var(--line-2);
+	box-shadow: var(--shadow-lg);
+	color: var(--ink-2);
+	font-size: 13px;
+	white-space: nowrap;
+}

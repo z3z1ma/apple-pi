@@ -58,7 +58,8 @@ function Comment({ comment }: { comment: State["comments"][number] }) {
 const keepTyping = (e: MouseEvent) => e.preventDefault();
 
 export function Composer() {
-	const { m, s, update, ask, readOnly } = useReview();
+	const review = useReview();
+	const { m, s, update, ask } = review;
 	const c = s.composer;
 	if (!c) return null;
 	const set = (change: (draft: NonNullable<State["composer"]>) => void) =>
@@ -66,7 +67,7 @@ export function Composer() {
 			if (draft.composer) change(draft.composer);
 		});
 	const asking = c.mode === "ask";
-	const canAsk = m.page.session.ask && !readOnly && !c.replyTo;
+	const canAsk = review.canAsk && !c.replyTo;
 	const submit = () => (asking ? ask() : update(saveComposer));
 	return (
 		<div className={`composer ${asking ? "ask" : ""} ${c.replyTo ? "" : "inl"}`}>

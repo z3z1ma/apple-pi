@@ -89,6 +89,13 @@ export const Icon = {
 	circle: () => icon(<circle cx="8" cy="8" r="5.2" />),
 	x: () => icon(<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />),
 	pencil: () => icon(<path d="M10.8 2.7l2.5 2.5L6 12.5l-3 .5.5-3z" />),
+	print: () =>
+		icon(
+			<>
+				<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2" />
+				<path d="M4.5 9.5h7v4h-7z" />
+			</>,
+		),
 	strike: () =>
 		icon(
 			<path d="M3 8h10M5.5 5.5c0-1.4 1.2-2.3 2.6-2.3 1.2 0 2.2.5 2.6 1.4M10.5 10.5c0 1.4-1.2 2.3-2.6 2.3-1.3 0-2.4-.6-2.8-1.6" />,

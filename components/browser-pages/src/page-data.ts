@@ -257,6 +257,68 @@ export interface LedgerResult {
 	submittedAt: string;
 }
 
-export type PageData = CodeReviewPage | MarkdownReviewPage | LedgerReviewPage;
+/** Real lines of one file, read from git: new and unchanged lines numbered, removed lines placed where they were. */
+export interface CodeExcerpt {
+	path: string;
+	from: number;
+	to: number;
+	/**
+	 * `new` for a file the change adds, `changed` for one it edits, `unchanged` for one it leaves alone, and
+	 * `deleted` for one it removes, whose rows are all removed lines numbered as they were before the change.
+	 */
+	status: "new" | "changed" | "unchanged" | "deleted";
+	rows: { t: LineType; n?: number; s: Segment[] }[];
+}
+
+/** A piece of an explanation section: a Markdown block, a code excerpt, a sandboxed figure, or a reference that failed. */
+export type ExplainPart =
+	| { block: MarkdownBlock }
+	| { code: CodeExcerpt }
+	| { figure: { caption: string; html: string } }
+	| { missing: string };
+
+export interface QuizQuestion {
+	question: string;
+	options: string[];
+	answer: number;
+	why: string;
+}
+
+export interface ExplainChangePage {
+	kind: "explain-change";
+	title: string;
+	/** What is explained, such as `72c7ad3` or `main…working tree`, and the commit subject for a single commit. */
+	ref: string;
+	subject?: string;
+	/** Every changed file, with lines added and removed. */
+	stats: { path: string; add: number; del: number }[];
+	/** Changed files the explanation shows code from. */
+	covered: string[];
+	summary: ExplainPart[];
+	primer?: ExplainPart[];
+	background: ExplainPart[];
+	intuition: ExplainPart[];
+	steps: { title: string; parts: ExplainPart[] }[];
+	quiz: QuizQuestion[];
+	createdAt: string;
+	session: { token: string; live: boolean; ask: boolean };
+}
+
+/** One message the explanation page sends the tutor, with the conversation so far. */
+export interface TutorTurn {
+	message: string;
+	mode: "socratic" | "direct";
+	thread: { role: "reader" | "tutor"; text: string }[];
+	/** Where the conversation started: a missed question, a step check, or a passage the reader selected. */
+	start?: {
+		kind: "talk" | "check" | "ask" | "quiz";
+		step?: number;
+		question?: number;
+		choice?: number;
+		quote?: string;
+	};
+}
+
+export type PageData = CodeReviewPage | MarkdownReviewPage | LedgerReviewPage | ExplainChangePage;
 
 export const PAGE_DATA_MARKER = '<script id="page-data" type="application/json">null</script>';

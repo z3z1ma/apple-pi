@@ -1,12 +1,14 @@
 # Browser pages
 
-Three tools open a page in the user's browser and wait for the verdict:
+Four tools open a page in the user's browser. Three are reviews and wait for the verdict:
 
 - `review_code`: a code review. The agent writes the structure; the page shows the real diff from git.
 - `review_markdown`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
 - `review_ledger_task`: a whole ledger task bundle, with its ticket graph. See [Ledger task review](#ledger-task-review).
 
-Root sessions only; a run without an attached user gets a message instead of a page. The same runtime will serve the change explanation page; its tool is not built yet.
+The fourth, `explain_change`, opens an explanation of a change for the user to understand, and returns at once. See [Explain change](#explain-change).
+
+Root sessions only; a run without an attached user gets a message instead of a page. Every page degrades gracefully: see [Without the agent](#without-the-agent).
 
 ## What the agent supplies
 
@@ -107,16 +109,39 @@ The agent receives the verdict, the overall comment, each annotation with its ki
 
 The agent receives the verdict, the overall comment, each annotation with its repository path and lines (`.ledger/<id>/tickets/03-runner.md:9`, or a line of an evidence file), rewritten blocks as before and after, and the documents the reviewer did not open. The saved page keeps every evidence file the reviewer opened.
 
+## Explain change
+
+`explain_change` helps the user understand a change well enough to build on it, after Geoffrey Litt's ["Understanding is the new bottleneck"](https://www.geoffreylitt.com/2026/07/02/understanding-is-the-new-bottleneck). The agent writes the explanation; the page supplies the real code.
+
+- **The change.** Without `head`, the working tree compared with `base` (default `HEAD`: the uncommitted changes), as `review_code` does. With `head`, the change from where `head` meets `base` up to `head`, as a pull request shows it: `base: "X^"` with `head: "X"` explains the single commit `X`.
+- **What the agent writes**, each part as Markdown: `title`, `summary` (the change in one minute), an optional `primer` for a reader new to the area (shown closed), `background` (what was there before), `intuition` (the idea before the code), `steps` (a walkthrough, each a `title` and a `body`), and `quiz`: exactly five questions, three or four options each, one right answer by index, and a `why`. The server rejects an answer that is not one of its options.
+- **Three fences** add what Markdown cannot:
+  - ```` ```code path:FROM-TO ```` takes no body. The page shows those lines from git, highlighted, with removed lines put back where they were and diff marks. Lines count in the file after the change, or before it for a file the change deletes. A reference that cannot be read becomes a note in the page and a warning in the tool's result.
+  - ```` ```figure Caption ```` holds self-contained HTML and script. It runs in a sandboxed frame with no network and no access to the page, in the page's colours, sized to its content.
+  - ```` ```mermaid ```` draws a diagram. GitHub alerts (`> [!NOTE]`) are callouts.
+- **The page** reads like a document: contents with scroll-spy in the left rail, the "In one minute" summary, Background, Intuition, the numbered Walkthrough, **Also changed** (every changed file the walkthrough does not show, grouped, so nothing changes without mention), and the Quiz, with instant feedback and the score in the top bar. It prints as a clean paper. Keys: `J`/`K` parts, `Q` quiz, `A`–`D` answer, `T` theme, `?` keys.
+- **Talk it through.** While the session lives, a sidebar slides out (`/`) where the reader talks to the agent. **Socratic** mode, the default, answers with one question at a time, offers hints before answers, and points to the step or question that holds the answer; **Direct** answers plainly. The reader can start from selected text (*Ask about this*, *Quiz me on this*), from *Check my understanding* after a step, or from *Talk it through* on a missed quiz question. Each reply comes from a read-only fork of the live conversation that wrote the explanation, as page questions do; its usage is recorded as "Explanation tutor".
+- **What the agent hears back.** The tool returns at once with the page's address and the saved copy's path. When the reader leaves the page, a short note (quiz misses and the questions asked) waits for the agent's next turn.
+- **The saved copy is for sharing.** It is written when the tool runs, without the reader's answers or conversation: attach it to a pull request or a page, and every reader takes the quiz fresh.
+
+## Without the agent
+
+A page reaches the agent only through its page server. A saved or shared copy has none, and a live page loses it when its session ends. A page checks `/health` when it opens, whenever the reader comes back to it, and after any request that fails; the answer also says whether the agent can answer questions now. Whatever cannot work is hidden, and the page reads as a plain page:
+
+- a saved or shared copy shows the content, and a saved review its result, with no review tools, no *Ask*, and no tutor;
+- a live review whose session ends becomes read-only, keeps the annotations already made, and says once that the review can no longer be sent;
+- an explanation without the agent keeps everything but the sidebar and its entry points; the quiz still works.
+
 ## Saved pages
 
 Every submitted review is saved as one self-contained HTML file in `<agent dir>/artifacts/<repository>/<date>-<title>.html`; the agent directory defaults to `~/.pi/agent`. The file opens offline and shows the review read-only, with the verdict and comments. Attach it to a pull request, a Confluence page, or a Jira ticket.
 
 ## Security
 
-The server listens on 127.0.0.1 on a random port. It serves the page, answers questions, and accepts a submission only for requests that carry the session token and name the loopback host. It accepts one submission, and closing the page server stops any answer still running.
+The server listens on 127.0.0.1 on a random port. It serves the page, answers questions, and accepts a submission only for requests that carry the session token and name the loopback host. It accepts one submission, and closing the page server stops any answer still running. An explanation's page server takes no submission; it runs until the session ends.
 
 A Markdown document is untrusted content in a page that holds the token, so it never runs script: raw HTML shows as text, links keep only relative, `http`, `https`, and `mailto` targets, images load only over `http` or `https`, and Mermaid runs in its strict security mode.
 
 ## Maintaining the page
 
-Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html`, `dist/markdown-review.html`, and `dist/ledger-review.html`. The Markdown and ledger pages share one document reader in `web/markdown/`. Mermaid's own build, `dist/mermaid.min.js` (about 3.6 MB), is inlined only into a page whose documents have a diagram, so other pages, and their saved copies, stay small. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.
+Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html`, `dist/markdown-review.html`, `dist/ledger-review.html`, and `dist/explain-change.html`. The Markdown and ledger pages share one document reader in `web/markdown/`. Mermaid's own build, `dist/mermaid.min.js` (about 3.6 MB), is inlined only into a page whose documents have a diagram, so other pages, and their saved copies, stay small. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.

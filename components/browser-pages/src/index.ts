@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
-import { askAgent, type Passage } from "./ask-agent.js";
+import { askAgent, askFork, type Passage } from "./ask-agent.js";
 import {
 	buildCodeReviewPage,
 	formatReviewResult,
@@ -38,6 +38,16 @@ import {
 	ReviewLedgerTaskParamsSchema,
 	serveEvidence,
 } from "./ledger-review.js";
+import {
+	buildExplainPage,
+	EXPLAIN_CHANGE_TOOL_NAME,
+	type ExplainChangeParams,
+	ExplainChangeParamsSchema,
+	explainTemplate,
+	parseTutorTurn,
+	readerNote,
+	tutorPrompt,
+} from "./explain-change.js";
 import type { PageData } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, readTemplate, savePage } from "./saved-page.js";
@@ -83,6 +93,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 				return asked && askAgent(ctx, asked.passage, asked.question, stop);
 			},
 			file: run.file,
+			health: () => ({ ask: !!liveSession(ctx) }),
 		});
 		sessions.add(session.close);
 		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
@@ -218,6 +229,73 @@ export default function browserPages(pi: ExtensionAPI): void {
 				signal,
 				onUpdate,
 			);
+		},
+	});
+
+	pi.registerTool({
+		name: EXPLAIN_CHANGE_TOOL_NAME,
+		label: "Explain change",
+		description:
+			"Open an explanation of a code change in the user's browser, so they understand it well enough to build on it. You write it: a one-minute summary, background (with an optional primer for newcomers), the intuition before the details, a walkthrough of steps in a sensible order, and a five-question quiz. Cite code with `code path:FROM-TO` fences: the page shows the real lines from git with diff marks, and lists every changed file the walkthrough skips. Returns at once with the page's address and a saved copy to attach to a pull request or a page. While the session lives, the reader can talk the explanation through with you in a Socratic sidebar; a note on their quiz results and questions arrives with your next turn.",
+		promptSnippet:
+			"Open a rich explanation of a code change (background, intuition, walkthrough over real code, quiz) in the user's browser",
+		promptGuidelines: [
+			"Use explain_change when the user asks to understand a change, a commit, a branch, or a pull request, or when you finish a substantial change they need to build on. Without `head` it explains the working tree against `base` (default HEAD: the uncommitted changes); pass `head` (with `base`, such as `<commit>^`) to explain any commit or range in history.",
+			"Read the surrounding code before you write. Background teaches what was there before; put the deep context a newcomer needs in `primer`. Intuition states the goal and the idea with a concrete example and toy data before any code: use a `mermaid` fence for flows, and a `figure Caption` fence (self-contained HTML and script, sandboxed, no network) when playing with something builds intuition faster than reading.",
+			"Order the steps the way the data flows or the way understanding builds, not by file. Each step is prose around `code path:FROM-TO` fences (empty body; line numbers of the file after the change, or before it for a file the change deletes), short enough to read in one go. Write in classic style: clear, concrete, with smooth transitions.",
+			"Write exactly five quiz questions that a reader who skimmed fails and a reader who understood passes: one idea each, preferably a concrete case with toy data; three or four options whose wrong ones are plausible misconceptions of similar length, never jokes, trivia, or 'all of the above'; and a `why` that explains the right answer and names the step that teaches it.",
+		],
+		parameters: ExplainChangeParamsSchema,
+		executionMode: "sequential",
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (!ctx.hasUI)
+				return { content: text("No user is attached to this run, so no explanation was opened."), details: undefined };
+			const token = randomBytes(24).toString("hex");
+			const { page, root, warnings } = await buildExplainPage(params as ExplainChangeParams, ctx.cwd, token);
+			const template = await explainTemplate(page);
+			// The saved copy is for sharing: no session, no reader state, so it reads as a plain page anywhere.
+			const saved = await savePage(
+				embedPage(template, { ...page, session: { token: "", live: false, ask: false } }),
+				root,
+				page.title,
+			);
+			page.session.ask = !!liveSession(ctx);
+			let lastNote = "";
+			const session = await openPageSession(embedPage(template, page), token, undefined, {
+				ask: async (body, stop) => {
+					const turn = parseTutorTurn(body, page);
+					return (
+						turn &&
+						askFork(
+							ctx,
+							{
+								prompt: tutorPrompt(page, turn),
+								pending: "This call was still running when the reader asked the tutor.",
+								label: "Explanation tutor",
+							},
+							stop,
+						)
+					);
+				},
+				health: () => ({ ask: !!liveSession(ctx) }),
+				note: (body) => {
+					const note = readerNote(body, page);
+					if (!note || note === lastNote) return;
+					lastNote = note;
+					pi.sendMessage(
+						{ customType: "explain-reader-note", content: note, display: true },
+						{ deliverAs: "nextTurn" },
+					);
+				},
+			});
+			sessions.add(session.close);
+			openInBrowser(session.url);
+			const lines = [
+				`Opened the explanation of ${page.ref} at ${session.url}`,
+				`Saved a shareable copy (attach it to a pull request or a page): ${saved}`,
+			];
+			if (warnings.length) lines.push("", "Code references the page could not show:", ...warnings.map((w) => `- ${w}`));
+			return { content: text(lines.join("\n")), details: { url: session.url, saved, warnings } };
 		},
 	});
 

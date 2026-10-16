@@ -13,26 +13,27 @@ export interface Passage {
 	context?: string;
 }
 
+/** A prompt for a read-only fork: what to answer, what a still-running tool call should read, and the usage label. */
+export interface ForkPrompt {
+	prompt: string;
+	pending: string;
+	label: string;
+}
+
 /**
- * Answers a reviewer's question from a read-only fork of the live conversation, the way `clarify` does: the
- * fork shares the session's request prefix, the pending review call gets a placeholder result, and only the
- * answer leaves the fork. Its usage is recorded in the session as "Review question".
+ * Answers from a read-only fork of the live conversation, the way `clarify` does: the fork shares the session's
+ * request prefix, a still-running tool call gets a placeholder result, and only the answer leaves the fork. Its
+ * usage is recorded in the session under `label`.
  */
-export async function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal) {
+export async function askFork(ctx: ExtensionContext, { prompt, pending, label }: ForkPrompt, signal: AbortSignal) {
 	const session = liveSession(ctx);
 	if (!session) throw new Error("The live session is not available, so the agent cannot answer.");
 	const messages = structuredClone(session.sessionManager.buildSessionProjection().messages);
-	closePendingCalls(messages, "The review page is still open; the user has not submitted a verdict yet.");
+	closePendingCalls(messages, pending);
 	const fork = startFork(session, {
 		messages,
-		append: {
-			role: "custom",
-			customType: "review-question",
-			content: `${FRAME}\n\nPassage: ${passage.where}${passage.context ? ` (${passage.context})` : ""}\n\n\`\`\`\n${passage.excerpt}\n\`\`\`\n\nQuestion: ${question}`,
-			display: false,
-			timestamp: Date.now(),
-		},
-		label: "Review question",
+		append: { role: "custom", customType: "page-question", content: prompt, display: false, timestamp: Date.now() },
+		label,
 		blockedTools: new Set(
 			session.agent.state.tools.filter((tool) => !READ_ONLY_TOOLS.has(tool.name)).map((tool) => tool.name),
 		),
@@ -54,4 +55,18 @@ export async function askAgent(ctx: ExtensionContext, passage: Passage, question
 	} finally {
 		signal.removeEventListener("abort", abort);
 	}
+}
+
+/** Answers a reviewer's question about a passage of the page they are reviewing. */
+export function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal) {
+	const where = `${passage.where}${passage.context ? ` (${passage.context})` : ""}`;
+	return askFork(
+		ctx,
+		{
+			prompt: `${FRAME}\n\nPassage: ${where}\n\n\`\`\`\n${passage.excerpt}\n\`\`\`\n\nQuestion: ${question}`,
+			pending: "The review page is still open; the user has not submitted a verdict yet.",
+			label: "Review question",
+		},
+		signal,
+	);
 }

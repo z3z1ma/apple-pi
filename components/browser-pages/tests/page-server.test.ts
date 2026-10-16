@@ -22,6 +22,25 @@ async function open(signal?: AbortSignal, ask?: (body: unknown, signal: AbortSig
 }
 
 describe("openPageSession", () => {
+	it("answers /health and takes notes with the token, and takes no submission without parse", async () => {
+		const notes: unknown[] = [];
+		const session = await openPageSession("<p>page</p>", "secret", undefined, { note: (body) => notes.push(body) });
+		closers.push(session.close);
+		const call = (path: string, token: string, body?: string) =>
+			fetch(new URL(path, session.url), {
+				method: body === undefined ? "GET" : "POST",
+				headers: { "x-page-token": token },
+				body,
+			});
+		expect((await call("/health", "secret")).status).toBe(200);
+		expect((await call("/health", "wrong")).status).toBe(403);
+		expect((await call("/note", "secret", '{"asked":["Why?"]}')).status).toBe(200);
+		expect((await call("/note", "secret", "not json")).status).toBe(400);
+		expect((await call("/note", "wrong", "{}")).status).toBe(403);
+		expect(notes).toEqual([{ asked: ["Why?"] }]);
+		expect((await call("/result", "secret", "{}")).status).toBe(404);
+	});
+
 	it("serves the page only with the token", async () => {
 		const session = await open();
 		expect(await (await fetch(session.url)).text()).toBe("<p>page</p>");

@@ -135,14 +135,16 @@ async function untrackedFiles(root: string): Promise<RawFile[]> {
 
 /**
  * The change under review: the working tree (staged, unstaged, and untracked files) compared with
- * the merge base of `base` and HEAD, the way a pull request compares a branch with its target.
+ * the merge base of `base` and HEAD, the way a pull request compares a branch with its target. With
+ * `until`, the change from the merge base of `base` and `until` to the commit `until` instead.
  */
-export async function readRepoDiff(cwd: string, base: string): Promise<RepoDiff> {
+export async function readRepoDiff(cwd: string, base: string, until?: string): Promise<RepoDiff> {
 	const root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
-	const baseCommit = (await git(root, ["merge-base", base, "HEAD"])).trim();
-	const head = (await git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
-	const diff = await git(root, ["diff", "--no-color", "--no-ext-diff", "--find-renames", "-U3", baseCommit, "--"]);
-	const files = [...parseUnifiedDiff(diff), ...(await untrackedFiles(root))];
+	const baseCommit = (await git(root, ["merge-base", base, until ?? "HEAD"])).trim();
+	const head = until ?? (await git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+	const range = until ? [baseCommit, until] : [baseCommit];
+	const diff = await git(root, ["diff", "--no-color", "--no-ext-diff", "--find-renames", "-U3", ...range, "--"]);
+	const files = [...parseUnifiedDiff(diff), ...(until ? [] : await untrackedFiles(root))];
 	for (const file of files)
 		for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
 	return { root, baseCommit, head, files };
@@ -171,10 +173,22 @@ export async function generatedPaths(root: string, paths: string[]): Promise<Set
 	return generated;
 }
 
-/** File content at the base commit, or undefined when the file did not exist there. */
+/** File content at a commit, or undefined when the file did not exist there. */
 export async function readBaseFile(root: string, baseCommit: string, path: string): Promise<string | undefined> {
 	try {
 		return await git(root, ["show", `${baseCommit}:${path}`]);
+	} catch {
+		return undefined;
+	}
+}
+
+/** The full hash and subject of a commit-ish, or undefined when it names no commit. */
+export async function commitOf(root: string, ref: string): Promise<{ hash: string; subject: string } | undefined> {
+	try {
+		const [hash, ...subject] = (await git(root, ["show", "-s", "--format=%H%n%s", `${ref}^{commit}`]))
+			.trim()
+			.split("\n");
+		return { hash, subject: subject.join(" ") };
 	} catch {
 		return undefined;
 	}

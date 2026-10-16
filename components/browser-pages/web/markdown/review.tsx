@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useSta
 
 import type { MarkdownBlock, TextSpan, Verdict } from "../../src/page-data";
 import { Icon, Kbd } from "../ui";
+import { useConnected } from "../connected";
 import { type DocReview, useDocReview } from "./context";
 import { annotationsAt, applyMarks, readSelection } from "./marks";
 import { drawDiagrams } from "./mermaid";
@@ -26,12 +27,23 @@ async function post(path: string, token: string, body: unknown): Promise<Respons
 	});
 }
 
-async function askAgent(token: string, file: string, spans: TextSpan[], quote: string | undefined, question: string) {
+async function askAgent(
+	token: string,
+	file: string,
+	spans: TextSpan[],
+	quote: string | undefined,
+	question: string,
+	onUnreachable: () => void,
+) {
 	try {
 		const response = await post("/ask", token, { file, spans, quote, question });
-		if (!response.ok) return `The agent could not answer: ${await response.text()}`;
+		if (!response.ok) {
+			onUnreachable();
+			return `The agent could not answer: ${await response.text()}`;
+		}
 		return ((await response.json()) as { answer?: string }).answer ?? "No answer.";
 	} catch {
+		onUnreachable();
 		return "Could not reach the agent. Is the session still open?";
 	}
 }
@@ -88,8 +100,11 @@ export interface ReaderSetup {
  * and scroll-spy, keys, and submission. A page supplies its documents through `setup` and lays out the rest.
  */
 export function useReader(setup: ReaderSetup) {
-	const { session, file, headings } = setup;
-	const readOnly = !session.live;
+	const { file, headings } = setup;
+	// A page that cannot reach its session (a saved copy, or one whose session ended) reads, but takes no review.
+	const { connected, agent, recheck } = useConnected(setup.session);
+	const readOnly = !connected;
+	const session = { ...setup.session, ask: setup.session.ask && agent };
 	const [s, setState] = useState<State>(() => initial(setup.result, setup.defaultFile));
 	const update = useCallback((change: (draft: State) => void) => {
 		setState((previous) => {
@@ -157,7 +172,7 @@ export function useReader(setup: ReaderSetup) {
 			else if (added) addAnnotation(d, added, setup.position);
 		});
 		if (added?.type !== "ask") return;
-		void askAgent(session.token, file, added.spans, added.quote, text).then((answer) =>
+		void askAgent(session.token, file, added.spans, added.quote, text, recheck).then((answer) =>
 			update((d) => {
 				const asked = d.annotations.find((x) => x.id === added.id);
 				if (asked) asked.answer = answer;
@@ -181,6 +196,7 @@ export function useReader(setup: ReaderSetup) {
 			(r) => r.ok,
 			() => false,
 		);
+		if (!ok) recheck();
 		update((d) => {
 			d.submit = ok ? "sent" : "failed";
 			if (ok) {
@@ -440,9 +456,14 @@ export function Banner({ result, note }: { result?: SavedReview & { submittedAt:
 
 /** The toolbar, popovers, and sheets that float over every reader page. */
 export function Floats({ keys, finish }: { keys: [string, string][]; finish?: ReactNode }) {
-	const { readOnly } = useDocReview();
+	const { readOnly, session, s } = useDocReview();
 	return (
 		<>
+			{session.live && readOnly && s.submit !== "sent" ? (
+				<div className="lost-note">
+					The session that opened this page has ended, so this review can no longer be sent.
+				</div>
+			) : null}
 			{readOnly ? null : <Toolbar />}
 			<Composer />
 			<AnnotationPop />
