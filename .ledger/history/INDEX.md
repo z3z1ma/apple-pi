@@ -119,3 +119,5 @@
 - `.ledger/history/202610131235-post-compaction-distill/task.md` — done — Distill learnings in a fork after compaction — Split the learning loop into capture (reflection, notebook), distill (post-compaction fork, ledger close, /distill: notebook to .pi/LEARNINGS.md, wiki, retrospectives, programs), and promote (/promote with approval to AGENTS.md, skills, docs).
 
 - `.ledger/history/202610131309-pi-1-2-upgrade/task.md` — done — Upgrade to Pi 1.2 and adopt its native integration points — Move dev/peer deps to Pi 1.2; fix start-event union handling; add reachesTools to pi_exec and programs; move pi_exec nested calls to ctx.executeTool with structuredContent/isError; show schema constraints; use public render data; schema examples.
+
+- `.ledger/history/202610151241-browser-review-surfaces/task.md` — done — Agent-structured browser review and understanding surfaces — Tool calls open ephemeral local web pages for code review, Markdown review, ledger task review, and human understanding; the agent structures content from blocks and review pages return anchored annotations plus a verdict.
