@@ -117,6 +117,14 @@ Below 140 columns the table sits above the details instead of beside them.
 
 A reply goes only to an agent that is idle when you press `enter`; a busy agent or an open questionnaire needs you in its own pane.
 
+## Running it all day
+
+- **Cost.** Measured with six agents, one of them working: the sidebar uses about 2% of one CPU core and 45 MB; a dashboard that no client is showing uses about 1.5% and 50 MB. Views redraw only what changed; a hidden dashboard stops capturing panes and animating, and catches up when you look at it.
+- **Crashes.** The sidebar and dashboard panes restart their app two seconds after a crash. `q` or `prefix` + `u` closes them for good. A failed read shows one error toast and the view keeps going.
+- **Memory.** Read positions and flash timers of ended sessions are dropped, so the views do not grow over days.
+- **Session names.** Agents name themselves after their first turn (see [automatic session titles](context.md#session-titles)), so cards and rows do not all read as the project directory.
+- **Restarts.** A tmux server restart forgets the bindings, hooks, and seen times; the next Pi that starts loads the plugin again. Pi agents started before an update keep writing their old record shape until they restart; the views still show them.
+
 ## `/pi-sessions`
 
 Run `/pi-sessions` inside Pi to list the live published sessions and the state directory, to confirm the extension is publishing.
