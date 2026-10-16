@@ -301,6 +301,14 @@
 	border-left: 3px solid var(--line-2);
 	color: var(--ink-2);
 }
+/* A table never runs past the paper: long code in a cell breaks, and a table still too wide scrolls in its block. */
+.blk-content:has(> table) {
+	overflow-x: auto;
+}
+.doc td code,
+.doc th code {
+	overflow-wrap: anywhere;
+}
 .doc table {
 	width: 100%;
 	border-collapse: collapse;
