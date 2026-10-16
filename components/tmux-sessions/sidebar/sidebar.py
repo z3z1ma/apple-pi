@@ -16,7 +16,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agents import Agent, AgentStore, mark_seen, tmux  # noqa: E402
-from presentation import STATES, activity, ago, details, glyph, show, state, task_line, tokens, use_theme  # noqa: E402
+from presentation import (  # noqa: E402
+    STATES,
+    activity,
+    ago,
+    count_of,
+    details,
+    glyph,
+    show,
+    state,
+    task_line,
+    tokens,
+    use_theme,
+)
 from textual import work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.binding import Binding  # noqa: E402
@@ -226,9 +238,9 @@ class Sidebar(App):
             )
             if need
             else Content.from_markup(
-                "[b $text-success]all clear[/]\n[$text-muted]$working working · $total agents[/]",
+                "[b $text-success]all clear[/]\n[$text-muted]$working working · $total[/]",
                 working=working,
-                total=len(agents),
+                total=count_of(len(agents), "agent"),
             )
         )
         self.query_one("#empty").display = not agents

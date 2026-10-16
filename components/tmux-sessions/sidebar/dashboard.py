@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agents import STATUS_STYLE, Agent, AgentStore, live, mark_seen, tmux  # noqa: E402
-from presentation import STATE_LABEL, ago, details, glyph, show, state, tokens, use_theme  # noqa: E402
+from presentation import STATE_LABEL, ago, count_of, details, glyph, show, state, tokens, use_theme  # noqa: E402
 from rich.text import Text  # noqa: E402
 from textual import on, work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
@@ -30,7 +30,8 @@ PREVIEW_SECONDS = 0.5
 TICK_SECONDS = 0.25
 # Reading a finished agent's pane in the preview for this long counts as having seen it.
 SEEN_AFTER_SECONDS = 3.0
-NARROW_COLUMNS = 140
+# Below this width the live view would be too narrow beside the full table, so it goes underneath.
+NARROW_COLUMNS = 180
 COLUMNS = (
     ("state", " ", 1),
     ("name", "Agent", 26),
@@ -64,13 +65,13 @@ class Dashboard(App):
     #header { height: 1; padding: 0 1; margin-bottom: 1; }
     #body { height: 1fr; }
     #body.-narrow { layout: vertical; }
-    #table { width: 3fr; height: 1fr; background: ansi_default; border: round $panel;
+    #table { width: auto; max-width: 65%; height: 1fr; background: ansi_default; border: round $panel;
              border-title-color: $text-muted; border-title-style: bold; }
     #table:focus { border: round $accent; }
     #table > .datatable--header { background: ansi_default; color: $text-muted; text-style: bold; }
     #table > .datatable--header-hover { background: ansi_default; }
-    #body.-narrow #table { width: 1fr; height: 2fr; }
-    #side { width: 2fr; height: 1fr; }
+    #body.-narrow #table { width: 1fr; max-width: 100%; height: 2fr; }
+    #side { width: 1fr; height: 1fr; }
     #body.-narrow #side { width: 1fr; height: 3fr; }
     #detail { height: auto; border: round $panel; padding: 0 1; border-title-color: $text-muted; }
     #detail.-waiting { border: round $warning; border-title-color: $text-warning; }
@@ -212,7 +213,9 @@ class Dashboard(App):
                 )
             )
         parts.append(
-            Content.from_markup("[$text-muted]$total agents · $$$cost[/]", total=len(agents), cost=f"{cost:.2f}")
+            Content.from_markup(
+                "[$text-muted]$total · $$$cost[/]", total=count_of(len(agents), "agent"), cost=f"{cost:.2f}"
+            )
         )
         show(self.query_one("#header", Static), Content("   ").join(parts))
 

@@ -44,6 +44,10 @@ def ago(timestamp: float, now: float) -> str:
     return f"{seconds // 86400}d"
 
 
+def count_of(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
 def tokens(count: int) -> str:
     return f"{count / 1_000_000:.1f}M" if count >= 1_000_000 else f"{count / 1000:.0f}k"
 
