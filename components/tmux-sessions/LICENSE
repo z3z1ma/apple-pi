@@ -1,4 +1,4 @@
-The bash scripts and tmux entrypoint in this directory are adapted from
+The tmux entrypoint in this directory descends from
 tmux-claude-session-manager (https://github.com/craftzdog/tmux-claude-session-manager),
 retargeted from Claude Code to Pi. Provenance is recorded in the repository
 THIRD_PARTY_NOTICES.md.

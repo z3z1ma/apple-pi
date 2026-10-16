@@ -1,29 +1,16 @@
 # Tmux sessions
 
-Run many Pi sessions across projects, each in its own tmux session, then list
-them, see which are `working` / `waiting` / `idle`, and jump to one from a
-single popup. Adapted from
-[tmux-claude-session-manager](https://github.com/craftzdog/tmux-claude-session-manager)
-(MIT, Takuya Matsuyama) and retargeted to Pi; see `THIRD_PARTY_NOTICES.md`.
+Run many Pi agents in ordinary tmux panes and keep one sidebar that shows which need you, what each one is, and what it is doing. Click a card to jump to that agent's pane.
 
-Claude Code publishes agent status through `claude agents --json`. Pi has no
-such command. Pi's program status reports (OSC 7501) reach terminals that
-support them, but tmux does not forward them, and they carry no session
-identity or pane. So this integration has two halves:
+The integration has three parts:
 
-- A Pi **extension** (`components/tmux-sessions/src/`, registered from
-  `extensions/tmux-sessions.ts`) that publishes each session's live status to
-  disk.
-- A set of **bash scripts and a tmux entrypoint**
-  (`components/tmux-sessions/scripts/`, `pi_session_manager.tmux`) that read
-  those records and drive the picker, launcher, and bell forwarding.
+- A Pi **extension** (`components/tmux-sessions/src/`, registered from `extensions/tmux-sessions.ts`) publishes each root session's live status to disk and loads the tmux plugin.
+- A **tmux plugin** (`pi_session_manager.tmux`, `scripts/sidebar.sh`) binds the key, moves the sidebar between windows, and records when you last looked at each pane.
+- The **sidebar** (`components/tmux-sessions/sidebar/`) is a [Textual](https://textual.textualize.io/) app that `uv run --script` starts in a tmux pane.
 
 ## The state contract
 
-Each root Pi session running inside tmux writes one JSON record to
-`~/.pi/agent/state/tmux-sessions/<sessionId>.json` (override with
-`PI_TMUX_STATE_DIR`). The record shape is owned by
-`components/tmux-sessions/src/state.ts`:
+Each root Pi session running inside tmux writes one JSON record to `~/.pi/agent/state/tmux-sessions/<sessionId>.json` (override with `PI_TMUX_STATE_DIR`). The record shape is owned by `components/tmux-sessions/src/state.ts`:
 
 ```json
 {
@@ -51,103 +38,66 @@ Status is derived from agent lifecycle events:
 | `agent_settled` (idle) | `idle` (your turn) |
 | `session_shutdown` | record removed |
 
-`ui_prompt_start` and `ui_prompt_end` cover every blocking extension UI,
-including `ask_user_question`'s questionnaire. `agent_settled` fires on
-interrupt and error too, so the `busy → idle` transition is unconditional
-rather than tied to a successful turn. Writes are
-atomic (temp file + `rename`) so the picker never parses a half-written record.
-Only root interactive (`tui`) sessions publish; subagents and `pi_exec` workers
-are excluded so the picker lists jump targets, not internal workers. A same-pane
-session switch, resume, or fork drops the old record and republishes under the
-new session id.
+`ui_prompt_start` and `ui_prompt_end` cover every blocking extension UI, including `ask_user_question`'s questionnaire. `agent_settled` fires on interrupt and error too, so the `busy → idle` transition is unconditional. Writes are atomic (temp file + `rename`). Only root interactive (`tui`) sessions publish; subagents and `pi_exec` workers are excluded. A same-pane session switch, resume, or fork drops the old record and republishes under the new session id. On settle the extension also rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line.
 
 ### Liveness
 
-A record is trusted only when **both** its pid is still running **and** its
-`paneId` still exists in `tmux list-panes -a`. Either check alone is
-insufficient: a SIGKILL'd Pi never runs its shutdown hook, and pid reuse could
-otherwise mask a stale record. `agents.sh` prunes records whose pid is gone.
+The sidebar shows a record only when its pid is running **and** its `paneId` exists in `tmux list-panes -a`. It deletes records whose pid is gone. A record whose pane is missing is skipped, not deleted, because `list-panes` sees only one tmux server.
 
 ## Install
 
-Load the extension in Pi (it is part of this package), then load the tmux
-plugin. With [tpm](https://github.com/tmux-plugins/tpm) pointing at your
-checkout, or directly in `~/.tmux.conf`:
+Nothing to add to `tmux.conf`. The first Pi that starts inside tmux runs `pi_session_manager.tmux` on that tmux server, and records the plugin's path and modification time in the server option `@pi_sessions_plugin`, so a later Pi skips it and an updated plugin reloads. It also sets `@pi_state_dir` to the extension's record directory, so the sidebar reads the same records even when `PI_TMUX_STATE_DIR` is set only in Pi's environment. Running `run-shell <path>/pi_session_manager.tmux` from `tmux.conf` also works; loading twice is harmless.
 
-```tmux
-run-shell ~/code/apple-pi/components/tmux-sessions/pi_session_manager.tmux
-```
+The plugin:
 
-Requirements: tmux ≥ 3.2 (for `display-popup`),
-[fzf](https://github.com/junegunn/fzf), and [jq](https://jqlang.org/).
+- binds `prefix` + `u` (override with `set -g @pi_sidebar_key <key>` before it loads);
+- installs hooks at index `71` on `session-window-changed`, `client-session-changed`, and `pane-focus-in`, so reloading replaces them and your own hooks on those events stay;
+- sets `focus-events on`, which `pane-focus-in` needs;
+- stamps `@pi_seen_at` on every pane that has none, so agents that finished before tracking began count as seen.
 
-## Keys
+Requirements: tmux ≥ 3.2 and [uv](https://docs.astral.sh/uv/) on the tmux server's `PATH` (the first start installs Textual). `run-shell` uses the tmux server's environment, not your shell rc.
+
+## The sidebar
+
+`prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. `prefix` + `u` again closes it. There is one sidebar per tmux server and one process.
+
+A large count shows how many agents need you, or "all clear". Below it, agents sit in three lanes:
+
+| Lane | Agents | Card |
+| --- | --- | --- |
+| NEEDS YOU | `?` asking you (a blocking prompt is open), `✓` done (settled since you last looked at its pane) | yellow or green border |
+| WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
+| QUIET | settled and seen | grey border |
+
+Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. An agent that enters NEEDS YOU moves to the top and flashes for four seconds.
+
+The sidebar paints the terminal's default background, so it stays translucent on a translucent terminal, and uses the Catppuccin Mocha palette.
 
 | Key | Action |
 | --- | --- |
-| `prefix` + `y` | Launch (or re-attach to) a Pi session for the current directory, in a popup |
-| `prefix` + `u` | Open the session picker |
+| click | jump to that agent's pane |
+| `j` / `k` | move the cursor (the sidebar must have focus: click it or move to its pane) |
+| `enter` | jump to the selected agent |
+| `x` / `X` | mark the selected / every agent as seen |
+| `esc` | return to the pane you came from |
+| `q` | close the sidebar |
 
-Inside the picker: `enter` jumps to the session, `ctrl-x` kills the highlighted
-one, and typing filters. Sessions needing attention (`waiting`, `idle`) sort to
-the top. Each row shows status, age, tmux location (`session:window.pane`
-indices), the tmux window name, a name, and the working directory. The name is
-the Pi session name when set, otherwise the tmux pane title (with Pi's
-spinner/`π` prefix stripped) or window name.
+### Seen
+
+"Seen" is the tmux pane option `@pi_seen_at`: the `pane-focus-in` hook stamps it whenever a pane gains focus, and `x` stamps it by hand. An agent that settles while you watch its pane counts as seen. The option lives and dies with its pane and works with no sidebar open; a tmux server restart forgets it.
 
 ## `/pi-sessions`
 
-Run `/pi-sessions` inside Pi to list the live published sessions and the state
-directory path — useful for confirming the extension is publishing.
-
-## Options
-
-Set before the plugin loads (defaults shown):
-
-```tmux
-set -g @pi_launch_key     'y'      # prefix key: launch/open for current dir
-set -g @pi_list_key       'u'      # prefix key: open the picker
-set -g @pi_command        'pi'     # command run in new sessions
-set -g @pi_args           ''       # extra args appended to the command
-set -g @pi_session_prefix 'pi-'    # tmux session name prefix
-set -g @pi_popup_width     '90%'   # popup width
-set -g @pi_popup_height    '90%'   # popup height
-set -g @pi_fzf_options    ''       # extra options passed to the fzf picker
-set -g @pi_forward_bell   'on'     # highlight the origin window on a bell
-set -g @pi_state_dir      ''       # override the record directory the scripts read
-```
-
-`run-shell` and `display-popup` inherit the tmux server's environment, not your
-shell rc. If you override the record directory for the extension with
-`PI_TMUX_STATE_DIR` (or `PI_CODING_AGENT_DIR`), that export is invisible to the
-scripts and the picker will look empty. Set `@pi_state_dir` to the same path so
-both halves agree.
-
-## Bell forwarding
-
-A dedicated `pi-*` session is a separate tmux session, so a bell inside it is
-invisible to the window that launched it. On settle the extension writes `BEL`
-to its own pane's pty (opt out with `PI_TMUX_SESSION_BELL=off`); tmux counts
-that as a bell, the global `alert-bell` hook catches it, and `bell.sh` relays it
-into the origin window's pane so `window-status-bell-style` highlights it. Set
-`@pi_forward_bell 'off'` to disable the relay.
+Run `/pi-sessions` inside Pi to list the live published sessions and the state directory, to confirm the extension is publishing.
 
 ## Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `PI_TMUX_DISABLED=1` | Disable status publishing entirely. |
+| `PI_TMUX_DISABLED=1` | Disable status publishing and plugin loading. |
 | `PI_TMUX_SESSION_BELL=off` | Do not ring the pane bell on settle. |
-| `PI_TMUX_STATE_DIR=/path` | Override the record directory the extension writes to. Also set the `@pi_state_dir` tmux option so the scripts read the same path. |
+| `PI_TMUX_STATE_DIR=/path` | Override the record directory. |
 
-## How it works
+## Development
 
-- The **launcher** creates a detached `pi-<hash-of-dir>` session running `pi`,
-  records the launching window in `@pi_origin`, and attaches to it in a popup.
-- **`agents.sh`** reads the JSON records, prunes dead ones, joins each `paneId`
-  to a tmux pane, and prints one row per live session sorted by attention.
-- The **picker** renders those rows with a live `capture-pane` preview. On
-  `enter` a dedicated session resumes in the popup over its origin window, while
-  a loose one is focused in place. `ctrl-x` terminates the Pi process.
-- Pressing `prefix` + `u` from inside a session popup detaches that popup first,
-  then reopens the picker full-size on the outer client.
+`npm run test:sidebar` runs the sidebar's pytest suite through `uv`; `npm run lint` and `npm run format:check` run Ruff on it. The original prototype and its evaluation live in the ledger task `202610152308-tmux-agent-tracking`.

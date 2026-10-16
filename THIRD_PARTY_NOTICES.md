@@ -100,10 +100,10 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 
 - Source: <https://github.com/craftzdog/tmux-claude-session-manager>
 - Author named by the source package: Takuya Matsuyama
-- Local paths: `components/tmux-sessions/` (bash scripts, `pi_session_manager.tmux`); the status-publishing extension in `components/tmux-sessions/src/` and `extensions/tmux-sessions.ts` is original to apple-pi
+- Local paths: `components/tmux-sessions/` (`pi_session_manager.tmux`); the status-publishing extension in `components/tmux-sessions/src/`, `extensions/tmux-sessions.ts`, the sidebar in `components/tmux-sessions/sidebar/`, and `scripts/sidebar.sh` are original to apple-pi
 - License: MIT
 - Original notice: `Copyright (c) 2026 Takuya Matsuyama` (reproduced verbatim in `components/tmux-sessions/LICENSE`)
-- The bash picker, launcher, popup-in-popup handling, and bell forwarding are adapted from upstream and retargeted from Claude Code to Pi. Pi has no `claude agents --json` equivalent, so status comes from JSON records the apple-pi extension writes to disk (`agents.sh` reads those records and joins them to tmux panes) rather than from an external agent command. Session prefix, tmux options, and command default were renamed to the `pi`/`@pi_*` namespace.
+- The integration began as an adaptation of upstream's bash picker, launcher, popup-in-popup handling, and bell forwarding, retargeted from Claude Code to Pi. Those scripts were later replaced by the apple-pi sidebar; the tmux plugin entrypoint and the `@pi_*` option namespace remain from that lineage.
 
 ## mattpocock/skills → engineering workflows and disciplines
 

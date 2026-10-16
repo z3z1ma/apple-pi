@@ -54,7 +54,7 @@ test("writeState round-trips through readAllStates and writes valid JSON", async
 	expect(all).toContainEqual(record);
 });
 
-test("writeState leaves no temp files behind for the picker to trip over", async () => {
+test("writeState leaves no temp files behind for the sidebar to trip over", async () => {
 	await writeState(makeRecord("session-atomic"));
 	const { readdirSync } = await import("node:fs");
 	const leftovers = readdirSync(stateDir).filter((name) => !name.endsWith(".json"));
@@ -143,4 +143,45 @@ test("uses generic UI prompt lifecycle events for waiting status", async () => {
 	else process.env.TMUX_PANE = previousPane;
 	if (previousBell === undefined) delete process.env.PI_TMUX_SESSION_BELL;
 	else process.env.PI_TMUX_SESSION_BELL = previousBell;
+});
+
+test("loads the tmux plugin once per tmux server and points it at the state directory", async () => {
+	const previousPane = process.env.TMUX_PANE;
+	process.env.TMUX_PANE = "%78";
+	const server = new Map<string, string>();
+	const pluginRuns: string[] = [];
+	const startPi = (sessionId: string) => {
+		const handlers = new Map<string, (...args: unknown[]) => unknown>();
+		const pi = {
+			on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
+			registerCommand() {},
+			getSessionName: () => "",
+			async exec(_command: string, args: string[]) {
+				if (args[0] === "-c") return { code: 0, stdout: "tmux\n", stderr: "" };
+				if (args[0] === "display-message") return { code: 0, stdout: "%78\t@4\t/dev/null\n", stderr: "" };
+				if (args[0] === "show-option") return { code: 0, stdout: `${server.get(args[2]) ?? ""}\n`, stderr: "" };
+				if (args[0] === "set-option") server.set(args[2], args[3]);
+				if (args[0] === "run-shell") pluginRuns.push(args[1]);
+				return { code: 0, stdout: "", stderr: "" };
+			},
+		};
+		registerTmuxSessions(pi as never);
+		handlers.get("session_start")?.(
+			{ reason: "startup" },
+			{ mode: "tui", cwd: "/tmp/project", isIdle: () => true, sessionManager: { getSessionId: () => sessionId } },
+		);
+	};
+
+	startPi("session-plugin-a");
+	await flushUntil(() => server.has("@pi_sessions_plugin"));
+	startPi("session-plugin-b");
+	await flushUntil(async () => (await readAllStates()).some((record) => record.sessionId === "session-plugin-b"));
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	expect(pluginRuns).toHaveLength(1);
+	expect(pluginRuns[0]).toMatch(/components\/tmux-sessions\/pi_session_manager\.tmux$/);
+	expect(server.get("@pi_state_dir")).toBe(stateDir);
+
+	if (previousPane === undefined) delete process.env.TMUX_PANE;
+	else process.env.TMUX_PANE = previousPane;
 });

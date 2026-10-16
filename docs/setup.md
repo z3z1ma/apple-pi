@@ -113,8 +113,6 @@ set -as terminal-features ",xterm-ghostty:RGB"
 set -g focus-events on
 set -g extended-keys on
 set -g extended-keys-format csi-u
-
-run-shell ~/code/apple-pi/components/tmux-sessions/pi_session_manager.tmux
 ```
 
 Extended keys let Pi tell `Shift+Enter`, `Ctrl+Shift+S`, and similar keys apart inside tmux. On tmux 3.2–3.4, remove the `extended-keys-format` line. See Pi's tmux guide for details. Extended-key settings apply only to a new tmux server, so restart it:
@@ -123,12 +121,7 @@ Extended keys let Pi tell `Shift+Enter`, `Ctrl+Shift+S`, and similar keys apart 
 tmux kill-server 2>/dev/null; tmux new -s main
 ```
 
-The default prefix is `Ctrl+B`. Then:
-
-- `prefix` + `y` opens or reattaches a Pi session for the current directory in a popup.
-- `prefix` + `u` opens the fuzzy session picker.
-
-See [Tmux sessions](tmux-sessions.md) for options.
+The first Pi you start inside tmux loads the agent sidebar's key binding and hooks into that tmux server, so `tmux.conf` needs no plugin line. The sidebar needs [uv](https://docs.astral.sh/uv/) on the tmux server's `PATH`. The default prefix is `Ctrl+B`; `prefix` + `u` turns the sidebar on or off. See [Tmux sessions](tmux-sessions.md).
 
 ## 6. Set up notifications (macOS)
 

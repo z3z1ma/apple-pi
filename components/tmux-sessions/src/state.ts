@@ -1,14 +1,13 @@
 /**
- * On-disk state contract between the Pi extension and the tmux bash scripts.
+ * On-disk state contract between the Pi extension and the tmux agent sidebar.
  *
  * Each root Pi session running inside tmux publishes one JSON record describing
- * its live status, tmux pane, and pid. `scripts/agents.sh` reads these records
+ * its live status, tmux pane, and pid. `sidebar/agents.py` reads these records
  * instead of a `claude agents --json` equivalent, which Pi does not have.
  *
  * The record is the integration boundary. Writes are atomic (temp file +
- * rename) so the picker never parses a half-written file, and the pid + pane id
- * let the bash side reject a phantom record left behind by a crashed or
- * SIGKILL'd Pi.
+ * rename) so the sidebar never parses a half-written file, and the pid + pane id
+ * let it reject a phantom record left behind by a crashed or SIGKILL'd Pi.
  */
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";

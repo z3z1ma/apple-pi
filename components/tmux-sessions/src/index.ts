@@ -1,8 +1,9 @@
 /**
- * Publish per-session Pi status to disk for the tmux session manager scripts.
+ * Publish per-session Pi status to disk for the tmux agent sidebar, and load
+ * the sidebar's tmux plugin once per tmux server.
  *
  * Pi has no `claude agents --json` equivalent, so this extension is the source
- * of truth the bash scripts read. For each root Pi session running inside tmux
+ * of truth the sidebar reads. For each root Pi session running inside tmux
  * it maintains one JSON record (see `state.ts`) with the pane, pid, and a
  * `busy` / `idle` / `waiting` status derived from agent lifecycle events:
  *
@@ -15,11 +16,10 @@
  * `agent_settled` fires on interrupt and error too, so the busy -> idle
  * transition is driven by settle unconditionally rather than by a successful
  * turn. On settle the extension also rings the pane's own bell (opt-out via
- * `PI_TMUX_SESSION_BELL`), which tmux's `alert-bell` hook forwards from a
- * dedicated session to the window that launched it.
+ * `PI_TMUX_SESSION_BELL`), so tmux marks the window in its status line.
  *
  * Only root interactive (`tui`) sessions publish. Subagent and pi_exec worker
- * sessions are excluded so the picker lists jump targets, not internal workers.
+ * sessions are excluded so the sidebar lists jump targets, not internal workers.
  *
  * Optional environment variables:
  * - `PI_TMUX_DISABLED=1`      disable publishing entirely.
@@ -27,7 +27,8 @@
  * - `PI_TMUX_STATE_DIR=/path` override the record directory.
  */
 
-import { appendFile } from "node:fs/promises";
+import { appendFile, stat } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
@@ -88,6 +89,22 @@ async function readTmuxPane(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxPane
 	}
 }
 
+const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
+
+/**
+ * Load the tmux plugin unless this server already loaded this exact file. The stamp holds the path and
+ * modification time, so an updated package reloads its bindings and hooks on the next Pi start.
+ */
+async function ensurePlugin(pi: ExtensionAPI, tmuxBin: string): Promise<void> {
+	const stamp = `${PLUGIN}:${(await stat(PLUGIN)).mtimeMs}`;
+	const loaded = await pi.exec(tmuxBin, ["show-option", "-gqv", "@pi_sessions_plugin"], { timeout: 2_000 });
+	if (loaded.stdout.trim() === stamp) return;
+	const run = await pi.exec(tmuxBin, ["run-shell", PLUGIN], { timeout: 10_000 });
+	if (run.code !== 0) return;
+	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_state_dir", STATE_DIR], { timeout: 2_000 });
+	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_sessions_plugin", stamp], { timeout: 2_000 });
+}
+
 export default function piTmuxSessions(pi: ExtensionAPI): void {
 	// Subagents and pi_exec workers are not user-facing jump targets.
 	if (inChildSessionContext() || isDisabled()) return;
@@ -122,6 +139,7 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			tmuxBin = await resolveTmuxBin(pi);
 			pane = await readTmuxPane(pi, tmuxBin);
 			paneResolved = true;
+			if (pane) schedule(() => ensurePlugin(pi, tmuxBin));
 		}
 		if (!pane) {
 			record = undefined;

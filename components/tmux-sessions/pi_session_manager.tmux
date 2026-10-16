@@ -1,35 +1,23 @@
 #!/usr/bin/env bash
-# pi-tmux-sessions
-#
-# List, monitor status, and jump across nested Pi sessions from a single popup.
-# tpm (or run-shell) executes this file on tmux startup; it reads user options
-# (with sensible defaults) and installs the key bindings.
-#
-# Status is published by the Pi extension in components/tmux-sessions/src, which
-# writes a JSON record per session that scripts/agents.sh reads. Load that
-# extension in Pi for the picker to show anything.
+# Pi agent sidebar for tmux. The Pi extension runs this file once per tmux server, so tmux.conf needs no line;
+# `run-shell <path>/pi_session_manager.tmux` in tmux.conf also works. Loading it twice is harmless.
 
-CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/helpers.sh
-. "$CURRENT_DIR/scripts/helpers.sh"
+SIDEBAR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/sidebar.sh"
+key="$(tmux show-option -gqv @pi_sidebar_key)"
 
-launch_key="$(get_tmux_option @pi_launch_key 'y')"
-list_key="$(get_tmux_option @pi_list_key 'u')"
+tmux bind-key "${key:-u}" run-shell "'$SIDEBAR' toggle '#{window_id}'"
 
-# Launch (or re-attach to) a Pi session for the current pane's directory.
-# #{pane_current_path} / #{window_id} are expanded by run-shell before the args
-# reach the script.
-tmux bind-key "$launch_key" \
-  run-shell "$CURRENT_DIR/scripts/launch.sh '#{q:pane_current_path}' '#{q:window_id}'"
+# A fixed hook index replaces this plugin's hook on reload instead of appending a duplicate,
+# and leaves the operator's own hooks on the same events alone.
+tmux set-hook -g 'session-window-changed[71]' "run-shell -b \"'$SIDEBAR' follow '#{window_id}'\""
+tmux set-hook -g 'client-session-changed[71]' "run-shell -b \"'$SIDEBAR' follow '#{window_id}'\""
 
-# Open the session picker. When pressed from inside a session popup, list.sh
-# closes that popup first so the picker opens full-size on the outer client.
-tmux bind-key "$list_key" \
-  run-shell "$CURRENT_DIR/scripts/list.sh '#{q:client_name}'"
+# pane-focus-in fires only with focus-events on.
+tmux set-option -g focus-events on
+tmux set-hook -g 'pane-focus-in[71]' "run-shell -b \"'$SIDEBAR' seen '#{pane_id}'\""
 
-# Forward a bell from a dedicated session to its origin window's pane, so tmux's
-# own bell machinery picks it up even though the session that rang is separate.
-if [ "$(get_tmux_option @pi_forward_bell 'on')" = 'on' ]; then
-  tmux set-hook -g alert-bell \
-    "run-shell -b \"$CURRENT_DIR/scripts/bell.sh '#{q:hook_session_name}'\""
-fi
+# Completions from before tracking started count as seen, so the first sidebar does not open on a flood.
+now="$(date +%s)"
+tmux list-panes -a -F '#{pane_id} #{@pi_seen_at}' | while read -r pane seen; do
+  [ -n "$seen" ] || tmux set-option -p -t "$pane" @pi_seen_at "$now"
+done
