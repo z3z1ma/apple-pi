@@ -59,7 +59,7 @@ Requirements: tmux ≥ 3.2 and [uv](https://docs.astral.sh/uv/) on the tmux serv
 
 ## The sidebar
 
-`prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. `prefix` + `u` again closes it. There is one sidebar per tmux server and one process.
+`prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. Each window gets back the layout it had before the sidebar arrived, unless its panes changed meanwhile. `prefix` + `u` again closes it. There is one sidebar per tmux server and one process.
 
 A large count shows how many agents need you, or "all clear". Below it, agents sit in three lanes:
 
