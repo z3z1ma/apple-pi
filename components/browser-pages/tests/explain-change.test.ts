@@ -194,6 +194,10 @@ describe("the tutor", () => {
 		expect(note).toContain("Quiz: 1 of 2 right (2 of 5 answered).");
 		expect(note).toContain('- Missed question 2, "Q1?": chose "a", not "b".');
 		expect(note).toContain("They asked the tutor:\n- Why four?");
+		expect(note).toContain("close that gap first");
+		const allRight = readerNote({ answers: [{ question: 1, chosen: 1 }], asked: [] }, page)!;
+		expect(allRight).toContain("Quiz: 1 of 1 right");
+		expect(allRight).not.toContain("close that gap");
 	});
 });
 

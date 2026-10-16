@@ -320,5 +320,7 @@ export function readerNote(body: unknown, page: ExplainChangePage): string | und
 				}),
 		);
 	if (asked.length) out.push("They asked the tutor:", ...asked.map((q) => `- ${q}`));
+	if (right < answers.length || asked.length)
+		out.push("If the next work builds on an idea they missed or asked about, close that gap first.");
 	return out.join("\n");
 }
