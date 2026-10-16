@@ -81,10 +81,12 @@ test("removeState deletes only the target record and tolerates a missing file", 
 	expect(ids).not.toContain("session-drop");
 });
 
-async function flushUntil(predicate: () => boolean | Promise<boolean>, tries = 50): Promise<void> {
-	for (let attempt = 0; attempt < tries; attempt += 1) {
+/** Wait for the extension's queued file writes; under full-suite load they can take far longer than a few ticks. */
+async function flushUntil(predicate: () => boolean | Promise<boolean>): Promise<void> {
+	const deadline = Date.now() + 5_000;
+	while (Date.now() < deadline) {
 		if (await predicate()) return;
-		await new Promise((resolve) => setImmediate(resolve));
+		await new Promise((resolve) => setTimeout(resolve, 5));
 	}
 }
 

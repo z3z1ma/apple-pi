@@ -165,6 +165,21 @@ describe("session titles", () => {
 		expect(run.stages()).toEqual(["provisional", "refined"]);
 	});
 
+	it("applies the provisional title before the refined one even when the first turn ends first", async () => {
+		quickProfile();
+		const provisional = held();
+		const run = await harness({
+			title: (stage) => (stage === "provisional" ? provisional.reply : fauxAssistantMessage(TITLES[stage])),
+		});
+		await run.session.prompt("The CSV parser crashes on quoted commas.");
+		await settle();
+		expect(run.name()).toBeUndefined();
+
+		provisional.release(fauxAssistantMessage(TITLES.provisional));
+		await until(() => run.name() === "Fix CSV parser crash");
+		expect(run.recorded()).toEqual(["Parser crash", "Fix CSV parser crash"]);
+	});
+
 	it("retitles from the ledger task when the session adds one or starts one", async () => {
 		quickProfile();
 		const run = await harness({

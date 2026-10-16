@@ -11,8 +11,8 @@
  * `session-title` custom entry. When the name changes to anything other than the last recorded
  * title, the operator has named the session: a `{ stopped: true }` entry records that, and
  * auto-titling stops for that session for good, including after a resume and even if the operator
- * later restores the old title. One request runs at a time: a newer stage aborts an older one, and session
- * switch or shutdown aborts it. A failed stage warns once and is not retried while the session stays
+ * later restores the old title. Requests run one at a time in stage order, so a fast first turn still shows
+ * its provisional title before the refined one; session switch or shutdown aborts every queued request. A failed stage warns once and is not retried while the session stays
  * open; only successful titles are persisted, so a reopened session may try a failed stage again.
  */
 
@@ -137,10 +137,12 @@ function loadState(ctx: ExtensionContext): SessionState {
 export default function registerSessionTitle(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 	let current: SessionState | undefined;
-	let inFlight: AbortController | undefined;
+	let controller = new AbortController();
+	let queue: Promise<void> = Promise.resolve();
 	const cancel = () => {
-		inFlight?.abort();
-		inFlight = undefined;
+		controller.abort();
+		controller = new AbortController();
+		queue = Promise.resolve();
 	};
 	pi.on("session_start", () => {
 		cancel();
@@ -179,10 +181,8 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 
 	const start = (ctx: ExtensionContext, state: SessionState, stage: Stage, prompt: string) => {
 		state.done.add(stage);
-		cancel();
-		const controller = new AbortController();
-		inFlight = controller;
-		void request(ctx, state, stage, prompt, controller);
+		const { signal } = controller;
+		queue = queue.then(() => request(ctx, state, stage, prompt, signal));
 	};
 
 	const request = async (
@@ -190,12 +190,12 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 		state: SessionState,
 		stage: Stage,
 		prompt: string,
-		controller: AbortController,
+		signal: AbortSignal,
 	) => {
-		const { signal } = controller;
+		if (signal.aborted) return;
 		try {
 			const { text } = await profileRequest(ctx.modelRegistry)(PROFILE, prompt, signal);
-			// After a newer stage, a session switch, or shutdown, this request no longer applies.
+			// After a session switch, shutdown, or the operator naming the session, this request no longer applies.
 			if (signal.aborted) return;
 			const title = cleanTitle(text);
 			if (!title || current !== state || ctx.sessionManager.getSessionId() !== state.id) return;
@@ -208,8 +208,6 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 			if (signal.aborted) return;
 			const reason = error instanceof Error ? error.message : String(error);
 			ctx.ui.notify(`Session title (${stage}, ${PROFILE} profile) failed: ${reason}`, "warning");
-		} finally {
-			if (inFlight === controller) inFlight = undefined;
 		}
 	};
 
