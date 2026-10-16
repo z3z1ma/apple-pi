@@ -12,3 +12,6 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
+- `.ledger/202610161427-session-mailbox/task.md` — in-progress — Session mailbox: durable per-session inbox that steers the agent — Every root Pi session gets a durable mailbox keyed by its session id; anything (agents, scripts, headless runs) appends messages, and the session receives them as steers with at-least-once delivery recorded in the session itself.
+
+- `.ledger/202610161427-shikamaru/task.md` — planning — Shikamaru: chief-of-staff Pi session that tracks every thread and runs worker sessions — One long-lived Pi session in ~/shikamaru takes in everything, keeps a durable index of projects, commitments and threads across repos, starts and watches top-level worker Pi sessions in tmux, and reports and nudges through the session mailbox.
