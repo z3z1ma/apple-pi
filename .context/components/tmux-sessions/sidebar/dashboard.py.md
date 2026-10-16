@@ -1,7 +1,7 @@
 ## symbol:Dashboard.show_preview
 
-Showing an unseen agent's live view for `SEEN_AFTER_SECONDS` while the dashboard has terminal focus marks it seen.
-Why: reading a finished agent's final output in the live view is looking at it; requiring `x` as well left read agents in NEEDS YOU. The focus check keeps a dashboard left open in a background window from clearing agents nobody read.
+Showing an unseen agent's live view for `SEEN_AFTER_SECONDS` marks it seen only while a tmux client shows the dashboard's window and the app has terminal focus. While no client shows the window, the dashboard also stops capturing panes and animating spinners.
+Why: reading a finished agent's final output in the live view is looking at it; requiring `x` as well left read agents in NEEDS YOU. Terminal focus alone is not enough: a dashboard in a window no client shows (detached, or created by a script) never receives a focus-out, so it would clear agents nobody read.
 Verify: components/tmux-sessions/sidebar/tests/test_dashboard.py
 
 ## symbol:Dashboard.send
