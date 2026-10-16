@@ -5,3 +5,8 @@ Why: the page holds the session token for `/ask` and `/note`; a figure with same
 
 Its height arrives by `postMessage`, accepted only from that frame's own window.
 Why: any page can post messages; checking the source keeps other frames from resizing figures.
+
+A figure's script can run before its frame has a width (`clientWidth` is 0). Figure code that measures must do it in a `ResizeObserver` callback, with a fallback width. The `explain_change` guideline in `src/index.ts` does not tell the agent this yet.
+Why: the demo's toy graph measured 0, computed negative column steps, and drew every edge as a back edge.
+
+Coupled: components/browser-pages/src/index.ts
