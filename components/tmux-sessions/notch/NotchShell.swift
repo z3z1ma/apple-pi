@@ -12,6 +12,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 	let webDir: URL
 	let agentsScript: URL
 	let focusScript: URL
+	let choicesFile: URL
 	var panel: NotchPanel!
 	var web: WKWebView!
 	var hitRect = CGRect.zero
@@ -19,10 +20,27 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 	var feed: Process?
 	var feedBuffer = Data()
 
-	init(webDir: URL, agentsScript: URL, focusScript: URL) {
+	init(webDir: URL, agentsScript: URL, focusScript: URL, choicesFile: URL) {
 		self.webDir = webDir
 		self.agentsScript = agentsScript
 		self.focusScript = focusScript
+		self.choicesFile = choicesFile
+	}
+
+	/// The saved per-session choices as a JSON object literal; anything unreadable starts empty.
+	func savedChoices() -> String {
+		guard let data = try? Data(contentsOf: choicesFile),
+			let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+			let json = try? JSONSerialization.data(withJSONObject: object)
+		else { return "{}" }
+		return String(decoding: json, as: UTF8.self)
+	}
+
+	/// Atomic: written to a temporary file and renamed, so a reader never sees half a file.
+	func saveChoices(_ choices: [String: Any]) {
+		guard let json = try? JSONSerialization.data(withJSONObject: choices, options: [.prettyPrinted, .sortedKeys])
+		else { return }
+		try? json.write(to: choicesFile, options: .atomic)
 	}
 
 	func applicationDidFinishLaunching(_: Notification) {
@@ -49,8 +67,9 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		config.userContentController.add(self, name: "notch")
 		let geometry =
 			"window.notchGeometry = {notchWidth: \(notchWidth), notchHeight: \(notchHeight), width: \(size.width), height: \(size.height)};"
+		let startup = geometry + " window.notchState = \(savedChoices());"
 		config.userContentController.addUserScript(
-			WKUserScript(source: geometry, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+			WKUserScript(source: startup, injectionTime: .atDocumentStart, forMainFrameOnly: true))
 		web = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: config)
 		web.setValue(false, forKey: "drawsBackground")
 		web.underPageBackgroundColor = .clear
@@ -91,6 +110,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 				x: body["x"] as? Double ?? 0, y: body["y"] as? Double ?? 0,
 				width: body["w"] as? Double ?? 0, height: body["h"] as? Double ?? 0)
 			track()
+		case "save":
+			if let choices = body["state"] as? [String: Any] { saveChoices(choices) }
 		case "focus":
 			focus(
 				session: body["tmuxSession"] as? String ?? "", pane: body["paneId"] as? String ?? "",
@@ -140,11 +161,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 ///
 /// Several Pis often start together, so several starts can race to replace the same panel. Each one asks only the panel it
 /// first saw to quit, and steps aside if the lock then passes to anyone else, so no start waits behind a newer panel.
-func claimPanel() -> Int32 {
-	let environment = ProcessInfo.processInfo.environment
-	let piHome = environment["PI_CODING_AGENT_DIR"] ?? NSHomeDirectory() + "/.pi/agent"
-	try? FileManager.default.createDirectory(atPath: piHome + "/state", withIntermediateDirectories: true)
-	let path = piHome + "/state/notch.lock"
+func claimPanel(stateDir: String) -> Int32 {
+	let path = stateDir + "/notch.lock"
 	// Close-on-exec, so the feed and focus children never inherit the lock and keep it after this panel dies.
 	let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
 	guard fd >= 0 else {
@@ -168,6 +186,8 @@ func claimPanel() -> Int32 {
 		}
 		usleep(100_000)
 	}
+	// The lock can pass straight from the panel this start replaced to a rival start, then on to this one: step aside.
+	if let replacing, ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "") != replacing { exit(0) }
 	ftruncate(fd, 0)
 	let record = Data("\(getpid())\n\(executable)\n".utf8)
 	_ = record.withUnsafeBytes { pwrite(fd, $0.baseAddress, record.count, 0) }
@@ -179,9 +199,13 @@ guard arguments.count == 3 else {
 	FileHandle.standardError.write(Data("usage: pi-notch <web dir> <agents.py> <focus script>\n".utf8))
 	exit(64)
 }
-let panelLock = claimPanel()
+let stateDir = (ProcessInfo.processInfo.environment["PI_CODING_AGENT_DIR"] ?? NSHomeDirectory() + "/.pi/agent") + "/state"
+try? FileManager.default.createDirectory(atPath: stateDir, withIntermediateDirectories: true)
+let panelLock = claimPanel(stateDir: stateDir)
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
-let shell = Shell(webDir: arguments[0], agentsScript: arguments[1], focusScript: arguments[2])
+let shell = Shell(
+	webDir: arguments[0], agentsScript: arguments[1], focusScript: arguments[2],
+	choicesFile: URL(fileURLWithPath: stateDir + "/notch.json"))
 app.delegate = shell
 app.run()

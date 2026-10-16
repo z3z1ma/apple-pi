@@ -83,14 +83,12 @@ const MAX_SCALE = Math.floor(Math.min((geo.width - 28) / ART.w, (geo.height - ge
 document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}px`);
 
 const images = {};
-// Per tmux session: its vibe; the room and worker look the shuffle button picked, by `${vibe}/${session}`;
-// and where you dragged its workers, as fractions of the room size.
-const saved = (key) => JSON.parse(localStorage.getItem(key) ?? "{}");
-const save = (key, value) => localStorage.setItem(key, JSON.stringify(value));
-const chosenVibes = saved("notch-vibes");
-const chosenRooms = saved("notch-rooms");
-const chosenLooks = saved("notch-looks");
-const positions = saved("notch-positions");
+// Choices per tmux session: its vibe; the room and worker look the shuffle button picked, by `${vibe}/${session}`;
+// and where you dragged its workers, as fractions of the room size. The shell loads them from and saves them to
+// <pi home>/state/notch.json, so other front ends can read them; opened alone in a browser they live in memory.
+const choices = { vibes: {}, rooms: {}, looks: {}, positions: {}, ...window.notchState };
+const { vibes: chosenVibes, rooms: chosenRooms, looks: chosenLooks, positions } = choices;
+const save = () => shell?.postMessage({ type: "save", state: choices });
 let agents = [];
 let session = null;
 let scale = SPRITE;
@@ -292,7 +290,6 @@ function moveDrag(clientX, clientY) {
 	const y = Math.min(Math.max(clientY - rect.top - drag.dy, drag.h), h);
 	positions[session] ??= {};
 	positions[session][drag.agent.id] = [x / w, y / h];
-	save("notch-positions", positions);
 	renderStage();
 }
 
@@ -308,7 +305,8 @@ canvas.onmousedown = (event) => {
 };
 window.addEventListener("mousemove", (event) => pointAt(event.clientX, event.clientY));
 window.addEventListener("mouseup", () => {
-	if (drag && !drag.moved) focusAgent(drag.agent);
+	if (drag?.moved) save();
+	else if (drag) focusAgent(drag.agent);
 	drag = null;
 });
 $("prev").onclick = () => cycle(-1);
@@ -320,14 +318,13 @@ $("shuffle").onclick = () => {
 	if (!others.length) return;
 	chosenRooms[`${vibe}/${session}`] = others[Math.floor(Math.random() * others.length)];
 	chosenLooks[`${vibe}/${session}`] = Math.floor(Math.random() * 2 ** 31);
-	save("notch-rooms", chosenRooms);
-	save("notch-looks", chosenLooks);
+	save();
 	render();
 };
 $("vibe").onclick = () => {
 	const names = Object.keys(VIBES);
 	chosenVibes[session] = names[(names.indexOf(vibeOf(session)) + 1) % names.length];
-	save("notch-vibes", chosenVibes);
+	save();
 	render();
 };
 
@@ -346,7 +343,11 @@ window.notch = {
 		// Opening shows the session whose agent has waited longest for you, if any.
 		const waiting = agents.filter((a) => a.state === "waiting").sort((a, b) => a.updatedAt - b.updatedAt)[0];
 		if (open && waiting) session = waiting.tmuxSession || "tmux";
-		if (!open) pointer = drag = null;
+		if (!open) {
+			// A drag cut short by leaving the panel keeps the spot it reached.
+			if (drag?.moved) save();
+			pointer = drag = null;
+		}
 		render();
 	},
 	pointer: pointAt,

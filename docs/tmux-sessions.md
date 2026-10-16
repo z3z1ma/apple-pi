@@ -133,6 +133,8 @@ On a Mac, a black pill sits under the notch: the agent count, then one dot per a
 
 A crowded room grows, up to the size of the panel window. Every session uses the size of the most crowded one, so the panel does not jump while you cycle.
 
+Your choices are kept in `~/.pi/agent/state/notch.json` and survive restarts. For each tmux session it holds the vibe (`vibes`), the room and worker look picked with the shuffle button (`rooms` and `looks`, keyed by `<vibe>/<session>`), and where you dragged each worker (`positions`, as fractions of the room's width and height). The panel rewrites the file whole after each change, so other tools can read it at any time.
+
 ### Requirements and start-up
 
 The panel needs macOS, the Xcode command line tools (`swiftc`), and uv.
