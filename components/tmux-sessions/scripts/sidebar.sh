@@ -15,19 +15,24 @@ sidebar() {
   [ -n "$pane" ] && tmux display-message -p -t "$pane" '#{pane_id}' 2>/dev/null
 }
 
-# tmux shrinks a window's panes unevenly when the sidebar arrives and hands all the space back to the
-# rightmost pane when it leaves, so splits drift left on every visit. Each window keeps the layout it had
-# before the sidebar arrived and gets it back when the sidebar leaves. If the panes changed meanwhile,
-# select-layout refuses the old layout and tmux's own reflow stands.
-remember_layout() {
-  tmux set-option -wF -t "$1" @pi_layout '#{window_layout}'
+layout_of() {
+  tmux display-message -p -t "$1" '#{window_layout}'
 }
 
-restore_layout() {
-  local layout
-  layout="$(tmux show-option -wqv -t "$1" @pi_layout)"
-  [ -n "$layout" ] && tmux select-layout -t "$1" "$layout" 2>/dev/null
-  tmux set-option -wu -t "$1" @pi_layout 2>/dev/null
+# tmux shrinks a window's panes unevenly when the sidebar arrives and hands all the space back to the
+# rightmost pane when it leaves, so splits drift on every visit. layout.py scales the window's own layout
+# in proportion instead, which also keeps resizes made while the sidebar is there. An empty result means
+# the layout could not be rewritten, and tmux's own reflow stands.
+relayout() {
+  local window="$1" layout
+  shift
+  layout="$(uv run -q --no-project python "$ROOT/sidebar/layout.py" "$@")"
+  [ -n "$layout" ] && tmux select-layout -t "$window" "$layout"
+}
+
+# select-layout assigns panes to cells in pane-list order, so the sidebar must enter as the window's last pane.
+last_pane() {
+  tmux list-panes -t "$1" -F '#{pane_id}' | tail -n 1
 }
 
 open() {
@@ -35,28 +40,33 @@ open() {
     tmux display-message "Pi sidebar needs uv on the tmux server's PATH"
     return
   fi
-  remember_layout "$1"
-  local pane
-  pane="$(tmux split-window -h -f -d -l "$WIDTH" -t "$1" -P -F '#{pane_id}' \
+  local before pane
+  before="$(layout_of "$1")"
+  pane="$(tmux split-window -h -f -d -l "$WIDTH" -t "$(last_pane "$1")" -P -F '#{pane_id}' \
     -e "PI_TMUX_STATE_DIR=$(tmux show-option -gqv @pi_state_dir)" \
     "uv run --script '$ROOT/sidebar/sidebar.py'")"
   tmux set-option -g @pi_sidebar_pane "$pane"
+  relayout "$1" add "$before" "${pane#%}" "$WIDTH"
 }
 
 follow() {
-  local pane="$1" window="$2" source
+  local pane="$1" window="$2" source width before leaving
   source="$(tmux display-message -p -t "$pane" '#{window_id}')"
   [ "$source" = "$window" ] && return
-  remember_layout "$window"
-  tmux join-pane -h -f -d -l "$(tmux display-message -p -t "$pane" '#{pane_width}')" -s "$pane" -t "$window"
-  restore_layout "$source"
+  width="$(tmux display-message -p -t "$pane" '#{pane_width}')"
+  before="$(layout_of "$window")"
+  leaving="$(layout_of "$source")"
+  tmux join-pane -h -f -d -l "$width" -s "$pane" -t "$(last_pane "$window")"
+  relayout "$window" add "$before" "${pane#%}" "$width"
+  relayout "$source" remove "$leaving" "${pane#%}"
 }
 
 close() {
-  local window
+  local window layout
   window="$(tmux display-message -p -t "$1" '#{window_id}')"
+  layout="$(layout_of "$window")"
   tmux kill-pane -t "$1"
-  restore_layout "$window"
+  relayout "$window" remove "$layout" "${1#%}"
 }
 
 case "${1:-}" in
