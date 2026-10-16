@@ -4,7 +4,7 @@ import type { MarkdownBlock, MarkdownLabel } from "../../src/page-data";
 import { Answer, Icon, Kbd, Md } from "../ui";
 import { useDocReview } from "./context";
 import { renderBlock } from "./render";
-import { addAnnotation, annotation, annotationTitle, LABELS, VERDICTS } from "./state";
+import { addAnnotation, annotation, annotationTitle, blockKey, LABELS, splitKey, VERDICTS } from "./state";
 
 /** Line diff of a block's source and the reviewer's rewrite. */
 function SourceDiff({ before, after }: { before: string; after: string }) {
@@ -43,7 +43,8 @@ const BlockContent = memo(function BlockContent({ id, html }: { id?: string; htm
 });
 
 function BlockEditor({ block, source }: { block: MarkdownBlock; source: string }) {
-	const { update } = useDocReview();
+	const { update, file } = useDocReview();
+	const key = blockKey(file, block.id);
 	return (
 		<div className="blk block-editor">
 			<textarea id="block-src" defaultValue={source} rows={Math.max(4, source.split("\n").length + 1)} />
@@ -68,8 +69,8 @@ function BlockEditor({ block, source }: { block: MarkdownBlock; source: string }
 					onClick={() => {
 						const value = (document.getElementById("block-src") as HTMLTextAreaElement).value.replace(/\n+$/, "");
 						update((d) => {
-							if (value === block.raw) delete d.edits[block.id];
-							else d.edits[block.id] = value;
+							if (value === block.raw) delete d.edits[key];
+							else d.edits[key] = value;
 							d.editing = null;
 						});
 					}}
@@ -82,7 +83,8 @@ function BlockEditor({ block, source }: { block: MarkdownBlock; source: string }
 }
 
 function RewriteTag({ block, after }: { block: MarkdownBlock; after: string }) {
-	const { s, update, readOnly } = useDocReview();
+	const { s, update, readOnly, file } = useDocReview();
+	const key = blockKey(file, block.id);
 	return (
 		<>
 			<div className="edit-tag">
@@ -92,11 +94,11 @@ function RewriteTag({ block, after }: { block: MarkdownBlock; after: string }) {
 					className="link"
 					onClick={() =>
 						update((d) => {
-							d.diffOpen[block.id] = !d.diffOpen[block.id];
+							d.diffOpen[key] = !d.diffOpen[key];
 						})
 					}
 				>
-					{s.diffOpen[block.id] ? "Hide" : "Show"} diff
+					{s.diffOpen[key] ? "Hide" : "Show"} diff
 				</button>
 				{readOnly ? null : (
 					<button
@@ -104,7 +106,7 @@ function RewriteTag({ block, after }: { block: MarkdownBlock; after: string }) {
 						className="link"
 						onClick={() =>
 							update((d) => {
-								delete d.edits[block.id];
+								delete d.edits[key];
 							})
 						}
 					>
@@ -112,16 +114,19 @@ function RewriteTag({ block, after }: { block: MarkdownBlock; after: string }) {
 					</button>
 				)}
 			</div>
-			{s.diffOpen[block.id] ? <SourceDiff before={block.raw} after={after} /> : null}
+			{s.diffOpen[key] ? <SourceDiff before={block.raw} after={after} /> : null}
 		</>
 	);
 }
 
 export function Block({ block }: { block: MarkdownBlock }) {
-	const { s, update, readOnly, openPop } = useDocReview();
-	const edit = s.edits[block.id];
-	if (s.editing === block.id) return <BlockEditor block={block} source={edit ?? block.raw} />;
-	const noted = s.annotations.some((a) => a.spans.some((sp) => sp.block === block.id && sp.start === undefined));
+	const { s, update, readOnly, openPop, file } = useDocReview();
+	const key = blockKey(file, block.id);
+	const edit = s.edits[key];
+	if (s.editing === key) return <BlockEditor block={block} source={edit ?? block.raw} />;
+	const noted = s.annotations.some(
+		(a) => a.file === file && a.spans.some((sp) => sp.block === block.id && sp.start === undefined),
+	);
 	return (
 		<div className={`blk ${edit !== undefined ? "edited" : ""} ${noted ? "noted" : ""}`} id={block.id}>
 			{readOnly ? null : (
@@ -146,7 +151,7 @@ export function Block({ block }: { block: MarkdownBlock }) {
 							title="Rewrite this block"
 							onClick={() =>
 								update((d) => {
-									d.editing = block.id;
+									d.editing = key;
 								})
 							}
 						>
@@ -163,14 +168,14 @@ export function Block({ block }: { block: MarkdownBlock }) {
 
 /** The bar above a selection. Typing a letter while it shows starts a comment; the app handles that key. */
 export function Toolbar() {
-	const { page, s, update, order, openPop } = useDocReview();
+	const { session, s, update, position, openPop, file } = useDocReview();
 	const toolbar = s.toolbar;
 	if (!toolbar) return null;
 	const mark = (type: "delete" | "label", label?: MarkdownLabel) => {
 		getSelection()?.removeAllRanges();
-		const added = annotation({ type, spans: toolbar.selected.spans, quote: toolbar.selected.quote, label });
+		const added = annotation({ type, spans: toolbar.selected.spans, quote: toolbar.selected.quote, label }, file);
 		update((d) => {
-			addAnnotation(d, added, order);
+			addAnnotation(d, added, position);
 			d.toolbar = null;
 		});
 	};
@@ -199,7 +204,7 @@ export function Toolbar() {
 			>
 				<Icon.pencil />
 			</button>
-			{page.session.ask ? (
+			{session.ask ? (
 				<button type="button" className="icon" title="Ask the agent" onClick={() => openPop("ask", toolbar.selected)}>
 					<Icon.spark />
 				</button>
@@ -305,17 +310,54 @@ export function AnnotationPop() {
 	);
 }
 
-export function Panel({ total }: { total: number }) {
-	const { page, s, order, openPop, scrollTo, readOnly } = useDocReview();
-	const lineOf = (id: string) => page.blocks[order.get(id) ?? 0].line;
-	const reveal = (id: string, block: string) => {
-		scrollTo(document.querySelector(`mark[data-an="${id}"]`) ?? document.getElementById(block), innerHeight / 3);
-		for (const m of document.querySelectorAll<HTMLElement>(`mark[data-an="${id}"]`)) {
-			m.classList.remove("flash");
-			void m.offsetWidth;
-			m.classList.add("flash");
-		}
+/** Every annotation, in review order; with `grouped`, under a heading per document. */
+export function Panel({ total, grouped }: { total: number; grouped: boolean }) {
+	const { s, openPop, lineOf, reveal, readOnly } = useDocReview();
+	const rows: ReactNode[] = [];
+	let file = "";
+	const heading = (path: string) => {
+		if (!grouped || path === file) return;
+		file = path;
+		rows.push(
+			<button type="button" key={`f:${path}`} className="pg-file" onClick={() => reveal(path, "")}>
+				{path}
+			</button>,
+		);
 	};
+	for (const a of s.annotations) {
+		heading(a.file);
+		const block = a.spans[0].block;
+		rows.push(
+			<button type="button" key={a.id} className="an-card" onClick={() => reveal(a.file, block, a.id)}>
+				<span className={`t ${a.type}`}>
+					{annotationTitle(a)}
+					<span className="sp" />
+					<span className="ln">L{lineOf(a.file, block)}</span>
+				</span>
+				<span className="q">{a.quote ?? "Whole block"}</span>
+				{a.type === "suggest" ? (
+					<span className="rep">
+						→ <ins>{a.replacement}</ins>
+					</span>
+				) : null}
+				{a.text ? <span>{a.text}</span> : null}
+				{a.type === "ask" ? <Md className="dim" text={a.answer ?? "Answering…"} /> : null}
+			</button>,
+		);
+	}
+	for (const key of Object.keys(s.edits)) {
+		const edit = splitKey(key);
+		heading(edit.file);
+		rows.push(
+			<button type="button" key={key} className="an-card" onClick={() => reveal(edit.file, edit.block)}>
+				<span className="t edit">
+					<Icon.pencil /> Rewritten block
+					<span className="sp" />
+					<span className="ln">L{lineOf(edit.file, edit.block)}</span>
+				</span>
+			</button>,
+		);
+	}
 	return (
 		<aside className="panel">
 			<div className="panel-h">
@@ -330,35 +372,10 @@ export function Panel({ total }: { total: number }) {
 					<span>{s.overall}</span>
 				</button>
 			) : null}
-			{s.annotations.map((a) => (
-				<button type="button" key={a.id} className="an-card" onClick={() => reveal(a.id, a.spans[0].block)}>
-					<span className={`t ${a.type}`}>
-						{annotationTitle(a)}
-						<span className="sp" />
-						<span className="ln">L{lineOf(a.spans[0].block)}</span>
-					</span>
-					<span className="q">{a.quote ?? "Whole block"}</span>
-					{a.type === "suggest" ? (
-						<span className="rep">
-							→ <ins>{a.replacement}</ins>
-						</span>
-					) : null}
-					{a.text ? <span>{a.text}</span> : null}
-					{a.type === "ask" ? <Md className="dim" text={a.answer ?? "Answering…"} /> : null}
-				</button>
-			))}
-			{Object.keys(s.edits).map((id) => (
-				<button type="button" key={id} className="an-card" onClick={() => scrollTo(document.getElementById(id))}>
-					<span className="t edit">
-						<Icon.pencil /> Rewritten block
-						<span className="sp" />
-						<span className="ln">L{lineOf(id)}</span>
-					</span>
-				</button>
-			))}
+			{rows}
 			{total === 0 ? (
 				<div className="empty">
-					Select text in the document to comment, mark it for deletion, suggest a rewrite, or label it. Hover a block to
+					Select text in a document to comment, mark it for deletion, suggest a rewrite, or label it. Hover a block to
 					comment on it as a whole or rewrite it.
 				</div>
 			) : null}
@@ -407,7 +424,8 @@ export function Keys({ keys }: { keys: [string, string][] }) {
 	);
 }
 
-export function Finish() {
+/** The verdict sheet; `children` adds page-specific notes above the verdicts. */
+export function Finish({ children }: { children?: ReactNode }) {
 	const { s, update, submit, readOnly } = useDocReview();
 	if (s.submit === "sent" && !readOnly)
 		return (
@@ -433,6 +451,7 @@ export function Finish() {
 						<b>{Object.keys(s.edits).length}</b> rewritten blocks
 					</span>
 				</div>
+				{children}
 				<div className="vd-opts">
 					{VERDICTS.map((v) => (
 						<button

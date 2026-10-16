@@ -1,7 +1,8 @@
-import type { MarkdownAnnotation, MarkdownLabel, MarkdownReviewPage, Verdict } from "../../src/page-data";
+import type { MarkdownAnnotation, MarkdownLabel, Verdict } from "../../src/page-data";
 import type { Selected } from "./marks";
 
-export type Annotation = MarkdownAnnotation & { id: string };
+/** An annotation in the page: the wire annotation plus its id and the document it belongs to. */
+export type Annotation = MarkdownAnnotation & { id: string; file: string };
 /** Popovers that take text from the reviewer. */
 export type ComposeKind = "comment" | "suggest" | "ask" | "block" | "overall";
 
@@ -20,8 +21,9 @@ export interface Pop {
 
 export interface State {
 	annotations: Annotation[];
-	/** Block id to the reviewer's rewrite of its source. */
+	/** `blockKey(file, block)` to the reviewer's rewrite of that block's source. */
 	edits: Record<string, string>;
+	/** The `blockKey` of the block being rewritten. */
 	editing: string | null;
 	diffOpen: Record<string, boolean>;
 	overall: string;
@@ -33,6 +35,21 @@ export interface State {
 	noteHidden: boolean;
 	toolbar: { x: number; y: number; selected: Selected } | null;
 	pop: Pop | null;
+}
+
+/** One block of one document. */
+export const blockKey = (file: string, block: string) => `${file}\n${block}`;
+export function splitKey(key: string): { file: string; block: string } {
+	const at = key.indexOf("\n");
+	return { file: key.slice(0, at), block: key.slice(at + 1) };
+}
+
+/** A submitted review as a saved page carries it; a one-document page leaves `file` out. */
+export interface SavedReview {
+	verdict: Verdict;
+	overall?: string;
+	annotations: (MarkdownAnnotation & { file?: string })[];
+	edits: { file?: string; block: string; after: string }[];
 }
 
 export const LABELS: Record<MarkdownLabel, { emoji: string; text: string }> = {
@@ -55,19 +72,19 @@ export const VERDICTS = [
 	{ id: "changes", label: "Request changes", detail: "Revise it and ask me again." },
 ] as const;
 
-export function initial(page: MarkdownReviewPage): State {
-	const r = page.result;
+/** The page's state, or the submitted review's when the page is a saved copy. */
+export function initial(result: SavedReview | undefined, file: string): State {
 	const dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
 	return {
-		annotations: (r?.annotations ?? []).map((a, i) => ({ ...a, id: `r${i}` })),
-		edits: Object.fromEntries((r?.edits ?? []).map((e) => [e.block, e.after])),
+		annotations: (result?.annotations ?? []).map((a, i) => ({ ...a, file: a.file ?? file, id: `r${i}` })),
+		edits: Object.fromEntries((result?.edits ?? []).map((e) => [blockKey(e.file ?? file, e.block), e.after])),
 		editing: null,
 		diffOpen: {},
-		overall: r?.overall ?? "",
-		verdict: r?.verdict ?? null,
+		overall: result?.overall ?? "",
+		verdict: result?.verdict ?? null,
 		modal: null,
-		submit: r ? "sent" : "idle",
-		panel: !!r,
+		submit: result ? "sent" : "idle",
+		panel: !!result,
 		theme: dark ? "dark" : "light",
 		noteHidden: false,
 		toolbar: null,
@@ -80,26 +97,27 @@ let created = 0;
  * A new annotation with its id. Ids are made here, outside state updates, because React may run an update
  * function later or more than once.
  */
-export const annotation = (a: MarkdownAnnotation): Annotation => ({ ...a, id: `a${++created}` });
+export const annotation = (a: MarkdownAnnotation, file: string): Annotation => ({ ...a, file, id: `a${++created}` });
 
-/** Adds an annotation in document order. */
-export function addAnnotation(d: State, a: Annotation, order: Map<string, number>): void {
+/** Adds an annotation in review order: by document, then by place in it. */
+export function addAnnotation(d: State, a: Annotation, position: (file: string, block: string) => number): void {
 	d.annotations.push(a);
-	const at = (x: MarkdownAnnotation) => (order.get(x.spans[0].block) ?? 0) * 1e9 + (x.spans[0].start ?? -1);
+	const at = (x: Annotation) => position(x.file, x.spans[0].block) * 1e9 + (x.spans[0].start ?? -1);
 	d.annotations.sort((x, y) => at(x) - at(y));
 }
 
-/** The annotation a popover's text makes, or undefined when it makes none. */
-export function composed(pop: Pop, text: string, why: string | undefined): Annotation | undefined {
+/** The annotation a popover's text makes in `file`, or undefined when it makes none. */
+export function composed(pop: Pop, text: string, why: string | undefined, file: string): Annotation | undefined {
 	const sel = pop.selected;
 	if (!text) return undefined;
-	if (pop.kind === "block" && pop.block) return annotation({ type: "comment", spans: [{ block: pop.block }], text });
+	if (pop.kind === "block" && pop.block)
+		return annotation({ type: "comment", spans: [{ block: pop.block }], text }, file);
 	if (!sel) return undefined;
 	const at = { spans: sel.spans, quote: sel.quote };
-	if (pop.kind === "comment") return annotation({ type: "comment", ...at, text });
-	if (pop.kind === "ask") return annotation({ type: "ask", ...at, text });
+	if (pop.kind === "comment") return annotation({ type: "comment", ...at, text }, file);
+	if (pop.kind === "ask") return annotation({ type: "ask", ...at, text }, file);
 	if (pop.kind === "suggest" && text !== sel.quote)
-		return annotation({ type: "suggest", ...at, replacement: text, text: why });
+		return annotation({ type: "suggest", ...at, replacement: text, text: why }, file);
 	return undefined;
 }
 
