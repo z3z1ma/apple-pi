@@ -26,3 +26,7 @@ Prototype of `review_ledger_task`: one tool call opens a whole ledger task bundl
 1. **Opened ticks.** The tree ticks files you opened, and Finish lists the ones you did not. Keep both, keep only the Finish list, or drop them?
 2. **Landing.** The page opens on the overview. Should a bundle without tickets open on `task.md` instead?
 3. **History.** Newer bundles carry `history.json` (the session and commit pointers the ledger keeps); these two do not. Hide it, or list it with the evidence files?
+
+## Verdict (operator, 2026-10-15)
+
+Approved as shown. Overflow fixed after the verdict: long code in table cells now breaks (in the shared Markdown reader too, where a table still too wide scrolls inside its block), and the overview's document cards wrap or clip their titles and paths. Questions 1 and 2 stand as shown (opened ticks and the not-opened list; the page opens on the overview). Question 3 was not answered: `history.json` lists with the evidence files, which needs no special case.

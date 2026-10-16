@@ -34,6 +34,7 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 - **Build directly:** implement the first slice now and record decisions here as they are made. Decided 2026-10-15.
 - **Saved pages live in** `~/.pi/agent/artifacts/<project>/<date>-<slug>.html`; the agent copies or attaches a file where it is needed. Approved 2026-10-15.
 - **Code review design: the [round 2 prototype](prototypes/code-review-v2/README.md),** approved 2026-10-15 without changes.
+- **Ledger task review design: the [round 1 prototype](prototypes/ledger-task-review/README.md),** approved 2026-10-15; overflow fixed after the verdict.
 - **Code review direction (prototype round 1 verdict).** Build on B (Cockpit) keyboard stepping; bring in C (Triage)'s "two minutes" focus, change map, and changes-by-attention view. Move the brief out of the right rail into the reading line. Make files, hunks, and agent notes collapsible. Decisions are secondary to review and need code context. Every view must scale to large diffs. A (Essay) is dropped.
 - Root session only; local macOS (`open <url>`); greenfield, no compatibility layers.
 
@@ -65,7 +66,7 @@ In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are com
 Next:
 
 1. Operator tries `review_markdown` on a real document (first look at `docs/browser-pages.md`: closed without a verdict).
-2. Design pass 2: `review_ledger_task` [round 1 prototype](prototypes/ledger-task-review/README.md) (bundle tree, overview with ticket graph and graph checks, ticket neighbourhood, evidence files on demand, the Markdown reader for every document) awaits the operator's verdict; then build.
+2. Build `review_ledger_task` from the approved [round 1 prototype](prototypes/ledger-task-review/README.md) (bundle tree, overview with ticket graph and graph checks, ticket neighbourhood, evidence files on demand, the Markdown reader for every document).
 3. Design pass 3: `explain_change`.
 
 ## Outcome

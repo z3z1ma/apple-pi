@@ -461,15 +461,15 @@ mark.an.flash { animation: flash 1.1s var(--ease); }
 
 /* documents row on the overview */
 .docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.doc-card { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; box-shadow: var(--shadow); }
+.doc-card { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; box-shadow: var(--shadow); }
 .doc-card:hover { border-color: var(--line-2); }
-.doc-card .dp { display: flex; align-items: center; gap: 7px; font: 500 12px var(--font-mono); color: var(--ink-3); }
+.doc-card .dp { min-width: 0; display: flex; align-items: center; gap: 7px; font: 500 12px var(--font-mono); color: var(--ink-3); }
 .doc-card .dp .ic { width: 13px; height: 13px; flex: none; }
 .doc-card .dp .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proto-bar { width: max-content; }
 .proto-bar button { white-space: nowrap; }
 .node.s-blocked { background: var(--surface-2); }
-.doc-card .dt { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.doc-card .dt { font-weight: 600; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
 .doc-card .dm { font-size: 12px; color: var(--ink-3); }
 
 /* ticket strip above a ticket */
@@ -509,6 +509,8 @@ mark.an.flash { animation: flash 1.1s var(--ease); }
 .pg-file .count { font-family: var(--font-ui); }
 .unopened { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--att-medium) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--att-medium) 28%, var(--line)); font-size: 13px; }
 .unopened .row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.doc td code, .doc th code { overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
