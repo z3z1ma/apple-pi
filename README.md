@@ -99,6 +99,8 @@ Everything above keeps the *model's* attention clean. This section is about the 
 
 So the harness grows a second surface. Four tools open a purpose-built page in the browser: one tool call, one self-contained HTML file, served on `127.0.0.1` behind a token (`components/browser-pages`). The division of labour is the whole trick. **The agent supplies the structure from what it knows; the page supplies the truth from git and disk.** The agent can tell the story of a change, order it, annotate it, and quiz me on it, but every line of code on the page is read by the server, so it can neither hide a hunk nor invent one.
 
+I never call these tools by hand. I ask in plain words ("walk me through this branch", "let me sign off on the spec"), or the agent opens a page itself when its work needs my judgment. The three review tools wait until I press **Finish review** and return my feedback as their result; `explain_change` returns at once and leaves the page open for me to read.
+
 ![explain_change: an interactive figure beside a Socratic tutor that answers a question with a question](media/readme/explain-change-tutor.webp)
 
 ### `review_code`: The Change as a Story
@@ -117,7 +119,7 @@ Specs and plans deserve to be read rendered, not reviewed as patches. The page s
 
 ![review_ledger_task: the task's intent and its ticket graph, with the hovered ticket's chain lit](media/readme/review-ledger-task.webp)
 
-A ledger task is a folder of documents plus a dependency graph that only exists in prose. `review_ledger_task` reads the whole bundle and draws that graph: tickets in columns by dependency depth, the frontier ringed, and a hover lighting everything a ticket waits on and everything waiting on it. Graph checks catch what `to-tickets` must never produce: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, a graph with nowhere to start (`tickets.ts`). Every document opens in the same annotation reader, evidence files load only when opened, and the result tells the agent which documents I never opened, so it knows exactly what my approval does not cover.
+A ledger task is a folder of documents plus a dependency graph that only exists in prose. `review_ledger_task` reads the whole bundle and draws that graph: tickets in columns by dependency depth, the tickets that can start now ringed, and a hover lighting everything a ticket waits on and everything waiting on it. Graph checks catch what the `to-tickets` skill must never produce: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, a graph with nowhere to start (`tickets.ts`). Every document opens in the same annotation reader, evidence files load only when opened, and the result tells the agent which documents I never opened, so it knows exactly what my approval does not cover.
 
 ### `explain_change`: Understanding Is the New Bottleneck
 
