@@ -27,3 +27,9 @@
 - For scripts in `.ledger/<task>/`, find the repository root by walking up to a marker directory, not a fixed `Path.parents[n]`: closing the task moves it under `history/`.
 - Editing a context file under `.context/.ledger/<task>/` makes the ledger extension write a stray `.context/.ledger/<task>/history.json`. Delete it before committing.
 - The operator reviews ticket sets in the bundle: write the tickets into `.ledger/<task>/tickets/` first, then open `review_ledger_task`; its verdict is the approval.
+- Never kill processes by pattern (`pkill -f vitest`) in this shared checkout: it can kill other lanes' runs. Cancel your own run with `task cancel` and kill only PIDs you started.
+- When reading the installed Pi package, grep `dist/core/` and `dist/modes/`, not `dist/bundle/chunks/`: the chunks are minified single lines that flood the output.
+- Faux-session tests: `session.dispose()` does not emit `session_shutdown`, so emit it first or extension watchers outlive the session; `session.reload()` emits `session_start` only after a host bound to the session (`bindExtensions({ onError })` before the scenario); queued custom steers show in `session.agent.hasQueuedMessages()`, not `pendingMessageCount`; and a custom message reaches the model with role `user`.
+- File-watch tests need `waitFor` timeouts above the 1 s default; under load notifications lag past it.
+- `pi_exec` `read()` can prefix line numbers; fetch exact bytes for a scripted rewrite with `bash` `cat`.
+- Treat a `google_search` summary of a recent product feature as unverified until an official source confirms it.
