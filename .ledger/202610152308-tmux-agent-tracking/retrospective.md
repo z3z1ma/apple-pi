@@ -16,6 +16,7 @@ Updated: 2026-10-16
 - `select-layout` assigns panes in pane-list order; a pane joined with `-f` must be the last pane, or the rewritten layout swaps panes.
 - Textual on a translucent terminal needs `ansi_color=True`, `background: ansi_default`, and solid (alpha-free) text colours.
 - Treat a rename as metadata, not a status change, or automatic titles reopen agents you just saw.
+- A new identity field in shared persistent records needs a policy for records written before it existed: here, records without `tmuxSocket` are shown only when their pane tty matches and are never pruned for a missing pane.
 
 ## Improvements
 
