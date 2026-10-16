@@ -130,9 +130,8 @@ function renderPill() {
 
 function roomScale(group, vibe) {
 	const widest = Math.max(...group.map((agent) => spriteOf(agent, vibe).width)) * SPRITE;
-	const needed = group.length * widest * CROWDING;
-	for (let s = SPRITE; s < MAX_SCALE; s += SCALE_STEP) if ((FLOOR.right - FLOOR.left) * ART.w * s >= needed) return s;
-	return Math.max(SPRITE, MAX_SCALE);
+	const needed = (group.length * widest * CROWDING) / ((FLOOR.right - FLOOR.left) * ART.w);
+	return Math.max(SPRITE, Math.min(MAX_SCALE, Math.ceil(needed / SCALE_STEP) * SCALE_STEP));
 }
 
 function renderStage() {

@@ -55,11 +55,11 @@ Decisions (operator):
 
 - Generate the art with `generate_image`.
 - One room per tmux session, showing one room at a time; arrows cycle the sessions.
-- Two vibes to play with: **office** (fancy tech workplaces: kombucha tap, coffee shop with cold brew, glass HQ, game studio) with tech workers, and **cozy** (lofi rooms: loft, cabin, space lounge, tatami, wizard library) with the hoodie programmer. A toggle in the panel switches between them.
+- Two vibes to play with: **office** (fancy tech workplaces: kombucha tap, coffee shop with cold brew, glass HQ, game studio) with tech workers, and **cozy** (lofi rooms: loft, cabin, space lounge, tatami, wizard library) with lofi programmers. A toggle in the panel switches the shown tmux session between them.
 
 Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, filling the panel, themed by a stable hash of the session name unless the 🎲 button picked a random room for it (remembered per vibe and session). Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane.
 
-Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` crops each room to the largest interior rectangle that holds none of the backdrop around the room, keys out the magenta on worker sheets, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads. To add a room or worker, put its raw image in `prototype/assets/raw/<vibe>/` and run `uv run -q -w pillow -w numpy python assets/clean.py` from `prototype/`. New room prompts need a plain dark backdrop around the room, and new worker prompts a blue shirt (see `.context/.ledger/202610160838-notch-agent-room/prototype/assets/clean.py.md`).
+Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` crops each room to the largest interior rectangle that holds none of the backdrop around the room, keys out the magenta on worker sheets, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads. To add a room or worker, put its raw image in `prototype/assets/raw/<vibe>/` and run `uv run -q -w pillow -w numpy python assets/clean.py` from `prototype/`. New room prompts need a plain dark backdrop around the room, and new worker prompts a blue shirt (see `.context/.ledger/202610160838-notch-agent-room/prototype/assets/clean.py.md`). A worker prompt asks for a 2×2 sprite sheet of the SAME character at the SAME desk, in this cell order, which `STATES` in `clean.py` reads: typing (top left), asleep with a small Zzz (top right), raising one hand with a yellow `!` (bottom left), cheering with sparkles (bottom right); 16-bit crisp pixels, flat pure magenta (#FF00FF) background, no text or logos.
 
 Run: `prototype/run.sh` (prototype 2, the default) or `prototype/run.sh index.html` (prototype 1).
 
@@ -67,7 +67,7 @@ Acceptance:
 
 1. Each worker's state is clear at a glance from its bubble and pose.
 2. Hovering a worker shows its name, state and last tool; clicking it focuses its pane.
-3. Arrows cycle the tmux sessions; the vibe toggle switches office and cozy and is remembered.
+3. Arrows cycle the tmux sessions; the vibe toggle switches office and cozy for the shown session and is remembered per session.
 4. The pixels stay crisp (whole device pixels), and both vibes feel fun.
 5. Animation runs only while the panel is open; collapsed idle CPU stays near zero.
 
@@ -79,7 +79,7 @@ Operator feedback on round 3 ("I like it. The room size is better."), and what c
 
 - "Workers … 5-10% smaller": `AGENT_PIXEL` 10 → 11 in `clean.py`, about 9 % smaller, still on the sprite-pixel grid.
 - "Scale the room larger … with more workers", with the round-3 size as the minimum: workers keep 2.5 css px per pixel (`SPRITE`). The room scale starts there and grows in 0.5 steps until no two workers stand closer than 0.8 of the widest worker's width (`CROWDING`). It stops at the largest step that fits the shell window (3.5 for 1100×500). One scale serves every session, taken from the most crowded room, so the panel and its arrows stay put while cycling. A per-room scale made the panel shrink under the pointer and collapse. At 3.5 the room's pixels (7 device px) are visibly larger than the workers' (5 device px).
-- "A few more varieties of sprites": office workers beanie, hijab and senior (wheelchair), and the cozy cat-hoodie worker. Office now has 5 workers and cozy has 2. The cozy "sweater" worker failed on image quota; its prompt is the same pattern. The magenta key now goes by hue (285–315°), so purple props such as the wheelchair frame stay.
+- "A few more varieties of sprites": office workers beanie, hijab and senior (wheelchair), and the cozy cat-hoodie worker. Office now has 5 workers and cozy has 2. The cozy "sweater" worker (long ginger hair, freckles, oversized blue knit sweater, wooden desk with a laptop and tea) failed on image quota; generate it with the worker prompt pattern under Assets. The magenta key now goes by hue (285–315°), so purple props such as the wheelchair frame stay.
 - "Vibe … tied to the specific tmux session": vibes are stored per session (`notch-vibes` in localStorage), defaulting to office.
 
 Checked in headless Chrome with 8 mock agents in 2 sessions: the 6-worker room opens at 3.5, the 2-worker room keeps the same size, the vibe toggle changes only the shown session, a forwarded pointer opens the tooltip, and there are no page errors.
