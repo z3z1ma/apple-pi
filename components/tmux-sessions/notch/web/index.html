@@ -351,6 +351,12 @@ window.notch = {
 		render();
 	},
 	pointer: pointAt,
+	// The shell moved the panel to another screen, or the notch changed size.
+	geometry(next) {
+		Object.assign(geo, next);
+		document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}px`);
+		render();
+	},
 };
 
 const load = (key) => new Promise((done) => {

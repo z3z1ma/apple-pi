@@ -146,9 +146,9 @@ One panel runs per Mac. It holds `~/.pi/agent/state/notch.lock` while it runs:
 - A second start of the same build exits at once.
 - A start of a changed build tells the running panel to quit, then takes its place, so an updated package shows on the next Pi start.
 
-Without `swiftc`, nothing starts, and the script writes one line to `~/.pi/agent/logs/pi-notch.log`, which also holds build errors. Run `components/tmux-sessions/scripts/notch.sh start` to start the panel by hand, and `pkill -f cache/notch/pi-notch-` to stop it.
+Without `swiftc`, nothing starts, and the script writes one line to `~/.pi/agent/logs/pi-notch.log`, which also holds build errors. Run `components/tmux-sessions/scripts/notch.sh start` to start the panel by hand, and `pkill -f cache/notch/pi-notch-` to stop it until the next Pi start. `PI_TMUX_DISABLED=1` keeps it off.
 
-The panel reads its agents from `sidebar/agents.py feed`, the sidebar's own agent view as one JSON line per second, so it shows the agents of the default tmux server.
+The panel reads its agents from `sidebar/agents.py feed`, the sidebar's own agent view as one JSON line per second, so it shows the agents of the default tmux server. If the feed stops, the panel starts it again a second later. When displays come or go, the panel moves to the screen with the notch, or to the top centre of the main screen when no notch shows (for example, with the lid closed).
 
 ### Adding rooms and workers
 
@@ -158,7 +158,7 @@ The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the re
 uv run -q -w pillow -w numpy python art/clean.py
 ```
 
-The script writes `web/assets/` and its `manifest.js`. The new room or worker appears the next time the panel starts.
+The script writes `web/assets/` and its `manifest.js`. The running panel keeps its old art: stop it as above, and the next Pi start shows the new room or worker.
 
 - **Room prompts:** a 16:9 pixel-art room seen straight on, like a dollhouse cross-section, with the floor in the bottom third and its middle clear. Ask for a plain dark navy backdrop around the room that reaches all four corners: the cleanup crops the room from that backdrop.
 - **Worker prompts:** a 2×2 sprite sheet of the same character at the same desk, in this cell order: typing (top left), asleep with a small Zzz (top right), one hand raised with a yellow `!` (bottom left), cheering with sparkles (bottom right). Use crisp 16-bit pixels on a flat pure magenta (`#FF00FF`) background, with no text or logos. Give the worker a bright blue shirt and hair that is not blue: the cleanup recolours the blue into six shirt colours. Avoid magenta props, which the cleanup removes with the background.

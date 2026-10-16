@@ -8,3 +8,9 @@ Coupled: components/tmux-sessions/notch/NotchShell.swift
 
 `draw()` refreshes the tooltip through `showTip()`, not `pointAt()`.
 Why: during a drag `pointAt()` calls `moveDrag()`, which redraws. Calling it from `draw()` recursed until the stack overflowed.
+
+## symbol:choices
+
+The keys `vibes`, `rooms`, `looks` and `positions`, and how each is keyed, are the format of `notch.json`. The shell stores the object as the page sends it.
+Why: the docs promise that other front ends can read the file. A renamed key also silently drops every saved choice, because the next load ignores the old key.
+Coupled: docs/tmux-sessions.md, components/tmux-sessions/notch/NotchShell.swift

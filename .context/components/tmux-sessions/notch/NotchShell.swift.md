@@ -6,6 +6,9 @@ Coupled: components/notify/scripts/focus-tmux.sh, components/tmux-sessions/scrip
 
 ## symbol:claimPanel
 
+A build is identified by `CommandLine.arguments[0]`. That is the absolute cache path `notch.sh` launches, and its file name carries the source hash.
+Why: if the same binary were launched by another path, it would look like another build and replace the running panel instead of exiting as a duplicate.
+
 Known residual risk: two starts of different builds within about 100 ms of each other, both racing to replace the same older panel, can leave the older of the two builds running. The next root pi start then replaces it.
 Why: builds have no order, only hashes, so a start cannot tell the newer build from the older one. Each start replaces only the panel it first saw, and steps aside when a rival takes over first. Without that rule, the two would kill each other in turn.
 Coupled: components/tmux-sessions/scripts/notch.sh, components/tmux-sessions/src/index.ts

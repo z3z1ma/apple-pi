@@ -43,19 +43,29 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		try? json.write(to: choicesFile, options: .atomic)
 	}
 
-	func applicationDidFinishLaunching(_: Notification) {
+	/// Move the panel to the top centre of the screen with a notch, or of the main screen when no notch shows (an external
+	/// display with the lid closed). Returns the geometry the page sizes its pill from, as a JavaScript object literal.
+	func place() -> String {
 		let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main!
 		let notchHeight = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 32
 		let left = screen.auxiliaryTopLeftArea?.width ?? 0
 		let right = screen.auxiliaryTopRightArea?.width ?? 0
 		let notchWidth = left > 0 ? screen.frame.width - left - right : 185
-		let size = NSSize(width: 1100, height: 500)
-		let frame = NSRect(
-			x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
-			width: size.width, height: size.height)
+		let size = panel.frame.size
+		panel.setFrame(
+			NSRect(
+				x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+				width: size.width, height: size.height),
+			display: true)
+		print("notch: \(Int(notchWidth))x\(Int(notchHeight)) on \(screen.localizedName)")
+		return "{notchWidth: \(notchWidth), notchHeight: \(notchHeight), width: \(size.width), height: \(size.height)}"
+	}
 
+	func applicationDidFinishLaunching(_: Notification) {
+		let size = NSSize(width: 1100, height: 500)
 		panel = NotchPanel(
-			contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+			contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
+			backing: .buffered, defer: false)
 		panel.isOpaque = false
 		panel.backgroundColor = .clear
 		panel.hasShadow = false
@@ -65,9 +75,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 
 		let config = WKWebViewConfiguration()
 		config.userContentController.add(self, name: "notch")
-		let geometry =
-			"window.notchGeometry = {notchWidth: \(notchWidth), notchHeight: \(notchHeight), width: \(size.width), height: \(size.height)};"
-		let startup = geometry + " window.notchState = \(savedChoices());"
+		let startup = "window.notchGeometry = \(place()); window.notchState = \(savedChoices());"
 		config.userContentController.addUserScript(
 			WKUserScript(source: startup, injectionTime: .atDocumentStart, forMainFrameOnly: true))
 		web = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: config)
@@ -82,8 +90,13 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 			self?.track()
 			return event
 		}
+		NotificationCenter.default.addObserver(
+			forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+		) { [weak self] _ in
+			guard let self else { return }
+			self.web.evaluateJavaScript("window.notch?.geometry?.(\(self.place()))")
+		}
 		startFeed()
-		print("notch: \(Int(notchWidth))x\(Int(notchHeight)) on \(screen.localizedName)")
 	}
 
 	/// Let clicks reach the panel only inside the shape the page reports; tell the page when the pointer enters or leaves it,
@@ -129,7 +142,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		try? process.run()
 	}
 
-	/// The feed holds only the pipe's write end, so it dies of a broken pipe within a second of this shell exiting.
+	/// The feed holds only the pipe's write end, so it dies of a broken pipe within a second of this shell exiting. A feed that
+	/// exits while the shell runs is started again a second later; the page keeps showing the last agents meanwhile.
 	func startFeed() {
 		let process = Process()
 		process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -138,8 +152,17 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		process.standardOutput = pipe
 		pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
 			let chunk = handle.availableData
+			// End of file: without detaching, the handler would be called again and again.
+			if chunk.isEmpty {
+				handle.readabilityHandler = nil
+				return
+			}
 			DispatchQueue.main.async { self?.consume(chunk) }
 		}
+		process.terminationHandler = { [weak self] _ in
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.startFeed() }
+		}
+		feedBuffer = Data()
 		try? process.run()
 		feed = process
 	}
