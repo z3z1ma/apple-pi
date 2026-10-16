@@ -16,7 +16,7 @@ Round 1 ([README](../explain-change/README.md)) plus the operator's answers (202
 ## How the build works
 
 - The tool still returns at once with the saved page's path; nothing comes back to the agent. The page server stays up after the tool returns, until the page closes or the session ends, so the sidebar can talk to the agent. Without a live session the sidebar says so and the rest of the page works.
-- Each tutor turn is a read-only fork of the live conversation, as `ask` is: it shares the request prefix, can read the repository, and sees the explanation, the reader's quiz answers, and the thread so far. A Socratic frame tells it to ask one question at a time, use hints before answers, and cite steps.
+- Each tutor turn is a read-only fork of the live conversation, as *Ask the agent* on the review pages is: it shares the request prefix, can read the repository, and sees the explanation, the reader's quiz answers, and the thread so far. A Socratic frame tells it to ask one question at a time, use hints before answers, and cite steps.
 - The saved page keeps the thread, so a later read shows the questions and answers.
 
 ## Contract changes
@@ -35,4 +35,6 @@ Round 1 ([README](../explain-change/README.md)) plus the operator's answers (202
 ## Questions for the verdict
 
 1. **Pop out.** This reads "pop out" as a sidebar that slides out from the edge, plus a button that detaches it into its own window. Is that what you meant, and is the detached window worth building?
-2. **Back to the agent.** The settled decision is that nothing returns. The thread and quiz misses show what the reader found hard. Keep returning nothing, or write a short note (misses and topics asked) into the session when the page closes?
+2. **Back to the agent.** The [settled decision](../../task.md#settled-decisions) is that nothing returns. The thread and quiz misses show what the reader found hard. Keep returning nothing, or write a short note (misses and topics asked) into the session when the page closes?
+
+Next: the operator's verdict on round 2 and these answers, then the build of `explain_change` ([task.md](../../task.md), Next).
