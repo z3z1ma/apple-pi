@@ -1,12 +1,13 @@
 import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
-import { describe, expect, it, vi } from "vitest";
+import { KeybindingsManager, stripTerminalSequences, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
+import { describe, expect, it } from "vitest";
 import type { FooterSnapshot } from "../src/index.js";
 import { collectInputCardSnapshot, InputCardEditor, renderInputCard } from "../src/index.js";
 import { CacheHitRateTracker } from "../src/ui/input-editor.js";
 
 const colorCodes: Record<string, number> = {
 	accent: 35,
+	bashMode: 33,
 	dim: 90,
 	muted: 36,
 	syntaxType: 96,
@@ -223,15 +224,6 @@ describe("input editor rendering", () => {
 		expect(output.at(-1)).not.toContain("hit");
 	});
 
-	it("does not render any bottom rail or former Starship footer", () => {
-		const output = stripTerminalSequences(renderInputCard(completeSnapshot, theme, 240, ["hello"]).join("\n"));
-		expect(output).not.toContain("~/project");
-		expect(output).not.toContain("on ⑂ main");
-		expect(output).not.toContain("$0.42");
-		expect(output).not.toContain("running agents");
-		expect(output.split("\n").some((line) => /^─+$/.test(line))).toBe(false);
-	});
-
 	it.each(["openai", "openai-codex", "xai"])(
 		"shows fast mode beside thinking for %s without adding a status",
 		(provider) => {
@@ -263,8 +255,10 @@ describe("input editor rendering", () => {
 
 	it("switches rail color to bashMode when prompt begins with shell exclamation", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 80, ["!git status"]);
-		expect(lines[0]).toContain("│");
+		expect(lines[0]).toContain(theme.fg("bashMode", "│"));
 		expect(lines[1]).toContain("!git status");
+		const normal = renderInputCard(completeSnapshot, theme, 80, ["git status"]);
+		expect(normal[0]).toContain(theme.fg("accent", "│"));
 	});
 
 	it("renders top and bottom borders only when viewport indicators exist", () => {
@@ -280,18 +274,33 @@ describe("input editor rendering", () => {
 		expect(scrolled.at(-1)).toContain("↓ 2 more");
 	});
 
-	it("delegates editor input to Pi's native CustomEditor handler", () => {
+	it("preserves native text editing and submission inside the custom frame", () => {
 		const { ctx, data } = contextFor();
 		const tui = { terminal: { rows: 24 }, requestRender: () => {} } as never;
 		const editorTheme = { borderColor: (text: string) => text, selectList: {} } as never;
-		const editor = new InputCardEditor(ctx, tui, editorTheme, {} as never, data, theme);
-		const nativeHandler = vi
-			.spyOn(Object.getPrototypeOf(InputCardEditor.prototype), "handleInput")
-			.mockImplementation(() => {});
-
-		editor.handleInput("hello");
-		expect(nativeHandler).toHaveBeenCalledWith("hello");
-		nativeHandler.mockRestore();
+		const editor = new InputCardEditor(
+			ctx,
+			tui,
+			editorTheme,
+			new KeybindingsManager(TUI_KEYBINDINGS, {}) as never,
+			data,
+			theme,
+		);
+		let submitted: string | undefined;
+		editor.onSubmit = (text) => {
+			submitted = text;
+		};
+		try {
+			editor.handleInput("hello");
+			editor.handleInput("\u007f");
+			editor.handleInput("!");
+			expect(editor.getText()).toBe("hell!");
+			expect(editor.render(80).map(stripTerminalSequences).join("\n")).toContain("│ hell!");
+			editor.handleInput("\r");
+			expect(submitted).toBe("hell!");
+		} finally {
+			editor.dispose();
+		}
 	});
 });
 

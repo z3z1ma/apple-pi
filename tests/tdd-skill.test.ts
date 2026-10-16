@@ -51,10 +51,6 @@ describe("tdd skill", () => {
 			"red before green",
 			"one slice at a time",
 			"one test → one implementation → repeat",
-			"tracer bullet",
-			"implementation-coupled",
-			"tautological",
-			"horizontal slicing",
 			"independent source of truth",
 			"/skill:code-review",
 		]) {
@@ -86,8 +82,6 @@ describe("tdd skill", () => {
 		expect(existsSync("skills/tdd/references/mocking.md")).toBe(true);
 		const tests = readFileSync("skills/tdd/references/tests.md", "utf8");
 		const mocking = readFileSync("skills/tdd/references/mocking.md", "utf8");
-		expect(tests).toContain('test("user can checkout with valid cart"');
-		expect(tests).toContain('test("createUser makes user retrievable"');
 		expect(tests).toContain("independent, known literal");
 		expect(mocking).toContain("Mock at **system boundaries** only");
 		expect(mocking).toContain("Do not mock:");

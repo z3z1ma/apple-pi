@@ -1299,19 +1299,6 @@ describe("pi_exec tool", () => {
 		}
 	});
 
-	it("does not advertise JavaScript saved programs under the Python runtime", () => {
-		const dir = mkdtempSync(join(tmpdir(), "apple-pi-no-js-program-"));
-		try {
-			mkdirSync(join(dir, ".pi", "programs"), { recursive: true });
-			writeFileSync(join(dir, ".pi", "programs", "legacy.js"), "/** @description Legacy */\nreturn 1;");
-			const { tools, emit } = register();
-			emit("session_start", {}, { cwd: dir });
-			expect(tools.get("program_legacy")).toBeUndefined();
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
 	it("scales the Python call envelope within package maxima", () => {
 		const gather = "import asyncio\nawait asyncio.gather(read(path='a'), read(path='b'))";
 		expect(deriveProgramEnvelope(gather).concurrency).toBe(16);

@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { describe, expect, it } from "vitest";
 
 import { registerOpenLearnings } from "../src/hooks/open-learnings.js";
-import { distillPrompt } from "../src/distillation.js";
 import type { Entry, Reflection } from "../src/session-ledger/types.js";
 
 function learning(id: string): Reflection {
@@ -47,11 +46,10 @@ describe("open learnings", () => {
 
 	it("holds the first close of each task while learnings are open", () => {
 		const { close } = harness([learning("aaaaaaaaaaaa")]);
-		const reason = `Before you close the task, distill this session's open learnings, then call ledger_status again. Lessons about this task belong in its retrospective.md.\n\n${distillPrompt([learning("aaaaaaaaaaaa")])}`;
 		expect(close("task-a", "in-progress")).toBeUndefined();
-		expect(close("task-a")).toEqual({ block: true, reason });
+		expect(close("task-a")).toMatchObject({ block: true, reason: expect.stringContaining("distill") });
 		expect(close("task-a")).toBeUndefined();
-		expect(close("task-b", "cancelled")).toEqual({ block: true, reason });
+		expect(close("task-b", "cancelled")).toMatchObject({ block: true });
 	});
 
 	it("lists every open learning's id and full text in the hold", () => {

@@ -5,7 +5,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import runtime from "../src/index.js";
 import { sealCheckpoint } from "../src/checkpoint.js";
-import { isOwnedMontyWorker } from "../src/program.js";
+import { createProgramSession, isOwnedMontyWorker } from "../src/program.js";
 
 function harness(manager: SessionManager) {
 	const tools = new Map<string, any>();
@@ -236,12 +236,20 @@ describe("pi_exec Monty session tree", () => {
 		}
 	});
 
-	it("strictly validates worker process ownership before any signal can be dispatched", async () => {
+	it("accepts only a live Monty worker owned by this process as a kill target", async () => {
 		expect(isOwnedMontyWorker(undefined)).toBe(false);
 		expect(isOwnedMontyWorker(-1)).toBe(false);
 		expect(isOwnedMontyWorker(0)).toBe(false);
 		expect(isOwnedMontyWorker(1)).toBe(false); // PID 1 (init/launchd)
 		expect(isOwnedMontyWorker(process.pid)).toBe(false); // Our own process (not a child subprocess)
 		expect(isOwnedMontyWorker(999_999_999)).toBe(false); // Non-existent PID
+		const live = await createProgramSession("");
+		const pid = live.session.workerPid;
+		try {
+			expect(isOwnedMontyWorker(pid)).toBe(true);
+		} finally {
+			await live.close();
+		}
+		expect(isOwnedMontyWorker(pid)).toBe(false);
 	});
 });

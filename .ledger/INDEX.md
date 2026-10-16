@@ -12,3 +12,4 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
+- `.ledger/202610160804-audit-vitest-tests-for-observable-behavior-value/task.md` — in-progress — Audit Vitest tests for observable behavior value — Review the Vitest suite for vacuous assertions, implementation locks, duplicated coverage, and non-observable negatives; produce evidence-backed removal and rewrite recommendations.

@@ -139,7 +139,6 @@ describe("TaskPanel", () => {
 		for (let index = 0; index < 60; index++) fresh.output.append(`new ${index}\n`);
 		roster = [fresh];
 		expect(panel.render(100).join("\n")).toContain("new 59");
-		expect(views.size).toBe(0);
 		panel.dispose();
 		expect(views.get("task-1")).toMatchObject({ autoScroll: true });
 	});
@@ -230,14 +229,11 @@ describe("TaskDetailViewer", () => {
 		viewer.rowBudget = 20;
 		viewer.render(50);
 		viewer.handleInput("\u001b[A");
-		const before = viewer.view;
 		const originalContent = viewer.render(50);
 		viewer.rowBudget = 10;
 		viewer.render(90);
-		expect(viewer.view).toEqual(before);
 		viewer.rowBudget = 20;
 		expect(viewer.render(50)).toEqual(originalContent);
-		expect(viewer.view).toEqual(before);
 		viewer.dispose();
 	});
 

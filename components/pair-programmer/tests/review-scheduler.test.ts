@@ -465,7 +465,7 @@ describe("PairReviewScheduler", () => {
 	it("rolls back a lease when the permit fails", () => {
 		const h = harness();
 		h.scheduler.observe(toolTurn(1, "read"));
-		const permit = h.take();
+		h.take();
 		h.scheduler.complete({
 			outcome: "failed",
 			lease: { attention: "relaxed", wakeOn: ["verification"] },
@@ -474,8 +474,6 @@ describe("PairReviewScheduler", () => {
 		expect([...h.scheduler.snapshot().wakeOn]).toEqual([...DEFAULT_PAIR_WAKE_ON]);
 		expect(h.scheduler.snapshot().pendingItems).toBe(1);
 		expect(h.scheduler.takePermit()).toBeUndefined();
-		h.scheduler.complete({ outcome: "ok" });
-		expect(permit.reviewId).toBe(permit.reviewId);
 	});
 
 	it("does not tight-loop a failed permit without new evidence or a timer", () => {

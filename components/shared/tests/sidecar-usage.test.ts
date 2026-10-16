@@ -10,9 +10,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 
 import {
-	buildSidecarUsageRecord,
 	recordSidecarUsage,
-	SIDECAR_USAGE_MAX_BYTES,
 	SIDECAR_USAGE_RECORD_KEYS,
 	safeSidecarUsageSessionId,
 	sidecarUsageRelativePath,
@@ -188,59 +186,6 @@ describe("sidecar usage records", () => {
 		expect(rows[0]).toMatchObject({ input: 3, cacheRead: 8, output: 1, cost: 0.1 });
 	});
 
-	it("aggregates into the baseline table columns", () => {
-		const records = [
-			buildSidecarUsageRecord({
-				agent: "pair",
-				trigger: "turn_end",
-				status: "stop",
-				provider: "anthropic",
-				model: "claude-opus-5",
-				input: 100,
-				cacheRead: 50,
-				output: 10,
-				cost: 1.5,
-			}),
-			buildSidecarUsageRecord({
-				agent: "consultant",
-				trigger: "consultation",
-				status: "stop",
-				provider: "openai-codex",
-				model: "gpt-5.6-luna",
-				input: 20,
-				cacheRead: 5,
-				output: 2,
-				cost: 0.01,
-			}),
-			buildSidecarUsageRecord({
-				agent: "pair",
-				trigger: "turn_end_replay",
-				status: "length",
-				provider: "anthropic",
-				model: "claude-opus-5",
-				input: 80,
-				cacheRead: 10,
-				output: 0,
-				cost: 0.5,
-			}),
-		];
-		const table = new Map<string, { calls: number; input: number; cacheRead: number; output: number; cost: number }>();
-		for (const record of records) {
-			const key = `${record.provider}/${record.model}`;
-			const row = table.get(key) ?? { calls: 0, input: 0, cacheRead: 0, output: 0, cost: 0 };
-			row.calls += 1;
-			row.input += record.input;
-			row.cacheRead += record.cacheRead;
-			row.output += record.output;
-			row.cost += record.cost;
-			table.set(key, row);
-		}
-		expect(Object.fromEntries(table)).toEqual({
-			"anthropic/claude-opus-5": { calls: 2, input: 180, cacheRead: 60, output: 10, cost: 2 },
-			"openai-codex/gpt-5.6-luna": { calls: 1, input: 20, cacheRead: 5, output: 2, cost: 0.01 },
-		});
-	});
-
 	it("sanitizes session ids and extracts usage.cost.total", () => {
 		expect(safeSidecarUsageSessionId(" session/../id:value ")).toBe("session_.._id_value");
 		expect(sidecarUsageRelativePath("---")).toBe(join("sidecar-usage", "unscoped.ndjson"));
@@ -251,6 +196,5 @@ describe("sidecar usage records", () => {
 			output: 2,
 			cost: 0.4,
 		});
-		expect(SIDECAR_USAGE_MAX_BYTES).toBeGreaterThan(0);
 	});
 });

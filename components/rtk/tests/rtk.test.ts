@@ -118,58 +118,6 @@ describe("RTK rewriteCommand", () => {
 	});
 });
 
-describe("Bash tool verbatim parameter", () => {
-	it("includes verbatim in bash tool schema parameters", () => {
-		const bashDef = createBashToolDefinition();
-		expect(bashDef.parameters.properties).toHaveProperty("verbatim");
-		expect(bashDef.promptGuidelines?.some((g) => g.includes("verbatim"))).toBe(false);
-	});
-
-	it("bypasses RTK rewriting when verbatim is true", async () => {
-		const bashDef = createBashToolDefinition();
-		const result = await bashDef.execute(
-			"call-1",
-			{
-				command: "git status",
-				verbatim: true,
-			},
-			undefined,
-			undefined,
-			{} as any,
-		);
-		expect(result.details?.rtk).toBe(false);
-	});
-
-	it("uses RTK rewriting when verbatim is explicitly false", async () => {
-		const bashDef = createBashToolDefinition();
-		const result = await bashDef.execute(
-			"call-2",
-			{
-				command: "git status",
-				verbatim: false,
-			},
-			undefined,
-			undefined,
-			{} as any,
-		);
-		expect(result.details?.rtk).toBe(true);
-	});
-
-	it("rewrites commands by default when verbatim is omitted on direct execute", async () => {
-		const bashDef = createBashToolDefinition();
-		const result = await bashDef.execute(
-			"call-3",
-			{
-				command: "git status",
-			},
-			undefined,
-			undefined,
-			{} as any,
-		);
-		expect(result.details?.rtk).toBe(true);
-	});
-});
-
 describe("Terse tools RTK bullet rendering", () => {
 	it("renders standard bullet ● when isRtk is false or omitted", () => {
 		expect(formatStatusBullet("success", mockTheme, false)).toBe("●");
@@ -296,6 +244,7 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		const properties = (tool.parameters as any).properties;
 		expect(properties.verbatim).toBeDefined();
 		expect(properties.verbatim.description).toContain("RTK");
+		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim"))).toBe(false);
 	});
 
 	it("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {

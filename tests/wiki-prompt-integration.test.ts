@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
+import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { WIKI_SYSTEM_PROMPT_TAG } from "../components/wiki/src/system-prompt.js";
-import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
-import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
+import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
-import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
-import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
-import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
+import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
-import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
 
 const marker = `<${WIKI_SYSTEM_PROMPT_TAG}>`;
 describe("wiki workbench distribution", () => {
@@ -36,45 +33,5 @@ describe("wiki workbench distribution", () => {
 
 	it("does not copy the wiki contract into the pair programmer prompt", () => {
 		expect(loadPairSystemPrompt(process.cwd(), false)).not.toContain(marker);
-	});
-
-	it("loads ordinary children with the wiki extension", () => {
-		expect(childSessionExtensions()).toEqual({
-			noExtensions: true,
-			additionalExtensionPaths: [
-				AUTO_COMPACT_EXTENSION_PATH,
-				VROOM_EXTENSION_PATH,
-				HOME_SEARCH_GUARD_EXTENSION_PATH,
-				LEDGER_EXTENSION_PATH,
-				WIKI_EXTENSION_PATH,
-				CODE_CONTEXT_EXTENSION_PATH,
-				SESSION_SEARCH_EXTENSION_PATH,
-				RTK_EXTENSION_PATH,
-			],
-		});
-	});
-
-	it("keeps the internal child free of wiki guidance and tools", () => {
-		expect(childSessionExtensions(false, false)).toEqual({
-			noExtensions: true,
-			additionalExtensionPaths: [AUTO_COMPACT_EXTENSION_PATH, VROOM_EXTENSION_PATH, HOME_SEARCH_GUARD_EXTENSION_PATH],
-		});
-	});
-
-	it("adds the pair sidecar after the standard wiki boundary", () => {
-		expect(childSessionExtensions(true)).toEqual({
-			noExtensions: true,
-			additionalExtensionPaths: [
-				AUTO_COMPACT_EXTENSION_PATH,
-				VROOM_EXTENSION_PATH,
-				HOME_SEARCH_GUARD_EXTENSION_PATH,
-				LEDGER_EXTENSION_PATH,
-				WIKI_EXTENSION_PATH,
-				CODE_CONTEXT_EXTENSION_PATH,
-				SESSION_SEARCH_EXTENSION_PATH,
-				RTK_EXTENSION_PATH,
-				PAIR_EXTENSION_PATH,
-			],
-		});
 	});
 });

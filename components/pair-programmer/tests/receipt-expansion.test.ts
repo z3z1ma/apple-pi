@@ -58,12 +58,6 @@ describe("pair receipt expansion", () => {
 		const tool = createExpandReceiptTool(storeWith(new Set(["e1"])));
 		expect(tool.name).toBe(EXPAND_RECEIPT_TOOL_NAME);
 		expect(Object.keys(tool.parameters.properties)).toEqual(["id"]);
-		expect(tool.parameters.properties).not.toHaveProperty("path");
-		expect(tool.parameters.properties).not.toHaveProperty("query");
-		expect(tool.parameters.properties).not.toHaveProperty("branch");
-		expect(tool.parameters.properties).not.toHaveProperty("scope");
-		expect(tool.parameters.properties).not.toHaveProperty("offset");
-		expect(tool.parameters.properties).not.toHaveProperty("limit");
 		const guidance = tool.promptGuidelines?.join("\n") ?? "";
 		expect(guidance).toContain("could materially affect your judgment");
 		expect(guidance).toContain("leave irrelevant receipts folded");
@@ -88,7 +82,6 @@ describe("pair receipt expansion", () => {
 		present(store, first);
 		const page = pageBody(await expand(store, first), ["e1"]);
 		expect(page.body).toBe("original");
-		expect(page.body).not.toContain("ignored later snapshot");
 	});
 
 	it("keeps issued snapshots immutable after the caller mutates its object", async () => {
@@ -426,7 +419,6 @@ describe("pair receipt expansion", () => {
 			expect(rendered).toContain("look\n[image]");
 			expect(rendered).toMatch(/\[image]\nreceipt: [0-9a-f]{32}/);
 			expect(rendered).not.toContain(secret);
-			expect(rendered).toMatch(/receipt: [0-9a-f]{32}/);
 		}
 
 		const requests = collectRecentUserRequests(entries);

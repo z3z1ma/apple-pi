@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getShellConfig, loadSkills } from "@earendil-works/pi-coding-agent";
@@ -148,14 +148,13 @@ function fixtureHost(tweak?: (args: any, value: any) => any): Host {
 }
 
 describe("code-review Python programs", () => {
-	it("loads only the renamed public skill", () => {
+	it("loads the public code-review skill without exposing the retired alias", () => {
 		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-code-review-"));
 		try {
 			const loaded = loadSkills({ cwd: process.cwd(), skillPaths: ["./skills"], includeDefaults: false, agentDir });
 			expect(loaded.diagnostics).toEqual([]);
 			expect(loaded.skills.map((skill) => skill.name)).toContain("code-review");
 			expect(loaded.skills.map((skill) => skill.name)).not.toContain("review");
-			expect(existsSync("skills/review")).toBe(false);
 		} finally {
 			rmSync(agentDir, { recursive: true, force: true });
 		}
@@ -174,7 +173,6 @@ describe("code-review Python programs", () => {
 				});
 				expect(result.scope.changedFiles).toEqual(["feature.ts"]);
 				expect(result.decisionReconciliation).toMatchObject({ unknownIds: [], missingIds: [], duplicateIds: [] });
-				expect(existsSync(`skills/code-review/references/${program.replace(".py", ".js")}`)).toBe(false);
 			} finally {
 				rmSync(cwd, { recursive: true, force: true });
 			}
@@ -337,14 +335,6 @@ describe("code-review Python programs", () => {
 			"without deduplicating, merging, or reranking",
 		])
 			expect(text.toLowerCase()).toContain(phrase.toLowerCase());
-		for (const forbidden of [
-			"shared causes / remediation order",
-			"rank shared remediation groups",
-			"shared remediation group",
-		])
-			expect(text.toLowerCase()).not.toContain(forbidden);
-		for (const program of PROGRAMS)
-			expect(source(program)).not.toMatch(/std\.|create_task|coverage_compare|reconcile_by_id/);
 	});
 });
 

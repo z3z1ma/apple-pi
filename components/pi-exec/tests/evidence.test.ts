@@ -5,13 +5,7 @@ import { join } from "node:path";
 import * as pi from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import runtime from "../src/index.js";
-import {
-	containsContextMarks,
-	EVIDENCE_FUNCTION_NAMES,
-	evidencePythonStubs,
-	fitContext,
-	runEvidenceFunction,
-} from "../src/evidence.js";
+import { containsContextMarks, fitContext, runEvidenceFunction } from "../src/evidence.js";
 
 vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
 	const actual = await importOriginal<typeof pi>();
@@ -251,9 +245,7 @@ describe("public evidence library", () => {
 		}
 	});
 
-	it("has no coverage or reconcile guest functions", async () => {
-		expect(evidencePythonStubs()).not.toMatch(/coverage|reconcile/);
-		expect(EVIDENCE_FUNCTION_NAMES).not.toContain("coverage_compare");
-		await expect(call("reconcile_by_id")).rejects.toThrow("Unknown evidence function");
+	it("rejects an unknown evidence function name", async () => {
+		await expect(call("not_an_evidence_function")).rejects.toThrow("Unknown evidence function");
 	});
 });

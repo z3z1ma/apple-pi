@@ -326,25 +326,6 @@ describe("pair programmer notebook compaction trigger", () => {
 		expect(runtime.compactInFlight).toBe(false);
 	});
 
-	it("uses raw progress when provider growth is lower than the raw threshold", async () => {
-		const { handler } = captureHandler({ compactAfterTokens: 3 });
-		const branch = [
-			compactionEntry("cmp-1", { firstKeptEntryId: "raw-1" }),
-			rawMessage("assistant-1", "done", {
-				message: { role: "assistant", content: "done", stopReason: "end_turn", usage: { totalTokens: 100 } },
-			}),
-			textCustomMessage("raw-1", "aaaaaaaaaaaa"),
-		];
-		const ctx = fakeCtx([branch], {
-			getContextUsage: vi.fn(() => ({ tokens: 101, contextWindow: 200000 })),
-		});
-
-		handler(agentSettled(), ctx);
-		await vi.runAllTimersAsync();
-
-		expect(ctx.compact).toHaveBeenCalledTimes(1);
-	});
-
 	it("uses raw progress from the first kept entry through the current branch", async () => {
 		const { handler } = captureHandler({ compactAfterTokens: 3 });
 		const branch = [
@@ -400,7 +381,7 @@ describe("pair programmer notebook compaction trigger", () => {
 		expect(ctx.compact).not.toHaveBeenCalled();
 	});
 
-	it("compacts when raw progress equals the threshold", async () => {
+	it("compacts at the raw threshold even when provider growth is lower", async () => {
 		const { handler } = captureHandler({ compactAfterTokens: 3 });
 		const branch = [
 			compactionEntry("cmp-1", { firstKeptEntryId: "raw-1" }),

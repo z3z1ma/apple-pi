@@ -85,11 +85,9 @@ describe("pair programmer notebook compaction packet", () => {
 		expect(buildNotebookPacket(withRetirement)).toBeUndefined();
 	});
 
-	it("persists the packet once per compaction and never touches the request context", () => {
+	it("persists the current packet as a hidden steer after compaction and skips an empty notebook", () => {
 		const { pi, handlers, messages } = captureExtension();
 		registerNotebookCompactionPacket(pi);
-
-		expect([...handlers.keys()]).toEqual(["session_compact"]);
 
 		handlers.get("session_compact")!({ type: "session_compact" }, contextFor(entries));
 		expect(messages).toEqual([
