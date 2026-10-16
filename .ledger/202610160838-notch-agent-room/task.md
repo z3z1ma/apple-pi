@@ -74,6 +74,8 @@ Prototype 2 runs in the notch with live agents and is waiting for the operator's
 
 Not yet checked: how it feels in the real notch, and whether the `!` reads at a glance at this size.
 
+Next: get the operator's verdict. Candidate follow-ups are larger state markers drawn in code, a generated room theme for each tmux session, and a narrower panel when there are two or more sessions (about 1000 pt wide now).
+
 ## Outcome
 
 Pending.

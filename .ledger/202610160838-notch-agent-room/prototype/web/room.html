@@ -49,8 +49,8 @@ const roomsEl = document.getElementById("rooms");
 const label = { waiting: "needs you", done: "done", working: "working", quiet: "quiet" };
 const order = { waiting: 0, done: 1, working: 2, quiet: 3 };
 const STATES = Object.keys(order);
-const VARIANTS = 6;
-// Room art is 250×140 art pixels; agents stand on the floor between these x bounds, in two staggered rows.
+const VARIANTS = 6; // one per HOODIE_HUES entry in assets/clean.py
+// Room art is 250×140 art pixels (the room.png that assets/clean.py writes); agents stand on the floor between these x bounds, in two staggered rows.
 const ART = { w: 250, h: 140, floorLeft: 62, floorRight: 222, backRow: 116, frontRow: 130 };
 document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}px`);
 
@@ -123,9 +123,8 @@ function renderRooms() {
 		const byId = new Map(agents.map((a) => [a.id, a]));
 		for (const room of roomsEl.querySelectorAll(".room")) {
 			for (const p of room.placed) p.agent = byId.get(p.agent.id);
-			drawRoom(room.querySelector("canvas"), room.placed, scale * dpr);
 		}
-		return;
+		return redrawRooms();
 	}
 	roomsEl.dataset.signature = signature;
 	roomsEl.innerHTML = "";
@@ -140,10 +139,9 @@ function renderRooms() {
 		room.append(canvas);
 		room.insertAdjacentHTML("beforeend", `<span class="plaque">${esc(name)}</span>`);
 		roomsEl.append(room);
-		const placed = place(group);
-		drawRoom(canvas, placed, scale * dpr);
-		room.placed = placed;
+		room.placed = place(group);
 		room.scale = scale;
+		drawRoom(room);
 		canvas.onmousemove = (event) => hoverAgent(room, event);
 		canvas.onmouseleave = () => room.querySelector(".tip")?.remove();
 		canvas.onclick = (event) => {
@@ -153,17 +151,20 @@ function renderRooms() {
 	}
 }
 
-function drawRoom(canvas, placed, pixel) {
-	const ctx = canvas.getContext("2d");
+function drawRoom(room) {
+	const ctx = room.querySelector("canvas").getContext("2d");
+	const pixel = room.scale * (window.devicePixelRatio || 1);
 	ctx.imageSmoothingEnabled = false;
 	ctx.setTransform(pixel, 0, 0, pixel, 0, 0);
 	ctx.drawImage(roomArt, 0, 0);
-	[...placed].sort((a, b) => a.y - b.y).forEach((p, i) => {
+	[...room.placed].sort((a, b) => a.y - b.y).forEach((p, i) => {
 		const img = sprites[`${p.agent.state}-${variantOf(p.agent.id)}`];
 		p.box = { x: Math.round(p.x - img.width / 2), y: p.y - img.height, w: img.width, h: img.height };
 		ctx.drawImage(img, p.box.x, p.box.y + bob(p.agent.state, i));
 	});
 }
+
+const redrawRooms = () => roomsEl.querySelectorAll(".room").forEach(drawRoom);
 
 function hitTest(room, event) {
 	const rect = event.target.getBoundingClientRect();
@@ -215,8 +216,7 @@ function focusAgent(agent) {
 setInterval(() => {
 	if (!open || !roomArt) return;
 	tick++;
-	const dpr = window.devicePixelRatio || 1;
-	for (const room of roomsEl.querySelectorAll(".room")) drawRoom(room.querySelector("canvas"), room.placed, room.scale * dpr);
+	redrawRooms();
 }, 250);
 
 window.notch = {
