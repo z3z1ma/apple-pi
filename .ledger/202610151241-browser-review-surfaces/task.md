@@ -64,8 +64,8 @@ In progress. Built and committed: `review_code` (slices 1–2), `review_markdown
 
 Next:
 
-1. Operator tries `review_markdown` and `review_ledger_task` on real work.
-2. Design pass 3: `explain_change` (background, intuition, literate walkthrough with real code, figures, quiz; no feedback), then its operator verdict and build.
+1. Operator tries `review_markdown` and `review_ledger_task` on real work (dogfood on this task: approved without annotations; it listed the five prototype READMEs as not opened).
+2. Design pass 3: `explain_change` [round 1 prototype](prototypes/explain-change/README.md) (summary, background with primer, intuition with sandboxed figures and diagrams, literate walkthrough over real git lines, an "also changed" list, quiz, print) awaits the operator's verdict; then build.
 
 ## Outcome
 
