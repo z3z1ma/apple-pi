@@ -1,13 +1,13 @@
 # Ledger task review, round 1
 
-Prototype of `review_ledger_task`. Open `index.html` in a browser (it loads `marked` from jsDelivr). Two real closed bundles are embedded: `branch-search-challenger-benchmark` (four tickets, two roots that merge, 61 evidence files) and `monty-pi-exec` (plan and six tickets). The bar at the bottom switches the bundle, the moment of the review (tickets just written, or mid-flight), and a broken ticket graph.
+Prototype of `review_ledger_task`: one tool call opens a whole ledger task bundle in the browser, so the user can review the spec or plan, the tickets, and their order before the agent continues, and sign off. Open `index.html` in a browser (it loads `marked` from jsDelivr). Two real closed bundles are embedded: `branch-search-challenger-benchmark` (four tickets, two roots that merge, 61 evidence files) and `monty-pi-exec` (plan and six tickets). The bar at the bottom switches the bundle, the moment of the review (tickets just written, or mid-flight), and a broken ticket graph.
 
 ## The design
 
 - **The reader is `review_markdown`.** Every Markdown file in the bundle gets the same paper column, selection toolbar, whole-block comments and rewrites, ask the agent, and highlights. Nothing new to learn.
 - **The left rail is the bundle.** Overview, `task.md`, the spec or plan, `tickets/` (number, title, criteria done, status dot), `retrospective.md`, then evidence folders, collapsed with file counts. The open document's sections nest under it, with scroll-spy, so the tree replaces the outline.
 - **The overview leads with the shape of the work:** the task's Intent, then the ticket graph. Columns follow dependency depth; arrows run from blocker to blocked. Tickets that can start now carry a blue ring and are listed under the graph. Hover a ticket to light what it waits on and what waits on it; click it to open it.
-- **Graph checks** come from the `to-tickets` rules: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, no ticket that can start. They show above the graph and as red edges; they warn, they do not block.
+- **Graph checks** come from the `to-tickets` rules: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, no ticket that can start. They show above the graph, and cycle and out-of-order edges turn red; they warn, they do not block.
 - **A ticket opens with its neighbourhood:** blocked by → this ticket → unblocks, each a link.
 - **Evidence files** (JSON, logs) open in a line-numbered view and take annotations like any document. The live page reads them from disk only when opened, so a 3 MB, 100-file bundle stays fast. The saved page keeps the Markdown and every evidence file the reviewer opened.
 - **Finish review** counts annotations per file and lists the documents not yet opened, as the code review lists unseen hunks.
