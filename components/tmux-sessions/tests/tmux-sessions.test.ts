@@ -193,6 +193,89 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 	else process.env.TMUX_PANE = previousPane;
 });
 
+/**
+ * Start one Pi process in a fake tmux pane on the given OS and open each root session in turn, as `/new` or a resume
+ * would; `notch` answers the notch launcher's exec.
+ */
+async function startPiOn(
+	os: NodeJS.Platform,
+	sessionIds: string | string[],
+	notch: (command: string, args: string[]) => Promise<unknown>,
+	statusRefreshes: string[] = [],
+) {
+	const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+	const previousPane = process.env.TMUX_PANE;
+	process.env.TMUX_PANE = "%80";
+	Object.defineProperty(process, "platform", { value: os });
+	const handlers = new Map<string, (...args: unknown[]) => unknown>();
+	const pi = {
+		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
+		registerCommand() {},
+		getSessionName: () => "",
+		async exec(command: string, args: string[]) {
+			if (command.endsWith("notch.sh")) return notch(command, args);
+			if (args[0] === "-c") return { code: 0, stdout: "tmux\n", stderr: "" };
+			if (args[0] === "display-message") return { code: 0, stdout: "%80\t@5\t/dev/null\n", stderr: "" };
+			if (args[0] === "run-shell" && args[1] === "-b") statusRefreshes.push(args[2]);
+			return { code: 0, stdout: "", stderr: "" };
+		},
+	};
+	try {
+		registerTmuxSessions(pi as never);
+		for (const sessionId of [sessionIds].flat()) {
+			const ctx = {
+				mode: "tui",
+				cwd: "/tmp/project",
+				isIdle: () => true,
+				sessionManager: { getSessionId: () => sessionId },
+			};
+			handlers.get("session_start")?.({ reason: "startup" }, ctx);
+			await flushUntil(async () => (await readAllStates()).some((record) => record.sessionId === sessionId));
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+	} finally {
+		Object.defineProperty(process, "platform", platform);
+		if (previousPane === undefined) delete process.env.TMUX_PANE;
+		else process.env.TMUX_PANE = previousPane;
+	}
+	return handlers;
+}
+
+test("each root Pi session start in tmux starts the notch panel on macOS and nowhere else", async () => {
+	const starts: string[][] = [];
+	const notch = async (command: string, args: string[]) => {
+		starts.push([command, ...args]);
+		return { code: 0, stdout: "", stderr: "" };
+	};
+	const start = [expect.stringMatching(/components\/tmux-sessions\/scripts\/notch\.sh$/), "start"];
+
+	await startPiOn("darwin", ["session-notch-mac", "session-notch-mac-new"], notch);
+	await startPiOn("linux", "session-notch-linux", notch);
+
+	expect(starts).toEqual([start, start]);
+});
+
+test("a failing notch start does not stop status publishing", async () => {
+	const statusRefreshes: string[] = [];
+	const handlers = await startPiOn(
+		"darwin",
+		"session-notch-fails",
+		async () => {
+			throw new Error("swiftc crashed");
+		},
+		statusRefreshes,
+	);
+	const refreshesAtStart = statusRefreshes.length;
+
+	handlers.get("agent_start")?.({ type: "agent_start" });
+	await flushUntil(
+		async () => (await readAllStates()).find((record) => record.sessionId === "session-notch-fails")?.status === "busy",
+	);
+
+	expect((await readAllStates()).find((record) => record.sessionId === "session-notch-fails")?.status).toBe("busy");
+	expect(statusRefreshes.length).toBeGreaterThan(refreshesAtStart);
+});
+
 test("a session rename updates the record's name without counting as a status change", async () => {
 	const previousPane = process.env.TMUX_PANE;
 	process.env.TMUX_PANE = "%79";

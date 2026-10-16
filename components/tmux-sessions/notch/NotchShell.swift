@@ -133,11 +133,53 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 	}
 }
 
+/// One panel per Mac. Holds an exclusive lock on `<pi home>/state/notch.lock` for the panel's lifetime and records its pid
+/// and executable there; the executable's name carries the build hash. A panel of the same build already holding the lock
+/// makes this start a duplicate; one of another build is told to quit and replaced. The kernel drops the lock when a panel
+/// dies, however it dies.
+///
+/// Several Pis often start together, so several starts can race to replace the same panel. Each one asks only the panel it
+/// first saw to quit, and steps aside if the lock then passes to anyone else, so no start waits behind a newer panel.
+func claimPanel() -> Int32 {
+	let environment = ProcessInfo.processInfo.environment
+	let piHome = environment["PI_CODING_AGENT_DIR"] ?? NSHomeDirectory() + "/.pi/agent"
+	try? FileManager.default.createDirectory(atPath: piHome + "/state", withIntermediateDirectories: true)
+	let path = piHome + "/state/notch.lock"
+	// Close-on-exec, so the feed and focus children never inherit the lock and keep it after this panel dies.
+	let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+	guard fd >= 0 else {
+		FileHandle.standardError.write(Data("pi-notch: cannot open \(path)\n".utf8))
+		exit(1)
+	}
+	let executable = CommandLine.arguments[0]
+	var replacing: String?
+	while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+		let record = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+		let holder = record.split(separator: "\n").map(String.init)
+		// An empty record is a panel that has just taken the lock and not yet written it.
+		if holder.count == 2 {
+			if holder[1] == executable { exit(0) }
+			if replacing == nil {
+				replacing = record
+				if let pid = pid_t(holder[0]) { kill(pid, SIGTERM) }
+			} else if record != replacing {
+				exit(0)
+			}
+		}
+		usleep(100_000)
+	}
+	ftruncate(fd, 0)
+	let record = Data("\(getpid())\n\(executable)\n".utf8)
+	_ = record.withUnsafeBytes { pwrite(fd, $0.baseAddress, record.count, 0) }
+	return fd
+}
+
 let arguments = CommandLine.arguments.dropFirst().map { URL(fileURLWithPath: $0).standardizedFileURL }
 guard arguments.count == 3 else {
 	FileHandle.standardError.write(Data("usage: pi-notch <web dir> <agents.py> <focus script>\n".utf8))
 	exit(64)
 }
+let panelLock = claimPanel()
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let shell = Shell(webDir: arguments[0], agentsScript: arguments[1], focusScript: arguments[2])

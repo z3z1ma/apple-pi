@@ -91,6 +91,7 @@ async function readTmuxPane(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxPane
 
 const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
 const SIDEBAR = fileURLToPath(new URL("../scripts/sidebar.sh", import.meta.url));
+const NOTCH = fileURLToPath(new URL("../scripts/notch.sh", import.meta.url));
 
 /**
  * Load the tmux plugin unless this server already loaded this exact file. The stamp holds the path and
@@ -156,6 +157,9 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			record = undefined;
 			return;
 		}
+		// Every new root session, so `/new` after a crash or a package update brings the right panel back. Outside the
+		// status queue: a first build of the panel takes seconds, and status updates must not wait for it.
+		if (process.platform === "darwin") pi.exec(NOTCH, ["start"]).catch(() => {});
 		const ts = nowSeconds();
 		record = {
 			schema: STATE_SCHEMA,

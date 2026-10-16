@@ -2,11 +2,12 @@
 
 Run many Pi agents in ordinary tmux panes and keep one sidebar that shows which need you, what each one is, and what it is doing. Click a card to jump to that agent's pane.
 
-The integration has three parts:
+The integration has four parts:
 
 - A Pi **extension** (`components/tmux-sessions/src/`, registered from `extensions/tmux-sessions.ts`) publishes each root session's live status to disk and loads the tmux plugin.
 - A **tmux plugin** (`pi_session_manager.tmux`, `scripts/sidebar.sh`) binds the key, moves the sidebar between windows, and records when you last looked at each pane.
 - The **sidebar** (`components/tmux-sessions/sidebar/`) is a [Textual](https://textual.textualize.io/) app that `uv run --script` starts in a tmux pane.
+- The **notch panel** (`components/tmux-sessions/notch/`) is a small Swift app on macOS that shows the same agents in the MacBook notch, as workers in a pixel room.
 
 ## The state contract
 
@@ -117,6 +118,49 @@ Below 140 columns the table sits above the details instead of beside them.
 
 A reply goes only to an agent that is idle when you press `enter`; a busy agent or an open questionnaire needs you in its own pane.
 
+## The notch panel
+
+On a Mac, a black pill sits under the notch: the agent count, then one dot per agent. Dots for agents that need you or have finished sit on the left; working and quiet agents sit on the right. Hover the pill to open the pixel room of one tmux session. Each agent is a worker at a desk, posed by its state, with a bubble over its head: `…` working, `z` quiet, `!` needs you, `✓` done.
+
+| Action | Effect |
+| --- | --- |
+| hover a worker | show its name, state, project, and last tool call |
+| click a worker | jump to its pane; Ghostty comes to the front |
+| drag a worker | move it in the room |
+| `‹` / `›` | show the previous or next tmux session; opening the panel shows the session whose agent has waited longest |
+| `☕ Office` / `🌙 Cozy` | switch this session between office rooms and cozy rooms |
+| `🎲` | pick another room and other workers for this session |
+
+A crowded room grows, up to the size of the panel window. Every session uses the size of the most crowded one, so the panel does not jump while you cycle.
+
+### Requirements and start-up
+
+The panel needs macOS, the Xcode command line tools (`swiftc`), and uv.
+
+Each root Pi that starts in tmux on macOS runs `scripts/notch.sh start` in the background. The script compiles `notch/NotchShell.swift` into `~/.pi/agent/cache/notch/pi-notch-<source hash>` if that file does not exist yet, and starts it. The first build takes a few seconds.
+
+One panel runs per Mac. It holds `~/.pi/agent/state/notch.lock` while it runs:
+
+- A second start of the same build exits at once.
+- A start of a changed build tells the running panel to quit, then takes its place, so an updated package shows on the next Pi start.
+
+Without `swiftc`, nothing starts, and the script writes one line to `~/.pi/agent/logs/pi-notch.log`, which also holds build errors. Run `components/tmux-sessions/scripts/notch.sh start` to start the panel by hand, and `pkill -f cache/notch/pi-notch-` to stop it.
+
+The panel reads its agents from `sidebar/agents.py feed`, the sidebar's own agent view as one JSON line per second, so it shows the agents of the default tmux server.
+
+### Adding rooms and workers
+
+The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the repository but not in the package. Each vibe has `room-<name>.png` and `worker-<name>.png` files. Generate new ones with the `generate_image` tool, or with `codex exec` and its image tool, then run this from `components/tmux-sessions/notch`:
+
+```bash
+uv run -q -w pillow -w numpy python art/clean.py
+```
+
+The script writes `web/assets/` and its `manifest.js`. The new room or worker appears the next time the panel starts.
+
+- **Room prompts:** a 16:9 pixel-art room seen straight on, like a dollhouse cross-section, with the floor in the bottom third and its middle clear. Ask for a plain dark navy backdrop around the room that reaches all four corners: the cleanup crops the room from that backdrop.
+- **Worker prompts:** a 2×2 sprite sheet of the same character at the same desk, in this cell order: typing (top left), asleep with a small Zzz (top right), one hand raised with a yellow `!` (bottom left), cheering with sparkles (bottom right). Use crisp 16-bit pixels on a flat pure magenta (`#FF00FF`) background, with no text or logos. Give the worker a bright blue shirt and hair that is not blue: the cleanup recolours the blue into six shirt colours. Avoid magenta props, which the cleanup removes with the background.
+
 ## Running it all day
 
 - **Cost.** Measured with six agents, one of them working: the sidebar uses about 2% of one CPU core and 45 MB; a dashboard that no client is showing uses about 1.5% and 50 MB. Views redraw only what changed; a hidden dashboard stops capturing panes and animating, and catches up when you look at it.
@@ -133,10 +177,12 @@ Run `/pi-sessions` inside Pi to list the live published sessions and the state d
 
 | Variable | Purpose |
 | --- | --- |
-| `PI_TMUX_DISABLED=1` | Disable status publishing and plugin loading. |
+| `PI_TMUX_DISABLED=1` | Disable status publishing, plugin loading, and the notch panel. |
 | `PI_TMUX_SESSION_BELL=off` | Do not ring the pane bell on settle. |
 | `PI_TMUX_STATE_DIR=/path` | Override the record directory. |
 
 ## Development
 
 `npm run test:sidebar` runs the sidebar and dashboard pytest suites through `uv`; `npm run lint` and `npm run format:check` run Ruff on it. The original prototype and its evaluation live in the ledger task `202610152308-tmux-agent-tracking`.
+
+The notch panel's Vitest suite type-checks the Swift shell on macOS and runs `notch.sh` against a fake `swiftc`. Its page opens alone in a browser with mock agents, so you can work on it without the panel: open `notch/web/index.html`. The panel's prototype rounds live in the ledger task `202610160838-notch-agent-room`.

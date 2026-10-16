@@ -39,6 +39,8 @@
     "components/tmux-sessions/src/",
     "components/tmux-sessions/scripts/",
     "components/tmux-sessions/sidebar/*.py",
+    "components/tmux-sessions/notch/NotchShell.swift",
+    "components/tmux-sessions/notch/web/",
     "components/tmux-sessions/pi_session_manager.tmux",
     "components/tmux-sessions/LICENSE",
     "components/input-editor/src/",

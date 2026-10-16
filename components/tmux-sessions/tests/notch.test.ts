@@ -55,7 +55,7 @@ function fakeSwiftc(): string {
 			"#!/bin/bash",
 			'echo call >> "$CALLS"',
 			'while [ "$1" != -o ]; do shift; done',
-			'printf \'#!/bin/bash\\nprintf "%%s\\\\n" "$@" > "$LAUNCHED"\\n\' > "$2"',
+			'printf \'#!/bin/bash\\necho "${TMUX-unset}" > "$LAUNCHED.tmux"\\nprintf "%%s\\\\n" "$@" > "$LAUNCHED"\\n\' > "$2"',
 			'/bin/chmod +x "$2"',
 		].join("\n"),
 	);
@@ -69,7 +69,7 @@ async function waitFor(path: string): Promise<string> {
 }
 
 test.skipIf(!onMac)(
-	"notch.sh start builds the shell once per source and launches it with the page, feed, and focus paths",
+	"notch.sh start builds the shell once per source and launches it outside tmux with the page, feed, and focus paths",
 	async () => {
 		const piHome = join(scratch, "built");
 		const calls = join(scratch, "calls");
@@ -79,6 +79,9 @@ test.skipIf(!onMac)(
 			PI_CODING_AGENT_DIR: piHome,
 			CALLS: calls,
 			LAUNCHED: launched,
+			// Pi runs inside a tmux server; the panel must not inherit it, or its feed would read that server, not the default one.
+			TMUX: "/tmp/tmux-test/named,1,0",
+			TMUX_PANE: "%1",
 		};
 
 		expect(spawnSync(launcher, ["start"], { env, encoding: "utf8" }).status).toBe(0);
@@ -87,6 +90,7 @@ test.skipIf(!onMac)(
 		expect(existsSync(join(paths[0], "index.html"))).toBe(true);
 		expect(paths[1].endsWith("agents.py") && existsSync(paths[1])).toBe(true);
 		expect(paths[2].endsWith("focus-tmux.sh") && existsSync(paths[2])).toBe(true);
+		expect(readFileSync(`${launched}.tmux`, "utf8")).toBe("unset\n");
 		const binaries = spawnSync("/bin/ls", [join(piHome, "cache", "notch")], { encoding: "utf8" })
 			.stdout.trim()
 			.split("\n");
