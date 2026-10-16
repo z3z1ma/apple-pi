@@ -120,7 +120,7 @@ A reply goes only to an agent that is idle when you press `enter`; a busy agent 
 
 ## The notch panel
 
-On a Mac, a black pill sits under the notch: the agent count, then one dot per agent. Dots for agents that need you or have finished sit on the left; working and quiet agents sit on the right. Hover the pill to open the pixel room of one tmux session. Each agent is a worker at a desk, posed by its state, with a bubble over its head: `…` working, `z` quiet, `!` needs you, `✓` done.
+On a Mac, a black pill sits under the notch: the agent count, then one dot per agent. Dots for agents that need you or have finished sit on the left; working and quiet agents sit on the right. Hover the pill to open the pixel room of one tmux session. Each agent is a worker, posed by its state, with a bubble over its head: `…` working, `z` quiet, `!` needs you, `✓` done.
 
 | Action | Effect |
 | --- | --- |
@@ -152,19 +152,22 @@ The panel reads its agents from `sidebar/agents.py feed`, the sidebar's own agen
 
 ### Adding rooms and workers
 
-The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the repository but not in the package. Each vibe has `room-<name>.png` and `worker-<name>.png` files. Generate new ones with the `generate_image` tool, or with `codex exec` and its image tool, then run this from `components/tmux-sessions/notch`:
+The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the repository but not in the package. Each vibe folder holds `room-<name>.png` and `worker-<name>.png` files; a new folder becomes a new vibe on the vibe button. To add art, from `components/tmux-sessions/notch`:
 
-```bash
-uv run -q -w pillow -w numpy python art/clean.py
-```
+1. Generate the image with the `generate_image` tool, or with `codex exec` and its image tool, following the prompt rules below.
+2. Shrink it to a 256-colour PNG before committing. Generated images are otherwise 1–2 MB each, and the cleanup keeps only 48 colours anyway:
 
-Before committing new raw images, shrink them to 256-colour PNGs; the cleanup keeps only 48 colours, and generated images are otherwise 1–2 MB each:
+   ```bash
+   uv run -q -w pillow python -c 'import sys; from PIL import Image; [Image.open(p).convert("RGB").quantize(256, dither=Image.Dither.NONE).save(p, optimize=True) for p in sys.argv[1:]]' art/raw/<vibe>/<new files>.png
+   ```
 
-```bash
-uv run -q -w pillow python -c 'import sys; from PIL import Image; [Image.open(p).convert("RGB").quantize(256, dither=Image.Dither.NONE).save(p, optimize=True) for p in sys.argv[1:]]' art/raw/<vibe>/<new files>.png
-```
+3. Run the cleanup. It writes `web/assets/` and its `manifest.js`:
 
-The script writes `web/assets/` and its `manifest.js`. The running panel keeps its old art: stop it as above, and the next Pi start shows the new room or worker.
+   ```bash
+   uv run -q -w pillow -w numpy python art/clean.py
+   ```
+
+4. The running panel keeps its old art: stop it as above, and the next Pi start shows the new room or worker.
 
 - **Room prompts:** a wide pixel-art room seen straight on, like a dollhouse cross-section, or an outdoor scene framed as a diorama stage. The floor fills the bottom 40% and stays completely empty from wall to wall: every piece of furniture and decor hangs on or stands against the back and side walls, because workers can stand anywhere on the floor and must not overlap a counter or a sofa. Ask for a plain dark navy backdrop around the room that reaches all four corners: the cleanup crops the room from that backdrop.
 - **Worker prompts:** a 2×2 sprite sheet of the same character at the same desk (animals can sit at a tiny laptop on the ground instead), in this cell order: typing (top left), asleep with a small Zzz (top right), one hand raised with a yellow `!` (bottom left), cheering with sparkles (bottom right). Use crisp 16-bit pixels on a flat pure magenta (`#FF00FF`) background, with no text or logos. Give the worker one bright blue piece of clothing (a shirt, coat, scarf, or bandana) and hair that is not blue: the cleanup recolours the blue into six shirt colours. Avoid magenta props, which the cleanup removes with the background.
