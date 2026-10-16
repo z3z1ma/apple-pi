@@ -88,6 +88,8 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
+Next: get the operator's verdict on round 2. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
+
 ## Outcome
 
 Pending.
