@@ -840,9 +840,38 @@
 	transition: grid-template-columns 0.22s var(--ease);
 }
 .ex-body.chat-open {
-	grid-template-columns: 270px minmax(0, 1fr) 420px;
+	grid-template-columns: 270px minmax(0, 1fr) var(--chat-w, 420px);
+}
+.ex-body.resizing {
+	transition: none;
+	user-select: none;
+	cursor: col-resize;
+}
+.ex-chat-grip {
+	position: absolute;
+	inset: 0 auto 0 -4px;
+	width: 8px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: col-resize;
+	z-index: 2;
+}
+.ex-chat-grip::after {
+	content: "";
+	position: absolute;
+	inset: 0 3px;
+	background: var(--agent);
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+.ex-chat-grip:hover::after,
+.ex-chat-grip:focus-visible::after,
+.ex-body.resizing .ex-chat-grip::after {
+	opacity: 1;
 }
 .ex-chat {
+	position: relative;
 	display: none;
 	min-height: 0;
 	border-left: 1px solid var(--line);

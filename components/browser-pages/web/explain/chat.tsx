@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 import type { TutorTurn } from "../../src/page-data";
 import { blockMarkdown, Icon, Kbd } from "../ui";
@@ -88,6 +88,7 @@ export function Sidebar({
 	onCite: (kind: string, n: number) => void;
 }) {
 	const { messages, mode, setMode, send } = tutor;
+	const aside = useRef<HTMLElement>(null);
 	const body = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLTextAreaElement>(null);
 	useEffect(() => {
@@ -103,7 +104,8 @@ export function Sidebar({
 	};
 	const last = messages.at(-1);
 	return (
-		<aside className="ex-chat">
+		<aside className="ex-chat" ref={aside}>
+			<Grip sidebar={aside} />
 			<div className="ex-chat-h">
 				<Icon.spark />
 				<b>Talk it through</b>
@@ -213,6 +215,44 @@ export function Sidebar({
 				</button>
 			</div>
 		</aside>
+	);
+}
+
+/** The sidebar's left edge. Its width lives in `--chat-w` on the page grid, so it stays when the sidebar closes. */
+function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
+	const grid = () => sidebar.current?.parentElement;
+	const resize = (width: number | undefined) => {
+		if (width === undefined) return grid()?.style.removeProperty("--chat-w");
+		// Wide enough for the header, narrow enough to leave the article room.
+		const px = Math.max(320, Math.min(width, innerWidth - 640));
+		grid()?.style.setProperty("--chat-w", `${Math.round(px)}px`);
+	};
+	const edge = () => sidebar.current?.getBoundingClientRect();
+	return (
+		<button
+			type="button"
+			className="ex-chat-grip"
+			aria-label="Resize the sidebar"
+			title="Drag to resize · double-click to reset"
+			onPointerDown={(e) => {
+				e.currentTarget.setPointerCapture(e.pointerId);
+				grid()?.classList.add("resizing");
+			}}
+			onPointerMove={(e) => {
+				const box = edge();
+				if (box && e.currentTarget.hasPointerCapture(e.pointerId)) resize(box.right - e.clientX);
+			}}
+			onLostPointerCapture={() => grid()?.classList.remove("resizing")}
+			onDoubleClick={() => resize(undefined)}
+			onKeyDown={(e) => {
+				const step = e.key === "ArrowLeft" ? 40 : e.key === "ArrowRight" ? -40 : 0;
+				// The set width, not the rendered one: the column animates toward it.
+				const width = Number.parseFloat(grid()?.style.getPropertyValue("--chat-w") ?? "") || edge()?.width;
+				if (!step || width === undefined) return;
+				e.preventDefault();
+				resize(width + step);
+			}}
+		/>
 	);
 }
 
