@@ -30,7 +30,7 @@ function harness(reflections: Reflection[]) {
 	const emit = (event: string, payload: unknown = {}) => handlers.get(event)?.(payload, ctx);
 	const close = (task: string, status = "done") =>
 		emit("tool_call", { toolName: "ledger_status", input: { task, status } });
-	return { statuses, emit, close };
+	return { branch, statuses, emit, close };
 }
 
 describe("open learnings", () => {
@@ -39,9 +39,14 @@ describe("open learnings", () => {
 		open.emit("session_start");
 		expect(open.statuses.get("learnings")).toBe("learnings:2");
 
-		const empty = harness([]);
-		empty.emit("turn_end");
-		expect(empty.statuses.get("learnings")).toBeUndefined();
+		open.branch.push({
+			id: "n2",
+			type: "custom",
+			customType: "notebook.reflections.retired",
+			data: { reflectionIds: ["aaaaaaaaaaaa", "bbbbbbbbbbbb"], coversUpToId: "m1" },
+		});
+		open.emit("turn_end");
+		expect(open.statuses.get("learnings")).toBeUndefined();
 	});
 
 	it("holds the first close of each task while learnings are open", () => {

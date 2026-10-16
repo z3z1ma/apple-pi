@@ -227,9 +227,10 @@ describe("TaskDetailViewer", () => {
 			vi.fn(),
 		);
 		viewer.rowBudget = 20;
-		viewer.render(50);
+		const tailContent = viewer.render(50);
 		viewer.handleInput("\u001b[A");
 		const originalContent = viewer.render(50);
+		expect(originalContent).not.toEqual(tailContent);
 		viewer.rowBudget = 10;
 		viewer.render(90);
 		viewer.rowBudget = 20;

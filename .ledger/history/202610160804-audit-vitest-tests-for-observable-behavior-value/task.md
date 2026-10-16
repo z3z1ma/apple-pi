@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-16
 Updated: 2026-10-16
 
@@ -14,7 +14,7 @@ Approved pruning complete: 1,528 Vitest cases pass across all 146 files, down fr
 
 ## Next steps
 
-Commit the validated changes, archive this task, and push as requested. The operator approved addressing the removal candidates and similar instances, then closing; this outcome does not claim exhaustive body-level review of every test. Existing changes to ledger production code and its two tests remain outside this work.
+No further implementation is required for the approved pruning scope. The changes were committed and pushed, and this task is archived. This outcome does not claim exhaustive body-level review of every test; a broader audit would be separate work. Pre-existing ledger production and test changes were excluded from these commits.
 
 ## Outcome
 

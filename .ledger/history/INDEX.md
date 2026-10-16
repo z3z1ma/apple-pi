@@ -123,3 +123,5 @@
 - `.ledger/history/202610151241-browser-review-surfaces/task.md` — done — Agent-structured browser review and understanding surfaces — Tool calls open ephemeral local web pages for code review, Markdown review, ledger task review, and human understanding; the agent structures content from blocks and review pages return anchored annotations plus a verdict.
 
 - `.ledger/history/202610152308-tmux-agent-tracking/task.md` — done — Agent tracking surfaces for tmux: list, sidebar, dashboard, status bar — Evolve the tmux session manager from a popup picker into views that show which Pi agents need the user, tell agents apart (auto session name, ledger task), and show progress at a glance; remove the dedicated popup launcher.
+
+- `.ledger/history/202610160804-audit-vitest-tests-for-observable-behavior-value/task.md` — done — Audit Vitest tests for observable behavior value — Review the Vitest suite for vacuous assertions, implementation locks, duplicated coverage, and non-observable negatives; produce evidence-backed removal and rewrite recommendations.

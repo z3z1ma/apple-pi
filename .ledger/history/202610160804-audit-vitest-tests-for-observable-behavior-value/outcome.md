@@ -57,4 +57,10 @@ This scan supplements, rather than replaces, the first-pass audit. Candidate-foc
 
 During iteration, the new editor test initially imported a type-only coding-agent keybindings export, then encountered the related nominal type mismatch. It now uses Pi TUI's real keybinding manager as the editor fixture; the behavioral tests and full typecheck pass. No failures remain from those iterations.
 
+## Post-change review
+
+A final review strengthened two existing cases without changing the test count. The open-learning status test now retires the learnings in the same session before checking that the previously displayed count clears; a no-op clear can no longer pass by starting with an empty status map. The responsive-scroll test now proves that manual scrolling changes visible content before checking its preservation through resizing; a no-op scroll handler can no longer pass the round-trip equality check. The archived task's next steps were corrected to describe the completed handoff rather than request another commit and archive.
+
+After those changes, all seven reviewed test files passed (**109 tests**), Biome check passed for the two changed test files, the root and web TypeScript checks passed, and `git diff --check` passed. The full-suite results above precede this final two-test strengthening; the full suite was not rerun afterward.
+
 Not verified: networked pair E2E, Linux/Windows worker recognition, and actual terminal focus/interaction. No production code changed, and no runtime behavior change is claimed.
