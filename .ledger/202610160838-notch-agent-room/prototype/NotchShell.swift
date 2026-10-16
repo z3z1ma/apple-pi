@@ -1,4 +1,4 @@
-// PROTOTYPE: a borderless panel over the MacBook notch that hosts web/index.html and feeds it live pi agents.
+// PROTOTYPE: a borderless panel over the MacBook notch that hosts a page from web/ and feeds it live pi agents.
 import AppKit
 import WebKit
 
@@ -9,6 +9,7 @@ final class NotchPanel: NSPanel {
 
 final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 	let prototypeDir: URL
+	let page: String
 	let repoDir: URL
 	var panel: NotchPanel!
 	var web: WKWebView!
@@ -17,8 +18,9 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 	var feed: Process?
 	var feedBuffer = Data()
 
-	init(prototypeDir: URL) {
+	init(prototypeDir: URL, page: String) {
 		self.prototypeDir = prototypeDir
+		self.page = page
 		var dir = prototypeDir
 		while !FileManager.default.fileExists(atPath: dir.appendingPathComponent("components/tmux-sessions").path) {
 			dir = dir.deletingLastPathComponent()
@@ -32,7 +34,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		let left = screen.auxiliaryTopLeftArea?.width ?? 0
 		let right = screen.auxiliaryTopRightArea?.width ?? 0
 		let notchWidth = left > 0 ? screen.frame.width - left - right : 185
-		let size = NSSize(width: 720, height: 460)
+		let size = NSSize(width: 1100, height: 500)
 		let frame = NSRect(
 			x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
 			width: size.width, height: size.height)
@@ -57,7 +59,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		web.underPageBackgroundColor = .clear
 		panel.contentView = web
 		let webDir = prototypeDir.appendingPathComponent("web")
-		web.loadFileURL(webDir.appendingPathComponent("index.html"), allowingReadAccessTo: webDir)
+		web.loadFileURL(webDir.appendingPathComponent(page), allowingReadAccessTo: webDir)
 		panel.orderFrontRegardless()
 
 		NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in self?.track() }
@@ -130,6 +132,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
-let shell = Shell(prototypeDir: URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL)
+let shell = Shell(
+	prototypeDir: URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL,
+	page: CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "index.html")
 app.delegate = shell
 app.run()

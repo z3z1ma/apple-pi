@@ -38,9 +38,7 @@ Acceptance:
 3. Clicking an agent focuses its tmux pane in Ghostty.
 4. Idle CPU of the shell and its web content stays low (measured with `ps`).
 
-## Current State
-
-Prototype 1 runs. Checked:
+Result:
 
 - Builds with `swiftc -O` (Swift 6.4, macOS 26.7).
 - The pill sits flush under the notch and shows 6 live agents from `AgentStore`. Checked with a screenshot cropped to the notch.
@@ -49,7 +47,32 @@ Prototype 1 runs. Checked:
 
 Verdict (operator, 2026-10-16): "Prototype is working great". Hover to expand, click-through, and click to focus work in the real panel. A thin Swift shell that hosts a web renderer is a sound base.
 
-Next: prototype 2 explores the pixel room and its art direction inside the same shell.
+## Prototype 2: does a generated pixel room read well in the notch?
+
+Question: can generated pixel art, after automatic cleanup, make a cozy room that shows each agent's state at a glance in the expanded notch?
+
+Decisions (operator): generate the art with `generate_image`; one room per tmux session, with that session's agents inside.
+
+Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: one room per tmux session, sharing one background for now. Each agent is a character at a desk, posed by state (working, quiet, waiting, done); clicking a character focuses its pane. Raw generations go in `prototype/assets/raw/`, and the cleanup script (`assets/clean.py`: chroma key, box downscale to the art-pixel grid, palette quantize, hoodie recolour into 6 variants) writes `web/assets/`.
+
+Run: `prototype/run.sh` (prototype 2, the default) or `prototype/run.sh index.html` (prototype 1).
+
+Acceptance:
+
+1. Each character's state is clear at a glance: typing (working), asleep (quiet), hand up with `!` (waiting), cheering (done).
+2. Hovering a character shows its name, state and last tool; clicking it focuses its pane.
+3. The pixels stay crisp (whole device pixels) and the room feels cozy.
+4. Animation runs only while the panel is open; collapsed idle CPU stays near zero.
+
+## Current State
+
+Prototype 2 runs in the notch with live agents and is waiting for the operator's verdict. Checked:
+
+- Generation and cleanup work in one pass: room 250×140 and agent frames about 35×40 art pixels, at the same pixel density. 6 agents fit on one floor in two staggered rows.
+- Headless Chrome with mock agents (2 sessions, 6 agents) shows crisp rooms, a tooltip on hover, and no page errors.
+- Collapsed idle CPU: shell, WebContent and feed 0.0 %.
+
+Not yet checked: how it feels in the real notch, and whether the `!` reads at a glance at this size.
 
 ## Outcome
 
