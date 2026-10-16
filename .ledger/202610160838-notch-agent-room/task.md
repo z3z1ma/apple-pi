@@ -57,7 +57,7 @@ Decisions (operator):
 - One room per tmux session, showing one room at a time; arrows cycle the sessions.
 - Two vibes to play with: **office** (fancy tech workplaces: kombucha tap, coffee shop with cold brew, glass HQ, game studio) with tech workers, and **cozy** (lofi rooms: loft, cabin, space lounge, tatami, wizard library) with lofi programmers. A toggle in the panel switches the shown tmux session between them.
 
-Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, filling the panel, themed by a stable hash of the session name unless the 🎲 button picked a random room for it (remembered per vibe and session). Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane.
+Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, filling the panel, themed by a stable hash of the session name. The 🎲 button shuffles that session's room and its workers' sprites, remembered per vibe and session. Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane; dragging moves the worker, remembered per session.
 
 Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` crops each room to the largest interior rectangle that holds none of the backdrop around the room, keys out the magenta on worker sheets, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads. To add a room or worker, put its raw image in `prototype/assets/raw/<vibe>/` and run `uv run -q -w pillow -w numpy python assets/clean.py` from `prototype/`. New room prompts need a plain dark backdrop around the room, and new worker prompts a blue shirt (see `.context/.ledger/202610160838-notch-agent-room/prototype/assets/clean.py.md`). A worker prompt asks for a 2×2 sprite sheet of the SAME character at the SAME desk, in this cell order, which `STATES` in `clean.py` reads: typing (top left), asleep with a small Zzz (top right), raising one hand with a yellow `!` (bottom left), cheering with sparkles (bottom right); 16-bit crisp pixels, flat pure magenta (#FF00FF) background, no text or logos.
 
@@ -67,7 +67,7 @@ Acceptance:
 
 1. Each worker's state is clear at a glance from its bubble and pose.
 2. Hovering a worker shows its name, state and last tool; clicking it focuses its pane.
-3. Arrows cycle the tmux sessions; the vibe toggle switches office and cozy for the shown session and is remembered per session.
+3. Arrows cycle the tmux sessions; the vibe toggle switches office and cozy for the shown session; 🎲 shuffles its room and workers; workers can be dragged into place. All of it is remembered per session.
 4. The pixels stay crisp (whole device pixels), and both vibes feel fun.
 5. Animation runs only while the panel is open; collapsed idle CPU stays near zero.
 
@@ -79,9 +79,9 @@ Operator feedback on round 4, and what changed:
 
 - "I don't like the sprite of the old guy in a wheelchair": removed (`raw/office/worker-senior.png`). Office has 4 workers.
 - "The dice roll should shuffle background and worker sprites": 🎲 picks another room and a new look seed for the shown session and vibe (`notch-looks`). The seed picks each agent's worker and shirt colour. Seed 0 is the default look.
-- "Click and drag a sprite to a different position": mousedown on a worker starts a drag. Movement comes from native mouse moves (browser) and the forwarded pointer (shell; AppKit sends drags to the panel, and the shell's local monitor forwards `leftMouseDragged`). The worker's bottom-centre stays inside the room. Positions are stored per session and agent as fractions of the room size (`notch-positions`), so they survive scale changes. A drag of more than 3 px does not count as a click, so it does not focus the pane.
+- "Click and drag a sprite to a different position": mousedown on a worker starts a drag. Movement comes from native mouse moves (browser) and the forwarded pointer (shell; AppKit sends drags to the panel, and the shell's local monitor forwards `leftMouseDragged`). The worker's bottom-centre stays inside the room. Positions are stored per session and agent as fractions of the room size (`notch-positions`), so they survive scale changes. The pane is focused on mouseup only when the pointer moved 3 px or less, so a drag does not focus it.
 
-Checked in headless Chrome: 🎲 changes the room and the sprites; a native drag moves and saves a worker without a focus click; a drag driven only by `window.notch.pointer()` between native mousedown and mouseup also moves it; a plain click still focuses; looks and positions survive a reload; no page errors. Not checked: dragging in the real panel.
+Checked in headless Chrome: 🎲 changes the room and the sprites; a native drag moves and saves a worker without focusing it; a drag driven only by `window.notch.pointer()` between native mousedown and mouseup also moves it without focusing; a plain click still focuses; closing the panel drops a drag; looks and positions survive a reload; no page errors. Not checked: dragging in the real panel.
 
 Operator feedback on round 3 ("I like it. The room size is better."), and what changed:
 

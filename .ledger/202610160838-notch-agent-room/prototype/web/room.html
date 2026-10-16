@@ -99,7 +99,6 @@ let open = false;
 let tick = 0;
 let pointer = null;
 let drag = null;
-let dragged = false;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const hash = (s, seed) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, seed);
@@ -269,23 +268,18 @@ function focusAgent(agent) {
 	else console.log("focus", agent.paneId);
 }
 
-// Dragging a worker moves its bottom-centre anchor, kept inside the room; a drag does not count as a click.
+// Pressing a worker and moving more than 3 px drags its bottom-centre anchor, kept inside the room; releasing
+// without moving focuses its pane.
 function moveDrag(clientX, clientY) {
+	drag.moved ||= Math.hypot(clientX - drag.startX, clientY - drag.startY) > 3;
+	if (!drag.moved) return;
 	const rect = canvas.getBoundingClientRect();
 	const w = ART.w * scale, h = ART.h * scale;
 	const x = Math.min(Math.max(clientX - rect.left - drag.dx, drag.w / 2), w - drag.w / 2);
 	const y = Math.min(Math.max(clientY - rect.top - drag.dy, drag.h), h);
-	drag.moved ||= Math.hypot(clientX - drag.startX, clientY - drag.startY) > 3;
-	(positions[session] ??= {})[drag.id] = [x / w, y / h];
-	stage.querySelector(".tip")?.remove();
+	(positions[session] ??= {})[drag.agent.id] = [x / w, y / h];
+	save("notch-positions", positions);
 	renderStage();
-}
-
-function endDrag() {
-	if (!drag) return;
-	if (drag.moved) save("notch-positions", positions);
-	dragged = drag.moved;
-	drag = null;
 }
 
 canvas.onmousedown = (event) => {
@@ -294,17 +288,15 @@ canvas.onmousedown = (event) => {
 	event.preventDefault();
 	const rect = canvas.getBoundingClientRect();
 	drag = {
-		id: hit.agent.id, w: hit.box.w, h: hit.box.h, moved: false, startX: event.clientX, startY: event.clientY,
+		agent: hit.agent, w: hit.box.w, h: hit.box.h, moved: false, startX: event.clientX, startY: event.clientY,
 		dx: event.clientX - rect.left - hit.x, dy: event.clientY - rect.top - hit.y,
 	};
 };
 window.addEventListener("mousemove", (event) => pointAt(event.clientX, event.clientY));
-window.addEventListener("mouseup", endDrag);
-canvas.onclick = (event) => {
-	if (dragged) return void (dragged = false);
-	const hit = hitTest(event.clientX, event.clientY);
-	if (hit) focusAgent(hit.agent);
-};
+window.addEventListener("mouseup", () => {
+	if (drag && !drag.moved) focusAgent(drag.agent);
+	drag = null;
+});
 $("prev").onclick = () => cycle(-1);
 $("next").onclick = () => cycle(1);
 $("shuffle").onclick = () => {
@@ -340,10 +332,7 @@ window.notch = {
 		// Opening shows the session whose agent has waited longest for you, if any.
 		const waiting = agents.filter((a) => a.state === "waiting").sort((a, b) => a.updatedAt - b.updatedAt)[0];
 		if (open && waiting) session = waiting.tmuxSession || "tmux";
-		if (!open) {
-			pointer = null;
-			endDrag();
-		}
+		if (!open) pointer = drag = null;
 		render();
 	},
 	pointer: pointAt,
