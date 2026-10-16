@@ -300,7 +300,7 @@ stateDiagram-v2
     GateCheck --> Permitted: No context file, or its current marker is already in context
 
     Blocked --> ReadContext: Tool call FAILS with an instruction to read<br/>the file or its context file first (no content included)
-    ReadContext --> ContextLoaded: Agent reads; the result carries the context file and its marker
+    ReadContext --> ContextLoaded: Agent reads - the result carries the context file and its marker
     ContextLoaded --> EditAttempt: Agent replans and retries with the constraints in context
 
     Permitted --> MutationApplied: File written to disk
