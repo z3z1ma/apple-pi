@@ -132,6 +132,8 @@ A page reaches the agent only through its page server. A saved or shared copy ha
 - a live review whose session ends becomes read-only, keeps the annotations already made, and says once that the review can no longer be sent;
 - an explanation without the agent keeps everything but the sidebar and its entry points; the quiz still works.
 
+A model error while the session lives is not a lost agent, and it hides nothing: the reply says the agent could not answer and why, and the next question may work. The check does not call the model, so it costs nothing.
+
 ## Saved pages
 
 Every submitted review is saved as one self-contained HTML file in `<agent dir>/artifacts/<repository>/<date>-<title>.html`; the agent directory defaults to `~/.pi/agent`. The file opens offline and shows the review read-only, with the verdict and comments. Attach it to a pull request, a Confluence page, or a Jira ticket.

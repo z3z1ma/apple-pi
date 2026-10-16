@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
  * Whether the page reaches its page server, and with it the agent. A saved or shared copy never does, and a live
  * page stops when its session ends; either way the page hides what needs the agent and reads as a plain page. It
  * checks again whenever the reader comes back to the page, and `recheck` after any request to the server fails.
+ * `agent` means the session can fork; it does not call the model, so a provider error shows in its reply instead.
  */
 export function useConnected(session: { token: string; live: boolean }): {
 	connected: boolean;
