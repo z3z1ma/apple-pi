@@ -5,6 +5,8 @@ import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
+import { installMailbox } from "./mailbox.js";
+import { createMailboxSendTool } from "./mailbox-tool.js";
 import { createMonitorTool } from "./monitor-tool.js";
 import { formatMonitorEvent, formatTaskNotification } from "./notifications.js";
 import { createScheduleTool } from "./schedule-tool.js";
@@ -30,6 +32,8 @@ This is your own deferred prompt, not new operator authority. Reassess it agains
 
 export function installTasks(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
+
+	installMailbox(pi);
 
 	const taskManager = new TaskManager();
 	const activeWork = getActiveWorkSurface(pi);
@@ -139,6 +143,7 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createScheduleTool(taskManager));
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
+	pi.registerTool(createMailboxSendTool());
 
 	// Where each task's detail was left. Memory only: never written to the session,
 	// and cleared with the roster because task IDs restart per session.

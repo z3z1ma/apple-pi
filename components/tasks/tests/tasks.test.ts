@@ -669,6 +669,7 @@ describe("tasks component", () => {
 				cwd: process.cwd(),
 				hasUI: true,
 				mode: "tui",
+				sessionManager: { getSessionId: () => "tasks-test", getEntries: () => [] },
 				ui: { custom, setStatus, setWidget, onTerminalInput: terminalInput },
 			};
 			for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
@@ -999,6 +1000,7 @@ describe("tasks component", () => {
 					cwd: process.cwd(),
 					hasUI: true,
 					mode: "tui",
+					sessionManager: { getSessionId: () => "tasks-test", getEntries: () => [] },
 					ui: { custom, setStatus: vi.fn(), setWidget: vi.fn() },
 				};
 				for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);

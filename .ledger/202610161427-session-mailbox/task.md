@@ -25,11 +25,12 @@ This is the communication backbone for [Shikamaru](../202610161427-shikamaru/tas
 - **Sending.** A tool for agents (taught by its description) and a shell command for senders outside Pi, writing the same message shape: `{id, from, ts, body}`.
 - **Old waiting messages get no special handling.** Messages for a session that has not opened in a long time simply wait. Anyone who cares (Shikamaru) can read the mailbox files directly.
 - **The code lives in `components/tasks`**, which already delivers steers. Persistent mailbox state changes the "no persistent scheduler state" boundary in `docs/scheduling.md` and the in-memory, session-local lifecycle in `docs/tasks.md` and `docs/boundaries.md`; those pages are updated with the change.
+- **Queue reservations.** Ids sent as steers but not yet recorded are reserved per session id on `globalThis`, because Pi's queue survives an extension reload. A completed run clears them (Pi keeps running while its queue holds messages); an aborted run keeps them, so a message discarded by Escape is redelivered after the next completed run without restarting the cancelled work.
 - **Only root sessions get the send tool.** Child sessions and `pi_exec` workers send by appending through `bash` or the shell command.
 
 ## Acceptance criteria
 
-1. A message sent while no process has session X open is delivered as a steer once `pi --session-id X` opens, exactly once in the absence of a crash.
+1. A message sent while no process has session X open is delivered once `pi --session-id X` opens, exactly once in the absence of a crash. At process startup it rides the first run (the command's prompt, the operator's first message, or the next mailbox message) instead of starting one, so the command's own prompt is never rejected (operator decision after review).
 2. A message sent during a run arrives at the next safe boundary, as monitor events do today.
 3. A message sent while the session is idle starts a turn.
 4. Several senders appending at the same moment lose and corrupt nothing: every message is delivered.
@@ -42,7 +43,7 @@ This is the communication backbone for [Shikamaru](../202610161427-shikamaru/tas
 
 ## Current State
 
-In progress. The operator confirmed the no-cursor design by starting implementation. Next: confirm the test seams, then implement in `components/tasks`.
+In progress. Implemented in `components/tasks` (`mailbox.ts`, `mailbox-tool.ts`, `scripts/pi-send.mjs`) with tests in `components/tasks/tests/mailbox.test.ts`; docs updated. Review findings fixed: Escape loss, reload duplicate, unreadable-mailbox crash, startup prompt race. Full `npm test` passed on the final tree (1519 unit, 23 sidebar, 118 pair, loader). Committed; task left open for operator review.
 
 ## Outcome
 

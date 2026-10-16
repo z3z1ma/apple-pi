@@ -45,6 +45,7 @@
     "components/tmux-sessions/LICENSE",
     "components/input-editor/src/",
     "components/tasks/src/",
+    "components/tasks/scripts/",
     "components/prompt-stash/src/",
     "components/terse-tools/src/",
     "components/rtk/src/",

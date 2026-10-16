@@ -194,6 +194,7 @@ try {
 		"ask_user_question",
 		"schedule",
 		"monitor",
+		"mailbox_send",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -257,9 +258,10 @@ try {
 				extension.path.endsWith("tasks.ts") &&
 				extension.tools.has("schedule") &&
 				extension.tools.has("monitor") &&
-				extension.tools.has("task"),
+				extension.tools.has("task") &&
+				extension.tools.has("mailbox_send"),
 		),
-		"tasks extension must own schedule, monitor, and task",
+		"tasks extension must own schedule, monitor, task, and mailbox_send",
 	);
 
 	const searchBranchesTool = result.extensions

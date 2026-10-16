@@ -1,6 +1,6 @@
 # Managed tasks and reactive execution
 
-The tasks extension owns immediate background commands, command monitors, one-shot schedules, task inspection and cancellation, and root-session wake-up when managed work becomes actionable.
+The tasks extension owns immediate background commands, command monitors, one-shot schedules, task inspection and cancellation, the session mailbox, and root-session wake-up when managed work becomes actionable.
 
 ## Execution model
 
@@ -10,6 +10,7 @@ Choose the entrypoint by intent:
 2. **`schedule`** arranges one prompt or command to start after a relative delay.
 3. **`monitor`** starts a continuing shell event source now. Every newline-terminated stdout line immediately steers the agent while the command keeps running.
 4. **`task`** lists, inspects, waits for, or cancels any managed command, monitor, or schedule.
+5. **`mailbox_send`** sends a message to another Pi session; see [Session mailbox](#session-mailbox).
 
 All command forms share the same `TaskManager`, `task-*` IDs, rolling output, process-tree cancellation, completion notification, and session lifecycle. A monitor is a managed command with stdout event delivery, not a second task system.
 
@@ -103,6 +104,50 @@ Write monitor commands as event adapters. Emit only meaningful state changes on 
 
 Prompt states are `scheduled`, `due`, `delivered`, or `cancelled`. Command and monitor states are `scheduled`, `running`, `completed`, `failed`, or `cancelled`.
 
+## Session mailbox
+
+Every root Pi session has a durable mailbox. Another session, a headless `pi -p` run, a shell script, or a clock can send it a message, and the session receives the message as a steer: at the next safe boundary during a run, as a new turn while idle, or in the first run after the session next opens.
+
+### Addressing
+
+A mailbox belongs to a session id. For a stable address, start the session with a fixed id: `pi --session-id shikamaru` reopens the same session, and so the same mailbox, every time. `/fork` and `/clone` create a new session id with a new, empty mailbox; `/tree` keeps the id. Mailboxes are shared across projects: Pi's default session ids are UUIDs, so give a named id such as `shikamaru` to one project only. Run one process per session id: Pi does not stop two processes from opening the same session, and both would act on the same messages.
+
+### Sending
+
+Agents call `mailbox_send`:
+
+```json
+{
+  "session_id": "shikamaru",
+  "message": "Worker w-7f3a is blocked on a review."
+}
+```
+
+`from` is set to the sender's session id, so the receiver can answer with `mailbox_send` to that id. Anything outside Pi uses the packaged script; its path is in the `mailbox_send` tool guidance:
+
+```bash
+node components/tasks/scripts/pi-send.mjs shikamaru --from launchd "Tick."
+echo "Nightly sweep finished." | node components/tasks/scripts/pi-send.mjs shikamaru
+```
+
+Both append one JSON line to `~/.pi/agent/state/mailbox/<session-id>.jsonl` (override the directory with `PI_MAILBOX_DIR`):
+
+```json
+{"id":"…","from":"launchd","ts":"2026-10-16T12:00:00.000Z","body":"Tick."}
+```
+
+Senders only append, so several can write at once without a lock. The session id must match Pi's own rule (letters, digits, `.`, `_`, `-`).
+
+### Delivery
+
+The session itself records what was delivered. Each delivery is a steer whose `custom_message` entry carries the message in `details`. On session start, when the mailbox file changes, and when a run completes, the session delivers every complete, well-formed line whose `id` is not yet recorded on any branch of the session and not already queued. The file watcher only wakes the reader; a dropped notification is picked up when the next run completes.
+
+When Pi itself starts, waiting mail rides the first run instead of starting one, because the command may carry its own prompt (`pi -p "..."`, `pi --session-id w-7f3a "brief"`) and Pi rejects a prompt while a turn is running. That prompt, your first message, or the next mailbox message starts the run that carries it. `/new`, `/resume`, `/fork`, and `/reload` deliver at once.
+
+If you press Escape while a message is queued, Pi discards the queue; the message is delivered again after your next completed run, not immediately, so the cancelled work does not restart.
+
+Delivery is at least once. A crash after a message is queued but before Pi records it delivers that message again on the next open; the `id` identifies the repeat. A message recorded on a branch that `/tree` left is not delivered again. Messages to a session that is not running wait in its mailbox; nothing expires or removes them.
+
 ## Message formats
 
 A monitor line is appended to the transcript as:
@@ -130,7 +175,7 @@ Output:
 ## Lifecycle and safety
 
 - **Root session only**: Child sessions and subagents do not load the extension.
-- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
+- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications. The session mailbox is the one persistent piece: its messages live on disk and survive Pi exit.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
-- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.
+- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools; programs may call `mailbox_send`, because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

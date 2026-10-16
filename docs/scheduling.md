@@ -28,6 +28,6 @@ Every schedule returns a `task-*` ID and resolved due time. Use `task` to list, 
 
 ## Boundaries
 
-Scheduling is root-only, one-shot, relative, and in memory. `delay_seconds` is limited to the platform timer range (about 24.8 days). Session start, fork, tree navigation, switch, and shutdown discard scheduled work without notifications. It does not survive Pi exit or execute while the owning session is closed. There are no absolute dates, recurrence, cron expressions, arbitrary delayed tool calls, ambient reminders, or persistent scheduler state.
+Scheduling is root-only, one-shot, relative, and in memory. `delay_seconds` is limited to the platform timer range (about 24.8 days). Session start, fork, tree navigation, switch, and shutdown discard scheduled work without notifications. It does not survive Pi exit or execute while the owning session is closed. There are no absolute dates, recurrence, cron expressions, arbitrary delayed tool calls, ambient reminders, or persistent scheduler state. For a clock that outlives the session, run it outside Pi (for example with launchd or cron) and send each tick to the [session mailbox](tasks.md#session-mailbox), which keeps messages on disk until the session opens.
 
 `schedule`, `monitor`, and `task` are intentionally unavailable inside `pi_exec`; programs already have bounded timers and direct `pi.bash`, while root-session wake-up, steering, and managed-task ownership remain outside the guest runtime.

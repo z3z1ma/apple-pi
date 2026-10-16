@@ -1,8 +1,12 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	test: {
 		environment: "node",
+		// Root test sessions open a session mailbox; keep it out of the real ~/.pi/agent.
+		env: { PI_MAILBOX_DIR: join(tmpdir(), "apple-pi-test-mailbox") },
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
 			"optional-extensions/backlog/tests/**/*.test.ts",
