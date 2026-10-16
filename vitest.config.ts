@@ -29,7 +29,6 @@ export default defineConfig({
 			"components/pi-exec/tests/**/*.test.ts",
 			"components/branch-search/tests/**/*.test.ts",
 			"components/browser-pages/tests/**/*.test.ts",
-			"components/history-eval/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

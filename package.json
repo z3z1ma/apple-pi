@@ -101,8 +101,8 @@
     ]
   },
   "scripts": {
-    "format": "biome format --write components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts vitest.eval.config.ts biome.json tsconfig.web.json",
-    "format:check": "biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts vitest.eval.config.ts biome.json tsconfig.web.json && uvx ruff format --isolated --check --line-length 120 components/tmux-sessions/sidebar",
+    "format": "biome format --write components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json",
+    "format:check": "biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json && uvx ruff format --isolated --check --line-length 120 components/tmux-sessions/sidebar",
     "lint": "biome lint components optional-extensions extensions tests scripts && uvx ruff check --isolated --select E4,E7,E9,F --line-length 120 components/tmux-sessions/sidebar",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
@@ -113,8 +113,7 @@
     "test:pair": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/pair-programmer/tests/pair.test.mjs",
     "test:loader": "node tests/package-load.mjs",
     "pack:check": "npm pack --dry-run",
-    "audit:cache": "node scripts/cache-audit.mjs",
-    "eval:history": "node scripts/eval-run.mjs eval/history.eval.ts"
+    "audit:cache": "node scripts/cache-audit.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": ">=1.2.0",

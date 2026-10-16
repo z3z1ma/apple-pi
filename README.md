@@ -321,7 +321,7 @@ stateDiagram-v2
 
 ---
 
-### 5. `subagents`, `branch-search`, `ralph`, & `history-eval`: Swap Space, Tournaments, and Loops
+### 5. `subagents`, `branch-search`, & `ralph`: Swap Space, Tournaments, and Loops
 
 #### The Observed Dysfunction
 Most multi-agent setups are theatrical roleplay ("You are a Senior PM arguing with a QA Engineer"). They burn 5x the tokens to produce the exact same bugs a single agent produces, while creating race conditions on the git working tree.
@@ -329,7 +329,7 @@ Most multi-agent setups are theatrical roleplay ("You are a Senior PM arguing wi
 Meanwhile, when you genuinely *do* need multiple agents—either to offload a noisy investigation, explore two competing approaches in parallel, or grind through a 50-file migration—standard harnesses give you no isolation primitives.
 
 #### The Mechanical Response
-`apple-pi` treats multi-agent execution as a systems engineering problem—providing **Swap Space** (`subagents`), **Speculative Branch Tournaments** (`branch-search`), **Fresh-Context Loops** (the `ralph` skill), and **Replay on Closed Tasks** (`history-eval`).
+`apple-pi` treats multi-agent execution as a systems engineering problem—providing **Swap Space** (`subagents`), **Speculative Branch Tournaments** (`branch-search`), and **Fresh-Context Loops** (the `ralph` skill).
 
 ```mermaid
 flowchart TB
@@ -348,9 +348,8 @@ flowchart TB
         WTA & WTB & WTC -->|Gates, then judge medians| Judge["Ranking + Optional Judge Model<br/>(judge.ts / report.ts)"]
     end
 
-    subgraph LoopAndEval["C. Fresh-Context Loops & Replay (skills/ralph + history-eval)"]
+    subgraph Loops["C. Fresh-Context Loops (skills/ralph)"]
         Ralph["ralph pi_exec program<br/>(ralph-simple.py / ralph-ledger.py)"] <-->|One increment per fresh worker| LState[("Repository<br/>+ optional .ledger task")]
-        Hist["history-eval<br/>(tasks.ts / clone.ts / run.ts)"] -->|Clones repo at a closed task's base<br/>& runs the agent on its task.md| Report["Oracle-Test Report<br/>(report.ts)"]
     end
 ```
 
@@ -363,12 +362,8 @@ flowchart TB
    * The `search_branches` tool (`orchestrator.ts`, `workspace.ts`) snapshots the workspace, asks a fork of the conversation for distinct approaches, and runs each one as its own conversation fork in an isolated git worktree. It then runs the agent's gate commands (such as the test suite) and numeric judge commands (time, size, any score a command can print), ranks the attempts that pass by the judges' medians, optionally lets a `judge.profile` model choose among them (`judge.ts`), applies the winner's diff, and keeps a `record.json` of every attempt (`record.ts`). It stays off until `~/.pi/agent/branch-search.json` exists (copy `branch-search.example.json`).
 3. **Ledger-Backed Ralph Loops (`skills/ralph`):**
    * A raw `while true; do agent; done` loop ("Ralph loop") works great until context resets cause the agent to thrash on the same half-finished item. The `ralph` skill guides the agent to write a `pi_exec` program that runs bounded, sequential, fresh coding workers, one increment each. `skills/ralph/references/ralph-simple.py` works over any caller-owned goal with no ledger, and `ralph-ledger.py` (`ledger-increment.md`) works over a prepared `.ledger` task as its durable memory, stopping when that task is `done` or `blocked`. Every worker boots with a fresh context; the repository and ledger carry the state, and the caller keeps review and integration authority.
-4. **Replay on Closed Ledger Tasks (`components/history-eval`):**
-   * How do you know if a new skill, system prompt tweak, or compaction rule actually improves the harness? Folklore and vibes aren't engineering. `history-eval` (`tasks.ts`, `clone.ts`, `session.ts`, `run.ts`) measures one agent on closed `.ledger` tasks of a repository: it derives each task's base and final commits from the commits its closed bundle cites, picks oracle tests that fail on the base and pass on the final commit, runs the agent in a fresh clone at the base with the closed `task.md` as its prompt, and then runs the oracle tests. It is a maintainer tool on real models, not part of the package or `npm test`.
-
 #### The Extrapolated & Emergent Implications
 * **Stochastic Search with Deterministic Selection:** When you combine `branch-search` with Ralph, you stop treating the LLM as a deterministic compiler that must get the answer right on the first try. Instead, you use `branch-search` to sample the solution space across multiple isolated git worktrees, let your gates and judge commands select the survivor, and then let a Ralph loop grind out the remaining increments of a ledger task with clean-context workers.
-* **Your Own History Becomes the Harness's Test Suite:** Every closed ledger task with cited commits and oracle tests is a reproducible benchmark. You change a harness mechanism (e.g., a `code-context` rule, a skill, or a `pair-programmer` threshold) and rerun `history-eval` on the same tasks to compare solved tasks, tokens, and cost.
 
 ---
 
@@ -441,7 +436,6 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `notify` | `notify.ts` | Native macOS completion notifications, optional `Pi Notifier.app` setup (`install-notifier-app.sh`, run by `/notify-setup`), and best-effort focus detection with click-to-focus (`focus-check.sh`, `focus-tmux.sh`). |
 | `vroom` | `vroom.ts` | `/fast`: priority service tier for OpenAI, Codex, and xAI requests. |
 | `xai-hosted-tools` | `xai-hosted-tools.ts` | Injects xAI's hosted web and X search tools into eligible xAI Responses requests (`payload.ts`). |
-| `history-eval` | *(maintainer script: `npm run eval:history`)* | Runs an agent on closed ledger tasks in fresh clones and checks the result with oracle tests (`tasks.ts`, `clone.ts`, `run.ts`, `report.ts`). Not in the package. |
 | `shared` | *(Internal library)* | Cross-component primitives: `work-manager.ts`, `exclusive-lease.ts`, `forked-continuation.ts`, `fork-context.ts`, `model-profiles.ts`, `sidecar-usage.ts`, `file-changes.ts`, and `git.ts`. |
 
 ### Optional Extensions (`optional-extensions/`)
@@ -560,17 +554,12 @@ cp model-profiles.anthropic.json ~/.pi/agent/model-profiles.json   # or model-pr
 Branch search stays off until a configuration exists:
 * `branch-search.example.json` — Example with the attempt count, per-attempt limits, and ignored directories cloned into each worktree. Copy it to `~/.pi/agent/branch-search.json`; the optional `judge.profile` key is documented in [`docs/branch-search.md`](docs/branch-search.md).
 
-### Auditing, Evaluation, & Smoke Testing
+### Auditing & Smoke Testing
 
 ```bash
 # Summarize prompt-cache reads and writes, uncached input, and recorded cost from Pi session logs
 npm run audit:cache
-
-# Run the history evaluation on real models over closed ledger tasks (components/history-eval)
-HISTORY_EVAL_CONFIG=eval.json HISTORY_EVAL_OUT=.ledger/<task-id> npm run eval:history
 ```
-
-See [`docs/history-eval.md`](docs/history-eval.md) for the `eval.json` keys.
 
 `.pi/programs/rpc_smoke.py` is a saved `pi_exec` program, not a standalone Python script. In a Pi session in this trusted checkout, ask the agent to call `program_rpc_smoke` with a `prompt`: it sends that prompt through the real installed Pi in RPC mode in a temporary directory and reports custom messages and usage. It calls the real default model.
 
