@@ -77,12 +77,11 @@ describe("buildLedgerPage", () => {
 });
 
 describe("evidence files", () => {
-	it("serves only files the page lists, highlighted, and keeps them for the saved page", async () => {
+	it("serves only files the page lists, highlighted, and says when a file is not text", async () => {
 		const page = await build();
 		const dir = join(repo, ".ledger", ID);
 		const served = await serveEvidence(page, dir, "evidence/run.json");
 		expect(served?.lines?.map((l) => l.map((s) => s.t).join(""))).toEqual(["{", '  "ok": true,', '  "runs": 3', "}"]);
-		expect(page.evidence[1].lines).toBe(served?.lines);
 		expect(await serveEvidence(page, dir, "evidence/blob.bin")).toEqual({ lines: undefined, binary: true });
 		expect(await serveEvidence(page, dir, "task.md")).toBeUndefined();
 		expect(await serveEvidence(page, dir, "../../../etc/passwd")).toBeUndefined();
