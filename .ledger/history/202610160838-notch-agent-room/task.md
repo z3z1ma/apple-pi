@@ -73,7 +73,9 @@ Acceptance:
 
 ## Current State
 
-Round 5 of prototype 2 runs in the notch with live agents. Operator: "we have gotten quite close to an acceptable prototype."
+Closed: all four tickets are implemented, committed and verified live (see Outcome). The prototype rounds below are history, newest first, recording how the design was reached; their "not yet checked" and asset notes were settled by the implementation notes at the end of this section.
+
+Prototype round 5 (final): the operator said "we have gotten quite close to an acceptable prototype."
 
 Operator feedback on round 4, and what changed:
 
@@ -110,7 +112,7 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
-Implementation (2026-10-16): tickets 01 (3e9c7dd, f77b01e), 02 (836192f) and 03 (575edfe) are committed. The operator confirmed 01 live, dragging included. Ticket 04 waits for one full `npm test` run that passes under lower machine load. The operator accepted one residual race: two different builds starting within about 100 ms of a source change can leave the older running until the next root pi start (see the `claimPanel` context note).
+Implementation (2026-10-16): tickets 01 (3e9c7dd, f77b01e), 02 (836192f) and 03 (575edfe) are committed. The operator confirmed 01 live, dragging included. The operator accepted one residual race: two different builds starting within about 100 ms of a source change can leave the older running until the next root pi start (see the `claimPanel` context note).
 
 Ticket 04 committed on the operator's instruction. Every full `npm test` run under load (average 12–19) timed out a few unrelated tests at 5 s (pi-exec, tasks, browser-pages, auto-compaction), a different set each run; each passes alone. Operator verified live that choices survive a panel restart (03) and that the panel follows display changes (04). The cozy sweater worker now exists (made with Codex `image_gen` after the Antigravity quota ran out); cozy has 3 workers. The game studio room stays as it is (operator: "It's fine").
 
