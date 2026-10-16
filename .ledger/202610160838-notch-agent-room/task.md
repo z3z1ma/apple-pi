@@ -1,4 +1,4 @@
-Status: planning
+Status: ready
 Created: 2026-10-16
 Updated: 2026-10-16
 
@@ -110,7 +110,7 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
-Next: confirm dragging in the real panel. The cozy sweater worker now exists (made with Codex `image_gen` after the Antigravity quota ran out); cozy has 3 workers. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
+Next: operator review of `plan.md` (the real component). Dragging in the real panel is still unconfirmed. The cozy sweater worker now exists (made with Codex `image_gen` after the Antigravity quota ran out); cozy has 3 workers. The game studio room stays as it is (operator: "It's fine").
 
 ## Outcome
 
