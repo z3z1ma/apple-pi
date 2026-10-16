@@ -58,16 +58,14 @@ def interior(image: Image.Image) -> Image.Image:
     while low <= high:
         h = (low + high) // 2
         w = round(h * aspect)
-        clear = w <= small.width and (
-            sums[h:, w:] - sums[:-h, w:] - sums[h:, :-w] + sums[:-h, :-w] == 0
-        )
-        if w <= small.width and clear.any():
-            ys, xs = np.nonzero(clear)
-            lowest = ys == ys.max()
-            x = int(np.round(np.median(xs[lowest])))
-            best, low = (x, int(ys.max()), w, h), h + 1
-        else:
+        # Top-left corners whose h×w window holds no backdrop, from the summed-area table.
+        clear = w <= small.width and sums[h:, w:] - sums[:-h, w:] - sums[h:, :-w] + sums[:-h, :-w] == 0
+        if not np.any(clear):
             high = h - 1
+            continue
+        ys, xs = np.nonzero(clear)
+        y = ys.max()
+        best, low = (int(np.round(np.median(xs[ys == y]))), int(y), w, h), h + 1
     x, y, w, h = (v * step for v in best)
     # Inset a little so the room's own outer edge lines do not show as a strip along the border.
     dx, dy = round(w * 0.02), round(h * 0.02)
