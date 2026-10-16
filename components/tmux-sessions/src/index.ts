@@ -90,6 +90,7 @@ async function readTmuxPane(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxPane
 }
 
 const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
+const SIDEBAR = fileURLToPath(new URL("../scripts/sidebar.sh", import.meta.url));
 
 /**
  * Load the tmux plugin unless this server already loaded this exact file. The stamp holds the path and
@@ -99,9 +100,9 @@ async function ensurePlugin(pi: ExtensionAPI, tmuxBin: string): Promise<void> {
 	const stamp = `${PLUGIN}:${(await stat(PLUGIN)).mtimeMs}`;
 	const loaded = await pi.exec(tmuxBin, ["show-option", "-gqv", "@pi_sessions_plugin"], { timeout: 2_000 });
 	if (loaded.stdout.trim() === stamp) return;
+	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_state_dir", STATE_DIR], { timeout: 2_000 });
 	const run = await pi.exec(tmuxBin, ["run-shell", PLUGIN], { timeout: 10_000 });
 	if (run.code !== 0) return;
-	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_state_dir", STATE_DIR], { timeout: 2_000 });
 	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_sessions_plugin", stamp], { timeout: 2_000 });
 }
 
@@ -122,6 +123,16 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 		queue = queue.then(task).catch(() => {
 			// State publishing must never disrupt the session.
 		});
+	}
+
+	/** Write the record, then let the tmux status-line summary recount; the script runs in the background. */
+	async function publish(next: AgentStateRecord): Promise<void> {
+		await writeState(next);
+		await refreshStatus();
+	}
+
+	async function refreshStatus(): Promise<void> {
+		await pi.exec(tmuxBin, ["run-shell", "-b", `'${SIDEBAR}' status`], { timeout: 2_000 });
 	}
 
 	async function init(ctx: ExtensionContext, reason: string): Promise<void> {
@@ -156,10 +167,12 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			paneId: pane.paneId,
 			windowId: pane.windowId,
 			paneTty: pane.paneTty,
+			// $TMUX is "socket,server-pid,session".
+			tmuxSocket: (process.env.TMUX ?? "").split(",")[0] ?? "",
 			startedAt: ts,
 			updatedAt: ts,
 		};
-		await writeState(record);
+		await publish(record);
 	}
 
 	function setStatus(status: AgentStatus): void {
@@ -168,7 +181,7 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			record.status = status;
 			record.updatedAt = nowSeconds();
 			record.sessionName = pi.getSessionName() || record.sessionName;
-			await writeState(record);
+			await publish(record);
 		});
 	}
 
@@ -176,7 +189,7 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 		if (bellDisabled() || !record?.paneTty) return;
 		try {
 			// Writing BEL to the pane's own pty makes tmux count a bell for that
-			// pane; the alert-bell hook then forwards it from a dedicated session.
+			// pane, which marks its window in the status line.
 			await appendFile(record.paneTty, "\x07");
 		} catch {
 			// A bell that cannot be delivered must not fail anything.
@@ -190,9 +203,10 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 	pi.on("session_info_changed", (event) => {
 		schedule(async () => {
 			if (!record) return;
+			// updatedAt stays the time of the last status change: the sidebar counts an idle agent updated after
+			// you last looked as unseen, and an automatic title arriving after you looked must not reopen it.
 			record.sessionName = event.name || "";
-			record.updatedAt = nowSeconds();
-			await writeState(record);
+			await publish(record);
 		});
 	});
 
@@ -214,8 +228,10 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", () => {
 		schedule(async () => {
-			if (record) await removeState(record.sessionId);
+			if (!record) return;
+			await removeState(record.sessionId);
 			record = undefined;
+			await refreshStatus();
 		});
 	});
 

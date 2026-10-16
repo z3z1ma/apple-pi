@@ -27,6 +27,7 @@ function makeRecord(sessionId: string, overrides: Record<string, unknown> = {}) 
 		paneId: "%7",
 		windowId: "@3",
 		paneTty: "/dev/ttys009",
+		tmuxSocket: "/private/tmp/tmux-501/default",
 		startedAt: ts,
 		updatedAt: ts,
 		...overrides,
@@ -150,6 +151,7 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 	process.env.TMUX_PANE = "%78";
 	const server = new Map<string, string>();
 	const pluginRuns: string[] = [];
+	const statusRefreshes: string[] = [];
 	const startPi = (sessionId: string) => {
 		const handlers = new Map<string, (...args: unknown[]) => unknown>();
 		const pi = {
@@ -161,7 +163,8 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 				if (args[0] === "display-message") return { code: 0, stdout: "%78\t@4\t/dev/null\n", stderr: "" };
 				if (args[0] === "show-option") return { code: 0, stdout: `${server.get(args[2]) ?? ""}\n`, stderr: "" };
 				if (args[0] === "set-option") server.set(args[2], args[3]);
-				if (args[0] === "run-shell") pluginRuns.push(args[1]);
+				if (args[0] === "run-shell" && args[1] === "-b") statusRefreshes.push(args[2]);
+				else if (args[0] === "run-shell") pluginRuns.push(args[1]);
 				return { code: 0, stdout: "", stderr: "" };
 			},
 		};
@@ -181,6 +184,40 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 	expect(pluginRuns).toHaveLength(1);
 	expect(pluginRuns[0]).toMatch(/components\/tmux-sessions\/pi_session_manager\.tmux$/);
 	expect(server.get("@pi_state_dir")).toBe(stateDir);
+	expect(statusRefreshes.length).toBeGreaterThan(0);
+	expect(statusRefreshes[0]).toMatch(/scripts\/sidebar\.sh' status$/);
+
+	if (previousPane === undefined) delete process.env.TMUX_PANE;
+	else process.env.TMUX_PANE = previousPane;
+});
+
+test("a session rename updates the record's name without counting as a status change", async () => {
+	const previousPane = process.env.TMUX_PANE;
+	process.env.TMUX_PANE = "%79";
+	const handlers = new Map<string, (...args: unknown[]) => unknown>();
+	const pi = {
+		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
+		registerCommand() {},
+		getSessionName: () => "",
+		async exec(_command: string, args: string[]) {
+			if (args[0] === "display-message") return { code: 0, stdout: "%79\t@5\t/dev/null\n", stderr: "" };
+			return { code: 0, stdout: "", stderr: "" };
+		},
+	};
+	registerTmuxSessions(pi as never);
+	handlers.get("session_start")?.(
+		{ reason: "startup" },
+		{ mode: "tui", cwd: "/tmp/project", isIdle: () => true, sessionManager: { getSessionId: () => "session-rename" } },
+	);
+	const find = async () => (await readAllStates()).find((record) => record.sessionId === "session-rename");
+	await flushUntil(async () => Boolean(await find()));
+	const before = await find();
+	await new Promise((resolve) => setTimeout(resolve, 1_100));
+	handlers.get("session_info_changed")?.({ name: "Auto title" });
+	await flushUntil(async () => (await find())?.sessionName === "Auto title");
+
+	expect((await find())?.sessionName).toBe("Auto title");
+	expect((await find())?.updatedAt).toBe(before?.updatedAt);
 
 	if (previousPane === undefined) delete process.env.TMUX_PANE;
 	else process.env.TMUX_PANE = previousPane;

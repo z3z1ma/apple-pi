@@ -121,7 +121,7 @@ Extended keys let Pi tell `Shift+Enter`, `Ctrl+Shift+S`, and similar keys apart 
 tmux kill-server 2>/dev/null; tmux new -s main
 ```
 
-The first Pi you start inside tmux loads the agent sidebar's key binding and hooks into that tmux server, so `tmux.conf` needs no plugin line. The sidebar needs [uv](https://docs.astral.sh/uv/) on the tmux server's `PATH`. The default prefix is `Ctrl+B`; `prefix` + `u` turns the sidebar on or off. See [Tmux sessions](tmux-sessions.md).
+The first Pi you start inside tmux loads the agent sidebar's key binding and hooks into that tmux server, so `tmux.conf` needs no plugin line. The sidebar needs [uv](https://docs.astral.sh/uv/) on the tmux server's `PATH`. The default prefix is `Ctrl+B`; `prefix` + `u` turns the agent sidebar on or off, `prefix` + `y` jumps to the agent that has waited longest, and `prefix` + `A` opens the agent dashboard. See [Tmux sessions](tmux-sessions.md).
 
 ## 6. Set up notifications (macOS)
 

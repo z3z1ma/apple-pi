@@ -23,6 +23,7 @@ Each root Pi session running inside tmux writes one JSON record to `~/.pi/agent/
   "paneId": "%3",
   "windowId": "@2",
   "paneTty": "/dev/ttys009",
+  "tmuxSocket": "/private/tmp/tmux-501/default",
   "startedAt": 1700000000,
   "updatedAt": 1700000000
 }
@@ -42,7 +43,7 @@ Status is derived from agent lifecycle events:
 
 ### Liveness
 
-The sidebar shows a record only when its pid is running **and** its `paneId` exists in `tmux list-panes -a`. It deletes records whose pid is gone. A record whose pane is missing is skipped, not deleted, because `list-panes` sees only one tmux server.
+The sidebar shows a record only when its pid is running **and** its `paneId` exists in `tmux list-panes -a`. It deletes records whose pid is gone, and records whose pane is gone from the tmux server named in `tmuxSocket`; that catches a Pi killed without its shutdown hook whose pid the OS has since reused. A record from another tmux server is skipped, not deleted.
 
 ## Install
 
@@ -50,7 +51,8 @@ Nothing to add to `tmux.conf`. The first Pi that starts inside tmux runs `pi_ses
 
 The plugin:
 
-- binds `prefix` + `u` (override with `set -g @pi_sidebar_key <key>` before it loads);
+- binds `prefix` + `u` to the sidebar, `prefix` + `y` to jump, and `prefix` + `A` to the dashboard (override with `@pi_sidebar_key`, `@pi_jump_key`, and `@pi_dashboard_key` before it loads);
+- appends `#{@pi_agents}`, the agent summary, to `status-right` once, and again if a config reload removed it;
 - installs hooks at index `71` on `session-window-changed`, `client-session-changed`, and `pane-focus-in`, so reloading replaces them and your own hooks on those events stay;
 - sets `focus-events on`, which `pane-focus-in` needs;
 - stamps `@pi_seen_at` on every pane that has none, so agents that finished before tracking began count as seen.
@@ -59,7 +61,7 @@ Requirements: tmux ≥ 3.2 and [uv](https://docs.astral.sh/uv/) on the tmux serv
 
 ## The sidebar
 
-`prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. Panes make room for it in proportion and grow back in proportion when it leaves, so splits do not drift and resizes you make while it is there survive (`sidebar/layout.py` rewrites the window layout). `prefix` + `u` again closes it. There is one sidebar per tmux server and one process.
+`prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. Panes make room for it in proportion and grow back in proportion when it leaves, so splits do not drift and resizes you make while it is there survive (`sidebar/layout.py` rewrites the window layout). `prefix` + `u` again closes it. There is one sidebar per tmux server and one process. A zoomed pane stays zoomed when the sidebar arrives or leaves, and the sidebar never enters the dashboard window.
 
 A large count shows how many agents need you, or "all clear". Below it, agents sit in three lanes:
 
@@ -69,7 +71,7 @@ A large count shows how many agents need you, or "all clear". Below it, agents s
 | WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
 | QUIET | settled and seen | grey border |
 
-Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. An agent that enters NEEDS YOU moves to the top and flashes for four seconds.
+Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds. Hovering a card shows everything about the agent untruncated: name, ledger task, last tool call, model, context size, cost, location, and directory.
 
 The sidebar paints the terminal's default background, so it stays translucent on a translucent terminal, and uses the Catppuccin Mocha palette.
 
@@ -84,7 +86,36 @@ The sidebar paints the terminal's default background, so it stays translucent on
 
 ### Seen
 
-"Seen" is the tmux pane option `@pi_seen_at`: the `pane-focus-in` hook stamps it whenever a pane gains focus, and `x` stamps it by hand. An agent that settles while you watch its pane counts as seen. The option lives and dies with its pane and works with no sidebar open; a tmux server restart forgets it.
+"Seen" is the tmux pane option `@pi_seen_at`: the `pane-focus-in` hook stamps it whenever a pane gains focus, and `x` stamps it by hand. An agent that settles while you watch its pane counts as seen, and so does an agent whose live view you read in the dashboard for three seconds. A rename, such as an automatic session title, is not a status change, so it never reopens an agent you have seen. The option lives and dies with its pane and works with no sidebar open; a tmux server restart forgets it.
+
+## Status line and jump
+
+The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. Every status change, rename, and focus change recounts it, so it needs no polling.
+
+`prefix` + `y` jumps to the agent that has needed you longest, skipping the pane you are in, so pressing it again walks the queue. With nothing waiting it says so.
+
+## The dashboard
+
+`prefix` + `A` opens a window named `π agents` in the current session, or switches to it if it exists anywhere; pressing it inside the dashboard returns to the window you came from. The window holds:
+
+- a header with the counts by state, the number of agents, and their total cost;
+- a table of every agent in the same attention order: state, name, ledger task, last tool call, time in state, context size, and cost;
+- the selected agent's full details and its 30-minute tool-call graph;
+- a live view of the selected agent's pane, refreshed twice a second.
+
+Below 140 columns the table sits above the details instead of beside them.
+
+| Key | Action |
+| --- | --- |
+| click a row, `j` / `k`, arrows | select an agent and show its live view |
+| click the selected row, `enter` | jump to that agent's pane |
+| `r` | reply: type a line into an idle agent's prompt without leaving the dashboard |
+| `x` / `X` | mark the selected / every agent as seen |
+| `p` | hide the table and give the live view the whole width |
+| `esc` | close the reply box, or go back to the previous window |
+| `q` | close the dashboard |
+
+A reply goes only to an agent that is idle when you press `enter`; a busy agent or an open questionnaire needs you in its own pane.
 
 ## `/pi-sessions`
 
@@ -100,4 +131,4 @@ Run `/pi-sessions` inside Pi to list the live published sessions and the state d
 
 ## Development
 
-`npm run test:sidebar` runs the sidebar's pytest suite through `uv`; `npm run lint` and `npm run format:check` run Ruff on it. The original prototype and its evaluation live in the ledger task `202610152308-tmux-agent-tracking`.
+`npm run test:sidebar` runs the sidebar and dashboard pytest suites through `uv`; `npm run lint` and `npm run format:check` run Ruff on it. The original prototype and its evaluation live in the ledger task `202610152308-tmux-agent-tracking`.

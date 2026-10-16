@@ -45,6 +45,8 @@ export interface AgentStateRecord {
 	windowId: string;
 	/** tmux pane pty path, used to ring the pane bell on settle. */
 	paneTty: string;
+	/** Socket of the tmux server the pane belongs to, so a reader on that server may prune a record whose pane is gone. */
+	tmuxSocket: string;
 	/** Epoch seconds when the record was first written. */
 	startedAt: number;
 	/** Epoch seconds of the last status change; drives the picker age column. */

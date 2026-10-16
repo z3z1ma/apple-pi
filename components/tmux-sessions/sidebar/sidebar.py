@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import sys
 import threading
@@ -17,78 +16,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agents import Agent, AgentStore, mark_seen, tmux  # noqa: E402
+from presentation import STATES, activity, ago, details, glyph, state, task_line, tokens, use_theme  # noqa: E402
 from textual import work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.binding import Binding  # noqa: E402
 from textual.containers import Horizontal, Vertical, VerticalScroll  # noqa: E402
 from textual.content import Content  # noqa: E402
-from textual.theme import BUILTIN_THEMES  # noqa: E402
 from textual.widget import Widget  # noqa: E402
 from textual.widgets import Digits, Sparkline, Static  # noqa: E402
 
-SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 POLL_SECONDS = 1.0
 TICK_SECONDS = 0.1
 FLASH_SECONDS = 4.0
-STATES = ("waiting", "done", "working", "quiet")
 LANES = (
     ("need", "NEEDS YOU", lambda agent: agent.needs_you),
     ("work", "WORKING", lambda agent: not agent.needs_you and agent.status == "busy"),
     ("quiet", "QUIET", lambda agent: not agent.needs_you and agent.status != "busy"),
 )
-
-
-def state(agent: Agent) -> str:
-    if agent.status == "waiting":
-        return "waiting"
-    if agent.unseen:
-        return "done"
-    if agent.status == "busy":
-        return "working"
-    return "quiet"
-
-
-def glyph(agent: Agent, frame: int) -> str:
-    current = state(agent)
-    if current == "working":
-        return SPINNER[frame % len(SPINNER)]
-    return {"waiting": "?", "done": "✓", "quiet": "·"}[current]
-
-
-def ago(timestamp: float, now: float) -> str:
-    seconds = max(0, int(now - timestamp))
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        return f"{seconds // 3600}h"
-    return f"{seconds // 86400}d"
-
-
-def tokens(count: int) -> str:
-    return f"{count / 1_000_000:.1f}M" if count >= 1_000_000 else f"{count / 1000:.0f}k"
-
-
-def task_line(agent: Agent) -> Content:
-    if agent.ledger and agent.session_name:
-        return Content.from_markup(
-            "[$text-accent]◆[/] $title [$text-muted]$status[/]", title=agent.ledger.title, status=agent.ledger.status
-        )
-    if agent.ledger:
-        return Content.from_markup(
-            "[$text-accent]◆[/] [$text-muted]$status · $project[/]", status=agent.ledger.status, project=agent.project
-        )
-    if agent.session_name:
-        return Content.from_markup("[$text-muted]◇ no ledger task · $project[/]", project=agent.project)
-    return Content.from_markup("[$text-muted]◇ no ledger task · unnamed[/]")
-
-
-def activity(agent: Agent) -> Content:
-    act = agent.activity
-    if not act.last_tool:
-        return Content.from_markup("[$text-muted]no tool calls yet[/]")
-    return Content.from_markup("[$text-secondary]$tool[/] $detail", tool=act.last_tool, detail=act.last_tool_detail)
 
 
 class Card(Widget):
@@ -115,6 +59,7 @@ class Card(Widget):
             self.set_class(name == current, f"-{name}")
         self.set_class(selected, "-selected")
         self.set_class(flash, "-flash")
+        self.tooltip = details(agent, now)
         if self.is_mounted:
             self.paint(now, frame)
 
@@ -156,6 +101,7 @@ class Sidebar(App):
     #hero-count.-clear { color: $success; }
     #hero-label { width: 1fr; height: 3; padding-left: 2; content-align: left middle; }
     #lanes { scrollbar-size-vertical: 1; }
+    #empty { margin: 2 2; color: $text-muted; text-wrap: wrap; }
     .lane-head { height: 1; margin: 1 0; border-top: heavy $panel; border-title-align: left;
                  border-title-style: bold; border-title-color: $text-muted; }
     #head-need { border-top: heavy $warning; border-title-color: $text-warning; }
@@ -199,6 +145,7 @@ class Sidebar(App):
         self.frame = 0
         self.previous_states: dict[str, str] = {}
         self.flash_until: dict[str, float] = {}
+        self.last_error = ""
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="hero"):
@@ -208,16 +155,11 @@ class Sidebar(App):
             for key, _, _ in LANES:
                 yield Static(classes="lane-head", id=f"head-{key}")
                 yield Vertical(classes="lane", id=f"lane-{key}")
+            yield Static("No Pi agents in tmux yet. Start pi in any pane and it appears here.", id="empty")
         yield Static("j/k move · ⏎ jump · x seen · esc back · q close", id="keys")
 
     def on_mount(self) -> None:
-        # The built-in muted text colour has alpha, which blends against the theme background rather than the
-        # real terminal; a solid colour keeps muted text muted.
-        base = BUILTIN_THEMES["catppuccin-mocha"]
-        self.register_theme(
-            dataclasses.replace(base, name="pi-mocha", variables={**base.variables, "text-muted": "#7f849c"})
-        )
-        self.theme = "pi-mocha"
+        use_theme(self)
         self.poll()
         self.set_interval(POLL_SECONDS, self.poll)
         self.set_interval(TICK_SECONDS, self.tick)
@@ -228,12 +170,24 @@ class Sidebar(App):
             return
         try:
             agents = self.store.poll()
+        except Exception as error:  # noqa: BLE001 - a bad poll must not end an always-on sidebar
+            self.call_from_thread(self.report, f"Could not read agents: {error}")
+            return
         finally:
             self.lock.release()
         self.call_from_thread(self.apply, agents)
 
+    def report(self, message: str) -> None:
+        if message != self.last_error:
+            self.last_error = message
+            self.notify(message, severity="error", timeout=10)
+
     def apply(self, agents: list[Agent]) -> None:
         now = time.time()
+        self.last_error = ""
+        live = {agent.session_id for agent in agents}
+        self.previous_states = {sid: s for sid, s in self.previous_states.items() if sid in live}
+        self.flash_until = {sid: until for sid, until in self.flash_until.items() if sid in live and until > now}
         for agent in agents:
             current = state(agent)
             before = self.previous_states.get(agent.session_id)
@@ -269,6 +223,7 @@ class Sidebar(App):
                 total=len(agents),
             )
         )
+        self.query_one("#empty").display = not agents
         now = time.time()
         for key, title, belongs in LANES:
             members = [agent for agent in agents if belongs(agent)]

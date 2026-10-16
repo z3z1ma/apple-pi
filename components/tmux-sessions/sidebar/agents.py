@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -220,48 +221,109 @@ class AgentStore:
         return log
 
     def poll(self) -> list[Agent]:
-        panes: dict[str, list[str]] = {}
-        for line in tmux(
-            "list-panes",
-            "-a",
-            "-F",
-            f"#{{pane_id}}\t#{{session_name}}\t#{{window_index}}\t#{{pane_index}}\t#{{{SEEN_OPTION}}}",
-        ).splitlines():
-            pane_id, *fields = line.split("\t")
-            panes[pane_id] = fields
-        focused = {line for line in tmux("list-clients", "-F", "#{pane_id}").splitlines() if line}
-        agents: list[Agent] = []
-        for path in STATE_DIR.glob("*.json"):
-            try:
-                record = json.loads(path.read_text())
-            except (OSError, ValueError):
-                continue
-            if not pid_alive(record.get("pid", 0)):
-                path.unlink(missing_ok=True)
-                continue
-            pane = panes.get(record.get("paneId", ""))
-            if pane is None:
-                continue
-            agent = Agent(
-                session_id=record["sessionId"],
-                status=record.get("status", "idle"),
-                cwd=record.get("cwd", ""),
-                session_name=record.get("sessionName", ""),
-                pane_id=record["paneId"],
-                updated_at=record.get("updatedAt", 0),
-            )
-            agent.tmux_session, agent.window_index, agent.pane_index, seen_at = pane
-            agent.focused = agent.pane_id in focused
-            settled_unseen = agent.status == "idle" and agent.updated_at > int(seen_at or 0)
-            # An agent that settles while you watch its pane gets no focus-in event, so watching counts as seeing.
-            if settled_unseen and agent.focused:
-                mark_seen(agent.pane_id)
-            agent.unseen = settled_unseen and not agent.focused
+        agents = live()
+        # Forget the read positions of ended sessions, so an always-on reader does not grow without bound.
+        current = {agent.session_id for agent in agents}
+        self.logs = {session_id: log for session_id, log in self.logs.items() if session_id in current}
+        for agent in agents:
             log = self._log(agent.session_id)
             if log is not None:
                 agent.activity = log.poll()
             agent.ledger = _ledger_task(agent.cwd, agent.session_id)
-            agents.append(agent)
-        rank = {"waiting": 0, "busy": 2, "idle": 3}
-        agents.sort(key=lambda a: (0 if a.needs_you else rank.get(a.status, 1), -a.updated_at))
         return agents
+
+
+def live() -> list[Agent]:
+    """Live agents from state records and tmux alone, in attention order: cheap enough for a tmux hook.
+
+    NEEDS YOU comes first, oldest first, so the top agent is the one that has waited longest; then working
+    and quiet agents, most recently changed first.
+    """
+    panes: dict[str, list[str]] = {}
+    socket = ""
+    for line in tmux(
+        "list-panes",
+        "-a",
+        "-F",
+        f"#{{socket_path}}\t#{{pane_id}}\t#{{session_name}}\t#{{window_index}}\t#{{pane_index}}\t#{{{SEEN_OPTION}}}",
+    ).splitlines():
+        socket, pane_id, *fields = line.split("\t")
+        panes[pane_id] = fields
+    focused = {line for line in tmux("list-clients", "-F", "#{pane_id}").splitlines() if line}
+    agents: list[Agent] = []
+    for path in STATE_DIR.glob("*.json"):
+        try:
+            record = json.loads(path.read_text())
+            pid, session_id, pane_id = int(record["pid"]), str(record["sessionId"]), str(record["paneId"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if not pid_alive(pid):
+            path.unlink(missing_ok=True)
+            continue
+        pane = panes.get(pane_id)
+        if pane is None:
+            # Only this tmux server can say its pane is gone; a record from another server is not ours to delete.
+            # This catches a Pi killed without its shutdown hook whose pid the OS has since reused.
+            if socket and record.get("tmuxSocket") == socket:
+                path.unlink(missing_ok=True)
+            continue
+        agent = Agent(
+            session_id=session_id,
+            status=str(record.get("status", "idle")),
+            cwd=str(record.get("cwd", "")),
+            session_name=str(record.get("sessionName") or ""),
+            pane_id=pane_id,
+            updated_at=int(record.get("updatedAt") or 0),
+        )
+        agent.tmux_session, agent.window_index, agent.pane_index, seen_at = pane
+        agent.focused = agent.pane_id in focused
+        settled_unseen = agent.status == "idle" and agent.updated_at > int(seen_at or 0)
+        # An agent that settles while you watch its pane gets no focus-in event, so watching counts as seeing.
+        if settled_unseen and agent.focused:
+            mark_seen(agent.pane_id)
+        agent.unseen = settled_unseen and not agent.focused
+        agents.append(agent)
+    agents.sort(key=attention_order)
+    return agents
+
+
+def attention_order(agent: Agent) -> tuple[int, int]:
+    if agent.needs_you:
+        return (0, agent.updated_at)
+    return (1 if agent.status == "busy" else 2, -agent.updated_at)
+
+
+# Status-line colours: the sidebar's Catppuccin Mocha warning, success, primary, and muted text.
+STATUS_STYLE = {"waiting": "#FAE3B0", "done": "#ABE9B3", "working": "#F5C2E7", "quiet": "#7f849c"}
+STATUS_GLYPH = {"waiting": "?", "done": "\u2713", "working": "\u283f", "quiet": "\u00b7"}
+
+
+def summary(agents: list[Agent]) -> str:
+    """A tmux status-line segment counting agents by state, or nothing when there are none."""
+    if not agents:
+        return ""
+    counts = {
+        "waiting": sum(agent.status == "waiting" for agent in agents),
+        "done": sum(agent.unseen for agent in agents),
+        "working": sum(agent.status == "busy" for agent in agents),
+        "quiet": sum(agent.status == "idle" and not agent.unseen for agent in agents),
+    }
+    parts = [
+        f"#[fg={STATUS_STYLE[name]}{',bold' if name in ('waiting', 'done') else ''}]{STATUS_GLYPH[name]} {count}"
+        for name, count in counts.items()
+        if count
+    ]
+    return f"#[fg={STATUS_STYLE['quiet']}]\u03c0 " + " ".join(parts) + "#[default] "
+
+
+def next_agent(agents: list[Agent], current_pane: str) -> Agent | None:
+    """The agent that has needed you longest, other than the one in the pane you are in."""
+    return next((agent for agent in agents if agent.needs_you and agent.pane_id != current_pane), None)
+
+
+if __name__ == "__main__":
+    if sys.argv[1:2] == ["summary"]:
+        print(summary(live()))
+    elif sys.argv[1:2] == ["next"]:
+        found = next_agent(live(), sys.argv[2] if len(sys.argv) > 2 else "")
+        print(found.pane_id if found else "")

@@ -10,3 +10,12 @@ It also sets `@pi_state_dir` to this extension's `STATE_DIR`.
 Why: the sidebar runs from the tmux server's environment, which does not see a `PI_TMUX_STATE_DIR` exported only to Pi.
 Coupled: components/tmux-sessions/scripts/sidebar.sh, components/tmux-sessions/pi_session_manager.tmux
 Verify: components/tmux-sessions/tests/tmux-sessions.test.ts
+
+## symbol:piTmuxSessions
+
+`updatedAt` changes only with the status, not with a rename (`session_info_changed`).
+Why: the sidebar counts an idle agent updated after you last looked at its pane as unseen. Automatic session titles arrive a moment after the turn settles, so bumping `updatedAt` on rename put agents you had just watched back into NEEDS YOU.
+Verify: components/tmux-sessions/tests/tmux-sessions.test.ts
+
+Every record write and removal runs `sidebar.sh status` in the background, so the tmux status-line summary follows status changes without polling.
+Coupled: components/tmux-sessions/scripts/sidebar.sh

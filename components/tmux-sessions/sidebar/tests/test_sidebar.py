@@ -2,91 +2,26 @@
 
 import asyncio
 import json
-import os
-import subprocess
-import sys
 import time
-from pathlib import Path
 
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import agents  # noqa: E402
-import sidebar  # noqa: E402
+import agents
+import sidebar
+from conftest import dead_pid, record
 
 
-class FakeTmux:
-    """Answers the tmux queries the sidebar makes and records the commands it sends."""
-
-    def __init__(self) -> None:
-        self.panes: dict[str, dict[str, str]] = {}
-        self.focused: set[str] = set()
-        self.commands: list[tuple[str, ...]] = []
-
-    def add_pane(self, pane_id: str, seen_at: str = "") -> None:
-        self.panes[pane_id] = {"session": "work", "window": "1", "index": str(len(self.panes) + 1), "seen": seen_at}
-
-    def __call__(self, *args: str) -> str:
-        if args[0] == "list-panes":
-            return "".join(
-                f"{pane}\t{p['session']}\t{p['window']}\t{p['index']}\t{p['seen']}\n" for pane, p in self.panes.items()
-            )
-        if args[0] == "list-clients":
-            return "".join(f"{pane}\n" for pane in self.focused)
-        self.commands.append(args)
-        if args[:2] == ("set", "-p"):
-            self.panes[args[3]]["seen"] = args[5]
-        return ""
-
-
-@pytest.fixture
-def env(tmp_path, monkeypatch):
-    fake = FakeTmux()
-    state = tmp_path / "state"
-    sessions = tmp_path / "sessions"
-    state.mkdir()
-    sessions.mkdir()
-    monkeypatch.setattr(agents, "tmux", fake)
-    monkeypatch.setattr(sidebar, "tmux", fake)
-    monkeypatch.setattr(agents, "STATE_DIR", state)
-    monkeypatch.setattr(agents, "SESSIONS_DIR", sessions)
-    return fake, state, sessions, tmp_path
-
-
-def record(state: Path, session_id: str, pane: str, status: str, updated_at: int, pid: int | None = None, **extra):
-    data = {
-        "schema": 1,
-        "sessionId": session_id,
-        "pid": os.getpid() if pid is None else pid,
-        "status": status,
-        "cwd": extra.get("cwd", "/tmp/project"),
-        "sessionName": extra.get("name", ""),
-        "paneId": pane,
-        "updatedAt": updated_at,
-    }
-    path = state / f"{session_id}.json"
-    path.write_text(json.dumps(data))
-    return path
-
-
-def dead_pid() -> int:
-    process = subprocess.Popen(["true"])
-    process.wait()
-    return process.pid
-
-
-def test_lists_live_agents_prunes_dead_records_and_keeps_records_without_a_pane(env):
+def test_lists_live_agents_and_prunes_dead_or_paneless_records_of_this_tmux_server_only(env):
     fake, state, _, _ = env
     fake.add_pane("%1", seen_at="0")
     live = record(state, "live", "%1", "busy", 100)
     dead = record(state, "dead", "%1", "idle", 100, pid=dead_pid())
-    elsewhere = record(state, "elsewhere", "%9", "idle", 100)
+    paneless = record(state, "paneless", "%9", "idle", 100)
+    other_server = record(state, "other-server", "%9", "idle", 100, socket="/tmp/tmux-test/other")
 
     found = agents.AgentStore().poll()
 
     assert [agent.session_id for agent in found] == ["live"]
-    assert live.exists() and elsewhere.exists() and not dead.exists()
+    assert live.exists() and other_server.exists()
+    assert not dead.exists() and not paneless.exists()
 
 
 def test_an_agent_that_settled_after_you_last_looked_needs_you_until_seen(env):
@@ -206,3 +141,35 @@ def test_sidebar_groups_agents_into_lanes_and_x_marks_the_selected_agent_seen(en
     assert lanes == {"need": ["done"], "work": ["busy"], "quiet": ["idle"]}
     assert count == "1"
     assert last[:5] == ("set", "-p", "-t", "%1", agents.SEEN_OPTION)
+
+
+def test_status_summary_counts_agents_by_state_and_is_empty_without_agents(env):
+    fake, state, _, _ = env
+    assert agents.summary(agents.live()) == ""
+    now = int(time.time())
+    for pane in ("%1", "%2", "%3", "%4"):
+        fake.add_pane(pane, seen_at=str(now - 100))
+    record(state, "asking", "%1", "waiting", now - 50)
+    record(state, "done", "%2", "idle", now - 50)
+    record(state, "working", "%3", "busy", now - 50)
+    record(state, "quiet", "%4", "idle", now - 200)
+
+    line = agents.summary(agents.live())
+
+    for part in ("? 1", "\u2713 1", "\u283f 1", "\u00b7 1"):
+        assert part in line
+
+
+def test_jump_target_is_the_agent_that_has_needed_you_longest_other_than_your_pane(env):
+    fake, state, _, _ = env
+    now = int(time.time())
+    for pane in ("%1", "%2", "%3"):
+        fake.add_pane(pane, seen_at=str(now - 1000))
+    record(state, "older", "%1", "waiting", now - 300)
+    record(state, "newer", "%2", "idle", now - 60)
+    record(state, "busy", "%3", "busy", now - 900)
+
+    assert agents.next_agent(agents.live(), "%9").session_id == "older"
+    assert agents.next_agent(agents.live(), "%1").session_id == "newer"
+    fake.panes["%2"]["seen"] = str(now)
+    assert agents.next_agent(agents.live(), "%1") is None
