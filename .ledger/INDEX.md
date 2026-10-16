@@ -11,3 +11,5 @@
 - `.ledger/202610141906-code-context-sidecars/task.md` — in-progress — Code context sidecars with read injection and block-and-retry edit gate — `<file>.context` Markdown sidecars hold invariants and hazards; top-level reads append the whole sidecar plus a hash marker, and edit/write are blocked until the current marker is in the effective context. Includes context_lint and reflection/distill upkeep.
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
+
+- `.ledger/202610160838-notch-agent-room/task.md` — planning — Notch agent room: a Mac notch UI that shows pi agents as a cozy pixel room — Clean-room take on Agent Shrine for pi/tmux: a thin Swift notch shell hosting a web renderer (reusable later in a local web app and Tauri/Electron), fed by the tmux-sessions agent store. Starts with a throwaway prototype.

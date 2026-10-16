@@ -1,0 +1,10 @@
+{
+  "sessions": [
+    {
+      "id": "01a1454a-968a-733e-a7cf-b55f238feeea",
+      "linkedAt": "2026-10-16T15:38:50.702Z",
+      "via": "ledger_add"
+    }
+  ],
+  "commits": []
+}
