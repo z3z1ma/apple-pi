@@ -101,10 +101,6 @@ So the harness grows a second surface. Four tools open a purpose-built page in t
 
 I never call these tools by hand. I ask in plain words ("walk me through this branch", "let me sign off on the spec"), or the agent opens a page itself when its work needs my judgment. The three review tools wait until I press **Finish review** and return my feedback as their result; `explain_change` returns at once and leaves the page open for me to read.
 
-![explain_change: an interactive figure beside a Socratic tutor that answers a question with a question](media/readme/explain-change-tutor.webp)
-
-<sub>These screenshots come from demo runs. The tutor's replies above are scripted for the demo, not written by a live model.</sub>
-
 ### `review_code`: The Change as a Story
 
 ![review_code: the agent's chapters, brief, and line notes over the real diff, with word-level marks](media/readme/review-code.webp)
@@ -124,6 +120,8 @@ Specs and plans deserve to be read rendered, not reviewed as patches. The page s
 A ledger task is a folder of documents plus a dependency graph that only exists in prose. `review_ledger_task` reads the whole bundle and draws that graph: tickets in columns by dependency depth, the tickets that can start now ringed, and a hover lighting everything a ticket waits on and everything waiting on it. Graph checks catch what the `to-tickets` skill must never produce: a blocker that is not in the bundle, a blocker numbered after its dependent, a cycle, a graph with nowhere to start (`tickets.ts`). Every document opens in the same annotation reader, evidence files load only when opened, and the result tells the agent which documents I never opened, so it knows exactly what my approval does not cover.
 
 ### `explain_change`: Understanding Is the New Bottleneck
+
+![explain_change: an interactive figure beside a Socratic tutor that answers a question with a question](media/readme/explain-change-tutor.webp)
 
 ![explain_change: the quiz, with instant feedback and an explanation for every answer](media/readme/explain-change-quiz.webp)
 
