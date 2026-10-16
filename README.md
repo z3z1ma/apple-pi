@@ -1,6 +1,6 @@
 # apple-pi 🥧
 
-<img width="1728" height="1060" alt="image" src="https://github.com/user-attachments/assets/d798b53a-c011-407c-be0b-cd2a13f1a5cc" />
+<img width="1728" height="1117" alt="image" src="https://github.com/user-attachments/assets/3d99e037-af13-460e-aeeb-037c2958af09" />
 
 This repository is my personal coding harness built on top of `pi`. It is not a product, a VC-backed framework seeking adoption, or a generalized starter kit for "agentic workflows." It is the cumulative result of spending months living inside terminal-based coding agents, hitting the exact same failure modes every afternoon, and building the mechanical back-pressure required to make them stop.
 
@@ -577,6 +577,8 @@ Then, inside Pi, run `/notify-setup` to create the optional `~/Applications/Pi N
 ---
 
 ## Provenance & Remixing
+
+<img width="1728" height="1060" alt="image" src="https://github.com/user-attachments/assets/d798b53a-c011-407c-be0b-cd2a13f1a5cc" />
 
 Built and maintained by **Alexander Butler** for daily production use.
 
