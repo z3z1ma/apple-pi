@@ -27,10 +27,10 @@
 	#stage { position: relative; width: max-content; margin: 6px 14px 14px; opacity: 0; transition: opacity .2s; }
 	#island.open #stage { opacity: 1; transition-delay: .12s; }
 	canvas { display: block; image-rendering: pixelated; border-radius: 8px; }
-	.chip { position: absolute; padding: 2px 8px; border-radius: 7px; background: #000b; font-size: 11px; font-weight: 600; }
-	#plaque { left: 8px; top: 6px; color: #f9e2af; }
+	.chip { padding: 2px 8px; border-radius: 7px; background: #000b; color: #cdd6f4; border: 0; font: inherit; font-size: 11px; font-weight: 600; }
+	#plaque { position: absolute; left: 8px; top: 6px; color: #f9e2af; }
 	#plaque .of { color: var(--quiet); font-weight: 500; margin-left: 4px; }
-	#vibe { right: 8px; top: 6px; color: #cdd6f4; border: 0; font: inherit; font-weight: 600; font-size: 11px; }
+	#controls { position: absolute; right: 8px; top: 6px; display: flex; gap: 6px; }
 	.arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 26px; height: 40px; border: 0; border-radius: 8px;
 		background: #000a; color: #f9e2af; font-size: 20px; line-height: 40px; padding: 0; }
 	#prev { left: 6px; } #next { right: 6px; }
@@ -48,7 +48,7 @@
 	<div id="stage">
 		<canvas></canvas>
 		<span class="chip" id="plaque"></span>
-		<button class="chip" id="vibe"></button>
+		<div id="controls"><button class="chip" id="shuffle" title="Random room">🎲</button><button class="chip" id="vibe"></button></div>
 		<button class="arrow" id="prev">‹</button><button class="arrow" id="next">›</button>
 	</div>
 </div>
@@ -61,9 +61,9 @@ const island = $("island"), bar = $("bar"), stage = $("stage"), canvas = stage.q
 const label = { waiting: "needs you", done: "done", working: "working", quiet: "quiet" };
 const order = { waiting: 0, done: 1, working: 2, quiet: 3 };
 const vibeLabel = { office: "☕ Office", cozy: "🌙 Cozy" };
-const SCALE = 2; // css pixels per art pixel: whole device pixels on a 2× display
-// Agents stand on the floor between these x bounds (art pixels), in two staggered rows.
-const FLOOR = { left: 62, right: 222, backRow: 112, frontRow: 124 };
+const SCALE = 2.5; // css pixels per art pixel: whole device pixels on a 2× display
+// Agents stand on the floor between these x bounds, in two staggered rows; fractions of the room size.
+const FLOOR = { left: 0.14, right: 0.86, backRow: 0.84, frontRow: 0.95 };
 const STATE_COLOR = { waiting: "#fae3b0", done: "#abe9b3", working: "#f5c2e7", quiet: "#9399b2" };
 const INK = "#1e1e2e";
 // 5×5 glyphs drawn inside each agent's state bubble.
@@ -81,6 +81,8 @@ canvas.style.height = `${ART.h * SCALE}px`;
 
 const images = {};
 let vibe = localStorage.getItem("notch-vibe") ?? "office";
+// Rooms picked with the shuffle button, by `${vibe}/${session}`; other sessions get a room from a hash of their name.
+const chosenRooms = JSON.parse(localStorage.getItem("notch-rooms") ?? "{}");
 let agents = [];
 let session = null;
 let placed = [];
@@ -90,7 +92,11 @@ let pointer = null;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const hash = (s, seed) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, seed);
-const roomOf = (name) => VIBES[vibe].rooms[hash(name, 7) % VIBES[vibe].rooms.length];
+const roomOf = (name) => {
+	const rooms = VIBES[vibe].rooms;
+	const chosen = chosenRooms[`${vibe}/${name}`];
+	return rooms.includes(chosen) ? chosen : rooms[hash(name, 7) % rooms.length];
+};
 const spriteOf = (agent) => {
 	const workers = VIBES[vibe].workers;
 	return images[`${vibe}/${workers[hash(agent.id, 3) % workers.length]}-${agent.state}-${hash(agent.id, 11) % VARIANTS}`];
@@ -123,7 +129,11 @@ function renderStage() {
 	if (!names.includes(session)) session = names[0];
 	const group = groups.find(([name]) => name === session)[1];
 	const step = (FLOOR.right - FLOOR.left) / group.length;
-	placed = group.map((agent, i) => ({ agent, x: FLOOR.left + (i + 0.5) * step, y: i % 2 ? FLOOR.backRow : FLOOR.frontRow }));
+	placed = group.map((agent, i) => ({
+		agent,
+		x: (FLOOR.left + (i + 0.5) * step) * ART.w,
+		y: Math.round((i % 2 ? FLOOR.backRow : FLOOR.frontRow) * ART.h),
+	}));
 	$("plaque").innerHTML = `${esc(session)}<span class="of">${names.indexOf(session) + 1}/${names.length}</span>`;
 	$("vibe").textContent = vibeLabel[vibe] ?? vibe;
 	$("prev").hidden = $("next").hidden = names.length < 2;
@@ -228,6 +238,14 @@ canvas.onclick = (event) => {
 canvas.onmousemove = (event) => pointAt(event.clientX, event.clientY);
 $("prev").onclick = () => cycle(-1);
 $("next").onclick = () => cycle(1);
+$("shuffle").onclick = () => {
+	const current = roomOf(session);
+	const others = VIBES[vibe].rooms.filter((room) => room !== current);
+	if (!others.length) return;
+	chosenRooms[`${vibe}/${session}`] = others[Math.floor(Math.random() * others.length)];
+	localStorage.setItem("notch-rooms", JSON.stringify(chosenRooms));
+	renderStage();
+};
 $("vibe").onclick = () => {
 	const names = Object.keys(VIBES);
 	vibe = names[(names.indexOf(vibe) + 1) % names.length];

@@ -57,9 +57,9 @@ Decisions (operator):
 - One room per tmux session, showing one room at a time; arrows cycle the sessions.
 - Two vibes to play with: **office** (fancy tech workplaces: kombucha tap, coffee shop with cold brew, glass HQ, game studio) with tech workers, and **cozy** (lofi rooms: loft, cabin, space lounge, tatami, wizard library) with the hoodie programmer. A toggle in the panel switches between them.
 
-Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, themed by a stable hash of the session name. Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane.
+Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, filling the panel, themed by a stable hash of the session name unless the 🎲 button picked a random room for it (remembered per vibe and session). Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane.
 
-Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` keys out the magenta, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads.
+Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` crops each room to the largest interior rectangle that holds none of the backdrop around the room, keys out the magenta on worker sheets, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads.
 
 Run: `prototype/run.sh` (prototype 2, the default) or `prototype/run.sh index.html` (prototype 1).
 
@@ -73,9 +73,14 @@ Acceptance:
 
 ## Current State
 
-Round 2 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
+Round 3 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
 
-Operator feedback on round 1, and what changed:
+Operator feedback on round 2 ("Better"), and what changed:
+
+- "A button to randomly change the room background": 🎲 next to the vibe toggle picks another room of the current vibe for the shown session, and remembers it.
+- "The room background should be bigger … take up all the background instead of this bluish black": rooms are cropped to their interior (208×116 art pixels) and drawn at 2.5 css px per art pixel (5 device px), so the room fills the 520×290 panel and workers are 25 % larger. Checked in headless Chrome: all 9 rooms crop cleanly, the shuffle cycles rooms and persists across reload, and there are no page errors.
+
+Round 1 feedback:
 
 - "The hover-over doesn't work": a panel that never becomes key gets no mouse-move events in its WKWebView. The shell now forwards the pointer position (`window.notch.pointer(x, y)`), and the page hit-tests from it. Clicks were already delivered.
 - "I don't see the state icon": the sprites' own `!` and `Zzz` were too small. Each worker now has a 9×9 art-pixel bubble drawn in code.
@@ -88,7 +93,7 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
-Next: get the operator's verdict on round 2. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
+Next: get the operator's verdict on round 3. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
 
 ## Outcome
 
