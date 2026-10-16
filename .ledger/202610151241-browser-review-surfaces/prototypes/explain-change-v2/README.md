@@ -38,3 +38,8 @@ Round 1 ([README](../explain-change/README.md)) plus the operator's answers (202
 2. **Back to the agent.** The [settled decision](../../task.md#settled-decisions) is that nothing returns. The thread and quiz misses show what the reader found hard. Keep returning nothing, or write a short note (misses and topics asked) into the session when the page closes?
 
 Next: the operator's verdict on round 2 and these answers, then the build of `explain_change` ([task.md](../../task.md), Next).
+
+## Verdict (operator, 2026-10-16)
+
+Approved. Pop-out means only that the sidebar slides out from the edge: no separate window. A short note may go back to the agent. The saved page will often be shared (attached to a pull request or a Confluence page), so every page must degrade gracefully: when it cannot reach a live page server with the agent behind it, it hides the features that need one and reads as a normal page. The operator's open concern is whether the Socratic tutor works as well as the interface looks; the build must check it with a real model.
+

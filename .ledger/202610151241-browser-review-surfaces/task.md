@@ -35,6 +35,9 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 - **Saved pages live in** `~/.pi/agent/artifacts/<project>/<date>-<slug>.html`; the agent copies or attaches a file where it is needed. Approved 2026-10-15.
 - **Code review design: the [round 2 prototype](prototypes/code-review-v2/README.md),** approved 2026-10-15 without changes.
 - **Ledger task review design: the [round 1 prototype](prototypes/ledger-task-review/README.md),** approved 2026-10-15; overflow fixed after the verdict.
+- **Explain change design: the [round 2 prototype](prototypes/explain-change-v2/README.md),** approved 2026-10-16. The Socratic sidebar slides out from the edge (no separate window). `head` explains any commit or range. Exactly five quiz questions, checked by the server and taught by the tool's guidelines. A short note on what the reader found hard goes back to the agent.
+- **Pages degrade gracefully.** A page that cannot reach a live page server with the agent behind it (a saved copy, a shared attachment, a closed session) hides every feature that needs the agent and reads as a normal page. Decided 2026-10-16.
+- **The saved explanation is clean and shareable:** written when the tool runs, without the reader's quiz answers or conversation. Proposed 2026-10-16, pending the operator's word.
 - **Code review direction (prototype round 1 verdict).** Build on B (Cockpit) keyboard stepping; bring in C (Triage)'s "two minutes" focus, change map, and changes-by-attention view. Move the brief out of the right rail into the reading line. Make files, hunks, and agent notes collapsible. Decisions are secondary to review and need code context. Every view must scale to large diffs. A (Essay) is dropped.
 - Root session only; local macOS (`open <url>`); greenfield, no compatibility layers.
 
@@ -65,7 +68,7 @@ In progress. Built and committed: `review_code` (slices 1–2), `review_markdown
 Next:
 
 1. Operator tries `review_markdown` and `review_ledger_task` on real work (dogfood on this task: approved without annotations; it listed the five prototype READMEs as not opened).
-2. Design pass 3: `explain_change`. [Round 1](prototypes/explain-change/README.md) answered 2026-10-16: add a Socratic chat sidebar that can pop out, keep five quiz questions but teach the agent to write good ones, and explain any commit or range in history. [Round 2](prototypes/explain-change-v2/README.md) adds those and awaits the operator's verdict; then build.
+2. Build `explain_change` from the approved [round 2 prototype](prototypes/explain-change-v2/README.md), with graceful degradation on every page, and check the Socratic tutor with a real model.
 
 ## Outcome
 
