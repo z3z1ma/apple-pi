@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- PROTOTYPE 2: the notch pill expands into one pixel room per tmux session. Opened alone in a browser it uses mock agents. -->
+<!-- PROTOTYPE 2: the notch pill expands into the pixel room of one tmux session; arrows cycle sessions, a toggle switches vibe.
+     Opened alone in a browser it uses mock agents. Assets and their names come from assets/manifest.js (written by assets/clean.py). -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -23,57 +24,78 @@
 	.dot.working { animation: pulse 1.6s ease-in-out infinite; }
 	@keyframes pulse { 50% { opacity: .35; } }
 	.count { color: var(--quiet); font-weight: 600; font-size: 11px; }
-	#rooms { display: flex; gap: 12px; justify-content: center; padding: 6px 14px 14px; width: max-content;
-		opacity: 0; transition: opacity .2s; }
-	#island.open #rooms { opacity: 1; transition-delay: .12s; }
-	.room { position: relative; }
-	.room canvas { display: block; image-rendering: pixelated; border-radius: 8px; }
-	.plaque { position: absolute; left: 8px; top: 6px; padding: 1px 7px; border-radius: 6px;
-		background: #000a; font-size: 11px; font-weight: 600; color: #f9e2af; }
+	#stage { position: relative; width: max-content; margin: 6px 14px 14px; opacity: 0; transition: opacity .2s; }
+	#island.open #stage { opacity: 1; transition-delay: .12s; }
+	canvas { display: block; image-rendering: pixelated; border-radius: 8px; }
+	.chip { position: absolute; padding: 2px 8px; border-radius: 7px; background: #000b; font-size: 11px; font-weight: 600; }
+	#plaque { left: 8px; top: 6px; color: #f9e2af; }
+	#plaque .of { color: var(--quiet); font-weight: 500; margin-left: 4px; }
+	#vibe { right: 8px; top: 6px; color: #cdd6f4; border: 0; font: inherit; font-weight: 600; font-size: 11px; }
+	.arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 26px; height: 40px; border: 0; border-radius: 8px;
+		background: #000a; color: #f9e2af; font-size: 20px; line-height: 40px; padding: 0; }
+	#prev { left: 6px; } #next { right: 6px; }
 	.tip { position: absolute; pointer-events: none; transform: translate(-50%, -100%); padding: 5px 8px;
 		border-radius: 8px; background: #11111bee; border: 1px solid #313244; white-space: nowrap;
-		max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+		max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 	.tip .state { color: var(--c); font-size: 11px; }
 	.tip .what { color: var(--quiet); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 	.empty { padding: 10px 40px; color: var(--quiet); }
 </style>
+<script src="assets/manifest.js"></script>
 </head>
 <body>
-<div id="island"><div id="bar"><div class="wing" id="left"></div><div class="wing" id="right"></div></div><div id="rooms"></div></div>
+<div id="island">
+	<div id="bar"><div class="wing" id="left"></div><div class="wing" id="right"></div></div>
+	<div id="stage">
+		<canvas></canvas>
+		<span class="chip" id="plaque"></span>
+		<button class="chip" id="vibe"></button>
+		<button class="arrow" id="prev">‹</button><button class="arrow" id="next">›</button>
+	</div>
+</div>
 <script>
 const shell = window.webkit?.messageHandlers?.notch;
 const geo = window.notchGeometry ?? { notchWidth: 185, notchHeight: 32, width: 1100, height: 500 };
-const island = document.getElementById("island");
-const bar = document.getElementById("bar");
-const roomsEl = document.getElementById("rooms");
+const { states: STATES, variants: VARIANTS, room: ART, vibes: VIBES } = window.ASSETS;
+const $ = (id) => document.getElementById(id);
+const island = $("island"), bar = $("bar"), stage = $("stage"), canvas = stage.querySelector("canvas");
 const label = { waiting: "needs you", done: "done", working: "working", quiet: "quiet" };
 const order = { waiting: 0, done: 1, working: 2, quiet: 3 };
-const STATES = Object.keys(order);
-const VARIANTS = 6; // one per HOODIE_HUES entry in assets/clean.py
-// Room art is 250×140 art pixels (the room.png that assets/clean.py writes); agents stand on the floor between these x bounds, in two staggered rows.
-const ART = { w: 250, h: 140, floorLeft: 62, floorRight: 222, backRow: 116, frontRow: 130 };
+const vibeLabel = { office: "☕ Office", cozy: "🌙 Cozy" };
+const SCALE = 2; // css pixels per art pixel: whole device pixels on a 2× display
+// Agents stand on the floor between these x bounds (art pixels), in two staggered rows.
+const FLOOR = { left: 62, right: 222, backRow: 112, frontRow: 124 };
+const STATE_COLOR = { waiting: "#fae3b0", done: "#abe9b3", working: "#f5c2e7", quiet: "#9399b2" };
+const INK = "#1e1e2e";
+// 5×5 glyphs drawn inside each agent's state bubble.
+const GLYPH = {
+	waiting: ["..#..", "..#..", "..#..", ".....", "..#.."],
+	done: [".....", "....#", "...#.", "#.#..", ".#..."],
+	quiet: ["#####", "...#.", "..#..", ".#...", "#####"],
+	working: [".....", ".....", ".....", "#.#.#", "....."],
+};
 document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}px`);
+canvas.width = ART.w * SCALE * devicePixelRatio;
+canvas.height = ART.h * SCALE * devicePixelRatio;
+canvas.style.width = `${ART.w * SCALE}px`;
+canvas.style.height = `${ART.h * SCALE}px`;
 
-const load = (src) => new Promise((done) => { const img = new Image(); img.onload = () => done(img); img.src = src; });
-const sprites = {};
-let roomArt;
+const images = {};
+let vibe = localStorage.getItem("notch-vibe") ?? "office";
 let agents = [];
+let session = null;
+let placed = [];
 let open = false;
 let tick = 0;
+let pointer = null;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-const variantOf = (id) => [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % VARIANTS;
-
-function renderPill() {
-	const sorted = [...agents].sort((a, b) => order[a.state] - order[b.state]);
-	document.getElementById("left").innerHTML =
-		`<span class="count">π ${agents.length}</span>` +
-		sorted.filter((a) => a.state === "waiting" || a.state === "done")
-			.map((a) => `<span class="dot" style="--c:var(--${a.state})"></span>`).join("");
-	document.getElementById("right").innerHTML = sorted
-		.filter((a) => a.state === "working" || a.state === "quiet")
-		.map((a) => `<span class="dot ${a.state}" style="--c:var(--${a.state})"></span>`).join("");
-}
+const hash = (s, seed) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, seed);
+const roomOf = (name) => VIBES[vibe].rooms[hash(name, 7) % VIBES[vibe].rooms.length];
+const spriteOf = (agent) => {
+	const workers = VIBES[vibe].workers;
+	return images[`${vibe}/${workers[hash(agent.id, 3) % workers.length]}-${agent.state}-${hash(agent.id, 11) % VARIANTS}`];
+};
 
 function sessions() {
 	const groups = new Map();
@@ -82,22 +104,31 @@ function sessions() {
 		if (!groups.has(key)) groups.set(key, []);
 		groups.get(key).push(agent);
 	}
-	return [...groups].sort((a, b) => b[1].length - a[1].length);
+	return [...groups].sort(([a], [b]) => a.localeCompare(b));
 }
 
-// Largest scale whose device pixels stay whole (on a 2× display) and whose rooms fit the panel.
-function roomScale(count) {
-	const room = (s) => count * (ART.w * s + 12) + 28;
-	return [2, 1.5, 1].find((s) => room(s) <= geo.width) ?? 1;
+function renderPill() {
+	const sorted = [...agents].sort((a, b) => order[a.state] - order[b.state]);
+	$("left").innerHTML = `<span class="count">π ${agents.length}</span>` +
+		sorted.filter((a) => a.state === "waiting" || a.state === "done")
+			.map((a) => `<span class="dot" style="--c:var(--${a.state})"></span>`).join("");
+	$("right").innerHTML = sorted.filter((a) => a.state === "working" || a.state === "quiet")
+		.map((a) => `<span class="dot ${a.state}" style="--c:var(--${a.state})"></span>`).join("");
 }
 
-function place(group) {
-	const step = (ART.floorRight - ART.floorLeft) / group.length;
-	return group.map((agent, i) => ({
-		agent,
-		x: ART.floorLeft + (i + 0.5) * step,
-		y: i % 2 ? ART.backRow : ART.frontRow,
-	}));
+function renderStage() {
+	const groups = sessions();
+	stage.hidden = !groups.length;
+	if (!groups.length) return;
+	const names = groups.map(([name]) => name);
+	if (!names.includes(session)) session = names[0];
+	const group = groups.find(([name]) => name === session)[1];
+	const step = (FLOOR.right - FLOOR.left) / group.length;
+	placed = group.map((agent, i) => ({ agent, x: FLOOR.left + (i + 0.5) * step, y: i % 2 ? FLOOR.backRow : FLOOR.frontRow }));
+	$("plaque").innerHTML = `${esc(session)}<span class="of">${names.indexOf(session) + 1}/${names.length}</span>`;
+	$("vibe").textContent = vibeLabel[vibe] ?? vibe;
+	$("prev").hidden = $("next").hidden = names.length < 2;
+	draw();
 }
 
 function bob(state, i) {
@@ -108,98 +139,77 @@ function bob(state, i) {
 	return 0;
 }
 
-function renderRooms() {
-	const groups = sessions();
-	if (!groups.length) {
-		roomsEl.innerHTML = `<div class="empty">No pi agents in tmux</div>`;
-		delete roomsEl.dataset.signature;
-		return;
-	}
-	const scale = roomScale(groups.length);
-	const dpr = window.devicePixelRatio || 1;
-	// Same sessions and agents: redraw in place, so an open tooltip survives the once-a-second feed.
-	const signature = JSON.stringify(groups.map(([name, group]) => [name, group.map((a) => a.id)]));
-	if (signature === roomsEl.dataset.signature) {
-		const byId = new Map(agents.map((a) => [a.id, a]));
-		for (const room of roomsEl.querySelectorAll(".room")) {
-			for (const p of room.placed) p.agent = byId.get(p.agent.id);
-		}
-		return redrawRooms();
-	}
-	roomsEl.dataset.signature = signature;
-	roomsEl.innerHTML = "";
-	for (const [name, group] of groups) {
-		const room = document.createElement("div");
-		room.className = "room";
-		const canvas = document.createElement("canvas");
-		canvas.width = ART.w * scale * dpr;
-		canvas.height = ART.h * scale * dpr;
-		canvas.style.width = `${ART.w * scale}px`;
-		canvas.style.height = `${ART.h * scale}px`;
-		room.append(canvas);
-		room.insertAdjacentHTML("beforeend", `<span class="plaque">${esc(name)}</span>`);
-		roomsEl.append(room);
-		room.placed = place(group);
-		room.scale = scale;
-		drawRoom(room);
-		canvas.onmousemove = (event) => hoverAgent(room, event);
-		canvas.onmouseleave = () => room.querySelector(".tip")?.remove();
-		canvas.onclick = (event) => {
-			const hit = hitTest(room, event);
-			if (hit) focusAgent(hit.agent);
-		};
-	}
+function bubble(ctx, state, cx, bottom) {
+	const x = Math.round(cx) - 4, y = bottom - 11;
+	ctx.fillStyle = INK;
+	ctx.fillRect(x + 1, y, 7, 9); ctx.fillRect(x, y + 1, 9, 7); ctx.fillRect(x + 3, y + 9, 3, 1); ctx.fillRect(x + 4, y + 10, 1, 1);
+	ctx.fillStyle = STATE_COLOR[state];
+	ctx.fillRect(x + 1, y + 1, 7, 7); ctx.fillRect(x + 4, y + 8, 1, 2);
+	ctx.fillStyle = INK;
+	const dots = state === "working" ? 1 + (tick % 3) : 5;
+	GLYPH[state].forEach((row, gy) => [...row].forEach((c, gx) => {
+		if (c === "#" && (state !== "working" || gx / 2 < dots)) ctx.fillRect(x + 2 + gx, y + 2 + gy, 1, 1);
+	}));
 }
 
-function drawRoom(room) {
-	const ctx = room.querySelector("canvas").getContext("2d");
-	const pixel = room.scale * (window.devicePixelRatio || 1);
+function draw() {
+	const ctx = canvas.getContext("2d");
+	const pixel = SCALE * devicePixelRatio;
 	ctx.imageSmoothingEnabled = false;
 	ctx.setTransform(pixel, 0, 0, pixel, 0, 0);
-	ctx.drawImage(roomArt, 0, 0);
-	[...room.placed].sort((a, b) => a.y - b.y).forEach((p, i) => {
-		const img = sprites[`${p.agent.state}-${variantOf(p.agent.id)}`];
+	ctx.drawImage(images[`${vibe}/room-${roomOf(session)}`], 0, 0);
+	[...placed].sort((a, b) => a.y - b.y).forEach((p, i) => {
+		const img = spriteOf(p.agent);
+		const lift = bob(p.agent.state, i);
 		p.box = { x: Math.round(p.x - img.width / 2), y: p.y - img.height, w: img.width, h: img.height };
-		ctx.drawImage(img, p.box.x, p.box.y + bob(p.agent.state, i));
+		ctx.drawImage(img, p.box.x, p.box.y + lift);
+		bubble(ctx, p.agent.state, p.x, p.box.y + lift);
 	});
+	if (pointer) pointAt(pointer.x, pointer.y);
+	else stage.querySelector(".tip")?.remove();
 }
 
-const redrawRooms = () => roomsEl.querySelectorAll(".room").forEach(drawRoom);
-
-function hitTest(room, event) {
-	const rect = event.target.getBoundingClientRect();
-	const x = (event.clientX - rect.left) / room.scale;
-	const y = (event.clientY - rect.top) / room.scale;
-	// Front row wins: test in reverse draw order.
-	return [...room.placed].sort((a, b) => b.y - a.y)
-		.find((p) => p.box && x >= p.box.x && x < p.box.x + p.box.w && y >= p.box.y && y < p.box.y + p.box.h);
+function hitTest(clientX, clientY) {
+	const rect = canvas.getBoundingClientRect();
+	const x = (clientX - rect.left) / SCALE, y = (clientY - rect.top) / SCALE;
+	// Front row wins: test in reverse draw order. The bubble above the head counts as part of the agent.
+	return [...placed].sort((a, b) => b.y - a.y)
+		.find((p) => p.box && x >= p.box.x && x < p.box.x + p.box.w && y >= p.box.y - 12 && y < p.box.y + p.box.h);
 }
 
-function hoverAgent(room, event) {
-	const hit = hitTest(room, event);
-	event.target.style.cursor = hit ? "pointer" : "default";
-	let tip = room.querySelector(".tip");
+// The shell forwards the pointer, because a panel that never becomes key gets no mouse-move events in its web view.
+function pointAt(clientX, clientY) {
+	pointer = { x: clientX, y: clientY };
+	const hit = open ? hitTest(clientX, clientY) : null;
+	let tip = stage.querySelector(".tip");
 	if (!hit) return tip?.remove();
-	if (!tip) room.append((tip = Object.assign(document.createElement("div"), { className: "tip" })));
+	if (!tip) stage.append((tip = Object.assign(document.createElement("div"), { className: "tip" })));
 	const a = hit.agent;
 	tip.style.setProperty("--c", `var(--${a.state})`);
-	tip.style.left = `${(hit.box.x + hit.box.w / 2) * room.scale}px`;
-	tip.style.top = `${hit.box.y * room.scale - 4}px`;
+	tip.style.left = `${(hit.box.x + hit.box.w / 2) * SCALE}px`;
+	tip.style.top = `${(hit.box.y - 12) * SCALE - 4}px`;
 	tip.innerHTML = `<b>${esc(a.name)}</b> <span class="state">${label[a.state]}</span>` +
 		`<div class="what">${esc(a.project)}${a.tool ? ` · ${esc(a.tool)} ${esc(a.detail)}` : ""}</div>`;
 }
 
+function cycle(delta) {
+	const names = sessions().map(([name]) => name);
+	session = names[(names.indexOf(session) + delta + names.length) % names.length];
+	renderStage();
+}
+
 function render() {
 	renderPill();
-	renderRooms();
+	renderStage();
 	layout();
 }
 
 function layout() {
 	const wing = Math.max(...[...bar.querySelectorAll(".wing")].map((w) => w.scrollWidth), 24) + 14;
 	const closedWidth = geo.notchWidth + 2 * wing;
-	const width = open ? Math.max(roomsEl.scrollWidth, closedWidth) : closedWidth;
-	const height = open ? geo.notchHeight + roomsEl.scrollHeight : geo.notchHeight;
+	const openWidth = stage.hidden ? closedWidth : ART.w * SCALE + 28;
+	const width = open ? Math.max(openWidth, closedWidth) : closedWidth;
+	const height = open ? geo.notchHeight + (stage.hidden ? 0 : ART.h * SCALE + 20) : geo.notchHeight;
 	island.style.width = `${width}px`;
 	island.style.height = `${height}px`;
 	island.classList.toggle("open", open);
@@ -212,23 +222,51 @@ function focusAgent(agent) {
 	else console.log("focus", agent.paneId);
 }
 
-// Pixel animation runs at 4 fps, and only while the rooms are visible.
+canvas.onclick = (event) => {
+	const hit = hitTest(event.clientX, event.clientY);
+	if (hit) focusAgent(hit.agent);
+};
+canvas.onmousemove = (event) => pointAt(event.clientX, event.clientY);
+$("prev").onclick = () => cycle(-1);
+$("next").onclick = () => cycle(1);
+$("vibe").onclick = () => {
+	const names = Object.keys(VIBES);
+	vibe = names[(names.indexOf(vibe) + 1) % names.length];
+	localStorage.setItem("notch-vibe", vibe);
+	renderStage();
+};
+
+// Pixel animation runs at 4 fps, and only while the room is visible.
 setInterval(() => {
-	if (!open || !roomArt) return;
+	if (!open || stage.hidden) return;
 	tick++;
-	redrawRooms();
+	draw();
 }, 250);
 
 window.notch = {
-	update(next) { agents = next; if (roomArt) render(); },
-	hover(inside) { if (inside !== open) { open = inside; layout(); } },
+	update(next) { agents = next; render(); },
+	hover(inside) {
+		if (inside === open) return;
+		open = inside;
+		// Opening shows the session whose agent has waited longest for you, if any.
+		const waiting = agents.filter((a) => a.state === "waiting").sort((a, b) => a.updatedAt - b.updatedAt)[0];
+		if (open && waiting) session = waiting.tmuxSession || "tmux";
+		if (!open) pointer = null;
+		render();
+	},
+	pointer: pointAt,
 };
 
-Promise.all([
-	load("assets/room.png").then((img) => { roomArt = img; }),
-	...STATES.flatMap((state) => Array.from({ length: VARIANTS }, (_, v) =>
-		load(`assets/agent-${state}-${v}.png`).then((img) => { sprites[`${state}-${v}`] = img; }))),
-]).then(() => {
+const load = (key) => new Promise((done) => {
+	const img = new Image();
+	img.onload = () => done((images[key] = img));
+	img.src = `assets/${key}.png`;
+});
+Promise.all(Object.entries(VIBES).flatMap(([name, { rooms, workers }]) => [
+	...rooms.map((room) => load(`${name}/room-${room}`)),
+	...workers.flatMap((w) => STATES.flatMap((s) => Array.from({ length: VARIANTS }, (_, v) => load(`${name}/${w}-${s}-${v}`)))),
+])).then(() => {
+	if (!VIBES[vibe]) vibe = Object.keys(VIBES)[0];
 	if (shell) return render();
 	document.body.classList.add("browser");
 	island.onmouseenter = () => window.notch.hover(true);
@@ -241,7 +279,7 @@ Promise.all([
 		["Grafana latency triage", "checkout", "mcp__grafana", "query p99", "WORK"],
 		["Release notes", "website", "read", "CHANGELOG.md", "WORK"],
 	].map(([name, project, tool, detail, tmuxSession], i) =>
-		({ id: `mock-${i}`, name, project, tool, detail, tmuxSession, state: STATES[i % 4], paneId: `%${i}` }));
+		({ id: `mock-${i}`, name, project, tool, detail, tmuxSession, state: STATES[i % 4], paneId: `%${i}`, updatedAt: i }));
 	window.notch.update(mock);
 	setInterval(() => {
 		const a = mock[Math.floor(Math.random() * mock.length)];

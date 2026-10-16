@@ -49,32 +49,44 @@ Verdict (operator, 2026-10-16): "Prototype is working great". Hover to expand, c
 
 ## Prototype 2: does a generated pixel room read well in the notch?
 
-Question: can generated pixel art, after automatic cleanup, make a cozy room that shows each agent's state at a glance in the expanded notch?
+Question: can generated pixel art, after automatic cleanup, make rooms that show each agent's state at a glance in the expanded notch?
 
-Decisions (operator): generate the art with `generate_image`; one room per tmux session, with that session's agents inside.
+Decisions (operator):
 
-Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: one room per tmux session, sharing one background for now. Each agent is a character at a desk, posed by state (working, quiet, waiting, done); clicking a character focuses its pane. Raw generations go in `prototype/assets/raw/`, and the cleanup script (`assets/clean.py`: chroma key, box downscale to the art-pixel grid, palette quantize, hoodie recolour into 6 variants) writes `web/assets/`.
+- Generate the art with `generate_image`.
+- One room per tmux session, showing one room at a time; arrows cycle the sessions.
+- Two vibes to play with: **office** (fancy tech workplaces: kombucha tap, coffee shop with cold brew, glass HQ, game studio) with tech workers, and **cozy** (lofi rooms: loft, cabin, space lounge, tatami, wizard library) with the hoodie programmer. A toggle in the panel switches between them.
+
+Scope: the same shell and collapsed pill. When the pill expands, it shows `web/room.html`: the room of one tmux session, themed by a stable hash of the session name. Opening shows the session whose agent has waited longest, if any. Each agent is a worker at a desk, posed by state, with a pixel bubble above its head drawn in code: `…` working, `z` quiet, `!` waiting, `✓` done. Hovering shows name, state and last tool; clicking focuses the pane.
+
+Assets: raw generations live in `prototype/assets/raw/<vibe>/` (`room-*.png`, and `worker-*.png` 2×2 pose sheets on magenta). `assets/clean.py` keys out the magenta, downscales to the art-pixel grid, quantizes the palette, recolours the blue shirt into 6 variants, and writes `web/assets/<vibe>/` plus `web/assets/manifest.js`, which the page reads.
 
 Run: `prototype/run.sh` (prototype 2, the default) or `prototype/run.sh index.html` (prototype 1).
 
 Acceptance:
 
-1. Each character's state is clear at a glance: typing (working), asleep (quiet), hand up with `!` (waiting), cheering (done).
-2. Hovering a character shows its name, state and last tool; clicking it focuses its pane.
-3. The pixels stay crisp (whole device pixels) and the room feels cozy.
-4. Animation runs only while the panel is open; collapsed idle CPU stays near zero.
+1. Each worker's state is clear at a glance from its bubble and pose.
+2. Hovering a worker shows its name, state and last tool; clicking it focuses its pane.
+3. Arrows cycle the tmux sessions; the vibe toggle switches office and cozy and is remembered.
+4. The pixels stay crisp (whole device pixels), and both vibes feel fun.
+5. Animation runs only while the panel is open; collapsed idle CPU stays near zero.
 
 ## Current State
 
-Prototype 2 runs in the notch with live agents and is waiting for the operator's verdict. Checked:
+Round 2 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
 
-- Generation and cleanup work in one pass: room 250×140 and agent frames about 35×40 art pixels, at the same pixel density. 6 agents fit on one floor in two staggered rows.
-- Headless Chrome with mock agents (2 sessions, 6 agents) shows crisp rooms, a tooltip on hover, and no page errors.
-- Collapsed idle CPU: shell, WebContent and feed 0.0 %.
+Operator feedback on round 1, and what changed:
 
-Not yet checked: how it feels in the real notch, and whether the `!` reads at a glance at this size.
+- "The hover-over doesn't work": a panel that never becomes key gets no mouse-move events in its WKWebView. The shell now forwards the pointer position (`window.notch.pointer(x, y)`), and the page hit-tests from it. Clicks were already delivered.
+- "I don't see the state icon": the sprites' own `!` and `Zzz` were too small. Each worker now has a 9×9 art-pixel bubble drawn in code.
+- "More generated room themes", "more like offices", "I want to play with both": 4 office rooms, 2 office workers and 4 more cozy rooms, with a vibe toggle.
+- "Cycle between rooms": one room at a time, with ‹ › arrows and an `n/m` count.
 
-Next: get the operator's verdict. Candidate follow-ups are larger state markers drawn in code, a generated room theme for each tmux session, and a narrower panel when there are two or more sessions (about 1000 pt wide now).
+Checked in headless Chrome with mock agents: the forwarded pointer opens the tooltip, the arrows cycle sessions, the vibe toggle switches, the tooltip clears when the panel closes, and there are no page errors. Collapsed idle CPU after a restart: shell 0.1 %, feed 0.6 % (first seconds).
+
+Not yet checked: hover and tooltips in the real notch with the forwarded pointer.
+
+Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
 ## Outcome
 

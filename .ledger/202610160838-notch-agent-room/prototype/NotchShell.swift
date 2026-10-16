@@ -71,7 +71,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		print("notch: \(Int(notchWidth))x\(Int(notchHeight)) on \(screen.localizedName)")
 	}
 
-	/// Let clicks reach the panel only inside the shape the page reports; tell the page when the pointer enters or leaves it.
+	/// Let clicks reach the panel only inside the shape the page reports; tell the page when the pointer enters or leaves it,
+	/// and where it is: a panel that never becomes key gets no mouse-move events in its web view.
 	func track() {
 		let mouse = NSEvent.mouseLocation
 		let local = CGPoint(x: mouse.x - panel.frame.minX, y: panel.frame.maxY - mouse.y)
@@ -80,6 +81,9 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
 		if inside != hovering {
 			hovering = inside
 			web.evaluateJavaScript("window.notch && window.notch.hover(\(inside))")
+		}
+		if inside {
+			web.evaluateJavaScript("window.notch?.pointer?.(\(local.x), \(local.y))")
 		}
 	}
 

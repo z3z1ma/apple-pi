@@ -1,0 +1,1 @@
+window.ASSETS = {"states": ["working", "quiet", "waiting", "done"], "variants": 6, "room": {"w": 250, "h": 140}, "vibes": {"cozy": {"rooms": ["cabin", "loft", "station", "tatami", "wizard"], "workers": ["hoodie"]}, "office": {"rooms": ["coffee", "hq", "kombucha", "studio"], "workers": ["braids", "glasses"]}}};

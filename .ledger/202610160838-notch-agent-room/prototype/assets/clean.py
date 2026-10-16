@@ -1,8 +1,14 @@
 """PROTOTYPE: turn raw generated images into crisp pixel assets for web/assets.
 
+raw/<vibe>/room-<name>.png  -> web/assets/<vibe>/room-<name>.png (250×140 art pixels)
+raw/<vibe>/worker-<name>.png -> web/assets/<vibe>/<name>-<state>-<variant>.png (2×2 sheet of poses, magenta background)
+and web/assets/manifest.js, which tells the page which vibes, rooms, and workers exist.
+
 Run: uv run -q -w pillow -w numpy python assets/clean.py
 """
 
+import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -10,18 +16,12 @@ from PIL import Image
 
 here = Path(__file__).resolve().parent
 raw, out = here / "raw", here.parent / "web" / "assets"
-out.mkdir(parents=True, exist_ok=True)
 
-ROOM_PIXEL = 5.5  # raw pixels per art pixel in room.png, from run-length analysis
+ROOM_SIZE = (250, 140)  # about 5.5 raw pixels per art pixel for a 1376×768 generation
 AGENT_PIXEL = 10  # agents drawn at half their generated detail so several fit in one room
 COLORS = 48
 STATES = ["working", "quiet", "waiting", "done"]  # sheet order: left to right, top to bottom
-HOODIE_HUES = [None, 0, 120, 280, 330, 170]  # None keeps the generated blue; others are target hues in degrees
-
-
-def pixelate(image: Image.Image, factor: float) -> Image.Image:
-    size = (round(image.width / factor), round(image.height / factor))
-    return image.resize(size, Image.Resampling.BOX)
+SHIRT_HUES = [None, 0, 120, 280, 330, 170]  # None keeps the generated blue; others are target hues in degrees
 
 
 def quantize(image: Image.Image) -> Image.Image:
@@ -32,7 +32,7 @@ def quantize(image: Image.Image) -> Image.Image:
 
 
 def recolor(frame: Image.Image, hue: int | None) -> Image.Image:
-    """Move the hoodie's blue pixels to another hue; dark hair and grey laptop stay put."""
+    """Move the shirt's blue pixels to another hue; dark hair and grey laptops stay put."""
     if hue is None:
         return frame
     hsv = np.asarray(frame.convert("RGB").convert("HSV")).copy()
@@ -44,23 +44,42 @@ def recolor(frame: Image.Image, hue: int | None) -> Image.Image:
     return result
 
 
-room = quantize(pixelate(Image.open(raw / "room.png").convert("RGBA"), ROOM_PIXEL))
-room.save(out / "room.png")
+def worker_frames(path: Path) -> list[Image.Image]:
+    sheet = np.asarray(Image.open(path).convert("RGBA")).copy()
+    r, g, b = (sheet[..., i].astype(int) for i in range(3))
+    # Magenta and its darker shadow tones: red and blue high, green well below both.
+    sheet[(r > 110) & (b > 110) & (g < np.minimum(r, b) * 0.55), 3] = 0
+    image = Image.fromarray(sheet)
+    cell = image.width // 2
+    frames = []
+    for index in range(len(STATES)):
+        x, y = (index % 2) * cell, (index // 2) * cell
+        crop = image.crop((x, y, x + cell, y + cell))
+        frame = crop.resize((round(cell / AGENT_PIXEL),) * 2, Image.Resampling.BOX)
+        pixels = np.asarray(frame).copy()
+        pixels[..., 3] = np.where(pixels[..., 3] > 140, 255, 0)
+        frame = quantize(Image.fromarray(pixels))
+        frames.append(frame.crop(frame.getbbox()))
+    return frames
 
-sheet = np.asarray(Image.open(raw / "agent-sheet.png").convert("RGBA")).copy()
-r, g, b = (sheet[..., i].astype(int) for i in range(3))
-magenta = (r > 180) & (b > 180) & (g < 120)
-sheet[magenta, 3] = 0
-sheet_image = Image.fromarray(sheet)
-cell = sheet_image.width // 2
-for index, state in enumerate(STATES):
-    x, y = (index % 2) * cell, (index // 2) * cell
-    frame = pixelate(sheet_image.crop((x, y, x + cell, y + cell)), AGENT_PIXEL)
-    pixels = np.asarray(frame).copy()
-    pixels[..., 3] = np.where(pixels[..., 3] > 140, 255, 0)
-    frame = quantize(Image.fromarray(pixels))
-    frame = frame.crop(frame.getbbox())
-    for variant, hue in enumerate(HOODIE_HUES):
-        recolor(frame, hue).save(out / f"agent-{state}-{variant}.png")
 
-print("room", room.size, *(f"{s} {Image.open(out / f'agent-{s}-0.png').size}" for s in STATES))
+shutil.rmtree(out, ignore_errors=True)
+manifest = {"states": STATES, "variants": len(SHIRT_HUES), "room": dict(zip("wh", ROOM_SIZE)), "vibes": {}}
+for vibe_dir in sorted(p for p in raw.iterdir() if p.is_dir()):
+    vibe = vibe_dir.name
+    (out / vibe).mkdir(parents=True)
+    rooms, workers = [], []
+    for path in sorted(vibe_dir.glob("room-*.png")):
+        room = Image.open(path).convert("RGBA").resize(ROOM_SIZE, Image.Resampling.BOX)
+        quantize(room).save(out / vibe / path.name)
+        rooms.append(path.stem.removeprefix("room-"))
+    for path in sorted(vibe_dir.glob("worker-*.png")):
+        name = path.stem.removeprefix("worker-")
+        for state, frame in zip(STATES, worker_frames(path)):
+            for variant, hue in enumerate(SHIRT_HUES):
+                recolor(frame, hue).save(out / vibe / f"{name}-{state}-{variant}.png")
+        workers.append(name)
+    manifest["vibes"][vibe] = {"rooms": rooms, "workers": workers}
+
+(out / "manifest.js").write_text(f"window.ASSETS = {json.dumps(manifest)};\n")
+print(json.dumps(manifest["vibes"]))
