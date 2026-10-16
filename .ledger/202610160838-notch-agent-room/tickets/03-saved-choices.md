@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (Notch panel runs from the component, started by hand)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] After changing a session's vibe and room, shuffling, and dragging a worker, a panel restart shows the same room, look and placement.
-- [ ] `notch.json` holds those choices for each session.
-- [ ] The page no longer reads or writes localStorage.
-- [ ] `docs/tmux-sessions.md` names `notch.json` and says what it holds.
+- [x] After changing a session's vibe and room, shuffling, and dragging a worker, a panel restart shows the same room, look and placement.
+- [x] `notch.json` holds those choices for each session.
+- [x] The page no longer reads or writes localStorage.
+- [x] `docs/tmux-sessions.md` names `notch.json` and says what it holds.

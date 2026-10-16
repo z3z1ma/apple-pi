@@ -4,8 +4,8 @@
 
 **Blocked by:** 01 (Notch panel runs from the component, started by hand)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] With an external display connected or removed, the panel stays at the built-in display's notch, with the right width and height.
-- [ ] With no notched screen active (lid closed on an external display), the panel sits at the top centre of the main screen.
-- [ ] After a `kill` of the feed process, live agents reappear within a few seconds, and the panel's pid is unchanged.
+- [x] With an external display connected or removed, the panel stays at the built-in display's notch, with the right width and height.
+- [x] With no notched screen active (lid closed on an external display), the panel sits at the top centre of the main screen.
+- [x] After a `kill` of the feed process, live agents reappear within a few seconds, and the panel's pid is unchanged.

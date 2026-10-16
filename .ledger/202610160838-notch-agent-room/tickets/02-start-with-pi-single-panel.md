@@ -4,12 +4,12 @@
 
 **Blocked by:** 01 (Notch panel runs from the component, started by hand)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A root pi session start in tmux on macOS starts the panel. A start outside tmux, a child session, or a start on Linux does not.
-- [ ] Root pi sessions in two tmux servers give exactly one panel process.
-- [ ] After a Swift source edit, the next root pi session start replaces the panel: a new pid and a new build hash in the lock file.
-- [ ] After `kill -9` of the panel, the next root pi session start brings it back. The lock file is opened close-on-exec, so a surviving feed child does not keep the lock.
-- [ ] A failing notch start does not stop status publishing (Vitest).
-- [ ] `npm run pack:check` lists the Swift shell and the web page with its assets, and does not list the art sources or the art pipeline.
-- [ ] `docs/tmux-sessions.md` has a Notch section covering requirements (macOS, Xcode command line tools, uv), start-up, and adding art with `generate_image` or `codex exec` plus the cleanup script. The README catalog and the tmux-sessions row of AGENTS.md mention the notch.
+- [x] A root pi session start in tmux on macOS starts the panel. A start outside tmux, a child session, or a start on Linux does not.
+- [x] Root pi sessions in two tmux servers give exactly one panel process.
+- [x] After a Swift source edit, the next root pi session start replaces the panel: a new pid and a new build hash in the lock file.
+- [x] After `kill -9` of the panel, the next root pi session start brings it back. The lock file is opened close-on-exec, so a surviving feed child does not keep the lock.
+- [x] A failing notch start does not stop status publishing (Vitest).
+- [x] `npm run pack:check` lists the Swift shell and the web page with its assets, and does not list the art sources or the art pipeline.
+- [x] `docs/tmux-sessions.md` has a Notch section covering requirements (macOS, Xcode command line tools, uv), start-up, and adding art with `generate_image` or `codex exec` plus the cleanup script. The README catalog and the tmux-sessions row of AGENTS.md mention the notch.

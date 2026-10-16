@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] On macOS with Xcode command line tools and uv, `notch.sh start` shows the pill with the live agents of the default tmux server.
-- [ ] A second `notch.sh start` with unchanged Swift source does not rebuild: the cached binary's modification time is unchanged.
-- [ ] Without `swiftc` on PATH, `notch.sh start` exits 0 and logs one line.
-- [ ] In the live panel, hover, cycling, vibe per session, 🎲, drag and click to focus behave as in prototype round 5. A click focuses the pane on the agent's own tmux server.
-- [ ] The feed mode prints one JSON line per poll with the fields the page reads, including the tmux socket. A pytest covers the waiting/done/working/quiet mapping.
-- [ ] A Vitest check type-checks the Swift shell on macOS when `swiftc` exists, is skipped otherwise, and fails when the shell does not compile.
-- [ ] The prototype's context files (under `.context/.ledger/202610160838-notch-agent-room/prototype/`, for the cleanup script and the room page) sit at the matching new source paths, and `context_lint` passes.
+- [x] On macOS with Xcode command line tools and uv, `notch.sh start` shows the pill with the live agents of the default tmux server.
+- [x] A second `notch.sh start` with unchanged Swift source does not rebuild: the cached binary's modification time is unchanged.
+- [x] Without `swiftc` on PATH, `notch.sh start` exits 0 and logs one line.
+- [x] In the live panel, hover, cycling, vibe per session, 🎲, drag and click to focus behave as in prototype round 5. A click focuses the pane on the agent's own tmux server.
+- [x] The feed mode prints one JSON line per poll with the fields the page reads, including the tmux socket. A pytest covers the waiting/done/working/quiet mapping.
+- [x] A Vitest check type-checks the Swift shell on macOS when `swiftc` exists, is skipped otherwise, and fails when the shell does not compile.
+- [x] The prototype's context files (under `.context/.ledger/202610160838-notch-agent-room/prototype/`, for the cleanup script and the room page) sit at the matching new source paths, and `context_lint` passes.
