@@ -1,4 +1,5 @@
-- When you set `expect` on a piped bash command, add `set -o pipefail`; otherwise the exit status is the last command's (for example `tail`), and the surprise report is wrong.
+- When you set `expect` on a piped bash command, add `set -o pipefail`; otherwise the exit status is the last command's (for example `tail`), and the surprise report is wrong. With `pipefail`, a count pipeline whose first command finds nothing (`pgrep … | wc -l`) exits 1 although it printed 0.
+- After `update_notebook` supersedes a learning, the notebook no longer knows the old id; use and retire the new one.
 - Retire notebook learnings in one call and wait for it before `ledger_status` `done`; in the same parallel batch, the ledger-close hold still sees them open.
 - Vitest in this repo hides `console.log` from passing tests. To inspect values in a scratch test, write them to a temporary file and read it, or assert on them.
 - Faux-session compaction (`tests/helpers/faux-session.ts`) needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".

@@ -1,12 +1,15 @@
-Status: pending
+Status: done
 Created: 2026-10-15
-Updated: 2026-10-15
+Updated: 2026-10-16
 
 # Retrospective
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- One rule made every page trustworthy: the agent supplies structure, and the server supplies the code from git or disk. A story cannot hide a hunk, and an explanation cannot show the wrong lines.
+- A prototype and a verdict for each page before the build. Each verdict changed the direction: the document-first Markdown page, the sliding tutor sidebar, the note back to the agent, and graceful degradation.
+- Graceful degradation came from one real use, sharing the saved page, and one check, `/health`, kept it simple.
+- The tutor's frame worked on the first real-model run. The real check was worth waiting for: the operator's open concern was whether it works as well as it looks.
 
 ## Learnings
 
@@ -21,4 +24,6 @@ Pending completion of the undertaking.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- Test a page on a very large change (hundreds of hunks) before calling it scalable; no page has been tried past 37 files.
+- Teach a native tool through its guidelines, not a skill: the guidance to find the why and plan backward reaches every call, including the passive ones.
+- When a value animates toward a target, read the target, not the rendered value; the sidebar's keyboard resize read a column that was still moving.
