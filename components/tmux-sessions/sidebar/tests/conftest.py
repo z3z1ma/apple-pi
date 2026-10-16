@@ -26,6 +26,7 @@ class FakeTmux:
         self.focused: set[str] = set()
         self.commands: list[tuple[str, ...]] = []
         self.screens: dict[str, str] = {}
+        self.watched = True
 
     def add_pane(self, pane_id: str, seen_at: str = "") -> None:
         self.panes[pane_id] = {"session": "work", "window": "1", "index": str(len(self.panes) + 1), "seen": seen_at}
@@ -36,10 +37,14 @@ class FakeTmux:
                 f"{SOCKET}\t{pane}\t{p['session']}\t{p['window']}\t{p['index']}\t{p['seen']}\n"
                 for pane, p in self.panes.items()
             )
+        if args[:3] == ("list-clients", "-F", "#{window_id}"):
+            return "@1\n" if self.watched else ""
         if args[0] == "list-clients":
             return "".join(f"{pane}\n" for pane in self.focused)
         if args[0] == "capture-pane":
             return self.screens.get(args[-1], "")
+        if args[:2] == ("display-message", "-p") and args[-1] == "#{window_id}":
+            return "@1\n"
         self.commands.append(args)
         if args[:2] == ("set", "-p"):
             self.panes[args[3]]["seen"] = args[5]
@@ -73,6 +78,8 @@ def record(state: Path, session_id: str, pane: str, status: str, updated_at: int
         "updatedAt": updated_at,
         "tmuxSocket": extra.get("socket", SOCKET),
     }
+    if data["tmuxSocket"] is None:
+        del data["tmuxSocket"]
     path = state / f"{session_id}.json"
     path.write_text(json.dumps(data))
     return path

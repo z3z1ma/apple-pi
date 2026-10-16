@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -259,9 +260,12 @@ class Dashboard(App):
         if agent is None:
             return
         screen = tmux("capture-pane", "-e", "-p", "-t", agent.pane_id)
-        self.call_from_thread(self.show_preview, agent, screen)
+        # Terminal focus alone is not enough: a dashboard in a window no client shows never gets a focus-out.
+        own_window = tmux("display-message", "-p", "-t", os.environ.get("TMUX_PANE", ""), "#{window_id}").strip()
+        watched = own_window in tmux("list-clients", "-F", "#{window_id}").split()
+        self.call_from_thread(self.show_preview, agent, screen, watched)
 
-    def show_preview(self, agent: Agent, screen: str) -> None:
+    def show_preview(self, agent: Agent, screen: str, watched: bool) -> None:
         if agent.session_id != self.selected:
             return
         preview = self.query_one("#preview", Static)
@@ -270,7 +274,7 @@ class Dashboard(App):
         preview.update(Text.from_ansi("\n".join(lines), no_wrap=True, overflow="crop"))
         preview.border_title = f"Live view · {agent.name}"
         preview.border_subtitle = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index}"
-        if agent.unseen and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
+        if agent.unseen and watched and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
             mark_seen(agent.pane_id)
             self.poll()
 

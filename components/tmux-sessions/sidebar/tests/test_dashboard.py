@@ -134,3 +134,20 @@ def test_wide_windows_put_the_live_view_beside_the_table_narrow_ones_below_and_p
     assert preview.y >= table.y + table.height
     shown, _, preview = asyncio.run(layout(200, 50, ("p",)))
     assert not shown and preview.width >= 196
+
+
+def test_a_dashboard_no_client_is_showing_marks_nothing_seen(env, monkeypatch):
+    fake, state, _, _ = env
+    now = int(time.time())
+    fake.add_pane("%1", seen_at=str(now - 600))
+    fake.watched = False
+    record(state, "done", "%1", "idle", now - 60, name="Finished")
+    monkeypatch.setattr(dashboard, "SEEN_AFTER_SECONDS", 0.3)
+
+    async def scenario():
+        app = dashboard.Dashboard()
+        async with app.run_test(size=(200, 50)) as pilot:
+            await pilot.pause(1.5)
+
+    run(scenario)
+    assert int(fake.panes["%1"]["seen"]) == now - 600

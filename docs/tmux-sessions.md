@@ -43,7 +43,7 @@ Status is derived from agent lifecycle events:
 
 ### Liveness
 
-The sidebar shows a record only when its pid is running **and** its `paneId` exists in `tmux list-panes -a`. It deletes records whose pid is gone, and records whose pane is gone from the tmux server named in `tmuxSocket`; that catches a Pi killed without its shutdown hook whose pid the OS has since reused. A record from another tmux server is skipped, not deleted.
+The sidebar shows a record only when its pid is running **and** its `paneId` exists in `tmux list-panes -a`. It deletes records whose pid is gone, and records whose pane is gone from the tmux server named in `tmuxSocket`; that catches a Pi killed without its shutdown hook whose pid the OS has since reused. A record from another tmux server is ignored, not deleted, because pane ids collide across servers; a record without `tmuxSocket` counts as this server's.
 
 ## Install
 

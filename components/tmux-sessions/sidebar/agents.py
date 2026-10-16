@@ -260,11 +260,14 @@ def live() -> list[Agent]:
         if not pid_alive(pid):
             path.unlink(missing_ok=True)
             continue
+        # Another tmux server's agent is not ours to show or delete: its pane ids can collide with ours. Records
+        # written before tmuxSocket existed all came from the one server people run, so they count as this one's.
+        if socket and (record.get("tmuxSocket") or socket) != socket:
+            continue
         pane = panes.get(pane_id)
         if pane is None:
-            # Only this tmux server can say its pane is gone; a record from another server is not ours to delete.
-            # This catches a Pi killed without its shutdown hook whose pid the OS has since reused.
-            if socket and record.get("tmuxSocket") == socket:
+            # On its own server a missing pane proves the Pi is gone, even when the OS has reused its pid.
+            if socket:
                 path.unlink(missing_ok=True)
             continue
         agent = Agent(

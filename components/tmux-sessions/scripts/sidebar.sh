@@ -75,6 +75,8 @@ follow() {
   local pane="$1" window="$2" source width before leaving zoomed_in zoomed_out
   source="$(tmux display-message -p -t "$pane" '#{window_id}')"
   [ "$source" = "$window" ] && return
+  # Only a window someone is looking at: a detached session that a script creates must not take the sidebar.
+  tmux list-clients -F '#{window_id}' | grep -qx "$window" || return
   # The dashboard already shows everything the sidebar would; the sidebar waits in the window you left.
   [ "$(tmux show-option -wqv -t "$window" @pi_dashboard)" = 1 ] && return
   width="$(tmux display-message -p -t "$pane" '#{pane_width}')"
