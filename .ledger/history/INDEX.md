@@ -121,3 +121,5 @@
 - `.ledger/history/202610131309-pi-1-2-upgrade/task.md` — done — Upgrade to Pi 1.2 and adopt its native integration points — Move dev/peer deps to Pi 1.2; fix start-event union handling; add reachesTools to pi_exec and programs; move pi_exec nested calls to ctx.executeTool with structuredContent/isError; show schema constraints; use public render data; schema examples.
 
 - `.ledger/history/202610151241-browser-review-surfaces/task.md` — done — Agent-structured browser review and understanding surfaces — Tool calls open ephemeral local web pages for code review, Markdown review, ledger task review, and human understanding; the agent structures content from blocks and review pages return anchored annotations plus a verdict.
+
+- `.ledger/history/202610152308-tmux-agent-tracking/task.md` — done — Agent tracking surfaces for tmux: list, sidebar, dashboard, status bar — Evolve the tmux session manager from a popup picker into views that show which Pi agents need the user, tell agents apart (auto session name, ledger task), and show progress at a glance; remove the dedicated popup launcher.

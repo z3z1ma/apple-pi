@@ -21,4 +21,4 @@ Why: `Lanes` is composed twice in one DOM (`Lanes` and its subclass `Merged`). I
 ## file
 
 Textual writes its screen to stderr. A launcher that redirects stderr leaves the pane blank.
-Coupled: .ledger/202610152308-tmux-agent-tracking/prototype/run.sh
+Coupled: .ledger/history/202610152308-tmux-agent-tracking/prototype/run.sh
