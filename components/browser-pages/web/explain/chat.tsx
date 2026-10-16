@@ -222,9 +222,14 @@ export function Sidebar({
 function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
 	const grid = () => sidebar.current?.parentElement;
 	const resize = (width: number) => {
-		// Wide enough for the header, narrow enough to leave the article room.
-		const px = Math.max(320, Math.min(width, innerWidth - 640));
-		grid()?.style.setProperty("--chat-w", `${Math.round(px)}px`);
+		const body = grid();
+		if (!body) return;
+		// Wide enough for the header. Wider than the default 420px only while the article keeps 480px beside the
+		// contents column, so on a narrow window a drag never makes the sidebar narrower than it opened.
+		const contents = body.firstElementChild?.getBoundingClientRect().width ?? 0;
+		const most = Math.max(420, body.clientWidth - contents - 480);
+		const px = Math.max(320, Math.min(width, most));
+		body.style.setProperty("--chat-w", `${Math.round(px)}px`);
 	};
 	const edge = () => sidebar.current?.getBoundingClientRect();
 	return (
