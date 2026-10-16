@@ -65,7 +65,7 @@ In progress. Built and committed: `review_code` (slices 1–2), `review_markdown
 Next:
 
 1. Operator tries `review_markdown` and `review_ledger_task` on real work (dogfood on this task: approved without annotations; it listed the five prototype READMEs as not opened).
-2. Design pass 3: `explain_change` [round 1 prototype](prototypes/explain-change/README.md) (summary, background with primer, intuition with sandboxed figures and diagrams, literate walkthrough over real git lines, an "also changed" list, quiz, print) awaits the operator's verdict; then build.
+2. Design pass 3: `explain_change`. [Round 1](prototypes/explain-change/README.md) answered 2026-10-16: add a Socratic chat sidebar that can pop out, keep five quiz questions but teach the agent to write good ones, and explain any commit or range in history. [Round 2](prototypes/explain-change-v2/README.md) adds those and awaits the operator's verdict; then build.
 
 ## Outcome
 

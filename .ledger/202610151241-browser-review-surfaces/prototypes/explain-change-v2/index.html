@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · Explain change · round 2</title>
+<!--
+  PROTOTYPE. Throwaway. Round 2 of the explain_change design pass (adds the Socratic sidebar): an explanation of commit 72c7ad3 (review_ledger_task),
+  with every code excerpt read from git. Loads marked and mermaid from jsDelivr (network needed).
+-->
+<style>
+
+:root {
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f5f1; --surface: #fff; --surface-2: #fbfaf7; --surface-3: #f0eee8;
+  --ink: #1d1c19; --ink-2: #55524b; --ink-3: #8b877f; --ink-4: #bdb9b0;
+  --line: #e9e6df; --line-2: #d9d5cb;
+  --accent: #3b5bdb; --accent-bg: #eef2ff;
+  --agent: #6e4ee6; --agent-bg: #f6f3ff; --agent-line: #e4dcfd;
+  --add-bg: #edf8ef; --add-gutter: #dff2e3; --add-strong: #bfe6c8; --add-ink: #2b8a3e;
+  --del-bg: #fdf1f1; --del-gutter: #f9e2e2; --del-strong: #f5c6c6; --del-ink: #c92a2a;
+  --code-bg: #f0eee8;
+  --att-high: #e8590c; --att-medium: #e9a100; --att-low: #a8a49b;
+  --k-change: #e8590c; --k-question: #1c7ed6; --k-concern: #e9a100; --k-nit: #8b877f; --k-praise: #2f9e44;
+  --pass: #2f9e44; --fail: #e03131; --unverified: #e9a100;
+  --shadow: 0 1px 2px rgba(28, 24, 16, .04), 0 6px 20px rgba(28, 24, 16, .05);
+  --shadow-lg: 0 2px 6px rgba(28, 24, 16, .06), 0 24px 64px rgba(28, 24, 16, .16);
+  --tk-k: #a626a4; --tk-s: #3f8f3a; --tk-n: #986801; --tk-t: #b97a00; --tk-f: #4078f2; --tk-c: #a0a1a7; --tk-p: #0184bc;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0f11; --surface: #15161a; --surface-2: #18191e; --surface-3: #1f2026;
+  --ink: #ecebe7; --ink-2: #a9a7a1; --ink-3: #76746f; --ink-4: #4a4946;
+  --line: #25262c; --line-2: #33343c;
+  --accent: #7b93ff; --accent-bg: rgba(123, 147, 255, .12);
+  --agent: #a98bfa; --agent-bg: rgba(169, 139, 250, .07); --agent-line: rgba(169, 139, 250, .2);
+  --add-bg: rgba(46, 160, 67, .09); --add-gutter: rgba(46, 160, 67, .15); --add-strong: rgba(46, 160, 67, .34); --add-ink: #57d377;
+  --del-bg: rgba(248, 81, 73, .08); --del-gutter: rgba(248, 81, 73, .13); --del-strong: rgba(248, 81, 73, .32); --del-ink: #ff7b72;
+  --code-bg: #22232a;
+  --att-high: #ff8a4c; --att-medium: #f5c04a; --att-low: #6b6a66;
+  --k-change: #ff8a4c; --k-question: #5aa9ff; --k-concern: #f5c04a; --k-nit: #8b8984; --k-praise: #57d377;
+  --pass: #57d377; --fail: #ff6b6b; --unverified: #f5c04a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, .4), 0 30px 80px rgba(0, 0, 0, .55);
+  --tk-k: #c678dd; --tk-s: #98c379; --tk-n: #d19a66; --tk-t: #e5c07b; --tk-f: #61afef; --tk-c: #7f848e; --tk-p: #56b6c2;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; overflow: hidden; }
+button { font: inherit; color: inherit; }
+kbd { font: 500 10.5px var(--font-ui); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-2); border-bottom-width: 2px; color: var(--ink-3); background: var(--surface); margin-left: 2px; }
+.sp { flex: 1; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic-fill { fill: currentColor; stroke: none; }
+p code, li code, h1 code, h2 code, .md code { font: .88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-weight: 500; font-size: 13px; cursor: pointer; transition: background .15s, transform .1s; white-space: nowrap; }
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: transparent; }
+.btn.primary:hover { opacity: .88; }
+.btn.primary kbd { background: transparent; color: inherit; border-color: color-mix(in srgb, var(--bg) 35%, transparent); opacity: .8; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--surface-3); color: var(--ink); }
+.btn.ghost.on { color: var(--agent); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.btn.lg { height: 40px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
+.btn.block { width: 100%; justify-content: center; }
+.btn[disabled] { opacity: .35; pointer-events: none; }
+.icon-btn { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; font-weight: 600; }
+.icon-btn:hover { background: var(--surface-3); color: var(--ink); }
+.link { border: 0; background: none; padding: 0; color: var(--ink-3); font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.link:hover { color: var(--ink); }
+.kbd-hint { font-size: 12px; color: var(--ink-3); }
+.count { font: 600 11px var(--font-ui); color: var(--ink-3); background: var(--surface-3); border-radius: 99px; padding: 1px 7px; }
+.n-add { color: var(--add-ink); font: 500 12px var(--font-mono); }
+.n-del { color: var(--del-ink); font: 500 12px var(--font-mono); }
+.branch { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; }
+.logo { width: 18px; height: 18px; border-radius: 6px; background: conic-gradient(from 210deg, var(--agent), var(--accent), var(--add-ink), var(--agent)); flex: none; }
+.chev { transition: transform .15s var(--ease); width: 14px; height: 14px; color: var(--ink-3); }
+.chev.closed { transform: rotate(-90deg); }
+.att-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--att-low); display: inline-block; flex: none; }
+.att-dot.att-high { background: var(--att-high); } .att-dot.att-medium { background: var(--att-medium); }
+.att-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-ui); letter-spacing: .02em; padding: 2px 8px 2px 7px; border-radius: 99px; color: var(--att-low); background: color-mix(in srgb, var(--att-low) 14%, transparent); text-transform: none; }
+.att-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.att-pill.att-high { color: var(--att-high); background: color-mix(in srgb, var(--att-high) 12%, transparent); }
+.att-pill.att-medium { color: var(--att-medium); background: color-mix(in srgb, var(--att-medium) 14%, transparent); }
+.att-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.att-bars i { width: 3px; border-radius: 1px; background: var(--line-2); }
+.att-bars i:nth-child(1) { height: 5px; } .att-bars i:nth-child(2) { height: 8.5px; } .att-bars i:nth-child(3) { height: 12px; }
+.att-bars.att-low i:nth-child(1) { background: var(--att-low); }
+.att-bars.att-medium i:nth-child(-n+2) { background: var(--att-medium); }
+.att-bars.att-high i { background: var(--att-high); }
+.a-high { --a: var(--att-high); } .a-medium { --a: var(--att-medium); } .a-low { --a: var(--att-low); }
+
+/* inline blocks in the diff */
+.inl { margin: 6px 18px 8px 102px; font: 13.5px/1.55 var(--font-ui); }
+.note-c { display: flex; align-items: center; gap: 8px; width: calc(100% - 120px); height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--agent-line); background: var(--agent-bg); color: var(--ink-2); cursor: pointer; text-align: left; font-size: 12.5px; }
+.note-c:hover { color: var(--ink); }
+.note-c .ic { width: 12px; height: 12px; color: var(--agent); }
+.note-c-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-c-more { color: var(--agent); font-weight: 600; font-size: 12px; }
+.note { padding: 10px 14px 10px 13px; border-radius: 10px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.note-h, .cmt-h { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-3); margin-bottom: 3px; }
+.note-h .who { color: var(--agent); font-weight: 600; }
+.note-h .ic { color: var(--agent); width: 13px; height: 13px; }
+.replies { margin-top: 10px; display: grid; gap: 8px; }
+.replies .cmt, .replies .composer { margin: 0; background: var(--surface); }
+.note-actions { margin-top: 6px; display: flex; gap: 14px; }
+.cmt { padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); border-left: 3px solid var(--k); box-shadow: var(--shadow); }
+.cmt-h .who { color: var(--ink); font-weight: 600; }
+.kind { font-weight: 600; font-size: 11px; letter-spacing: .02em; color: var(--k); }
+.k-question { --k: var(--k-question); } .k-change { --k: var(--k-change); } .k-concern { --k: var(--k-concern); } .k-nit { --k: var(--k-nit); } .k-praise { --k: var(--k-praise); }
+.where { font-family: var(--font-mono); font-size: 11.5px; }
+.av { width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--bg); font: 700 10px/18px var(--font-ui); text-align: center; flex: none; }
+.composer { padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-2)); box-shadow: 0 0 0 4px var(--accent-bg), var(--shadow); }
+.composer.ask { border-color: color-mix(in srgb, var(--agent) 50%, var(--line-2)); box-shadow: 0 0 0 4px var(--agent-bg), var(--shadow); }
+.composer-top { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px; }
+.composer-top b { font-weight: 600; color: var(--ink); }
+.composer-top .kbd-hint { margin-left: auto; }
+.seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--surface-3); }
+.seg button { border: 0; background: transparent; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.seg button .ic { width: 13px; height: 13px; }
+.seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.composer.ask .seg button.on { color: var(--agent); }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.kind-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--line-2); background: transparent; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.kind-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+.kind-chip.on { border-color: var(--k); color: var(--ink); background: color-mix(in srgb, var(--k) 10%, transparent); }
+textarea { width: 100%; resize: vertical; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: 14px/1.5 var(--font-ui); padding: 9px 11px; outline: none; transition: border-color .15s, box-shadow .15s; }
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); background: var(--surface); }
+.composer-foot, .vd-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.ask-t { border-radius: 12px; border: 1px solid var(--agent-line); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+.ask-q { display: flex; gap: 9px; align-items: flex-start; padding: 10px 14px; border-bottom: 1px solid var(--agent-line); }
+.ask-q .where { margin-left: auto; color: var(--ink-3); white-space: nowrap; }
+.ask-a { display: flex; gap: 9px; padding: 11px 14px; background: var(--agent-bg); }
+.ask-a > .ic { color: var(--agent); margin-top: 3px; width: 14px; height: 14px; }
+.ask-a p { margin: 0 0 8px; } .ask-a p:last-child { margin: 0; }
+.ask-actions { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--agent-line); background: var(--agent-bg); }
+.sim-tag { font: 600 10.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.thinking { color: var(--ink-3); display: inline-flex; align-items: center; gap: 8px; }
+.dots { display: inline-flex; gap: 3px; } .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--agent); animation: blink 1s infinite; } .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 50% { opacity: .2; } }
+.dec-c { display: flex; align-items: center; gap: 9px; width: calc(100% - 120px); min-height: 32px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--agent-line); background: var(--surface); cursor: pointer; text-align: left; font-size: 13px; }
+.dec-c.q { border-color: color-mix(in srgb, var(--k-question) 45%, var(--line)); background: color-mix(in srgb, var(--k-question) 5%, var(--surface)); }
+.dec-c .di { color: var(--agent); font-size: 12px; }
+.dec-c.q .di, .dec-c.q .dec-c-k { color: var(--k-question); }
+.dec-c-k { font: 600 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); white-space: nowrap; }
+.dec-c-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550; }
+.dec-c-a { color: var(--ink-3); white-space: nowrap; font-size: 12.5px; }
+.dec-c-a b { color: var(--ink); font-weight: 600; }
+
+/* ---------- shared blocks ---------- */
+.callout { display: flex; gap: 12px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--att-medium) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--att-medium) 30%, var(--line)); }
+.callout .co-ic { color: var(--att-medium); padding-top: 2px; }
+.co-t { font: 600 12px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; color: var(--att-medium); margin-bottom: 2px; }
+.co-b { font-size: 14px; line-height: 1.6; }
+.decision { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.decision.open { border-color: color-mix(in srgb, var(--k-question) 40%, var(--line)); }
+.dec-h { display: flex; align-items: center; gap: 7px; font: 600 11.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); margin-bottom: 6px; }
+.decision.open .dec-h { color: var(--k-question); }
+.dec-h .ic { width: 14px; height: 14px; }
+.dec-h .link { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.dec-q { font: 600 15px/1.4 var(--font-ui); margin-bottom: 2px; }
+.dec-ctx { margin: 0 0 10px; color: var(--ink-2); font-size: 13.5px; }
+.dec-opts { display: grid; gap: 6px; }
+.dec-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.dec-opt:hover { background: var(--surface-3); }
+.dec-opt .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--ink-4); margin-top: 2px; flex: none; }
+.dec-opt.on { border-color: var(--accent); background: var(--accent-bg); }
+.dec-opt.on .radio { border: 5px solid var(--accent); }
+.dec-body { display: grid; gap: 2px; }
+.dec-label { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.dec-detail { color: var(--ink-2); font-size: 13px; }
+.tag-agent { font: 600 10.5px var(--font-ui); color: var(--agent); background: var(--agent-bg); border: 1px solid var(--agent-line); padding: 1px 7px; border-radius: 99px; }
+.dec-note { margin-top: 10px; font-size: 13.5px; }
+.verif { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.verif li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; font-size: 13.5px; line-height: 1.5; }
+.verif .v-ic { padding-top: 2px; }
+.verif .ic { width: 15px; height: 15px; }
+.v-pass .v-ic { color: var(--pass); } .v-fail .v-ic { color: var(--fail); } .v-unverified .v-ic { color: var(--unverified); }
+.v-l { font-weight: 500; } .v-d { color: var(--ink-3); font-size: 12.5px; margin-left: 6px; }
+.verdict { display: grid; gap: 14px; }
+.vd-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-3); }
+.vd-stats b { color: var(--ink); font-weight: 600; }
+.vd-stats .warn { color: var(--att-medium); }
+.vd-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.vd-opt { display: grid; gap: 3px; text-align: left; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; }
+.vd-opt:hover { background: var(--surface-3); }
+.vd-l { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.vd-l::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--vc); }
+.vd-d { color: var(--ink-3); font-size: 12.5px; }
+.vd-approve { --vc: var(--pass); } .vd-approve_notes { --vc: var(--att-medium); } .vd-changes { --vc: var(--k-change); }
+.vd-opt.on { border-color: var(--vc); background: color-mix(in srgb, var(--vc) 9%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc) 14%, transparent); }
+
+/* ---------- overlays ---------- */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); animation: fade .18s var(--ease); }
+.modal { width: min(760px, calc(100vw - 48px)); max-height: calc(100vh - 96px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 22px 24px 24px; animation: rise .22s var(--ease); }
+.modal-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.modal-h h3 { margin: 0; font-size: 17px; font-weight: 650; }
+.modal-sub { color: var(--ink-3); font-size: 13px; margin: -8px 0 14px; }
+.sim { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-3); color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+pre.json { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 12px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.j-k { color: var(--tk-p); } .j-s { color: var(--tk-s); } .j-n { color: var(--tk-n); } .j-b { color: var(--tk-k); }
+.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 28px; }
+.keys div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.keys kbd { font-size: 11.5px; }
+.cl-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; margin-bottom: 8px; }
+.cl-item:hover { border-color: var(--line-2); }
+.cl-meta { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--ink-3); }
+.empty { color: var(--ink-3); font-size: 13.5px; padding: 18px 0; text-align: center; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+
+/* ---------- prototype bar (not part of the design) ---------- */
+.proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 4px; padding: 5px 6px 5px 12px; border-radius: 99px; background: #111; color: #f2f2f2; box-shadow: 0 8px 30px rgba(0, 0, 0, .35), 0 0 0 1px #2a2a2a; font: 12.5px var(--font-ui); }
+.proto-bar button { border: 0; background: transparent; color: #cfcfcf; height: 28px; min-width: 28px; padding: 0 10px; border-radius: 99px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.proto-bar button:hover { background: #2a2a2a; color: #fff; }
+.proto-bar button.on { background: #f2f2f2; color: #111; }
+.proto-tag { font: 700 10px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: #ffb547; margin-right: 6px; }
+.proto-sep { width: 1px; height: 18px; background: #333; margin: 0 4px; }
+
+
+html, body { height: 100%; }
+body { overflow: hidden; }
+.logo { width: auto; height: auto; background: none; border-radius: 0; font-size: 18px; line-height: 1; flex: none; }
+.app { display: grid; grid-template-rows: 54px minmax(0, 1fr); height: 100vh; }
+.top { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.top-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.path-chip { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.count-pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.count-pill.on { background: var(--surface-3); color: var(--ink); }
+.count-pill .n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--ink); color: var(--bg); font-size: 11px; display: grid; place-items: center; }
+.body { display: grid; grid-template-columns: 240px minmax(0, 1fr) 0; min-height: 0; transition: grid-template-columns .2s var(--ease); }
+.body.panel { grid-template-columns: 240px minmax(0, 1fr) 360px; }
+.stage { overflow: auto; position: relative; }
+
+/* outline */
+.outline { overflow: auto; padding: 18px 10px 90px; border-right: 1px solid var(--line); }
+.o-k { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 4px 10px 8px; }
+.o-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font-size: 13.5px; color: var(--ink-2); line-height: 1.35; }
+.o-item.d3 { padding-left: 22px; font-size: 13px; }
+.o-item.d4 { padding-left: 34px; font-size: 12.5px; }
+.o-item:hover { background: var(--surface-3); color: var(--ink); }
+.o-item.on { color: var(--ink); background: var(--surface); box-shadow: var(--shadow), inset 0 0 0 1px var(--line); }
+.o-item .o-n { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--k-change); }
+
+/* document */
+.paper { max-width: 800px; margin: 28px auto 160px; padding: 44px 64px 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+.agent-line { display: flex; gap: 10px; align-items: flex-start; margin: -6px 0 26px; padding: 10px 14px; border-radius: 12px; background: var(--agent-bg); border: 1px solid var(--agent-line); font-size: 14px; line-height: 1.55; color: var(--ink-2); }
+.agent-line .ic { color: var(--agent); margin-top: 3px; width: 13px; height: 13px; }
+.doc { font-size: 16px; line-height: 1.75; color: var(--ink); }
+.blk { position: relative; }
+.blk > :first-child { margin-top: 0; }
+.blk > :last-child { margin-bottom: 0; }
+.blk + .blk { margin-top: 16px; }
+.gut { position: absolute; left: -46px; top: 2px; display: flex; flex-direction: column; gap: 4px; opacity: 0; transition: opacity .12s; }
+.blk:hover .gut { opacity: 1; }
+.gut button { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-3); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.gut button:hover { color: var(--ink); border-color: var(--ink-4); }
+.gut .ic { width: 13px; height: 13px; }
+.doc h1 { font-size: 34px; line-height: 1.18; letter-spacing: -.025em; font-weight: 720; margin: 0 0 12px; }
+.doc h2 { font-size: 23px; line-height: 1.3; letter-spacing: -.015em; font-weight: 680; margin: 34px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.doc h3 { font-size: 18px; font-weight: 660; margin: 22px 0 4px; }
+.doc h4 { font-size: 15px; font-weight: 660; margin: 18px 0 4px; }
+.doc p { margin: 0; }
+.doc a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: 3px; }
+.doc ul, .doc ol { margin: 0; padding-left: 26px; }
+.doc li { margin: 4px 0; }
+.doc li > ul, .doc li > ol { margin: 2px 0; }
+.doc li:has(> input[type="checkbox"]) { list-style: none; margin-left: -22px; }
+.doc input[type="checkbox"] { margin: 0 8px 0 0; accent-color: var(--pass); transform: translateY(1px); }
+.doc code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.doc pre { position: relative; margin: 0; padding: 16px 18px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 13px/1.65 var(--font-mono); white-space: pre; overflow-x: auto; }
+.doc pre code { background: none; padding: 0; font-size: inherit; }
+.doc pre .lang { position: absolute; top: 8px; right: 12px; font: 600 10.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-4); }
+.doc blockquote { margin: 0; padding: 4px 18px; border-left: 3px solid var(--line-2); color: var(--ink-2); }
+.doc table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.doc th, .doc td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.doc th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); font-weight: 650; border-bottom-color: var(--line-2); }
+.doc hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+.alert { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--a-line); background: var(--a-bg); }
+.alert .alert-t { display: flex; align-items: center; gap: 7px; font: 650 12.5px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; color: var(--a-ink); margin-bottom: 4px; }
+.alert .alert-t .ic { width: 14px; height: 14px; }
+.alert p { color: var(--ink); }
+.alert.note { --a-ink: var(--accent); --a-bg: var(--accent-bg); --a-line: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.alert.warning { --a-ink: var(--att-medium); --a-bg: color-mix(in srgb, var(--att-medium) 9%, var(--surface)); --a-line: color-mix(in srgb, var(--att-medium) 32%, var(--line)); }
+.alert.important { --a-ink: var(--agent); --a-bg: var(--agent-bg); --a-line: var(--agent-line); }
+.mermaid-box { display: grid; place-items: center; padding: 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); overflow-x: auto; }
+.mermaid-box svg { max-width: 100%; height: auto; }
+.mermaid-box pre.mermaid { margin: 0; padding: 0; border: 0; background: none; white-space: normal; }
+.tk-k { color: var(--tk-k); } .tk-s { color: var(--tk-s); } .tk-n { color: var(--tk-n); } .tk-t { color: var(--tk-t); } .tk-f { color: var(--tk-f); } .tk-c { color: var(--tk-c); font-style: italic; }
+
+/* annotations in the text */
+mark.an { color: inherit; padding: 1px 0; border-radius: 3px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+mark.an.comment { background: color-mix(in srgb, var(--att-medium) 26%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--att-medium) 70%, transparent); }
+mark.an.delete { background: var(--del-bg); color: var(--del-ink); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+mark.an.suggest { background: var(--del-bg); color: var(--del-ink); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+mark.an.label { background: color-mix(in srgb, var(--k-question) 14%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--k-question) 55%, transparent); }
+mark.an.label.good { background: color-mix(in srgb, var(--pass) 14%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--pass) 55%, transparent); }
+mark.an.ask { background: var(--agent-bg); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--agent) 55%, transparent); }
+mark.an.flash { animation: flash 1.1s var(--ease); }
+@keyframes flash { 0%, 40% { background: color-mix(in srgb, var(--accent) 40%, transparent); } }
+.deco-ins { background: var(--add-strong); color: var(--add-ink); border-radius: 3px; padding: 1px 2px; margin-left: 2px; text-decoration: none; }
+.deco-badge { display: inline-block; font-size: 12px; line-height: 1; padding: 2px 5px; margin-left: 3px; border-radius: 99px; background: var(--surface-3); vertical-align: 1px; cursor: pointer; }
+.blk.block-noted::before { content: ""; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 3px; background: var(--att-medium); }
+.blk.edited::before { content: ""; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 3px; background: var(--add-ink); }
+.edit-tag { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12.5px; color: var(--add-ink); font-weight: 600; }
+.src-diff { margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; font: 12.5px/1.6 var(--font-mono); }
+.src-diff div { padding: 0 12px; white-space: pre-wrap; }
+.src-diff .a { background: var(--add-bg); color: var(--add-ink); }
+.src-diff .d { background: var(--del-bg); color: var(--del-ink); }
+.block-editor textarea { font: 13.5px/1.6 var(--font-mono); min-height: 120px; }
+.block-editor .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+
+/* floating toolbar and popovers */
+.tbar { position: fixed; z-index: 40; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; background: #141414; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: pop .14s var(--ease); }
+.tbar button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #eee; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.tbar button:hover { background: #2b2b2b; }
+.tbar .sep { width: 1px; height: 18px; background: #333; margin: 0 2px; }
+.tbar .ic { width: 14px; height: 14px; }
+.tbar .hint { color: #888; font-size: 11px; padding: 0 6px 0 2px; white-space: nowrap; }
+.tbar button.main { background: #f2f2f2; color: #111; }
+.tbar button.main:hover { background: #fff; }
+.tbar button.icon { width: 30px; padding: 0; justify-content: center; font-size: 14px; }
+.pop { position: fixed; z-index: 41; width: 380px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); animation: pop .14s var(--ease); }
+.pop .quote { font-size: 12.5px; color: var(--ink-3); border-left: 2px solid var(--line-2); padding-left: 8px; margin: 0 0 8px; max-height: 60px; overflow: hidden; }
+.pop-h { display: flex; align-items: center; gap: 8px; font: 600 12px var(--font-ui); color: var(--ink-2); margin-bottom: 8px; }
+.pop-h .ic { width: 13px; height: 13px; }
+.pop .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pop .answer { font-size: 14px; line-height: 1.6; padding: 10px 12px; border-radius: 10px; background: var(--agent-bg); border: 1px solid var(--agent-line); margin-top: 8px; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+
+/* annotations panel */
+.panel { overflow: auto; border-left: 1px solid var(--line); background: var(--surface); padding: 0 14px 90px; }
+.panel-h { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 14px 0 10px; background: var(--surface); }
+.panel-h h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.an-card { display: grid; gap: 6px; width: 100%; text-align: left; padding: 11px 12px; margin-bottom: 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-size: 13.5px; line-height: 1.5; }
+.an-card:hover { border-color: var(--line-2); }
+.an-card .t { display: flex; align-items: center; gap: 7px; font: 650 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; }
+.an-card .t .ic { width: 12px; height: 12px; }
+.an-card .t.comment { color: var(--att-medium); } .an-card .t.delete, .an-card .t.suggest { color: var(--del-ink); } .an-card .t.label { color: var(--k-question); } .an-card .t.ask { color: var(--agent); } .an-card .t.edit { color: var(--add-ink); } .an-card .t.global { color: var(--ink-2); }
+.an-card .q { color: var(--ink-3); font-size: 12.5px; border-left: 2px solid var(--line-2); padding-left: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.an-card .rep ins { text-decoration: none; background: var(--add-strong); border-radius: 3px; padding: 0 2px; }
+.panel .empty { padding: 30px 8px; text-align: center; color: var(--ink-3); font-size: 13.5px; line-height: 1.6; }
+.av { width: auto; height: 18px; padding: 0 6px; border-radius: 99px; background: var(--ink); color: var(--bg); font: 700 10px/18px var(--font-ui); flex: none; }
+.loading { padding: 80px; text-align: center; color: var(--ink-3); }
+
+/* ================================================================ explain_change (round 1) */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.logo { width: auto; height: auto; background: none; border-radius: 0; font-size: 18px; line-height: 1; flex: none; }
+.app { display: grid; grid-template-rows: 54px minmax(0, 1fr); height: 100vh; }
+.top { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); position: relative; }
+.top-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ex-kind { font: 600 11px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--agent); background: var(--agent-bg); border: 1px solid var(--agent-line); padding: 2px 8px; border-radius: 99px; flex: none; }
+.ex-ref { font: 500 12px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); flex: none; }
+.ex-stat { font: 500 12px var(--font-mono); color: var(--ink-3); white-space: nowrap; flex: none; }
+.ex-stat .a { color: var(--add-ink); } .ex-stat .d { color: var(--del-ink); }
+.ex-quizpill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.ex-quizpill .n { font-variant-numeric: tabular-nums; color: var(--ink); }
+.ex-quizpill.pass { border-color: color-mix(in srgb, var(--pass) 45%, var(--line-2)); color: var(--pass); background: color-mix(in srgb, var(--pass) 8%, var(--surface)); }
+.ex-progress { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--accent); transition: width .1s linear; }
+
+.ex-body { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: 0; }
+.stage { overflow: auto; position: relative; scroll-behavior: auto; }
+
+/* contents */
+.ex-toc { overflow: auto; padding: 22px 12px 90px 14px; border-right: 1px solid var(--line); }
+.ex-toc-k { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 0 10px 10px; }
+.ex-toc-i { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; line-height: 1.35; }
+.ex-toc-i:hover { background: var(--surface-3); color: var(--ink); }
+.ex-toc-i.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow), inset 0 0 0 1px var(--line); }
+.ex-toc-i .num { font: 650 11px var(--font-mono); color: var(--ink-4); width: 16px; flex: none; }
+.ex-toc-i.on .num { color: var(--accent); }
+.ex-toc-i.step { padding-left: 36px; font-size: 13px; }
+.ex-toc-i.step .num { width: 14px; }
+.ex-toc-i .tail { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ex-toc-i .tail.pass { color: var(--pass); }
+.ex-toc-keys { margin: 18px 10px 0; display: grid; gap: 6px; font-size: 12px; color: var(--ink-3); }
+
+/* the article */
+.ex-article { max-width: 760px; margin: 0 auto; padding: 44px 32px 200px; }
+.ex-eyebrow { font: 500 12px var(--font-mono); color: var(--ink-3); margin-bottom: 12px; }
+.ex-article h1 { font-size: 38px; line-height: 1.15; letter-spacing: -.028em; font-weight: 740; margin: 0 0 14px; text-wrap: balance; }
+.ex-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-3); margin-bottom: 26px; }
+.ex-meta b { color: var(--ink-2); font-weight: 600; }
+.ex-tldr { padding: 20px 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 18px; }
+.ex-tldr-k { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.ex-tldr p { margin: 0; font-size: 17px; line-height: 1.65; text-wrap: pretty; }
+.ex-route { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.ex-route button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 7px 12px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.ex-route button:hover { border-color: var(--line-2); color: var(--ink); }
+.ex-route .num { font: 650 11px var(--font-mono); color: var(--ink-4); }
+.ex-route .t { color: var(--ink-3); font-size: 12px; }
+
+.ex-sec { margin-top: 64px; }
+.ex-sec-h { display: flex; align-items: baseline; gap: 14px; margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.ex-sec-h .num { font: 650 13px var(--font-mono); color: var(--accent); }
+.ex-sec-h h2 { margin: 0; font-size: 26px; letter-spacing: -.018em; font-weight: 700; }
+.ex-sec-h .t { margin-left: auto; font-size: 12.5px; color: var(--ink-3); }
+.ex-lead { font-size: 15px; color: var(--ink-2); margin: -6px 0 22px; }
+
+.ex-prose { font-size: 16.5px; line-height: 1.75; color: var(--ink); text-wrap: pretty; }
+.ex-prose > * { margin: 0; }
+.ex-prose > * + * { margin-top: 16px; }
+.ex-prose > .ex-code, .ex-prose > .ex-figure, .ex-prose > .ex-diagram, .ex-prose > .alert { margin-top: 20px; margin-bottom: 4px; }
+.ex-prose h3 { font-size: 19px; margin: 30px 0 0; }
+.ex-prose ul, .ex-prose ol { margin: 0; padding-left: 24px; }
+.ex-prose li { margin: 4px 0; }
+.ex-prose code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.ex-prose strong { font-weight: 650; }
+.ex-prose em { font-style: italic; }
+.ex-prose pre { margin: 0; padding: 14px 18px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font: 13px/1.6 var(--font-mono); white-space: pre-wrap; overflow-x: auto; }
+.ex-prose pre code { background: none; padding: 0; font-size: inherit; }
+.ex-prose .alert { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--a-line); background: var(--a-bg); font-size: 15.5px; }
+.ex-prose .alert-t { font: 650 12px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--a-ink); margin-bottom: 4px; }
+.ex-prose .alert.note { --a-ink: var(--accent); --a-bg: var(--accent-bg); --a-line: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.ex-prose .alert.important { --a-ink: var(--agent); --a-bg: var(--agent-bg); --a-line: var(--agent-line); }
+.ex-prose .alert p + p { margin-top: 8px; }
+
+.ex-primer { border-radius: 14px; border: 1px dashed var(--line-2); margin-bottom: 26px; background: var(--surface-2); }
+.ex-primer > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; font-size: 14px; color: var(--ink-2); }
+.ex-primer > summary::-webkit-details-marker { display: none; }
+.ex-primer > summary b { color: var(--ink); font-weight: 600; }
+.ex-primer > summary .t { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+.ex-primer[open] > summary { border-bottom: 1px dashed var(--line-2); }
+.ex-primer .ex-prose { padding: 16px 20px 20px; font-size: 15.5px; }
+
+/* walkthrough */
+.ex-step { margin-top: 44px; scroll-margin-top: 24px; }
+.ex-step:first-of-type { margin-top: 8px; }
+.ex-step-k { display: flex; align-items: center; gap: 10px; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+.ex-step h3 { font-size: 21px; letter-spacing: -.012em; margin: 0 0 10px; }
+.ex-files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.ex-files span { font: 500 11.5px var(--font-mono); color: var(--ink-3); background: var(--surface-3); border-radius: 6px; padding: 2px 7px; }
+
+/* code cards */
+.ex-code { margin: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+.ex-code-h { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 12px; color: var(--ink-3); }
+.ex-code-h .path { font: 500 12px var(--font-mono); color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-code-h .badge { font: 600 10.5px var(--font-ui); letter-spacing: .03em; text-transform: uppercase; padding: 1px 7px; border-radius: 99px; flex: none; }
+.ex-code-h .badge.new { color: var(--add-ink); background: var(--add-bg); }
+.ex-code-h .badge.changed { color: var(--att-medium); background: color-mix(in srgb, var(--att-medium) 12%, transparent); }
+.ex-code-h .lines { white-space: nowrap; flex: none; }
+.ex-code-b { position: relative; font: 12.5px/1.65 var(--font-mono); overflow-x: auto; padding: 8px 0; tab-size: 2; }
+.ex-code.clip .ex-code-b { max-height: 420px; overflow-y: hidden; }
+.ex-code.clip .ex-code-b::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(transparent, var(--surface)); pointer-events: none; }
+.ex-cl { display: grid; grid-template-columns: 46px 18px max-content; white-space: pre; padding-right: 18px; }
+.ex-cl .n { color: var(--ink-4); text-align: right; padding-right: 10px; user-select: none; }
+.ex-cl .m { color: var(--ink-4); user-select: none; }
+.ex-cl.add { background: var(--add-bg); } .ex-cl.add .m { color: var(--add-ink); }
+.ex-cl.del { background: var(--del-bg); } .ex-cl.del .m { color: var(--del-ink); }
+.ex-cl.del .s { color: var(--del-ink); }
+.ex-more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: var(--surface-2); padding: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.ex-more:hover { color: var(--ink); }
+
+/* figures */
+.ex-figure { margin: 0; }
+.ex-fig-frame { border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); padding: 18px 20px; }
+.ex-fig-frame iframe { display: block; width: 100%; border: 0; height: 320px; background: transparent; }
+.ex-figure figcaption { display: flex; gap: 10px; align-items: baseline; margin-top: 10px; font-size: 13.5px; color: var(--ink-3); line-height: 1.5; }
+.ex-figure figcaption b { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+.ex-figure .live { margin-left: auto; font: 600 10.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); white-space: nowrap; }
+.ex-diagram { border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); padding: 20px; overflow-x: auto; display: grid; justify-items: center; }
+.ex-diagram svg { max-width: none !important; }
+.ex-diagram pre.mermaid { background: none; border: 0; padding: 0; margin: 0; white-space: pre-wrap; color: var(--ink-3); font-size: 12px; }
+
+/* also changed */
+.ex-also { display: grid; gap: 18px; }
+.ex-group-h { display: flex; align-items: center; gap: 8px; font: 600 12.5px var(--font-ui); color: var(--ink-2); margin-bottom: 6px; }
+.ex-group-h .count { margin-left: 2px; }
+.ex-frow { display: grid; grid-template-columns: minmax(0, 1fr) 90px 120px; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
+.ex-frow:nth-child(even) { background: var(--surface-2); }
+.ex-frow .p { font: 500 12.5px var(--font-mono); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-frow .c { font: 500 12px var(--font-mono); text-align: right; white-space: nowrap; }
+.ex-frow .c .a { color: var(--add-ink); } .ex-frow .c .d { color: var(--del-ink); }
+.ex-bar { display: flex; height: 6px; border-radius: 99px; overflow: hidden; background: var(--surface-3); }
+.ex-bar i { display: block; height: 100%; } .ex-bar .a { background: var(--add-ink); opacity: .75; } .ex-bar .d { background: var(--del-ink); opacity: .75; }
+.ex-covered { padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; color: var(--ink-2); margin-bottom: 18px; }
+.ex-covered b { color: var(--ink); }
+
+/* quiz */
+.ex-q { padding: 18px 20px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 14px; scroll-margin-top: 24px; }
+.ex-q.focus { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 0 0 4px var(--accent-bg), var(--shadow); }
+.ex-q-h { display: flex; align-items: center; gap: 8px; font: 600 11.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.ex-q-h .ok { color: var(--pass); } .ex-q-h .no { color: var(--fail); }
+.ex-q-t { font-size: 16px; line-height: 1.6; margin: 0 0 14px; font-weight: 550; }
+.ex-q-t code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; font-weight: 500; }
+.ex-opts { display: grid; gap: 8px; }
+.ex-opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface-2); font-size: 14.5px; color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s; }
+.ex-opt:hover:not([disabled]) { border-color: var(--ink-4); background: var(--surface); }
+.ex-opt kbd { margin: 0; }
+.ex-opt[disabled] { cursor: default; }
+.ex-opt.right { border-color: var(--pass); background: color-mix(in srgb, var(--pass) 10%, var(--surface)); }
+.ex-opt.wrong { border-color: var(--fail); background: color-mix(in srgb, var(--fail) 8%, var(--surface)); }
+.ex-opt.dim { opacity: .55; }
+.ex-opt .mark { margin-left: auto; font-weight: 700; }
+.ex-opt.right .mark { color: var(--pass); } .ex-opt.wrong .mark { color: var(--fail); }
+.ex-why { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: var(--surface-2); font-size: 14.5px; line-height: 1.6; color: var(--ink-2); animation: rise .2s var(--ease); }
+.ex-why code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.ex-score { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-2); margin-top: 6px; }
+.ex-score .big { font-size: 28px; font-weight: 740; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ex-score .msg { font-size: 14.5px; color: var(--ink-2); line-height: 1.5; }
+.ex-score.pass { border-color: color-mix(in srgb, var(--pass) 40%, var(--line)); background: color-mix(in srgb, var(--pass) 7%, var(--surface)); }
+.ex-score.pass .big { color: var(--pass); }
+
+@media print {
+  body { overflow: visible; }
+  .app { display: block; height: auto; }
+  .top, .ex-toc, .proto-bar, .ex-more, .ex-progress { display: none !important; }
+  .ex-body { display: block; }
+  .stage { overflow: visible; }
+  .ex-article { padding: 0; max-width: none; }
+  .ex-code.clip .ex-code-b { max-height: none; }
+  .ex-code.clip .ex-code-b::after { display: none; }
+  .ex-sec, .ex-step, .ex-q, .ex-code, .ex-figure { break-inside: avoid-page; }
+}
+
+/* ================================================================ talk it through (round 2) */
+.ex-body { transition: grid-template-columns .22s var(--ease); }
+.ex-body.chat-open { grid-template-columns: 270px minmax(0, 1fr) 420px; }
+.ex-chat { display: none; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); }
+.ex-body.chat-open .ex-chat { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; animation: ex-slide .22s var(--ease); }
+@keyframes ex-slide { from { opacity: 0; transform: translateX(16px); } }
+.ex-chatbtn.on { color: var(--agent); background: var(--agent-bg); }
+.ex-chat-h { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ex-chat-h > .ic { color: var(--agent); width: 14px; height: 14px; }
+.ex-chat-h .seg { margin-left: 6px; }
+.ex-chat-b { overflow: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 14px; }
+.ex-chat-c { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.ex-chat-c textarea { flex: 1; resize: none; font-size: 14px; }
+.ex-chat-c .btn { height: 38px; }
+.ex-m { max-width: 92%; font-size: 14.5px; line-height: 1.6; }
+.ex-m .body > * { margin: 0; } .ex-m .body > * + * { margin-top: 8px; }
+.ex-m .body code { font: .86em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.ex-m.tutor { align-self: flex-start; }
+.ex-m.tutor .who { display: flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-ui); color: var(--agent); margin-bottom: 4px; }
+.ex-m.tutor .who .ic { width: 12px; height: 12px; }
+.ex-m.tutor .body { padding: 10px 13px; border-radius: 4px 14px 14px 14px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.ex-m.you { align-self: flex-end; display: grid; justify-items: end; gap: 6px; }
+.ex-m.you .body { padding: 9px 13px; border-radius: 14px 4px 14px 14px; background: var(--surface-3); }
+.ex-quote { max-width: 100%; font-size: 12.5px; color: var(--ink-3); border-left: 2px solid var(--agent-line); padding: 2px 0 2px 9px; text-align: left; }
+.ex-quote .src { display: block; font: 600 10.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--agent); margin-bottom: 2px; }
+.ex-cites { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ex-cites button { border: 0; background: none; padding: 0; font-size: 12.5px; color: var(--accent); cursor: pointer; }
+.ex-cites button:hover { text-decoration: underline; }
+.ex-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ex-replies.col { flex-direction: column; align-items: stretch; }
+.ex-replies button { text-align: left; border: 1px solid var(--line-2); background: var(--surface); border-radius: 99px; padding: 5px 12px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.ex-replies.col button { border-radius: 10px; padding: 8px 12px; }
+.ex-replies button:hover { border-color: var(--agent); color: var(--ink); }
+.ex-dots { display: inline-flex; gap: 4px; padding: 12px 14px; border-radius: 4px 14px 14px 14px; background: var(--agent-bg); border: 1px solid var(--agent-line); }
+.ex-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--agent); animation: blink 1s infinite; }
+.ex-dots i:nth-child(2) { animation-delay: .15s; } .ex-dots i:nth-child(3) { animation-delay: .3s; }
+.ex-chat-empty { text-align: center; padding: 30px 8px; color: var(--ink-2); font-size: 14px; }
+.ex-chat-empty .big .ic { width: 26px; height: 26px; color: var(--agent); }
+.ex-chat-empty p { margin: 8px 0; line-height: 1.55; }
+.ex-chat-empty .dim { color: var(--ink-3); font-size: 13px; }
+.ex-chat-empty .small { font-size: 12.5px; margin-top: 18px; }
+.ex-launch { position: fixed; right: 22px; bottom: 22px; z-index: 30; display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border-radius: 99px; border: 1px solid var(--agent-line); background: var(--surface); color: var(--agent); font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: var(--shadow-lg); }
+.ex-launch:hover { background: var(--agent-bg); }
+.ex-launch kbd { color: var(--agent); border-color: var(--agent-line); }
+.ex-check { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 22px; padding: 11px 14px; border-radius: 12px; border: 1px dashed var(--agent-line); background: color-mix(in srgb, var(--agent-bg) 60%, transparent); color: var(--ink-2); font-size: 14px; cursor: pointer; text-align: left; }
+.ex-check:hover { border-style: solid; color: var(--ink); }
+.ex-check .ic { color: var(--agent); }
+.ex-check b { color: var(--agent); font-weight: 600; }
+.ex-why-act { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
+.ex-talk { color: var(--agent); border-color: var(--agent-line); background: var(--surface); }
+.ex-talk .ic { color: var(--agent); }
+.ex-tbar { position: fixed; z-index: 40; display: flex; gap: 2px; padding: 4px; border-radius: 12px; background: #141414; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: pop .14s var(--ease); }
+.ex-tbar button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: #eee; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ex-tbar button:hover { background: #2b2b2b; }
+.ex-tbar .ic { width: 13px; height: 13px; }
+.ex-toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 60; padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 13.5px; box-shadow: var(--shadow-lg); animation: rise .2s var(--ease); }
+@media print { .ex-chat, .ex-launch, .ex-check, .ex-why-act, .ex-tbar { display: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="proto"></div>
+<script type="module">
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@14/lib/marked.esm.js";
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+// ================================================================ helpers
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const svg = (d) => `<svg class="ic" viewBox="0 0 16 16">${d}</svg>`;
+const I = {
+  moon: svg('<path d="M13.2 9.6A5.6 5.6 0 016.4 2.8a5.6 5.6 0 106.8 6.8z"/>'),
+  sun: svg('<circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3"/>'),
+  print: svg('<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2"/><path d="M4.5 9.5h7v4h-7z"/>'),
+  x: svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>'),
+  chat: svg('<path d="M2.6 4.3c0-1 .8-1.8 1.8-1.8h7.2c1 0 1.8.8 1.8 1.8v5c0 1-.8 1.8-1.8 1.8H7.2l-3.1 2.4v-2.4h0c-.9-.1-1.5-.8-1.5-1.8z"/><path d="M5.5 6.2h5M5.5 8.4h3"/>'),
+  spark: svg('<path d="M8 1.2l1.7 5.1 5.1 1.7-5.1 1.7L8 14.8l-1.7-5.1L1.2 8l5.1-1.7z" fill="currentColor" stroke="none"/>'),
+  popout: svg('<path d="M9 2.5h4.5V7M13.5 2.5L8 8M6.5 3.5H3.5c-.6 0-1 .4-1 1v8c0 .6.4 1 1 1h8c.6 0 1-.4 1-1v-3"/>'),
+  send: svg('<path d="M2.2 7.7L13.6 2.6 9.8 13.8 7.6 9.1z"/><path d="M7.6 9.1l6-6.5"/>'),
+};
+const KW = new Set("import export from const let var function return if else for while async await new throw try catch type interface extends class readonly as of in null undefined true false void this break continue".split(" "));
+function highlight(code) {
+  const re = /\/\/.*|\/\*.*?\*\/|^\s*\*.*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/(?:[^/\\\n]|\\.)+\/[gimsuy]*(?=[\s,;)])|\d[\d_.]*|[A-Za-z_$][\w$]*|\s+|./g;
+  let m, out = "";
+  while ((m = re.exec(code))) {
+    const t = m[0];
+    let c = "";
+    if (/^\s*(\/\/|\/\*|\*)/.test(t)) c = "c"; else if (/^["'`]/.test(t)) c = "s"; else if (/^\/.+\/[gimsuy]*$/.test(t) && t.length > 2) c = "s"; else if (/^\d/.test(t)) c = "n"; else if (KW.has(t)) c = "k"; else if (/^[A-Z]/.test(t)) c = "t"; else if (/^[a-z_$]/i.test(t) && code[re.lastIndex] === "(") c = "f";
+    out += c ? `<span class="tk-${c}">${esc(t)}</span>` : esc(t);
+  }
+  return out;
+}
+const pad = (n) => String(n).padStart(2, "0");
+
+// ================================================================ the explanation, as the agent would send it
+const EX = {"title": "How review_ledger_task turns a bundle into a reviewable graph", "summary": "`review_ledger_task` opens a whole ledger task in the browser. The server reads the bundle from disk, turns each ticket's `**Blocked by:**` line into a dependency graph, checks that graph against the rules `to-tickets` writes by, and serves every other file only when the reviewer opens it. Every document reuses the Markdown reader, so the new ideas are three: reading ticket numbers out of prose, checking the graph, and evidence on demand.", "primer": "A **ledger task** is a folder, `.ledger/<id>/`, that holds one piece of work. It always has `task.md` (intent, status, current state) and `retrospective.md`. Anything else is optional: a `spec.md` or `plan.md`, a `tickets/` folder, and whatever evidence the work produced, such as benchmark records or prototypes. Closed tasks move unchanged to `.ledger/history/<id>/`.\n\nThe `to-tickets` skill splits decided work into **tickets**, one file each, numbered in dependency order: `tickets/01-challenger-pass.md`, `tickets/02-trap-puzzles.md`, and so on. Each ticket follows one template:\n\n```markdown\n# 03: Benchmark runner and report\n\n**What to build:** One command runs the trap benchmark \u2026\n\n**Blocked by:** 01 (Challenger pass), 02 (Three trap puzzles with reference solutions).\n\n**Status:** ready-for-agent\n\n- [ ] With the fake model and scripted replies, the command runs all three arms \u2026\n```\n\nThe **frontier** is every ticket whose blockers are all done: the work that can start now.", "background": "Two pages already shared one runtime. A tool call builds the page's data, a small server on `127.0.0.1` serves it behind a token, and the tool call waits until the page posts its result to `/result`. The server then saves a self-contained copy of the page and returns the review to the model as text.\n\n`review_markdown` added a **document reader**: the server splits a file into top-level blocks with their source lines, and the page lets the reviewer select text in a block and annotate it. Just before this change, that reader was made multi-document: every annotation now carries its `file`, so a page can hold many documents and still send back one list of annotations.\n\nA ledger task is exactly that: many documents. What the reader cannot do alone is show how the tickets depend on each other, or deal with a bundle that holds 60 JSON records next to its four tickets.", "intuition": "Think of the bundle as a small website with one map. The documents are the pages; the tickets are the map's nodes; and each `**Blocked by:**` line draws arrows into its ticket. Lay the nodes out in columns by how deep their dependencies go, and the shape of the work appears: what can start now, what waits, and what waits on what.\n\nThe graph is only as good as the lines it reads, so the page checks it against the rules `to-tickets` writes by. Try it: edit a `Blocked by` line below, or pick a broken case.\n\n```figure Edit a ticket's Blocked by line and watch the frontier and the graph checks follow. This toy repeats the page's rules in a few lines.\n<div class=\"fig\">\n  <div class=\"presets\">\n    <button data-p=\"written\" class=\"on\">As written<\/button>\n    <button data-p=\"cycle\">Add a cycle<\/button>\n    <button data-p=\"missing\">Name a missing ticket<\/button>\n    <button data-p=\"later\">Wait on a later ticket<\/button>\n  <\/div>\n  <div class=\"cols\">\n    <div class=\"rows\" id=\"rows\"><\/div>\n    <div class=\"out\"><svg id=\"edges\"><\/svg><div id=\"graph\"><\/div><\/div>\n  <\/div>\n  <div class=\"foot\"><div id=\"front\"><\/div><div id=\"checks\"><\/div><\/div>\n<\/div>\n<style>\n  .fig { font: 13.5px/1.5 var(--font-ui); color: var(--ink); }\n  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }\n  .presets button { font: inherit; font-size: 12.5px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); border-radius: 99px; padding: 4px 11px; cursor: pointer; }\n  .presets button.on { background: var(--ink); color: var(--bg); border-color: transparent; }\n  .cols { display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: start; }\n  .row { display: grid; grid-template-columns: 26px 1fr; gap: 2px 8px; margin-bottom: 9px; }\n  .row b { font: 650 12px var(--font-mono); color: var(--ink-2); padding-top: 6px; }\n  .row span { font-weight: 600; font-size: 13px; }\n  .row label { grid-column: 2; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); }\n  .row input { flex: 1; min-width: 0; font: 12.5px var(--font-mono); padding: 4px 7px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--ink); }\n  .out { position: relative; min-height: 200px; }\n  #edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }\n  #edges path { fill: none; stroke: var(--line-2); stroke-width: 1.6; }\n  #edges path.bad { stroke: var(--fail); stroke-dasharray: 5 4; }\n  .node { position: absolute; width: 112px; line-height: 1.3; padding: 7px 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); font-size: 12px; transition: left .25s, top .25s; }\n  .node i { font: normal 650 11px var(--font-mono); color: var(--ink-3); display: block; }\n  .node.frontier { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }\n  .node.blocked { background: var(--surface-2); color: var(--ink-2); }\n  .foot { display: grid; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }\n  #checks div { color: var(--fail); } #checks .ok { color: var(--pass); font-weight: 600; }\n<\/style>\n<script>\n  const TITLES = { 1: \"Challenger pass\", 2: \"Trap puzzles\", 3: \"Benchmark runner\", 4: \"First benchmark run\" };\n  const PRESETS = {\n    written: { 1: \"\", 2: \"\", 3: \"01, 02\", 4: \"03\" },\n    cycle: { 1: \"\", 2: \"04\", 3: \"01, 02\", 4: \"03\" },\n    missing: { 1: \"\", 2: \"\", 3: \"01, 02, 07\", 4: \"03\" },\n    later: { 1: \"\", 2: \"\", 3: \"01, 04\", 4: \"02\" },\n  };\n  let by = { ...PRESETS.written };\n  const pad = (n) => String(n).padStart(2, \"0\");\n  const rows = document.getElementById(\"rows\");\n  function drawRows() {\n    rows.innerHTML = Object.keys(TITLES).map((id) => `<div class=\"row\"><b>${pad(id)}<\/b><span>${TITLES[id]}<\/span><label>Blocked by <input data-id=\"${id}\" value=\"${by[id]}\" placeholder=\"none\"><\/label><\/div>`).join(\"\");\n  }\n  function draw() {\n    const ids = Object.keys(TITLES).map(Number);\n    const named = Object.fromEntries(ids.map((id) => [id, [...new Set((by[id].match(/\\d{2,3}/g) || []).map(Number))]]));\n    const blockers = Object.fromEntries(ids.map((id) => [id, named[id].filter((n) => ids.includes(n))]));\n    const depth = {}, visiting = new Set();\n    const d = (id) => { if (id in depth) return depth[id]; if (visiting.has(id)) return 0; visiting.add(id); const v = blockers[id].length ? 1 + Math.max(...blockers[id].map(d)) : 0; visiting.delete(id); return (depth[id] = v); };\n    ids.forEach(d);\n    const cols = {}; ids.forEach((id) => (cols[depth[id]] ??= []).push(id));\n    const ncols = Object.keys(cols).length, width = document.querySelector(\".out\").clientWidth || 380;\n    const step = ncols > 1 ? Math.min(150, (width - 112) / (ncols - 1)) : 0;\n    const pos = {}; Object.entries(cols).forEach(([c, list]) => list.forEach((id, r) => (pos[id] = { x: c * step, y: r * 64 + (Math.max(...Object.values(cols).map((l) => l.length)) - list.length) * 32 })));\n    const problems = [];\n    ids.forEach((id) => named[id].filter((n) => !ids.includes(n)).forEach((n) => problems.push(`${pad(id)} waits on ${pad(n)}, which is not a ticket here.`)));\n    ids.forEach((id) => blockers[id].filter((b) => b > id).forEach((b) => problems.push(`${pad(id)} waits on a later ticket, ${pad(b)}.`)));\n    const state = {}; const walk = (id, path) => { state[id] = 1; for (const b of blockers[id]) { if (state[b] === 1) problems.push(`Cycle: ${[...path.slice(path.indexOf(b)), b].map(pad).join(\" \u2192 \")}.`); else if (!state[b]) walk(b, [...path, b]); } state[id] = 2; };\n    ids.forEach((id) => state[id] || walk(id, [id]));\n    const frontier = ids.filter((id) => named[id].length === blockers[id].length && blockers[id].length === 0);\n    document.getElementById(\"graph\").innerHTML = ids.map((id) => `<div class=\"node ${frontier.includes(id) ? \"frontier\" : \"blocked\"}\" style=\"left:${pos[id].x}px;top:${pos[id].y}px\"><i>${pad(id)}<\/i>${TITLES[id]}<\/div>`).join(\"\");\n    document.getElementById(\"edges\").innerHTML = ids.flatMap((id) => blockers[id].map((b) => { const p = pos[b], q = pos[id]; const x1 = p.x + 112, y1 = p.y + 22, x2 = q.x, y2 = q.y + 22; const back = x2 <= x1; return `<path class=\"${back || b > id ? \"bad\" : \"\"}\" d=\"${back ? `M${x1} ${y1} C${x1 + 50} ${y1 + 90}, ${x2 - 50} ${y2 + 90}, ${x2} ${y2}` : `M${x1} ${y1} C${x1 + 20} ${y1}, ${x2 - 20} ${y2}, ${x2} ${y2}`}\"/>`; })).join(\"\");\n    document.getElementById(\"front\").innerHTML = `<b>Can start now:<\/b> ${frontier.length ? frontier.map(pad).join(\", \") : \"nothing\"}`;\n    document.getElementById(\"checks\").innerHTML = problems.length ? problems.map((p) => `<div>${p}<\/div>`).join(\"\") : '<span class=\"ok\">\u2713 Graph checks pass<\/span>';\n  }\n  rows.addEventListener(\"input\", (e) => { by[e.target.dataset.id] = e.target.value; draw(); });\n  document.querySelector(\".presets\").addEventListener(\"click\", (e) => {\n    const p = e.target.dataset.p; if (!p) return;\n    by = { ...PRESETS[p] };\n    document.querySelectorAll(\".presets button\").forEach((b) => b.classList.toggle(\"on\", b === e.target));\n    drawRows(); draw();\n  });\n  drawRows(); draw();\n  new ResizeObserver(draw).observe(document.querySelector(\".out\"));\n<\/script>\n```\n\n> [!NOTE]\n> A ticket that waits on a missing ticket counts as **blocked**, not ready. The page cannot know that the missing ticket is done, so it must not offer the work as startable.\n\nEverything that is not Markdown is **evidence**: records, logs, prototypes. A bundle can hold hundreds of them, and the reviewer opens a few at most. So the page lists them by name and size, and asks the server for a file only when the reviewer opens it:\n\n```mermaid\nsequenceDiagram\n  participant P as Page\n  participant S as Page server\n  participant D as Bundle on disk\n  P->>S: GET /file?path=evidence/run.json (with the token)\n  S->>S: Is this path on the page's own list?\n  S->>D: read the file\n  D-->>S: bytes\n  S->>S: not text? say so. Text? highlight it, keep the lines on the page\n  S-->>P: { lines }\n```\n\n> [!IMPORTANT]\n> The server answers only paths from the list it built itself. The page cannot name a file outside the bundle, so a token in the wrong hands cannot read the rest of the disk.", "steps": [{"title": "Reading ticket numbers out of prose", "body": "`**Blocked by:**` lines are written by people and agents, in many forms: `01: Title.`, `03 (Title)`, `01 (A), 02 (B).`, a Markdown link, `#04`. They also quote titles, and titles hold numbers of their own: \"Retry 408 and 429 in phase 2\".\n\nTwo patterns split the problem. `NUMBER` finds any two- or three-digit number, the way ticket numbers are written; a single digit is prose. `REFERENCE` finds only numbers that *read* as a reference: at the start of the line or of a list item, after `#`, `[`, `and`, or `ticket`.\n\n```code components/browser-pages/src/tickets.ts:3-10\n```\n\n`parseTickets` combines them. A number that is a ticket of this bundle counts wherever it appears. A number that is *not* a ticket here counts only when it reads as a reference, and then it becomes an `unknown` blocker. So \"Retry 408\" is just a title, while \"07: Report template\" is a missing ticket the page should warn about.\n\n```code components/browser-pages/src/tickets.ts:18-46\n```\n\nA ticket that names itself stays in its own `blockers` on purpose: the cycle check then catches it."}, {"title": "Checking the graph", "body": "A ticket's state depends on the others. It is **done** or **in progress** by its own `Status:` line; otherwise it is **ready** only if every blocker is done *and* it names no missing ticket.\n\n```code components/browser-pages/src/tickets.ts:52-58\n```\n\n`graphProblems` reports where the graph breaks the rules: an unknown blocker, a blocker numbered after the ticket it blocks (numbers follow dependency order), a cycle, and a graph where no ticket can start. The cycle search is a depth-first walk that marks a ticket *open* while it walks that ticket's blockers; reaching an open ticket again closes a loop.\n\n```code components/browser-pages/src/tickets.ts:62-95\n```\n\nBoth functions are pure and import nothing from Node, so the server uses them to read the bundle and the page imports the same code to colour the graph. One rule set, two places."}, {"title": "Finding the bundle and its reading order", "body": "The agent passes `task` as whatever it has at hand: the id, `.ledger/<id>`, or a path inside the bundle. `bundleDir` tries the given path, then the id under `.ledger/`, then under `.ledger/history/`, and walks up from whatever exists to the folder directly under one of them.\n\n```code components/browser-pages/src/ledger-review.ts:39-62\n```\n\nDocuments come in the order a reviewer reads them: the task, its spec or plan, other documents, the tickets, the retrospective, then everything in folders. `[` and `]` in the page follow this order.\n\n```code components/browser-pages/src/ledger-review.ts:74-82\n```"}, {"title": "Evidence on demand", "body": "The page server gains one route. Like `/ask` and `/result`, it requires the token; unlike them, it is a `GET` that returns JSON, and it exists only when the tool passes a `file` handler.\n\n```code components/browser-pages/src/page-server.ts:94-117\n```\n\nThe ledger tool's handler is `serveEvidence`. It looks the path up in the page's own list, reads the file once, marks it binary if it holds a zero byte, and otherwise highlights its lines. The lines stay on the page object, which is why the saved copy shows every file the reviewer opened.\n\n```code components/browser-pages/src/ledger-review.ts:130-143\n```\n\nAnnotations on evidence point at lines (`l3`). The server accepts them only for a file it has served, so a submission cannot point at lines of a file nobody opened.\n\n```code components/browser-pages/src/ledger-review.ts:147-157\n```"}, {"title": "Laying out the graph", "body": "The page places each ticket in a column by its depth: tickets with no blockers in column 0, and every other ticket one column right of its deepest blocker. Within a column, tickets sort by the average height of their blockers, which keeps arrows from crossing. A cycle has no depth, so the `visiting` set breaks it and the back edge is drawn as a red loop under the graph.\n\n```code components/browser-pages/web/ledger/graph.ts:15-54\n```"}, {"title": "What the agent reads back", "body": "The result is plain text for the model. Every annotation names its file by repository path and lines, so the agent can open it directly; rewritten blocks come as before and after; and the documents the reviewer did not open are listed, so the agent knows what the approval did not cover.\n\n```code components/browser-pages/src/ledger-review.ts:226-245\n```"}], "quiz": [{"q": "A ticket's line reads `**Blocked by:** 02: Retry 408 and 429 in phase 2.` The bundle holds tickets 01 to 05. What does the ticket wait on?", "options": ["Ticket 02 only", "Ticket 02, plus missing tickets 408 and 429", "Tickets 02 and 2", "Nothing: the line quotes a title"], "answer": 0, "why": "02 is a ticket of the bundle, so it counts wherever it appears. 408 and 429 are not tickets and do not read as references (they follow \"Retry\" and \"and\" mid-phrase), and a single digit such as 2 is prose."}, {"q": "Ticket 03 is `ready-for-agent`, and its only blocker is 07, which is not in the bundle. How does the page show 03?", "options": ["Ready: nothing in the bundle blocks it", "Blocked, and the graph checks report the missing 07", "Done", "It is left out of the graph"], "answer": 1, "why": "A missing blocker cannot be known to be done, so `ticketState` returns blocked, and `graphProblems` reports that 03 waits on 07, which is not a ticket here."}, {"q": "Why does the server answer `GET /file` only for paths on the page's own evidence list?", "options": ["It makes Shiki faster", "So nothing holding the token can read files outside the bundle", "Because the browser cannot send other paths", "To keep the saved page small"], "answer": 1, "why": "The list is built by the server from the bundle folder. Answering only those paths means a request cannot name `../../.ssh/id_rsa` or any other file, even with the token."}, {"q": "A submission includes an annotation on line 3 of `evidence/run.json`, but the page never opened that file. What happens?", "options": ["The annotation is kept", "Only that annotation is dropped", "The whole submission is rejected", "The server reads the file, then accepts it"], "answer": 2, "why": "Evidence lines are accepted only for a file the server has served (`blocksIn` returns nothing otherwise), and any malformed part rejects the whole submission."}, {"q": "Ticket 04 waits on 02 and 03. Ticket 02 waits on 01. Tickets 01 and 03 wait on nothing. Which column holds 04, counting from 0?", "options": ["Column 0", "Column 1", "Column 2", "Column 3"], "answer": 2, "why": "01 and 03 have depth 0, 02 has depth 1, and 04 sits one column right of its deepest blocker, 02: column 2."}]};
+const CODE = {"refs": {"components/browser-pages/src/ledger-review.ts:130-143": {"path": "components/browser-pages/src/ledger-review.ts", "from": 130, "to": 143, "status": "new", "rows": [{"t": "+", "n": 130, "s": "/**"}, {"t": "+", "n": 131, "s": " * The lines of an evidence file the page lists, highlighted. They stay on the page, so the saved copy shows every"}, {"t": "+", "n": 132, "s": " * file the reviewer opened. Paths come only from the page's own list, so the page cannot read outside the bundle."}, {"t": "+", "n": 133, "s": " */"}, {"t": "+", "n": 134, "s": "export async function serveEvidence(page: LedgerReviewPage, dir: string, path: string) {"}, {"t": "+", "n": 135, "s": "\tconst file = page.evidence.find((e) => e.path === path);"}, {"t": "+", "n": 136, "s": "\tif (!file) return undefined;"}, {"t": "+", "n": 137, "s": "\tif (!file.lines && !file.binary) {"}, {"t": "+", "n": 138, "s": "\t\tconst buffer = await readFile(join(dir, path));"}, {"t": "+", "n": 139, "s": "\t\tif (buffer.includes(0)) file.binary = true;"}, {"t": "+", "n": 140, "s": "\t\telse file.lines = await highlightLines(buffer.toString(\"utf8\").replace(/\\r?\\n$/, \"\"), path);"}, {"t": "+", "n": 141, "s": "\t}"}, {"t": "+", "n": 142, "s": "\treturn { lines: file.lines, binary: file.binary };"}, {"t": "+", "n": 143, "s": "}"}]}, "components/browser-pages/src/ledger-review.ts:147-157": {"path": "components/browser-pages/src/ledger-review.ts", "from": 147, "to": 157, "status": "new", "rows": [{"t": "+", "n": 147, "s": "/** Accepts the blocks of `file`: a document's Markdown blocks, or `l<N>` lines of an evidence file already served. */"}, {"t": "+", "n": 148, "s": "function blocksIn(page: LedgerReviewPage, file: unknown): ((block: string) => boolean) | undefined {"}, {"t": "+", "n": 149, "s": "\tconst doc = page.documents.find((d) => d.path === file);"}, {"t": "+", "n": 150, "s": "\tif (doc) return (id) => doc.blocks.some((b) => b.id === id);"}, {"t": "+", "n": 151, "s": "\tconst lines = page.evidence.find((e) => e.path === file)?.lines;"}, {"t": "+", "n": 152, "s": "\tif (!lines) return undefined;"}, {"t": "+", "n": 153, "s": "\treturn (id) => {"}, {"t": "+", "n": 154, "s": "\t\tconst n = Number(/^l(\\d+)$/.exec(id)?.[1]);"}, {"t": "+", "n": 155, "s": "\t\treturn n >= 1 && n <= lines.length;"}, {"t": "+", "n": 156, "s": "\t};"}, {"t": "+", "n": 157, "s": "}"}]}, "components/browser-pages/src/ledger-review.ts:226-245": {"path": "components/browser-pages/src/ledger-review.ts", "from": 226, "to": 245, "status": "new", "rows": [{"t": "+", "n": 226, "s": "export function formatLedgerResult(page: LedgerReviewPage, result: LedgerResult, savedPath?: string): string {"}, {"t": "+", "n": 227, "s": "\tconst out = [`The reviewer ${VERDICT_TEXT[result.verdict]} (${page.path}).`];"}, {"t": "+", "n": 228, "s": "\tif (result.overall) out.push(\"\", `Overall: ${result.overall}`);"}, {"t": "+", "n": 229, "s": "\tif (result.annotations.length > 0) {"}, {"t": "+", "n": 230, "s": "\t\tout.push(\"\", `Annotations (${result.annotations.length}), each with the passage it marks:`);"}, {"t": "+", "n": 231, "s": "\t\tfor (const a of result.annotations) out.push(...annotationLines(a, where(page, a.file, a.spans)));"}, {"t": "+", "n": 232, "s": "\t}"}, {"t": "+", "n": 233, "s": "\tif (result.edits.length > 0) {"}, {"t": "+", "n": 234, "s": "\t\tout.push(\"\", REWRITES_HEADING);"}, {"t": "+", "n": 235, "s": "\t\tfor (const edit of result.edits) {"}, {"t": "+", "n": 236, "s": "\t\t\tconst block = page.documents.find((d) => d.path === edit.file)!.blocks.find((b) => b.id === edit.block)!;"}, {"t": "+", "n": 237, "s": "\t\t\tout.push(...rewriteLines(where(page, edit.file, [{ block: block.id }]), block.raw, edit.after));"}, {"t": "+", "n": 238, "s": "\t\t}"}, {"t": "+", "n": 239, "s": "\t}"}, {"t": "+", "n": 240, "s": "\tconst unopened = page.documents.filter((d) => !result.opened.includes(d.path)).map((d) => d.path);"}, {"t": "+", "n": 241, "s": "\tif (unopened.length > 0 && result.verdict !== \"dismissed\")"}, {"t": "+", "n": 242, "s": "\t\tout.push(\"\", `The reviewer did not open: ${unopened.join(\", \")}.`);"}, {"t": "+", "n": 243, "s": "\tif (savedPath) out.push(\"\", `Saved page: ${savedPath}`);"}, {"t": "+", "n": 244, "s": "\treturn out.join(\"\\n\");"}, {"t": "+", "n": 245, "s": "}"}]}, "components/browser-pages/src/ledger-review.ts:39-62": {"path": "components/browser-pages/src/ledger-review.ts", "from": 39, "to": 62, "status": "new", "rows": [{"t": "+", "n": 39, "s": "/** The bundle directory `task` names: the directory directly under `.ledger/` or `.ledger/history/` that holds it. */"}, {"t": "+", "n": 40, "s": "async function bundleDir(task: string, cwd: string, root: string): Promise<string> {"}, {"t": "+", "n": 41, "s": "\tlet ledger: string;"}, {"t": "+", "n": 42, "s": "\ttry {"}, {"t": "+", "n": 43, "s": "\t\tledger = await realpath(join(root, \".ledger\"));"}, {"t": "+", "n": 44, "s": "\t} catch {"}, {"t": "+", "n": 45, "s": "\t\tthrow new Error(`There is no .ledger directory in ${root}.`);"}, {"t": "+", "n": 46, "s": "\t}"}, {"t": "+", "n": 47, "s": "\tconst history = join(ledger, \"history\");"}, {"t": "+", "n": 48, "s": "\tfor (const candidate of [isAbsolute(task) ? task : resolve(cwd, task), join(ledger, task), join(history, task)]) {"}, {"t": "+", "n": 49, "s": "\t\tlet path: string;"}, {"t": "+", "n": 50, "s": "\t\ttry {"}, {"t": "+", "n": 51, "s": "\t\t\tpath = await realpath(candidate);"}, {"t": "+", "n": 52, "s": "\t\t} catch {"}, {"t": "+", "n": 53, "s": "\t\t\tcontinue;"}, {"t": "+", "n": 54, "s": "\t\t}"}, {"t": "+", "n": 55, "s": "\t\tfor (let dir = path; dir !== dirname(dir); dir = dirname(dir)) {"}, {"t": "+", "n": 56, "s": "\t\t\tconst parent = dirname(dir);"}, {"t": "+", "n": 57, "s": "\t\t\tconst bundle = (parent === ledger && dir !== history) || parent === history;"}, {"t": "+", "n": 58, "s": "\t\t\tif (bundle && (await stat(dir)).isDirectory()) return dir;"}, {"t": "+", "n": 59, "s": "\t\t}"}, {"t": "+", "n": 60, "s": "\t}"}, {"t": "+", "n": 61, "s": "\tthrow new Error(`No ledger task \"${task}\" in ${ledger}.`);"}, {"t": "+", "n": 62, "s": "}"}]}, "components/browser-pages/src/ledger-review.ts:74-82": {"path": "components/browser-pages/src/ledger-review.ts", "from": 74, "to": 82, "status": "new", "rows": [{"t": "+", "n": 74, "s": "/** Reading order: the task, its spec or plan, other documents, tickets, the retrospective, then everything in folders. */"}, {"t": "+", "n": 75, "s": "function rank(path: string): number {"}, {"t": "+", "n": 76, "s": "\tif (path === \"task.md\") return 0;"}, {"t": "+", "n": 77, "s": "\tif (path === \"spec.md\" || path === \"plan.md\") return 1;"}, {"t": "+", "n": 78, "s": "\tif (path === \"retrospective.md\") return 4;"}, {"t": "+", "n": 79, "s": "\tif (ticketNumber(path) !== undefined) return 3;"}, {"t": "+", "n": 80, "s": "\treturn path.includes(\"/\") ? 5 : 2;"}, {"t": "+", "n": 81, "s": "}"}, {"t": "+", "n": 82, "s": "const byReadingOrder = (a: string, b: string) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true });"}]}, "components/browser-pages/src/page-server.ts:94-117": {"path": "components/browser-pages/src/page-server.ts", "from": 94, "to": 117, "status": "changed", "rows": [{"t": "+", "n": 94, "s": "\tconst serveFile = async (res: ServerResponse, path: string, file: (path: string) => Promise<unknown | undefined>) => {"}, {"t": "+", "n": 95, "s": "\t\ttry {"}, {"t": "+", "n": 96, "s": "\t\t\tconst value = await file(path);"}, {"t": "+", "n": 97, "s": "\t\t\tif (value === undefined) return send(res, 404, \"Not found\");"}, {"t": "+", "n": 98, "s": "\t\t\treturn send(res, 200, JSON.stringify(value), \"application/json\");"}, {"t": "+", "n": 99, "s": "\t\t} catch (error) {"}, {"t": "+", "n": 100, "s": "\t\t\treturn send(res, 500, error instanceof Error ? error.message : String(error));"}, {"t": "+", "n": 101, "s": "\t\t}"}, {"t": "+", "n": 102, "s": "\t};"}, {"t": "+", "n": 103, "s": ""}, {"t": " ", "n": 104, "s": "\tconst server = createServer(async (req, res) => {"}, {"t": " ", "n": 105, "s": "\t\tconst url = new URL(req.url ?? \"/\", \"http://127.0.0.1\");"}, {"t": " ", "n": 106, "s": "\t\tif (req.headers.host !== host) return send(res, 403, \"Forbidden\");"}, {"t": " ", "n": 107, "s": "\t\tif (req.method === \"GET\" && url.pathname === \"/\") {"}, {"t": " ", "n": 108, "s": "\t\t\tif (url.searchParams.get(\"t\") !== token) return send(res, 403, \"Forbidden\");"}, {"t": " ", "n": 109, "s": "\t\t\treturn send(res, 200, html, \"text/html; charset=utf-8\");"}, {"t": " ", "n": 110, "s": "\t\t}"}, {"t": "-", "n": null, "s": "\t\tif (req.method === \"POST\" && url.pathname === \"/result\") {"}, {"t": "-", "n": null, "s": "\t\t\tif (req.headers[\"x-page-token\"] !== token) return send(res, 403, \"Forbidden\");"}, {"t": "-", "n": null, "s": "\t\t\tif (done) return send(res, 409, \"This review was already closed.\");"}, {"t": "-", "n": null, "s": "\t\t\tlet value: R | undefined;"}, {"t": "-", "n": null, "s": "\t\t\ttry {"}, {"t": "-", "n": null, "s": "\t\t\t\tvalue = parse(JSON.parse(await readBody(req)));"}, {"t": "-", "n": null, "s": "\t\t\t} catch {"}, {"t": "-", "n": null, "s": "\t\t\t\tvalue = undefined;"}, {"t": "-", "n": null, "s": "\t\t\t}"}, {"t": "-", "n": null, "s": "\t\t\tif (value === undefined) return send(res, 400, \"Invalid review.\");"}, {"t": "-", "n": null, "s": "\t\t\tdone = true;"}, {"t": "-", "n": null, "s": "\t\t\tsend(res, 200, \"{}\", \"application/json\");"}, {"t": "-", "n": null, "s": "\t\t\tsettle?.resolve(value);"}, {"t": "-", "n": null, "s": "\t\t\treturn;"}, {"t": "-", "n": null, "s": "\t\t}"}, {"t": "-", "n": null, "s": "\t\tif (req.method === \"POST\" && url.pathname === \"/ask\" && ask) {"}, {"t": "-", "n": null, "s": "\t\t\tif (req.headers[\"x-page-token\"] !== token) return send(res, 403, \"Forbidden\");"}, {"t": "-", "n": null, "s": "\t\t\tif (done) return send(res, 409, \"This review was already closed.\");"}, {"t": "-", "n": null, "s": "\t\t\tconst stop = new AbortController();"}, {"t": "-", "n": null, "s": "\t\t\tconst abort = () => stop.abort();"}, {"t": "-", "n": null, "s": "\t\t\tasking.signal.addEventListener(\"abort\", abort, { once: true });"}, {"t": "-", "n": null, "s": "\t\t\tres.on(\"close\", () => {"}, {"t": "-", "n": null, "s": "\t\t\t\tif (!res.writableFinished) abort();"}, {"t": "-", "n": null, "s": "\t\t\t\tasking.signal.removeEventListener(\"abort\", abort);"}, {"t": "-", "n": null, "s": "\t\t\t});"}, {"t": "-", "n": null, "s": "\t\t\tlet body: unknown;"}, {"t": "-", "n": null, "s": "\t\t\ttry {"}, {"t": "-", "n": null, "s": "\t\t\t\tbody = JSON.parse(await readBody(req));"}, {"t": "-", "n": null, "s": "\t\t\t} catch {"}, {"t": "-", "n": null, "s": "\t\t\t\treturn send(res, 400, \"Invalid question.\");"}, {"t": "-", "n": null, "s": "\t\t\t}"}, {"t": "-", "n": null, "s": "\t\t\ttry {"}, {"t": "-", "n": null, "s": "\t\t\t\tconst answer = await ask(body, stop.signal);"}, {"t": "-", "n": null, "s": "\t\t\t\tif (answer === undefined) return send(res, 400, \"Invalid question.\");"}, {"t": "-", "n": null, "s": "\t\t\t\treturn send(res, 200, JSON.stringify({ answer }), \"application/json\");"}, {"t": "-", "n": null, "s": "\t\t\t} catch (error) {"}, {"t": "-", "n": null, "s": "\t\t\t\treturn send(res, 502, error instanceof Error ? error.message : String(error));"}, {"t": "-", "n": null, "s": "\t\t\t}"}, {"t": "-", "n": null, "s": "\t\t}"}, {"t": "+", "n": 111, "s": "\t\tif (req.headers[\"x-page-token\"] !== token) return send(res, 403, \"Forbidden\");"}, {"t": "+", "n": 112, "s": "\t\tif (req.method === \"POST\" && url.pathname === \"/result\") return settleWith(req, res);"}, {"t": "+", "n": 113, "s": "\t\tif (req.method === \"POST\" && url.pathname === \"/ask\" && ask) return answer(req, res, ask);"}, {"t": "+", "n": 114, "s": "\t\tif (req.method === \"GET\" && url.pathname === \"/file\" && file)"}, {"t": "+", "n": 115, "s": "\t\t\treturn serveFile(res, url.searchParams.get(\"path\") ?? \"\", file);"}, {"t": " ", "n": 116, "s": "\t\tsend(res, 404, \"Not found\");"}, {"t": " ", "n": 117, "s": "\t});"}]}, "components/browser-pages/src/tickets.ts:18-46": {"path": "components/browser-pages/src/tickets.ts", "from": 18, "to": 46, "status": "new", "rows": [{"t": "+", "n": 18, "s": "/** The bundle's tickets, in number order, as their files state them. */"}, {"t": "+", "n": 19, "s": "export function parseTickets(files: { path: string; source: string }[]): Ticket[] {"}, {"t": "+", "n": 20, "s": "\tconst numbered = files.flatMap((f) => {"}, {"t": "+", "n": 21, "s": "\t\tconst id = ticketNumber(f.path);"}, {"t": "+", "n": 22, "s": "\t\treturn id === undefined ? [] : [{ ...f, id }];"}, {"t": "+", "n": 23, "s": "\t});"}, {"t": "+", "n": 24, "s": "\tconst ids = new Set(numbered.map((f) => f.id));"}, {"t": "+", "n": 25, "s": "\treturn numbered"}, {"t": "+", "n": 26, "s": "\t\t.map(({ path, source, id }) => {"}, {"t": "+", "n": 27, "s": "\t\t\tconst heading = /^#\\s+(.+)$/m.exec(source)?.[1] ?? path;"}, {"t": "+", "n": 28, "s": "\t\t\tconst blockedBy = /\\*\\*Blocked by:\\*\\*\\s*([^\\n]*)/.exec(source)?.[1] ?? \"\";"}, {"t": "+", "n": 29, "s": "\t\t\t// A ticket of the bundle counts wherever its number appears; another number counts only where it reads as a"}, {"t": "+", "n": 30, "s": "\t\t\t// reference, so \"Retry 408\" in a title is not a missing ticket."}, {"t": "+", "n": 31, "s": "\t\t\tconst shaped = [...blockedBy.matchAll(REFERENCE)].map((m) => Number(m[1]));"}, {"t": "+", "n": 32, "s": "\t\t\tconst known = [...blockedBy.matchAll(NUMBER)].map((m) => Number(m[1])).filter((n) => ids.has(n));"}, {"t": "+", "n": 33, "s": "\t\t\tconst named = [...new Set([...shaped, ...known])];"}, {"t": "+", "n": 34, "s": "\t\t\treturn {"}, {"t": "+", "n": 35, "s": "\t\t\t\tid,"}, {"t": "+", "n": 36, "s": "\t\t\t\tpath,"}, {"t": "+", "n": 37, "s": "\t\t\t\ttitle: heading.replace(/^\\d+\\s*[:.\\-\u2013]\\s*/, \"\"),"}, {"t": "+", "n": 38, "s": "\t\t\t\tstatus: (/\\*\\*Status:\\*\\*\\s*([^\\n]+)/.exec(source)?.[1] ?? \"\").trim().replace(/\\.$/, \"\"),"}, {"t": "+", "n": 39, "s": "\t\t\t\tblockers: named.filter((n) => ids.has(n)),"}, {"t": "+", "n": 40, "s": "\t\t\t\tunknown: named.filter((n) => !ids.has(n)),"}, {"t": "+", "n": 41, "s": "\t\t\t\tdone: (source.match(/^\\s*[-*] \\[x\\]/gim) ?? []).length,"}, {"t": "+", "n": 42, "s": "\t\t\t\ttotal: (source.match(/^\\s*[-*] \\[[ x]\\]/gim) ?? []).length,"}, {"t": "+", "n": 43, "s": "\t\t\t};"}, {"t": "+", "n": 44, "s": "\t\t})"}, {"t": "+", "n": 45, "s": "\t\t.sort((a, b) => a.id - b.id);"}, {"t": "+", "n": 46, "s": "}"}]}, "components/browser-pages/src/tickets.ts:3-10": {"path": "components/browser-pages/src/tickets.ts", "from": 3, "to": 10, "status": "new", "rows": [{"t": "+", "n": 3, "s": "const TICKET = /^tickets\\/(\\d+)[-_][^/]*\\.md$/;"}, {"t": "+", "n": 4, "s": "/**"}, {"t": "+", "n": 5, "s": " * A number written as a ticket reference: it starts the line or a list item (`01: Title`, `01 (Title)`, `#01`, `[01](\u2026)`,"}, {"t": "+", "n": 6, "s": " * `and 02`, `ticket 03`), not a phrase such as \"Retry 408\"."}, {"t": "+", "n": 7, "s": " */"}, {"t": "+", "n": 8, "s": "const REFERENCE = /(?:^|[,;([#]|\\band\\b|\\btickets?\\b)\\s*(\\d{1,3})(?=\\s*[:(),;.\\]]|\\s*$|\\s+and\\b)/gi;"}, {"t": "+", "n": 9, "s": "/** Any two- or three-digit number, as ticket numbers are written (`01`, `12`); single digits are prose, such as \"Phase 2\". */"}, {"t": "+", "n": 10, "s": "const NUMBER = /(?<![\\w.])(\\d{2,3})(?![\\w.])/g;"}]}, "components/browser-pages/src/tickets.ts:52-58": {"path": "components/browser-pages/src/tickets.ts", "from": 52, "to": 58, "status": "new", "rows": [{"t": "+", "n": 52, "s": "/** Done, in progress, ready to start (every blocker done), or blocked; a ticket waiting on a missing ticket is blocked. */"}, {"t": "+", "n": 53, "s": "export function ticketState(t: Ticket, all: Ticket[]): TicketState {"}, {"t": "+", "n": 54, "s": "\tif (isDone(t)) return \"done\";"}, {"t": "+", "n": 55, "s": "\tif (/progress/i.test(t.status)) return \"progress\";"}, {"t": "+", "n": 56, "s": "\tconst ready = !t.unknown.length && t.blockers.every((b) => isDone(all.find((x) => x.id === b)));"}, {"t": "+", "n": 57, "s": "\treturn ready ? \"frontier\" : \"blocked\";"}, {"t": "+", "n": 58, "s": "}"}]}, "components/browser-pages/src/tickets.ts:62-95": {"path": "components/browser-pages/src/tickets.ts", "from": 62, "to": 95, "status": "new", "rows": [{"t": "+", "n": 62, "s": "/**"}, {"t": "+", "n": 63, "s": " * Where the graph breaks the `to-tickets` rules: a blocker that is not a ticket here, a blocker numbered after its"}, {"t": "+", "n": 64, "s": " * dependent, a cycle, or no ticket that can start."}, {"t": "+", "n": 65, "s": " */"}, {"t": "+", "n": 66, "s": "export function graphProblems(tickets: Ticket[]): string[] {"}, {"t": "+", "n": 67, "s": "\tconst problems: string[] = [];"}, {"t": "+", "n": 68, "s": "\tfor (const t of tickets)"}, {"t": "+", "n": 69, "s": "\t\tfor (const u of t.unknown) problems.push(`${pad(t.id)} waits on ${pad(u)}, which is not a ticket in this bundle.`);"}, {"t": "+", "n": 70, "s": "\tfor (const t of tickets)"}, {"t": "+", "n": 71, "s": "\t\tfor (const b of t.blockers)"}, {"t": "+", "n": 72, "s": "\t\t\tif (b > t.id) problems.push(`${pad(t.id)} waits on a later ticket, ${pad(b)}; blockers come first.`);"}, {"t": "+", "n": 73, "s": "\tconst state = new Map<number, \"open\" | \"closed\">();"}, {"t": "+", "n": 74, "s": "\tconst walk = (t: Ticket, path: number[]) => {"}, {"t": "+", "n": 75, "s": "\t\tstate.set(t.id, \"open\");"}, {"t": "+", "n": 76, "s": "\t\tfor (const b of t.blockers) {"}, {"t": "+", "n": 77, "s": "\t\t\tif (state.get(b) === \"open\") {"}, {"t": "+", "n": 78, "s": "\t\t\t\tconst loop = [...path.slice(path.indexOf(b)), b];"}, {"t": "+", "n": 79, "s": "\t\t\t\tproblems.push("}, {"t": "+", "n": 80, "s": "\t\t\t\t\tloop.length === 2"}, {"t": "+", "n": 81, "s": "\t\t\t\t\t\t? `${pad(b)} waits on itself.`"}, {"t": "+", "n": 82, "s": "\t\t\t\t\t\t: `Cycle: ${loop.map(pad).join(\" \u2192 \")}. None of these can start.`,"}, {"t": "+", "n": 83, "s": "\t\t\t\t);"}, {"t": "+", "n": 84, "s": "\t\t\t} else if (!state.has(b)) {"}, {"t": "+", "n": 85, "s": "\t\t\t\tconst blocker = tickets.find((x) => x.id === b);"}, {"t": "+", "n": 86, "s": "\t\t\t\tif (blocker) walk(blocker, [...path, b]);"}, {"t": "+", "n": 87, "s": "\t\t\t}"}, {"t": "+", "n": 88, "s": "\t\t}"}, {"t": "+", "n": 89, "s": "\t\tstate.set(t.id, \"closed\");"}, {"t": "+", "n": 90, "s": "\t};"}, {"t": "+", "n": 91, "s": "\tfor (const t of tickets) if (!state.has(t.id)) walk(t, [t.id]);"}, {"t": "+", "n": 92, "s": "\tif (tickets.length && tickets.every((t) => t.blockers.length))"}, {"t": "+", "n": 93, "s": "\t\tproblems.push(\"No ticket can start: every ticket waits on another.\");"}, {"t": "+", "n": 94, "s": "\treturn problems;"}, {"t": "+", "n": 95, "s": "}"}]}, "components/browser-pages/web/ledger/graph.ts:15-54": {"path": "components/browser-pages/web/ledger/graph.ts", "from": 15, "to": 54, "status": "new", "rows": [{"t": "+", "n": 15, "s": "/**"}, {"t": "+", "n": 16, "s": " * Places each ticket in a column by its dependency depth, ordering each column by where its blockers sit so edges"}, {"t": "+", "n": 17, "s": " * cross as little as possible. A cycle cannot be layered; its back edge loops under the graph."}, {"t": "+", "n": 18, "s": " */"}, {"t": "+", "n": 19, "s": "export function layout(tickets: Ticket[]) {"}, {"t": "+", "n": 20, "s": "\tconst byId = new Map(tickets.map((t) => [t.id, t]));"}, {"t": "+", "n": 21, "s": "\tconst depth = new Map<number, number>();"}, {"t": "+", "n": 22, "s": "\tconst visiting = new Set<number>();"}, {"t": "+", "n": 23, "s": "\tconst depthOf = (t: Ticket): number => {"}, {"t": "+", "n": 24, "s": "\t\tconst known = depth.get(t.id);"}, {"t": "+", "n": 25, "s": "\t\tif (known !== undefined) return known;"}, {"t": "+", "n": 26, "s": "\t\tif (visiting.has(t.id)) return 0;"}, {"t": "+", "n": 27, "s": "\t\tvisiting.add(t.id);"}, {"t": "+", "n": 28, "s": "\t\tconst blockers = t.blockers.flatMap((b) => byId.get(b) ?? []);"}, {"t": "+", "n": 29, "s": "\t\tconst d = blockers.length ? 1 + Math.max(...blockers.map(depthOf)) : 0;"}, {"t": "+", "n": 30, "s": "\t\tvisiting.delete(t.id);"}, {"t": "+", "n": 31, "s": "\t\tdepth.set(t.id, d);"}, {"t": "+", "n": 32, "s": "\t\treturn d;"}, {"t": "+", "n": 33, "s": "\t};"}, {"t": "+", "n": 34, "s": "\tconst columns: Ticket[][] = [];"}, {"t": "+", "n": 35, "s": "\tfor (const t of tickets) {"}, {"t": "+", "n": 36, "s": "\t\tconst d = depthOf(t);"}, {"t": "+", "n": 37, "s": "\t\tcolumns[d] = [...(columns[d] ?? []), t];"}, {"t": "+", "n": 38, "s": "\t}"}, {"t": "+", "n": 39, "s": "\tconst rows = Math.max(0, ...columns.map((c) => c.length));"}, {"t": "+", "n": 40, "s": "\tconst height = rows * NODE.h + Math.max(0, rows - 1) * NODE.gy;"}, {"t": "+", "n": 41, "s": "\tconst pos = new Map<number, { x: number; y: number }>();"}, {"t": "+", "n": 42, "s": "\tcolumns.forEach((column, c) => {"}, {"t": "+", "n": 43, "s": "\t\tconst y = (t: Ticket) => {"}, {"t": "+", "n": 44, "s": "\t\t\tconst placed = t.blockers.flatMap((b) => pos.get(b)?.y ?? []);"}, {"t": "+", "n": 45, "s": "\t\t\treturn placed.length ? placed.reduce((sum, v) => sum + v, 0) / placed.length : t.id;"}, {"t": "+", "n": 46, "s": "\t\t};"}, {"t": "+", "n": 47, "s": "\t\tconst sorted = c > 0 ? [...column].sort((a, b) => y(a) - y(b) || a.id - b.id) : column;"}, {"t": "+", "n": 48, "s": "\t\tconst h = sorted.length * NODE.h + (sorted.length - 1) * NODE.gy;"}, {"t": "+", "n": 49, "s": "\t\tfor (const [r, t] of sorted.entries())"}, {"t": "+", "n": 50, "s": "\t\t\tpos.set(t.id, { x: c * (NODE.w + NODE.gx), y: (height - h) / 2 + r * (NODE.h + NODE.gy) });"}, {"t": "+", "n": 51, "s": "\t});"}, {"t": "+", "n": 52, "s": "\tconst width = columns.length * NODE.w + Math.max(0, columns.length - 1) * NODE.gx;"}, {"t": "+", "n": 53, "s": "\treturn { pos, width, height };"}, {"t": "+", "n": 54, "s": "}"}]}}, "stats": [{"path": ".context/components/browser-pages/web/markdown/marks.ts.md", "add": 2, "del": 2}, {"path": ".ledger/202610151241-browser-review-surfaces/checks/README.md", "add": 2, "del": 0}, {"path": ".ledger/202610151241-browser-review-surfaces/checks/demo-ledger.test.ts", "add": 46, "del": 0}, {"path": ".ledger/202610151241-browser-review-surfaces/checks/drive-ledger.py", "add": 86, "del": 0}, {"path": ".ledger/202610151241-browser-review-surfaces/task.md", "add": 8, "del": 10}, {"path": "AGENTS.md", "add": 1, "del": 1}, {"path": "README.md", "add": 1, "del": 1}, {"path": "components/browser-pages/dist/ledger-review.html", "add": 97, "del": 0}, {"path": "components/browser-pages/dist/markdown-review.html", "add": 9, "del": 9}, {"path": "components/browser-pages/src/index.ts", "add": 58, "del": 3}, {"path": "components/browser-pages/src/ledger-review.ts", "add": 245, "del": 0}, {"path": "components/browser-pages/src/markdown-review.ts", "add": 77, "del": 56}, {"path": "components/browser-pages/src/page-data.ts", "add": 58, "del": 1}, {"path": "components/browser-pages/src/page-server.ts", "add": 65, "del": 42}, {"path": "components/browser-pages/src/tickets.ts", "add": 95, "del": 0}, {"path": "components/browser-pages/tests/code-review.test.ts", "add": 4, "del": 1}, {"path": "components/browser-pages/tests/ledger-review.test.ts", "add": 214, "del": 0}, {"path": "components/browser-pages/tests/markdown-review.test.ts", "add": 2, "del": 1}, {"path": "components/browser-pages/tests/page-build.test.ts", "add": 1, "del": 1}, {"path": "components/browser-pages/tests/tickets.test.ts", "add": 95, "del": 0}, {"path": "components/browser-pages/web/ledger-review.html", "add": 14, "del": 0}, {"path": "components/browser-pages/web/ledger-review.tsx", "add": 8, "del": 0}, {"path": "components/browser-pages/web/ledger/app.tsx", "add": 189, "del": 0}, {"path": "components/browser-pages/web/ledger/graph.ts", "add": 98, "del": 0}, {"path": "components/browser-pages/web/ledger/parts.tsx", "add": 502, "del": 0}, {"path": "components/browser-pages/web/ledger/styles.css", "add": 794, "del": 0}, {"path": "components/browser-pages/web/markdown/render.ts", "add": 13, "del": 15}, {"path": "components/browser-pages/web/markdown/state.ts", "add": 2, "del": 2}, {"path": "components/browser-pages/web/markdown/styles.css", "add": 20, "del": 0}, {"path": "docs/browser-pages.md", "add": 18, "del": 3}, {"path": "package.json", "add": 1, "del": 1}, {"path": "tests/package-load.mjs", "add": 2, "del": 1}], "subject": "feat(browser-pages): review_ledger_task"}
+;
+const COMMIT = "72c7ad3";
+const params = new URLSearchParams(location.search);
+const state = { theme: params.get("theme") === "dark" ? "dark" : "light", answers: {}, modal: null };
+/** The conversation beside the explanation. Socratic by default: it answers with questions that lead the reader to the answer. */
+const chat = { open: params.get("chat") === "1", mode: "socratic", messages: [], script: null };
+let figures = [];
+
+// ================================================================ Markdown with three extra fences: code, figure, mermaid
+function codeCard(ref) {
+  const c = CODE.refs[ref];
+  if (!c) return `<pre>${esc(ref)}</pre>`;
+  const fresh = c.status === "new";
+  const rows = c.rows.map((r) => {
+    const cls = fresh ? "" : r.t === "+" ? "add" : r.t === "-" ? "del" : "";
+    return `<div class="ex-cl ${cls}"><span class="n">${r.n ?? ""}</span><span class="m">${fresh ? "" : r.t === " " ? "" : r.t}</span><span class="s">${highlight(r.s) || " "}</span></div>`;
+  }).join("");
+  const added = c.rows.filter((r) => r.t === "+").length, removed = c.rows.filter((r) => r.t === "-").length;
+  const clip = c.rows.length > 26;
+  return `<figure class="ex-code ${clip ? "clip" : ""}"><figcaption class="ex-code-h"><span class="path">${esc(c.path)}</span><span class="lines">lines ${c.from}–${c.to}</span>${fresh ? '<span class="badge new">new file</span>' : `<span class="badge changed">+${added} −${removed}</span>`}</figcaption>
+    <div class="ex-code-b">${rows}</div>${clip ? `<button class="ex-more" data-action="more">Show all ${c.rows.length} lines</button>` : ""}</figure>`;
+}
+function figure(caption, html) {
+  const n = figures.length + 1;
+  figures.push(html);
+  return `<figure class="ex-figure"><div class="ex-fig-frame"><iframe sandbox="allow-scripts" data-fig="${n - 1}" title="Figure ${n}"></iframe></div><figcaption><b>Figure ${n}.</b><span>${esc(caption)}</span><span class="live">Interactive</span></figcaption></figure>`;
+}
+function md(text) {
+  return marked.lexer(text).map((t) => {
+    if (t.type === "code") {
+      const info = t.raw.split("\n")[0].replace(/^[`~]{3,}/, "").trim();
+      if (info.startsWith("code ")) return codeCard(info.slice(5).trim());
+      if (info.startsWith("figure")) return figure(info.slice(6).trim(), t.text);
+      if (info === "mermaid") return `<div class="ex-diagram"><pre class="mermaid">${esc(t.text)}</pre></div>`;
+    }
+    if (t.type === "blockquote") {
+      const m = /^\s*>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*\n/i.exec(t.raw);
+      if (m) return `<div class="alert ${m[1].toLowerCase()}"><div class="alert-t">${m[1].toLowerCase()}</div>${marked.parse(t.raw.slice(m[0].length).replace(/^\s*>\s?/gm, ""))}</div>`;
+    }
+    return t.type === "space" ? "" : marked.parser([t]);
+  }).join("");
+}
+const inline = (text) => marked.parseInline(text);
+
+// ================================================================ the page
+const words = (s) => s.split(/\s+/).length;
+const refsIn = (s) => [...s.matchAll(/```code (\S+)/g)].map((m) => m[1]);
+const stepFiles = (s) => [...new Set(refsIn(s.body).map((r) => r.replace(/:\d+-\d+$/, "")))];
+const covered = new Set([...refsIn(EX.intuition), ...EX.steps.flatMap((s) => refsIn(s.body))].map((r) => r.replace(/:\d+-\d+$/, "")));
+const minutes = Math.max(1, Math.round((words([EX.summary, EX.background, EX.intuition, ...EX.steps.map((s) => s.body)].join(" ")) / 230) + Object.values(CODE.refs).reduce((n, c) => n + c.rows.length, 0) / 60));
+/** A long path keeps its first folder and its last two parts. */
+const shortPath = (p) => { const parts = p.split("/"); return parts.length > 4 && p.length > 60 ? `${parts[0]}/…/${parts.slice(-2).join("/")}` : p; };
+const totals = CODE.stats.reduce((t, f) => ({ add: t.add + f.add, del: t.del + f.del }), { add: 0, del: 0 });
+
+const KINDS = [
+  ["Code the walkthrough did not cover", (p) => /\.(ts|tsx)$/.test(p) && !/test/.test(p) && !p.startsWith("tests/") && !p.startsWith(".ledger")],
+  ["Tests", (p) => /test/.test(p)],
+  ["Page markup and styles", (p) => /\.(css|html)$/.test(p) && !p.includes("/dist/")],
+  ["Built pages", (p) => p.includes("/dist/")],
+  ["Docs, ledger, and manifest", () => true],
+];
+function alsoChanged() {
+  const rest = CODE.stats.filter((f) => !covered.has(f.path));
+  const max = Math.max(...rest.map((f) => f.add + f.del));
+  const used = new Set();
+  const groups = KINDS.map(([name, test]) => {
+    const files = rest.filter((f) => !used.has(f.path) && test(f.path));
+    files.forEach((f) => used.add(f.path));
+    return [name, files];
+  }).filter(([, files]) => files.length);
+  return `<div class="ex-covered">The walkthrough shows <b>${covered.size} of ${CODE.stats.length} files</b>. Everything else that ${COMMIT} changed is listed here, so nothing changed without being mentioned.</div>
+    <div class="ex-also">${groups.map(([name, files]) => `<div><div class="ex-group-h">${name}<span class="count">${files.length}</span></div>${files.map((f) => `<div class="ex-frow"><span class="p" title="${esc(f.path)}">${esc(shortPath(f.path))}</span><span class="c"><span class="a">+${f.add}</span> <span class="d">−${f.del}</span></span><span class="ex-bar"><i class="a" style="width:${(100 * f.add) / max}%"></i><i class="d" style="width:${(100 * f.del) / max}%"></i></span></div>`).join("")}</div>`).join("")}</div>`;
+}
+
+const right = () => EX.quiz.filter((q, i) => state.answers[i] === q.answer).length;
+const answered = () => Object.keys(state.answers).length;
+function quizHtml() {
+  const qs = EX.quiz.map((q, i) => {
+    const a = state.answers[i];
+    const done = a !== undefined;
+    return `<div class="ex-q" id="q${i}" data-q="${i}"><div class="ex-q-h">Question ${i + 1} of ${EX.quiz.length}<span class="sp"></span>${done ? (a === q.answer ? '<span class="ok">✓ Right</span>' : '<span class="no">✗ Not quite</span>') : ""}</div>
+      <p class="ex-q-t">${inline(q.q)}</p>
+      <div class="ex-opts">${q.options.map((o, k) => {
+        const cls = !done ? "" : k === q.answer ? "right" : k === a ? "wrong" : "dim";
+        return `<button class="ex-opt ${cls}" data-action="answer" data-q="${i}" data-k="${k}" ${done ? "disabled" : ""}><kbd>${"ABCD"[k]}</kbd><span>${inline(o)}</span>${done && k === q.answer ? '<span class="mark">✓</span>' : done && k === a ? '<span class="mark">✗</span>' : ""}</button>`;
+      }).join("")}</div>
+      ${done ? `<div class="ex-why">${inline(q.why)}${a !== q.answer ? `<div class="ex-why-act"><button class="btn sm ex-talk" data-action="talk" data-q="${i}">${I.chat} Talk it through</button><span>The tutor starts from your answer and asks until it clicks.</span></div>` : ""}</div>` : ""}</div>`;
+  }).join("");
+  const all = answered() === EX.quiz.length;
+  const score = all
+    ? `<div class="ex-score ${right() === EX.quiz.length ? "pass" : ""}"><span class="big">${right()}/${EX.quiz.length}</span><span class="msg">${right() === EX.quiz.length ? "You understand this change. It is ready to share." : "Read the steps the misses point to, then try the quiz again."}</span><span class="sp"></span>${right() === EX.quiz.length ? "" : '<button class="btn" data-action="retry">Try again</button>'}</div>`
+    : "";
+  return qs + score;
+}
+
+function tocHtml() {
+  const item = (id, num, label, cls = "", tail = "") => `<button class="ex-toc-i ${cls}" data-action="goto" data-id="${id}" data-toc="${id}"><span class="num">${num}</span><span>${label}</span>${tail}</button>`;
+  const q = answered() ? `<span class="tail ${right() === EX.quiz.length ? "pass" : ""}">${right()}/${EX.quiz.length}</span>` : `<span class="tail">${EX.quiz.length}</span>`;
+  return `<nav class="ex-toc"><div class="ex-toc-k">Contents</div>
+    ${item("top", "·", "In one minute")}${item("background", "1", "Background")}${item("intuition", "2", "Intuition")}${item("walkthrough", "3", "Walkthrough")}
+    ${EX.steps.map((s, i) => item(`step${i}`, i + 1, esc(s.title), "step")).join("")}
+    ${item("also", "4", "Also changed")}${item("quiz", "5", "Quiz", "", q)}
+    <div class="ex-toc-keys"><span><kbd>J</kbd> <kbd>K</kbd> next / previous part</span><span><kbd>Q</kbd> quiz · <kbd>A</kbd>–<kbd>D</kbd> answer</span></div></nav>`;
+}
+
+function render() {
+  figures = [];
+  document.documentElement.dataset.theme = state.theme;
+  const pill = `<button class="ex-quizpill ${answered() === EX.quiz.length && right() === EX.quiz.length ? "pass" : ""}" data-action="goto" data-id="quiz">Quiz <span class="n">${answered() ? `${right()}/${EX.quiz.length}` : `0/${EX.quiz.length}`}</span></button>`;
+  document.getElementById("app").innerHTML = `<div class="app">
+    <header class="top"><span class="logo">🥧</span><span class="ex-kind">Explanation</span><span class="top-title">${esc(EX.title)}</span><span class="ex-ref">${COMMIT}</span><span class="ex-stat">${CODE.stats.length} files <span class="a">+${totals.add}</span> <span class="d">−${totals.del}</span></span><span class="sp"></span>
+      ${pill}<button class="btn ghost ex-chatbtn ${chat.open ? "on" : ""}" data-action="chat">${I.chat} Talk it through <kbd>/</kbd></button><button class="icon-btn" data-action="theme" title="Theme">${state.theme === "dark" ? I.sun : I.moon}</button><button class="icon-btn" data-action="print" title="Print">${I.print}</button><button class="icon-btn" data-action="modal" data-m="keys" title="Keyboard (?)">?</button>
+      <div class="ex-progress" id="progress"></div></header>
+    <div class="ex-body ${chat.open ? "chat-open" : ""}" id="body">${tocHtml()}<main class="stage" id="stage"><article class="ex-article">
+      <div id="top" class="ex-eyebrow">Explanation of ${COMMIT} · ${esc(CODE.subject)}</div>
+      <h1>${esc(EX.title)}</h1>
+      <div class="ex-meta"><span><b>${minutes} min</b> read</span><span><b>${EX.steps.length}</b> steps</span><span><b>${EX.quiz.length}</b> questions</span><span><b>${covered.size}</b> of ${CODE.stats.length} files walked through</span></div>
+      <div class="ex-tldr"><div class="ex-tldr-k">In one minute</div>${md(EX.summary)}</div>
+      <div class="ex-route">${["Background", "Intuition", "Walkthrough", "Quiz"].map((s, i) => `<button data-action="goto" data-id="${s.toLowerCase()}"><span class="num">${i + 1}</span>${s}${s === "Walkthrough" ? `<span class="t">${EX.steps.length} steps</span>` : s === "Quiz" ? `<span class="t">${EX.quiz.length} questions</span>` : ""}</button>`).join("")}</div>
+      <section class="ex-sec" id="background"><div class="ex-sec-h"><span class="num">01</span><h2>Background</h2><span class="t">What was there before</span></div>
+        <details class="ex-primer"><summary><b>New to the ledger?</b> Start with the primer: bundles, tickets, and the frontier.<span class="t">${Math.max(1, Math.round(words(EX.primer) / 230))} min</span></summary><div class="ex-prose">${md(EX.primer)}</div></details>
+        <div class="ex-prose">${md(EX.background)}</div></section>
+      <section class="ex-sec" id="intuition"><div class="ex-sec-h"><span class="num">02</span><h2>Intuition</h2><span class="t">The idea, before the code</span></div><div class="ex-prose">${md(EX.intuition)}</div></section>
+      <section class="ex-sec" id="walkthrough"><div class="ex-sec-h"><span class="num">03</span><h2>Walkthrough</h2><span class="t">${EX.steps.length} steps</span></div>
+        <p class="ex-lead">The steps follow the data: from the files on disk, to the graph, to the page, and back to the agent. Every excerpt is real code from ${COMMIT}.</p>
+        ${EX.steps.map((s, i) => `<div class="ex-step" id="step${i}"><div class="ex-step-k">Step ${i + 1} of ${EX.steps.length}</div><h3>${esc(s.title)}</h3><div class="ex-files">${stepFiles(s).map((f) => `<span>${esc(f.split("/").pop())}</span>`).join("")}</div><div class="ex-prose">${md(s.body)}</div><button class="ex-check" data-action="check" data-step="${i}">${I.chat}<span><b>Check my understanding</b> of this step</span><span class="sp"></span><kbd>/</kbd></button></div>`).join("")}</section>
+      <section class="ex-sec" id="also"><div class="ex-sec-h"><span class="num">04</span><h2>Also changed</h2><span class="t">Not walked through</span></div>${alsoChanged()}</section>
+      <section class="ex-sec" id="quiz"><div class="ex-sec-h"><span class="num">05</span><h2>Quiz</h2><span class="t">Answer from memory</span></div>
+        <p class="ex-lead">Five questions about the substance of the change. Each answer explains itself. Pass before you share the change, or before you build on it.</p><div id="quiz-body">${quizHtml()}</div></section>
+    </article></main><aside class="ex-chat" id="chat"></aside></div></div>${chat.open ? "" : `<button class="ex-launch" data-action="chat">${I.chat}<span>Talk it through</span><kbd>/</kbd></button>`}<div id="tbar"></div><div id="toast"></div>${modalHtml()}`;
+  renderChat();
+  mountFigures();
+  void drawDiagrams();
+  spy();
+}
+function modalHtml() {
+  if (state.modal !== "keys") return "";
+  const keys = [["J / K", "Next / previous part"], ["/", "Talk it through"], ["Q", "Go to the quiz"], ["A – D", "Answer the question in view"], ["T", "Light or dark"], ["⌘P", "Print a clean copy"], ["?", "Show or hide this list"]];
+  return `<div class="overlay" data-action="close-modal"><div class="modal" data-action="noop"><div class="modal-h"><h3>Keyboard</h3><span class="sp"></span><button class="icon-btn" data-action="close-modal">${I.x}</button></div><div class="keys">${keys.map(([k, v]) => `<div><span>${v}</span><kbd>${k}</kbd></div>`).join("")}</div></div></div>`;
+}
+
+// Figures run sandboxed (no access to this page) in the page's colours, and tell the page their height.
+const FIG_BASE = `*{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--ink);font:14px/1.5 var(--font-ui)}`;
+function mountFigures() {
+  const css = getComputedStyle(document.documentElement);
+  const vars = ["--font-ui", "--font-mono", "--bg", "--surface", "--surface-2", "--surface-3", "--ink", "--ink-2", "--ink-3", "--ink-4", "--line", "--line-2", "--accent", "--accent-bg", "--agent", "--pass", "--fail", "--shadow", "--add-ink", "--del-ink"].map((v) => `${v}:${css.getPropertyValue(v)}`).join(";");
+  for (const frame of document.querySelectorAll("iframe[data-fig]")) {
+    const i = Number(frame.dataset.fig);
+    frame.srcdoc = `<!doctype html><html data-theme="${state.theme}"><head><meta charset="utf-8"><style>:root{${vars};color-scheme:${state.theme}}${FIG_BASE}</style></head><body>${figures[i]}<script>new ResizeObserver(()=>parent.postMessage({figure:${i},height:document.documentElement.scrollHeight},"*")).observe(document.body)<\/script></body></html>`;
+  }
+}
+addEventListener("message", (e) => {
+  const frame = document.querySelector(`iframe[data-fig="${e.data?.figure}"]`);
+  if (frame && e.source === frame.contentWindow) frame.style.height = `${e.data.height}px`;
+});
+async function drawDiagrams() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+  mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: v("--font-ui"),
+    sequence: { useMaxWidth: false, wrap: true, width: 170, actorFontSize: 14, messageFontSize: 14, noteFontSize: 13, actorMargin: 60, boxMargin: 8, mirrorActors: false },
+    themeVariables: { fontSize: "14px", primaryColor: v("--surface"), primaryBorderColor: v("--line-2"), primaryTextColor: v("--ink"), lineColor: v("--ink-3"), actorBkg: v("--surface"), actorBorder: v("--line-2"), actorTextColor: v("--ink"), signalColor: v("--ink-2"), signalTextColor: v("--ink"), noteBkgColor: v("--surface-3"), noteTextColor: v("--ink-2"), noteBorderColor: v("--line-2"), labelBoxBkgColor: v("--surface"), activationBkgColor: v("--surface-3"), sequenceNumberColor: v("--bg") } });
+  try { await mermaid.run({ nodes: [...document.querySelectorAll("pre.mermaid")] }); } catch (e) { console.warn(e); }
+}
+
+// ================================================================ reading position and keys
+const anchors = () => ["top", "background", "intuition", "walkthrough", ...EX.steps.map((_, i) => `step${i}`), "also", "quiz"];
+function spy() {
+  const stage = document.getElementById("stage");
+  if (!stage) return;
+  const top = stage.getBoundingClientRect().top + 120;
+  let cur = "top";
+  for (const id of anchors()) if ((document.getElementById(id)?.getBoundingClientRect().top ?? 1e9) < top) cur = id;
+  for (const el of document.querySelectorAll("[data-toc]")) el.classList.toggle("on", el.dataset.toc === cur);
+  const p = stage.scrollTop / Math.max(1, stage.scrollHeight - stage.clientHeight);
+  document.getElementById("progress").style.width = `${Math.min(100, p * 100)}%`;
+  const qs = [...document.querySelectorAll(".ex-q")];
+  const inView = qs.find((q) => { const r = q.getBoundingClientRect(); return r.bottom > top && r.top < innerHeight - 80; });
+  for (const q of qs) q.classList.toggle("focus", q === inView && !qs.every((x) => x === inView));
+}
+function goto(id) {
+  const stage = document.getElementById("stage");
+  const el = document.getElementById(id);
+  if (!el) return;
+  const to = id === "top" ? 0 : el.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop - 24;
+  stage.scrollTo({ top: to, behavior: Math.abs(to - stage.scrollTop) > stage.clientHeight * 2 ? "auto" : "smooth" });
+}
+function answer(q, k) {
+  if (state.answers[q] !== undefined) return;
+  state.answers[q] = k;
+  document.getElementById("quiz-body").innerHTML = quizHtml();
+  document.querySelector(".ex-toc").outerHTML = tocHtml();
+  const pill = document.querySelector(".ex-quizpill");
+  pill.querySelector(".n").textContent = `${right()}/${EX.quiz.length}`;
+  pill.classList.toggle("pass", answered() === EX.quiz.length && right() === EX.quiz.length);
+  spy();
+}
+const ACTIONS = {
+  noop: () => {},
+  goto: (d) => goto(d.id),
+  theme: () => { state.theme = state.theme === "dark" ? "light" : "dark"; const y = document.getElementById("stage").scrollTop; render(); document.getElementById("stage").scrollTop = y; },
+  print: () => print(),
+  modal: (d) => { state.modal = state.modal === d.m ? null : d.m; const y = document.getElementById("stage").scrollTop; render(); document.getElementById("stage").scrollTop = y; },
+  "close-modal": () => ACTIONS.modal({ m: state.modal }),
+  answer: (d) => answer(Number(d.q), Number(d.k)),
+  retry: () => { for (const [i, q] of EX.quiz.entries()) if (state.answers[i] !== q.answer) delete state.answers[i]; document.getElementById("quiz-body").innerHTML = quizHtml(); document.querySelector(".ex-toc").outerHTML = tocHtml(); goto(`q${EX.quiz.findIndex((q, i) => state.answers[i] === undefined)}`); },
+  chat: () => (chat.open ? closeChat() : ((chat.open = true), openChat())),
+  "close-chat": () => closeChat(),
+  mode: (d) => { chat.mode = d.m; renderChat(); },
+  popout: () => toast("In the build, this moves the conversation to its own window and keeps it in sync with the page."),
+  send: () => { const t = document.getElementById("chat-in"); const v = t.value; t.value = ""; reply(v); },
+  reply: (d) => reply(d.text),
+  suggest: (d) => { const [q, turns, cites] = SUGGEST[Number(d.i)]; begin({ text: q }, turns(), { cites }); },
+  talk: (d) => { const i = Number(d.q); begin({ text: `Talk me through question ${i + 1}. I chose “${EX.quiz[i].options[state.answers[i]]}”.` }, QUIZ_TALK[i], { choice: EX.quiz[i].options[state.answers[i]], cites: [STEP_NAMES()[[0, 1, 3, 3, 4][i]], [`Question ${i + 1}`, `q${i}`]] }); },
+  check: (d) => { const i = Number(d.step); begin({ text: `Check my understanding of step ${i + 1}: ${EX.steps[i].title}.` }, STEP_CHECK[i], { cites: [STEP_NAMES()[i]], asks: true }); },
+  "ask-sel": () => { document.getElementById("tbar").innerHTML = ""; begin({ text: "What is this doing, and why?", quote: selected }, [T("Good place to stop. Before I explain: say in one sentence what you think this part does. I will build on your answer.", ["I'm not sure", "Give me a hint", "Just tell me"], "Look at what comes into this part, and what leaves it."), T("Close. The piece to add is *why* it is done here and not elsewhere: the step this sits in says so in its first paragraph. *(Prototype: scripted reply.)*", [])], { cites: [] }); getSelection().removeAllRanges(); },
+  "quiz-sel": () => { document.getElementById("tbar").innerHTML = ""; begin({ text: "Quiz me on this.", quote: selected }, [T("Here is a question about it: if this sentence were false, what would break first, and where would you see it?", ["I'm not sure", "Give me a hint", "Just tell me"], "Find the code card nearest to this sentence, and ask what it would do differently."), T("That's the idea: tie each claim to the code that makes it true. *(Prototype: scripted reply.)*", [])], { asks: true }); getSelection().removeAllRanges(); },
+  more: (d, el) => { const card = el.closest(".ex-code"); card.classList.remove("clip"); el.remove(); },
+};
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (el) ACTIONS[el.dataset.action](el.dataset, el);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.id === "chat-in" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); return ACTIONS.send(); }
+  if (e.target.id === "chat-in" && e.key === "Escape") return closeChat();
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input, textarea")) return;
+  const k = e.key.toLowerCase();
+  if (k === "/") { e.preventDefault(); return chat.open ? document.getElementById("chat-in")?.focus() : ACTIONS.chat(); }
+  if (k === "escape" && chat.open && !state.modal) return closeChat();
+  if (k === "?") return ACTIONS.modal({ m: "keys" });
+  if (k === "escape" && state.modal) return ACTIONS.modal({ m: state.modal });
+  if (k === "t") return ACTIONS.theme();
+  if (k === "q") return goto("quiz");
+  if (k === "j" || k === "k") {
+    const list = anchors();
+    const cur = document.querySelector(".ex-toc-i.on")?.dataset.toc ?? "top";
+    const next = list[Math.max(0, Math.min(list.length - 1, list.indexOf(cur) + (k === "j" ? 1 : -1)))];
+    return goto(next);
+  }
+  if ("abcd".includes(k) && k.length === 1) {
+    const q = document.querySelector(".ex-q.focus") ?? document.querySelector(".ex-q:not(:has(.ex-why))");
+    if (q && EX.quiz[Number(q.dataset.q)].options["abcd".indexOf(k)] !== undefined) answer(Number(q.dataset.q), "abcd".indexOf(k));
+  }
+});
+document.getElementById("app").addEventListener("scroll", spy, true);
+
+// ================================================================ talk it through: the Socratic sidebar
+// Prototype: the tutor's turns are scripted. In the build a read-only fork of the live conversation answers, as `ask` does.
+const T = (text, replies = ["Give me a hint", "Just tell me"], hint = "") => ({ text, replies, hint });
+const QUIZ_TALK = [
+  [T("You chose **{choice}**. Let's take one number at a time. `02` is a ticket of this bundle. Does it matter *where* in the line `02` appears?", ["No, a known ticket counts anywhere", "Only at the start", "Give me a hint"], "Step 1: `NUMBER` finds any two- or three-digit number, and `parseTickets` keeps those that are tickets here."),
+   T("Right. Now `408`. It is not a ticket here. When does a number like that still count, as a *missing* ticket?", ["Only when it reads as a reference", "Always", "Give me a hint"], "Compare `REFERENCE`: the number must start the line or a list item, or follow `#`, `[`, `and`, or `ticket`."),
+   T("Exactly. \"Retry 408\" reads as prose, so 408 is ignored, and so is 429 in mid-phrase. The 2 in \"phase 2\" is a single digit, which never counts. The ticket waits on **02 only**.", ["Retry question 1"])],
+  [T("You chose **{choice}**. Suppose the page showed 03 as ready, and someone starts it. What do they know about ticket 07?", ["Nothing: it is not in the bundle", "That it is done", "Give me a hint"], "`ticketState` asks whether every blocker is done. Can it look up the status of 07?"),
+   T("Right, nothing. If the page cannot know that 07 is done, can it promise that 03 is safe to start?", ["No, so 03 must be blocked", "Yes", "Give me a hint"], "Read the note under Figure 1."),
+   T("That is the rule: an unknown blocker blocks. The graph checks report it too, so the reviewer sees why 03 waits.", ["Retry question 2"])],
+  [T("You chose **{choice}**. Let's test it. Suppose the server answered *any* path the page asked for. What could `GET /file?path=../../.ssh/id_rsa` send back?", ["Your private SSH key", "An error", "Give me a hint"], "Think about what `readFile(join(dir, path))` does with `..` in the path."),
+   T("Right: `join` walks up out of the bundle, and the server would read whatever is there. So the list is not about speed. **Who builds that list, and from what?**", ["The server, from the bundle folder", "The page", "Give me a hint"], "Look at `buildLedgerPage` in Step 3: where does `evidence` come from?"),
+   T("Exactly. The server builds the list from the bundle folder, so a request can only name files inside the bundle, even with the token. Reading lazily is a separate decision, made for speed.", ["Retry question 3"])],
+  [T("You chose **{choice}**. An annotation on evidence points at a line such as `l3`. To accept `l3` of `evidence/run.json`, what does the server compare it with?", ["The lines it served for that file", "The file on disk", "Give me a hint"], "Step 4, `blocksIn`: where do its `lines` come from?"),
+   T("Yes, the lines it served. If nobody opened the file, did the server serve any lines?", ["No, so blocksIn accepts nothing", "Yes", "Give me a hint"], "`serveEvidence` stores lines only when the page asks for a file."),
+   T("So the annotation is malformed, and as everywhere in `parseLedgerResult`, one malformed part rejects the whole submission. The agent never gets a half-checked review.", ["Retry question 4"])],
+  [T("You chose **{choice}**. Start with the tickets that wait on nothing. Which column do 01 and 03 go in?", ["Column 0", "Column 1", "Give me a hint"], "Step 5: a ticket with no blockers has depth 0."),
+   T("Right. 02 waits on 01. How far to the right of its blockers does a ticket sit?", ["One column right of its deepest blocker", "One column per blocker", "Give me a hint"], "`depthOf` returns 1 + the largest depth among the blockers."),
+   T("So 02 is in column 1, and 04, one column right of its deepest blocker 02, is in column 2.", ["Retry question 5"])],
+];
+const STEP_CHECK = [
+  [T("Here is a line: `**Blocked by:** #04 and ticket 06; see phase 3.` The bundle holds tickets 01 to 05. What does `parseTickets` report?", ["Blocker 04, and 06 missing", "Blockers 04 and 06", "Give me a hint"], "Which of 04 and 06 are tickets here? And does `ticket 06` read as a reference?"),
+   T("04 is a ticket, so it is a blocker. 06 is not a ticket here, but `ticket 06` reads as a reference, so it is *unknown*: a missing ticket the page warns about. The 3 in \"phase 3\" is a single digit, so it is prose.", [])],
+  [T("Ticket 05 names itself under `Blocked by`. What do the graph checks report, and how does the page show 05?", ["\"05 waits on itself\", and 05 is blocked", "Nothing: a self-reference is ignored", "Give me a hint"], "05 stays in its own blockers. What does the walk find when it reaches a ticket that is still *open*?"),
+   T("The walk opens 05, follows its blocker, and finds 05 still open: a loop of one, reported as \"05 waits on itself\". And 05 is blocked, because its blocker, itself, is not done.", [])],
+  [T("The agent passes `task: \"tickets/02-runner.md\"` from inside the bundle. How does `bundleDir` find the bundle?", ["It walks up to the folder directly under .ledger", "It fails: that is not an id", "Give me a hint"], "Its first candidate is the path itself, resolved against the working directory."),
+   T("It resolves the path, then walks up until the parent is `.ledger/` or `.ledger/history/`. Any path inside a bundle finds it.", [])],
+  [T("`serveEvidence` returns the lines, but it also stores them on the page object. Why store them?", ["So the saved page includes every file opened", "To cache reads", "Give me a hint"], "When does the tool save the page, and from what?"),
+   T("The tool saves the page from that same object after the review. Storing the lines there puts every opened file into the saved copy, and it also lets the server check line annotations later.", [])],
+  [T("Two tickets in column 1 both wait only on 01. In what order does the column list them?", ["By the average height of their blockers, then by number", "By title", "Give me a hint"], "Look at the sort in `layout`."),
+   T("Both blockers sit at the same height, so the tie falls to the ticket number. Sorting by the blockers' height first is what keeps arrows from crossing.", [])],
+  [T("The reviewer approves but never opens ticket 04. What does the agent learn from the result?", ["That the approval did not cover 04", "Nothing about 04", "Give me a hint"], "Read the last lines `formatLedgerResult` writes."),
+   T("The result lists the documents the reviewer did not open, so the agent knows the approval does not cover 04, and can say so or ask.", [])],
+];
+const STEP_NAMES = () => EX.steps.map((s, i) => [`Step ${i + 1} · ${s.title}`, `step${i}`]);
+
+/** The tutor's reply holds its place in the thread from the moment it starts typing. */
+function say(turn, extra = {}) {
+  const message = { role: "tutor", pending: true };
+  chat.messages.push(message);
+  renderChat();
+  setTimeout(() => {
+    Object.assign(message, turn, extra, { pending: false });
+    renderChat();
+  }, 650 + Math.min(900, turn.text.length * 6));
+}
+function begin(user, turns, opts = {}) {
+  chat.open = true;
+  chat.script = { turns, at: 0, ...opts };
+  chat.messages.push({ role: "you", ...user });
+  openChat();
+  // A check always asks first; Direct mode answers the reader's own questions plainly.
+  const direct = chat.mode === "direct" && !opts.asks;
+  const t = direct ? { ...turns.at(-1), replies: [] } : turns[0];
+  if (direct) chat.script.at = turns.length - 1;
+  say({ ...t, text: t.text.replace("{choice}", opts.choice ?? "") }, { cites: opts.cites });
+}
+function reply(text) {
+  if (!text.trim()) return;
+  if (/^Retry question (\d)/.test(text)) {
+    const i = Number(text.slice(-1)) - 1;
+    delete state.answers[i];
+    document.getElementById("quiz-body").innerHTML = quizHtml();
+    document.querySelector(".ex-toc").outerHTML = tocHtml();
+    return goto(`q${i}`);
+  }
+  chat.messages.push({ role: "you", text });
+  const sc = chat.script;
+  if (!sc) return say({ text: chat.mode === "socratic" ? "Before I answer: what do you expect, and why? Say it in a sentence and I will build on it.\n\n*(Prototype: scripted reply. In the build, the agent answers from its own conversation.)*" : "*(Prototype: scripted reply. In the build, the agent answers here from its own conversation, directly.)*", replies: [] });
+  if (text === "Give me a hint") return say({ text: sc.turns[sc.at].hint || "Look again at the step this points to.", replies: sc.turns[sc.at].replies.filter((r) => r !== "Give me a hint") });
+  if (text === "Just tell me" || sc.at >= sc.turns.length - 1) sc.at = sc.turns.length - 1;
+  else sc.at += 1;
+  say(sc.turns[sc.at], { cites: sc.at === sc.turns.length - 1 ? sc.cites : undefined });
+}
+function openChat() {
+  document.getElementById("body").classList.add("chat-open");
+  document.querySelector(".ex-launch")?.remove();
+  document.querySelector(".ex-chatbtn")?.classList.add("on");
+  renderChat();
+  setTimeout(() => document.getElementById("chat-in")?.focus(), 50);
+}
+function closeChat() {
+  chat.open = false;
+  document.getElementById("body").classList.remove("chat-open");
+  document.querySelector(".ex-chatbtn")?.classList.remove("on");
+  document.querySelector(".app").insertAdjacentHTML("afterend", `<button class="ex-launch" data-action="chat">${I.chat}<span>Talk it through</span><kbd>/</kbd></button>`);
+}
+const SUGGEST = [
+  ["Explain the frontier as if I'm new", () => [T("Let's build it from Figure 1, as written. 01 and 02 wait on nothing. Can someone start 03 today?", ["No, it waits on 01 and 02", "Yes", "Give me a hint"], "Read the Blocked by line of 03 in the figure."), T("Right. So which tickets *can* start today?", ["01 and 02", "Only 01", "Give me a hint"], "A ticket can start when every ticket it waits on is done."), T("That set, every ticket whose blockers are all done, is the **frontier**. The page rings those tickets and lists them under the graph as \"Can start now\".", [])], [["Intuition", "intuition"]]],
+  ["Quiz me on step 2", () => STEP_CHECK[1], [["Step 2 · Checking the graph", "step1"]]],
+  ["Why read evidence only on demand?", () => [T("Start from the numbers. The benchmark bundle holds 4 tickets and 61 JSON records. How many records does a reviewer open?", ["A few at most", "All of them", "Give me a hint"], "Think of your own last review of a benchmark."), T("So what would the saved page hold if the server embedded every file up front?", ["All 61 records, megabytes of JSON", "Only what was opened", "Give me a hint"], "The saved page is the page data plus the result."), T("Exactly. Reading on demand keeps the page fast and the saved copy small, and the copy still holds every file the reviewer opened, because `serveEvidence` keeps those lines on the page.", [])], [["Step 4 · Evidence on demand", "step3"]]],
+];
+function renderChat() {
+  const el = document.getElementById("chat");
+  if (!el) return;
+  const msgs = chat.messages.map((m, i) => {
+    const last = i === chat.messages.length - 1;
+    if (m.pending) return `<div class="ex-m tutor"><div class="who">${I.spark} Tutor</div><div class="ex-dots"><i></i><i></i><i></i></div></div>`;
+    if (m.role === "you") return `<div class="ex-m you">${m.quote ? `<div class="ex-quote"><span class="src">${esc(m.quote.src)}</span>${esc(m.quote.text)}</div>` : ""}<div class="body">${inline(m.text)}</div></div>`;
+    return `<div class="ex-m tutor"><div class="who">${I.spark} Tutor</div><div class="body">${md(m.text)}</div>
+      ${m.cites?.length ? `<div class="ex-cites">${m.cites.map(([label, id]) => `<button data-action="goto" data-id="${id}">${esc(label)} ›</button>`).join("")}</div>` : ""}
+      ${last && m.replies?.length ? `<div class="ex-replies">${m.replies.map((r) => `<button data-action="reply" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>` : ""}</div>`;
+  }).join("");
+  const empty = `<div class="ex-chat-empty"><div class="big">${I.spark}</div><p>Ask anything about this change.</p><p class="dim">${chat.mode === "socratic" ? "In <b>Socratic</b> mode the tutor answers with questions that lead you to the answer, one step at a time, with a hint whenever you want one." : "In <b>Direct</b> mode the tutor answers plainly and points to the step."}</p>
+    <div class="ex-replies col">${SUGGEST.map(([q], i) => `<button data-action="suggest" data-i="${i}">${esc(q)}</button>`).join("")}</div>
+    <p class="dim small">Also: select text in the explanation, use <b>Check my understanding</b> after a step, or <b>Talk it through</b> after a missed question.</p></div>`;
+  el.innerHTML = `<div class="ex-chat-h">${I.spark}<b>Talk it through</b><div class="seg"><button class="${chat.mode === "socratic" ? "on" : ""}" data-action="mode" data-m="socratic">Socratic</button><button class="${chat.mode === "direct" ? "on" : ""}" data-action="mode" data-m="direct">Direct</button></div><span class="sp"></span><button class="icon-btn" data-action="popout" title="Pop out into its own window">${I.popout}</button><button class="icon-btn" data-action="close-chat" title="Close (Esc)">${I.x}</button></div>
+    <div class="ex-chat-b" id="chat-b">${chat.messages.length ? msgs : empty}</div>
+    <div class="ex-chat-c"><textarea id="chat-in" rows="2" placeholder="${chat.mode === "socratic" ? "Answer, or ask something…" : "Ask something…"}"></textarea><button class="btn primary sm" data-action="send">${I.send}</button></div>`;
+  const b = document.getElementById("chat-b");
+  b.scrollTop = b.scrollHeight;
+}
+function toast(text) {
+  const t = document.getElementById("toast");
+  t.innerHTML = `<div class="ex-toast">${text}</div>`;
+  setTimeout(() => (t.innerHTML = ""), 3600);
+}
+
+// Selecting text in the explanation offers to ask about it, or to be quizzed on it.
+let selected = null;
+document.addEventListener("mouseup", (e) => {
+  if (e.target.closest(".ex-tbar, .ex-chat, button, iframe")) return;
+  setTimeout(() => {
+    const sel = getSelection();
+    const tbar = document.getElementById("tbar");
+    if (!sel || sel.isCollapsed || !sel.anchorNode?.parentElement?.closest(".ex-article")) { tbar.innerHTML = ""; selected = null; return; }
+    const text = sel.toString().replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const where = sel.anchorNode.parentElement.closest(".ex-step, .ex-sec");
+    const src = where?.classList.contains("ex-step") ? `Step ${Number(where.id.slice(4)) + 1}` : where?.querySelector("h2")?.textContent ?? "Summary";
+    selected = { text: text.length > 160 ? `${text.slice(0, 157)}…` : text, src };
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    tbar.innerHTML = `<div class="ex-tbar" style="left:${Math.min(Math.max(12, r.left + r.width / 2 - 140), innerWidth - 300)}px;top:${Math.max(60, r.top - 46)}px"><button data-action="ask-sel">${I.chat} Ask about this</button><button data-action="quiz-sel">${I.spark} Quiz me on this</button></div>`;
+  });
+});
+document.addEventListener("mousedown", (e) => { if (e.target.closest(".ex-tbar")) e.preventDefault(); });
+
+function renderProto() {
+  document.getElementById("proto").innerHTML = `<div class="proto-bar"><span class="proto-tag">Prototype · Explain change R2</span><button data-action="print">Print preview</button></div>`;
+}
+render();
+renderProto();
+
+</script>
+</body>
+</html>
