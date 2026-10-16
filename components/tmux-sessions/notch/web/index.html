@@ -60,7 +60,7 @@ const $ = (id) => document.getElementById(id);
 const island = $("island"), bar = $("bar"), stage = $("stage"), canvas = stage.querySelector("canvas");
 const label = { waiting: "needs you", done: "done", working: "working", quiet: "quiet" };
 const order = { waiting: 0, done: 1, working: 2, quiet: 3 };
-const vibeLabel = { office: "\u2615 Office", cozy: "\u{1F319} Cozy", nature: "\u{1F33F} Nature", anime: "\u{1F338} Anime" };
+const vibeLabel = { office: "\u2615 Office", cozy: "\u{1F319} Cozy", nature: "\u{1F33F} Nature", anime: "\u{1F338} Anime", ocean: "\u{1F30A} Ocean", fantasy: "\u{1F409} Fantasy" };
 const DEFAULT_VIBE = "office";
 // Css pixels per pixel, in steps that stay whole device pixels on a 2× display. Workers keep SPRITE; the room
 // starts at SPRITE and grows when its workers would stand closer than CROWDING of a worker's width apart.

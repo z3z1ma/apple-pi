@@ -128,7 +128,7 @@ On a Mac, a black pill sits under the notch: the agent count, then one dot per a
 | click a worker | jump to its pane; Ghostty comes to the front |
 | drag a worker | move it in the room |
 | `‹` / `›` | show the previous or next tmux session; opening the panel shows the session whose agent has waited longest |
-| `☕ Office` / `🌙 Cozy` | switch this session between office rooms and cozy rooms |
+| the vibe button, for example `☕ Office` | switch this session to the next vibe: office, cozy, nature, anime, ocean, or fantasy |
 | `🎲` | pick another room and other workers for this session |
 
 A crowded room grows, up to the size of the panel window. Every session uses the size of the most crowded one, so the panel does not jump while you cycle.
@@ -158,10 +158,16 @@ The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the re
 uv run -q -w pillow -w numpy python art/clean.py
 ```
 
+Before committing new raw images, shrink them to 256-colour PNGs; the cleanup keeps only 48 colours, and generated images are otherwise 1–2 MB each:
+
+```bash
+uv run -q -w pillow python -c 'import sys; from PIL import Image; [Image.open(p).convert("RGB").quantize(256, dither=Image.Dither.NONE).save(p, optimize=True) for p in sys.argv[1:]]' art/raw/<vibe>/<new files>.png
+```
+
 The script writes `web/assets/` and its `manifest.js`. The running panel keeps its old art: stop it as above, and the next Pi start shows the new room or worker.
 
-- **Room prompts:** a 16:9 pixel-art room seen straight on, like a dollhouse cross-section, with the floor in the bottom third and its middle clear. Ask for a plain dark navy backdrop around the room that reaches all four corners: the cleanup crops the room from that backdrop.
-- **Worker prompts:** a 2×2 sprite sheet of the same character at the same desk, in this cell order: typing (top left), asleep with a small Zzz (top right), one hand raised with a yellow `!` (bottom left), cheering with sparkles (bottom right). Use crisp 16-bit pixels on a flat pure magenta (`#FF00FF`) background, with no text or logos. Give the worker a bright blue shirt and hair that is not blue: the cleanup recolours the blue into six shirt colours. Avoid magenta props, which the cleanup removes with the background.
+- **Room prompts:** a wide pixel-art room seen straight on, like a dollhouse cross-section, or an outdoor scene framed as a diorama stage. The floor fills the bottom 40% and stays completely empty from wall to wall: every piece of furniture and decor hangs on or stands against the back and side walls, because workers can stand anywhere on the floor and must not overlap a counter or a sofa. Ask for a plain dark navy backdrop around the room that reaches all four corners: the cleanup crops the room from that backdrop.
+- **Worker prompts:** a 2×2 sprite sheet of the same character at the same desk (animals can sit at a tiny laptop on the ground instead), in this cell order: typing (top left), asleep with a small Zzz (top right), one hand raised with a yellow `!` (bottom left), cheering with sparkles (bottom right). Use crisp 16-bit pixels on a flat pure magenta (`#FF00FF`) background, with no text or logos. Give the worker one bright blue piece of clothing (a shirt, coat, scarf, or bandana) and hair that is not blue: the cleanup recolours the blue into six shirt colours. Avoid magenta props, which the cleanup removes with the background.
 
 ## Running it all day
 
