@@ -60,11 +60,11 @@ In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are com
 - Slice 3: `review_markdown` splits the file into top-level blocks with source lines (`marked` lexer, Shiki for fences); the page renders each block (raw HTML as text, unsafe URLs dropped, Mermaid strict), takes selection annotations (comment, 👍/❓, delete, suggest, ask), whole-block comments, block rewrites, an overall comment, and a verdict; `J`/`K` sections, `?` keys. Overlapping highlights nest and open together. Rewritten blocks take no text marks. The server checks span shape only: rendered text can be longer than the source (marked's newlines), so a raw-length bound rejected real selections.
 - Checks: browser-pages tests, including hostile Markdown, DOM selection and marks under happy-dom, result validation and model text, and the tool end to end; manual drive in Chrome ([checks](checks/README.md)): hostile input inert, every annotation kind, ask answer, rewrite diff, J/K, dark Mermaid, submission, saved page.
 - Not yet checked: asking with a real model in a live session; very large documents for performance.
-- Known cost: the Markdown page is 3.7 MB because Mermaid bundles every diagram type; every saved Markdown review is that size.
+- Page weight: Mermaid (3.6 MB, committed as `dist/mermaid.min.js`) is inlined only into Markdown pages whose document has a diagram; otherwise the page is about 340 KB.
 
 Next:
 
-1. Operator tries `review_markdown` on a real document.
+1. Operator tries `review_markdown` on a real document (first look at `docs/browser-pages.md`: closed without a verdict).
 2. Design pass 2: `review_ledger_task` (reuse the Markdown reader; file tree, ticket DAG from `Blocked by:`, sign-off), then its operator verdict and build.
 3. Design pass 3: `explain_change`.
 

@@ -1,20 +1,23 @@
 import { execFile } from "node:child_process";
 import { readFile, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { marked } from "marked";
 import { type Static, Type } from "typebox";
 
 import { highlightLines } from "./highlight.js";
-import type {
-	MarkdownAnnotation,
-	MarkdownBlock,
-	MarkdownLabel,
-	MarkdownResult,
-	MarkdownReviewPage,
-	TextSpan,
+import {
+	type MarkdownAnnotation,
+	type MarkdownBlock,
+	type MarkdownLabel,
+	type MarkdownResult,
+	type MarkdownReviewPage,
+	PAGE_DATA_MARKER,
+	type TextSpan,
 } from "./page-data.js";
+import { readTemplate } from "./saved-page.js";
 
 const run = promisify(execFile);
 
@@ -86,6 +89,17 @@ export async function buildMarkdownPage(
 		},
 		root,
 	};
+}
+
+const MERMAID = fileURLToPath(new URL("../dist/mermaid.min.js", import.meta.url));
+
+/** The page app, with Mermaid inlined only when the document has a diagram: Mermaid is most of a page's weight. */
+export async function markdownTemplate(page: MarkdownReviewPage): Promise<string> {
+	const template = await readTemplate("markdown-review");
+	if (!page.blocks.some((b) => b.mermaid)) return template;
+	// A classic script runs before the app's module script and sets `globalThis.mermaid`.
+	const mermaid = (await readFile(MERMAID, "utf8")).replace(/<\/script/gi, "<\\/script");
+	return template.replace(PAGE_DATA_MARKER, () => `<script>${mermaid}</script>${PAGE_DATA_MARKER}`);
 }
 
 // ---------------------------------------------------------------------------- what the page sends back

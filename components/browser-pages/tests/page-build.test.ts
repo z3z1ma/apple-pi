@@ -31,3 +31,11 @@ it.each(["code-review", "markdown-review"])(
 		}
 	},
 );
+
+it("the committed Mermaid matches the installed one (run npm run build:web)", () => {
+	const installed = readFileSync(
+		fileURLToPath(new URL("../../../node_modules/mermaid/dist/mermaid.min.js", import.meta.url)),
+	);
+	const committed = readFileSync(fileURLToPath(new URL("../dist/mermaid.min.js", import.meta.url)));
+	expect(committed.equals(installed)).toBe(true);
+});

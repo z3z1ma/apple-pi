@@ -104,4 +104,4 @@ A Markdown document is untrusted content in a page that holds the token, so it n
 
 ## Maintaining the page
 
-Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html` and `dist/markdown-review.html`. Only the Markdown page bundles Mermaid, which makes it about 3.7 MB; the code review page stays near 300 KB. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.
+Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html` and `dist/markdown-review.html`. Mermaid's own build, `dist/mermaid.min.js` (about 3.6 MB), is inlined only into a Markdown page whose document has a diagram, so other pages, and their saved copies, stay small. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.

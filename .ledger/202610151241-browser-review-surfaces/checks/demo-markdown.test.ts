@@ -6,9 +6,9 @@ import { join } from "node:path";
 
 import { it } from "vitest";
 
-import { buildMarkdownPage, formatMarkdownResult, parseMarkdownQuestion, parseMarkdownResult } from "../src/markdown-review.js";
+import { buildMarkdownPage, formatMarkdownResult, markdownTemplate, parseMarkdownQuestion, parseMarkdownResult } from "../src/markdown-review.js";
 import { openPageSession } from "../src/page-server.js";
-import { embedPage, readTemplate } from "../src/saved-page.js";
+import { embedPage } from "../src/saved-page.js";
 
 const out = process.env.DEMO_OUT ?? "/tmp/bpm";
 const SOURCE = `# Retry transient HTTP failures
@@ -129,7 +129,7 @@ it("serves a demo Markdown review and records the submission", { timeout: 600_00
 		"demo-token",
 	);
 	page.session.ask = true;
-	const template = await readTemplate("markdown-review");
+	const template = await markdownTemplate(page);
 	const session = await openPageSession(embedPage(template, page), "demo-token", (body) => parseMarkdownResult(body, page), {
 		ask: async (body) => {
 			if (!parseMarkdownQuestion(body, page)) return undefined;

@@ -19,6 +19,7 @@ import {
 	buildMarkdownPage,
 	formatMarkdownResult,
 	markdownPassage,
+	markdownTemplate,
 	parseMarkdownQuestion,
 	parseMarkdownResult,
 	REVIEW_MARKDOWN_TOOL_NAME,
@@ -39,6 +40,8 @@ const NO_USER = "No user is attached to this run, so no review page was opened."
 
 interface PageRun<P extends PageData, R extends { verdict: string }> {
 	page: P;
+	/** The built app the page data goes into. */
+	template: string;
 	root: string;
 	parse: (body: unknown) => R | undefined;
 	/** The passage and question a page asks about, or undefined for a malformed question. */
@@ -58,7 +61,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		onUpdate: ((update: { content: ReturnType<typeof text>; details: undefined }) => void) | undefined,
 	) {
 		const { page } = run;
-		const template = await readTemplate(page.kind);
+		const { template } = run;
 		page.session.ask = !!liveSession(ctx);
 		const session = await openPageSession(embedPage(template, page), page.session.token, run.parse, {
 			signal,
@@ -108,6 +111,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			return review(
 				{
 					page,
+					template: await readTemplate("code-review"),
 					root,
 					parse: (body) => parseReviewResult(body, page),
 					question: (body) => {
@@ -146,6 +150,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			return review(
 				{
 					page,
+					template: await markdownTemplate(page),
 					root,
 					parse: (body) => parseMarkdownResult(body, page),
 					question: (body) => {

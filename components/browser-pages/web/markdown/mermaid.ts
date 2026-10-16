@@ -1,4 +1,10 @@
-import mermaid from "mermaid";
+import type { Mermaid } from "mermaid";
+
+declare global {
+	interface Window {
+		mermaid?: Mermaid;
+	}
+}
 
 let theme = "";
 
@@ -14,7 +20,9 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 		}
 	}
 	const nodes = [...document.querySelectorAll<HTMLElement>("pre.mermaid:not([data-processed])")];
-	if (!nodes.length) return;
+	// The server inlines Mermaid only into pages whose document has a diagram.
+	const mermaid = window.mermaid;
+	if (!nodes.length || !mermaid) return;
 	for (const node of nodes) node.dataset.source ??= node.textContent ?? "";
 	mermaid.initialize({
 		startOnLoad: false,

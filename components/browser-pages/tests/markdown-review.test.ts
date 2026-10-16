@@ -9,6 +9,7 @@ import browserPages from "../src/index.js";
 import {
 	buildMarkdownPage,
 	formatMarkdownResult,
+	markdownTemplate,
 	parseMarkdownQuestion,
 	parseMarkdownResult,
 } from "../src/markdown-review.js";
@@ -69,6 +70,16 @@ describe("buildMarkdownPage", () => {
 		const mermaid = block(page, "```mermaid");
 		expect(mermaid.mermaid).toBe(true);
 		expect(mermaid.code).toBeUndefined();
+	});
+
+	it("inlines Mermaid only when the document has a diagram", async () => {
+		const page = await build();
+		const withDiagram = await markdownTemplate(page);
+		const without = await markdownTemplate({ ...page, blocks: page.blocks.filter((b) => !b.mermaid) });
+		expect(withDiagram).toContain('globalThis["mermaid"]');
+		expect(without).not.toContain('globalThis["mermaid"]');
+		expect(withDiagram.indexOf('globalThis["mermaid"]')).toBeLessThan(withDiagram.indexOf('id="page-data"'));
+		expect(without.length).toBeLessThan(withDiagram.length / 4);
 	});
 });
 
