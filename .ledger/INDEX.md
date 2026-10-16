@@ -12,3 +12,4 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
+- `.ledger/202610152308-tmux-agent-tracking/task.md` — in-progress — Agent tracking surfaces for tmux: list, sidebar, dashboard, status bar — Evolve the tmux session manager from a popup picker into views that show which Pi agents need the user, tell agents apart (auto session name, ledger task), and show progress at a glance; remove the dedicated popup launcher.
