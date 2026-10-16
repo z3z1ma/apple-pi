@@ -8,7 +8,7 @@ Updated: 2026-10-04
 
 Treat each completed ledger task, with its transcripts, start and end commits, and scalar measures, as a stored history. Accumulate them in every repository (or parent directory) that has a `.ledger/`, and replay (free, for policies that only react to recorded events) or re-simulate (paid, for policies that change what the model sees) harness policies over them, so the agent works measurably better: fewer turns to an accepted change, fewer user corrections, lower cost, and first-time adherence to conventions. Inspired by Dream-RSI (https://www.dream-rsi.com/, https://github.com/zhengkid/Dream-RSI). Full reasoning, evidence, and decisions: `notes.md` (decisions in section 10).
 
-## Step 1: capture (settled 2026-10-04)
+## Step 1: capture (built 2026-10-04, partly removed on shelving; see `notes.md` section 12)
 
 The ledger extension records, in each task bundle's `history.json`, only pointers; every measure is derived later from the transcripts, so a better measure applies to every history retroactively.
 
@@ -24,7 +24,7 @@ Acceptance criteria:
 - The archived bundle in `.ledger/history/` keeps `history.json`.
 - `docs/ledger.md` describes `history.json`; the ledger system prompt stays unchanged unless the agent needs to act on it.
 
-## Step 2: REM (spec drafted 2026-10-04)
+## Step 2: REM (shelved design notes, not ready for implementation)
 
 The methodology is named REM (Replay, Evaluate, Mutate), run as `/rem`. Draft spec: `spec.md`. Operator decisions: a simulated user replays the original user; the scorecard is oracle tests as the gate plus turns, corrections, cost, and convention findings; variants are model-proposed; the simulated user and proposer may send transcripts to the user's own model profiles; `/rem` is a shipped Pi command; the first ticket is a tracer bullet on one world.
 

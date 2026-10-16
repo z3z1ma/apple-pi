@@ -1,6 +1,6 @@
 # REM: Replay, Evaluate, Mutate
 
-Status: draft spec (2026-10-04). Decisions come from the operator; see `notes.md` sections 9 and 10. Open points are marked **Open**.
+Status: shelved design notes (2026-10-04), not ready for implementation. Repository binding (`notes.md` section 11) must be settled first, and the capture this design assumes was partly removed (`notes.md` section 12). Decisions come from the operator; see `notes.md` sections 9 and 10. Open points are marked **Open**.
 
 REM is how the harness (Apple Pi's agent environment: its instructions, skills, and tools as they act in a repository) improves itself in a repository. Named after the sleep phase in which the brain replays the day, and inspired by Dream-RSI (https://www.dream-rsi.com/): REM **replays** past ledger tasks with a simulated user, **evaluates** the current harness against a proposed change on a fixed scorecard, and **mutates** the harness when the change is better on that evidence and the user approves it.
 
