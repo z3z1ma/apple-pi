@@ -221,8 +221,7 @@ export function Sidebar({
 /** The sidebar's left edge. Its width lives in `--chat-w` on the page grid, so it stays when the sidebar closes. */
 function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
 	const grid = () => sidebar.current?.parentElement;
-	const resize = (width: number | undefined) => {
-		if (width === undefined) return grid()?.style.removeProperty("--chat-w");
+	const resize = (width: number) => {
 		// Wide enough for the header, narrow enough to leave the article room.
 		const px = Math.max(320, Math.min(width, innerWidth - 640));
 		grid()?.style.setProperty("--chat-w", `${Math.round(px)}px`);
@@ -243,7 +242,7 @@ function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
 				if (box && e.currentTarget.hasPointerCapture(e.pointerId)) resize(box.right - e.clientX);
 			}}
 			onLostPointerCapture={() => grid()?.classList.remove("resizing")}
-			onDoubleClick={() => resize(undefined)}
+			onDoubleClick={() => grid()?.style.removeProperty("--chat-w")}
 			onKeyDown={(e) => {
 				const step = e.key === "ArrowLeft" ? 40 : e.key === "ArrowRight" ? -40 : 0;
 				// The set width, not the rendered one: the column animates toward it.
