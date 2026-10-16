@@ -106,3 +106,7 @@ Pair programmer reviews and consultant consultations write one NDJSON line per m
 ```
 
 Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change pair programmer or consultant behavior.
+
+## Session titles
+
+[`extensions/session-title.ts`](../extensions/session-title.ts) names unnamed root TUI sessions so they are distinguishable in `/resume` and the tmux sidebar. Each stage is one request on the user-global `quick` model profile: a provisional title from the first prompt when the first turn starts, a refined title from the first prompt and first reply once that turn settles, and a retitle from the task title and latest prompt when the session calls `ledger_add` or moves a task to `in-progress` with `ledger_status`. The extension replaces only names it set itself, which it records as `session-title` custom entries. Any other rename, from `/name` or elsewhere, stops auto-titling that session for good, also after a resume. A newer stage aborts an in-flight one, and a failed stage (for example a missing `quick` profile) shows one warning and is not retried while the session stays open; reopening the session may try it again. Child sessions, `pi_exec` workers, and non-TUI modes are never titled.

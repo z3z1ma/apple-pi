@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { profileRequest } from "../src/extension.js";
+import { profileRequest } from "../src/model-profiles.js";
 
 const restore: (() => void)[] = [];
 afterEach(() => {

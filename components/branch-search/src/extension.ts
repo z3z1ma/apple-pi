@@ -3,9 +3,9 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
-import { resolveModelProfile } from "../../shared/src/model-profiles.js";
+import { profileRequest } from "../../shared/src/model-profiles.js";
 import { type BranchSearchConfig, readBranchSearchConfig, validateBranchSearchConfig } from "./config.js";
-import { type ProfileRequest, runBranchSearch } from "./orchestrator.js";
+import { runBranchSearch } from "./orchestrator.js";
 
 const TOOL_NAME = "search_branches";
 const ALONE = `Call ${TOOL_NAME} on its own, as the only tool call in its message, so the search can fork the conversation at this call.`;
@@ -44,29 +44,6 @@ function answerCall(toolCallId: string): (prompt: string) => AgentMessage {
 		isError: false,
 		timestamp: Date.now(),
 	});
-}
-
-/** One request on a user-global model profile, without the conversation or tools: the judge model. */
-export function profileRequest(
-	registry: Pick<ExtensionContext["modelRegistry"], "find" | "streamSimple">,
-): ProfileRequest {
-	return async (profile, prompt, signal) => {
-		const { model, thinking } = resolveModelProfile(profile, registry);
-		const reply = await registry
-			.streamSimple(
-				model,
-				{ messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
-				{ signal, ...(thinking === "off" ? {} : { reasoning: thinking }) },
-			)
-			.result();
-		if (reply.stopReason === "error" || reply.stopReason === "aborted")
-			throw new Error(reply.errorMessage ?? reply.stopReason);
-		const text = reply.content
-			.flatMap((block) => (block.type === "text" ? [block.text] : []))
-			.join("\n")
-			.trim();
-		return { text, usage: reply.usage };
-	};
 }
 
 /**

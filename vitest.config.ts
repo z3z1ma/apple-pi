@@ -17,6 +17,7 @@ export default defineConfig({
 			"components/subagents/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
+			"components/session-title/tests/**/*.test.ts",
 			"components/input-editor/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",
 			"components/code-context/tests/**/*.test.ts",

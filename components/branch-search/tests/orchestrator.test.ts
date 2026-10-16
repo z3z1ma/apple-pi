@@ -18,7 +18,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
 import type { Gate, Judge } from "../src/judge.js";
-import { type ProfileRequest, runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
+import type { ProfileRequest } from "../../shared/src/model-profiles.js";
+import { runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
 import {
 	barrier,

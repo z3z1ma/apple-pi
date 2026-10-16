@@ -2,12 +2,12 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { abortable } from "../../shared/src/abortable.js";
 import type { ForkWorktree } from "../../shared/src/fork-context.js";
 import { cloneIgnoredDirs, git, repoRoot } from "../../shared/src/git.js";
 import { type ForkHandle, type ForkRequest, startFork } from "../../shared/src/forked-continuation.js";
+import type { ProfileRequest } from "../../shared/src/model-profiles.js";
 import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 import { type BranchSearchConfig, normalizePaths, validateBranchSearchConfig } from "./config.js";
 import { type Gate, type Judge, rank, type Scores, score } from "./judge.js";
@@ -60,13 +60,6 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 
 /** The custom message type of search prompts in forks. */
 export const BRANCH_SEARCH_MESSAGE_TYPE = "branch-search";
-
-/** One request on a user-global model profile, without the conversation or tools. */
-export type ProfileRequest = (
-	profile: string,
-	prompt: string,
-	signal: AbortSignal,
-) => Promise<{ text: string; usage: Usage }>;
 
 export interface SearchOptions {
 	/** The live parent session; its current projection is the fork point. */

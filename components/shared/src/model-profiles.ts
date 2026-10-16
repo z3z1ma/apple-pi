@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { Model, ModelThinkingLevel, Usage } from "@earendil-works/pi-ai";
+import { type ExtensionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export const MODEL_PROFILES_FILENAME = "model-profiles.json";
 export const MODEL_PROFILE_THINKING_LEVELS: readonly ModelThinkingLevel[] = [
@@ -170,4 +170,34 @@ export function resolveModelProfile(
 		);
 	}
 	return { name, model, thinking: profile.thinking };
+}
+
+/** One request on a user-global model profile, without the conversation or tools. */
+export type ProfileRequest = (
+	profile: string,
+	prompt: string,
+	signal: AbortSignal,
+) => Promise<{ text: string; usage: Usage }>;
+
+/** A one-shot {@link ProfileRequest} against Pi's model registry: one user prompt, the reply's text. */
+export function profileRequest(
+	registry: Pick<ExtensionContext["modelRegistry"], "find" | "streamSimple">,
+): ProfileRequest {
+	return async (profile, prompt, signal) => {
+		const { model, thinking } = resolveModelProfile(profile, registry);
+		const reply = await registry
+			.streamSimple(
+				model,
+				{ messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
+				{ signal, ...(thinking === "off" ? {} : { reasoning: thinking }) },
+			)
+			.result();
+		if (reply.stopReason === "error" || reply.stopReason === "aborted")
+			throw new Error(reply.errorMessage ?? reply.stopReason);
+		const text = reply.content
+			.flatMap((block) => (block.type === "text" ? [block.text] : []))
+			.join("\n")
+			.trim();
+		return { text, usage: reply.usage };
+	};
 }
