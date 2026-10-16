@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -29,25 +29,6 @@ function temporaryRoot(): string {
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-
-function git(cwd: string, ...args: string[]): string {
-	return execFileSync(
-		"git",
-		["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args],
-		{ cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-	).trim();
-}
-
-function repository(path: string): string {
-	mkdirSync(path, { recursive: true });
-	git(path, "init", "-q");
-	return commit(path);
-}
-
-function commit(path: string): string {
-	git(path, "commit", "-q", "--allow-empty", "-m", "change");
-	return git(path, "rev-parse", "HEAD");
-}
 
 function ledger() {
 	const tools = new Map<string, any>();
@@ -119,22 +100,25 @@ function history(path: string) {
 }
 
 describe("ledger history capture", () => {
-	it("records the session and the start and close commits, and keeps them in the archive", async () => {
+	it("keeps only session links through start and close, and carries them into the archive", async () => {
 		const root = temporaryRoot();
-		repository(root);
 		const pi = ledger();
 		const taskId = await pi.add(root, "session-1");
-		const start = commit(root);
-		await pi.status(root, "session-1", taskId, "in-progress");
-		const close = commit(root);
+		await pi.status(root, "session-2", taskId, "in-progress");
+		expect(history(join(root, ".ledger", taskId))).toEqual({
+			sessions: [
+				{ id: "session-1", linkedAt: expect.any(String), via: "ledger_add" },
+				{ id: "session-2", linkedAt: expect.any(String), via: "ledger_status" },
+			],
+		});
 		await pi.status(root, "session-1", taskId, "done");
 
-		const recorded = history(join(root, ".ledger/history", taskId));
-		expect(recorded.sessions).toEqual([{ id: "session-1", linkedAt: expect.any(String), via: "ledger_add" }]);
-		expect(recorded.commits).toEqual([
-			{ event: "in-progress", at: expect.any(String), repository: ".", commit: start },
-			{ event: "done", at: expect.any(String), repository: ".", commit: close },
-		]);
+		expect(history(join(root, ".ledger/history", taskId))).toEqual({
+			sessions: [
+				{ id: "session-1", linkedAt: expect.any(String), via: "ledger_add" },
+				{ id: "session-2", linkedAt: expect.any(String), via: "ledger_status" },
+			],
+		});
 	});
 
 	it("links a session that changes a bundle file once, and ignores one that does not", async () => {
@@ -156,48 +140,6 @@ describe("ledger history capture", () => {
 			{ id: "session-1", linkedAt: expect.any(String), via: "ledger_add" },
 			{ id: "session-2", linkedAt: expect.any(String), via: "edit" },
 		]);
-	});
-
-	it("records each repository below a parent-directory ledger", async () => {
-		const root = temporaryRoot();
-		const first = repository(join(root, "repo-a"));
-		const second = repository(join(root, "repo-b"));
-		mkdirSync(join(root, "plain"));
-		const pi = ledger();
-		const taskId = await pi.add(root, "session-1");
-		await pi.status(root, "session-1", taskId, "in-progress");
-
-		expect(history(join(root, ".ledger", taskId)).commits).toEqual([
-			{ event: "in-progress", at: expect.any(String), repository: "repo-a", commit: first },
-			{ event: "in-progress", at: expect.any(String), repository: "repo-b", commit: second },
-		]);
-	});
-
-	it("names the enclosing repository relative to a ledger root nested inside it", async () => {
-		const top = temporaryRoot();
-		const head = repository(top);
-		const root = join(top, "service");
-		mkdirSync(root);
-		const pi = ledger();
-		const taskId = await pi.add(root, "session-1");
-		await pi.status(root, "session-1", taskId, "in-progress");
-
-		expect(history(join(root, ".ledger", taskId)).commits).toEqual([
-			{ event: "in-progress", at: expect.any(String), repository: "..", commit: head },
-		]);
-	});
-
-	it("links a session outside git without recording commits", async () => {
-		const root = temporaryRoot();
-		const pi = ledger();
-		const taskId = await pi.add(root, "session-1");
-		await pi.status(root, "session-1", taskId, "in-progress");
-		await pi.status(root, "session-1", taskId, "done");
-
-		expect(history(join(root, ".ledger/history", taskId))).toEqual({
-			sessions: [{ id: "session-1", linkedAt: expect.any(String), via: "ledger_add" }],
-			commits: [],
-		});
 	});
 
 	it("waits for a busy ledger and keeps concurrent links", async () => {
@@ -313,7 +255,6 @@ describe("ledger history capture", () => {
 
 	it("links nothing for a session without a session file", async () => {
 		const root = temporaryRoot();
-		const head = repository(root);
 		const memory = SessionManager.inMemory(root);
 		const pi = ledger();
 		const taskId = await pi.add(root, memory);
@@ -322,16 +263,13 @@ describe("ledger history capture", () => {
 		await pi.ran(root, memory, "bash", () => writeFileSync(join(bundle, "notes.md"), "notes\n"));
 		await pi.status(root, memory, taskId, "in-progress");
 
-		expect(history(bundle)).toEqual({
-			sessions: [],
-			commits: [{ event: "in-progress", at: expect.any(String), repository: ".", commit: head }],
-		});
+		expect(existsSync(join(bundle, "history.json"))).toBe(false);
 	});
 
-	it("links an edit to a parent-directory ledger from a session in a repository below it", async () => {
+	it("links an edit to a parent-directory ledger from a session in a project below it", async () => {
 		const root = temporaryRoot();
 		const repo = join(root, "repo-a");
-		repository(repo);
+		mkdirSync(repo);
 		const pi = ledger();
 		const taskId = await pi.add(root, "session-1");
 		const bundle = join(root, ".ledger", taskId);

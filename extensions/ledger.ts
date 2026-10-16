@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import {
@@ -47,17 +46,14 @@ export interface AddedLedgerTask {
 	indexPath: string;
 }
 
-/** Pointers to a task's work; measures are derived later from the linked transcripts. */
+/** The sessions that worked on a task, linked by ID; their transcripts stay local. */
 interface LedgerHistory {
 	sessions: { id: string; linkedAt: string; via: "ledger_add" | "ledger_status" | "edit" }[];
-	commits: { event: "in-progress" | ClosedLedgerStatus; at: string; repository: string; commit: string }[];
 }
 
 interface HistoryUpdate {
 	sessionId?: string;
 	via: LedgerHistory["sessions"][number]["via"];
-	event?: LedgerHistory["commits"][number]["event"];
-	heads?: { repository: string; commit: string }[];
 }
 
 export interface TransitionedLedgerTask {
@@ -258,58 +254,20 @@ async function acquireLedgerLeaseWhenFree(
 	return undefined;
 }
 
-function gitRevision(cwd: string, revision: string): string | undefined {
-	try {
-		return execFileSync("git", ["rev-parse", revision], {
-			cwd,
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-		}).trim();
-	} catch {
-		// Outside a repository, before a first commit, or without git: there is no commit to point at.
-		return undefined;
-	}
-}
-
-/**
- * HEAD of the repository holding the ledger root, named by its top level relative to the root (`.` when they
- * match), or, for a parent-directory ledger, of each repository directly below it, named by its directory.
- */
-function repositoryHeads(root: string): { repository: string; commit: string }[] {
-	const top = gitRevision(root, "--show-toplevel");
-	if (top !== undefined) {
-		const commit = gitRevision(root, "HEAD");
-		return commit ? [{ repository: relative(root, realpathSync(top)) || ".", commit }] : [];
-	}
-	return readdirSync(root, { withFileTypes: true })
-		.filter((entry) => entry.isDirectory() && pathExists(join(root, entry.name, ".git")))
-		.map((entry) => entry.name)
-		.sort()
-		.flatMap((repository) => {
-			const commit = gitRevision(join(root, repository), "HEAD");
-			return commit ? [{ repository, commit }] : [];
-		});
-}
-
-/** Apply an update to a bundle's history.json and return a function that restores the previous file. */
+/** Link a session in a bundle's history.json and return a function that restores the previous file. */
 function recordHistory(bundle: string, update: HistoryUpdate): () => void {
 	const path = join(bundle, HISTORY_FILE);
 	let previous: string | undefined;
-	let history: LedgerHistory = { sessions: [], commits: [] };
+	let history: LedgerHistory = { sessions: [] };
 	if (pathExists(path)) {
 		assertRegularFile(path, HISTORY_FILE);
 		previous = readFileSync(path, "utf8");
 		history = JSON.parse(previous) as LedgerHistory;
-		if (!Array.isArray(history.sessions) || !Array.isArray(history.commits)) {
-			throw new Error(`${path} must hold sessions and commits arrays`);
-		}
+		if (!Array.isArray(history.sessions)) throw new Error(`${path} must hold a sessions array`);
 	}
-	const at = new Date().toISOString();
-	const { sessionId, via, event, heads = [] } = update;
-	const linking = sessionId !== undefined && !history.sessions.some((session) => session.id === sessionId);
-	if (linking) history.sessions.push({ id: sessionId, linkedAt: at, via });
-	if (event) for (const head of heads) history.commits.push({ event, at, ...head });
-	if (!linking && !(event && heads.length)) return () => {};
+	const { sessionId, via } = update;
+	if (sessionId === undefined || history.sessions.some((session) => session.id === sessionId)) return () => {};
+	history.sessions.push({ id: sessionId, linkedAt: new Date().toISOString(), via });
 	writeAtomicTextFile(path, `${JSON.stringify(history, null, 2)}\n`);
 	return () => (previous === undefined ? rmSync(path, { force: true }) : writeAtomicTextFile(path, previous));
 }
@@ -546,10 +504,6 @@ export async function transitionLedgerTask(
 	const taskId = parseTaskId(taskInput);
 	const status = parseStatus(statusInput);
 	const history: HistoryUpdate = { sessionId, via: "ledger_status" };
-	if (status === "in-progress" || !isLiveStatus(status)) {
-		history.event = status;
-		history.heads = repositoryHeads(root);
-	}
 	const release = acquireLedgerLease(root);
 	try {
 		return isLiveStatus(status)
@@ -665,7 +619,7 @@ function archiveTask(
 		mkdirIfNeeded(historyPath);
 		historyCreated = !historyExisted;
 		assertDirectory(historyPath, ".ledger/history");
-		// The close commit and session link travel with the bundle into history.
+		// The session link travels with the bundle into history.
 		restoreHistory = recordHistory(liveBundleAbsolute, history);
 		if (nextTask !== liveTask) {
 			writeTextFile(liveTaskAbsolute, nextTask);
