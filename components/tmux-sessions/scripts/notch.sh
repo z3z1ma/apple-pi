@@ -33,9 +33,7 @@ start() {
     mv "$bin.$$" "$bin"
     log "built $bin"
   fi
-  local focus_dir
-  focus_dir="$(cd "$here/../notify/scripts" && pwd)"
-  nohup "$bin" "$here/notch/web" "$here/sidebar/agents.py" "$focus_dir/focus-tmux.sh" </dev/null >>"$log_path" 2>&1 &
+  nohup "$bin" "$here/notch/web" "$here/sidebar/agents.py" "$here/../notify/scripts/focus-tmux.sh" </dev/null >>"$log_path" 2>&1 &
 }
 
 case "${1:-}" in

@@ -340,12 +340,12 @@ def feed_record(agent: Agent) -> dict:
     }
 
 
-def feed(interval: float = 1.0) -> None:
+def feed() -> None:
     """Print the live agents as one JSON line per poll, for the notch panel; runs until its reader goes away."""
     store = AgentStore()
     while True:
         print(json.dumps([feed_record(agent) for agent in store.poll()]), flush=True)
-        time.sleep(interval)
+        time.sleep(1)
 
 
 def summary(agents: list[Agent]) -> str:
