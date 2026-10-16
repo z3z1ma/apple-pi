@@ -48,7 +48,7 @@
 	<div id="stage">
 		<canvas></canvas>
 		<span class="chip" id="plaque"></span>
-		<div id="controls"><button class="chip" id="shuffle" title="Random room">🎲</button><button class="chip" id="vibe"></button></div>
+		<div id="controls"><button class="chip" id="shuffle" title="Shuffle room and workers">🎲</button><button class="chip" id="vibe"></button></div>
 		<button class="arrow" id="prev">‹</button><button class="arrow" id="next">›</button>
 	</div>
 </div>
@@ -83,9 +83,14 @@ const MAX_SCALE = Math.floor(Math.min((geo.width - 28) / ART.w, (geo.height - ge
 document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}px`);
 
 const images = {};
-// Per tmux session: its vibe, and rooms picked with the shuffle button by `${vibe}/${session}`.
-const chosenVibes = JSON.parse(localStorage.getItem("notch-vibes") ?? "{}");
-const chosenRooms = JSON.parse(localStorage.getItem("notch-rooms") ?? "{}");
+// Per tmux session: its vibe; the room and worker look the shuffle button picked, by `${vibe}/${session}`;
+// and where you dragged its workers, as fractions of the room size.
+const saved = (key) => JSON.parse(localStorage.getItem(key) ?? "{}");
+const save = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+const chosenVibes = saved("notch-vibes");
+const chosenRooms = saved("notch-rooms");
+const chosenLooks = saved("notch-looks");
+const positions = saved("notch-positions");
 let agents = [];
 let session = null;
 let scale = SPRITE;
@@ -93,6 +98,8 @@ let placed = [];
 let open = false;
 let tick = 0;
 let pointer = null;
+let drag = null;
+let dragged = false;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const hash = (s, seed) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, seed);
@@ -104,9 +111,12 @@ const roomOf = (name) => {
 	const chosen = chosenRooms[`${vibe}/${name}`];
 	return rooms.includes(chosen) ? chosen : rooms[hash(name, 7) % rooms.length];
 };
-const spriteOf = (agent, vibe) => {
+const spriteOf = (agent, name) => {
+	const vibe = vibeOf(name);
+	const look = chosenLooks[`${vibe}/${name}`] ?? 0;
 	const workers = VIBES[vibe].workers;
-	return images[`${vibe}/${workers[hash(agent.id, 3) % workers.length]}-${agent.state}-${hash(agent.id, 11) % VARIANTS}`];
+	const worker = workers[hash(agent.id, 3 + look) % workers.length];
+	return images[`${vibe}/${worker}-${agent.state}-${hash(agent.id, 11 + look) % VARIANTS}`];
 };
 
 function sessions() {
@@ -128,8 +138,8 @@ function renderPill() {
 		.map((a) => `<span class="dot ${a.state}" style="--c:var(--${a.state})"></span>`).join("");
 }
 
-function roomScale(group, vibe) {
-	const widest = Math.max(...group.map((agent) => spriteOf(agent, vibe).width)) * SPRITE;
+function roomScale(group, name) {
+	const widest = Math.max(...group.map((agent) => spriteOf(agent, name).width)) * SPRITE;
 	const needed = (group.length * widest * CROWDING) / ((FLOOR.right - FLOOR.left) * ART.w);
 	return Math.max(SPRITE, Math.min(MAX_SCALE, Math.ceil(needed / SCALE_STEP) * SCALE_STEP));
 }
@@ -143,7 +153,7 @@ function renderStage() {
 	const group = groups.find(([name]) => name === session)[1];
 	const vibe = vibeOf(session);
 	// One scale for every session, from the most crowded room, so the panel and its arrows stay put while you cycle.
-	scale = Math.max(...groups.map(([name, members]) => roomScale(members, vibeOf(name))));
+	scale = Math.max(...groups.map(([name, members]) => roomScale(members, name)));
 	if (canvas.width !== ART.w * scale * devicePixelRatio) {
 		canvas.width = ART.w * scale * devicePixelRatio;
 		canvas.height = ART.h * scale * devicePixelRatio;
@@ -151,11 +161,10 @@ function renderStage() {
 		canvas.style.height = `${ART.h * scale}px`;
 	}
 	const step = (FLOOR.right - FLOOR.left) / group.length;
-	placed = group.map((agent, i) => ({
-		agent,
-		x: (FLOOR.left + (i + 0.5) * step) * ART.w * scale,
-		y: half((i % 2 ? FLOOR.backRow : FLOOR.frontRow) * ART.h * scale),
-	}));
+	placed = group.map((agent, i) => {
+		const [fx, fy] = positions[session]?.[agent.id] ?? [FLOOR.left + (i + 0.5) * step, i % 2 ? FLOOR.backRow : FLOOR.frontRow];
+		return { agent, x: fx * ART.w * scale, y: half(fy * ART.h * scale) };
+	});
 	$("plaque").innerHTML = `${esc(session)}<span class="of">${names.indexOf(session) + 1}/${names.length}</span>`;
 	$("vibe").textContent = vibeLabel[vibe] ?? vibe;
 	$("prev").hidden = $("next").hidden = names.length < 2;
@@ -192,15 +201,14 @@ function draw() {
 	ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
 	ctx.drawImage(images[`${vibe}/room-${roomOf(session)}`], 0, 0, ART.w * scale, ART.h * scale);
 	[...placed].sort((a, b) => a.y - b.y).forEach((p, i) => {
-		const img = spriteOf(p.agent, vibe);
+		const img = spriteOf(p.agent, session);
 		const w = img.width * SPRITE, h = img.height * SPRITE;
 		const lift = bob(p.agent.state, i) * SPRITE;
 		p.box = { x: half(p.x - w / 2), y: p.y - h, w, h };
 		ctx.drawImage(img, p.box.x, p.box.y + lift, w, h);
 		bubble(ctx, p.agent.state, p.x, p.box.y + lift);
 	});
-	if (pointer) pointAt(pointer.x, pointer.y);
-	else stage.querySelector(".tip")?.remove();
+	showTip();
 }
 
 function hitTest(clientX, clientY) {
@@ -214,7 +222,12 @@ function hitTest(clientX, clientY) {
 // The shell forwards the pointer, because a panel that never becomes key gets no mouse-move events in its web view.
 function pointAt(clientX, clientY) {
 	pointer = { x: clientX, y: clientY };
-	const hit = open ? hitTest(clientX, clientY) : null;
+	if (drag) moveDrag(clientX, clientY);
+	else showTip();
+}
+
+function showTip() {
+	const hit = open && pointer && !drag ? hitTest(pointer.x, pointer.y) : null;
 	let tip = stage.querySelector(".tip");
 	if (!hit) return tip?.remove();
 	if (!tip) stage.append((tip = Object.assign(document.createElement("div"), { className: "tip" })));
@@ -256,11 +269,42 @@ function focusAgent(agent) {
 	else console.log("focus", agent.paneId);
 }
 
+// Dragging a worker moves its bottom-centre anchor, kept inside the room; a drag does not count as a click.
+function moveDrag(clientX, clientY) {
+	const rect = canvas.getBoundingClientRect();
+	const w = ART.w * scale, h = ART.h * scale;
+	const x = Math.min(Math.max(clientX - rect.left - drag.dx, drag.w / 2), w - drag.w / 2);
+	const y = Math.min(Math.max(clientY - rect.top - drag.dy, drag.h), h);
+	drag.moved ||= Math.hypot(clientX - drag.startX, clientY - drag.startY) > 3;
+	(positions[session] ??= {})[drag.id] = [x / w, y / h];
+	stage.querySelector(".tip")?.remove();
+	renderStage();
+}
+
+function endDrag() {
+	if (!drag) return;
+	if (drag.moved) save("notch-positions", positions);
+	dragged = drag.moved;
+	drag = null;
+}
+
+canvas.onmousedown = (event) => {
+	const hit = hitTest(event.clientX, event.clientY);
+	if (!hit) return;
+	event.preventDefault();
+	const rect = canvas.getBoundingClientRect();
+	drag = {
+		id: hit.agent.id, w: hit.box.w, h: hit.box.h, moved: false, startX: event.clientX, startY: event.clientY,
+		dx: event.clientX - rect.left - hit.x, dy: event.clientY - rect.top - hit.y,
+	};
+};
+window.addEventListener("mousemove", (event) => pointAt(event.clientX, event.clientY));
+window.addEventListener("mouseup", endDrag);
 canvas.onclick = (event) => {
+	if (dragged) return void (dragged = false);
 	const hit = hitTest(event.clientX, event.clientY);
 	if (hit) focusAgent(hit.agent);
 };
-canvas.onmousemove = (event) => pointAt(event.clientX, event.clientY);
 $("prev").onclick = () => cycle(-1);
 $("next").onclick = () => cycle(1);
 $("shuffle").onclick = () => {
@@ -269,13 +313,15 @@ $("shuffle").onclick = () => {
 	const others = VIBES[vibe].rooms.filter((room) => room !== current);
 	if (!others.length) return;
 	chosenRooms[`${vibe}/${session}`] = others[Math.floor(Math.random() * others.length)];
-	localStorage.setItem("notch-rooms", JSON.stringify(chosenRooms));
+	chosenLooks[`${vibe}/${session}`] = Math.floor(Math.random() * 2 ** 31);
+	save("notch-rooms", chosenRooms);
+	save("notch-looks", chosenLooks);
 	render();
 };
 $("vibe").onclick = () => {
 	const names = Object.keys(VIBES);
 	chosenVibes[session] = names[(names.indexOf(vibeOf(session)) + 1) % names.length];
-	localStorage.setItem("notch-vibes", JSON.stringify(chosenVibes));
+	save("notch-vibes", chosenVibes);
 	render();
 };
 
@@ -294,7 +340,10 @@ window.notch = {
 		// Opening shows the session whose agent has waited longest for you, if any.
 		const waiting = agents.filter((a) => a.state === "waiting").sort((a, b) => a.updatedAt - b.updatedAt)[0];
 		if (open && waiting) session = waiting.tmuxSession || "tmux";
-		if (!open) pointer = null;
+		if (!open) {
+			pointer = null;
+			endDrag();
+		}
 		render();
 	},
 	pointer: pointAt,

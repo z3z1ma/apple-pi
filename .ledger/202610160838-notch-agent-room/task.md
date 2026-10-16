@@ -73,13 +73,21 @@ Acceptance:
 
 ## Current State
 
-Round 4 of prototype 2 runs in the notch with live agents and is waiting for the operator's verdict.
+Round 5 of prototype 2 runs in the notch with live agents. Operator: "we have gotten quite close to an acceptable prototype."
+
+Operator feedback on round 4, and what changed:
+
+- "I don't like the sprite of the old guy in a wheelchair": removed (`raw/office/worker-senior.png`). Office has 4 workers.
+- "The dice roll should shuffle background and worker sprites": 🎲 picks another room and a new look seed for the shown session and vibe (`notch-looks`). The seed picks each agent's worker and shirt colour. Seed 0 is the default look.
+- "Click and drag a sprite to a different position": mousedown on a worker starts a drag. Movement comes from native mouse moves (browser) and the forwarded pointer (shell; AppKit sends drags to the panel, and the shell's local monitor forwards `leftMouseDragged`). The worker's bottom-centre stays inside the room. Positions are stored per session and agent as fractions of the room size (`notch-positions`), so they survive scale changes. A drag of more than 3 px does not count as a click, so it does not focus the pane.
+
+Checked in headless Chrome: 🎲 changes the room and the sprites; a native drag moves and saves a worker without a focus click; a drag driven only by `window.notch.pointer()` between native mousedown and mouseup also moves it; a plain click still focuses; looks and positions survive a reload; no page errors. Not checked: dragging in the real panel.
 
 Operator feedback on round 3 ("I like it. The room size is better."), and what changed:
 
 - "Workers … 5-10% smaller": `AGENT_PIXEL` 10 → 11 in `clean.py`, about 9 % smaller, still on the sprite-pixel grid.
 - "Scale the room larger … with more workers", with the round-3 size as the minimum: workers keep 2.5 css px per pixel (`SPRITE`). The room scale starts there and grows in 0.5 steps until no two workers stand closer than 0.8 of the widest worker's width (`CROWDING`). It stops at the largest step that fits the shell window (3.5 for 1100×500). One scale serves every session, taken from the most crowded room, so the panel and its arrows stay put while cycling. A per-room scale made the panel shrink under the pointer and collapse. At 3.5 the room's pixels (7 device px) are visibly larger than the workers' (5 device px).
-- "A few more varieties of sprites": office workers beanie, hijab and senior (wheelchair), and the cozy cat-hoodie worker. Office now has 5 workers and cozy has 2. The cozy "sweater" worker (long ginger hair, freckles, oversized blue knit sweater, wooden desk with a laptop and tea) failed on image quota; generate it with the worker prompt pattern under Assets. The magenta key now goes by hue (285–315°), so purple props such as the wheelchair frame stay.
+- "A few more varieties of sprites": office workers beanie and hijab (and senior, removed in round 5), and the cozy cat-hoodie worker. The cozy "sweater" worker (long ginger hair, freckles, oversized blue knit sweater, wooden desk with a laptop and tea) failed on image quota; generate it with the worker prompt pattern under Assets. The magenta key now goes by hue (285–315°), so purple props such as the wheelchair frame stay.
 - "Vibe … tied to the specific tmux session": vibes are stored per session (`notch-vibes` in localStorage), defaulting to office.
 
 Checked in headless Chrome with 8 mock agents in 2 sessions: the 6-worker room opens at 3.5, the 2-worker room keeps the same size, the vibe toggle changes only the shown session, a forwarded pointer opens the tooltip, and there are no page errors.
@@ -102,7 +110,7 @@ Not yet checked: hover and tooltips in the real notch with the forwarded pointer
 
 Known asset issues: the game studio room shows real game trademarks (Pac-Man, Street Fighter, Mario-like art); regenerate it before any use beyond this prototype. The braids worker is drawn a little larger than the others.
 
-Next: get the operator's verdict on round 4, and generate the cozy sweater worker when the image quota allows. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
+Next: confirm dragging in the real panel, and generate the cozy sweater worker when the image quota allows. Then regenerate the game studio room without trademarks, and decide which vibe or vibes, rooms and workers carry into a real component.
 
 ## Outcome
 
