@@ -1,6 +1,6 @@
 # apple-pi 🥧
 
-<img width="1728" height="1059" alt="image" src="https://github.com/user-attachments/assets/54687db9-56c9-4e44-8dc3-5838c6659a78" />
+<img width="1728" height="1060" alt="image" src="https://github.com/user-attachments/assets/d798b53a-c011-407c-be0b-cd2a13f1a5cc" />
 
 This repository is my personal coding harness built on top of `pi`. It is not a product, a VC-backed framework seeking adoption, or a generalized starter kit for "agentic workflows." It is the cumulative result of spending months living inside terminal-based coding agents, hitting the exact same failure modes every afternoon, and building the mechanical back-pressure required to make them stop.
 
