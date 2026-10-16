@@ -292,12 +292,15 @@ function TicketGraph({ bundle }: { bundle: Bundle }) {
 			<div className="graph-wrap">
 				<div className={`graph ${hot ? "hovering" : ""}`} style={{ width, height: height + (loops ? 130 : 0) }}>
 					<svg aria-hidden="true">
-						{lines.map((e) => (
-							<g key={`${e.from}-${e.to}`} className={edgeHot(e.from, e.to) ? "hot" : ""}>
-								<path className={`edge ${e.kind}`} d={e.d} />
-								<path className={`edge-head ${e.kind}`} d={e.head} />
-							</g>
-						))}
+						{lines.map((e) => {
+							const hot = edgeHot(e.from, e.to) ? "hot" : "";
+							return (
+								<g key={`${e.from}-${e.to}`}>
+									<path className={`edge ${e.kind} ${hot}`} d={e.d} />
+									<path className={`edge-head ${e.kind} ${hot}`} d={e.head} />
+								</g>
+							);
+						})}
 					</svg>
 					{tickets.map((t) => {
 						const state = ticketState(t, tickets);
