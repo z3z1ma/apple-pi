@@ -1,4 +1,4 @@
-Status: planning
+Status: ready
 Created: 2026-10-16
 Updated: 2026-10-16
 
@@ -30,6 +30,8 @@ The model is the Codex "Dots" experience as the operator described it: one place
 - **Workers are top-level Pi sessions in tmux windows.** Orchard picks the session id and writes the brief to a file, then starts the worker with `pi --session-id <id> --name <name> @<brief file>` (Pi expands `~` and reads `@file` as prompt text, so long briefs need no shell quoting). With the id it finds the worker's tmux state record, session file and mailbox. Orchard chooses the directory: an existing checkout, a worktree, or anything else the work needs.
 - **Communication runs through the [session mailbox](../history/202610161427-session-mailbox/task.md).** Every brief asks the worker to `mailbox_send` to `orchard` when it finishes or is blocked; Orchard redirects a worker the same way.
 - **Finished workers stay open until the operator has seen them.** Orchard summarizes the result and closes the window after the operator acknowledges it.
+- **`~/orchard` is a local git repository.** Orchard commits its ledger and charter changes. Whether to add a private remote is the operator's choice.
+- **Staleness is Orchard's judgment.** The skill asks Orchard to note a due or follow-up date in plain words in a thread's `task.md` when one exists; Orchard judges staleness from those and the `Updated` date. No fixed header lines.
 - **Heartbeat v1 is a self-scheduled sweep.** After each sweep Orchard uses `schedule` to set the next one. It stops when Orchard's pane closes, which is acceptable. The charter decides what a sweep scans beyond Orchard's ledger and workers, and how often.
 
 ## Deliverables
@@ -43,17 +45,12 @@ The model is the Codex "Dots" experience as the operator described it: one place
 2. Given work, Orchard starts a worker in a new tmux window as a top-level Pi session with its brief, and records the worker's session id in the thread.
 3. A worker that finishes or gets blocked reports to `orchard` through the mailbox, and Orchard summarizes that to the operator without the operator reading the worker.
 4. After Orchard's process restarts (`pi --session-id orchard`), it answers "what is going on with X" from disk.
-5. A sweep lists threads past their nag date and the state of every worker, then schedules the next sweep.
+5. A sweep reports threads that look stale (past a noted due or follow-up date, or untouched for a long time) and the state of every worker, then schedules the next sweep.
 6. The skill is packaged: `npm run pack:check` lists `skills/orchard/SKILL.md`, and the package-load test passes.
-
-## Open questions
-
-- Whether `~/orchard` is a local git repository (history for the ledger and charter, no remote).
-- The exact staleness lines in a thread's `task.md`.
 
 ## Current State
 
-Planning. The session mailbox is done. Design decisions above are settled with the operator; two small questions remain. Next: the operator reviews this task, then implementation (skill first, then `~/orchard`).
+Planning. The session mailbox is done. All design decisions are settled and the operator approved the plan. Next: implementation, skill first, then `~/orchard`.
 
 ## Outcome
 
