@@ -12,6 +12,10 @@ Coupled: .ledger/202610160838-notch-agent-room/prototype/web/room.html
 Worker sheets must not put magenta-hued props (285–315°) on the worker. Purple props, such as a wheelchair frame, stay.
 Why: the background key removes every saturated pixel in that hue band, not only the flat `#FF00FF` backdrop. The band covers the darker magenta shadows that generations draw under desks.
 
+Each pose cell shrinks to a fixed `WORKER_CELL`, not by a raw-pixel factor.
+Why: generators return sheets at different resolutions (Antigravity 1024×1024, Codex `image_gen` 1254×1254). A per-raw-pixel factor drew the Codex worker about 22 % larger than the others.
+Coupled: .ledger/202610160838-notch-agent-room/prototype/web/room.html
+
 ## symbol:recolor
 
 Worker sheets must show a blue shirt with hair that is not blue. The prompts say "bright blue t-shirt" or "blue vest".

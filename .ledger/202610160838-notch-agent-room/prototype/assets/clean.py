@@ -18,7 +18,7 @@ here = Path(__file__).resolve().parent
 raw, out = here / "raw", here.parent / "web" / "assets"
 
 ROOM_SIZE = (208, 116)  # about 5.5 raw pixels per art pixel once a 1376×768 generation is cropped to its interior
-AGENT_PIXEL = 11  # raw pixels per worker pixel on a 1024-wide sheet; other sheet sizes scale to match
+WORKER_CELL = 47  # art pixels per pose cell, whatever the sheet's resolution
 COLORS = 48
 STATES = ["working", "quiet", "waiting", "done"]  # sheet order: left to right, top to bottom
 SHIRT_HUES = [None, 0, 120, 280, 330, 170]  # None keeps the generated blue; others are target hues in degrees
@@ -84,7 +84,7 @@ def worker_frames(path: Path) -> list[Image.Image]:
     for index in range(len(STATES)):
         x, y = (index % 2) * cell, (index // 2) * cell
         crop = image.crop((x, y, x + cell, y + cell))
-        frame = crop.resize((round(1024 / 2 / AGENT_PIXEL),) * 2, Image.Resampling.BOX)
+        frame = crop.resize((WORKER_CELL, WORKER_CELL), Image.Resampling.BOX)
         pixels = np.asarray(frame).copy()
         pixels[..., 3] = np.where(pixels[..., 3] > 140, 255, 0)
         frame = quantize(Image.fromarray(pixels))
