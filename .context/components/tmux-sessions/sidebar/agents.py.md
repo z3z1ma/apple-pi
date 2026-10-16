@@ -25,3 +25,10 @@ Why: top-level `usage` entries are separate requests (forked continuations, cach
 
 The name never comes from prompt text. Order: Pi session name, then the linked ledger task title, then the project directory.
 Why: the sidebar is always on screen; raw prompts can expose sensitive request text.
+
+## symbol:feed_record
+
+The keys are the notch page's input contract: it groups rooms by `tmuxSession`, keys saved looks and positions by `id`, and sends `paneId`, `tmuxSession` and `tmuxSocket` back to the shell to focus a pane.
+Why: renaming a key here breaks the page silently; it shows no error, only empty rooms or clicks that do nothing.
+Coupled: components/tmux-sessions/notch/web/index.html
+Verify: components/tmux-sessions/sidebar/tests/test_notch_feed.py

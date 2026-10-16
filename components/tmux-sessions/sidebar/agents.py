@@ -63,6 +63,7 @@ class Agent:
     pane_id: str
     updated_at: int
     tmux_session: str = ""
+    tmux_socket: str = ""
     window_index: str = ""
     pane_index: str = ""
     focused: bool = False
@@ -291,6 +292,7 @@ def live() -> list[Agent]:
             updated_at=int(record.get("updatedAt") or 0),
         )
         agent.tmux_session, agent.window_index, agent.pane_index, seen_at = pane
+        agent.tmux_socket = socket
         agent.focused = agent.pane_id in focused
         settled_unseen = agent.status == "idle" and agent.updated_at > int(seen_at or 0)
         # An agent that settles while you watch its pane gets no focus-in event, so watching counts as seeing.
@@ -313,16 +315,44 @@ STATUS_STYLE = {"waiting": "#FAE3B0", "done": "#ABE9B3", "working": "#F5C2E7", "
 STATUS_GLYPH = {"waiting": "?", "done": "\u2713", "working": "\u283f", "quiet": "\u00b7"}
 
 
+def display_state(agent: Agent) -> str:
+    """The state the status line and the notch show: waiting, done (settled and unseen), working, or quiet."""
+    if agent.status == "waiting":
+        return "waiting"
+    if agent.unseen:
+        return "done"
+    return "working" if agent.status == "busy" else "quiet"
+
+
+def feed_record(agent: Agent) -> dict:
+    """One agent as the notch panel's page reads it."""
+    return {
+        "id": agent.session_id,
+        "name": agent.name,
+        "project": agent.project,
+        "state": display_state(agent),
+        "tool": agent.activity.last_tool,
+        "detail": agent.activity.last_tool_detail,
+        "tmuxSession": agent.tmux_session,
+        "paneId": agent.pane_id,
+        "tmuxSocket": agent.tmux_socket,
+        "updatedAt": agent.updated_at,
+    }
+
+
+def feed(interval: float = 1.0) -> None:
+    """Print the live agents as one JSON line per poll, for the notch panel; runs until its reader goes away."""
+    store = AgentStore()
+    while True:
+        print(json.dumps([feed_record(agent) for agent in store.poll()]), flush=True)
+        time.sleep(interval)
+
+
 def summary(agents: list[Agent]) -> str:
     """A tmux status-line segment counting agents by state, or nothing when there are none."""
     if not agents:
         return ""
-    counts = {
-        "waiting": sum(agent.status == "waiting" for agent in agents),
-        "done": sum(agent.unseen for agent in agents),
-        "working": sum(agent.status == "busy" for agent in agents),
-        "quiet": sum(agent.status == "idle" and not agent.unseen for agent in agents),
-    }
+    counts = {name: sum(display_state(agent) == name for agent in agents) for name in STATUS_STYLE}
     parts = [
         f"#[fg={STATUS_STYLE[name]}{',bold' if name in ('waiting', 'done') else ''}]{STATUS_GLYPH[name]} {count}"
         for name, count in counts.items()
@@ -342,3 +372,5 @@ if __name__ == "__main__":
     elif sys.argv[1:2] == ["next"]:
         found = next_agent(live(), sys.argv[2] if len(sys.argv) > 2 else "")
         print(found.pane_id if found else "")
+    elif sys.argv[1:2] == ["feed"]:
+        feed()
