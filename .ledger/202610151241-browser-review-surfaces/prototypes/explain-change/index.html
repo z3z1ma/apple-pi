@@ -539,7 +539,6 @@ const I = {
   sun: svg('<circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3"/>'),
   print: svg('<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2"/><path d="M4.5 9.5h7v4h-7z"/>'),
   x: svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>'),
-  check: svg('<path d="M3.5 8.5l2.8 2.8L12.5 5"/>'),
 };
 const KW = new Set("import export from const let var function return if else for while async await new throw try catch type interface extends class readonly as of in null undefined true false void this break continue".split(" "));
 function highlight(code) {
@@ -678,7 +677,7 @@ function render() {
       <section class="ex-sec" id="background"><div class="ex-sec-h"><span class="num">01</span><h2>Background</h2><span class="t">What was there before</span></div>
         <details class="ex-primer"><summary><b>New to the ledger?</b> Start with the primer: bundles, tickets, and the frontier.<span class="t">${Math.max(1, Math.round(words(EX.primer) / 230))} min</span></summary><div class="ex-prose">${md(EX.primer)}</div></details>
         <div class="ex-prose">${md(EX.background)}</div></section>
-      <section class="ex-sec" id="intuition"><div class="ex-sec-h"><span class="num">02</span><h2>Intuition</h2><span class="t">The idea, before the code</span></div><div class="ex-prose">${md(EX.intuition.replace("\nFIGURE\n", "\nFIGURE\n"))}</div></section>
+      <section class="ex-sec" id="intuition"><div class="ex-sec-h"><span class="num">02</span><h2>Intuition</h2><span class="t">The idea, before the code</span></div><div class="ex-prose">${md(EX.intuition)}</div></section>
       <section class="ex-sec" id="walkthrough"><div class="ex-sec-h"><span class="num">03</span><h2>Walkthrough</h2><span class="t">${EX.steps.length} steps</span></div>
         <p class="ex-lead">The steps follow the data: from the files on disk, to the graph, to the page, and back to the agent. Every excerpt is real code from ${COMMIT}.</p>
         ${EX.steps.map((s, i) => `<div class="ex-step" id="step${i}"><div class="ex-step-k">Step ${i + 1} of ${EX.steps.length}</div><h3>${esc(s.title)}</h3><div class="ex-files">${stepFiles(s).map((f) => `<span>${esc(f.split("/").pop())}</span>`).join("")}</div><div class="ex-prose">${md(s.body)}</div></div>`).join("")}</section>
