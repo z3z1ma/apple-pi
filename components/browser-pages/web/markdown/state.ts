@@ -102,8 +102,8 @@ export const annotation = (a: MarkdownAnnotation, file: string): Annotation => (
 /** Adds an annotation in review order: by document, then by place in it. */
 export function addAnnotation(d: State, a: Annotation, position: (file: string, block: string) => number): void {
 	d.annotations.push(a);
-	const at = (x: Annotation) => position(x.file, x.spans[0].block) * 1e9 + (x.spans[0].start ?? -1);
-	d.annotations.sort((x, y) => at(x) - at(y));
+	const at = (x: Annotation) => position(x.file, x.spans[0].block);
+	d.annotations.sort((x, y) => at(x) - at(y) || (x.spans[0].start ?? -1) - (y.spans[0].start ?? -1));
 }
 
 /** The annotation a popover's text makes in `file`, or undefined when it makes none. */

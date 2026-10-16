@@ -188,7 +188,10 @@ describe("buildCodeReviewPage", () => {
 });
 
 describe("review_code tool", () => {
-	it("opens the page, waits for the submission, saves the page, and returns the review", async () => {
+	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
+	it("opens the page, waits for the submission, saves the page, and returns the review", {
+		timeout: 30_000,
+	}, async () => {
 		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));
 		// A stand-in browser: it submits an approval for whatever page it is asked to open.

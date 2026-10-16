@@ -200,6 +200,63 @@ export interface MarkdownResult {
 	submittedAt: string;
 }
 
-export type PageData = CodeReviewPage | MarkdownReviewPage;
+/** A ticket in a ledger bundle, as its `tickets/NN-*.md` file states it. */
+export interface Ticket {
+	id: number;
+	path: string;
+	title: string;
+	/** As written after `**Status:**`, such as `ready-for-agent`, `in-progress`, or `done`. */
+	status: string;
+	/** Tickets in the bundle this one waits on. */
+	blockers: number[];
+	/** Numbers named under `**Blocked by:**` that are not tickets in the bundle. */
+	unknown: number[];
+	/** Acceptance checkboxes ticked, and all of them. */
+	done: number;
+	total: number;
+}
+
+/** A file in the bundle that is not Markdown. The page asks for its lines when the reviewer opens it. */
+export interface EvidenceFile {
+	path: string;
+	bytes: number;
+	/** Present once served: highlighted lines, or `binary` for a file that is not text. */
+	lines?: Segment[][];
+	binary?: boolean;
+}
+
+export interface LedgerReviewPage {
+	kind: "ledger-review";
+	title: string;
+	/** The bundle, relative to the repository, such as `.ledger/<id>`. */
+	path: string;
+	status?: string;
+	created?: string;
+	updated?: string;
+	note?: string;
+	createdAt: string;
+	/** Every Markdown file, in reading order: task, spec or plan, other documents, tickets, retrospective. */
+	documents: { path: string; blocks: MarkdownBlock[] }[];
+	evidence: EvidenceFile[];
+	tickets: Ticket[];
+	session: { token: string; live: boolean; ask: boolean };
+	result?: LedgerResult;
+}
+
+export interface LedgerAnnotation extends MarkdownAnnotation {
+	file: string;
+}
+
+export interface LedgerResult {
+	verdict: Verdict;
+	overall?: string;
+	annotations: LedgerAnnotation[];
+	edits: { file: string; block: string; after: string }[];
+	/** Documents and evidence files the reviewer opened. */
+	opened: string[];
+	submittedAt: string;
+}
+
+export type PageData = CodeReviewPage | MarkdownReviewPage | LedgerReviewPage;
 
 export const PAGE_DATA_MARKER = '<script id="page-data" type="application/json">null</script>';

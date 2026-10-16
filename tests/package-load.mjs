@@ -65,9 +65,10 @@ try {
 				extension.path.endsWith("browser-pages.ts") &&
 				extension.tools.has("review_code") &&
 				extension.tools.has("review_markdown") &&
+				extension.tools.has("review_ledger_task") &&
 				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
 		),
-		"missing review_code or review_markdown browser page tool",
+		"missing a browser page tool (review_code, review_markdown, review_ledger_task)",
 	);
 	assert(
 		result.extensions.some(

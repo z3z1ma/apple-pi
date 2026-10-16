@@ -32,7 +32,7 @@ export const ReviewMarkdownParamsSchema = Type.Object({
 
 export type ReviewMarkdownParams = Static<typeof ReviewMarkdownParamsSchema>;
 
-async function repositoryRoot(dir: string): Promise<string | undefined> {
+export async function repositoryRoot(dir: string): Promise<string | undefined> {
 	try {
 		return (await run("git", ["rev-parse", "--show-toplevel"], { cwd: dir })).stdout.trim() || undefined;
 	} catch {
@@ -41,7 +41,7 @@ async function repositoryRoot(dir: string): Promise<string | undefined> {
 }
 
 /** Splits the file into top-level blocks with source lines; code fences come highlighted. */
-async function blocksOf(source: string): Promise<MarkdownBlock[]> {
+export async function blocksOf(source: string): Promise<MarkdownBlock[]> {
 	const blocks: MarkdownBlock[] = [];
 	let line = 1;
 	for (const token of marked.lexer(source)) {
@@ -93,13 +93,16 @@ export async function buildMarkdownPage(
 
 const MERMAID = fileURLToPath(new URL("../dist/mermaid.min.js", import.meta.url));
 
-/** The page app, with Mermaid inlined only when the document has a diagram: Mermaid is most of a page's weight. */
-export async function markdownTemplate(page: MarkdownReviewPage): Promise<string> {
-	const template = await readTemplate("markdown-review");
-	if (!page.blocks.some((b) => b.mermaid)) return template;
+/** A page app, with Mermaid inlined only when its documents have a diagram: Mermaid is most of a page's weight. */
+export async function withDiagrams(template: string, blocks: MarkdownBlock[]): Promise<string> {
+	if (!blocks.some((b) => b.mermaid)) return template;
 	// A classic script runs before the app's module script and sets `globalThis.mermaid`.
 	const mermaid = (await readFile(MERMAID, "utf8")).replace(/<\/script/gi, "<\\/script");
 	return template.replace(PAGE_DATA_MARKER, () => `<script>${mermaid}</script>${PAGE_DATA_MARKER}`);
+}
+
+export async function markdownTemplate(page: MarkdownReviewPage): Promise<string> {
+	return withDiagrams(await readTemplate("markdown-review"), page.blocks);
 }
 
 // ---------------------------------------------------------------------------- what the page sends back
@@ -107,14 +110,17 @@ export async function markdownTemplate(page: MarkdownReviewPage): Promise<string
 const TYPES = new Set(["comment", "delete", "suggest", "label", "ask"]);
 const LABELS = new Set(["good", "clarify"]);
 const VERDICTS = new Set(["approve", "approve_notes", "changes", "dismissed"]);
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
-const optionalString = (v: unknown): v is string | undefined => v === undefined || typeof v === "string";
+export const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+export const optionalString = (v: unknown): v is string | undefined => v === undefined || typeof v === "string";
+export const isVerdict = (v: unknown): v is MarkdownResult["verdict"] => VERDICTS.has(v as string);
+const hasBlockIn = (blocks: MarkdownBlock[]) => (id: string) => blocks.some((b) => b.id === id);
 
-function parseSpans(value: unknown, page: MarkdownReviewPage): TextSpan[] | undefined {
+/** The spans of an annotation or question, each on a block `hasBlock` accepts, or undefined. */
+export function parseSpans(value: unknown, hasBlock: (block: string) => boolean): TextSpan[] | undefined {
 	if (!Array.isArray(value) || value.length === 0) return undefined;
 	const spans: TextSpan[] = [];
 	for (const span of value) {
-		if (!isObject(span) || !page.blocks.some((b) => b.id === span.block)) return undefined;
+		if (!isObject(span) || typeof span.block !== "string" || !hasBlock(span.block)) return undefined;
 		const whole = span.start === undefined && span.end === undefined;
 		const start = span.start as number;
 		const end = span.end as number;
@@ -130,31 +136,38 @@ function parseSpans(value: unknown, page: MarkdownReviewPage): TextSpan[] | unde
 /** A question about a passage the page shows, or undefined. */
 export function parseMarkdownQuestion(body: unknown, page: MarkdownReviewPage) {
 	if (!isObject(body) || typeof body.question !== "string" || !body.question.trim()) return undefined;
-	const spans = parseSpans(body.spans, page);
+	const spans = parseSpans(body.spans, hasBlockIn(page.blocks));
 	if (!spans || !optionalString(body.quote)) return undefined;
 	return { spans, quote: body.quote?.trim() || undefined, question: body.question.trim() };
 }
 
+/** One annotation the page sent, on blocks `hasBlock` accepts, or undefined when anything in it is malformed. */
+export function parseAnnotation(a: unknown, hasBlock: (block: string) => boolean): MarkdownAnnotation | undefined {
+	if (!isObject(a) || !TYPES.has(a.type as string)) return undefined;
+	const spans = parseSpans(a.spans, hasBlock);
+	if (!spans || !optionalString(a.quote) || !optionalString(a.text) || !optionalString(a.answer)) return undefined;
+	if (a.type === "suggest" && typeof a.replacement !== "string") return undefined;
+	if (a.type === "label" && !LABELS.has(a.label as string)) return undefined;
+	return {
+		type: a.type as MarkdownAnnotation["type"],
+		spans,
+		quote: a.quote?.trim() || undefined,
+		text: a.text?.trim() || undefined,
+		replacement: a.type === "suggest" ? (a.replacement as string) : undefined,
+		label: a.type === "label" ? (a.label as MarkdownLabel) : undefined,
+		answer: a.type === "ask" ? a.answer : undefined,
+	};
+}
+
 /** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 export function parseMarkdownResult(body: unknown, page: MarkdownReviewPage): MarkdownResult | undefined {
-	if (!isObject(body) || !VERDICTS.has(body.verdict as string) || !optionalString(body.overall)) return undefined;
+	if (!isObject(body) || !isVerdict(body.verdict) || !optionalString(body.overall)) return undefined;
 	if (!Array.isArray(body.annotations) || !Array.isArray(body.edits)) return undefined;
 	const annotations: MarkdownAnnotation[] = [];
 	for (const a of body.annotations) {
-		if (!isObject(a) || !TYPES.has(a.type as string)) return undefined;
-		const spans = parseSpans(a.spans, page);
-		if (!spans || !optionalString(a.quote) || !optionalString(a.text) || !optionalString(a.answer)) return undefined;
-		if (a.type === "suggest" && typeof a.replacement !== "string") return undefined;
-		if (a.type === "label" && !LABELS.has(a.label as string)) return undefined;
-		annotations.push({
-			type: a.type as MarkdownAnnotation["type"],
-			spans,
-			quote: a.quote?.trim() || undefined,
-			text: a.text?.trim() || undefined,
-			replacement: a.type === "suggest" ? (a.replacement as string) : undefined,
-			label: a.type === "label" ? (a.label as MarkdownLabel) : undefined,
-			answer: a.type === "ask" ? a.answer : undefined,
-		});
+		const annotation = parseAnnotation(a, hasBlockIn(page.blocks));
+		if (!annotation) return undefined;
+		annotations.push(annotation);
 	}
 	const edits: MarkdownResult["edits"] = [];
 	for (const e of body.edits) {
@@ -173,17 +186,17 @@ export function parseMarkdownResult(body: unknown, page: MarkdownReviewPage): Ma
 // ---------------------------------------------------------------------------- text for the model
 
 /** `path:30` or `path:30-34` for the blocks a set of spans touches. */
-export function linesOf(page: MarkdownReviewPage, spans: TextSpan[]): string {
-	const blocks = page.blocks.filter((b) => spans.some((s) => s.block === b.id));
-	const from = Math.min(...blocks.map((b) => b.line));
-	const to = Math.max(...blocks.map((b) => b.endLine));
-	return `${page.path}:${from}${to > from ? `-${to}` : ""}`;
+export function linesOf(path: string, blocks: MarkdownBlock[], spans: TextSpan[]): string {
+	const touched = blocks.filter((b) => spans.some((s) => s.block === b.id));
+	const from = Math.min(...touched.map((b) => b.line));
+	const to = Math.max(...touched.map((b) => b.endLine));
+	return `${path}:${from}${to > from ? `-${to}` : ""}`;
 }
 
 /** The passage a question is about, for the read-only fork's prompt. */
-export function markdownPassage(page: MarkdownReviewPage, spans: TextSpan[], quote: string | undefined) {
-	const whole = page.blocks.filter((b) => spans.some((s) => s.block === b.id)).map((b) => b.raw);
-	return { where: linesOf(page, spans), excerpt: quote ?? whole.join("\n\n") };
+export function markdownPassage(path: string, blocks: MarkdownBlock[], spans: TextSpan[], quote: string | undefined) {
+	const whole = blocks.filter((b) => spans.some((s) => s.block === b.id)).map((b) => b.raw);
+	return { where: linesOf(path, blocks, spans), excerpt: quote ?? whole.join("\n\n") };
 }
 
 const VERDICT_TEXT: Record<MarkdownResult["verdict"], string> = {
@@ -195,37 +208,45 @@ const VERDICT_TEXT: Record<MarkdownResult["verdict"], string> = {
 const LABEL_TEXT: Record<MarkdownLabel, string> = { good: "👍 looks good", clarify: "❓ clarify this" };
 const quoted = (text: string | undefined) => (text ? ` “${text.replace(/\s*\n\s*/g, " / ")}”` : "");
 
+/** One annotation for the model, where `where` is its `path:lines`. */
+export function annotationLines(a: MarkdownAnnotation, where: string): string[] {
+	const whole = a.spans.every((s) => s.start === undefined);
+	if (a.type === "comment")
+		return [`- comment · ${where}${whole ? " (whole block)" : quoted(a.quote)}: ${a.text ?? ""}`];
+	if (a.type === "delete") return [`- delete · ${where}${quoted(a.quote)}`];
+	if (a.type === "suggest")
+		return [`- replace · ${where}${quoted(a.quote)} with “${a.replacement}”${a.text ? ` (${a.text})` : ""}`];
+	if (a.type === "label") return [`- ${LABEL_TEXT[a.label ?? "good"]} · ${where}${quoted(a.quote)}`];
+	const answer = a.answer ? a.answer.split("\n").map((line) => `  > ${line}`) : [];
+	return [`- asked · ${where}${quoted(a.quote)}: ${a.text ?? ""}`, ...answer];
+}
+
+/** A rewritten block for the model, as before and after. */
+export function rewriteLines(where: string, before: string, after: string): string[] {
+	return [
+		`- ${where}`,
+		"  before:",
+		...before.split("\n").map((l) => `  | ${l}`),
+		"  after:",
+		...after.split("\n").map((l) => `  | ${l}`),
+	];
+}
+
+export const REWRITES_HEADING =
+	"Blocks the reviewer rewrote in the page (the file is unchanged; apply these or say why not):";
+
 export function formatMarkdownResult(page: MarkdownReviewPage, result: MarkdownResult, savedPath?: string): string {
 	const out = [`The reviewer ${VERDICT_TEXT[result.verdict]} (${page.path}).`];
 	if (result.overall) out.push("", `Overall: ${result.overall}`);
 	if (result.annotations.length > 0) {
 		out.push("", `Annotations (${result.annotations.length}), each with the passage it marks:`);
-		for (const a of result.annotations) {
-			const where = linesOf(page, a.spans);
-			const whole = a.spans.every((s) => s.start === undefined);
-			if (a.type === "comment")
-				out.push(`- comment · ${where}${whole ? " (whole block)" : quoted(a.quote)}: ${a.text ?? ""}`);
-			else if (a.type === "delete") out.push(`- delete · ${where}${quoted(a.quote)}`);
-			else if (a.type === "suggest")
-				out.push(`- replace · ${where}${quoted(a.quote)} with “${a.replacement}”${a.text ? ` (${a.text})` : ""}`);
-			else if (a.type === "label") out.push(`- ${LABEL_TEXT[a.label ?? "good"]} · ${where}${quoted(a.quote)}`);
-			else {
-				out.push(`- asked · ${where}${quoted(a.quote)}: ${a.text ?? ""}`);
-				if (a.answer) out.push(...a.answer.split("\n").map((line) => `  > ${line}`));
-			}
-		}
+		for (const a of result.annotations) out.push(...annotationLines(a, linesOf(page.path, page.blocks, a.spans)));
 	}
 	if (result.edits.length > 0) {
-		out.push("", "Blocks the reviewer rewrote in the page (the file is unchanged; apply these or say why not):");
+		out.push("", REWRITES_HEADING);
 		for (const edit of result.edits) {
 			const block = page.blocks.find((b) => b.id === edit.block)!;
-			out.push(
-				`- ${linesOf(page, [{ block: block.id }])}`,
-				"  before:",
-				...block.raw.split("\n").map((l) => `  | ${l}`),
-				"  after:",
-				...edit.after.split("\n").map((l) => `  | ${l}`),
-			);
+			out.push(...rewriteLines(linesOf(page.path, page.blocks, [{ block: block.id }]), block.raw, edit.after));
 		}
 	}
 	if (savedPath) out.push("", `Saved page: ${savedPath}`);

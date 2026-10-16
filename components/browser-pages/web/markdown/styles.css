@@ -749,3 +749,23 @@ mark.an.flash {
 	padding: 30px 8px;
 	line-height: 1.6;
 }
+
+/* the panel's heading for each document, on pages with several */
+.pg-file {
+	display: block;
+	width: 100%;
+	text-align: left;
+	border: 0;
+	background: none;
+	padding: 0;
+	margin: 14px 2px 8px;
+	font: 600 12px var(--font-mono);
+	color: var(--ink-2);
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pg-file:hover {
+	color: var(--ink);
+}

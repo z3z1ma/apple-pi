@@ -1,11 +1,12 @@
 # Browser pages
 
-Two tools open a page in the user's browser and wait for the verdict:
+Three tools open a page in the user's browser and wait for the verdict:
 
 - `review_code`: a code review. The agent writes the structure; the page shows the real diff from git.
 - `review_markdown`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
+- `review_ledger_task`: a whole ledger task bundle, with its ticket graph. See [Ledger task review](#ledger-task-review).
 
-Root sessions only; a run without an attached user gets a message instead of a page. The same runtime will serve the ledger task review and change explanation pages. Their tools are not built yet.
+Root sessions only; a run without an attached user gets a message instead of a page. The same runtime will serve the change explanation page; its tool is not built yet.
 
 ## What the agent supplies
 
@@ -92,6 +93,20 @@ Questions go to a read-only fork, as in the code review. Text annotations point 
 
 The agent receives the verdict, the overall comment, each annotation with its kind, `path:line` range, and quoted text (with the replacement, label, or question and answer), and each rewritten block as before and after. The file itself never changes; the agent applies the feedback.
 
+## Ledger task review
+
+`review_ledger_task` takes `task`: a ledger task's id, `.ledger/<id>`, or any path inside the bundle, under `.ledger/` or `.ledger/history/`. An optional one-sentence `note` sits above the task. The server reads the whole bundle; the agent curates nothing.
+
+- **The tree** on the left is the bundle: the overview, `task.md`, the spec or plan, other documents, `tickets/` (number, title, acceptance boxes ticked, and status), `retrospective.md`, then other folders, closed, with their file counts. The open document's sections nest under it. Files the reviewer opened carry a tick; annotation counts show on files and folders.
+- **The overview** shows the task's Intent and the ticket graph. Tickets stand in columns by dependency depth, with arrows from each blocker to the tickets it blocks, read from each ticket's `**Blocked by:**` line. A ticket whose blockers are all done can start now; it carries a ring and is listed under the graph. Hover a ticket to light what it waits on and what waits on it; click it to open it.
+- **Graph checks** follow the `to-tickets` rules: a blocker that is not a ticket in the bundle, a blocker numbered after the ticket it blocks, a cycle (a ticket that names itself included), and no ticket that can start. They show above the graph; edges that run backwards are red. A ticket waiting on a missing ticket counts as blocked.
+- **Every Markdown document** opens in the same reader and takes the same annotations as `review_markdown`. A ticket opens with its neighbourhood: blocked by, the ticket, and what it unblocks.
+- **Other files**, such as JSON records and logs, are evidence. The page lists them and reads one from disk only when the reviewer opens it, through the page server and only from the bundle's own list. It shows line numbers and takes annotations by line. A file that is not text says so.
+- **Finish review** lists the documents the reviewer has not opened.
+- **Keys:** `G` overview, `[` and `]` previous and next document in reading order, `J` and `K` sections, `?` keys.
+
+The agent receives the verdict, the overall comment, each annotation with its repository path and lines (`.ledger/<id>/tickets/03-runner.md:9`, or a line of an evidence file), rewritten blocks as before and after, and the documents the reviewer did not open. The saved page keeps every evidence file the reviewer opened.
+
 ## Saved pages
 
 Every submitted review is saved as one self-contained HTML file in `<agent dir>/artifacts/<repository>/<date>-<title>.html`; the agent directory defaults to `~/.pi/agent`. The file opens offline and shows the review read-only, with the verdict and comments. Attach it to a pull request, a Confluence page, or a Jira ticket.
@@ -104,4 +119,4 @@ A Markdown document is untrusted content in a page that holds the token, so it n
 
 ## Maintaining the page
 
-Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html` and `dist/markdown-review.html`. Mermaid's own build, `dist/mermaid.min.js` (about 3.6 MB), is inlined only into a Markdown page whose document has a diagram, so other pages, and their saved copies, stay small. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.
+Each kind of page is a React app in `components/browser-pages/web/`, built by Vite into one self-contained file per kind: `dist/code-review.html`, `dist/markdown-review.html`, and `dist/ledger-review.html`. The Markdown and ledger pages share one document reader in `web/markdown/`. Mermaid's own build, `dist/mermaid.min.js` (about 3.6 MB), is inlined only into a page whose documents have a diagram, so other pages, and their saved copies, stay small. Pi installs git packages without dev dependencies, so the built files are committed. After changing `web/`, run `npm run build:web`. A test fails when a committed file does not match a fresh build.

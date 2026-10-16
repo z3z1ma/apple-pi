@@ -165,7 +165,8 @@ describe("results", () => {
 });
 
 describe("review_markdown tool", () => {
-	it("opens the page, waits for the submission, and saves the page with the result", async () => {
+	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
+	it("opens the page, waits for the submission, and saves the page with the result", { timeout: 30_000 }, async () => {
 		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));
 		const browser = `#!/bin/sh\nurl="$1"\ncurl -s -X POST -H "x-page-token: \${url##*t=}" -H "content-type: application/json" --data '{"verdict":"approve","annotations":[],"edits":[]}' "\${url%%\\?*}result" > /dev/null\n`;

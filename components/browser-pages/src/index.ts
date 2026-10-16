@@ -26,6 +26,18 @@ import {
 	ReviewMarkdownParamsSchema,
 	type ReviewMarkdownParams,
 } from "./markdown-review.js";
+import {
+	buildLedgerPage,
+	formatLedgerResult,
+	ledgerPassage,
+	ledgerTemplate,
+	parseLedgerQuestion,
+	parseLedgerResult,
+	REVIEW_LEDGER_TASK_TOOL_NAME,
+	type ReviewLedgerTaskParams,
+	ReviewLedgerTaskParamsSchema,
+	serveEvidence,
+} from "./ledger-review.js";
 import type { PageData } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, readTemplate, savePage } from "./saved-page.js";
@@ -47,6 +59,8 @@ interface PageRun<P extends PageData, R extends { verdict: string }> {
 	/** The passage and question a page asks about, or undefined for a malformed question. */
 	question: (body: unknown) => { passage: Passage; question: string } | undefined;
 	format: (result: R, saved: string) => string;
+	/** Answers the page's `GET /file` requests, for pages that load files on demand. */
+	file?: (path: string) => Promise<unknown | undefined>;
 }
 
 export default function browserPages(pi: ExtensionAPI): void {
@@ -60,8 +74,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		signal: AbortSignal | undefined,
 		onUpdate: ((update: { content: ReturnType<typeof text>; details: undefined }) => void) | undefined,
 	) {
-		const { page } = run;
-		const { template } = run;
+		const { page, template } = run;
 		page.session.ask = !!liveSession(ctx);
 		const session = await openPageSession(embedPage(template, page), page.session.token, run.parse, {
 			signal,
@@ -69,6 +82,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 				const asked = run.question(body);
 				return asked && askAgent(ctx, asked.passage, asked.question, stop);
 			},
+			file: run.file,
 		});
 		sessions.add(session.close);
 		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
@@ -155,9 +169,50 @@ export default function browserPages(pi: ExtensionAPI): void {
 					parse: (body) => parseMarkdownResult(body, page),
 					question: (body) => {
 						const q = parseMarkdownQuestion(body, page);
-						return q && { passage: markdownPassage(page, q.spans, q.quote), question: q.question };
+						return q && { passage: markdownPassage(page.path, page.blocks, q.spans, q.quote), question: q.question };
 					},
 					format: (result, saved) => formatMarkdownResult(page, result, saved),
+				},
+				ctx,
+				signal,
+				onUpdate,
+			);
+		},
+	});
+
+	pi.registerTool({
+		name: REVIEW_LEDGER_TASK_TOOL_NAME,
+		label: "Review ledger task",
+		description:
+			"Open a ledger task bundle in the user's browser for review and wait for their verdict. The page shows the task's intent, the ticket graph built from each ticket's `Blocked by:` line with graph checks, and every document in the bundle rendered for annotation as in review_markdown; other files open on demand. Returns the verdict and each annotation with its file, lines, and quoted text, rewritten blocks, and the documents the user did not open. The page never changes the files.",
+		promptSnippet:
+			"Open a ledger task bundle (task, spec, tickets, evidence) in the user's browser for review and sign-off",
+		promptGuidelines: [
+			"Use review_ledger_task when a ledger task's plan, specification, or tickets need the user's sign-off before implementation, or its outcome needs review before closing. It blocks until they submit.",
+			"Pass the task id as `task`. Pass `note` only when one sentence helps, such as what changed since their last review or what you need decided.",
+			"Apply the returned annotations to the bundle's files yourself; suggested rewrites and rewritten blocks are feedback, not edits already made.",
+		],
+		parameters: ReviewLedgerTaskParamsSchema,
+		executionMode: "sequential",
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
+			const { page, root, dir } = await buildLedgerPage(
+				params as ReviewLedgerTaskParams,
+				ctx.cwd,
+				randomBytes(24).toString("hex"),
+			);
+			return review(
+				{
+					page,
+					template: await ledgerTemplate(page),
+					root,
+					parse: (body) => parseLedgerResult(body, page),
+					question: (body) => {
+						const q = parseLedgerQuestion(body, page);
+						return q && { passage: ledgerPassage(page, q.file, q.spans, q.quote), question: q.question };
+					},
+					format: (result, saved) => formatLedgerResult(page, result, saved),
+					file: (path) => serveEvidence(page, dir, path),
 				},
 				ctx,
 				signal,

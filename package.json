@@ -101,7 +101,7 @@
     "lint": "biome lint components optional-extensions extensions tests scripts",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
-    "build:web": "vite build --config components/browser-pages/web/vite.config.ts --mode code-review && vite build --config components/browser-pages/web/vite.config.ts --mode markdown-review && cp node_modules/mermaid/dist/mermaid.min.js components/browser-pages/dist/",
+    "build:web": "vite build --config components/browser-pages/web/vite.config.ts --mode code-review && vite build --config components/browser-pages/web/vite.config.ts --mode markdown-review && vite build --config components/browser-pages/web/vite.config.ts --mode ledger-review && cp node_modules/mermaid/dist/mermaid.min.js components/browser-pages/dist/",
     "test": "npm run test:unit && npm run test:pair && npm run test:loader",
     "test:unit": "vitest run",
     "test:pair": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/pair-programmer/tests/pair.test.mjs",

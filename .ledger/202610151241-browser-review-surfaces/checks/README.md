@@ -12,3 +12,5 @@ rm components/browser-pages/tests/demo.local.test.ts   # it waits for a submissi
 `/tmp/bp/result.txt` holds the text the agent receives; `/tmp/bp/saved.html` is the saved page.
 
 The Markdown review has the same pair: `demo-markdown.test.ts` (a retry spec with Mermaid, alerts, a table, hostile HTML and links, and long appendices) and `drive-markdown.py` (every annotation kind, ask, rewrite, `J`/`K`, dark theme, submit, saved page, `?`). Use `/tmp/bpm` in place of `/tmp/bp`.
+
+The ledger task review has `demo-ledger.test.ts` (serves the real closed `branch-search-challenger-benchmark` bundle, with evidence files on demand) and `drive-ledger.py` (graph, ticket, annotation, ask, evidence, navigation, finish, saved page). Use `/tmp/bpl`.

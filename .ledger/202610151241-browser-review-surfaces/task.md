@@ -54,20 +54,18 @@ Reference: [Plannotator](https://github.com/backnotprop/plannotator). It already
 
 ## Current State
 
-In progress. Slice 1 (`2d76315`) and slice 2, ask the agent (`f803990`), are committed; `4b3fcf6` shares the anchor format and adds the 🥧 logo. `review_markdown` is built (slice 3).
+In progress. Built and committed: `review_code` (slices 1–2), `review_markdown` (slice 3), and `review_ledger_task` (slice 4). Next is design pass 3, `explain_change`.
 
-- Design: code review [round 2](prototypes/code-review-v2/README.md) and Markdown review [round 2](prototypes/markdown-review-v2/README.md) approved. Stack: [frontend-stack.md](frontend-stack.md), approved.
-- Code: `components/browser-pages/` (`src/` servers, tools, and ask fork; `web/` one React app per kind; committed `dist/<kind>.html`), `extensions/browser-pages.ts`. Contract: `docs/browser-pages.md`.
-- Slice 3: `review_markdown` splits the file into top-level blocks with source lines (`marked` lexer, Shiki for fences); the page renders each block (raw HTML as text, unsafe URLs dropped, Mermaid strict), takes selection annotations (comment, 👍/❓, delete, suggest, ask), whole-block comments, block rewrites, an overall comment, and a verdict; `J`/`K` sections, `?` keys. Overlapping highlights nest and open together. Rewritten blocks take no text marks. The server checks span shape only: rendered text can be longer than the source (marked's newlines), so a raw-length bound rejected real selections.
-- Checks: browser-pages tests, including hostile Markdown, DOM selection and marks under happy-dom, result validation and model text, and the tool end to end; manual drive in Chrome ([checks](checks/README.md)): hostile input inert, every annotation kind, ask answer, rewrite diff, J/K, dark Mermaid, submission, saved page.
-- Not yet checked: asking with a real model in a live session; very large documents for performance.
-- Page weight: Mermaid (3.6 MB, committed as `dist/mermaid.min.js`) is inlined only into Markdown pages whose document has a diagram; otherwise the page is about 340 KB.
+- Design: code review [round 2](prototypes/code-review-v2/README.md), Markdown review [round 2](prototypes/markdown-review-v2/README.md), and ledger task review [round 1](prototypes/ledger-task-review/README.md) are approved. Stack: [frontend-stack.md](frontend-stack.md).
+- Code: `components/browser-pages/`: `src/` servers, tools, ask fork, and `tickets.ts` (ticket parsing and graph checks, shared with the page); `web/` one React app per kind, with one document reader in `web/markdown/` that the Markdown and ledger pages share; committed `dist/<kind>.html` and `dist/mermaid.min.js`. Contract: `docs/browser-pages.md`.
+- Slice 4: `review_ledger_task` reads a bundle by id or path (live or history): documents in reading order, tickets from `Blocked by:` (known ids anywhere, unknown ids only where they read as references; a self-reference is a cycle; a missing blocker blocks), evidence files listed and served on demand through `GET /file` from the bundle's own list, kept in the saved page once opened. Results carry `file`, and the model gets repository paths with lines and the documents not opened.
+- Checks: browser-pages tests (67), including tickets, ledger build, evidence serving, result validation, model text, and the tool end to end; manual drive in Chrome on a real closed bundle ([checks](checks/README.md)): graph, hover, ticket strip, annotation, ask, evidence highlight, `[`/`]`, grouped panel, finish with unopened list, saved page with evidence.
+- Not yet checked: asking with a real model in a live session; very large documents or bundles; a graph with more than about 15 tickets (it scrolls sideways).
 
 Next:
 
-1. Operator tries `review_markdown` on a real document (first look at `docs/browser-pages.md`: closed without a verdict).
-2. Build `review_ledger_task` from the approved [round 1 prototype](prototypes/ledger-task-review/README.md) (bundle tree, overview with ticket graph and graph checks, ticket neighbourhood, evidence files on demand, the Markdown reader for every document).
-3. Design pass 3: `explain_change`.
+1. Operator tries `review_markdown` and `review_ledger_task` on real work.
+2. Design pass 3: `explain_change` (background, intuition, literate walkthrough with real code, figures, quiz; no feedback), then its operator verdict and build.
 
 ## Outcome
 

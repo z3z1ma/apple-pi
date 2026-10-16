@@ -48,22 +48,20 @@ marked.use({
 const ALERT = /^\s*>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*\n?/i;
 const COLOR = /^#[0-9a-f]{3,8}$/i;
 
+/** HTML for one highlighted line: its text escaped, and only colour tokens let into the style. */
+export function lineHtml(line: Segment[]): string {
+	return line
+		.map((seg) => {
+			const style = [seg.c && COLOR.test(seg.c) ? `--c:${seg.c}` : "", seg.d && COLOR.test(seg.d) ? `--d:${seg.d}` : ""]
+				.filter(Boolean)
+				.join(";");
+			return style ? `<span class="tk" style="${style}">${escapeHtml(seg.t)}</span>` : escapeHtml(seg.t);
+		})
+		.join("");
+}
+
 function codeHtml(lang: string, lines: Segment[][]): string {
-	const body = lines
-		.map((line) =>
-			line
-				.map((seg) => {
-					const style = [
-						seg.c && COLOR.test(seg.c) ? `--c:${seg.c}` : "",
-						seg.d && COLOR.test(seg.d) ? `--d:${seg.d}` : "",
-					]
-						.filter(Boolean)
-						.join(";");
-					return style ? `<span class="tk" style="${style}">${escapeHtml(seg.t)}</span>` : escapeHtml(seg.t);
-				})
-				.join(""),
-		)
-		.join("\n");
+	const body = lines.map(lineHtml).join("\n");
 	return `<pre class="code">${lang ? `<span class="lang">${escapeHtml(lang)}</span>` : ""}<code>${body}</code></pre>`;
 }
 
