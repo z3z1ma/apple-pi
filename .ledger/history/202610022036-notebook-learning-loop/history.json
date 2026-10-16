@@ -5,13 +5,5 @@
       "linkedAt": "2026-10-13T15:17:14.004Z",
       "via": "edit"
     }
-  ],
-  "commits": [
-    {
-      "event": "done",
-      "at": "2026-10-13T15:17:23.788Z",
-      "repository": ".",
-      "commit": "2c087d29dd64682e861b6cce8de46923b89c6f65"
-    }
   ]
 }

@@ -5,19 +5,5 @@
       "linkedAt": "2026-10-16T15:04:04.833Z",
       "via": "ledger_add"
     }
-  ],
-  "commits": [
-    {
-      "event": "in-progress",
-      "at": "2026-10-16T15:17:06.337Z",
-      "repository": ".",
-      "commit": "ec1fb1baf367b45a6db0e4d13ca2f956777a7141"
-    },
-    {
-      "event": "done",
-      "at": "2026-10-16T15:26:12.578Z",
-      "repository": ".",
-      "commit": "20123ba1dd92181da3eea421678083ab97de1676"
-    }
   ]
 }

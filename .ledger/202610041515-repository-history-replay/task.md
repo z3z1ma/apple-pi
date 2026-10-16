@@ -34,7 +34,7 @@ Re-simulation design for AGENTS.md and skills (level 2 in `notes.md` section 5: 
 
 ## Current State
 
-Shelved by the operator (2026-10-04): the replay plumbing was half-baked. The harness is removed; session links in `history.json` stay for the tmux sidebar; commit recording goes once the other lane's ledger edits land. Everything needed to resume is in `notes.md` (sections 11 and 12 first) and `spec.md`.
+Shelved by the operator (2026-10-04): the replay plumbing was half-baked. The harness and the commit recording are removed; session links in `history.json` stay for the tmux sidebar. Everything needed to resume is in `notes.md` (sections 11 and 12 first) and `spec.md`.
 
 ## Outcome
 

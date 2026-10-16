@@ -107,8 +107,9 @@ The operator proposed that work be attributable to exactly one ledger task, so h
 The operator judged the replay plumbing half-baked and shelved the task. What changed:
 
 - **Removed:** the `components/history-eval/` harness, its launcher `scripts/eval-run.mjs`, `vitest.eval.config.ts`, the `eval:history` script, `docs/history-eval.md`, and the README sections (commit `bce75c1`). The removed code is in git history at `bce75c1^`: task extraction from cited commits, base-only clones, isolated real SDK sessions with cancellation, oracle scoring, and a cost report. Earlier branch-search evaluation code is at tag `branch-search-v1`.
-- **Kept:** `history.json` session links in every ledger bundle, because the tmux sidebar titles agent cards from them (another lane's feature).
-- **To remove once the other lane's uncommitted ledger edits land:** the start and close commit recording in `history.json`, which only replay used.
+- **Kept:** `history.json` session links in every ledger bundle, because the tmux sidebar titles agent cards from them.
+- **Also removed:** the start and close commit recording in `history.json`, and the commit entries already written in every bundle; `history.json` now holds session links only. Recover the recording from git history before that removal.
+- **Stashed, not committed:** follow-up fixes to the capture code made after its last commit (per-call baselines for bash and pi_exec change detection, a stricter filter for the atomic-write temporary files, `history.json` created at `ledger_add`). They are `git stash` entry "history.json capture fixes ... shelved with history replay"; the first two still apply to session linking and are worth recovering.
 - **Kept here:** this file and `spec.md` (the REM design: Replay, Evaluate, Mutate, run as `/rem`).
 
 To pick this up again: read `task.md`, this file (sections 3-6, 10, 11), and `spec.md`; settle section 11 first, because REM's worlds depend on clean attribution.

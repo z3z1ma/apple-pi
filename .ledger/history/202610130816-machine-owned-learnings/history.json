@@ -5,13 +5,5 @@
       "linkedAt": "2026-10-13T15:16:12.995Z",
       "via": "ledger_add"
     }
-  ],
-  "commits": [
-    {
-      "event": "done",
-      "at": "2026-10-13T15:47:45.067Z",
-      "repository": ".",
-      "commit": "071706176186000679df9f31bd11adfa9cc25f91"
-    }
   ]
 }
