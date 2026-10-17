@@ -8,6 +8,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +45,11 @@ function send(sessionId: string, message: { id: string; from: string; body: stri
 		join(mailboxDir, `${sessionId}.jsonl`),
 		`${JSON.stringify({ ...message, ts: "2026-10-16T12:00:00.000Z" })}\n`,
 	);
+}
+
+function toolResultText(run: Awaited<ReturnType<typeof open>>): string {
+	const result = run.session.messages.find((message) => message.role === "toolResult");
+	return (result?.content ?? []).map((part) => ("text" in part ? part.text : "")).join("");
 }
 
 async function open(
@@ -321,6 +327,29 @@ describe("session mailbox", () => {
 		expect(lines.map((line) => JSON.parse(line))).toEqual([
 			{ id: expect.any(String), from: "alpha", ts: expect.any(String), body: "Done." },
 		]);
+		expect(toolResultText(run)).toContain("No running Pi session in tmux has this id");
+	});
+
+	it("says nothing more when a running Pi session in tmux has the receiver's id", async () => {
+		const stateDir = process.env.PI_TMUX_STATE_DIR as string;
+		mkdirSync(stateDir, { recursive: true });
+		const record = join(stateDir, "gamma.json");
+		writeFileSync(record, JSON.stringify({ sessionId: "gamma", pid: process.pid }));
+		cleanup.push(async () => rmSync(record, { force: true }));
+		const run = await open(
+			SessionManager.inMemory(root, { id: "alpha" }),
+			[
+				fauxAssistantMessage(fauxToolCall("mailbox_send", { session_id: "gamma", message: "Done." }, { id: "c1" }), {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage("sent"),
+			],
+			{ tools: ["mailbox_send"] },
+		);
+
+		await run.session.prompt("tell gamma");
+
+		expect(toolResultText(run)).toMatch(/^Sent \S+ to gamma\.$/);
 	});
 
 	it("rejects a session id that is not a valid Pi session id", async () => {

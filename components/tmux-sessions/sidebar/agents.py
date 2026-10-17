@@ -62,6 +62,7 @@ class Agent:
     session_name: str
     pane_id: str
     updated_at: int
+    reports_to: str = ""
     tmux_session: str = ""
     tmux_socket: str = ""
     window_index: str = ""
@@ -290,6 +291,7 @@ def live() -> list[Agent]:
             session_name=str(record.get("sessionName") or ""),
             pane_id=pane_id,
             updated_at=int(record.get("updatedAt") or 0),
+            reports_to=str(record.get("reportsTo") or ""),
         )
         agent.tmux_session, agent.window_index, agent.pane_index, seen_at = pane
         agent.tmux_socket = socket
@@ -348,6 +350,23 @@ def feed() -> None:
         time.sleep(1)
 
 
+def listing(agents: list[Agent]) -> list[dict]:
+    """The live agents for a supervising agent such as an Orchard: what runs, what it is doing, and whom it reports to."""
+    return [
+        {
+            "id": agent.session_id,
+            "name": agent.session_name,
+            "status": agent.status,
+            "cwd": agent.cwd,
+            "reportsTo": agent.reports_to,
+            "paneId": agent.pane_id,
+            "tmuxSession": agent.tmux_session,
+            "updatedAt": agent.updated_at,
+        }
+        for agent in agents
+    ]
+
+
 def summary(agents: list[Agent]) -> str:
     """A tmux status-line segment counting agents by state, or nothing when there are none."""
     if not agents:
@@ -374,3 +393,5 @@ if __name__ == "__main__":
         print(found.pane_id if found else "")
     elif sys.argv[1:2] == ["feed"]:
         feed()
+    elif sys.argv[1:2] == ["list"]:
+        print(json.dumps(listing(live()), indent=2))

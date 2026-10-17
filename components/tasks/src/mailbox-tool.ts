@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { isPublished } from "../../tmux-sessions/src/state.js";
 import { appendMailboxMessage } from "./mailbox.js";
 import { type MailboxMessage, type MailboxSendParameters, mailboxSendParameters } from "./types.js";
 
@@ -20,8 +21,12 @@ export function createMailboxSendTool() {
 		parameters: mailboxSendParameters,
 		async execute(_toolCallId, params: MailboxSendParameters, _signal, _onUpdate, ctx) {
 			const message = appendMailboxMessage(params.session_id, ctx.sessionManager.getSessionId(), params.message);
+			const sent = `Sent ${message.id} to ${params.session_id}.`;
+			const text = (await isPublished(params.session_id))
+				? sent
+				: `${sent} No running Pi session in tmux has this id, so the message waits in its mailbox until the session opens.`;
 			return {
-				content: [{ type: "text", text: `Sent ${message.id} to ${params.session_id}.` }],
+				content: [{ type: "text", text }],
 				details: message,
 			};
 		},

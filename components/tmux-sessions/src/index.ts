@@ -13,6 +13,10 @@
  * - `agent_settled`                   -> idle (settled, the user's turn)
  * - `session_shutdown`                -> record removed
  *
+ * A session started with `--reports-to <id>` publishes that id in its record
+ * and mails it when the session closes, so a supervising session (an Orchard)
+ * learns that its worker stopped.
+ *
  * `agent_settled` fires on interrupt and error too, so the busy -> idle
  * transition is driven by settle unconditionally rather than by a successful
  * turn. On settle the extension also rings the pane's own bell (opt-out via
@@ -32,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
+import { appendMailboxMessage } from "../../tasks/src/mailbox.js";
 import {
 	type AgentStateRecord,
 	type AgentStatus,
@@ -107,7 +112,25 @@ async function ensurePlugin(pi: ExtensionAPI, tmuxBin: string): Promise<void> {
 	await pi.exec(tmuxBin, ["set-option", "-g", "@pi_sessions_plugin", stamp], { timeout: 2_000 });
 }
 
+/** Mail the supervisor that its worker closed. Shutdown must go on, so a failed send is dropped. */
+function reportClose(record: AgentStateRecord, reason: string): void {
+	const name = record.sessionName ? ` "${record.sessionName}"` : "";
+	try {
+		appendMailboxMessage(
+			record.reportsTo,
+			record.sessionId,
+			`Session${name} closed (${reason}) while ${record.status}. Directory: ${record.cwd}`,
+		);
+	} catch {
+		// An invalid --reports-to id has no mailbox to write to.
+	}
+}
+
 export default function piTmuxSessions(pi: ExtensionAPI): void {
+	pi.registerFlag("reports-to", {
+		type: "string",
+		description: "Session id to mail when this session closes; published in its tmux state record",
+	});
 	// Subagents and pi_exec workers are not user-facing jump targets.
 	if (inChildSessionContext() || isDisabled()) return;
 
@@ -173,6 +196,7 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			paneTty: pane.paneTty,
 			// $TMUX is "socket,server-pid,session".
 			tmuxSocket: (process.env.TMUX ?? "").split(",")[0] ?? "",
+			reportsTo: String(pi.getFlag("reports-to") ?? ""),
 			startedAt: ts,
 			updatedAt: ts,
 		};
@@ -230,13 +254,16 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 		schedule(ringPaneBell);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", (event) => {
+		if (record?.reportsTo && event.reason !== "reload") reportClose(record, event.reason);
 		schedule(async () => {
 			if (!record) return;
 			await removeState(record.sessionId);
 			record = undefined;
 			await refreshStatus();
 		});
+		// Pi awaits this before a SIGHUP exit; without it a killed window left its record behind.
+		return queue;
 	});
 
 	pi.registerCommand("pi-sessions", {

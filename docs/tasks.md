@@ -146,7 +146,7 @@ When Pi itself starts, waiting mail rides the first run instead of starting one,
 
 If you press Escape while a message is queued, Pi discards the queue; the message is delivered again after your next completed run, not immediately, so the cancelled work does not restart.
 
-Delivery is at least once. A crash after a message is queued but before Pi records it delivers that message again on the next open; the `id` identifies the repeat. A message recorded on a branch that `/tree` left is not delivered again. Messages to a session that is not running wait in its mailbox; nothing expires or removes them.
+Delivery is at least once. A crash after a message is queued but before Pi records it delivers that message again on the next open; the `id` identifies the repeat. A message recorded on a branch that `/tree` left is not delivered again. Messages to a session that is not running wait in its mailbox; nothing expires or removes them. When no running Pi session in tmux publishes the receiver's id (see [tmux sessions](tmux-sessions.md#the-state-contract)), `mailbox_send` says so in its result, so the sender knows the message waits; a receiver outside tmux gets the same note.
 
 ## Message formats
 

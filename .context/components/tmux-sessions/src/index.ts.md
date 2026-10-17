@@ -19,3 +19,9 @@ Verify: components/tmux-sessions/tests/tmux-sessions.test.ts
 
 Every record write and removal runs `sidebar.sh status` in the background, so the tmux status-line summary follows status changes without polling.
 Coupled: components/tmux-sessions/scripts/sidebar.sh
+
+The `reports-to` flag is registered before the child-session and `PI_TMUX_DISABLED` returns.
+Why: Pi exits with "Unknown option" on a flag no extension registered, so a worker started with `--reports-to` under `PI_TMUX_DISABLED=1` would not start.
+
+The close notice text is what the Orchard skill tells the Orchard to expect; change both together.
+Coupled: skills/orchard/SKILL.md, docs/tmux-sessions.md

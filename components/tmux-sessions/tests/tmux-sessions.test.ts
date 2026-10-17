@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
@@ -28,6 +28,7 @@ function makeRecord(sessionId: string, overrides: Record<string, unknown> = {}) 
 		windowId: "@3",
 		paneTty: "/dev/ttys009",
 		tmuxSocket: "/private/tmp/tmux-501/default",
+		reportsTo: "",
 		startedAt: ts,
 		updatedAt: ts,
 		...overrides,
@@ -101,6 +102,8 @@ test("uses generic UI prompt lifecycle events for waiting status", async () => {
 			handlers.set(name, handler);
 		},
 		registerCommand() {},
+		registerFlag() {},
+		getFlag: () => undefined,
 		getSessionName() {
 			return "prompt lifecycle";
 		},
@@ -159,6 +162,8 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 		const pi = {
 			on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
 			registerCommand() {},
+			registerFlag() {},
+			getFlag: () => undefined,
 			getSessionName: () => "",
 			async exec(_command: string, args: string[]) {
 				if (args[0] === "-c") return { code: 0, stdout: "tmux\n", stderr: "" };
@@ -211,6 +216,8 @@ async function startPiOn(
 	const pi = {
 		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
 		registerCommand() {},
+		registerFlag() {},
+		getFlag: () => undefined,
 		getSessionName: () => "",
 		async exec(command: string, args: string[]) {
 			if (command.endsWith("notch.sh")) return notch(command, args);
@@ -283,6 +290,8 @@ test("a session rename updates the record's name without counting as a status ch
 	const pi = {
 		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
 		registerCommand() {},
+		registerFlag() {},
+		getFlag: () => undefined,
 		getSessionName: () => "",
 		async exec(_command: string, args: string[]) {
 			if (args[0] === "display-message") return { code: 0, stdout: "%79\t@5\t/dev/null\n", stderr: "" };
@@ -303,6 +312,62 @@ test("a session rename updates the record's name without counting as a status ch
 
 	expect((await find())?.sessionName).toBe("Auto title");
 	expect((await find())?.updatedAt).toBe(before?.updatedAt);
+
+	if (previousPane === undefined) delete process.env.TMUX_PANE;
+	else process.env.TMUX_PANE = previousPane;
+});
+
+test("a session started with --reports-to publishes its supervisor, mails it when it closes, not on reload, and removes its record before shutdown resolves", async () => {
+	const previousPane = process.env.TMUX_PANE;
+	process.env.TMUX_PANE = "%81";
+	const mailbox = join(process.env.PI_MAILBOX_DIR as string, "orchard-test.jsonl");
+	rmSync(mailbox, { force: true });
+	const handlers = new Map<string, (...args: unknown[]) => unknown>();
+	const flags = new Map<string, unknown>();
+	const pi = {
+		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
+		registerCommand() {},
+		registerFlag(name: string) {
+			flags.set(name, "orchard-test");
+		},
+		getFlag: (name: string) => flags.get(name),
+		getSessionName: () => "Worker",
+		async exec(_command: string, args: string[]) {
+			if (args[0] === "display-message") return { code: 0, stdout: "%81\t@6\t/dev/null\n", stderr: "" };
+			return { code: 0, stdout: "", stderr: "" };
+		},
+	};
+	registerTmuxSessions(pi as never);
+	handlers.get("session_start")?.(
+		{ reason: "startup" },
+		{ mode: "tui", cwd: "/tmp/worker", isIdle: () => true, sessionManager: { getSessionId: () => "session-worker" } },
+	);
+	const find = async () => (await readAllStates()).find((record) => record.sessionId === "session-worker");
+	await flushUntil(async () => Boolean(await find()));
+	expect((await find())?.reportsTo).toBe("orchard-test");
+
+	handlers.get("session_shutdown")?.({ reason: "reload" });
+	expect(existsSync(mailbox)).toBe(false);
+
+	handlers.get("session_start")?.(
+		{ reason: "reload" },
+		{ mode: "tui", cwd: "/tmp/worker", isIdle: () => true, sessionManager: { getSessionId: () => "session-worker" } },
+	);
+	await flushUntil(async () => Boolean(await find()));
+	handlers.get("agent_start")?.({ type: "agent_start" });
+	await flushUntil(async () => (await find())?.status === "busy");
+	// Pi awaits the handler before a SIGHUP exit, so the record must be gone when it resolves.
+	await handlers.get("session_shutdown")?.({ reason: "quit" });
+	expect(existsSync(join(stateDir, "session-worker.json"))).toBe(false);
+
+	const [message] = readFileSync(mailbox, "utf8")
+		.trim()
+		.split("\n")
+		.map((line) => JSON.parse(line));
+	expect(message).toMatchObject({
+		from: "session-worker",
+		body: 'Session "Worker" closed (quit) while busy. Directory: /tmp/worker',
+	});
 
 	if (previousPane === undefined) delete process.env.TMUX_PANE;
 	else process.env.TMUX_PANE = previousPane;

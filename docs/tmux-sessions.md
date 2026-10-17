@@ -25,6 +25,7 @@ Each root Pi session running inside tmux writes one JSON record to `~/.pi/agent/
   "windowId": "@2",
   "paneTty": "/dev/ttys009",
   "tmuxSocket": "/private/tmp/tmux-501/default",
+  "reportsTo": "orchard-work",
   "startedAt": 1700000000,
   "updatedAt": 1700000000
 }
@@ -45,6 +46,22 @@ Status is derived from agent lifecycle events:
 ### Liveness
 
 The sidebar shows a record only when its pid is running **and** its `paneId` exists in this tmux server with the same `paneTty` (pane ids collide across tmux servers). It deletes records whose pid is gone, and records whose `tmuxSocket` names this server but whose pane is gone, which catches a Pi killed without its shutdown hook whose pid the OS has since reused. Records from another server, or written before records named their server, are skipped and left alone.
+
+### Supervised sessions
+
+A session that another session started and watches, such as an [Orchard](../skills/orchard/SKILL.md) worker, is started with `pi --reports-to <supervisor id>`. Its record carries that id as `reportsTo` (empty otherwise), and when it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) it appends one message to the supervisor's [mailbox](tasks.md#session-mailbox), from its own session id:
+
+```text
+Session "JEM review" closed (quit) while busy. Directory: /path/to/repo
+```
+
+Killing its window or the tmux server sends the notice too, because Pi runs its shutdown hooks on SIGHUP. A crash, SIGKILL or power loss sends none; the supervisor finds those by comparing what it started with the live list.
+
+`agents.py list` prints the live list as JSON, after the same liveness checks the sidebar uses: `id`, `name`, `status`, `cwd`, `reportsTo`, `paneId`, `tmuxSession` and `updatedAt` for each Pi session running in this tmux server. Run it inside tmux:
+
+```bash
+uv run -q --no-project python components/tmux-sessions/sidebar/agents.py list
+```
 
 ## Install
 

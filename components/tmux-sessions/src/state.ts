@@ -47,6 +47,8 @@ export interface AgentStateRecord {
 	paneTty: string;
 	/** Socket of the tmux server the pane belongs to, so a reader on that server may prune a record whose pane is gone. */
 	tmuxSocket: string;
+	/** Session id this session reports to (`--reports-to`), mailed when it closes; empty when unset. */
+	reportsTo: string;
 	/** Epoch seconds when the record was first written. */
 	startedAt: number;
 	/** Epoch seconds of the last status change; drives the picker age column. */
@@ -79,6 +81,17 @@ export async function writeState(record: AgentStateRecord): Promise<void> {
 /** Remove a session's record on clean shutdown. Missing file is not an error. */
 export async function removeState(sessionId: string): Promise<void> {
 	await rm(recordPath(sessionId), { force: true });
+}
+
+/** Whether a running Pi process publishes this session id. */
+export async function isPublished(sessionId: string): Promise<boolean> {
+	try {
+		const { pid } = JSON.parse(await readFile(recordPath(sessionId), "utf8"));
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /** Read and parse every published record, skipping unreadable/corrupt files. */

@@ -79,6 +79,7 @@ def record(state: Path, session_id: str, pane: str, status: str, updated_at: int
         "paneTty": extra.get("tty", f"/dev/tty{pane[1:]}"),
         "updatedAt": updated_at,
         "tmuxSocket": extra.get("socket", SOCKET),
+        "reportsTo": extra.get("reports_to", ""),
     }
     if data["tmuxSocket"] is None:
         del data["tmuxSocket"]
