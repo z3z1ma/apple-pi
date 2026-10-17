@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-16
 Updated: 2026-10-16
 
@@ -21,7 +21,7 @@ The model is the Codex "Dots" experience as the operator described it: one place
 
 ## Decisions
 
-- **Name and home:** Orchard, in `~/orchard` (renamed from the working name Shikamaru), private and outside this repository. Orchard always runs as `pi --session-id orchard` in its own tmux pane, so its mailbox address is `orchard`.
+- **Name and home:** Orchard (renamed from the working name Shikamaru). Any directory with a charter can be an Orchard home, started with any session id; `~/orchard` with `pi --session-id orchard` is the example used below. The session id is the Orchard's mailbox address, and mailboxes are shared across directories, so an operator who runs several Orchards (for example one for work, one personal) gives each its own id, such as `orchard-work` and `orchard-home`. The charter names the id. Homes stay private and outside this repository.
 - **Procedures in a packaged skill, judgment in a private charter.** apple-pi ships an `orchard` skill with the procedures (taking in dumps, keeping threads, starting and briefing workers, sweeping). `~/orchard/AGENTS.md` holds only the operator's own judgment (priorities, people, preferences, sweep sources and cadence) and tells Orchard to use the skill. Package updates reach Orchard through the skill.
 - **The disk is the memory.** The session can be thrown away; everything Orchard knows lives in files it re-reads.
 - **Orchard's own ledger is the thread index.** Every thread is a ledger task in `~/orchard/.ledger`; `.ledger/INDEX.md` is the index. Work that lives in a repo gets a pointer task there that names the repo ledger task the worker owns (a committed repo `.ledger`, or a private one listed in `.git/info/exclude`). Plain lines in `task.md`, such as a due date or a nag-after date, drive staleness; no new file format.
@@ -37,7 +37,7 @@ The model is the Codex "Dots" experience as the operator described it: one place
 ## Deliverables
 
 1. `skills/orchard/SKILL.md` in apple-pi: short, written with the `skill-authoring` skill.
-2. `~/orchard`, set up with the operator: `AGENTS.md` (the charter), the capability map, and an empty `.ledger`.
+2. ~~An Orchard home set up with the operator~~: moved out of this task by the operator; creating his Orchard homes is a separate concern.
 
 ## Acceptance criteria
 
@@ -50,7 +50,7 @@ The model is the Codex "Dots" experience as the operator described it: one place
 
 ## Current State
 
-Ready. The session mailbox is done. All design decisions are settled and the operator approved the plan. Next: implementation, skill first, then `~/orchard`.
+In progress. The `orchard` skill is written and packaged; two live acceptance runs are recorded in [evidence/acceptance-run.md](evidence/acceptance-run.md), and run 2 passed every criterion after two guidance fixes (keep a finished worker open until the operator replies; keep one sweep scheduled and check `task` each reply). The skill takes its session id from the charter, so several Orchards can run side by side. Limits of seam B, reported to the operator: no end-to-end run used the final `--no-mcp` harness, shell network access is blocked only by the test charter, and scratch runs share logs and caches under the real agent directory. Setting up the operator's Orchard homes is a separate concern.
 
 ## Outcome
 
