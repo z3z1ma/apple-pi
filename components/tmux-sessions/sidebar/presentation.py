@@ -74,7 +74,7 @@ def activity(agent: Agent) -> Content:
 
 
 def details(agent: Agent, now: float) -> Content:
-    """Everything known about one agent, untruncated: the hover tooltip and the dashboard's detail panel."""
+    """Everything known about one agent, untruncated, for the dashboard's detail panel."""
     act = agent.activity
     lines = [
         Content.from_markup("[b]$name[/b]", name=agent.name),

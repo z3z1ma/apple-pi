@@ -72,7 +72,7 @@ A large count shows how many agents need you, or "all clear". Below it, agents s
 | WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
 | QUIET | settled and seen | grey border |
 
-Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds. Hovering a card shows everything about the agent untruncated: name, ledger task, last tool call, model, context size, cost, location, and directory.
+Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
 
 The sidebar paints the terminal's default background, so it stays translucent on a translucent terminal, and uses the Catppuccin Mocha palette.
 

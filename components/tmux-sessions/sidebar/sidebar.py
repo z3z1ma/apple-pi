@@ -21,7 +21,6 @@ from presentation import (  # noqa: E402
     activity,
     ago,
     count_of,
-    details,
     glyph,
     show,
     state,
@@ -73,7 +72,6 @@ class Card(Widget):
             self.set_class(name == current, f"-{name}")
         self.set_class(selected, "-selected")
         self.set_class(flash, "-flash")
-        self.tooltip = details(agent, now)
         if self.is_mounted:
             self.paint(now, frame)
 
