@@ -1,9 +1,9 @@
-import { memo, type ReactNode, useState } from "react";
+import { type CSSProperties, memo, type ReactNode, useState } from "react";
 
 import type { EvidenceFile, LedgerReviewPage, MarkdownBlock, Segment, Ticket } from "../../src/page-data";
 import { graphProblems, type TicketState, ticketState } from "../../src/tickets";
-import { Icon, Kbd } from "../ui";
 import { lineHtml, renderBlock } from "../markdown/render";
+import { Icon, Kbd } from "../ui";
 import { chain, edges, layout, NODE } from "./graph";
 
 export const STATE_LABEL: Record<TicketState, string> = {
@@ -132,7 +132,8 @@ export function Tree({
 			<button
 				type="button"
 				key={path}
-				className={`t-row in${depth} s-${ticketState(ticket, page.tickets)} ${on ? "on" : ""}`}
+				className={`t-row s-${ticketState(ticket, page.tickets)} ${on ? "on" : ""}`}
+				style={{ "--depth": depth } as CSSProperties}
 				title={path}
 				onClick={() => open(path)}
 			>
@@ -150,7 +151,8 @@ export function Tree({
 			<button
 				type="button"
 				key={path}
-				className={`t-row in${depth} ${on ? "on" : ""}`}
+				className={`t-row ${on ? "on" : ""}`}
+				style={{ "--depth": depth } as CSSProperties}
 				title={path}
 				onClick={() => open(path)}
 			>
@@ -167,7 +169,8 @@ export function Tree({
 				<button
 					type="button"
 					key={`${path}#${h.id}`}
-					className={`t-sub d${h.heading?.depth} ${current === h.id ? "on" : ""}`}
+					className={`t-sub ${current === h.id ? "on" : ""}`}
+					style={{ "--depth": depth, "--h-depth": h.heading?.depth ?? 2 } as CSSProperties}
 					onClick={() => goTo(h.id)}
 				>
 					{h.heading?.text}
@@ -183,7 +186,8 @@ export function Tree({
 			<button
 				type="button"
 				key={f.path}
-				className={`t-row t-folder in${depth}`}
+				className="t-row t-folder"
+				style={{ "--depth": depth } as CSSProperties}
 				onClick={() => setClosed((c) => ({ ...c, [f.path]: !shut }))}
 			>
 				{Icon.chevron(shut)}
