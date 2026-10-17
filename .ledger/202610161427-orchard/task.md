@@ -50,8 +50,10 @@ The model is the Codex "Dots" experience as the operator described it: one place
 
 ## Current State
 
-In progress. The `orchard` skill is written and packaged; two live acceptance runs are recorded in [evidence/acceptance-run.md](evidence/acceptance-run.md), and run 2 passed every criterion after two guidance fixes (keep a finished worker open until the operator replies; keep one sweep scheduled and check `task` each reply). The skill takes its session id from the charter, so several Orchards can run side by side. Limits of seam B, reported to the operator: no end-to-end run used the final `--no-mcp` harness, shell network access is blocked only by the test charter, and scratch runs share logs and caches under the real agent directory. Setting up the operator's Orchard homes is a separate concern.
+Done. Approved by the operator for closing.
 
 ## Outcome
 
-Pending.
+Shipped the `orchard` skill (`skills/orchard/SKILL.md`, commit `52d8d69` plus a follow-up that drops the `AGENTS.md`-only wording) and its package-load entry. Two live acceptance runs are recorded in [evidence/acceptance-run.md](evidence/acceptance-run.md); run 2 passed every criterion after two guidance fixes. Known limits of that evidence: no end-to-end run used the final `--no-mcp` harness, shell network access was blocked only by the test charter, and scratch runs shared logs and caches under the real agent directory.
+
+The operator's first Orchard lives in `~/code_projects/work` (commit `e432199` there): `ORCHARD.md` is the charter and `./orchard` starts `pi --session-id orchard-work --append-system-prompt ORCHARD.md`. The charter is not an `AGENTS.md` because Pi applies `AGENTS.md` to every session below its directory, and that workspace's repositories and worktrees sit below it.
