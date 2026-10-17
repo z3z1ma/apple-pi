@@ -5,11 +5,18 @@ description: "Open a document in the browser for annotation and sign-off. Use wh
 
 # Present a Document for Review
 
-Use `review_markdown` when the next useful step is the user's judgment on a Markdown document. Open the rendered document at that handoff so they can select and annotate the exact passages.
+`review_markdown` renders a document so the user can annotate the exact passages. The page shows the document; you set up the review. A review the user does not know how to approach yields vague feedback; a review framed around one judgment yields a decision.
 
-- Finish the draft enough to make the requested judgment possible. Use `note` for the decision or feedback you need, when it helps.
-- Pass the file's `path`, either absolute or relative to `cwd`. Set `cwd` to select a different project; it defaults to the session directory. Call the tool from the root session.
-- For approval of a whole ledger undertaking, use `review_ledger_task` so the user sees the bundle and dependencies together.
-- Wait for the verdict. Apply the annotations and suggested rewrites yourself, and resolve material questions before continuing work that depends on approval.
+**Goal:** the user knows what judgment you need, can give it from the document alone, and their feedback reaches the file.
 
-Success means the user reviews the actual document and their feedback reaches the file. The page returns annotations; it leaves the source unchanged.
+## Frame the review
+
+- **Know the judgment you need** before you open the page. Sign-off means the document is complete enough to sign. A decision means the document states the options and their consequences. Feedback on a draft means you say which parts are settled and which are open.
+- **Open at the right scope.** One document, one judgment. If the real question spans a ledger undertaking, use `review_ledger_task` so the user sees the bundle and its dependencies together.
+- **Orient in the conversation first.** One or two sentences: what the document is, what changed since they last saw it, and what you need from them. Then open the page.
+- **Use `note` for the ask**, in one sentence, when it sharpens what to read for: "Decide between the two storage options in section 3." A note that repeats the title is noise.
+- **Honest confidence.** Say what is settled, what is proposed, and what is a guess, so the user spends attention where it matters.
+
+## After the verdict
+
+Apply the annotations and rewrites yourself; they are feedback, not edits already made. Resolve a material question before work that depends on approval continues. Report what you changed and anything you left as it was, with the reason.

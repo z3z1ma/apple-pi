@@ -5,12 +5,34 @@ description: "Explain a code change through a browser walkthrough with real code
 
 # Explain a Change
 
-Use `explain_change` when the handoff calls for understanding: what changed, why it changed, and how the pieces work together. Open the explanation as part of the answer, alongside a short summary in the conversation. For an approval verdict, use `review_code` instead.
+`explain_change` turns your understanding into a page the user can learn from. The tool supplies the real code and the quiz machinery; the explanation is only as good as the model you built first. A page that restates the diff in prose is harder to read than the diff.
 
-- Ground the explanation in the originating intent, surrounding code, and tests. Choose the few ideas the user needs to retain.
-- Teach the idea with a concrete example before walking through real code. Use the quiz to check those ideas, and organize the walkthrough around how the change works.
-- Cite repository-root paths with empty `code path:FROM-TO` fences. The tool supplies the code; its guidance defines line and revision semantics.
-- Call from the root session. Set `cwd` for the target repository or worktree; use `base` and `head` for historical changes. Present a different checkout directly by selecting its directory.
-- Share the returned page address and saved artifact. The tool returns immediately; use subsequent reader feedback to close gaps before building on the change.
+**Goal:** the user can reason about the change and continue from it without you. The tool's guidance owns the mechanics (sections, `code` fences, quiz shape, `cwd`, `base`, `head`); this skill owns the quality of what goes in them.
 
-Success means the user can reason about the change and continue from it. If the page cannot open, explain the change in your reply and state the concrete obstacle while still delivering a useful answer.
+## Build the model
+
+Read until you can answer, from memory:
+
+- **Mechanism**: how it works now. Trace the data path from where the change starts to where its effect is observed.
+- **Motive**: why it exists. The task, the discussion, the bug, the constraint it serves.
+- **Invariant**: what must stay true, and which line keeps it true.
+- **Failure mode**: what breaks if the change is wrong, and how the reader would notice.
+- **Trade-off**: what was given up, and which alternative was rejected and why.
+
+Done means you can say what the change does, why, and what would break if it were wrong, in one plain sentence. Until you can, keep reading.
+
+Then plan backward: choose the two or three ideas the reader must leave with. Write the quiz against those ideas first; a question a skimmer passes tests nothing. Then write the explanation that teaches them.
+
+## Write to teach
+
+Explain the way Feynman and Kleppmann do.
+
+- **Concrete before abstract.** Intuition is one worked example with toy data, told before any code. State the general rule only after the example has made it obvious. Draw the flow if a picture helps; give a figure if playing with the idea teaches faster than reading.
+- **Follow the data, not the file list.** Each walkthrough step is one idea with the few lines that carry it. Cite the lines the reader must see; summarize the rest.
+- **Name the guarantee and where it stops.** "Writes are ordered per key, not across keys." A guarantee with its boundary is worth ten adjectives.
+- **One true sentence per concept.** The sentence the reader will repeat to a colleague. The summary is that sentence, expanded to a paragraph.
+- **Plain technical English.** Short sentences. One idea each. Active voice. One word per meaning; define a term the first time only.
+- **Orient first.** Background says what was there before, in terms the reader already has; deep context for a newcomer goes in the primer.
+- **Honest confidence.** Say what was verified and what was not. Mark a guess as a guess.
+
+Open the page as part of the answer and give a short summary in the conversation. Use the reader's quiz misses and questions, when they arrive, to close the gap before work builds on the change.

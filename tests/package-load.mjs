@@ -440,6 +440,11 @@ try {
 	for (const skill of packagedSkills) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
 	}
+	// Browser skills are self-contained: no links into another skill's directory.
+	for (const skill of browserSkills) {
+		const links = [...readFileSync(`skills/${skill}/SKILL.md`, "utf8").matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]);
+		for (const link of links) assert(!link.startsWith("../"), `${skill} links outside its directory: ${link}`);
+	}
 	const askUserTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "ask_user_question");
