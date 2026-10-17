@@ -50,7 +50,7 @@ The model is the Codex "Dots" experience as the operator described it: one place
 
 ## Current State
 
-Planning. The session mailbox is done. All design decisions are settled and the operator approved the plan. Next: implementation, skill first, then `~/orchard`.
+Ready. The session mailbox is done. All design decisions are settled and the operator approved the plan. Next: implementation, skill first, then `~/orchard`.
 
 ## Outcome
 
