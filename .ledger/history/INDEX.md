@@ -129,3 +129,5 @@
 - `.ledger/history/202610160838-notch-agent-room/task.md` — done — Notch agent room: a Mac notch UI that shows pi agents as a cozy pixel room — Clean-room take on Agent Shrine for pi/tmux: a thin Swift notch shell hosting a web renderer (reusable later in a local web app and Tauri/Electron), fed by the tmux-sessions agent store. Starts with a throwaway prototype.
 
 - `.ledger/history/202610161427-session-mailbox/task.md` — done — Session mailbox: durable per-session inbox that steers the agent — Every root Pi session gets a durable mailbox keyed by its session id; anything (agents, scripts, headless runs) appends messages, and the session receives them as steers with at-least-once delivery recorded in the session itself.
+
+- `.ledger/history/202610161427-orchard/task.md` — done — Orchard: chief-of-staff Pi session that tracks every thread and runs worker sessions — One long-lived Pi session in ~/orchard takes in everything, keeps a durable index of projects, commitments and threads across repos, starts and watches top-level worker Pi sessions in tmux, and reports and nudges through the session mailbox.
