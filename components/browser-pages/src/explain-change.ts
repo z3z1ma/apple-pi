@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { type Static, Type } from "typebox";
 
@@ -14,6 +14,12 @@ export const EXPLAIN_CHANGE_TOOL_NAME = "explain_change";
 const markdown = (description: string) => Type.String({ description });
 
 export const ExplainChangeParamsSchema = Type.Object({
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+		}),
+	),
 	title: Type.String({ description: "What the change does, as a headline" }),
 	base: Type.Optional(
 		Type.String({ description: "Git ref to compare with. Default HEAD: without `head`, the uncommitted changes" }),
@@ -153,7 +159,7 @@ export async function buildExplainPage(
 			throw new Error(`Quiz question ${i + 1}: \`answer\` ${q.answer} is not one of its ${q.options.length} options.`);
 	const base = params.base?.trim() || "HEAD";
 	const until = params.head?.trim() || undefined;
-	const diff = await readRepoDiff(cwd, base, until);
+	const diff = await readRepoDiff(resolve(cwd, params.cwd ?? "."), base, until);
 	const head = until ? await commitOf(diff.root, until) : undefined;
 	if (until && !head) throw new Error(`\`${until}\` names no commit.`);
 	const single = head && (await commitOf(diff.root, `${until}^`))?.hash === diff.baseCommit;

@@ -32,6 +32,12 @@ const RefSchema = Type.Object({
 });
 
 export const ReviewCodeParamsSchema = Type.Object({
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+		}),
+	),
 	title: Type.String({ description: "What the change does, as a short headline" }),
 	intent: Type.String({
 		description: "Why the change exists and what it achieves, in two to four sentences (Markdown)",
@@ -355,6 +361,7 @@ export async function buildCodeReviewPage(
 	cwd: string,
 	token: string,
 ): Promise<{ page: CodeReviewPage; root: string }> {
+	cwd = resolve(cwd, params.cwd ?? ".");
 	const diff = await readRepoDiff(cwd, params.base ?? "HEAD");
 	const generated = await generatedPaths(
 		diff.root,

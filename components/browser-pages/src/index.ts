@@ -90,7 +90,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			signal,
 			ask: async (body, stop) => {
 				const asked = run.question(body);
-				return asked && askAgent(ctx, asked.passage, asked.question, stop);
+				return asked && askAgent(ctx, asked.passage, asked.question, stop, run.root);
 			},
 			file: run.file,
 			health: () => ({ ask: !!liveSession(ctx) }),
@@ -120,6 +120,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		promptSnippet: "Open a structured code review of your change in the user's browser and get line-anchored feedback",
 		promptGuidelines: [
 			"Use review_code when the user asks to review your work or when a finished change deserves their review before you continue. It blocks until they submit, so call it at a natural stopping point.",
+			"Pass `cwd` to review another repository or worktree directly from this root session. It may be absolute or relative to the session directory. File references are relative to the target repository root; browser tools run in the root session only.",
 			"Tell the change as a story: core chapters first, consequences next, tests and docs last. Give every change a one-sentence summary and set attention to where a mistake would hurt.",
 			"When one change repeats across many places, list them under one change with `places`; the page shows one example and flags any place that is more than a rename.",
 			"Use notes for what the code cannot show. Add decisions only for real judgment calls the user may want to override.",
@@ -160,6 +161,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		promptSnippet: "Open a Markdown document in the user's browser for passage-level review and sign-off",
 		promptGuidelines: [
 			"Use review_markdown when a document you wrote or revised, such as a spec, plan, or README, needs the user's sign-off or feedback before you continue. It blocks until they submit.",
+			"Pass `cwd` for a document in another directory; relative `path` is resolved there. An absolute `path` also works from any session directory. Open the page from this root session; browser tools are root-session only.",
 			"Pass `note` only when one sentence of context helps, such as what changed since their last review or what you need decided.",
 			"Apply the returned annotations to the file yourself; suggested rewrites and rewritten blocks are feedback, not edits already made.",
 		],
@@ -200,6 +202,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			"Open a ledger task bundle (task, spec, tickets, evidence) in the user's browser for review and sign-off",
 		promptGuidelines: [
 			"Use review_ledger_task when a ledger task's plan, specification, or tickets need the user's sign-off before implementation, or its outcome needs review before closing. It blocks until they submit.",
+			"Pass `cwd` to select another project's ledger directly from this root session. It may be absolute or relative to the session directory; browser tools run in the root session only.",
 			"Pass the task id as `task`. Pass `note` only when one sentence helps, such as what changed since their last review or what you need decided.",
 			"Apply the returned annotations to the bundle's files yourself; suggested rewrites and rewritten blocks are feedback, not edits already made.",
 		],
@@ -241,6 +244,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			"Open a rich explanation of a code change (background, intuition, walkthrough over real code, quiz) in the user's browser",
 		promptGuidelines: [
 			"Use explain_change when the user asks to understand a change, a commit, a branch, or a pull request, or when you finish a substantial change they need to build on. Without `head` it explains the working tree against `base` (default HEAD: the uncommitted changes); pass `head` (with `base`, such as `<commit>^`) to explain any commit or range in history.",
+			"Pass `cwd` to explain another repository or worktree directly from this root session. It may be absolute or relative to the session directory. Code fences use paths relative to the target repository root; browser tools run in the root session only.",
 			"Before you write, find why the change exists, not only what it does: read the surrounding code, the ledger task that governs it (intent, decisions, retrospective), its discussion if it happened in this session (`search_session`), the context files and docs for the rules it must keep, the wiki for its terms, and the tests for its behavior. Teach the reasons, the options it rejected, and the rules the next change must respect.",
 			"Plan backward: choose the two or three ideas the reader must leave with, write the quiz to test them, then write the explanation that teaches them.",
 			"Background teaches what was there before; put the deep context a newcomer needs in `primer`. Intuition states the goal and the idea with a concrete example and toy data before any code: use a `mermaid` fence for flows, and a `figure Caption` fence (self-contained HTML and script, sandboxed, no network) when playing with something builds intuition faster than reading.",
@@ -274,6 +278,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 								prompt: tutorPrompt(page, turn),
 								pending: "This call was still running when the reader asked the tutor.",
 								label: "Explanation tutor",
+								root,
 							},
 							stop,
 						)

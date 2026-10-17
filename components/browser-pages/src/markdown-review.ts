@@ -24,6 +24,12 @@ const run = promisify(execFile);
 export const REVIEW_MARKDOWN_TOOL_NAME = "review_markdown";
 
 export const ReviewMarkdownParamsSchema = Type.Object({
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+		}),
+	),
 	path: Type.String({ description: "The Markdown file to review, relative to the working directory" }),
 	note: Type.Optional(
 		Type.String({ description: "One sentence shown above the document: what you need from the reviewer" }),
@@ -71,6 +77,7 @@ export async function buildMarkdownPage(
 	cwd: string,
 	token: string,
 ): Promise<{ page: MarkdownReviewPage; root: string }> {
+	cwd = resolve(cwd, params.cwd ?? ".");
 	// Git reports the real path of the repository, so compare it with the real path of the file.
 	const file = await realpath(isAbsolute(params.path) ? params.path : resolve(cwd, params.path));
 	const source = await readFile(file, "utf8");

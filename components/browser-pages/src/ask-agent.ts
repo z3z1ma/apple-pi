@@ -18,6 +18,7 @@ export interface ForkPrompt {
 	prompt: string;
 	pending: string;
 	label: string;
+	root: string;
 }
 
 /**
@@ -25,14 +26,19 @@ export interface ForkPrompt {
  * request prefix, a still-running tool call gets a placeholder result, and only the answer leaves the fork. Its
  * usage is recorded in the session under `label`.
  */
-export async function askFork(ctx: ExtensionContext, { prompt, pending, label }: ForkPrompt, signal: AbortSignal) {
+export async function askFork(
+	ctx: ExtensionContext,
+	{ prompt, pending, label, root }: ForkPrompt,
+	signal: AbortSignal,
+) {
 	const session = liveSession(ctx);
 	if (!session) throw new Error("The live session is not available, so the agent cannot answer.");
 	const messages = structuredClone(session.sessionManager.buildSessionProjection().messages);
 	closePendingCalls(messages, pending);
+	const content = `${prompt}\n\nPage source directory: ${JSON.stringify(root)}. Resolve the page's file paths against this directory. Use absolute paths for read, grep, find, and ls; the fork's working directory remains the parent session's and may name a different repository.`;
 	const fork = startFork(session, {
 		messages,
-		append: { role: "custom", customType: "page-question", content: prompt, display: false, timestamp: Date.now() },
+		append: { role: "custom", customType: "page-question", content, display: false, timestamp: Date.now() },
 		label,
 		blockedTools: new Set(
 			session.agent.state.tools.filter((tool) => !READ_ONLY_TOOLS.has(tool.name)).map((tool) => tool.name),
@@ -58,7 +64,7 @@ export async function askFork(ctx: ExtensionContext, { prompt, pending, label }:
 }
 
 /** Answers a reviewer's question about a passage of the page they are reviewing. */
-export function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal) {
+export function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal, root: string) {
 	const where = `${passage.where}${passage.context ? ` (${passage.context})` : ""}`;
 	return askFork(
 		ctx,
@@ -66,6 +72,7 @@ export function askAgent(ctx: ExtensionContext, passage: Passage, question: stri
 			prompt: `${FRAME}\n\nPassage: ${where}\n\n\`\`\`\n${passage.excerpt}\n\`\`\`\n\nQuestion: ${question}`,
 			pending: "The review page is still open; the user has not submitted a verdict yet.",
 			label: "Review question",
+			root,
 		},
 		signal,
 	);

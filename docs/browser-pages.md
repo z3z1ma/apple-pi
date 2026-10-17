@@ -10,6 +10,14 @@ The fourth, `explain_change`, opens an explanation of a change for the user to u
 
 Root sessions only; a run without an attached user gets a message instead of a page. Every page degrades gracefully: see [Without the agent](#without-the-agent).
 
+## Working directory
+
+All four tools accept optional `cwd`: an absolute directory or a directory relative to the session's working directory. It defaults to the session's working directory. Use it to open a page for another repository or Git worktree directly from the root session; browser tools are not available in subagents.
+
+For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"`, `base: "<commit>^"`, and `head: "<commit>"`. `review_code` accepts the same `cwd` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
+
+For `review_markdown`, a relative `path` is resolved against `cwd`; an absolute `path` works independently of the session directory. For `review_ledger_task`, `cwd` selects the project whose `.ledger` holds the task. Returned file anchors use the target repository's paths. Page questions and the explanation tutor receive the page's absolute source directory and instructions to use absolute file paths, while retaining the parent session's conversation and working directory.
+
 ## What the agent supplies
 
 The tool call carries structure and prose, never code:

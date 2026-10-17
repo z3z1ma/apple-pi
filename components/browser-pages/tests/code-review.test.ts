@@ -212,10 +212,16 @@ describe("review_code tool", () => {
 				on: () => {},
 			} as any);
 			const updates: string[] = [];
-			const result = await tool.execute("call", params(), undefined, (u: any) => updates.push(u.content[0].text), {
-				hasUI: true,
-				cwd: repo,
-			});
+			const result = await tool.execute(
+				"call",
+				params({ cwd: repo }),
+				undefined,
+				(u: any) => updates.push(u.content[0].text),
+				{
+					hasUI: true,
+					cwd: bin,
+				},
+			);
 			expect(updates[0]).toMatch(/^Waiting for the review at http:\/\/127\.0\.0\.1:\d+\/\?t=/);
 			expect(result.content[0].text).toContain("The reviewer approved.");
 			expect(result.content[0].text).toContain("Summary: Ship it.");

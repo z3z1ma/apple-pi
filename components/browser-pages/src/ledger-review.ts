@@ -26,6 +26,12 @@ import { parseTickets, ticketNumber } from "./tickets.js";
 export const REVIEW_LEDGER_TASK_TOOL_NAME = "review_ledger_task";
 
 export const ReviewLedgerTaskParamsSchema = Type.Object({
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+		}),
+	),
 	task: Type.String({
 		description: "The ledger task to review: its id, `.ledger/<id>`, or any path inside the bundle",
 	}),
@@ -86,6 +92,7 @@ export async function buildLedgerPage(
 	cwd: string,
 	token: string,
 ): Promise<{ page: LedgerReviewPage; root: string; dir: string }> {
+	cwd = resolve(cwd, params.cwd ?? ".");
 	const root = (await repositoryRoot(cwd)) ?? (await realpath(cwd));
 	const dir = await bundleDir(params.task, cwd, root);
 	const paths = (await filesUnder(dir)).sort(byReadingOrder);

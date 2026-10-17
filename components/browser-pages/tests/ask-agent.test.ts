@@ -24,6 +24,8 @@ const lastText = (context: Context) => JSON.stringify(context.messages.at(-1));
 it("answers a reviewer's question from a read-only fork of the live conversation", async () => {
 	const repo = mkdtempSync(join(tmpdir(), "browser-pages-ask-"));
 	cleanup.push(() => rmSync(repo, { recursive: true, force: true }));
+	const sessionCwd = mkdtempSync(join(tmpdir(), "browser-pages-parent-"));
+	cleanup.push(() => rmSync(sessionCwd, { recursive: true, force: true }));
 	const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
 	git("init", "-q", "-b", "main");
 	git("config", "user.email", "t@e.com");
@@ -62,7 +64,7 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 				const hunk = page.order[0];
 				const added = page.hunks[hunk].lines.findIndex((l) => l.t === "+");
 				const passage = questionPassage(page, { hunk, start: added, end: added, question: "Why five?" });
-				answer = await askAgent(ctx, passage, "Why five?", new AbortController().signal);
+				answer = await askAgent(ctx, passage, "Why five?", new AbortController().signal, repo);
 				return { content: [{ type: "text", text: "reviewed" }], details: {} };
 			},
 		});
@@ -81,7 +83,7 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 			return fauxAssistantMessage(fauxToolCall("review", {}, { id: "review-call" }), { stopReason: "toolUse" });
 		},
 		["review", "read", "bash"],
-		{ cwd: repo },
+		{ cwd: sessionCwd },
 	);
 	cleanup.push(run.dispose);
 	await run.session.prompt("review it");
@@ -90,7 +92,10 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	const fork = run.requests.find((request) => lastText(request).includes("Why five?"))!;
 	expect(fork.messages.at(-2)).toMatchObject({ role: "toolResult", toolCallId: "review-call", isError: true });
 	expect(lastText(fork)).toContain("a.ts:1");
+	expect(lastText(fork)).toContain(JSON.stringify(`Page source directory: ${JSON.stringify(repo)}`).slice(1, -1));
+	expect(lastText(fork)).toContain("Use absolute paths");
 	expect(lastText(fork)).toContain("+export const limit = 5;");
 	expect(existsSync(join(repo, "escaped.txt"))).toBe(false);
+	expect(existsSync(join(sessionCwd, "escaped.txt"))).toBe(false);
 	expect(JSON.stringify(run.requests.at(-1)!.messages)).not.toContain("Why five?");
 });

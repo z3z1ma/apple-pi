@@ -227,10 +227,16 @@ describe("explain_change tool", () => {
 				},
 				sendMessage: (message: any, options: unknown) => sent.push({ message, options }),
 			} as any);
-			const result = await tool.execute("call", params({ base: "HEAD^", head: "HEAD" }), undefined, undefined, {
-				hasUI: true,
-				cwd: repo,
-			});
+			const result = await tool.execute(
+				"call",
+				params({ cwd: repo, base: "HEAD^", head: "HEAD" }),
+				undefined,
+				undefined,
+				{
+					hasUI: true,
+					cwd: bin,
+				},
+			);
 			const { url, saved: copy } = result.details;
 			const html = readFileSync(copy, "utf8");
 			const data = JSON.parse(/<script id="page-data" type="application\/json">(.*?)<\/script>/s.exec(html)![1]);
