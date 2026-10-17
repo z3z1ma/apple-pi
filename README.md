@@ -103,6 +103,8 @@ So the harness grows a second surface. Four tools open a purpose-built page in t
 
 I never call these tools by hand. I ask in plain words ("walk me through this branch", "let me sign off on the spec"), or the agent opens a page itself when its work needs my judgment. The three review tools wait until I press **Finish review** and return my feedback as their result; `explain_change` returns at once and leaves the page open for me to read.
 
+Four small activation skills (`human-review-code`, `human-review-markdown`, `human-review-ledger-task`, and `explain-change`) are intended to help the agent recognize these handoff moments and use the matching page. They supplement the tools' usage guidance; `human-review-code` presents work for human judgment, while the separate `code-review` skill audits the change.
+
 ### `review_code`: The Change as a Story
 
 ![review_code: the agent's chapters, brief, and line notes over the real diff, with word-level marks](media/readme/review-code.webp)

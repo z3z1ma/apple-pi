@@ -18,6 +18,17 @@ For example, a session in `work` can explain a commit in a nested worktree with 
 
 For `review_markdown`, a relative `path` is resolved against `cwd`; an absolute `path` works independently of the session directory. For `review_ledger_task`, `cwd` selects the project whose `.ledger` holds the task. Returned file anchors use the target repository's paths. Page questions and the explanation tutor receive the page's absolute source directory and instructions to use absolute file paths, while retaining the parent session's conversation and working directory.
 
+## Activation skills
+
+Four model-invoked skills supplement the tools' always-present usage guidance:
+
+- `human-review-code`: present a coherent implementation for the user's judgment. The separate `code-review` skill audits code for defects and conformance.
+- `human-review-markdown`: open a prepared document for passage-level feedback or sign-off.
+- `human-review-ledger-task`: open the whole undertaking at a plan/ticket approval or outcome-review boundary.
+- `explain-change`: teach a change the user needs to understand well enough to build on.
+
+Their descriptions advertise the handoff moments, including proactive use when that judgment or understanding is the next useful step. Their bodies keep only minimal presentation and feedback guidance; exact invocation semantics remain with the tools. They can also be invoked explicitly with `/skill:<name>`. These skills are intended to improve recognition; they do not enforce that a page opens on every matching turn. Loader checks establish availability, while improved activation needs observation in actual agent use.
+
 ## What the agent supplies
 
 The tool call carries structure and prose, never code:

@@ -34,8 +34,11 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	git("add", ".");
 	git("commit", "-q", "-m", "base");
 	writeFileSync(join(repo, "a.ts"), "export const limit = 5;\n");
+	writeFileSync(join(repo, "rationale.txt"), "Five covers the upstream's retry window.");
+	writeFileSync(join(sessionCwd, "rationale.txt"), "Wrong checkout.");
 
 	let answer: string | undefined;
+	let rationale: string | undefined;
 	const reviewer: ExtensionFactory = (pi) => {
 		trackLiveSessions();
 		pi.registerTool({
@@ -72,13 +75,22 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	const run = await fauxSession(
 		[reviewer],
 		(context) => {
-			// The fork tries a write; it may run only read-only tools, so it gets a refusal and answers anyway.
-			if (lastText(context).includes("Why five?"))
+			if (lastText(context).includes("Why five?")) {
+				const root = lastText(context).includes(repo) ? repo : sessionCwd;
+				return fauxAssistantMessage(fauxToolCall("read", { path: join(root, "rationale.txt") }, { id: "fork-read" }), {
+					stopReason: "toolUse",
+				});
+			}
+			if (lastText(context).includes("fork-read")) {
+				const result = context.messages.at(-1)!;
+				if (result.role === "toolResult")
+					rationale = result.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
+				// Read-only page questions must still refuse a write after reading the target checkout.
 				return fauxAssistantMessage(fauxToolCall("bash", { command: "touch escaped.txt" }, { id: "fork-bash" }), {
 					stopReason: "toolUse",
 				});
-			if (lastText(context).includes("fork-bash"))
-				return fauxAssistantMessage("Five covers the upstream's retry window.");
+			}
+			if (lastText(context).includes("fork-bash")) return fauxAssistantMessage(rationale ?? "No rationale read.");
 			if (context.messages.at(-1)?.role === "toolResult") return fauxAssistantMessage("done");
 			return fauxAssistantMessage(fauxToolCall("review", {}, { id: "review-call" }), { stopReason: "toolUse" });
 		},
@@ -92,8 +104,6 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 	const fork = run.requests.find((request) => lastText(request).includes("Why five?"))!;
 	expect(fork.messages.at(-2)).toMatchObject({ role: "toolResult", toolCallId: "review-call", isError: true });
 	expect(lastText(fork)).toContain("a.ts:1");
-	expect(lastText(fork)).toContain(JSON.stringify(`Page source directory: ${JSON.stringify(repo)}`).slice(1, -1));
-	expect(lastText(fork)).toContain("Use absolute paths");
 	expect(lastText(fork)).toContain("+export const limit = 5;");
 	expect(existsSync(join(repo, "escaped.txt"))).toBe(false);
 	expect(existsSync(join(sessionCwd, "escaped.txt"))).toBe(false);

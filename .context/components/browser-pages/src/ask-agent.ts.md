@@ -6,5 +6,8 @@ Why: Pi gives extensions no handle on their `AgentSession`; calling `trackLiveSe
 The fork's messages end with a placeholder result (`pending`) for any still-running tool call (`closePendingCalls`): the review call that waits for the verdict, or whatever the agent runs while a reader talks to the explanation's tutor.
 Why: providers reject a conversation with an unanswered tool call. The faux model accepts it, so the test asserts the placeholder directly.
 
+Page questions and the explanation tutor keep the parent session's working directory and tool declarations. Their appended prompt carries the page builder's absolute source root and directs file reads there; callers must pass the page's root, not `ctx.cwd`.
+Why: a root session can open a page for another checkout through `cwd`. Inheriting the conversation alone would leave root-relative page anchors pointing at the parent's checkout; changing the inherited request prefix or rebinding its tools would lose the fork's shared-prefix semantics.
+
 Coupled: components/browser-pages/src/index.ts, components/shared/src/forked-continuation.ts
 Verify: components/browser-pages/tests/ask-agent.test.ts
