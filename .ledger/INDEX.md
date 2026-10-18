@@ -14,4 +14,3 @@
 
 - `.ledger/202610171741-guildworld/task.md` — planning — Agent World: themeable living work-world over real Pi sessions — Wayfinder map toward a whole-product spec for Agent World, a cozy themeable pixel-art world app inside apple-pi that renders real Pi/tmux sessions, coordinator delegation, and Jira/GitHub/Slack/Confluence work as characters, places, and quests. Source: ~/Downloads/guildworld_handoff.
 
-- `.ledger/202610172354-session-state-model/task.md` — in-progress — Shared Pi and tmux state model for all of apple-pi — Wayfinder map toward a spec for one rich state model of Pi sessions, tmux, and processes (entities, bindings, activity, conversation, attention), captured by a bridge extension in every Pi session plus tmux and process observation, stored in SQLite, and used uniformly by the sidebar, dashboard, notch, coordinator, and Agent World.
