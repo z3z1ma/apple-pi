@@ -410,7 +410,7 @@ try {
 		"codebase-design",
 	];
 	const fundamentalSkills = ["code-review", "skill-authoring", "llm-wiki"];
-	const roleSkills = ["orchard"];
+	const roleSkills = ["coordinator"];
 	const browserSkills = ["human-review-code", "human-review-markdown", "human-review-ledger-task", "explain-change"];
 	const packagedSkills = [
 		...explicitWorkflowSkills,

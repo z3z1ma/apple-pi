@@ -25,7 +25,7 @@ Each root Pi session running inside tmux writes one JSON record to `~/.pi/agent/
   "windowId": "@2",
   "paneTty": "/dev/ttys009",
   "tmuxSocket": "/private/tmp/tmux-501/default",
-  "reportsTo": "orchard-work",
+  "reportsTo": "coordinator-work",
   "startedAt": 1700000000,
   "updatedAt": 1700000000
 }
@@ -49,7 +49,7 @@ The sidebar shows a record only when its pid is running **and** its `paneId` exi
 
 ### Supervised sessions
 
-A session that another session started and watches, such as an [Orchard](../skills/orchard/SKILL.md) worker, is started with `pi --reports-to <supervisor id>`. Its record carries that id as `reportsTo` (empty otherwise), and when it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) it appends one message to the supervisor's [mailbox](tasks.md#session-mailbox), from its own session id:
+A session that another session started and watches, such as a [coordinator](../skills/coordinator/SKILL.md) worker, is started with `pi --reports-to <supervisor id>`. Its record carries that id as `reportsTo` (empty otherwise), and when it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) it appends one message to the supervisor's [mailbox](tasks.md#session-mailbox), from its own session id:
 
 ```text
 Session "JEM review" closed (quit) while busy. Directory: /path/to/repo

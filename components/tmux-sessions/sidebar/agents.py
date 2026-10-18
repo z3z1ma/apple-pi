@@ -351,7 +351,7 @@ def feed() -> None:
 
 
 def listing(agents: list[Agent]) -> list[dict]:
-    """The live agents for a supervising agent such as an Orchard: what runs, what it is doing, and whom it reports to."""
+    """The live agents for a supervising agent such as a coordinator: what runs, what it is doing, and whom it reports to."""
     return [
         {
             "id": agent.session_id,

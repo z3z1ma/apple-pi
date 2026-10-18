@@ -14,7 +14,7 @@
  * - `session_shutdown`                -> record removed
  *
  * A session started with `--reports-to <id>` publishes that id in its record
- * and mails it when the session closes, so a supervising session (an Orchard)
+ * and mails it when the session closes, so a supervising session (a coordinator)
  * learns that its worker stopped.
  *
  * `agent_settled` fires on interrupt and error too, so the busy -> idle

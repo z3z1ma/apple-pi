@@ -110,7 +110,7 @@ Every root Pi session has a durable mailbox. Another session, a headless `pi -p`
 
 ### Addressing
 
-A mailbox belongs to a session id. For a stable address, start the session with a fixed id: `pi --session-id orchard` reopens the same session, and so the same mailbox, every time. `/fork` and `/clone` create a new session id with a new, empty mailbox; `/tree` keeps the id. Mailboxes are shared across projects: Pi's default session ids are UUIDs, so give a named id such as `orchard` to one project only. Run one process per session id: Pi does not stop two processes from opening the same session, and both would act on the same messages.
+A mailbox belongs to a session id. For a stable address, start the session with a fixed id: `pi --session-id coordinator` reopens the same session, and so the same mailbox, every time. `/fork` and `/clone` create a new session id with a new, empty mailbox; `/tree` keeps the id. Mailboxes are shared across projects: Pi's default session ids are UUIDs, so give a named id such as `coordinator` to one project only. Run one process per session id: Pi does not stop two processes from opening the same session, and both would act on the same messages.
 
 ### Sending
 
@@ -118,7 +118,7 @@ Agents call `mailbox_send`:
 
 ```json
 {
-  "session_id": "orchard",
+  "session_id": "coordinator",
   "message": "Worker w-7f3a is blocked on a review."
 }
 ```
@@ -126,8 +126,8 @@ Agents call `mailbox_send`:
 `from` is set to the sender's session id, so the receiver can answer with `mailbox_send` to that id. Anything outside Pi uses the packaged script; its path is in the `mailbox_send` tool guidance:
 
 ```bash
-node components/tasks/scripts/pi-send.mjs orchard --from launchd "Tick."
-echo "Nightly sweep finished." | node components/tasks/scripts/pi-send.mjs orchard
+node components/tasks/scripts/pi-send.mjs coordinator --from launchd "Tick."
+echo "Nightly sweep finished." | node components/tasks/scripts/pi-send.mjs coordinator
 ```
 
 Both append one JSON line to `~/.pi/agent/state/mailbox/<session-id>.jsonl` (override the directory with `PI_MAILBOX_DIR`):

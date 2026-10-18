@@ -35,6 +35,6 @@ Verify: components/tmux-sessions/sidebar/tests/test_notch_feed.py
 
 ## symbol:listing
 
-The keys are the Orchard skill's contract for which workers run; it runs `agents.py list` and reads `id`, `status`, `reportsTo` and `paneId`.
-Coupled: skills/orchard/SKILL.md
+The keys are the coordinator skill's contract for which workers run; it runs `agents.py list` and reads `id`, `status`, `reportsTo` and `paneId`.
+Coupled: skills/coordinator/SKILL.md
 Verify: components/tmux-sessions/sidebar/tests/test_listing.py

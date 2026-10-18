@@ -320,7 +320,7 @@ test("a session rename updates the record's name without counting as a status ch
 test("a session started with --reports-to publishes its supervisor, mails it when it closes, not on reload, and removes its record before shutdown resolves", async () => {
 	const previousPane = process.env.TMUX_PANE;
 	process.env.TMUX_PANE = "%81";
-	const mailbox = join(process.env.PI_MAILBOX_DIR as string, "orchard-test.jsonl");
+	const mailbox = join(process.env.PI_MAILBOX_DIR as string, "coordinator-test.jsonl");
 	rmSync(mailbox, { force: true });
 	const handlers = new Map<string, (...args: unknown[]) => unknown>();
 	const flags = new Map<string, unknown>();
@@ -328,7 +328,7 @@ test("a session started with --reports-to publishes its supervisor, mails it whe
 		on: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler),
 		registerCommand() {},
 		registerFlag(name: string) {
-			flags.set(name, "orchard-test");
+			flags.set(name, "coordinator-test");
 		},
 		getFlag: (name: string) => flags.get(name),
 		getSessionName: () => "Worker",
@@ -344,7 +344,7 @@ test("a session started with --reports-to publishes its supervisor, mails it whe
 	);
 	const find = async () => (await readAllStates()).find((record) => record.sessionId === "session-worker");
 	await flushUntil(async () => Boolean(await find()));
-	expect((await find())?.reportsTo).toBe("orchard-test");
+	expect((await find())?.reportsTo).toBe("coordinator-test");
 
 	handlers.get("session_shutdown")?.({ reason: "reload" });
 	expect(existsSync(mailbox)).toBe(false);
