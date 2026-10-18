@@ -28,7 +28,7 @@ if (!body) {
 const receipt = await sendCommand(
 	sessionId,
 	{ kind: "mail", from, body, sentAt: new Date().toISOString() },
-	{ stored: true },
+	{ until: "accepted" },
 );
 if (receipt.stage === "failed") {
 	console.error(`pi-send: ${receipt.reason}`);

@@ -6,6 +6,7 @@ import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-ev
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, sendCommand, spawnRuntime } from "./client.js";
+import { installCoordinator } from "./coordinator.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
 import { installPeers } from "./peers.js";
@@ -366,7 +367,10 @@ function handedOver(sessionId: string): Set<string> {
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi, !inChildSessionContext());
-	if (!inChildSessionContext()) installPeers(pi);
+	if (!inChildSessionContext()) {
+		installPeers(pi);
+		installCoordinator(pi);
+	}
 	// The tmux-sessions extension registers this flag too; Pi lets each extension read only flags it registered.
 	pi.registerFlag("reports-to", {
 		type: "string",
@@ -486,6 +490,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					}
 					return; // applied once the transcript records it
 				}
+				case "close":
+					target.progress(commandId, "applied");
+					ctx.shutdown();
+					return;
 				case "set_model": {
 					const model = ctx.modelRegistry.find(command.provider, command.id);
 					if (!model) return fail(`unknown model ${command.provider}/${command.id}`);
@@ -542,7 +550,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			await sendCommand(
 				reportsTo,
 				{ kind: "mail", from, body, sentAt: new Date().toISOString() },
-				{ stored: true },
+				{ until: "accepted" },
 			).catch((error) =>
 				process.stderr.write(`Session state: the close notice to ${reportsTo} failed: ${error.message}\n`),
 			);

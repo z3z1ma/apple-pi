@@ -53,6 +53,9 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | `set_model` | `provider`, `id` | Switches model; fails for an unknown or unavailable model |
 | `set_thinking` | `level` | Sets the thinking level |
 | `answer` | `questionnaire`, `replies` | Answers the open questionnaire with that prompt `id`: one reply per question, in order, either `{"selected": [labels]}` or `{"custom": text}`. The dialog in the terminal closes, and the tool returns what the terminal would for the same choices. Fails when the terminal answered first or the replies do not fit; other dialogs are answered only in the terminal |
+| `mail` | `from`, `body`, `sentAt` | Mails the session; see [Mail](#mail). Waits while the session is not running |
+| `start` | `tmux` (`socket`, `pane`), `cwd`, `name`, `reportsTo`, `prompt` | Runs by the runtime itself: opens a tmux window after that pane's window running `pi --session-id <id> [--name] [--reports-to] [prompt]`, for a new id or a stopped session (whose `cwd` and `name` are the defaults). Fails when the session runs; `delivered` once the window opened, `applied` when the session's bridge connects, `failed` when the window closes first |
+| `close` | | Quits the session's Pi process |
 
 The runtime stores each command in `commands` and answers the sender with one `{"type": "receipt", "commandId": ..., "stage": ..., "reason"?: ...}` line per stage: `accepted` (stored), `delivered` (the session's bridge has it), `applied` (Pi took it), or `failed` with a reason. Each stage is also an event (`command_accepted`, ...). No receipt says the work is done; its effects appear as ordinary observed facts and events. A command for a session with no live incarnation, or bound to one that is no longer current, fails at once with `not running`. Sending the same `commandId` again applies nothing and answers with the stage the first one reached. A command handed to a bridge is bound to that incarnation, and only it can report on the command; if the bridge disconnects first, the command fails, since nobody can say whether it was applied (mail is sent again instead). `talk`, `steer`, and `follow_up` fail with `no model selected` when the session has no model. Anyone who can open the socket, which is only your user, can send commands; confirmations belong to the view that sends them.
 
@@ -81,6 +84,10 @@ A mail is delivered when the session's transcript records it, as a `custom_messa
 For a stable address, start a session with a fixed id: `pi --session-id coordinator` reopens the same session every time. `/fork` and `/clone` create a new session id; `/tree` keeps it. Session ids are shared across projects, so give a named id such as `coordinator` to one project only.
 
 A session started with `--reports-to <id>` mails that session when it closes, except on reload: `Session "<name>" closed (<reason>) while <idle|busy|waiting>. Directory: <cwd>`.
+
+## Coordinator tools
+
+A root session started with `pi --coordinator` gets three more tools, which send the commands above with that session's pane and id: `start_session` (`cwd`, `name`, optional `prompt` such as `@brief.md`, optional `session_id`) starts a peer session that reports to it, `reopen_session` reopens a stopped one by id, and `close_session` closes a running one. Every root session registers them, so it can read the flag, but only a coordinator keeps them active. The [coordinator skill](../skills/coordinator/SKILL.md) uses them.
 
 ## Reading a transcript entry
 

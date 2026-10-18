@@ -43,7 +43,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);
 
 import { migrate } from "./schema.js";
-import { canonicalSocket, listPanes, type PaneRow, socketFiles } from "./tmux.js";
+import { canonicalSocket, listPanes, openWindow, type PaneRow, socketFiles } from "./tmux.js";
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -155,6 +155,8 @@ export class Runtime {
 	private readonly failingServers = new Set<string>();
 	/** The client that sent each command still in flight, so its receipts reach it. */
 	private readonly commandClients = new Map<string, Connection>();
+	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
+	private readonly starting = new Map<string, { commandId: string; socket: string; pane?: string }>();
 	/** The bridge connection each unsettled command was handed to. */
 	private readonly dispatched = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
@@ -370,6 +372,11 @@ export class Runtime {
 			)
 			.all(session.id) as { command_id: string; command: string }[];
 		for (const { command_id, command } of mail) this.dispatch(connection, command_id, JSON.parse(command));
+		const start = this.starting.get(session.id);
+		if (start) {
+			this.starting.delete(session.id);
+			this.setCommandStage(start.commandId, "applied");
+		}
 	}
 
 	/**
@@ -413,6 +420,11 @@ export class Runtime {
 		).run(commandId, sessionId, generation ?? null, command.kind, JSON.stringify(command), now, now);
 		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
 		this.commandClients.set(commandId, client);
+		if (command.kind === "start") {
+			receipt("accepted");
+			void this.startSession(commandId, sessionId, command);
+			return;
+		}
 		if (waits) {
 			receipt(
 				"accepted",
@@ -428,6 +440,54 @@ export class Runtime {
 			return;
 		}
 		this.dispatch(target, commandId, command);
+	}
+
+	/** Run `pi` for a session in a new tmux window; the session's bridge connecting applies the command. */
+	private async startSession(commandId: string, sessionId: string, command: Extract<Command, { kind: "start" }>) {
+		const db = this.db!;
+		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
+		const row = db.prepare("select cwd, name, generation from sessions where id = ?").get(sessionId) as
+			| { cwd: string; name: string | null; generation: number }
+			| undefined;
+		const live =
+			row &&
+			db
+				.prepare(
+					"select 1 from incarnations where session_id = ? and generation = ? and ended_at is null and process_state in ('alive', 'alive_bridge_lost')",
+				)
+				.get(sessionId, row.generation);
+		if (live) return fail("already running");
+		if (this.starting.has(sessionId)) return fail("already starting");
+		const cwd = command.cwd ?? row?.cwd;
+		if (!cwd) return fail("unknown session; give a directory to start it in");
+		const name = command.name ?? row?.name ?? undefined;
+		const pi = [
+			"pi",
+			"--session-id",
+			sessionId,
+			...(name ? ["--name", name] : []),
+			...(command.reportsTo ? ["--reports-to", command.reportsTo] : []),
+			...(command.prompt ? [command.prompt] : []),
+		];
+		const start: { commandId: string; socket: string; pane?: string } = {
+			commandId,
+			socket: canonicalSocket(command.tmux.socket),
+		};
+		this.starting.set(sessionId, start); // the bridge may connect before tmux answers
+		try {
+			start.pane = await openWindow(
+				command.tmux.socket,
+				command.tmux.pane,
+				{ cwd, name, command: pi },
+				AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
+			);
+		} catch (error) {
+			if (this.starting.get(sessionId) === start) this.starting.delete(sessionId);
+			const { stderr, message } = error as { stderr?: string; message: string };
+			if (this.db === db) fail(`tmux could not open a window: ${stderr?.trim() || message}`);
+			return;
+		}
+		if (this.db === db && this.starting.get(sessionId) === start) this.setCommandStage(commandId, "delivered");
 	}
 
 	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
@@ -755,6 +815,7 @@ export class Runtime {
 				)
 				.all() as { socket: string }[];
 			for (const row of known) sockets.add(row.socket);
+			for (const start of this.starting.values()) sockets.add(start.socket);
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
 			const reads = [...sockets].map(async (socket) => ({ socket, panes: await listPanes(socket, options) }));
 			const servers = await Promise.allSettled(reads);
@@ -792,6 +853,12 @@ export class Runtime {
 	private syncServer(socket: string, read: PaneRow[] | "absent"): void {
 		const db = this.db!;
 		const panes = read === "absent" ? undefined : read;
+		for (const [sessionId, start] of this.starting) {
+			if (start.socket !== socket || !start.pane) continue;
+			if (panes?.some((pane) => pane.paneId === start.pane && !pane.dead)) continue;
+			this.starting.delete(sessionId);
+			this.setCommandStage(start.commandId, "failed", "the window closed before the session started");
+		}
 		const present = db.prepare("select 1 from tmux_servers where socket = ?").get(socket) !== undefined;
 		if (panes && !present) {
 			db.prepare("insert into tmux_servers (socket, source, updated_at) values (?, 'tmux', ?)").run(socket, Date.now());

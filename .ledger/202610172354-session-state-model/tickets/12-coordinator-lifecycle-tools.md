@@ -4,9 +4,9 @@
 
 **Blocked by:** 02 tmux topology and pane binding; 08 Command channel
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] On a scratch tmux server, the start tool opens a new window running a Pi session with the given id, name, cwd, `reportsTo`, and first prompt, and its receipt reaches applied when that session's bridge connects.
-- [ ] The reopen tool restarts a stopped session by id as a new incarnation with its history.
-- [ ] The close tool ends a session; the database shows the incarnation exited.
-- [ ] The `coordinator` skill text instructs these tools and no longer mentions `tmux new-window` or `agents.py list`.
+- [x] On a scratch tmux server, the start tool opens a new window running a Pi session with the given id, name, cwd, `reportsTo`, and first prompt, and its receipt reaches applied when that session's bridge connects.
+- [x] The reopen tool restarts a stopped session by id as a new incarnation with its history.
+- [x] The close tool ends a session; the database shows the incarnation exited.
+- [x] The `coordinator` skill text instructs these tools and no longer mentions `tmux new-window` or `agents.py list`.

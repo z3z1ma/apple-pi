@@ -96,7 +96,22 @@ export type Command =
 	 * Mail from `from` (a session id, or a name such as "shell"). Unlike every other command it waits while the session
 	 * is not running and is delivered when it next opens; it is applied once the session's transcript records it.
 	 */
-	| { kind: "mail"; from: string; body: string; sentAt: string };
+	| { kind: "mail"; from: string; body: string; sentAt: string }
+	/**
+	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
+	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the
+	 * session's bridge connects; failed when the window closes first.
+	 */
+	| {
+			kind: "start";
+			tmux: { socket: string; pane: string };
+			cwd?: string;
+			name?: string;
+			reportsTo?: string;
+			prompt?: string;
+	  }
+	/** Quit the session's Pi process. */
+	| { kind: "close" };
 
 /**
  * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command

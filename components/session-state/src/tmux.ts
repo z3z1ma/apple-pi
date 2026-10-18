@@ -126,3 +126,38 @@ export async function listPanes(
 			};
 		});
 }
+
+/** Open a window after `pane`'s window on server `socket`, running `command` in `cwd`; returns the new pane's id. */
+export async function openWindow(
+	socket: string,
+	pane: string,
+	window: { cwd: string; name?: string; command: string[] },
+	signal: AbortSignal,
+): Promise<string> {
+	// new-window takes a window, not a pane, as its target.
+	const { stdout: target } = await run("tmux", ["-S", socket, "display-message", "-p", "-t", pane, "#{window_id}"], {
+		encoding: "utf8",
+		signal,
+	});
+	const { stdout } = await run(
+		"tmux",
+		[
+			"-S",
+			socket,
+			"new-window",
+			"-a",
+			"-d",
+			"-P",
+			"-F",
+			"#{pane_id}",
+			"-t",
+			target.trim(),
+			"-c",
+			window.cwd,
+			...(window.name ? ["-n", window.name] : []),
+			...window.command,
+		],
+		{ encoding: "utf8", signal },
+	);
+	return stdout.trim();
+}

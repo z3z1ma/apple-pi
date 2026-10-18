@@ -69,7 +69,7 @@ function createMailboxSendTool() {
 			const receipt = await sendCommand(
 				params.session_id,
 				{ kind: "mail", from, body: params.message, sentAt: new Date().toISOString() },
-				{ signal, stored: true },
+				{ signal, until: "accepted" },
 			);
 			if (receipt.stage === "failed") throw new Error(`Mail to ${params.session_id} failed: ${receipt.reason}`);
 			const sent = `Sent ${receipt.commandId} to ${params.session_id}.`;

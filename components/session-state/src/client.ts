@@ -71,14 +71,13 @@ async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
 }
 
 /**
- * Send one command and return the receipt that settles it for the sender: delivered, applied, or failed, or
- * accepted with a reason when the target is not running and the command waits (only mail does). With `stored`,
- * the first receipt settles it: the runtime has the command, which is enough for mail.
+ * Send one command and return the receipt that settles it for the sender: with `until: "accepted"` the first one
+ * (the runtime has stored it, which is enough for mail), otherwise applied or failed.
  */
 export async function sendCommand(
 	sessionId: string,
 	command: Command,
-	options: { commandId?: string; signal?: AbortSignal; stored?: boolean } = {},
+	options: { commandId?: string; signal?: AbortSignal; until?: "accepted" | "applied" } = {},
 ): Promise<Receipt> {
 	const commandId = options.commandId ?? randomUUID();
 	const socket = await connectRuntime(options.signal);
@@ -91,7 +90,8 @@ export async function sendCommand(
 				lineReader((line) => {
 					const receipt = JSON.parse(line) as Receipt;
 					if (receipt.type !== "receipt" || receipt.commandId !== commandId) return;
-					if (options.stored || receipt.stage !== "accepted" || receipt.reason) resolve(receipt);
+					if (options.until === "accepted" || receipt.stage === "applied" || receipt.stage === "failed")
+						resolve(receipt);
 				}),
 			);
 			socket.on("close", () => reject(new Error("the session-state runtime closed the connection")));
