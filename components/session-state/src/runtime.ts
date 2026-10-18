@@ -290,6 +290,7 @@ export class Runtime {
 			sameStart(latest.process_started_at, proc.startedAt)
 		) {
 			generation = latest.generation; // the same process reconnecting, for example after /reload
+			this.recordGap(connection, session.id, generation);
 			this.setProcessState(session.id, generation, "alive", "bridge");
 		} else {
 			if (latest && latest.ended_at === null) {
@@ -340,6 +341,21 @@ export class Runtime {
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
+	}
+
+	/**
+	 * A bridge reconnecting to an open incarnation that had no live connection was unheard for a while (the runtime
+	 * or the bridge was down). What happened then is lost: record the gap, from the last thing recorded, instead of
+	 * inventing events. The hello's snapshot then brings current state back.
+	 */
+	private recordGap(connection: Connection, sessionId: string, generation: number): void {
+		for (const other of this.connections)
+			if (other !== connection && !other.shutdown && other.sessionId === sessionId && other.generation === generation)
+				return;
+		const { since } = this.db!.prepare(
+			"select max(at) as since from events where session_id = ? and generation = ?",
+		).get(sessionId, generation) as { since: number | null };
+		this.event("runtime", sessionId, generation, "gap", { since, until: Date.now() });
 	}
 
 	/** Completed conversation, indexed once: a row already present is ignored, a new one is also an event. */

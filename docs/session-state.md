@@ -42,6 +42,10 @@ The pane's tty comes from tmux, not from the bridge, so the runtime fills it in 
 
 Any client can ask the runtime for one entry of a session's transcript by sending `{"type": "read_entry", "requestId": ..., "sessionId": ..., "entryId": ...}` on the socket. The runtime reads the entry from the session's JSONL file and answers on the same connection with `{"type": "entry", "requestId": ..., "entry": {...}}`, or with `"error"`: `unknown session`, `session has no transcript file`, `entry not found`, or why the file could not be read.
 
+## Runtime outage
+
+A session never depends on the runtime. While the runtime is down, a bridge keeps its session's current state and retries the socket, starting a new runtime if none answers. On reconnect it sends that whole state again: identity, run state, facts, the tool running now, and every conversation row (rows already indexed are ignored). Events that happened while nothing listened are not reconstructed. Instead the runtime records one `gap` event for the incarnation, from the last thing it had recorded to the reconnect. A `/reload` is a short gap of the same kind.
+
 ## Liveness
 
 An incarnation is `alive` while its bridge is connected and heard within the last five seconds. When the bridge goes quiet or its connection drops, the runtime checks the process itself (pid plus start time, so a reused pid does not count): a running process is `alive_bridge_lost`; a gone process ends the incarnation as `lost`. A check that fails (for example, `ps` cannot run) proves nothing: the incarnation stays `alive_bridge_lost` and a `process_check_failed` event is recorded. A clean shutdown ends it as `exited`. A `/reload` keeps the same incarnation. Reopening a session from a new process starts the next generation; the previous one ends as `superseded` and stays under watch until its process is gone. Only the current generation's bridge changes the session's run state.
