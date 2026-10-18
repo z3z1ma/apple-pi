@@ -128,6 +128,28 @@ An operator-facing signal that a run has settled or attention is required. It is
 **Session status**:
 The operator-facing indication that a root session is busy, idle, or waiting for input. An idle session can have unfinished delegated work.
 
+### Session state
+
+**Session state model**:
+The single shared account of the operator's Pi sessions, their processes, and tmux that every view and every supervising session reads. Each fact in it carries its source and time.
+
+**Incarnation**:
+One process lifetime of a session. Reopening a session starts a new incarnation, possibly in another tmux pane; a command meant for an old incarnation never reaches a new one.
+_Avoid_: Instance, run
+
+**Bridge**:
+The part of every Pi session that reports the session's activity to the session state model and carries commands back into it.
+
+**Supervision**:
+The relation from a session to the session that started it and watches over it, such as a coordinator session (the operator's chief-of-staff session) and its workers.
+
+**Lineage**:
+The relation from a session to the session it was forked or cloned from.
+
+**Needs you**:
+A session with an open prompt for the operator, or with a new reply since the operator last looked at it.
+_Avoid_: Unseen, done
+
 ### Integration and safety
 
 **Search root guard**:

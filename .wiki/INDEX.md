@@ -2,6 +2,8 @@
 
 ## Domain language
 
+- [[domain-contexts]]: the two contexts, the Apple Pi harness and Agent World, and how they relate.
+- [[agent-world-language]]: Agent World vocabulary: characters, coordinators, workers, headquarters, wings, buildings, hubs, work items; theme-neutral terms with fantasy names in brackets.
 - [[domain-language]]: working vocabulary for the active harness; all retained optional modules are outside the domain. Public subagents and Pi Exec model workers are distinct participant kinds. Task means an undertaking; job means runtime-managed work. Runtime tools, code, and product docs still use the existing names; aligning them is separate work. Context boundaries and unqualified “agent” and “background” conventions remain open.
 
 ## Design
