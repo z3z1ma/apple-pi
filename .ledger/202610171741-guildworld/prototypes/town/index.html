@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+PROTOTYPE (throwaway) for the Agent World ticket "How places are built".
+A procedural Phaser 4 town over mock or live session state. Run ./serve.sh and open the printed URL.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>PROTOTYPE · Agent World town</title>
+<style>
+	html, body { margin: 0; height: 100%; overflow: hidden; background: #1d1a2b; font: 13px/1.45 -apple-system, system-ui, sans-serif; color: #f3e9d2; }
+	#game { position: fixed; inset: 0; }
+	.ic { display: inline-block; vertical-align: -2px; width: 14px; height: 14px; }
+	.ic.busy { width: 18px; height: 11px; border-radius: 6px; background: #2b2238; border: 1px solid #f3e9d2; box-sizing: border-box; background-image: radial-gradient(circle, #f3e9d2 1.2px, transparent 1.4px); background-size: 5px 9px; background-position: 1px 0; }
+	.ic.waiting { width: 11px; height: 11px; background: #f2c14e; transform: rotate(45deg); border: 1.5px solid #2b2238; margin: 0 2px; position: relative; }
+	.ic.waiting::after { content: "!"; position: absolute; inset: 0; transform: rotate(-45deg); color: #2b2238; font: 900 9px/11px sans-serif; text-align: center; }
+	.ic.idle { border-radius: 50%; background: #cfc6f2; border: 1.5px solid #2b2238; box-sizing: border-box; box-shadow: inset -4px 2px 0 #2b2238; }
+	#hud { position: fixed; top: 14px; left: 14px; display: flex; gap: 14px; align-items: center; padding: 8px 14px; border-radius: 12px; background: rgba(36,28,48,.85); border: 1px solid rgba(243,233,210,.18); backdrop-filter: blur(6px); }
+	#hud b { font: 600 15px Georgia, serif; letter-spacing: .3px; } #hud .src { font-size: 11px; color: #b9a9c9; }
+	#inspector { position: fixed; top: 14px; right: 14px; width: 300px; padding: 14px 16px; border-radius: 12px; background: rgba(36,28,48,.94); border: 1px solid #6b5577; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+	#inspector h2 { margin: 0; font: 600 17px Georgia, serif; } #inspector .sub { color: #c9b6d9; margin: 2px 0 10px; font-size: 12px; }
+	#inspector dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; margin: 0; } #inspector dt { color: #a99bb5; } #inspector dd { margin: 0; overflow-wrap: anywhere; }
+	#inspector ul { margin: 0; padding-left: 4px; list-style: none; } #inspector li { margin: 3px 0; }
+	#inspector .note { color: #a99bb5; font-size: 11px; margin: 10px 0 0; }
+	#inspector .x { position: absolute; top: 8px; right: 10px; background: none; border: 0; color: #c9b6d9; font-size: 18px; cursor: pointer; }
+	code { font: 11px ui-monospace, Menlo, monospace; }
+	#controls { position: fixed; left: 14px; bottom: 14px; width: 360px; max-height: 70vh; overflow: auto; border-radius: 10px; background: #f6f3ee; color: #222; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-size: 12px; }
+	#controls.closed #controls-body { display: none; }
+	#toggle { width: 100%; text-align: left; border: 0; background: #e6dfd3; padding: 7px 10px; font-weight: 700; cursor: pointer; border-radius: 10px 10px 0 0; }
+	#controls-body { padding: 8px 10px; } #controls button { font-size: 11px; cursor: pointer; border: 1px solid #c9c0b0; background: #fff; border-radius: 6px; padding: 2px 6px; }
+	#controls .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
+	#controls .tmux { border: 1px solid #ddd5c6; border-radius: 8px; padding: 5px 7px; margin: 6px 0; background: #fff; }
+	#controls .th { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+	#controls .sess { display: flex; gap: 6px; align-items: center; padding: 2px 0; } #controls .sess .nm { flex: 1; } #controls .role { color: #8a7f70; font-size: 10px; }
+	#controls .sess button:first-child { background: #2b2238; border-color: #2b2238; padding: 2px 4px; }
+	#controls .empty { color: #8a7f70; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud"></div>
+<div id="inspector" hidden></div>
+<div id="controls"><button id="toggle">PROTOTYPE controls (state is mock unless you load live.json)</button><div id="controls-body"></div></div>
+<script src="vendor/phaser.min.js"></script>
+<script src="assets/manifest.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

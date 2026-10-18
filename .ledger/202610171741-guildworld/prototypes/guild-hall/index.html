@@ -1,0 +1,192 @@
+<!doctype html>
+<!--
+PROTOTYPE (throwaway) for the Agent World ticket "Guild Hall art and scale".
+Question: which tile scale, camera angle, and asset pipeline give the storybook feel with readable characters and status?
+Three variants, switchable via ?variant= and the bottom bar (or the arrow keys): A top-down 32 px tiles, B top-down 16 px tiles, C isometric 32 px tiles.
+All agents are mock data. Open this file directly in a browser; no server needed.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Agent World Guild Hall</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14142a; color: #f3e9d2; font: 13px/1.4 -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #stage { position: absolute; inset: 0 0 56px 0; display: grid; place-items: center; }
+  #wrap { position: relative; }
+  canvas { display: block; image-rendering: pixelated; }
+  .plate { position: absolute; transform: translate(-50%, 0); white-space: nowrap; pointer-events: none; font-size: 11px; font-weight: 600; padding: 1px 6px 1px 4px; border-radius: 9px; background: rgba(32, 22, 40, .78); border: 1px solid rgba(243, 233, 210, .35); }
+  .plate b { display: inline-block; width: 14px; text-align: center; margin-right: 3px; border-radius: 7px; }
+  .plate.busy b { background: #6d5a9c; } .plate.waiting b { background: #d9a520; color: #2a1d05; } .plate.idle b { background: #4d6b55; }
+  .plate.sel { border-color: #ffd98a; }
+  #inspector { position: absolute; top: 16px; right: 16px; width: 280px; background: rgba(36, 26, 44, .94); border: 1px solid #6b5577; border-radius: 10px; padding: 12px 14px; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  #inspector h2 { margin: 0 0 2px; font-size: 15px; } #inspector .role { color: #c9b6d9; margin-bottom: 8px; }
+  #inspector dl { display: grid; grid-template-columns: 92px 1fr; gap: 3px 8px; margin: 0; } #inspector dt { color: #a99bb5; } #inspector dd { margin: 0; overflow-wrap: anywhere; }
+  .tag { font-size: 10px; padding: 0 5px; border-radius: 6px; margin-left: 4px; } .obs { background: #2f5b44; } .dec { background: #5b4a2f; } .mock { background: #7a2f3c; }
+  #bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #fff; color: #111; border-radius: 999px; padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-weight: 600; }
+  #bar button { border: 0; background: #eee; border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 15px; }
+  #bar .hint { font-weight: 400; color: #666; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
+<div id="inspector"></div>
+<div id="bar"><button id="prev">&#8592;</button><span id="label"></span><button id="next">&#8594;</button><span class="hint">N plates · click a hero · PROTOTYPE</span></div>
+<script src="assets/manifest.js"></script>
+<script>
+const VARIANTS = {
+  A: { name: "Top-down · 32 px tiles", density: "t32", room: "room-topdown" },
+  B: { name: "Top-down · 16 px tiles", density: "t16", room: "room-topdown" },
+  C: { name: "Isometric · 32 px tiles", density: "t32", room: "room-iso" },
+};
+// Placement in fractions of the room image: props stand on their foot point (bottom centre).
+const LAYOUT = {
+  "room-topdown": {
+    floor: [[0.1, 0.5], [0.9, 0.5], [0.9, 0.9], [0.1, 0.9]],
+    props: [
+      { i: 0, x: 0.5, y: 0.7 },   // map table
+      { i: 1, x: 0.5, y: 0.86 },  // bench in front of it
+      { i: 2, x: 0.8, y: 0.6 },   // armchair by the fire
+      { i: 3, x: 0.84, y: 0.86 }, // beanbag
+      { i: 4, x: 0.2, y: 0.6 },   // writing desk
+      { i: 5, x: 0.27, y: 0.66 }, // stool
+      { i: 6, x: 0.12, y: 0.86 }, // globe
+    ],
+    stations: { desk: [0.2, 0.62], table: [0.36, 0.76], tableHead: [0.68, 0.73], beanbag: [0.78, 0.9] },
+  },
+  "room-iso": {
+    floor: [[0.18, 0.6], [0.55, 0.48], [0.9, 0.7], [0.5, 0.9]],
+    props: [
+      { i: 0, x: 0.5, y: 0.72 },
+      { i: 1, x: 0.53, y: 0.82 },
+      { i: 2, x: 0.74, y: 0.66 },
+      { i: 3, x: 0.75, y: 0.8 },
+      { i: 4, x: 0.3, y: 0.62 },
+      { i: 5, x: 0.37, y: 0.66 },
+      { i: 6, x: 0.25, y: 0.75 },
+    ],
+    stations: { desk: [0.3, 0.64], table: [0.4, 0.77], tableHead: [0.66, 0.75], beanbag: [0.7, 0.84] },
+  },
+};
+// Mock agents. In the product these come from the tmux state records; here every value is invented.
+const AGENTS = [
+  { id: "coordinator-work", sprite: "guildmaster", label: "Guildmaster", status: "idle", station: "tableHead", cwd: "~/coordinator", tool: "read ledger/INDEX.md", task: "Weekly sweep", supervisor: "-" },
+  { id: "jem-review", sprite: "sage", label: "Sage", status: "busy", station: "desk", cwd: "~/code/jem", tool: "grep 'retryPolicy'", task: "JEM review", supervisor: "coordinator-work" },
+  { id: "agent-world-proto", sprite: "artificer", label: "Artificer", status: "busy", station: "table", cwd: "~/code/apple-pi", tool: "edit index.html", task: "Guild Hall prototype", supervisor: "coordinator-work" },
+  { id: "flaky-ci", sprite: "sentinel", label: "Sentinel", status: "waiting", station: null, cwd: "~/code/cdf", tool: "ask_user_question", task: "Flaky CI triage", supervisor: "coordinator-work" },
+  { id: "docs-pass", sprite: "scribe", label: "Scribe", status: "idle", station: "beanbag", cwd: "~/code/site", tool: "write README.md", task: "Docs pass", supervisor: "coordinator-work" },
+];
+const GLYPH = { busy: "\u2026", waiting: "!", idle: "z" };
+
+const params = new URLSearchParams(location.search);
+let key = VARIANTS[params.get("variant")] ? params.get("variant") : "A";
+let plates = true, selected = null, hover = null;
+const canvas = document.getElementById("c"), ctx = canvas.getContext("2d"), wrap = document.getElementById("wrap");
+const images = {};
+function img(src) { if (!images[src]) { images[src] = new Image(); images[src].src = src; } return images[src]; }
+
+let scene;
+function build() {
+  const v = VARIANTS[key], m = ASSETS[v.density], [rw, rh] = m.rooms[v.room], lay = LAYOUT[v.room];
+  const at = ([fx, fy]) => [fx * rw, fy * rh];
+  scene = {
+    v, m, rw, rh, lay, at,
+    room: img(`assets/${v.density}/${v.room}.png`),
+    props: lay.props.map((p) => ({ kind: "prop", img: img(`assets/${v.density}/prop-${p.i}.png`), size: m.props[p.i], x: p.x * rw, y: p.y * rh })),
+    agents: AGENTS.map((a, n) => {
+      const home = a.station ? at(lay.stations[a.station]) : at([0.55 + 0.05 * n, 0.88]);
+      return { kind: "agent", a, x: home[0], y: home[1], home, target: null, wait: 1 + Math.random() * 3, pose: pose(a) };
+    }),
+  };
+  document.querySelectorAll(".plate").forEach((p) => p.remove());
+  scene.agents.forEach((g) => { g.el = document.createElement("div"); g.el.className = `plate ${g.a.status}`; g.el.innerHTML = `<b>${GLYPH[g.a.status]}</b>${g.a.label}`; wrap.appendChild(g.el); });
+  canvas.width = rw; canvas.height = rh;
+  document.getElementById("label").textContent = `${key} (${v.name})`;
+  history.replaceState(null, "", `?variant=${key}`);
+  fit();
+}
+function pose(a) { return a.status === "busy" ? "busy" : a.status === "waiting" ? "waiting" : a.station === "beanbag" ? "asleep" : "idle"; }
+function fit() {
+  const s = Math.max(1, Math.floor(Math.min(innerWidth / scene.rw, (innerHeight - 56) / scene.rh)));
+  scene.scale = s; canvas.style.width = `${scene.rw * s}px`; canvas.style.height = `${scene.rh * s}px`;
+}
+function inside(poly, x, y) {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+  }
+  return hit;
+}
+function wander(g, dt) {
+  // Only an idle hero that is not resting strolls; busy heroes stay at their station; waiting heroes stand still.
+  if (g.a.status !== "idle" || g.pose === "asleep") return;
+  if (!g.target) {
+    g.wait -= dt;
+    if (g.wait > 0) return;
+    for (let k = 0; k < 20; k++) {
+      const fx = Math.random(), fy = Math.random();
+      if (inside(scene.lay.floor, fx, fy)) { g.target = scene.at([fx, fy]); break; }
+    }
+    return;
+  }
+  const speed = scene.m.tile * 1.2, dx = g.target[0] - g.x, dy = g.target[1] - g.y, d = Math.hypot(dx, dy);
+  if (d < 1) { g.target = null; g.wait = 2 + Math.random() * 4; return; }
+  g.x += (dx / d) * Math.min(d, speed * dt); g.y += (dy / d) * Math.min(d, speed * dt);
+}
+function spriteOf(g) { return { im: img(`assets/${scene.v.density}/${g.a.sprite}-${g.pose}.png`), size: scene.m.chars[g.a.sprite][g.pose] }; }
+let last = performance.now(), t = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; t += dt;
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, scene.rw, scene.rh);
+  if (scene.room.complete) ctx.drawImage(scene.room, 0, 0);
+  scene.agents.forEach((g) => wander(g, dt));
+  const items = [...scene.props, ...scene.agents].sort((p, q) => p.y - q.y);  // Y-sort on the foot point
+  for (const it of items) {
+    if (it.kind === "prop") { if (it.img.complete) ctx.drawImage(it.img, Math.round(it.x - it.size[0] / 2), Math.round(it.y - it.size[1])); continue; }
+    const { im, size } = spriteOf(it);
+    const walking = !!it.target, bob = walking ? Math.round(Math.abs(Math.sin(t * 9)) * scene.m.tile / 16) : it.pose === "busy" ? Math.round((Math.sin(t * 3 + it.x) + 1) * scene.m.tile / 32) : 0;
+    const x = Math.round(it.x - size[0] / 2), y = Math.round(it.y - size[1]) - bob;
+    if (im.complete) {
+      ctx.globalAlpha = 0.25; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(Math.round(it.x), Math.round(it.y), size[0] * 0.3, scene.m.tile * 0.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      if (it === hover || it.a.id === selected) { ctx.globalAlpha = 0.5; ctx.drawImage(im, x - 1, y); ctx.drawImage(im, x + 1, y); ctx.globalAlpha = 1; }
+      ctx.drawImage(im, x, y);
+    }
+    it.box = [x, y, size[0], size[1]];
+    it.el.style.display = plates ? "" : "none";
+    it.el.style.left = `${it.x * scene.scale}px`; it.el.style.top = `${(it.y + 2) * scene.scale}px`;
+    it.el.classList.toggle("sel", it.a.id === selected);
+  }
+  requestAnimationFrame(frame);
+}
+function pick(ev) {
+  const r = canvas.getBoundingClientRect(), x = (ev.clientX - r.left) / scene.scale, y = (ev.clientY - r.top) / scene.scale;
+  return [...scene.agents].sort((p, q) => q.y - p.y).find((g) => g.box && x >= g.box[0] && x < g.box[0] + g.box[2] && y >= g.box[1] && y < g.box[1] + g.box[3]) || null;
+}
+canvas.addEventListener("mousemove", (ev) => { hover = pick(ev); canvas.style.cursor = hover ? "pointer" : "default"; });
+canvas.addEventListener("click", (ev) => { const g = pick(ev); selected = g ? g.a.id : null; inspect(g); });
+function inspect(g) {
+  const el = document.getElementById("inspector");
+  if (!g) { el.style.display = "none"; return; }
+  const a = g.a;
+  el.innerHTML = `<h2>${a.label}<span class="tag mock">mock</span></h2><div class="role">Pi session <code>${a.id}</code></div><dl>
+    <dt>Status</dt><dd>${GLYPH[a.status]} ${a.status}<span class="tag obs">observed</span></dd>
+    <dt>Pose</dt><dd>${g.pose}${g.target ? ", strolling" : ""}<span class="tag dec">decorative</span></dd>
+    <dt>Last tool</dt><dd><code>${a.tool}</code><span class="tag obs">observed</span></dd>
+    <dt>Ledger task</dt><dd>${a.task}</dd><dt>Directory</dt><dd><code>${a.cwd}</code></dd><dt>Reports to</dt><dd>${a.supervisor}</dd></dl>`;
+  el.style.display = "block";
+}
+function step(d) { const ks = Object.keys(VARIANTS); key = ks[(ks.indexOf(key) + d + ks.length) % ks.length]; build(); }
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1);
+  if (e.key === "n" || e.key === "N") plates = !plates;
+  if (e.key === "Escape") { selected = null; inspect(null); }
+});
+addEventListener("resize", fit);
+build(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
