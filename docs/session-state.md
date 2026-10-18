@@ -4,7 +4,7 @@ Apple-pi keeps one shared account of your Pi sessions in a SQLite database. Ever
 
 ## Parts
 
-- **Bridge** (`components/session-state/src/bridge.ts`, loaded by `extensions/session-state.ts`): an extension in every root session. It reports the session's identity, its process, and its run state, sends a heartbeat every second, and reports a clean shutdown.
+- **Bridge** (`components/session-state/src/bridge.ts`, loaded by `extensions/session-state.ts`): an extension in every root session and, by path, in every interactive child session (subagent); the internal `/btw` session does not load it. It reports the session's identity, its process, and its run state, sends a heartbeat every second, and reports a clean shutdown.
 - **Runtime** (`components/session-state/src/runtime.ts`): one daemon per Mac and the only writer to the database. The first bridge that finds no runtime starts it with `node`, detached, and it keeps running after sessions end. One instance is guarded by an exclusive SQLite lock it holds for its whole life; the operating system releases it however the runtime exits, so there is no stale lock to clean up. If the runtime cannot start, the session shows one warning naming the runtime log.
 - **Database**: SQLite in WAL mode, created and upgraded by forward migrations (`schema.ts`; the schema version is SQLite's `user_version`).
 
@@ -12,7 +12,7 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
 
 ## What it records
 
-- `sessions`: one row per Pi session id, with its kind, session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation, plus everything else its bridge observes:
+- `sessions`: one row per Pi session id, with its kind (`root`, or `child` for a subagent, with `spawned_by` naming the session that started it; a child runs in its parent's process, so its incarnation has the parent's pid and no pane of its own), session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation, plus everything else its bridge observes:
   - the top-level tool running now (`current_tool`, its id, its main argument such as the command or path, and since when). Pi can run several tools at once: each start and end is an event with its duration, and while any still runs, the session shows the most recently started one;
   - an open `prompt` (JSON): a questionnaire with its questions while `ask_user_question` runs, or another dialog's kind and title;
   - the `queue` (JSON): steers and follow-ups typed during a run and not yet delivered (Pi delivers steers first), and `pending`, Pi's own flag that something waits, which also covers messages other extensions queued;

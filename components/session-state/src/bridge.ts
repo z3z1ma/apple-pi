@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
+import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { statePaths } from "./paths.js";
 import {
 	type BridgeMessage,
@@ -221,17 +222,20 @@ function helloFor(
 	previousSession: Facts["previousSession"],
 ): Hello {
 	const sessions = ctx.sessionManager;
+	const child = inChildSessionContext();
 	return {
 		type: "hello",
 		session: {
 			id: sessions.getSessionId(),
-			kind: "root",
+			kind: child ? "child" : "root",
+			...(child ? { spawnedBy: childSessionParent() } : {}),
 			file: sessions.getSessionFile(),
 			cwd: ctx.cwd,
 			name: sessions.getSessionName(),
 		},
 		process: { pid: process.pid, startedAt: Math.round(Date.now() - process.uptime() * 1000) },
-		tmux: tmuxPane(),
+		// A subagent runs in its parent's process and pane; the pane belongs to the parent.
+		tmux: child ? undefined : tmuxPane(),
 		run: ctx.isIdle() ? "idle" : "thinking",
 		facts: {
 			model: modelName(ctx),

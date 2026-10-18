@@ -78,7 +78,8 @@ export type EntryReply =
 
 export interface Hello {
 	type: "hello";
-	session: { id: string; kind: "root"; file?: string; cwd: string; name?: string };
+	/** A child is a subagent session; `spawnedBy` is the session that started it. */
+	session: { id: string; kind: "root" | "child"; spawnedBy?: string; file?: string; cwd: string; name?: string };
 	process: { pid: number; startedAt: number };
 	/** The tmux server socket and pane this session runs in, from its `TMUX` and `TMUX_PANE`; absent outside tmux. */
 	tmux?: { socket: string; pane: string };

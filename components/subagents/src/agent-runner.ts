@@ -20,12 +20,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
 import { CODE_CONTEXT_EXTENSION_PATH } from "../../../extensions/code-context.js";
-import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../../../extensions/rtk.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
+import { SESSION_STATE_EXTENSION_PATH } from "../../../extensions/session-state.js";
+import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH } from "../../../extensions/wiki.js";
 import {
 	createChildNotebookTools,
@@ -47,8 +48,8 @@ import {
 } from "./nested-tools.js";
 import { addToolGuidanceSections, buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { assistantMessageMarker } from "./response-marker.js";
-import { disposeAgentSession } from "./session-lifecycle.js";
 import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
+import { disposeAgentSession } from "./session-lifecycle.js";
 import { preloadSkills } from "./skill-loader.js";
 import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
 
@@ -95,6 +96,7 @@ export function childSessionExtensions(
 	];
 	if (standard) {
 		additionalExtensionPaths.push(
+			SESSION_STATE_EXTENSION_PATH,
 			LEDGER_EXTENSION_PATH,
 			WIKI_EXTENSION_PATH,
 			CODE_CONTEXT_EXTENSION_PATH,
@@ -507,7 +509,9 @@ export async function runAgent(
 		systemPromptOverride: () => systemPrompt,
 		appendSystemPromptOverride: () => [],
 	});
-	await runInChildSessionContext(() => loader.reload());
+	// Child-context code (the session-state bridge) reads which session started this one.
+	const parentSessionId = ctx.sessionManager?.getSessionId?.();
+	await runInChildSessionContext(() => loader.reload(), parentSessionId);
 	options.signal?.throwIfAborted();
 
 	// Plain entries in `tools:` are expected to be built-in names (extension tools
@@ -630,7 +634,7 @@ export async function runAgent(
 		sessionOpts.thinkingLevel = thinkingLevel;
 	}
 
-	const { session } = await runInChildSessionContext(() => createAgentSession(sessionOpts));
+	const { session } = await runInChildSessionContext(() => createAgentSession(sessionOpts), parentSessionId);
 
 	const baseSessionName = agentConfig?.name ?? type;
 	session.setSessionName(options.agentId ? `${baseSessionName}#${options.agentId.slice(0, 8)}` : baseSessionName);
@@ -640,15 +644,17 @@ export async function runAgent(
 	// a leaked context.ts factory cannot register the pair programmer notebook.
 	try {
 		options.signal?.throwIfAborted();
-		await runInChildSessionContext(() =>
-			session.bindExtensions({
-				onError: (err) => {
-					notifyObserver(options.onToolActivity, {
-						type: "end",
-						toolName: `extension-error:${err.extensionPath}`,
-					});
-				},
-			}),
+		await runInChildSessionContext(
+			() =>
+				session.bindExtensions({
+					onError: (err) => {
+						notifyObserver(options.onToolActivity, {
+							type: "end",
+							toolName: `extension-error:${err.extensionPath}`,
+						});
+					},
+				}),
+			parentSessionId,
 		);
 		options.signal?.throwIfAborted();
 	} catch (error) {

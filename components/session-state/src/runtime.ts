@@ -318,11 +318,20 @@ export class Runtime {
 			if (hello.tmux) void this.pollTmux();
 		}
 		db.prepare(
-			`insert into sessions (id, kind, session_file, cwd, name, run_state, generation, source, updated_at)
-			values (?, ?, ?, ?, ?, 'idle', ?, 'bridge', ?)
-			on conflict (id) do update set kind = excluded.kind, session_file = excluded.session_file, cwd = excluded.cwd,
-				name = excluded.name, generation = excluded.generation, source = 'bridge', updated_at = excluded.updated_at`,
-		).run(session.id, session.kind, session.file ?? null, session.cwd, session.name ?? null, generation, now);
+			`insert into sessions (id, kind, spawned_by, session_file, cwd, name, run_state, generation, source, updated_at)
+			values (?, ?, ?, ?, ?, ?, 'idle', ?, 'bridge', ?)
+			on conflict (id) do update set kind = excluded.kind, spawned_by = excluded.spawned_by, session_file = excluded.session_file,
+				cwd = excluded.cwd, name = excluded.name, generation = excluded.generation, source = 'bridge', updated_at = excluded.updated_at`,
+		).run(
+			session.id,
+			session.kind,
+			session.spawnedBy ?? null,
+			session.file ?? null,
+			session.cwd,
+			session.name ?? null,
+			generation,
+			now,
+		);
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
