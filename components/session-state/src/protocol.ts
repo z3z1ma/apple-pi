@@ -113,7 +113,12 @@ export type Command =
 	/** Quit the session's Pi process. */
 	| { kind: "close" }
 	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */
-	| { kind: "mark_seen" };
+	| { kind: "mark_seen" }
+	/**
+	 * Store a view's choice under `key` in `preferences`, replacing the old value. Applied by the runtime; it belongs to
+	 * no session, so the request's `sessionId` only names the client (the notch sends "notch") and is not checked.
+	 */
+	| { kind: "set_preference"; key: string; value: unknown };
 
 /**
  * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command

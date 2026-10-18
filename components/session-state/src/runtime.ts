@@ -462,6 +462,20 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "set_preference") {
+			receipt("accepted");
+			if (typeof command.key !== "string" || !command.key || command.value === undefined)
+				this.setCommandStage(commandId, "failed", "set_preference needs a key and a value");
+			else {
+				db.prepare(
+					`insert into preferences (key, value, updated_at) values (?, ?, ?)
+					on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at`,
+				).run(command.key, JSON.stringify(command.value), Date.now());
+				this.event("client", null, null, "preference_set", { key: command.key, value: command.value });
+				this.setCommandStage(commandId, "applied");
+			}
+			return;
+		}
 		if (waits) {
 			receipt(
 				"accepted",

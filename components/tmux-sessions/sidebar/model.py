@@ -97,7 +97,10 @@ class Agent:
 def connect() -> sqlite3.Connection | None:
     if not DB_PATH.exists():
         return None
-    db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    # Opened for writing but query-only: a strictly read-only connection reads no rows from a WAL database whose
+    # -shm file is gone, as after the runtime stops.
+    db = sqlite3.connect(DB_PATH)
+    db.execute("pragma query_only = 1")
     db.row_factory = sqlite3.Row
     return db
 

@@ -34,9 +34,9 @@ start() {
     log "built $bin"
   fi
   # The panel outlives the Pi that started it and serves every tmux server, so it must not inherit that Pi's server:
-  # its feed reads the default one.
+  # a click focuses the agent's own server, named by TMUX_SOCKET.
   unset TMUX TMUX_PANE
-  nohup "$bin" "$here/notch/web" "$here/sidebar/agents.py" "$here/../notify/scripts/focus-tmux.sh" </dev/null >>"$log_path" 2>&1 &
+  nohup "$bin" "$here/notch/web" "$here/../notify/scripts/focus-tmux.sh" </dev/null >>"$log_path" 2>&1 &
 }
 
 case "${1:-}" in

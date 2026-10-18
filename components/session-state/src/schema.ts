@@ -154,6 +154,12 @@ const MIGRATIONS = [
 	// The incarnation a client bound a command to, kept apart from the one it was handed to: bound mail never waits for
 	// a later incarnation.
 	`alter table commands add column bound_generation integer;`,
+	// Choices a view keeps across restarts (the notch's vibes, rooms, looks, and positions), as JSON by key.
+	`create table preferences (
+		key text primary key,
+		value text not null,
+		updated_at integer not null
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

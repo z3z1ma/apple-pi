@@ -84,8 +84,9 @@ document.documentElement.style.setProperty("--notch-height", `${geo.notchHeight}
 
 const images = {};
 // Choices per tmux session: its vibe; the room and worker look the shuffle button picked, by `${vibe}/${session}`;
-// and where you dragged its workers, as fractions of the room size. The shell loads them from and saves them to
-// <pi home>/state/notch.json, so other front ends can read them; opened alone in a browser they live in memory.
+// and where you dragged its workers, as fractions of the room size. The shell loads them from and saves them to the
+// session-state database's `notch` preference, so other front ends can read them; opened alone in a browser they live
+// in memory.
 const choices = { vibes: {}, rooms: {}, looks: {}, positions: {}, ...window.notchState };
 const { vibes: chosenVibes, rooms: chosenRooms, looks: chosenLooks, positions } = choices;
 const save = () => shell?.postMessage({ type: "save", state: choices });

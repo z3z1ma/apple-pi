@@ -11,6 +11,6 @@ Why: during a drag `pointAt()` calls `moveDrag()`, which redraws. Calling it fro
 
 ## symbol:choices
 
-The keys `vibes`, `rooms`, `looks` and `positions`, and how each is keyed, are the format of `notch.json`. The shell stores the object as the page sends it.
-Why: the docs promise that other front ends can read the file. A renamed key also silently drops every saved choice, because the next load ignores the old key.
+The keys `vibes`, `rooms`, `looks` and `positions`, and how each is keyed, are the format of the `notch` preference in the session-state database. The shell stores the object as the page sends it.
+Why: other front ends read the same preference. A renamed key also silently drops every saved choice, because the next load ignores the old key.
 Coupled: docs/tmux-sessions.md, components/tmux-sessions/notch/NotchShell.swift
