@@ -127,6 +127,47 @@ export async function listPanes(
 		});
 }
 
+/** The attached clients of a server and the pane each one shows; none when no server runs there. */
+export async function listClients(
+	socket: string,
+	options: { timeout: number; signal: AbortSignal },
+): Promise<{ name: string; pane: string }[]> {
+	let stdout: string;
+	try {
+		({ stdout } = await run("tmux", ["-S", socket, "list-clients", "-F", `#{client_name}${SEP}#{pane_id}`], {
+			encoding: "utf8",
+			signal: AbortSignal.any([options.signal, AbortSignal.timeout(options.timeout)]),
+		}));
+	} catch (error) {
+		if (noServer(String((error as { stderr?: string }).stderr ?? ""))) return [];
+		throw error;
+	}
+	return stdout
+		.split("\n")
+		.filter((line) => line.includes(SEP))
+		.map((line) => {
+			const [name, pane] = line.split(SEP);
+			return { name, pane };
+		});
+}
+
+/** Set global options on a server and redraw each client's status line, in one tmux call. */
+export async function setServerOptions(
+	socket: string,
+	options: Record<string, string>,
+	clients: string[],
+	signal: AbortSignal,
+): Promise<void> {
+	const commands = [
+		...Object.entries(options).map(([name, value]) => ["set-option", "-g", name, value]),
+		...clients.map((client) => ["refresh-client", "-S", "-t", client]),
+	];
+	await run("tmux", ["-S", socket, ...commands.flatMap((command, index) => (index ? [";", ...command] : command))], {
+		encoding: "utf8",
+		signal,
+	});
+}
+
 /** Open a window after `pane`'s window on server `socket`, running `command` in `cwd`; returns the new pane's id. */
 export async function openWindow(
 	socket: string,

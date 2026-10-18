@@ -11,7 +11,7 @@ option() {
 }
 
 tmux bind-key "$(option @pi_sidebar_key u)" run-shell "'$SIDEBAR' toggle '#{window_id}'"
-tmux bind-key "$(option @pi_jump_key y)" run-shell "'$SIDEBAR' jump '#{client_name}' '#{pane_id}'"
+tmux bind-key "$(option @pi_jump_key y)" run-shell "'$SIDEBAR' jump '#{client_name}'"
 tmux bind-key "$(option @pi_dashboard_key A)" \
   run-shell "'$SIDEBAR' dashboard '#{client_name}' '#{window_id}' '#{session_id}'"
 
@@ -20,14 +20,8 @@ tmux bind-key "$(option @pi_dashboard_key A)" \
 tmux set-hook -g 'session-window-changed[71]' "run-shell -b \"'$SIDEBAR' follow '#{window_id}'\""
 tmux set-hook -g 'client-session-changed[71]' "run-shell -b \"'$SIDEBAR' follow '#{window_id}'\""
 
-# pane-focus-in fires only with focus-events on.
-tmux set-option -g focus-events on
-tmux set-hook -g 'pane-focus-in[71]' "run-shell -b \"'$SIDEBAR' seen '#{pane_id}'\""
-
-# Completions from before tracking started count as seen, so the first sidebar does not open on a flood.
-now="$(date +%s)"
-tmux list-panes -a -F '#{pane_id} #{@pi_seen_at}' | while read -r pane seen; do
-  [ -n "$seen" ] || tmux set-option -p -t "$pane" @pi_seen_at "$now"
-done
+# The session-state runtime marks a session seen when a client shows its pane, and writes the summary
+# (@pi_agents) and the jump target (@pi_jump_target); this file only shows and uses them.
+tmux set-hook -gu 'pane-focus-in[71]'
 
 "$SIDEBAR" status

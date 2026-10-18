@@ -93,7 +93,6 @@ async function readTmuxPane(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxPane
 }
 
 const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
-const SIDEBAR = fileURLToPath(new URL("../scripts/sidebar.sh", import.meta.url));
 const NOTCH = fileURLToPath(new URL("../scripts/notch.sh", import.meta.url));
 
 /**
@@ -133,15 +132,8 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 		});
 	}
 
-	/** Write the record, then let the tmux status-line summary recount; the script runs in the background. */
-	async function publish(next: AgentStateRecord): Promise<void> {
-		await writeState(next);
-		await refreshStatus();
-	}
-
-	async function refreshStatus(): Promise<void> {
-		await pi.exec(tmuxBin, ["run-shell", "-b", `'${SIDEBAR}' status`], { timeout: 2_000 });
-	}
+	// The session-state runtime writes the status-line summary; the record serves the sidebar and the notch.
+	const publish = (next: AgentStateRecord) => writeState(next);
 
 	async function init(ctx: ExtensionContext, reason: string): Promise<void> {
 		// Only a real interactive session inside tmux is a jump target.
@@ -243,7 +235,6 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			if (!record) return;
 			await removeState(record.sessionId);
 			record = undefined;
-			await refreshStatus();
 		});
 		// Pi awaits this before a SIGHUP exit; without it a killed window left its record behind.
 		return queue;

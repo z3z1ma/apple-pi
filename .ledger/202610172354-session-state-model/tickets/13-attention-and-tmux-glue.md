@@ -4,10 +4,10 @@
 
 **Blocked by:** 02 tmux topology and pane binding; 03 Rich activity; 04 Conversation index and read-through; 08 Command channel
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] With a client attached to a scratch-server pane holding a faux session, that session's seen time updates without any hook.
-- [ ] A mark-seen command sets the seen time and clears needs you for a session with no open prompt.
-- [ ] A session that settles with a new reply after its seen time, or opens a questionnaire, is needs you.
-- [ ] The scratch server's status-line option holds the current summary after each relevant change, and its jump-target option names the pane that has needed the operator longest.
-- [ ] The plugin installs no pane-focus seen hook, and the jump binding switches to the target pane.
+- [x] With a client attached to a scratch-server pane holding a faux session, that session's seen time updates without any hook.
+- [x] A mark-seen command sets the seen time and clears needs you for a session with no open prompt.
+- [x] A session that settles with a new reply after its seen time, or opens a questionnaire, is needs you.
+- [x] The scratch server's status-line option holds the current summary after each relevant change, and its jump-target option names the pane that has needed the operator longest.
+- [x] The plugin installs no pane-focus seen hook, and the jump binding switches to the target pane.

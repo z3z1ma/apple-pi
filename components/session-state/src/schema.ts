@@ -146,6 +146,11 @@ const MIGRATIONS = [
 			json_extract(command, '$.body') as body, created_at as sent_at,
 			case stage when 'applied' then updated_at end as delivered_at, stage, reason
 		from commands where kind = 'mail';`,
+	// Attention: when the operator last saw the session, when it last settled, and since when it needs the operator
+	// (an open prompt, or a settle after the last seen time); null when it does not.
+	`alter table sessions add column seen_at integer;
+	alter table sessions add column settled_at integer;
+	alter table sessions add column needs_you_since integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

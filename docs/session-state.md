@@ -56,6 +56,7 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | `mail` | `from`, `body`, `sentAt` | Mails the session; see [Mail](#mail). Waits while the session is not running |
 | `start` | `tmux` (`socket`, `pane`), `cwd`, `name`, `reportsTo`, `prompt` | Runs by the runtime itself: opens a tmux window after that pane's window running `pi --session-id <id> [--name] [--reports-to] [prompt]`, for a new id or a stopped session (whose `cwd` and `name` are the defaults). Fails when the session runs; `delivered` once the window opened, `applied` when the session's bridge connects, `failed` when the window closes first |
 | `close` | | Quits the session's Pi process |
+| `mark_seen` | | The operator saw the session (applied by the runtime); see [Attention](#attention) |
 
 The runtime stores each command in `commands` and answers the sender with one `{"type": "receipt", "commandId": ..., "stage": ..., "reason"?: ...}` line per stage: `accepted` (stored), `delivered` (the session's bridge has it), `applied` (Pi took it), or `failed` with a reason. Each stage is also an event (`command_accepted`, ...). No receipt says the work is done; its effects appear as ordinary observed facts and events. A command for a session with no live incarnation, or bound to one that is no longer current, fails at once with `not running`. Sending the same `commandId` again applies nothing and answers with the stage the first one reached. A command handed to a bridge is bound to that incarnation, and only it can report on the command; if the bridge disconnects first, the command fails, since nobody can say whether it was applied (mail is sent again instead). `talk`, `steer`, and `follow_up` fail with `no model selected` when the session has no model. Anyone who can open the socket, which is only your user, can send commands; confirmations belong to the view that sends them.
 
@@ -84,6 +85,10 @@ A mail is delivered when the session's transcript records it, as a `custom_messa
 For a stable address, start a session with a fixed id: `pi --session-id coordinator` reopens the same session every time. `/fork` and `/clone` create a new session id; `/tree` keeps it. Session ids are shared across projects, so give a named id such as `coordinator` to one project only.
 
 A session started with `--reports-to <id>` mails that session when it closes, except on reload: `Session "<name>" closed (<reason>) while <idle|busy|waiting>. Directory: <cwd>`.
+
+## Attention
+
+The runtime keeps, per session, `seen_at` (when the operator last saw it), `settled_at` (when its run last settled), and `needs_you_since`: set when a run settles or a prompt opens, cleared when the operator sees it and no prompt is open, or when the prompt closes with no unseen settle. A session is seen when a tmux client shows its pane (the runtime reads `list-clients` with its once-a-second tmux poll; no hook) and when a client sends `mark_seen`; each is a `seen` event. For each tmux server the runtime writes the status-line summary of the live top-level sessions in its panes to `@pi_agents` (asking you, done and unseen, working, idle) and the pane that has needed you longest to `@pi_jump_target`, only when they change, and redraws the status line of every client.
 
 ## Coordinator tools
 

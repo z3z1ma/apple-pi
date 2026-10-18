@@ -71,9 +71,7 @@ The plugin:
 
 - binds `prefix` + `u` to the sidebar, `prefix` + `y` to jump, and `prefix` + `A` to the dashboard (override with `@pi_sidebar_key`, `@pi_jump_key`, and `@pi_dashboard_key` before it loads);
 - appends `#{@pi_agents}`, the agent summary, to `status-right` once, and again if a config reload removed it;
-- installs hooks at index `71` on `session-window-changed`, `client-session-changed`, and `pane-focus-in`, so reloading replaces them and your own hooks on those events stay;
-- sets `focus-events on`, which `pane-focus-in` needs;
-- stamps `@pi_seen_at` on every pane that has none, so agents that finished before tracking began count as seen.
+- installs hooks at index `71` on `session-window-changed` and `client-session-changed`, so reloading replaces them and your own hooks on those events stay, and removes the `pane-focus-in` seen hook earlier versions installed.
 
 Requirements: tmux ≥ 3.2 and [uv](https://docs.astral.sh/uv/) on the tmux server's `PATH` (the first start installs Textual). `run-shell` uses the tmux server's environment, not your shell rc.
 
@@ -108,7 +106,7 @@ The sidebar paints the terminal's default background, so it stays translucent on
 
 ## Status line and jump
 
-The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. Every status change, rename, and focus change recounts it, so it needs no polling.
+The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. The [session-state](session-state.md#attention) runtime writes it to the server option `@pi_agents` within a second of a change, and the session that has needed you longest to `@pi_jump_target`, which `prefix` + `y` jumps to.
 
 `prefix` + `y` jumps to the agent that has needed you longest, skipping the pane you are in, so pressing it again walks the queue. With nothing waiting it says so.
 

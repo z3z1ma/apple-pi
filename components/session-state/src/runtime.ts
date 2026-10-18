@@ -42,8 +42,17 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 };
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);
 
+import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { migrate } from "./schema.js";
-import { canonicalSocket, listPanes, openWindow, type PaneRow, socketFiles } from "./tmux.js";
+import {
+	canonicalSocket,
+	listClients,
+	listPanes,
+	openWindow,
+	type PaneRow,
+	setServerOptions,
+	socketFiles,
+} from "./tmux.js";
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -155,6 +164,8 @@ export class Runtime {
 	private readonly failingServers = new Set<string>();
 	/** The client that sent each command still in flight, so its receipts reach it. */
 	private readonly commandClients = new Map<string, Connection>();
+	/** The status-line options last written to each tmux server, so they are written only when they change. */
+	private readonly attentionShown = new Map<string, string>();
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
 	private readonly starting = new Map<string, { commandId: string; socket: string; pane?: string }>();
 	/** The bridge connection each unsettled command was handed to. */
@@ -425,6 +436,15 @@ export class Runtime {
 			void this.startSession(commandId, sessionId, command);
 			return;
 		}
+		if (command.kind === "mark_seen") {
+			receipt("accepted");
+			if (!current) this.setCommandStage(commandId, "failed", "unknown session");
+			else {
+				this.seen(sessionId, "command");
+				this.setCommandStage(commandId, "applied");
+			}
+			return;
+		}
 		if (waits) {
 			receipt(
 				"accepted",
@@ -673,6 +693,16 @@ export class Runtime {
 				db.prepare("update sessions set parent_session_id = null where id = ?").run(sessionId);
 			if (key === "previousSession")
 				db.prepare("update sessions set previous_session_id = null where id = ?").run(sessionId);
+			// An open prompt needs the operator; once it closes, only a settle they have not seen still does.
+			if (key === "prompt" && value)
+				db.prepare("update sessions set needs_you_since = coalesce(needs_you_since, ?) where id = ?").run(
+					Date.now(),
+					sessionId,
+				);
+			else if (key === "prompt")
+				db.prepare(
+					"update sessions set needs_you_since = case when coalesce(settled_at, 0) > coalesce(seen_at, 0) then needs_you_since end where id = ?",
+				).run(sessionId);
 			const type = key === "prompt" ? (value ? "prompt_opened" : "prompt_closed") : `${column}_changed`;
 			this.event("bridge", sessionId, generation, type, { from: before, to: value });
 		}
@@ -737,6 +767,23 @@ export class Runtime {
 			sessionId,
 		);
 		this.event("bridge", sessionId, generation, "run_state", { from: row.run_state, to: run });
+		if (run === "idle") {
+			// A settle needs the operator until they see it.
+			const now = Date.now();
+			db.prepare("update sessions set settled_at = ?, needs_you_since = coalesce(needs_you_since, ?) where id = ?").run(
+				now,
+				now,
+				sessionId,
+			);
+		}
+	}
+
+	/** The operator saw the session, in its pane or through a command; only an open prompt still needs them. */
+	private seen(sessionId: string, via: "pane" | "command"): void {
+		this.db!.prepare(
+			"update sessions set seen_at = ?, needs_you_since = case when prompt is null then null else needs_you_since end where id = ?",
+		).run(Date.now(), sessionId);
+		this.event("runtime", sessionId, null, "seen", { via });
 	}
 
 	private setProcessState(sessionId: string, generation: number, state: ProcessState, source: string): void {
@@ -817,7 +864,10 @@ export class Runtime {
 			for (const row of known) sockets.add(row.socket);
 			for (const start of this.starting.values()) sockets.add(start.socket);
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
-			const reads = [...sockets].map(async (socket) => ({ socket, panes: await listPanes(socket, options) }));
+			const reads = [...sockets].map(async (socket) => {
+				const panes = await listPanes(socket, options);
+				return { socket, panes, clients: panes === "absent" ? [] : await listClients(socket, options) };
+			});
 			const servers = await Promise.allSettled(reads);
 			if (this.db !== db) return; // stopped while tmux answered
 			db.exec("begin");
@@ -827,6 +877,10 @@ export class Runtime {
 					if (result.status === "fulfilled") {
 						this.failingServers.delete(socket);
 						this.syncServer(socket, result.value.panes);
+						this.seeShownPanes(
+							socket,
+							result.value.clients.map((client) => client.pane),
+						);
 					} else if (!this.failingServers.has(socket)) {
 						// A failed read proves nothing: the server keeps its rows until a read succeeds.
 						this.failingServers.add(socket);
@@ -841,11 +895,64 @@ export class Runtime {
 				db.exec("rollback");
 				throw error;
 			}
+			for (const result of servers) {
+				if (this.db !== db) return;
+				if (result.status !== "fulfilled") continue;
+				if (result.value.panes === "absent") this.attentionShown.delete(result.value.socket);
+				else await this.showAttention(result.value.socket, result.value.clients);
+			}
 		} catch (error) {
 			// A failed pass changes nothing; the next one tries again. The error goes to the runtime log.
 			console.error(`tmux poll failed: ${(error as Error).stack ?? error}`);
 		} finally {
 			this.polling = false;
+		}
+	}
+
+	/** A session whose pane a client shows has been seen, once it settled after the last time it was. */
+	private seeShownPanes(socket: string, shown: string[]): void {
+		if (shown.length === 0) return;
+		const rows = this.db!.prepare(
+			`select s.id from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
+			where i.ended_at is null and i.tmux_socket = ? and i.pane_id in (${shown.map(() => "?").join(", ")})
+				and coalesce(s.settled_at, 0) > coalesce(s.seen_at, 0)`,
+		).all(socket, ...shown) as { id: string }[];
+		for (const { id } of rows) this.seen(id, "pane");
+	}
+
+	/**
+	 * Write a server's status-line summary (`@pi_agents`) and jump target (`@pi_jump_target`) when they change,
+	 * from the live top-level sessions in its panes.
+	 */
+	private async showAttention(socket: string, clients: { name: string; pane: string }[]): Promise<void> {
+		const rows = (
+			this.db!.prepare(
+				`select i.pane_id, s.run_state, s.prompt, s.needs_you_since from sessions s
+				join incarnations i on i.session_id = s.id and i.generation = s.generation
+				where s.kind = 'root' and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
+					and i.tmux_socket = ? and i.pane_id is not null`,
+			).all(socket) as { pane_id: string; run_state: string; prompt: string | null; needs_you_since: number | null }[]
+		).map(
+			(row): AttentionRow => ({
+				paneId: row.pane_id,
+				runState: row.run_state,
+				prompt: row.prompt !== null,
+				needsYouSince: row.needs_you_since,
+			}),
+		);
+		const options = { "@pi_agents": statusSummary(rows), "@pi_jump_target": jumpTarget(rows) };
+		const written = JSON.stringify(options);
+		if (this.attentionShown.get(socket) === written) return;
+		try {
+			await setServerOptions(
+				socket,
+				options,
+				clients.map((client) => client.name),
+				AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
+			);
+			this.attentionShown.set(socket, written);
+		} catch (error) {
+			console.error(`writing attention to ${socket} failed: ${(error as Error).message}`);
 		}
 	}
 

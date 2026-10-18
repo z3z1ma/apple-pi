@@ -111,7 +111,9 @@ export type Command =
 			prompt?: string;
 	  }
 	/** Quit the session's Pi process. */
-	| { kind: "close" };
+	| { kind: "close" }
+	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */
+	| { kind: "mark_seen" };
 
 /**
  * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command

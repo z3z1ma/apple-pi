@@ -3,10 +3,9 @@
 #
 #   sidebar.sh toggle <window>                    prefix + u: open the sidebar in <window> without focus, or close it
 #   sidebar.sh follow <window>                    window and session hooks: move the open sidebar into <window>
-#   sidebar.sh seen <pane>                        focus hook: record when the operator last looked at <pane>
-#   sidebar.sh jump <client> <pane>               prefix + U: go to the agent that has needed you longest
+#   sidebar.sh jump <client>                      prefix + y: go to the agent that has needed you longest
 #   sidebar.sh dashboard <client> <window> <session>   prefix + A: open, switch to, or leave the dashboard window
-#   sidebar.sh status                             refresh the status-line summary
+#   sidebar.sh status                             show the runtime's summary (@pi_agents) in the status line
 set -uo pipefail
 # Hooks run this through run-shell, which would show any output in the operator's pane.
 exec >/dev/null 2>&1
@@ -112,7 +111,6 @@ go_to() {
 }
 
 status() {
-  tmux set-option -g @pi_agents "$(py agents.py summary)"
   case "$(tmux show-option -gqv status-right)" in
   *'#{@pi_agents}'*) ;;
   *) tmux set-option -ga status-right '#{@pi_agents}' ;;
@@ -129,13 +127,9 @@ follow)
   pane="$(sidebar)"
   if [ -n "$pane" ]; then follow "$pane" "$2"; fi
   ;;
-seen)
-  tmux set-option -p -t "$2" @pi_seen_at "$(date +%s)"
-  status
-  ;;
 jump)
-  target="$(py agents.py next "$3")"
-  if [ -n "$target" ]; then go_to "$2" "$target"; else tmux display-message -c "$2" "No other Pi agent needs you"; fi
+  target="$(tmux show-option -gqv @pi_jump_target)"
+  if [ -n "$target" ]; then go_to "$2" "$target"; else tmux display-message -c "$2" "No Pi agent needs you"; fi
   ;;
 dashboard)
   window="$(dashboard_window)"

@@ -156,7 +156,6 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 	process.env.TMUX_PANE = "%78";
 	const server = new Map<string, string>();
 	const pluginRuns: string[] = [];
-	const statusRefreshes: string[] = [];
 	const startPi = (sessionId: string) => {
 		const handlers = new Map<string, (...args: unknown[]) => unknown>();
 		const pi = {
@@ -170,8 +169,7 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 				if (args[0] === "display-message") return { code: 0, stdout: "%78\t@4\t/dev/null\n", stderr: "" };
 				if (args[0] === "show-option") return { code: 0, stdout: `${server.get(args[2]) ?? ""}\n`, stderr: "" };
 				if (args[0] === "set-option") server.set(args[2], args[3]);
-				if (args[0] === "run-shell" && args[1] === "-b") statusRefreshes.push(args[2]);
-				else if (args[0] === "run-shell") pluginRuns.push(args[1]);
+				if (args[0] === "run-shell") pluginRuns.push(args[1]);
 				return { code: 0, stdout: "", stderr: "" };
 			},
 		};
@@ -191,8 +189,6 @@ test("loads the tmux plugin once per tmux server and points it at the state dire
 	expect(pluginRuns).toHaveLength(1);
 	expect(pluginRuns[0]).toMatch(/components\/tmux-sessions\/pi_session_manager\.tmux$/);
 	expect(server.get("@pi_state_dir")).toBe(stateDir);
-	expect(statusRefreshes.length).toBeGreaterThan(0);
-	expect(statusRefreshes[0]).toMatch(/scripts\/sidebar\.sh' status$/);
 
 	if (previousPane === undefined) delete process.env.TMUX_PANE;
 	else process.env.TMUX_PANE = previousPane;
@@ -206,7 +202,6 @@ async function startPiOn(
 	os: NodeJS.Platform,
 	sessionIds: string | string[],
 	notch: (command: string, args: string[]) => Promise<unknown>,
-	statusRefreshes: string[] = [],
 ) {
 	const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
 	const previousPane = process.env.TMUX_PANE;
@@ -223,7 +218,6 @@ async function startPiOn(
 			if (command.endsWith("notch.sh")) return notch(command, args);
 			if (args[0] === "-c") return { code: 0, stdout: "tmux\n", stderr: "" };
 			if (args[0] === "display-message") return { code: 0, stdout: "%80\t@5\t/dev/null\n", stderr: "" };
-			if (args[0] === "run-shell" && args[1] === "-b") statusRefreshes.push(args[2]);
 			return { code: 0, stdout: "", stderr: "" };
 		},
 	};
@@ -263,16 +257,9 @@ test("each root Pi session start in tmux starts the notch panel on macOS and now
 });
 
 test("a failing notch start does not stop status publishing", async () => {
-	const statusRefreshes: string[] = [];
-	const handlers = await startPiOn(
-		"darwin",
-		"session-notch-fails",
-		async () => {
-			throw new Error("swiftc crashed");
-		},
-		statusRefreshes,
-	);
-	const refreshesAtStart = statusRefreshes.length;
+	const handlers = await startPiOn("darwin", "session-notch-fails", async () => {
+		throw new Error("swiftc crashed");
+	});
 
 	handlers.get("agent_start")?.({ type: "agent_start" });
 	await flushUntil(
@@ -280,7 +267,6 @@ test("a failing notch start does not stop status publishing", async () => {
 	);
 
 	expect((await readAllStates()).find((record) => record.sessionId === "session-notch-fails")?.status).toBe("busy");
-	expect(statusRefreshes.length).toBeGreaterThan(refreshesAtStart);
 });
 
 test("a session rename updates the record's name without counting as a status change", async () => {
