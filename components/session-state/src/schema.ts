@@ -97,6 +97,18 @@ const MIGRATIONS = [
 	alter table sessions add column last_error text;
 	alter table sessions add column last_abort_at integer;
 	alter table sessions add column config text;`,
+	`create table messages (
+		session_id text not null,
+		entry_id text not null,
+		part text not null,
+		at integer not null,
+		role text not null,
+		tool text,
+		size integer not null,
+		preview text not null,
+		source text not null,
+		primary key (session_id, entry_id, part)
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

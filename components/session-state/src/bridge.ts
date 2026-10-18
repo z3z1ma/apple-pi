@@ -4,7 +4,15 @@ import { createConnection, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { statePaths } from "./paths.js";
-import { type BridgeMessage, type Facts, HEARTBEAT_MS, type Hello, type RunState, type Tool } from "./protocol.js";
+import {
+	type BridgeMessage,
+	type Facts,
+	HEARTBEAT_MS,
+	type Hello,
+	type IndexRow,
+	type RunState,
+	type Tool,
+} from "./protocol.js";
 
 const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.ts", import.meta.url));
 const REGISTER = new URL("./register.mjs", import.meta.url).href;
@@ -50,6 +58,8 @@ class StateLink {
 	private heartbeat?: NodeJS.Timeout;
 	private retry?: NodeJS.Timeout;
 	readonly hello: Hello;
+	/** Every conversation row indexed so far; all are sent again on reconnect, and the runtime ignores repeats. */
+	private readonly rows: IndexRow[] = [];
 	private readonly warn: (message: string) => void;
 
 	constructor(hello: Hello, warn: (message: string) => void) {
@@ -73,6 +83,12 @@ class StateLink {
 			(changed as Record<string, unknown>)[key] = value;
 		}
 		if (Object.keys(changed).length > 0) this.send({ type: "facts", facts: changed });
+	}
+
+	index(rows: IndexRow[]): void {
+		if (rows.length === 0) return;
+		this.rows.push(...rows);
+		this.send({ type: "index", rows });
 	}
 
 	toolStart(tool: Tool): void {
@@ -106,6 +122,7 @@ class StateLink {
 		socket.on("connect", () => {
 			this.connected = true;
 			this.send(this.hello);
+			if (this.rows.length > 0) this.send({ type: "index", rows: this.rows });
 			this.heartbeat = setInterval(() => this.send({ type: "heartbeat" }), HEARTBEAT_MS);
 			this.heartbeat.unref();
 		});
@@ -207,6 +224,65 @@ function tmuxPane(): Hello["tmux"] {
 	return socket && pane ? { socket, pane } : undefined;
 }
 
+const PREVIEW_CHARS = 120;
+function preview(text: string): string {
+	return text.trim().split("\n")[0].slice(0, PREVIEW_CHARS);
+}
+
+/** Index rows for transcript entries: one per message, plus one per tool call inside an assistant message. */
+function indexRows(entry: { type: string; id: string; timestamp: string } & Record<string, any>): IndexRow[] {
+	const at = Date.parse(entry.timestamp);
+	if (entry.type === "custom_message") {
+		const text = textOf(entry.content);
+		return [
+			{
+				entryId: entry.id,
+				part: "",
+				at,
+				role: "custom",
+				tool: entry.customType,
+				size: text.length,
+				preview: preview(text),
+			},
+		];
+	}
+	if (entry.type !== "message") return [];
+	const message = entry.message;
+	const text = textOf(message.content);
+	if (message.role === "user")
+		return [{ entryId: entry.id, part: "", at, role: "user", size: text.length, preview: preview(text) }];
+	if (message.role === "toolResult")
+		return [
+			{
+				entryId: entry.id,
+				part: "",
+				at,
+				role: "tool_result",
+				tool: message.toolName,
+				size: text.length,
+				preview: preview(text),
+			},
+		];
+	if (message.role !== "assistant") return [];
+	const rows: IndexRow[] = [
+		{ entryId: entry.id, part: "", at, role: "assistant", size: text.length, preview: preview(text) },
+	];
+	for (const part of Array.isArray(message.content) ? message.content : []) {
+		if (part?.type !== "toolCall") continue;
+		const args = JSON.stringify(part.arguments ?? {});
+		rows.push({
+			entryId: entry.id,
+			part: part.id,
+			at,
+			role: "tool_call",
+			tool: part.name,
+			size: args.length,
+			preview: preview(mainArg(part.arguments) ?? args),
+		});
+	}
+	return rows;
+}
+
 function textOf(content: unknown): string {
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
@@ -220,6 +296,17 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	let mcpServers: string[] = [];
 	// Messages typed while a run is busy wait in Pi's queue until delivered as a user message.
 	let queued: { kind: "steers" | "followUps"; text: string }[] = [];
+	let indexedEntries = new Set<string>();
+	const indexNew = (ctx: ExtensionContext) => {
+		if (!link) return;
+		const rows: IndexRow[] = [];
+		for (const entry of ctx.sessionManager.getEntries()) {
+			if (indexedEntries.has(entry.id)) continue;
+			indexedEntries.add(entry.id);
+			rows.push(...indexRows(entry as never));
+		}
+		link.index(rows);
+	};
 	const reportQueue = () =>
 		link?.facts({
 			queue: {
@@ -239,7 +326,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			else process.stderr.write(`${message}\n`);
 		};
 		link = new StateLink(helloFor(pi, ctx, skills, mcpServers), warn);
+		indexedEntries = new Set();
+		indexNew(ctx);
 	});
+	pi.on("turn_end", (_event, ctx) => indexNew(ctx));
 	pi.on("session_shutdown", (event) => {
 		link?.close(event.reason === "reload" ? undefined : event.reason);
 		link = undefined;
@@ -322,6 +412,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.on("session_compact_failed", (_event, ctx) => link?.run(ctx.isIdle() ? "idle" : "thinking"));
 	pi.on("agent_settled", (event, ctx) => {
 		link?.run("idle");
+		indexNew(ctx);
 		if (!ctx.hasPendingMessages() && queued.length > 0) {
 			queued = [];
 			reportQueue();

@@ -1,14 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
+	type EntryReply,
 	type Facts,
 	type Hello,
+	type IndexRow,
 	lineReader,
 	type ProcessState,
+	type ReadEntry,
 	type RunState,
 	SILENCE_MS,
 	type Tool,
@@ -233,9 +237,14 @@ export class Runtime {
 			this.hello(connection, message);
 			return;
 		}
+		if (message.type === "read_entry") {
+			void this.readEntry(connection, message);
+			return;
+		}
 		const { sessionId, generation } = connection;
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
+		else if (message.type === "index") this.index(sessionId, generation, message.rows);
 		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
@@ -304,6 +313,67 @@ export class Runtime {
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
+	}
+
+	/** Completed conversation, indexed once: a row already present is ignored, a new one is also an event. */
+	private index(sessionId: string, generation: number, rows: IndexRow[]): void {
+		const db = this.db!;
+		const insert = db.prepare(
+			`insert or ignore into messages (session_id, entry_id, part, at, role, tool, size, preview, source)
+			values (?, ?, ?, ?, ?, ?, ?, ?, 'bridge')`,
+		);
+		db.exec("begin");
+		try {
+			for (const row of rows) {
+				const added = insert.run(
+					sessionId,
+					row.entryId,
+					row.part,
+					row.at,
+					row.role,
+					row.tool ?? null,
+					row.size,
+					row.preview,
+				);
+				if (added.changes)
+					this.event("bridge", sessionId, generation, "message", {
+						entryId: row.entryId,
+						part: row.part,
+						role: row.role,
+					});
+			}
+			db.exec("commit");
+		} catch (error) {
+			db.exec("rollback");
+			throw error;
+		}
+	}
+
+	/** One entry of a session's transcript, read from Pi's own JSONL file, which stays the source of truth. */
+	private async readEntry(connection: Connection, request: ReadEntry): Promise<void> {
+		const reply = (body: { entry: unknown } | { error: string }) =>
+			connection.socket.write(
+				`${JSON.stringify({ type: "entry", requestId: request.requestId, ...body } as EntryReply)}\n`,
+			);
+		const row = this.db?.prepare("select session_file from sessions where id = ?").get(request.sessionId) as
+			| { session_file: string | null }
+			| undefined;
+		if (!row) return void reply({ error: "unknown session" });
+		if (!row.session_file) return void reply({ error: "session has no transcript file" });
+		let text: string;
+		try {
+			text = await readFile(row.session_file, "utf8");
+		} catch (error) {
+			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
+		}
+		for (const line of text.split("\n")) {
+			if (!line.includes(request.entryId)) continue;
+			try {
+				const entry = JSON.parse(line);
+				if (entry.id === request.entryId) return void reply({ entry });
+			} catch {}
+		}
+		reply({ error: "entry not found" });
 	}
 
 	/** The current generation's facts, each change an event of its own. */

@@ -33,6 +33,32 @@ export interface Facts {
 	config: { name: string | null; activeTools: string[]; extensions: string[]; skills: string[]; mcpServers: string[] };
 }
 
+/**
+ * One completed piece of conversation: a message (`part` ""), or a tool call inside an assistant message (`part`
+ * is the tool call id). The text itself stays in the session's JSONL; `read_entry` fetches it.
+ */
+export interface IndexRow {
+	entryId: string;
+	part: string;
+	at: number;
+	role: "user" | "assistant" | "tool_call" | "tool_result" | "custom";
+	tool?: string;
+	size: number;
+	preview: string;
+}
+
+/** Any client may ask for one session entry; the runtime answers on the same connection with `EntryReply`. */
+export interface ReadEntry {
+	type: "read_entry";
+	requestId: string;
+	sessionId: string;
+	entryId: string;
+}
+
+export type EntryReply =
+	| { type: "entry"; requestId: string; entry: unknown }
+	| { type: "entry"; requestId: string; error: string };
+
 export interface Hello {
 	type: "hello";
 	session: { id: string; kind: "root"; file?: string; cwd: string; name?: string };
@@ -51,6 +77,8 @@ export type BridgeMessage =
 	| { type: "facts"; facts: Partial<Facts> }
 	| { type: "tool_start"; tool: Tool }
 	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean }
+	| { type: "index"; rows: IndexRow[] }
+	| ReadEntry
 	| { type: "shutdown"; reason: string };
 
 /** A bridge sends a heartbeat this often; the runtime treats a bridge silent for SILENCE_MS as lost. */

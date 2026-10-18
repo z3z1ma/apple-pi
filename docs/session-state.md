@@ -23,7 +23,8 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
   Only the session's current generation changes these. Streamed text and tool progress update nothing, so they write no events.
 - `incarnations`: one row per process lifetime of a session (generation 1, 2, ... on each reopen), with pid, process start time, process state, start and end, and why it ended. An incarnation running in tmux is bound to its pane: the server socket and pane id the bridge reads from `TMUX` and `TMUX_PANE`, and the pane's tty once the runtime has seen the pane (recorded with `tmux` as its source).
 - `tmux_servers`, `tmux_sessions`, `tmux_windows`, `tmux_window_links`, `tmux_panes`: every live tmux server (keyed by its resolved socket path, so `/tmp` and `/private/tmp` are one server) and its sessions, windows, and panes, including panes that run no Pi. A window can be linked into several sessions, so each link (session, window, index in that session) is its own row. tmux ids such as `%3` are only unique within a server, so every row also carries the socket. A pane row holds its window, tty, first process, current command and path, and whether it is active or dead.
-- `events`: an append-only history of run-state changes, tools starting and ending (with duration), prompts opening and closing, every other change to a session's facts (`<column>_changed`), process-state changes, incarnations starting and ending, failed process checks, every tmux server, session, window, window link, and pane added, changed, or removed, and failed tmux reads. Every row names its source (`bridge`, `runtime`, or `tmux`) and time.
+- `messages`: an index of each session's completed conversation, one row per message (user, assistant, tool result, or an extension's custom message such as delivered mail) and one per tool call inside an assistant message (`part` is the tool call id). A row holds the transcript entry id, time, role, tool, size, and a short preview; the text itself stays in Pi's session JSONL.
+- `events`: an append-only history of run-state changes, tools starting and ending (with duration), prompts opening and closing, every other change to a session's facts (`<column>_changed`), each newly indexed message (`message`), process-state changes, incarnations starting and ending, failed process checks, every tmux server, session, window, window link, and pane added, changed, or removed, and failed tmux reads. Every row names its source (`bridge`, `runtime`, or `tmux`) and time.
 
 ## tmux
 
@@ -32,6 +33,10 @@ Once a second the runtime runs one `tmux list-panes -a` against every server soc
 Each read has one second to answer. Only tmux's own "no server running" or "error connecting ... (No such file or directory | Connection refused)" means a server is gone and removes its rows. Any other failure (a timeout, a server that stopped answering, no permission, no tmux) proves nothing: the server keeps its rows, one `tmux_server_read_failed` event is recorded and logged, and the other servers are read as usual.
 
 The pane's tty comes from tmux, not from the bridge, so the runtime fills it in from the topology and records it with source `tmux` and its own event.
+
+## Reading a transcript entry
+
+Any client can ask the runtime for one entry of a session's transcript by sending `{"type": "read_entry", "requestId": ..., "sessionId": ..., "entryId": ...}` on the socket. The runtime reads the entry from the session's JSONL file and answers on the same connection with `{"type": "entry", "requestId": ..., "entry": {...}}`, or with `"error"`: `unknown session`, `session has no transcript file`, `entry not found`, or why the file could not be read.
 
 ## Liveness
 
