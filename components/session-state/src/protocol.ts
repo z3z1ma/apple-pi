@@ -72,6 +72,38 @@ export interface ReadEntry {
 	entryId: string;
 }
 
+/** What a client can ask a session to do. */
+export type Command =
+	| { kind: "talk"; text: string }
+	| { kind: "steer"; text: string }
+	| { kind: "follow_up"; text: string }
+	| { kind: "abort" }
+	| { kind: "rename"; name: string }
+	| { kind: "set_model"; provider: string; id: string }
+	| { kind: "set_thinking"; level: string };
+
+/**
+ * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command
+ * is bound to that incarnation and never reaches a later one; without it, it goes to the current one.
+ */
+export interface CommandRequest {
+	type: "command";
+	commandId: string;
+	sessionId: string;
+	generation?: number;
+	command: Command;
+}
+
+export type ReceiptStage = "accepted" | "delivered" | "applied" | "failed";
+
+/** Sent to the requesting client for each stage a command reaches; never "done": effects show as observed events. */
+export interface Receipt {
+	type: "receipt";
+	commandId: string;
+	stage: ReceiptStage;
+	reason?: string;
+}
+
 export type EntryReply =
 	| { type: "entry"; requestId: string; entry: unknown }
 	| { type: "entry"; requestId: string; error: string };
@@ -97,6 +129,9 @@ export type BridgeMessage =
 	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean; current: Tool | null }
 	| { type: "index"; rows: IndexRow[] }
 	| { type: "task_link"; bundle: string; taskId: string; via: string; at: number }
+	| CommandRequest
+	/** A bridge reporting how far a command it was given got. */
+	| { type: "command_progress"; commandId: string; stage: "delivered" | "applied" | "failed"; reason?: string }
 	| ReadEntry
 	| { type: "shutdown"; reason: string };
 

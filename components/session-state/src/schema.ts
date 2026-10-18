@@ -129,6 +129,17 @@ const MIGRATIONS = [
 		source text not null
 	) strict;`,
 	`alter table sessions add column spawned_by text;`,
+	`create table commands (
+		command_id text primary key,
+		session_id text not null,
+		generation integer,
+		kind text not null,
+		command text not null,
+		stage text not null,
+		reason text,
+		created_at integer not null,
+		updated_at integer not null
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
+	type CommandRequest,
 	type EntryReply,
 	type Facts,
 	type Hello,
@@ -13,6 +14,8 @@ import {
 	lineReader,
 	type ProcessState,
 	type ReadEntry,
+	type Receipt,
+	type ReceiptStage,
 	type RunState,
 	SILENCE_MS,
 	type Tool,
@@ -149,6 +152,8 @@ export class Runtime {
 	private readonly stopping = new AbortController();
 	/** Servers whose last read failed, so a failure is logged and recorded once rather than every second. */
 	private readonly failingServers = new Set<string>();
+	/** The client that sent each command still in flight, so its receipts reach it. */
+	private readonly commandClients = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
 	private readonly failedChecks = new Set<string>();
 	private readonly paths: StatePaths;
@@ -240,6 +245,14 @@ export class Runtime {
 	private handle(connection: Connection, message: BridgeMessage): void {
 		if (message.type === "hello") {
 			this.hello(connection, message);
+			return;
+		}
+		if (message.type === "command") {
+			this.command(connection, message);
+			return;
+		}
+		if (message.type === "command_progress") {
+			this.commandProgress(connection, message.commandId, message.stage, message.reason);
 			return;
 		}
 		if (message.type === "read_entry") {
@@ -341,6 +354,86 @@ export class Runtime {
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
+	}
+
+	/**
+	 * Record a client's command and hand it to the target incarnation's bridge. A repeated `commandId` only reports
+	 * how far the first one got. Without a live incarnation (or a bound one that is no longer current) it fails at once.
+	 */
+	private command(client: Connection, request: CommandRequest): void {
+		const db = this.db!;
+		const { commandId, sessionId, generation, command } = request;
+		const receipt = (stage: ReceiptStage, reason?: string) =>
+			client.socket.write(
+				`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}) } satisfies Receipt)}\n`,
+			);
+		if (typeof commandId !== "string" || typeof sessionId !== "string" || typeof command?.kind !== "string") {
+			receipt("failed", "commandId, sessionId, and command.kind are required");
+			return;
+		}
+		const existing = db.prepare("select stage, reason from commands where command_id = ?").get(commandId) as
+			| { stage: ReceiptStage; reason: string | null }
+			| undefined;
+		if (existing) {
+			receipt(existing.stage, existing.reason ?? undefined);
+			return;
+		}
+		const now = Date.now();
+		db.prepare(
+			`insert into commands (command_id, session_id, generation, kind, command, stage, created_at, updated_at)
+			values (?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+		).run(commandId, sessionId, generation ?? null, command.kind, JSON.stringify(command), now, now);
+		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
+		receipt("accepted");
+		const current = db.prepare("select generation from sessions where id = ?").get(sessionId) as
+			| { generation: number }
+			| undefined;
+		const target = [...this.connections].find(
+			(connection) =>
+				!connection.shutdown &&
+				connection.sessionId === sessionId &&
+				connection.generation === current?.generation &&
+				(generation === undefined || generation === current?.generation),
+		);
+		if (!target) {
+			this.commandClients.set(commandId, client);
+			this.setCommandStage(commandId, "failed", "not running");
+			return;
+		}
+		this.commandClients.set(commandId, client);
+		target.socket.write(`${JSON.stringify({ type: "command", commandId, command })}\n`);
+	}
+
+	/** A bridge reports progress only for commands addressed to its own session. */
+	private commandProgress(bridge: Connection, commandId: string, stage: ReceiptStage, reason?: string): void {
+		const row = this.db!.prepare("select session_id from commands where command_id = ?").get(commandId) as
+			| { session_id: string }
+			| undefined;
+		if (!row || row.session_id !== bridge.sessionId) return;
+		this.setCommandStage(commandId, stage, reason);
+	}
+
+	private setCommandStage(commandId: string, stage: ReceiptStage, reason?: string): void {
+		const db = this.db!;
+		const row = db.prepare("select session_id, generation, stage from commands where command_id = ?").get(commandId) as
+			| { session_id: string; generation: number | null; stage: ReceiptStage }
+			| undefined;
+		if (!row || row.stage === "applied" || row.stage === "failed") return;
+		db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
+			stage,
+			reason ?? null,
+			Date.now(),
+			commandId,
+		);
+		this.event("runtime", row.session_id, row.generation, `command_${stage}`, {
+			commandId,
+			...(reason ? { reason } : {}),
+		});
+		const client = this.commandClients.get(commandId);
+		client?.socket.write(
+			`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}) } satisfies Receipt)}\n`,
+		);
+		if (stage === "applied" || stage === "failed") this.commandClients.delete(commandId);
 	}
 
 	/**

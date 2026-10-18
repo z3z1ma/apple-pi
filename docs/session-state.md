@@ -38,6 +38,22 @@ Each read has one second to answer. Only tmux's own "no server running" or "erro
 
 The pane's tty comes from tmux, not from the bridge, so the runtime fills it in from the topology and records it with source `tmux` and its own event.
 
+## Commands
+
+Any client can ask a session to do something by sending `{"type": "command", "commandId": ..., "sessionId": ..., "command": {...}}` on the socket; add `"generation"` to bind it to one incarnation, so it can never reach a later one. Commands:
+
+| `kind` | Fields | Effect |
+| --- | --- | --- |
+| `talk` | `text` | A new user turn; fails with `busy` while a run is active |
+| `steer` | `text` | Redirects the active run at its next boundary (starts a turn when idle) |
+| `follow_up` | `text` | Queued until the active run ends |
+| `abort` | | Stops the active run; applied once the run has stopped |
+| `rename` | `name` | Renames the session |
+| `set_model` | `provider`, `id` | Switches model; fails for an unknown or unavailable model |
+| `set_thinking` | `level` | Sets the thinking level |
+
+The runtime stores each command in `commands` and answers the sender with one `{"type": "receipt", "commandId": ..., "stage": ..., "reason"?: ...}` line per stage: `accepted` (stored), `delivered` (the session's bridge has it), `applied` (Pi took it), or `failed` with a reason. Each stage is also an event (`command_accepted`, ...). No receipt says the work is done; its effects appear as ordinary observed facts and events. A command for a session with no live incarnation, or bound to one that is no longer current, fails at once with `not running`. Sending the same `commandId` again applies nothing and answers with the stage the first one reached. Anyone who can open the socket, which is only your user, can send commands; confirmations belong to the view that sends them.
+
 ## Reading a transcript entry
 
 Any client can ask the runtime for one entry of a session's transcript by sending `{"type": "read_entry", "requestId": ..., "sessionId": ..., "entryId": ...}` on the socket. The runtime reads the entry from the session's JSONL file and answers on the same connection with `{"type": "entry", "requestId": ..., "entry": {...}}`, or with `"error"`: `unknown session`, `session has no transcript file`, `entry not found`, or why the file could not be read.

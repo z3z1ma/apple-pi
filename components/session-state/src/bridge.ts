@@ -9,10 +9,12 @@ import { childSessionParent, inChildSessionContext } from "../../subagents/src/c
 import { statePaths } from "./paths.js";
 import {
 	type BridgeMessage,
+	type Command,
 	type Facts,
 	HEARTBEAT_MS,
 	type Hello,
 	type IndexRow,
+	lineReader,
 	type RunState,
 	type Tool,
 } from "./protocol.js";
@@ -64,11 +66,17 @@ class StateLink {
 	/** Every conversation row indexed so far; all are sent again on reconnect, and the runtime ignores repeats. */
 	private readonly rows: IndexRow[] = [];
 	private readonly warn: (message: string) => void;
+	private readonly onCommand: (commandId: string, command: Command) => void;
 
-	constructor(hello: Hello, warn: (message: string) => void) {
+	constructor(hello: Hello, warn: (message: string) => void, onCommand: (commandId: string, command: Command) => void) {
 		this.hello = hello;
 		this.warn = warn;
+		this.onCommand = onCommand;
 		this.connect();
+	}
+
+	progress(commandId: string, stage: "delivered" | "applied" | "failed", reason?: string): void {
+		this.send({ type: "command_progress", commandId, stage, ...(reason ? { reason } : {}) });
 	}
 
 	run(run: RunState): void {
@@ -133,6 +141,19 @@ class StateLink {
 			this.heartbeat = setInterval(() => this.send({ type: "heartbeat" }), HEARTBEAT_MS);
 			this.heartbeat.unref();
 		});
+		socket.on(
+			"data",
+			lineReader((line) => {
+				let message: { type?: string; commandId?: string; command?: Command };
+				try {
+					message = JSON.parse(line);
+				} catch {
+					return;
+				}
+				if (message.type === "command" && message.commandId && message.command)
+					this.onCommand(message.commandId, message.command);
+			}),
+		);
 		socket.on("error", () => {});
 		socket.on("close", () => {
 			this.connected = false;
@@ -393,6 +414,54 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher = undefined;
 	};
 
+	// Resolved when the current run settles; an abort is applied only once the run has stopped.
+	const settledWaiters: (() => void)[] = [];
+	const settled = (ctx: ExtensionContext) =>
+		ctx.isIdle() ? Promise.resolve() : new Promise<void>((resolve) => settledWaiters.push(resolve));
+	/** Carry out a command from the runtime with Pi's own calls, reporting each stage back. */
+	const apply = async (commandId: string, command: Command) => {
+		const target = link;
+		const ctx = current;
+		if (!target || !ctx) return;
+		target.progress(commandId, "delivered");
+		const fail = (reason: string) => target.progress(commandId, "failed", reason);
+		try {
+			switch (command.kind) {
+				case "talk":
+					if (!ctx.isIdle()) return fail("busy: send steer or follow_up while a run is active");
+					pi.sendUserMessage(command.text);
+					break;
+				case "steer":
+					pi.sendUserMessage(command.text, { deliverAs: "steer" });
+					break;
+				case "follow_up":
+					pi.sendUserMessage(command.text, { deliverAs: "followUp" });
+					break;
+				case "abort":
+					ctx.abort();
+					await settled(ctx);
+					break;
+				case "rename":
+					pi.setSessionName(command.name);
+					break;
+				case "set_thinking":
+					pi.setThinkingLevel(command.level as never);
+					break;
+				case "set_model": {
+					const model = ctx.modelRegistry.find(command.provider, command.id);
+					if (!model) return fail(`unknown model ${command.provider}/${command.id}`);
+					if (!(await pi.setModel(model))) return fail(`model ${command.provider}/${command.id} is not available`);
+					break;
+				}
+				default:
+					return fail(`unknown command ${(command as { kind: string }).kind}`);
+			}
+			target.progress(commandId, "applied");
+		} catch (error) {
+			fail((error as Error).message);
+		}
+	};
+
 	pi.on("session_start", (event, ctx) => {
 		link?.close();
 		stop();
@@ -409,7 +478,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		};
 		// A switch, resume, or fork in this process names the session file that ran here before.
 		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
-		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn);
+		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (commandId, command) => {
+			void apply(commandId, command);
+		});
 		refreshGit(ctx);
 		indexNew(ctx);
 		// Messages can be appended while the session is idle (passive forks, extensions); look for them each second.
@@ -508,6 +579,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.on("session_compact_failed", (_event, ctx) => link?.run(ctx.isIdle() ? "idle" : "thinking"));
 	pi.on("agent_settled", (event, ctx) => {
 		link?.run("idle");
+		for (const resolve of settledWaiters.splice(0)) resolve();
 		refreshGit(ctx);
 		indexNew(ctx);
 		if (!ctx.hasPendingMessages()) queued = { steers: 0, followUps: 0 };
