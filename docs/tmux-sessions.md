@@ -4,68 +4,39 @@ Run many Pi agents in ordinary tmux panes and keep one sidebar that shows which 
 
 The integration has four parts:
 
-- A Pi **extension** (`components/tmux-sessions/src/`, registered from `extensions/tmux-sessions.ts`) publishes each root session's live status to disk and loads the tmux plugin.
-- A **tmux plugin** (`pi_session_manager.tmux`, `scripts/sidebar.sh`) binds the key, moves the sidebar between windows, and records when you last looked at each pane.
+- A Pi **extension** (`components/tmux-sessions/src/`, registered from `extensions/tmux-sessions.ts`) loads the tmux plugin, rings a pane's bell when its run settles, and starts the notch panel.
+- A **tmux plugin** (`pi_session_manager.tmux`, `scripts/sidebar.sh`) binds the keys and moves the sidebar between windows.
 - The **sidebar** (`components/tmux-sessions/sidebar/`) is a [Textual](https://textual.textualize.io/) app that `uv run --script` starts in a tmux pane.
 - The **notch panel** (`components/tmux-sessions/notch/`) is a small Swift app on macOS that shows the same agents in the MacBook notch, as workers in a pixel room.
 
-## The state contract
+All of them show what the [session-state](session-state.md) model records: the sidebar, the dashboard, and the notch read its database, and send changes (mark seen, a dashboard reply, notch choices) to its runtime as commands.
 
-Each root Pi session running inside tmux writes one JSON record to `~/.pi/agent/state/tmux-sessions/<sessionId>.json` (override with `PI_TMUX_STATE_DIR`). The record shape is owned by `components/tmux-sessions/src/state.ts`:
+## Where the data comes from
 
-```json
-{
-  "schema": 1,
-  "sessionId": "…",
-  "pid": 12345,
-  "status": "busy | idle | waiting",
-  "cwd": "/path/to/project",
-  "sessionName": "optional display name",
-  "paneId": "%3",
-  "windowId": "@2",
-  "paneTty": "/dev/ttys009",
-  "tmuxSocket": "/private/tmp/tmux-501/default",
-  "reportsTo": "coordinator-work",
-  "startedAt": 1700000000,
-  "updatedAt": 1700000000
-}
-```
+An agent is a live top-level Pi session whose process runs in a pane of this tmux server (the notch shows every server). Its state comes from the database:
 
-Status is derived from agent lifecycle events:
-
-| Event | Status |
+| State | When |
 | --- | --- |
-| `agent_start` | `busy` |
-| `ui_prompt_start` | `waiting` (a blocking extension prompt needs you) |
-| `ui_prompt_end` | `idle` when the session is idle; otherwise `busy` |
-| `agent_settled` (idle) | `idle` (your turn) |
-| `session_shutdown` | record removed |
+| asking you (`?`) | a prompt is open: `ask_user_question` or another extension's dialog |
+| done (`✓`) | its run settled after you last saw it ([attention](session-state.md#attention)) |
+| working | a run is in progress |
+| idle | settled and seen |
 
-`ui_prompt_start` and `ui_prompt_end` cover every blocking extension UI, including `ask_user_question`'s questionnaire. `agent_settled` fires on interrupt and error too, so the `busy → idle` transition is unconditional. Writes are atomic (temp file + `rename`). Only root interactive (`tui`) sessions publish; subagents and `pi_exec` workers are excluded. A same-pane session switch, resume, or fork drops the old record and republishes under the new session id. On settle the extension also rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line.
-
-### Liveness
-
-The sidebar shows a record only when its pid is running **and** its `paneId` exists in this tmux server with the same `paneTty` (pane ids collide across tmux servers). It deletes records whose pid is gone, and records whose `tmuxSocket` names this server but whose pane is gone, which catches a Pi killed without its shutdown hook whose pid the OS has since reused. Records from another server, or written before records named their server, are skipped and left alone.
+Subagents and `pi_exec` workers are not agents here. On settle the extension rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line.
 
 ### Supervised sessions
 
-A session that another session started and watches, such as a [coordinator](../skills/coordinator/SKILL.md) worker, is started with `pi --reports-to <supervisor id>`. Its record carries that id as `reportsTo` (empty otherwise), and when it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail) the supervisor from its own session id:
+A session that another session started and watches, such as a [coordinator](../skills/coordinator/SKILL.md) worker, is started with `pi --reports-to <supervisor id>` (the coordinator's `start_session` does this). When it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail) the supervisor from its own session id:
 
 ```text
 Session "JEM review" closed (quit) while busy. Directory: /path/to/repo
 ```
 
-Killing its window or the tmux server sends the notice too, because Pi runs its shutdown hooks on SIGHUP. A crash, SIGKILL or power loss sends none; the supervisor finds those by comparing what it started with the live list.
-
-`agents.py list` prints the live list as JSON, after the same liveness checks the sidebar uses: `id`, `name`, `status`, `cwd`, `reportsTo`, `paneId`, `tmuxSession` and `updatedAt` for each Pi session running in this tmux server. Run it inside tmux:
-
-```bash
-uv run -q --no-project python components/tmux-sessions/sidebar/agents.py list
-```
+Killing its window or the tmux server sends the notice too, because Pi runs its shutdown hooks on SIGHUP. A crash, SIGKILL or power loss sends none; the supervisor finds those by comparing what it started with `list_peer_sessions`.
 
 ## Install
 
-Nothing to add to `tmux.conf`. The first Pi that starts inside tmux runs `pi_session_manager.tmux` on that tmux server, and records the plugin's path and modification time in the server option `@pi_sessions_plugin`, so a later Pi skips it and an updated plugin reloads. It also sets `@pi_state_dir` to the extension's record directory, so the sidebar reads the same records even when `PI_TMUX_STATE_DIR` is set only in Pi's environment. Running `run-shell <path>/pi_session_manager.tmux` from `tmux.conf` also works; loading twice is harmless.
+Nothing to add to `tmux.conf`. The first Pi that starts inside tmux runs `pi_session_manager.tmux` on that tmux server, and records the plugin's path and modification time in the server option `@pi_sessions_plugin`, so a later Pi skips it and an updated plugin reloads. It also sets `@pi_agent_dir` to Pi's agent directory, so the sidebar and dashboard find the database even when `PI_CODING_AGENT_DIR` is set only in Pi's environment. Running `run-shell <path>/pi_session_manager.tmux` from `tmux.conf` also works; loading twice is harmless.
 
 The plugin:
 
@@ -83,11 +54,11 @@ A large count shows how many agents need you, or "all clear". Below it, agents s
 
 | Lane | Agents | Card |
 | --- | --- | --- |
-| NEEDS YOU | `?` asking you (a blocking prompt is open), `✓` done (settled since you last looked at its pane) | yellow or green border |
+| NEEDS YOU | `?` asking you (a prompt is open), `✓` done (settled since you last saw it) | yellow or green border |
 | WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
 | QUIET | settled and seen | grey border |
 
-Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session most recently linked in `.ledger/*/history.json`, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost and the last tool call come from the session's JSONL log, read incrementally. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
+Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session touched last, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost, context size, and the last tool call come from the database. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
 
 The sidebar paints the terminal's default background, so it stays translucent on a translucent terminal, and uses the Catppuccin Mocha palette.
 
@@ -102,13 +73,13 @@ The sidebar paints the terminal's default background, so it stays translucent on
 
 ### Seen
 
-"Seen" is the tmux pane option `@pi_seen_at`: the `pane-focus-in` hook stamps it whenever a pane gains focus, and `x` stamps it by hand. An agent that settles while you watch its pane counts as seen, and so does an agent whose live view you read in the dashboard for three seconds. A rename, such as an automatic session title, is not a status change, so it never reopens an agent you have seen. The option lives and dies with its pane and works with no sidebar open; a tmux server restart forgets it.
+The session-state runtime records when you last saw each session: when a tmux client shows its pane (no hook; it reads the clients once a second), when you press `x`, and when you read an agent's live view in the dashboard for three seconds. A rename, such as an automatic session title, is not a settle, so it never reopens an agent you have seen. Seen times live in the database, so they work with no sidebar open and survive a tmux server restart.
 
 ## Status line and jump
 
 The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. The [session-state](session-state.md#attention) runtime writes it to the server option `@pi_agents` within a second of a change, and the session that has needed you longest to `@pi_jump_target`, which `prefix` + `y` jumps to.
 
-`prefix` + `y` jumps to the agent that has needed you longest, skipping the pane you are in, so pressing it again walks the queue. With nothing waiting it says so.
+`prefix` + `y` jumps to the agent that has needed you longest. Once you see it, the target moves to the next one in line, so pressing it again walks the queue. With nothing waiting it says so.
 
 ## The dashboard
 
@@ -125,13 +96,13 @@ Below 140 columns the table sits above the details instead of beside them.
 | --- | --- |
 | click a row, `j` / `k`, arrows | select an agent and show its live view |
 | click the selected row, `enter` | jump to that agent's pane |
-| `r` | reply: type a line into an idle agent's prompt without leaving the dashboard |
+| `r` | reply: send a line to an idle agent as a new turn without leaving the dashboard |
 | `x` / `X` | mark the selected / every agent as seen |
 | `p` | hide the table and give the live view the whole width |
 | `esc` | close the reply box, or go back to the previous window |
 | `q` | close the dashboard |
 
-A reply goes only to an agent that is idle when you press `enter`; a busy agent or an open questionnaire needs you in its own pane.
+A reply is a `talk` command, sent only to an agent that is idle when you press `enter`; a busy agent or an open questionnaire needs you in its own pane.
 
 ## The notch panel
 
@@ -148,11 +119,11 @@ On a Mac, a black pill sits under the notch: the agent count, then one dot per a
 
 A crowded room grows, up to the size of the panel window. Every session uses the size of the most crowded one, so the panel does not jump while you cycle.
 
-Your choices are kept in `~/.pi/agent/state/notch.json` and survive restarts. For each tmux session it holds the vibe (`vibes`), the room and worker look picked with the shuffle button (`rooms` and `looks`, keyed by `<vibe>/<session>`), and where you dragged each worker (`positions`, as fractions of the room's width and height). The panel rewrites the file whole after each change, so other tools can read it at any time.
+Your choices survive restarts: the panel stores them as the `notch` preference in the session-state database, through the runtime's `set_preference` command. For each tmux session they hold the vibe (`vibes`), the room and worker look picked with the shuffle button (`rooms` and `looks`, keyed by `<vibe>/<session>`), and where you dragged each worker (`positions`, as fractions of the room's width and height). The panel sends the whole object after each change, so other tools can read it at any time.
 
 ### Requirements and start-up
 
-The panel needs macOS, the Xcode command line tools (`swiftc`), and uv.
+The panel needs macOS and the Xcode command line tools (`swiftc`).
 
 Each root Pi that starts in tmux on macOS runs `scripts/notch.sh start` in the background. The script compiles `notch/NotchShell.swift` into `~/.pi/agent/cache/notch/pi-notch-<source hash>` if that file does not exist yet, and starts it. The first build takes a few seconds.
 
@@ -163,7 +134,7 @@ One panel runs per Mac. It holds `~/.pi/agent/state/notch.lock` while it runs:
 
 Without `swiftc`, nothing starts, and the script writes one line to `~/.pi/agent/logs/pi-notch.log`, which also holds build errors. Run `components/tmux-sessions/scripts/notch.sh start` to start the panel by hand, and `pkill -f cache/notch/pi-notch-` to stop it until the next Pi start. `PI_TMUX_DISABLED=1` keeps it off.
 
-The panel reads its agents from `sidebar/agents.py feed`, the sidebar's own agent view as one JSON line per second, so it shows the agents of the default tmux server. If the feed stops, the panel starts it again a second later. When displays come or go, the panel moves to the screen with the notch, or to the top centre of the main screen when no notch shows (for example, with the lid closed).
+The panel reads its agents from the session-state database once a second, from every tmux server; `pi-notch --feed-once` prints them as the page receives them. When displays come or go, the panel moves to the screen with the notch, or to the top centre of the main screen when no notch shows (for example, with the lid closed).
 
 ### Adding rooms and workers
 
@@ -191,21 +162,20 @@ The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the re
 
 - **Cost.** Measured with six agents, one of them working: the sidebar uses about 2% of one CPU core and 45 MB; a dashboard that no client is showing uses about 1.5% and 50 MB. Views redraw only what changed; a hidden dashboard stops capturing panes and animating, and catches up when you look at it.
 - **Crashes.** The sidebar and dashboard panes restart their app two seconds after a crash. `q` or `prefix` + `u` closes them for good. A failed read shows one error toast and the view keeps going.
-- **Memory.** Read positions and flash timers of ended sessions are dropped, so the views do not grow over days.
+- **Memory.** Flash timers and tool-history positions of ended sessions are dropped, so the views do not grow over days.
 - **Session names.** Agents name themselves after their first turn (see [automatic session titles](context.md#session-titles)), so cards and rows do not all read as the project directory.
-- **Restarts.** A tmux server restart forgets the bindings, hooks, and seen times; the next Pi that starts loads the plugin again. Pi agents started before an update keep writing their old record shape until they restart; the views still show them.
+- **Restarts.** A tmux server restart forgets the bindings and hooks; the next Pi that starts loads the plugin again. Seen times and notch choices live in the database.
 
 ## `/pi-sessions`
 
-Run `/pi-sessions` inside Pi to list the live published sessions and the state directory, to confirm the extension is publishing.
+Run `/pi-sessions` inside Pi to list the live top-level sessions the session-state model knows, with their status.
 
 ## Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `PI_TMUX_DISABLED=1` | Disable status publishing, plugin loading, and the notch panel. |
+| `PI_TMUX_DISABLED=1` | Disable plugin loading, the pane bell, and the notch panel. |
 | `PI_TMUX_SESSION_BELL=off` | Do not ring the pane bell on settle. |
-| `PI_TMUX_STATE_DIR=/path` | Override the record directory. |
 
 ## Development
 

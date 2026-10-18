@@ -17,7 +17,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import agents  # noqa: E402
 import dashboard  # noqa: E402
 import model  # noqa: E402
 import sidebar  # noqa: E402
@@ -36,8 +35,8 @@ class FakeTmux:
         self.screens: dict[str, str] = {}
         self.watched = True
 
-    def add_pane(self, pane_id: str, seen_at: str = "") -> None:
-        self.panes[pane_id] = {"session": "work", "window": "1", "index": str(len(self.panes) + 1), "seen": seen_at}
+    def add_pane(self, pane_id: str) -> None:
+        self.panes[pane_id] = {"session": "work", "window": "1", "index": str(len(self.panes) + 1)}
 
     def __call__(self, *args: str) -> str:
         if args[0] == "display-message" and "server\t#{socket_path}" in args:
@@ -46,12 +45,6 @@ class FakeTmux:
                 + "".join(f"client\t{pane}\n" for pane in self.focused)
                 + "".join(f"pane\t{pane}\t{p['index']}\n" for pane, p in self.panes.items())
             )
-        if args[0] == "list-panes":
-            panes = "".join(
-                f"pane\t{SOCKET}\t{pane}\t/dev/tty{pane[1:]}\t{p['session']}\t{p['window']}\t{p['index']}\t{p['seen']}\n"
-                for pane, p in self.panes.items()
-            )
-            return panes + "".join(f"client\t{pane}\n" for pane in self.focused)
         if args[:3] == ("list-clients", "-F", "#{window_id}"):
             return "@1\n" if self.watched else ""
         if args[0] == "list-clients":
@@ -61,51 +54,7 @@ class FakeTmux:
         if args[:2] == ("display-message", "-p") and args[-1] == "#{window_id}":
             return "@1\n"
         self.commands.append(args)
-        if args[:2] == ("set", "-p"):
-            self.panes[args[3]]["seen"] = args[5]
         return ""
-
-
-@pytest.fixture
-def env(tmp_path, monkeypatch):
-    fake = FakeTmux()
-    state = tmp_path / "state"
-    sessions = tmp_path / "sessions"
-    state.mkdir()
-    sessions.mkdir()
-    monkeypatch.setattr(agents, "tmux", fake)
-    monkeypatch.setattr(sidebar, "tmux", fake)
-    monkeypatch.setattr(dashboard, "tmux", fake)
-    monkeypatch.setattr(agents, "STATE_DIR", state)
-    monkeypatch.setattr(agents, "SESSIONS_DIR", sessions)
-    return fake, state, sessions, tmp_path
-
-
-def record(state: Path, session_id: str, pane: str, status: str, updated_at: int, pid: int | None = None, **extra):
-    data = {
-        "schema": 1,
-        "sessionId": session_id,
-        "pid": os.getpid() if pid is None else pid,
-        "status": status,
-        "cwd": extra.get("cwd", "/tmp/project"),
-        "sessionName": extra.get("name", ""),
-        "paneId": pane,
-        "paneTty": extra.get("tty", f"/dev/tty{pane[1:]}"),
-        "updatedAt": updated_at,
-        "tmuxSocket": extra.get("socket", SOCKET),
-        "reportsTo": extra.get("reports_to", ""),
-    }
-    if data["tmuxSocket"] is None:
-        del data["tmuxSocket"]
-    path = state / f"{session_id}.json"
-    path.write_text(json.dumps(data))
-    return path
-
-
-def dead_pid() -> int:
-    process = subprocess.Popen(["true"])
-    process.wait()
-    return process.pid
 
 
 @pytest.fixture(scope="session")

@@ -14,7 +14,7 @@ export interface StatePaths {
 }
 
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
-function agentDir(): string {
+export function agentDir(): string {
 	const configured = process.env.PI_CODING_AGENT_DIR;
 	if (!configured) return join(homedir(), ".pi", "agent");
 	if (configured === "~") return homedir();

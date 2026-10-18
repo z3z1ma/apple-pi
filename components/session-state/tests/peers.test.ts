@@ -103,3 +103,20 @@ test("the discovery and mail tools tell peer sessions from subagents", async () 
 		await close(run);
 	}
 }, 20000);
+
+test("/pi-sessions lists the live top-level sessions, the caller's own too", async () => {
+	const notices: string[] = [];
+	const run = await fauxSession([bridge], [], []);
+	try {
+		await run.session.bindExtensions({ uiContext: { notify: (text: string) => notices.push(text) } as never });
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		await fake("listed-1", { session: { name: "docs-worker" }, run: "thinking" });
+		await run.session.prompt("/pi-sessions");
+		expect(notices.at(-1)).toMatch(/^Live Pi sessions \(\d+\):/);
+		expect(notices.at(-1)).toContain("busy    listed-1  docs-worker");
+		expect(notices.at(-1)).toContain(id);
+	} finally {
+		await close(run);
+	}
+}, 20000);

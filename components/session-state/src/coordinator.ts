@@ -26,15 +26,8 @@ const reply = (text: string, details: Record<string, unknown>) => ({
 	details,
 });
 
-/**
- * Tools to start, reopen, and close peer sessions in tmux. They are registered in every root session, so the
- * `--coordinator` flag can be read, and active only in a session started with it.
- */
+/** Tools to start, reopen, and close peer sessions in tmux, active only in a session started with `--coordinator`. */
 export function installCoordinator(pi: ExtensionAPI): void {
-	pi.registerFlag("coordinator", {
-		type: "boolean",
-		description: "Give this session the tools to start, reopen, and close peer sessions in tmux",
-	});
 	pi.registerTool(
 		defineTool({
 			name: "start_session",

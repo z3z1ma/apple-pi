@@ -14,7 +14,7 @@ export interface Peer {
 }
 
 /** Live top-level sessions other than `self`, read from the state database. */
-export function livePeers(self: string): Peer[] {
+export function livePeers(self: string | null): Peer[] {
 	const path = statePaths().db;
 	if (!existsSync(path)) return [];
 	const db = new DatabaseSync(path, { readOnly: true });
@@ -23,7 +23,7 @@ export function livePeers(self: string): Peer[] {
 			.prepare(
 				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, json_extract(s.current_task, '$.taskId') as task
 				from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
-				where s.kind = 'root' and s.id != ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
+				where s.kind = 'root' and s.id is not ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
 				order by s.updated_at desc`,
 			)
 			.all(self) as {
@@ -48,8 +48,18 @@ export function livePeers(self: string): Peer[] {
 	}
 }
 
-/** `list_peer_sessions`, for root sessions. */
+/** `list_peer_sessions` for the model and `/pi-sessions` for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
+	pi.registerCommand("pi-sessions", {
+		description: "List the live top-level Pi sessions on this machine",
+		handler: async (_args, ctx) => {
+			const sessions = livePeers(null);
+			const lines = sessions.map(
+				(session) => `${session.status.padEnd(7)} ${session.id}  ${session.name ?? session.cwd}`,
+			);
+			ctx.ui.notify(`Live Pi sessions (${sessions.length}):\n${lines.join("\n") || "(none)"}`, "info");
+		},
+	});
 	pi.registerTool(
 		defineTool({
 			name: "list_peer_sessions",

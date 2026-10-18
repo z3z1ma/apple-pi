@@ -378,17 +378,21 @@ function handedOver(sessionId: string): Set<string> {
 }
 
 export default function sessionStateBridge(pi: ExtensionAPI): void {
+	// Registered even when switched off: Pi exits with "Unknown option" on a flag no extension registered.
+	pi.registerFlag("reports-to", {
+		type: "string",
+		description: "Session id of the coordinator this session reports to; mailed when this session closes",
+	});
+	pi.registerFlag("coordinator", {
+		type: "boolean",
+		description: "Give this session the tools to start, reopen, and close peer sessions in tmux",
+	});
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi, !inChildSessionContext());
 	if (!inChildSessionContext()) {
 		installPeers(pi);
 		installCoordinator(pi);
 	}
-	// The tmux-sessions extension registers this flag too; Pi lets each extension read only flags it registered.
-	pi.registerFlag("reports-to", {
-		type: "string",
-		description: "Session id of the coordinator this session reports to",
-	});
 	let link: StateLink | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];

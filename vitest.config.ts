@@ -1,13 +1,9 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	test: {
 		environment: "node",
-		// Root test sessions read tmux state records; keep them out of the real ~/.pi/agent.
 		env: {
-			PI_TMUX_STATE_DIR: join(tmpdir(), "apple-pi-test-tmux-sessions"),
 			// Only the session-state suites start a runtime daemon, each in its own temporary directory.
 			PI_SESSION_STATE_DISABLED: "1",
 		},

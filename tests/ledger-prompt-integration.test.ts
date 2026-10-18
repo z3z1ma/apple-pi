@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
+import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
 import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
-import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
+import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../extensions/ledger.js";
 import { PAIR_EXTENSION_PATH } from "../extensions/pi-pair.js";
 import { RTK_EXTENSION_PATH } from "../extensions/rtk.js";
-import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../extensions/session-search.js";
+import { SESSION_STATE_EXTENSION_PATH } from "../extensions/session-state.js";
+import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
-import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
 
 const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
 describe("ledger system prompt distribution", () => {
@@ -46,6 +47,7 @@ describe("ledger system prompt distribution", () => {
 				AUTO_COMPACT_EXTENSION_PATH,
 				VROOM_EXTENSION_PATH,
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
+				SESSION_STATE_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
 				CODE_CONTEXT_EXTENSION_PATH,
@@ -69,6 +71,7 @@ describe("ledger system prompt distribution", () => {
 				AUTO_COMPACT_EXTENSION_PATH,
 				VROOM_EXTENSION_PATH,
 				HOME_SEARCH_GUARD_EXTENSION_PATH,
+				SESSION_STATE_EXTENSION_PATH,
 				LEDGER_EXTENSION_PATH,
 				WIKI_EXTENSION_PATH,
 				CODE_CONTEXT_EXTENSION_PATH,

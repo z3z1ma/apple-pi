@@ -46,10 +46,10 @@ try {
 		result.extensions.some(
 			(extension) =>
 				extension.path.endsWith("tmux-sessions.ts") &&
-				(extension.handlers.get("agent_settled")?.length ?? 0) > 0 &&
-				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+				(extension.handlers.get("session_start")?.length ?? 0) > 0 &&
+				(extension.handlers.get("agent_settled")?.length ?? 0) > 0,
 		),
-		"missing tmux-sessions status-publishing hooks",
+		"missing tmux-sessions plugin and bell hooks",
 	);
 	assert(
 		result.extensions.some((extension) => extension.path.endsWith("input-editor.ts")),
