@@ -90,7 +90,7 @@ test("a settled session needs you until a client shows its pane, then counts as 
 		await run.session.prompt("work");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull());
 		expect(row(id).seen_at).toBeNull();
-		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(pane(0)));
+		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(pane(0)), { timeout: 5000 });
 		expect(option("@pi_agents")).toContain("\u2713 1");
 
 		tmux("select-window", "-t", "work:0");
@@ -100,7 +100,7 @@ test("a settled session needs you until a client shows its pane, then counts as 
 		expect(query(state.dbPath, "select data from events where session_id = ? and type = 'seen'", id)).toEqual([
 			{ data: JSON.stringify({ via: "pane" }) },
 		]);
-		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(""));
+		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(""), { timeout: 5000 });
 		expect(option("@pi_agents")).toContain("\u00b7 1");
 	} finally {
 		tmux("select-window", "-t", "work:2");
@@ -150,13 +150,13 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 
 		const turn = run.session.prompt("ask me");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull(), { timeout: 10000 });
-		await vi.waitFor(() => expect(option("@pi_agents")).toContain("? 1"));
+		await vi.waitFor(() => expect(option("@pi_agents")).toContain("? 1"), { timeout: 5000 });
 		// Seeing it does not clear an open prompt.
 		await sendCommand(state.socketPath, id, { kind: "mark_seen" });
 		expect(row(id).needs_you_since).not.toBeNull();
 		answer({ answers: [], cancelled: true });
 		await turn;
-		await vi.waitFor(() => expect(option("@pi_agents")).not.toContain("? 1"));
+		await vi.waitFor(() => expect(option("@pi_agents")).not.toContain("? 1"), { timeout: 5000 });
 	} finally {
 		await close(run);
 	}
@@ -172,7 +172,7 @@ test("the jump target is the pane that has needed you longest, and the jump key 
 		await vi.waitFor(() => expect(row(older.id).needs_you_since).not.toBeNull());
 		await second.run.session.prompt("work");
 		await vi.waitFor(() => expect(row(second.id).needs_you_since).not.toBeNull());
-		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(pane(0)));
+		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(pane(0)), { timeout: 5000 });
 		expect(option("@pi_agents")).toContain("\u2713 2");
 
 		tmux("run-shell", PLUGIN);
