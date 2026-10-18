@@ -379,10 +379,11 @@ export class Runtime {
 		// Mail not yet in the session's transcript goes to every new bridge; the bridge skips what it already has.
 		const mail = db
 			.prepare(
-				"select command_id, command from commands where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered') order by created_at",
+				`select command_id, command from commands where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered')
+					and (bound_generation is null or bound_generation = ?) order by created_at`,
 			)
-			.all(session.id) as { command_id: string; command: string }[];
-		for (const { command_id, command } of mail) this.dispatch(connection, command_id, JSON.parse(command));
+			.all(session.id, generation) as { command_id: string; command: string }[];
+		for (const { command_id, command } of mail) this.dispatch(connection, command_id, JSON.parse(command), true);
 		const start = this.starting.get(session.id);
 		if (start) {
 			this.starting.delete(session.id);
@@ -426,14 +427,30 @@ export class Runtime {
 		const waits = !target && command.kind === "mail" && generation === undefined;
 		const now = Date.now();
 		db.prepare(
-			`insert into commands (command_id, session_id, generation, kind, command, stage, created_at, updated_at)
-			values (?, ?, ?, ?, ?, 'accepted', ?, ?)`,
-		).run(commandId, sessionId, generation ?? null, command.kind, JSON.stringify(command), now, now);
+			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
+			values (?, ?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+		).run(
+			commandId,
+			sessionId,
+			generation ?? null,
+			generation ?? null,
+			command.kind,
+			JSON.stringify(command),
+			now,
+			now,
+		);
 		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
 		this.commandClients.set(commandId, client);
 		if (command.kind === "start") {
 			receipt("accepted");
-			void this.startSession(commandId, sessionId, command);
+			if (typeof command.tmux?.socket !== "string" || typeof command.tmux?.pane !== "string") {
+				this.setCommandStage(commandId, "failed", "start needs tmux.socket and tmux.pane");
+				return;
+			}
+			this.startSession(commandId, sessionId, command).catch((error) => {
+				console.error(`start ${sessionId} failed: ${(error as Error).stack ?? error}`);
+				if (this.db) this.setCommandStage(commandId, "failed", (error as Error).message);
+			});
 			return;
 		}
 		if (command.kind === "mark_seen") {
@@ -511,10 +528,10 @@ export class Runtime {
 	}
 
 	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
-	private dispatch(target: Connection, commandId: string, command: Command): void {
+	private dispatch(target: Connection, commandId: string, command: Command, replay = false): void {
 		this.db!.prepare("update commands set generation = ? where command_id = ?").run(target.generation!, commandId);
 		this.dispatched.set(commandId, target);
-		target.socket.write(`${JSON.stringify({ type: "command", commandId, command })}\n`);
+		target.socket.write(`${JSON.stringify({ type: "command", commandId, command, ...(replay ? { replay } : {}) })}\n`);
 	}
 
 	/**
@@ -527,10 +544,10 @@ export class Runtime {
 		for (const [commandId, target] of this.dispatched) {
 			if (target !== connection) continue;
 			this.dispatched.delete(commandId);
-			const row = this.db?.prepare("select kind from commands where command_id = ?").get(commandId) as
-				| { kind: string }
+			const row = this.db?.prepare("select kind, bound_generation from commands where command_id = ?").get(commandId) as
+				| { kind: string; bound_generation: number | null }
 				| undefined;
-			if (row && row.kind !== "mail")
+			if (row && (row.kind !== "mail" || row.bound_generation !== null))
 				this.setCommandStage(
 					commandId,
 					"failed",
@@ -864,6 +881,8 @@ export class Runtime {
 			for (const row of known) sockets.add(row.socket);
 			for (const start of this.starting.values()) sockets.add(start.socket);
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
+			// Only a start whose window existed before this read began can be missing from it.
+			const startsBeforeRead = new Set([...this.starting.values()].filter((start) => start.pane));
 			const reads = [...sockets].map(async (socket) => {
 				const panes = await listPanes(socket, options);
 				return { socket, panes, clients: panes === "absent" ? [] : await listClients(socket, options) };
@@ -876,7 +895,7 @@ export class Runtime {
 					const result = servers[index];
 					if (result.status === "fulfilled") {
 						this.failingServers.delete(socket);
-						this.syncServer(socket, result.value.panes);
+						this.syncServer(socket, result.value.panes, startsBeforeRead);
 						this.seeShownPanes(
 							socket,
 							result.value.clients.map((client) => client.pane),
@@ -957,11 +976,11 @@ export class Runtime {
 	}
 
 	/** A socket where tmux says no server runs (none ever ran there, or it exited) has no rows. */
-	private syncServer(socket: string, read: PaneRow[] | "absent"): void {
+	private syncServer(socket: string, read: PaneRow[] | "absent", startsBeforeRead: Set<unknown>): void {
 		const db = this.db!;
 		const panes = read === "absent" ? undefined : read;
 		for (const [sessionId, start] of this.starting) {
-			if (start.socket !== socket || !start.pane) continue;
+			if (start.socket !== socket || !startsBeforeRead.has(start)) continue;
 			if (panes?.some((pane) => pane.paneId === start.pane && !pane.dead)) continue;
 			this.starting.delete(sessionId);
 			this.setCommandStage(start.commandId, "failed", "the window closed before the session started");

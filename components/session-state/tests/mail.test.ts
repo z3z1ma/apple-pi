@@ -86,8 +86,7 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 	try {
 		await seen(to);
 		await seen(from);
-		await receiver.session.prompt("hello"); // a session past its first run takes mail at once
-
+		// The receiver has not run yet: live mail still starts a turn; only mail that waited for it rides the next one.
 		await sender.session.prompt("ask for a review");
 		await vi.waitFor(() => expect(mailIn(receiver.session)).toHaveLength(1), { timeout: 10000 });
 		await vi.waitFor(() => expect(receiver.session.messages.at(-1)).toMatchObject({ role: "assistant" }));
@@ -169,17 +168,49 @@ test("a worker that closes mails its supervisor, but not on reload", async () =>
 		await supervisor.session.prompt("start"); // past startup, so mail starts a turn
 		worker.session.extensionRunner.setFlagValue("reports-to", supervisorId);
 		worker.session.sessionManager.appendSessionInfo("docs-worker");
-		await worker.session.bindExtensions({}); // a reload-like rebind reads the flag; no notice
-		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" });
+		const workerId = worker.session.sessionManager.getSessionId();
+		const reconnects = () =>
+			query(state.dbPath, "select 1 from events where session_id = ? and type = 'gap'", workerId).length;
+		await worker.session.bindExtensions({}); // a rebind reads the flag
+		await vi.waitFor(() => expect(reconnects()).toBe(1), { timeout: 10000 });
+		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" }); // no notice
 		await worker.session.bindExtensions({});
+		await vi.waitFor(() => expect(reconnects()).toBe(2), { timeout: 10000 });
 		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
 		await vi.waitFor(() => expect(mailIn(supervisor.session)).toHaveLength(1), { timeout: 10000 });
 		const details = (mailIn(supervisor.session)[0] as { details: { from: string; body: string } }).details;
 		expect(details.from).toBe(worker.session.sessionManager.getSessionId());
 		expect(details.body).toBe(`Session "docs-worker" closed (quit) while idle. Directory: ${worker.cwd}`);
 	} finally {
-		worker.dispose();
+		await close(worker);
 		await close(supervisor);
+	}
+}, 30000);
+
+test("mail counts as delivered only once the session's file holds it", async () => {
+	const sessionDir = mkdtempSync(join(tmpdir(), "aps-mail-disk-"));
+	dirs.push(sessionDir);
+	let release: (reply: Reply) => void = () => {};
+	const receiver = await fauxSession([bridge], () => new Promise<Reply>((resolve) => (release = resolve)), [], {
+		sessionManager: SessionManager.create(tmpdir(), sessionDir),
+	});
+	const id = receiver.session.sessionManager.getSessionId();
+	try {
+		await seen(id);
+		const sending = sendCommand(state.socketPath, id, {
+			kind: "mail",
+			from: "coordinator-1",
+			body: "first thing",
+			sentAt: new Date().toISOString(),
+		});
+		await vi.waitFor(() => expect(mailIn(receiver.session)).toHaveLength(1), { timeout: 10000 });
+		// The mail opened the session's first turn; Pi writes no file until a reply exists, so it is not delivered.
+		await new Promise((resolve) => setTimeout(resolve, 1500));
+		expect(mail(id)[0]).toMatchObject({ stage: "delivered", delivered_at: null });
+		release(fauxAssistantMessage("on it"));
+		expect((await sending).at(-1)).toEqual({ stage: "applied" });
+	} finally {
+		await close(receiver);
 	}
 }, 30000);
 

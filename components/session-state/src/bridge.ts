@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { dirname } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
-import { RETRY_MS, sendCommand, spawnRuntime } from "./client.js";
+import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
@@ -37,12 +38,12 @@ class StateLink {
 	/** Every conversation row indexed so far; all are sent again on reconnect, and the runtime ignores repeats. */
 	private readonly rows: IndexRow[] = [];
 	private readonly warn: (message: string) => void;
-	private readonly onCommand: (link: StateLink, commandId: string, command: Command) => void;
+	private readonly onCommand: (link: StateLink, commandId: string, command: Command, replay: boolean) => void;
 
 	constructor(
 		hello: Hello,
 		warn: (message: string) => void,
-		onCommand: (link: StateLink, commandId: string, command: Command) => void,
+		onCommand: (link: StateLink, commandId: string, command: Command, replay: boolean) => void,
 	) {
 		this.hello = hello;
 		this.warn = warn;
@@ -69,6 +70,14 @@ class StateLink {
 			(changed as Record<string, unknown>)[key] = value;
 		}
 		if (Object.keys(changed).length > 0) this.send({ type: "facts", facts: changed });
+	}
+
+	/** Send mail from this session without waiting; the runtime reads it even if this link closes right after. */
+	mail(to: string, body: string): boolean {
+		if (!this.connected) return false;
+		const command: Command = { kind: "mail", from: this.hello.session.id, body, sentAt: new Date().toISOString() };
+		this.send({ type: "command", commandId: randomUUID(), sessionId: to, command });
+		return true;
 	}
 
 	taskLink(bundle: string, taskId: string, via: string): void {
@@ -121,14 +130,14 @@ class StateLink {
 		socket.on(
 			"data",
 			lineReader((line) => {
-				let message: { type?: string; commandId?: string; command?: Command };
+				let message: { type?: string; commandId?: string; command?: Command; replay?: boolean };
 				try {
 					message = JSON.parse(line);
 				} catch {
 					return;
 				}
 				if (!this.closed && message.type === "command" && message.commandId && message.command)
-					this.onCommand(this, message.commandId, message.command);
+					this.onCommand(this, message.commandId, message.command, message.replay === true);
 			}),
 		);
 		socket.on("error", () => {});
@@ -150,6 +159,10 @@ class StateLink {
 		if (this.connected && this.socket) this.socket.write(`${JSON.stringify(message)}\n`);
 	}
 }
+
+/** Pi writes a session's file once it holds such an entry (`SessionManager._hasConversation`). */
+const isConversation = (entry: SessionEntry) =>
+	entry.type === "message" && (entry.message.role === "user" || entry.message.role === "assistant");
 
 /** The argument that says what a tool call does, by the same rule the tmux sidebar has always used. */
 const MAIN_ARGS = ["command", "path", "pattern", "query", "description", "task", "name", "code"];
@@ -424,11 +437,19 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		for (const entry of fresh) rows.push(...indexRows(entry as never));
 		indexed = entries.length;
 		link.index(rows);
-		// Mail is applied once the transcript holds it; until then a lost process means it is sent again.
-		for (const id of mailRecordedIn(fresh)) {
-			handedOver(link.hello.session.id).delete(id);
-			link.progress(id, "applied");
+		for (const id of mailRecordedIn(fresh)) recorded.add(id);
+		acknowledgeMail(link, entries);
+	};
+	// Mail in the transcript but not yet reported applied. Pi writes a new session's file only once it holds a user
+	// or assistant message; until then a lost process would lose mail that looked recorded.
+	const recorded = new Set<string>();
+	const acknowledgeMail = (target: StateLink, entries: SessionEntry[]) => {
+		if (recorded.size === 0 || !entries.some(isConversation)) return;
+		for (const id of recorded) {
+			handedOver(target.hello.session.id).delete(id);
+			target.progress(id, "applied");
 		}
+		recorded.clear();
 	};
 	// Until its first run, a process that just started takes mail with the next turn (see `deliverMail`).
 	let startingUp = false;
@@ -442,7 +463,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	const settled = (ctx: ExtensionContext) =>
 		ctx.isIdle() ? Promise.resolve() : new Promise<void>((resolve) => settledWaiters.push(resolve));
 	/** Carry out a command from the runtime with Pi's own calls, reporting each stage back. */
-	const apply = async (from: StateLink, commandId: string, command: Command) => {
+	const apply = async (from: StateLink, commandId: string, command: Command, replay: boolean) => {
 		const target = link;
 		const ctx = current;
 		// A command that reached a link this session already replaced was meant for the session before it.
@@ -482,16 +503,25 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					break;
 				}
 				case "mail": {
-					if (mailRecordedIn(ctx.sessionManager.getEntries()).has(commandId)) break;
+					const entries = ctx.sessionManager.getEntries();
+					if (mailRecordedIn(entries).has(commandId)) {
+						recorded.add(commandId);
+						acknowledgeMail(target, entries);
+						return;
+					}
 					const pending = handedOver(target.hello.session.id);
 					if (!pending.has(commandId)) {
 						pending.add(commandId);
-						deliverMail(pi, { id: commandId, from: command.from, ts: command.sentAt, body: command.body }, startingUp);
+						// Only mail that waited for this process rides the next turn while it starts up.
+						const mail = { id: commandId, from: command.from, ts: command.sentAt, body: command.body };
+						deliverMail(pi, mail, startingUp && replay);
 					}
 					return; // applied once the transcript records it
 				}
 				case "close":
 					target.progress(commandId, "applied");
+					// Pi's shutdown waits for a running turn to settle; stop it first.
+					ctx.abort();
 					ctx.shutdown();
 					return;
 				case "set_model": {
@@ -514,6 +544,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		stop();
 		current = ctx;
 		startingUp = event.reason === "startup";
+		recorded.clear();
 		// Any start but a reload is a new agent session, whose queue holds none of the mail handed over before.
 		if (event.reason !== "reload") handedOver(ctx.sessionManager.getSessionId()).clear();
 		queued = { steers: 0, followUps: 0 };
@@ -528,8 +559,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		};
 		// A switch, resume, or fork in this process names the session file that ran here before.
 		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
-		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (from, commandId, command) => {
-			void apply(from, commandId, command);
+		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (from, commandId, command, replay) => {
+			void apply(from, commandId, command, replay);
 		});
 		refreshGit(ctx);
 		indexNew(ctx);
@@ -537,7 +568,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher = setInterval(() => current && indexNew(current), 1000);
 		watcher.unref();
 	});
-	pi.on("session_shutdown", async (event) => {
+	pi.on("session_shutdown", (event) => {
 		stop();
 		for (const resolve of settledWaiters.splice(0)) resolve();
 		const reportsTo = link?.hello.facts.reportsTo;
@@ -545,15 +576,11 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			const name = current.sessionManager.getSessionName();
 			const status = link.hello.facts.prompt ? "waiting" : link.hello.run === "idle" ? "idle" : "busy";
 			const body = `Session${name ? ` "${name}"` : ""} closed (${event.reason}) while ${status}. Directory: ${current.cwd}`;
-			// Its own connection, which starts the runtime if needed: the supervisor relies on this notice.
-			const from = link.hello.session.id;
-			await sendCommand(
-				reportsTo,
-				{ kind: "mail", from, body, sentAt: new Date().toISOString() },
-				{ until: "accepted" },
-			).catch((error) =>
-				process.stderr.write(`Session state: the close notice to ${reportsTo} failed: ${error.message}\n`),
-			);
+			// Shutdown must go on, so with the runtime unreachable the notice is dropped, and said so.
+			if (!link.mail(reportsTo, body))
+				process.stderr.write(
+					`Session state: the close notice to ${reportsTo} was not sent: the runtime is unreachable\n`,
+				);
 		}
 		link?.close(event.reason === "reload" ? undefined : event.reason);
 		link = undefined;

@@ -151,6 +151,9 @@ const MIGRATIONS = [
 	`alter table sessions add column seen_at integer;
 	alter table sessions add column settled_at integer;
 	alter table sessions add column needs_you_since integer;`,
+	// The incarnation a client bound a command to, kept apart from the one it was handed to: bound mail never waits for
+	// a later incarnation.
+	`alter table commands add column bound_generation integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

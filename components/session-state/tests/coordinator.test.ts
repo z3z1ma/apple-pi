@@ -171,7 +171,7 @@ test("a coordinator closes a running session, which records its exit", async () 
 			expect(incarnation(workerId)).toMatchObject({ process_state: "exited", end_reason: "quit" }),
 		);
 	} finally {
-		worker.dispose();
+		await close(worker);
 		await close(run);
 	}
 }, 30000);

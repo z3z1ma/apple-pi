@@ -38,14 +38,23 @@ export function spawnRuntime(warn: (message: string) => void): ChildProcess | un
 	return child;
 }
 
-function open(path: string): Promise<Socket> {
+function open(path: string, signal?: AbortSignal): Promise<Socket> {
 	return new Promise((resolve, reject) => {
 		const socket = createConnection(path);
+		const abort = () => {
+			socket.destroy();
+			reject(signal?.reason);
+		};
+		signal?.addEventListener("abort", abort, { once: true });
 		socket.once("connect", () => {
+			signal?.removeEventListener("abort", abort);
 			socket.off("error", reject);
 			resolve(socket);
 		});
-		socket.once("error", reject);
+		socket.once("error", (error) => {
+			signal?.removeEventListener("abort", abort);
+			reject(error);
+		});
 	});
 }
 
@@ -56,8 +65,9 @@ async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
 	for (;;) {
 		signal?.throwIfAborted();
 		try {
-			return await open(statePaths().socket);
+			return await open(statePaths().socket, signal);
 		} catch {
+			signal?.throwIfAborted();
 			if (failure) throw new Error(failure);
 			if (!started) {
 				started = true;
@@ -81,10 +91,13 @@ export async function sendCommand(
 ): Promise<Receipt> {
 	const commandId = options.commandId ?? randomUUID();
 	const socket = await connectRuntime(options.signal);
+	const { signal } = options;
+	let abort = () => {};
 	try {
+		signal?.throwIfAborted();
 		return await new Promise<Receipt>((resolve, reject) => {
-			const abort = () => reject(options.signal?.reason);
-			options.signal?.addEventListener("abort", abort, { once: true });
+			abort = () => reject(signal?.reason);
+			signal?.addEventListener("abort", abort, { once: true });
 			socket.on(
 				"data",
 				lineReader((line) => {
@@ -99,6 +112,7 @@ export async function sendCommand(
 			socket.write(`${JSON.stringify({ type: "command", commandId, sessionId, command })}\n`);
 		});
 	} finally {
+		signal?.removeEventListener("abort", abort);
 		socket.destroy();
 	}
 }
