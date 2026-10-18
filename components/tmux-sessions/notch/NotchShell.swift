@@ -48,11 +48,18 @@ final class Store {
 		defer { sqlite3_finalize(statement) }
 		if let bind { sqlite3_bind_int64(statement, 1, bind) }
 		var result: [[String?]] = []
-		while sqlite3_step(statement) == SQLITE_ROW {
+		var step = sqlite3_step(statement)
+		while step == SQLITE_ROW {
 			result.append(
 				(0..<sqlite3_column_count(statement)).map { column in
 					sqlite3_column_text(statement, column).map { String(cString: $0) }
 				})
+			step = sqlite3_step(statement)
+		}
+		// A read that stops early (busy, I/O error) is a failure, not fewer agents.
+		guard step == SQLITE_DONE else {
+			FileHandle.standardError.write(Data("notch: database read failed: \(String(cString: sqlite3_errmsg(db)))\n".utf8))
+			return nil
 		}
 		return result
 	}

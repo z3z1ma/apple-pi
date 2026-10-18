@@ -81,6 +81,7 @@ class Runtime:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.lines: list[dict] = []
+        self.answer: dict = {"stage": "applied"}
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(str(path))
         self.server.listen()
@@ -93,7 +94,20 @@ class Runtime:
             except OSError:
                 return
             with connection, connection.makefile() as reader:
-                self.lines.extend(json.loads(line) for line in reader if line.strip())
+                for raw in reader:
+                    if not raw.strip():
+                        continue
+                    line = json.loads(raw)
+                    self.lines.append(line)
+                    # Answer as the runtime does; a client that does not wait has closed already.
+                    try:
+                        connection.sendall(
+                            (
+                                json.dumps({"type": "receipt", "commandId": line["commandId"], **self.answer}) + "\n"
+                            ).encode()
+                        )
+                    except OSError:
+                        pass
 
     def commands(self) -> list[tuple[str, dict]]:
         # The socket thread reads after the client has sent; give it a moment.

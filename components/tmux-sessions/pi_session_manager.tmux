@@ -22,6 +22,8 @@ tmux set-hook -g 'client-session-changed[71]' "run-shell -b \"'$SIDEBAR' follow 
 
 # The session-state runtime marks a session seen when a client shows its pane, and writes the summary
 # (@pi_agents) and the jump target (@pi_jump_target); this file only shows and uses them.
+# Textual views need focus events to know whether the terminal is focused before they count a read as seen.
+tmux set-option -g focus-events on
 tmux set-hook -gu 'pane-focus-in[71]'
 
 "$SIDEBAR" status

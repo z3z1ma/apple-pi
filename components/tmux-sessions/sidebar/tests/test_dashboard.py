@@ -75,6 +75,24 @@ def test_reply_sends_talk_to_an_idle_agent_and_offers_none_to_a_busy_one(world):
     assert not [command for command in fake.commands if command[0] == "send-keys"]
 
 
+def test_a_reply_the_runtime_refuses_says_why_and_keeps_your_text(world):
+    setup_agents(world)
+    world.runtime.answer = {"stage": "failed", "reason": "busy: send steer or follow_up while a run is active"}
+
+    async def scenario():
+        app = dashboard.Dashboard()
+        async with app.run_test(size=(200, 50)) as pilot:
+            await pilot.pause(0.8)
+            await pilot.press("j", "j", "r")
+            await pilot.pause(0.2)
+            await pilot.press(*"go on", "enter")
+            await pilot.pause(0.5)
+            return [notice.message for notice in app._notifications]
+
+    notices = run(scenario)
+    assert any("busy: send steer" in message and "go on" in message for message in notices)
+
+
 def test_reading_a_finished_agent_in_the_live_view_marks_it_seen(world, monkeypatch):
     world.add("done", "%1", name="Finished", needs_you_since=time.time() - 60)
     monkeypatch.setattr(dashboard, "SEEN_AFTER_SECONDS", 0.3)

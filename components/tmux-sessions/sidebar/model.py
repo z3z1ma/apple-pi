@@ -237,6 +237,9 @@ class Store:
                     continue
                 self.last_tool[row["session_id"]] = (data.get("name") or "", data.get("arg") or "")
                 self.tool_times.setdefault(row["session_id"], deque()).append(row["at"] / 1000)
+        # Ended sessions' tools are dropped, so an always-on view does not grow over days.
+        live_ids = {agent.session_id for agent in agents}
+        self.last_tool = {session_id: tool for session_id, tool in self.last_tool.items() if session_id in live_ids}
         cutoff = time.time() - SPARK_MINUTES * 60
         for session_id, times in list(self.tool_times.items()):
             while times and times[0] < cutoff:
@@ -251,11 +254,19 @@ class Store:
         return agents
 
 
-def send(agent: Agent, command: dict) -> bool:
-    """Send one command for the agent's current incarnation to the runtime; false when the runtime is unreachable."""
+RUNTIME_DOWN = "the session-state runtime is not running"
+
+
+def send(agent: Agent, command: dict, wait: bool = False) -> str | None:
+    """Send one command for the agent's current incarnation to the runtime; returns why it failed, or None.
+
+    With `wait`, it returns only once the runtime answers that the command was applied or failed, so call it off
+    the UI thread.
+    """
+    command_id = str(uuid.uuid4())
     line = {
         "type": "command",
-        "commandId": str(uuid.uuid4()),
+        "commandId": command_id,
         "sessionId": agent.session_id,
         "generation": agent.generation,
         "command": command,
@@ -265,14 +276,26 @@ def send(agent: Agent, command: dict) -> bool:
             connection.settimeout(1)
             connection.connect(str(SOCKET_PATH))
             connection.sendall((json.dumps(line) + "\n").encode())
+            if not wait:
+                return None
+            connection.settimeout(None)
+            for raw in connection.makefile():
+                receipt = json.loads(raw)
+                if receipt.get("commandId") != command_id:
+                    continue
+                if receipt.get("stage") == "applied":
+                    return None
+                if receipt.get("stage") == "failed":
+                    return receipt.get("reason") or "failed"
     except OSError:
-        return False
-    return True
+        return RUNTIME_DOWN
+    return "the runtime closed the connection before answering"
 
 
-def mark_seen(agent: Agent) -> bool:
+def mark_seen(agent: Agent) -> str | None:
     return send(agent, {"kind": "mark_seen"})
 
 
-def talk(agent: Agent, text: str) -> bool:
-    return send(agent, {"kind": "talk", "text": text})
+def talk(agent: Agent, text: str) -> str | None:
+    """Wait for the runtime's answer (see `send`)."""
+    return send(agent, {"kind": "talk", "text": text}, wait=True)

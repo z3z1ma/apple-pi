@@ -69,13 +69,18 @@ async function inPane(window: number, replies: Parameters<typeof fauxSession>[1]
 	vi.stubEnv("TMUX_PANE", pane(window));
 	const run = await fauxSession([bridge, askUserQuestion], replies, tools);
 	const id = run.session.sessionManager.getSessionId();
-	await vi.waitFor(
-		() =>
-			expect(
-				query(state.dbPath, "select 1 from incarnations where session_id = ? and pane_id is not null", id),
-			).toHaveLength(1),
-		{ timeout: 15000 },
-	);
+	try {
+		await vi.waitFor(
+			() =>
+				expect(
+					query(state.dbPath, "select 1 from incarnations where session_id = ? and pane_id is not null", id),
+				).toHaveLength(1),
+			{ timeout: 15000 },
+		);
+	} catch (error) {
+		await close(run); // a session left open would start a new runtime after the test stops this one
+		throw error;
+	}
 	return { run, id };
 }
 
@@ -135,6 +140,11 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 		);
 		await run.session.prompt("work");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull());
+		// A view that saw an earlier incarnation cannot clear this one.
+		expect((await sendCommand(state.socketPath, id, { kind: "mark_seen" }, { generation: 99 })).at(-1)).toMatchObject({
+			stage: "failed",
+		});
+		expect(row(id).needs_you_since).not.toBeNull();
 		expect((await sendCommand(state.socketPath, id, { kind: "mark_seen" })).at(-1)).toEqual({ stage: "applied" });
 		expect(row(id)).toMatchObject({ needs_you_since: null, seen_at: expect.any(Number) });
 

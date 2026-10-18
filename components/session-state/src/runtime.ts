@@ -456,6 +456,8 @@ export class Runtime {
 		if (command.kind === "mark_seen") {
 			receipt("accepted");
 			if (!current) this.setCommandStage(commandId, "failed", "unknown session");
+			else if (generation !== undefined && generation !== current.generation)
+				this.setCommandStage(commandId, "failed", "not running");
 			else {
 				this.seen(sessionId, "command");
 				this.setCommandStage(commandId, "applied");
@@ -798,8 +800,8 @@ export class Runtime {
 			sessionId,
 		);
 		this.event("bridge", sessionId, generation, "run_state", { from: row.run_state, to: run });
-		if (run === "idle") {
-			// A settle needs the operator until they see it.
+		if (run === "idle" && row.run_state !== "compacting") {
+			// A settle needs the operator until they see it; a compaction outside a run brings no reply.
 			const now = Date.now();
 			db.prepare("update sessions set settled_at = ?, needs_you_since = coalesce(needs_you_since, ?) where id = ?").run(
 				now,
@@ -897,6 +899,8 @@ export class Runtime {
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
 			// Only a start whose window existed before this read began can be missing from it.
 			const startsBeforeRead = new Set([...this.starting.values()].filter((start) => start.pane));
+			// A client showing a pane saw only what had settled before the clients were read.
+			const readStartedAt = Date.now();
 			const reads = [...sockets].map(async (socket) => {
 				const panes = await listPanes(socket, options);
 				return { socket, panes, clients: panes === "absent" ? [] : await listClients(socket, options) };
@@ -913,6 +917,7 @@ export class Runtime {
 						this.seeShownPanes(
 							socket,
 							result.value.clients.map((client) => client.pane),
+							readStartedAt,
 						);
 					} else if (!this.failingServers.has(socket)) {
 						// A failed read proves nothing: the server keeps its rows until a read succeeds.
@@ -943,13 +948,13 @@ export class Runtime {
 	}
 
 	/** A session whose pane a client shows has been seen, once it settled after the last time it was. */
-	private seeShownPanes(socket: string, shown: string[]): void {
+	private seeShownPanes(socket: string, shown: string[], readStartedAt: number): void {
 		if (shown.length === 0) return;
 		const rows = this.db!.prepare(
 			`select s.id from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
 			where i.ended_at is null and i.tmux_socket = ? and i.pane_id in (${shown.map(() => "?").join(", ")})
-				and coalesce(s.settled_at, 0) > coalesce(s.seen_at, 0)`,
-		).all(socket, ...shown) as { id: string }[];
+				and coalesce(s.settled_at, 0) > coalesce(s.seen_at, 0) and s.settled_at < ?`,
+		).all(socket, ...shown, readStartedAt) as { id: string }[];
 		for (const { id } of rows) this.seen(id, "pane");
 	}
 

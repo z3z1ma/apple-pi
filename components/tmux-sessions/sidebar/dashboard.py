@@ -342,11 +342,17 @@ class Dashboard(App):
         if current is None or current.status != "idle":
             self.notify(f"Not sent: {agent.name} is no longer waiting for input.", severity="warning")
             return
-        if not talk(current, text):
-            self.notify("Not sent: the session-state runtime is not running.", severity="warning")
-            return
-        self.notify(f"Sent to {agent.name}", timeout=3)
-        self.poll()
+        self.deliver(current, text)
+
+    @work(thread=True)
+    def deliver(self, agent: Agent, text: str) -> None:
+        failure = talk(agent, text)
+        if failure:
+            self.call_from_thread(
+                self.notify, f"Not sent to {agent.name}: {failure}. Your text: {text}", severity="warning"
+            )
+        else:
+            self.call_from_thread(self.notify, f"Sent to {agent.name}", timeout=3)
 
     def close_reply(self) -> None:
         reply = self.query_one("#reply", Input)

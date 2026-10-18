@@ -79,7 +79,7 @@ The session-state runtime records when you last saw each session: when a tmux cl
 
 The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. The [session-state](session-state.md#attention) runtime writes it to the server option `@pi_agents` within a second of a change, and the session that has needed you longest to `@pi_jump_target`, which `prefix` + `y` jumps to.
 
-`prefix` + `y` jumps to the agent that has needed you longest. Once you see it, the target moves to the next one in line, so pressing it again walks the queue. With nothing waiting it says so.
+`prefix` + `y` jumps to the agent that has needed you longest. Once you see it, the target moves to the next one in line, so pressing it again walks the queue; an agent with an open prompt stays the target until you answer it. With nothing waiting it says so.
 
 ## The dashboard
 
