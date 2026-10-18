@@ -35,6 +35,54 @@ const MIGRATIONS = [
 		type text not null,
 		data text
 	) strict;`,
+	`create table tmux_servers (
+		socket text primary key,
+		source text not null,
+		updated_at integer not null
+	) strict;
+	create table tmux_sessions (
+		socket text not null,
+		id text not null,
+		name text not null,
+		source text not null,
+		updated_at integer not null,
+		primary key (socket, id)
+	) strict;
+	create table tmux_windows (
+		socket text not null,
+		id text not null,
+		name text not null,
+		source text not null,
+		updated_at integer not null,
+		primary key (socket, id)
+	) strict;
+	create table tmux_window_links (
+		socket text not null,
+		id text not null,
+		session_id text not null,
+		window_id text not null,
+		window_index integer not null,
+		source text not null,
+		updated_at integer not null,
+		primary key (socket, id)
+	) strict;
+	create table tmux_panes (
+		socket text not null,
+		id text not null,
+		window_id text not null,
+		tty text not null,
+		pid integer not null,
+		current_command text not null,
+		current_path text not null,
+		active integer not null,
+		dead integer not null,
+		source text not null,
+		updated_at integer not null,
+		primary key (socket, id)
+	) strict;
+	alter table incarnations add column tmux_socket text;
+	alter table incarnations add column pane_id text;
+	alter table incarnations add column pane_tty text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

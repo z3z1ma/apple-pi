@@ -118,8 +118,16 @@ function helloFor(ctx: ExtensionContext): Hello {
 			name: sessions.getSessionName(),
 		},
 		process: { pid: process.pid, startedAt: Math.round(Date.now() - process.uptime() * 1000) },
+		tmux: tmuxPane(),
 		run: ctx.isIdle() ? "idle" : "thinking",
 	};
+}
+
+/** tmux sets `TMUX` to `<socket>,<server pid>,<session>` and `TMUX_PANE` to `%<id>` in every pane it starts. */
+function tmuxPane(): Hello["tmux"] {
+	const socket = process.env.TMUX?.split(",")[0];
+	const pane = process.env.TMUX_PANE;
+	return socket && pane ? { socket, pane } : undefined;
 }
 
 export default function sessionStateBridge(pi: ExtensionAPI): void {

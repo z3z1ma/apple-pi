@@ -7,6 +7,8 @@ export interface Hello {
 	type: "hello";
 	session: { id: string; kind: "root"; file?: string; cwd: string; name?: string };
 	process: { pid: number; startedAt: number };
+	/** The tmux server socket and pane this session runs in, from its `TMUX` and `TMUX_PANE`; absent outside tmux. */
+	tmux?: { socket: string; pane: string };
 	run: RunState;
 }
 

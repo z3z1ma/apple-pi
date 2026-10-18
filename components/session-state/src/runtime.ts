@@ -12,6 +12,49 @@ import {
 	SILENCE_MS,
 } from "./protocol.js";
 import { migrate } from "./schema.js";
+import { canonicalSocket, listPanes, type PaneRow, socketFiles } from "./tmux.js";
+
+/** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
+const TMUX_POLL_MS = 1000;
+
+type Fields = Record<string, string | number>;
+
+/** The columns each tmux table keeps beside `socket` and `id`, and how to read them from a pane row. */
+const TOPOLOGY = [
+	{
+		table: "tmux_sessions",
+		kind: "tmux_session",
+		key: (p: PaneRow) => p.sessionId,
+		fields: (p: PaneRow): Fields => ({ name: p.sessionName }),
+	},
+	{
+		table: "tmux_windows",
+		kind: "tmux_window",
+		key: (p: PaneRow) => p.windowId,
+		fields: (p: PaneRow): Fields => ({ name: p.windowName }),
+	},
+	// A window can be linked into several sessions, at a different index in each.
+	{
+		table: "tmux_window_links",
+		kind: "tmux_window_link",
+		key: (p: PaneRow) => `${p.sessionId}:${p.windowId}`,
+		fields: (p: PaneRow): Fields => ({ session_id: p.sessionId, window_id: p.windowId, window_index: p.windowIndex }),
+	},
+	{
+		table: "tmux_panes",
+		kind: "tmux_pane",
+		key: (p: PaneRow) => p.paneId,
+		fields: (p: PaneRow): Fields => ({
+			window_id: p.windowId,
+			tty: p.tty,
+			pid: p.pid,
+			current_command: p.command,
+			current_path: p.path,
+			active: p.active,
+			dead: p.dead,
+		}),
+	},
+];
 
 interface Connection {
 	socket: Socket;
@@ -74,6 +117,11 @@ export class Runtime {
 	private lock?: DatabaseSync;
 	private server?: Server;
 	private timer?: NodeJS.Timeout;
+	private tmuxTimer?: NodeJS.Timeout;
+	private polling = false;
+	private readonly stopping = new AbortController();
+	/** Servers whose last read failed, so a failure is logged and recorded once rather than every second. */
+	private readonly failingServers = new Set<string>();
 	private readonly connections = new Set<Connection>();
 	private readonly failedChecks = new Set<string>();
 	private readonly paths: StatePaths;
@@ -99,17 +147,23 @@ export class Runtime {
 		});
 		chmodSync(this.paths.socket, 0o600);
 		this.timer = setInterval(() => this.checkLiveness(), 1000);
+		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
 		this.checkLiveness();
+		void this.pollTmux();
 		return true;
 	}
 
 	stop(): void {
 		clearInterval(this.timer);
+		clearInterval(this.tmuxTimer);
 		for (const connection of this.connections) connection.socket.destroy();
+		this.stopping.abort();
 		this.server?.close();
 		rmSync(this.paths.socket, { force: true });
 		rmSync(this.paths.pid, { force: true });
-		this.db?.close();
+		const db = this.db;
+		this.db = undefined; // in-flight work sees the runtime stopped instead of a closed database
+		db?.close();
 		this.lock?.close();
 	}
 
@@ -195,11 +249,18 @@ export class Runtime {
 				);
 			}
 			generation = (latest?.generation ?? 0) + 1;
+			const tmuxSocket = hello.tmux ? canonicalSocket(hello.tmux.socket) : null;
 			db.prepare(
-				`insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, source, updated_at)
-				values (?, ?, ?, ?, 'alive', ?, 'bridge', ?)`,
-			).run(session.id, generation, proc.pid, proc.startedAt, now, now);
-			this.event("bridge", session.id, generation, "incarnation_started", { pid: proc.pid });
+				`insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, source, updated_at,
+					tmux_socket, pane_id)
+				values (?, ?, ?, ?, 'alive', ?, 'bridge', ?, ?, ?)`,
+			).run(session.id, generation, proc.pid, proc.startedAt, now, now, tmuxSocket, hello.tmux?.pane ?? null);
+			this.event("bridge", session.id, generation, "incarnation_started", {
+				pid: proc.pid,
+				tmux: hello.tmux ? { socket: tmuxSocket, pane: hello.tmux.pane } : null,
+			});
+			this.bindPaneTtys();
+			if (hello.tmux) void this.pollTmux();
 		}
 		db.prepare(
 			`insert into sessions (id, kind, session_file, cwd, name, run_state, generation, source, updated_at)
@@ -286,6 +347,130 @@ export class Runtime {
 				this.failedChecks.add(key);
 				this.event("runtime", row.session_id, row.generation, "process_check_failed", { pid: row.pid });
 			}
+		}
+	}
+
+	/** Read every live tmux server and bring the topology tables up to date, one transaction per pass. */
+	private async pollTmux(): Promise<void> {
+		if (this.polling || !this.db) return;
+		this.polling = true;
+		try {
+			const db = this.db;
+			const sockets = new Set(await socketFiles());
+			const known = db
+				.prepare(
+					`select socket from tmux_servers union select tmux_socket from incarnations
+					where tmux_socket is not null and process_state in ('alive', 'alive_bridge_lost')`,
+				)
+				.all() as { socket: string }[];
+			for (const row of known) sockets.add(row.socket);
+			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
+			const reads = [...sockets].map(async (socket) => ({ socket, panes: await listPanes(socket, options) }));
+			const servers = await Promise.allSettled(reads);
+			if (this.db !== db) return; // stopped while tmux answered
+			db.exec("begin");
+			try {
+				[...sockets].forEach((socket, index) => {
+					const result = servers[index];
+					if (result.status === "fulfilled") {
+						this.failingServers.delete(socket);
+						this.syncServer(socket, result.value.panes);
+					} else if (!this.failingServers.has(socket)) {
+						// A failed read proves nothing: the server keeps its rows until a read succeeds.
+						this.failingServers.add(socket);
+						const message = (result.reason as Error).message;
+						console.error(`tmux read failed for ${socket}: ${message}`);
+						this.event("tmux", null, null, "tmux_server_read_failed", { socket, error: message });
+					}
+				});
+				this.bindPaneTtys();
+				db.exec("commit");
+			} catch (error) {
+				db.exec("rollback");
+				throw error;
+			}
+		} catch (error) {
+			// A failed pass changes nothing; the next one tries again. The error goes to the runtime log.
+			console.error(`tmux poll failed: ${(error as Error).stack ?? error}`);
+		} finally {
+			this.polling = false;
+		}
+	}
+
+	/** A socket where tmux says no server runs (none ever ran there, or it exited) has no rows. */
+	private syncServer(socket: string, read: PaneRow[] | "absent"): void {
+		const db = this.db!;
+		const panes = read === "absent" ? undefined : read;
+		const present = db.prepare("select 1 from tmux_servers where socket = ?").get(socket) !== undefined;
+		if (panes && !present) {
+			db.prepare("insert into tmux_servers (socket, source, updated_at) values (?, 'tmux', ?)").run(socket, Date.now());
+			this.event("tmux", null, null, "tmux_server_added", { socket });
+		}
+		for (const { table, kind, key, fields } of TOPOLOGY) {
+			const rows = new Map<string, Fields>();
+			for (const pane of panes ?? []) rows.set(key(pane), fields(pane));
+			this.syncTable(table, kind, socket, rows);
+		}
+		if (!panes && present) {
+			db.prepare("delete from tmux_servers where socket = ?").run(socket);
+			this.event("tmux", null, null, "tmux_server_removed", { socket });
+		}
+	}
+
+	private syncTable(table: string, kind: string, socket: string, rows: Map<string, Fields>): void {
+		const db = this.db!;
+		const now = Date.now();
+		const existing = new Map(
+			(db.prepare(`select * from ${table} where socket = ?`).all(socket) as Fields[]).map((row) => [
+				String(row.id),
+				row,
+			]),
+		);
+		for (const [id, row] of rows) {
+			const columns = Object.keys(row);
+			const old = existing.get(id);
+			if (!old) {
+				db.prepare(
+					`insert into ${table} (socket, id, ${columns.join(", ")}, source, updated_at)
+					values (?, ?, ${columns.map(() => "?").join(", ")}, 'tmux', ?)`,
+				).run(socket, id, ...Object.values(row), now);
+				this.event("tmux", null, null, `${kind}_added`, { socket, id, ...row });
+				continue;
+			}
+			const changed = columns.filter((column) => old[column] !== row[column]);
+			if (changed.length === 0) continue;
+			db.prepare(
+				`update ${table} set ${changed.map((column) => `${column} = ?`).join(", ")}, source = 'tmux', updated_at = ?
+				where socket = ? and id = ?`,
+			).run(...changed.map((column) => row[column]), now, socket, id);
+			this.event("tmux", null, null, `${kind}_changed`, {
+				socket,
+				id,
+				changes: Object.fromEntries(changed.map((column) => [column, { from: old[column], to: row[column] }])),
+			});
+		}
+		for (const id of existing.keys()) {
+			if (rows.has(id)) continue;
+			db.prepare(`delete from ${table} where socket = ? and id = ?`).run(socket, id);
+			this.event("tmux", null, null, `${kind}_removed`, { socket, id });
+		}
+	}
+
+	/** A bound incarnation learns its pane's tty from tmux once the topology has the pane; tmux is that fact's source. */
+	private bindPaneTtys(): void {
+		const db = this.db!;
+		const unbound = db
+			.prepare(
+				`select i.session_id, i.generation, p.tty from incarnations i
+				join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id
+				where i.pane_tty is null and i.ended_at is null`,
+			)
+			.all() as { session_id: string; generation: number; tty: string }[];
+		for (const row of unbound) {
+			db.prepare(
+				"update incarnations set pane_tty = ?, source = 'tmux', updated_at = ? where session_id = ? and generation = ?",
+			).run(row.tty, Date.now(), row.session_id, row.generation);
+			this.event("tmux", row.session_id, row.generation, "incarnation_pane_tty", { tty: row.tty });
 		}
 	}
 

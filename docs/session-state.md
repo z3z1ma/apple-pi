@@ -13,8 +13,17 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
 ## What it records
 
 - `sessions`: one row per Pi session id, with its kind, session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation.
-- `incarnations`: one row per process lifetime of a session (generation 1, 2, ... on each reopen), with pid, process start time, process state, start and end, and why it ended.
-- `events`: an append-only history of run-state changes, process-state changes, incarnations starting and ending, and failed process checks. Every row names its source (`bridge` or `runtime`) and time.
+- `incarnations`: one row per process lifetime of a session (generation 1, 2, ... on each reopen), with pid, process start time, process state, start and end, and why it ended. An incarnation running in tmux is bound to its pane: the server socket and pane id the bridge reads from `TMUX` and `TMUX_PANE`, and the pane's tty once the runtime has seen the pane (recorded with `tmux` as its source).
+- `tmux_servers`, `tmux_sessions`, `tmux_windows`, `tmux_window_links`, `tmux_panes`: every live tmux server (keyed by its resolved socket path, so `/tmp` and `/private/tmp` are one server) and its sessions, windows, and panes, including panes that run no Pi. A window can be linked into several sessions, so each link (session, window, index in that session) is its own row. tmux ids such as `%3` are only unique within a server, so every row also carries the socket. A pane row holds its window, tty, first process, current command and path, and whether it is active or dead.
+- `events`: an append-only history of run-state changes, process-state changes, incarnations starting and ending, failed process checks, every tmux server, session, window, window link, and pane added, changed, or removed, and failed tmux reads. Every row names its source (`bridge`, `runtime`, or `tmux`) and time.
+
+## tmux
+
+Once a second the runtime runs one `tmux list-panes -a` against every server socket in tmux's own socket directory (`$TMUX_TMPDIR`, or `/tmp`, then `tmux-<uid>`) and every socket a live session reported, and brings the tmux tables up to date in one transaction. A server outside that directory with no Pi session in it is not seen; finding it would mean inspecting every process's open sockets.
+
+Each read has one second to answer. Only tmux's own "no server running" or "error connecting ... (No such file or directory | Connection refused)" means a server is gone and removes its rows. Any other failure (a timeout, a server that stopped answering, no permission, no tmux) proves nothing: the server keeps its rows, one `tmux_server_read_failed` event is recorded and logged, and the other servers are read as usual.
+
+The pane's tty comes from tmux, not from the bridge, so the runtime fills it in from the topology and records it with source `tmux` and its own event.
 
 ## Liveness
 
