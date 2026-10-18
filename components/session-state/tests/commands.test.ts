@@ -90,6 +90,7 @@ test("rename and thinking-level commands change the session", async () => {
 			stage: "applied",
 		});
 		await vi.waitFor(() => expect(JSON.parse(row(id).config as string)).toMatchObject({ name: "From a view" }));
+		expect(row(id).name).toBe("From a view");
 		expect((await sendCommand(state.socketPath, id, { kind: "set_thinking", level: "off" })).at(-1)).toEqual({
 			stage: "applied",
 		});
@@ -132,9 +133,12 @@ test("a session that is not running fails at once, and a command bound to an old
 	const manager = SessionManager.create(cwd, sessionDir);
 	const first = await fauxSession([bridge], [fauxAssistantMessage("hi")], [], { cwd, sessionManager: manager });
 	const id = manager.getSessionId();
-	await seen(id);
-	await first.session.prompt("hi");
-	await close(first);
+	try {
+		await seen(id);
+		await first.session.prompt("hi");
+	} finally {
+		await close(first);
+	}
 	expect(await sendCommand(state.socketPath, id, { kind: "talk", text: "anyone?" })).toEqual([
 		{ stage: "accepted" },
 		{ stage: "failed", reason: "not running" },

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
+	type Command,
 	type CommandRequest,
 	type EntryReply,
 	type Facts,
@@ -154,6 +155,8 @@ export class Runtime {
 	private readonly failingServers = new Set<string>();
 	/** The client that sent each command still in flight, so its receipts reach it. */
 	private readonly commandClients = new Map<string, Connection>();
+	/** The bridge connection each unsettled command was handed to. */
+	private readonly dispatched = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
 	private readonly failedChecks = new Set<string>();
 	private readonly paths: StatePaths;
@@ -238,6 +241,7 @@ export class Runtime {
 		socket.on("error", () => {});
 		socket.on("close", () => {
 			this.connections.delete(connection);
+			this.dropCommandsOf(connection);
 			this.checkLiveness();
 		});
 	}
@@ -365,10 +369,7 @@ export class Runtime {
 				"select command_id, command from commands where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered') order by created_at",
 			)
 			.all(session.id) as { command_id: string; command: string }[];
-		for (const { command_id, command } of mail)
-			connection.socket.write(
-				`${JSON.stringify({ type: "command", commandId: command_id, command: JSON.parse(command) })}\n`,
-			);
+		for (const { command_id, command } of mail) this.dispatch(connection, command_id, JSON.parse(command));
 	}
 
 	/**
@@ -426,15 +427,44 @@ export class Runtime {
 			this.setCommandStage(commandId, "failed", "not running");
 			return;
 		}
+		this.dispatch(target, commandId, command);
+	}
+
+	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
+	private dispatch(target: Connection, commandId: string, command: Command): void {
+		this.db!.prepare("update commands set generation = ? where command_id = ?").run(target.generation!, commandId);
+		this.dispatched.set(commandId, target);
 		target.socket.write(`${JSON.stringify({ type: "command", commandId, command })}\n`);
 	}
 
-	/** A bridge reports progress only for commands addressed to its own session. */
+	/**
+	 * A closed connection gets no more receipts. Commands handed to a bridge that went away fail, since nobody can say
+	 * whether they were applied; mail stays, and the session's next bridge gets it again.
+	 */
+	private dropCommandsOf(connection: Connection): void {
+		for (const [commandId, client] of this.commandClients)
+			if (client === connection) this.commandClients.delete(commandId);
+		for (const [commandId, target] of this.dispatched) {
+			if (target !== connection) continue;
+			this.dispatched.delete(commandId);
+			const row = this.db?.prepare("select kind from commands where command_id = ?").get(commandId) as
+				| { kind: string }
+				| undefined;
+			if (row && row.kind !== "mail")
+				this.setCommandStage(
+					commandId,
+					"failed",
+					"the session's bridge disconnected; it may or may not have applied it",
+				);
+		}
+	}
+
+	/** A bridge reports progress only for commands handed to its own incarnation. */
 	private commandProgress(bridge: Connection, commandId: string, stage: ReceiptStage, reason?: string): void {
-		const row = this.db!.prepare("select session_id from commands where command_id = ?").get(commandId) as
-			| { session_id: string }
+		const row = this.db!.prepare("select session_id, generation from commands where command_id = ?").get(commandId) as
+			| { session_id: string; generation: number | null }
 			| undefined;
-		if (!row || row.session_id !== bridge.sessionId) return;
+		if (!row || row.session_id !== bridge.sessionId || row.generation !== bridge.generation) return;
 		this.setCommandStage(commandId, stage, reason);
 	}
 
@@ -458,7 +488,10 @@ export class Runtime {
 		client?.socket.write(
 			`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}) } satisfies Receipt)}\n`,
 		);
-		if (stage === "applied" || stage === "failed") this.commandClients.delete(commandId);
+		if (stage === "applied" || stage === "failed") {
+			this.commandClients.delete(commandId);
+			this.dispatched.delete(commandId);
+		}
 	}
 
 	/**
@@ -583,6 +616,9 @@ export class Runtime {
 			const type = key === "prompt" ? (value ? "prompt_opened" : "prompt_closed") : `${column}_changed`;
 			this.event("bridge", sessionId, generation, type, { from: before, to: value });
 		}
+		// The name has its own column, which a rename must change too.
+		if (facts.config && facts.config.name !== row.name)
+			db.prepare("update sessions set name = ? where id = ?").run(facts.config.name, sessionId);
 	}
 
 	private isCurrent(sessionId: string, generation: number): boolean {

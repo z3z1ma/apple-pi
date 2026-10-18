@@ -11,6 +11,10 @@ export type QuestionnaireReply = { selected: string[] } | { custom: string };
 export interface OpenQuestionnaire {
 	sessionId: string;
 	toolCallId: string;
+	/** The questions, as the tool was called with them. */
+	questions: unknown;
+	/** Resolves when the questionnaire closes, whoever answered it. */
+	closed: Promise<void>;
 	/** Answers the questionnaire; returns why it refused when it is closed or the answers do not fit. */
 	answer(replies: QuestionnaireReply[]): string | undefined;
 }

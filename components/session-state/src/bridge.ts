@@ -20,8 +20,6 @@ import {
 	type Tool,
 } from "./protocol.js";
 
-const QUESTIONNAIRE_TOOL = "ask_user_question";
-
 /**
  * One session's link to the runtime. It keeps the session's current state and sends it whole on every
  * (re)connect, so nothing depends on messages sent while the runtime was away.
@@ -37,9 +35,13 @@ class StateLink {
 	/** Every conversation row indexed so far; all are sent again on reconnect, and the runtime ignores repeats. */
 	private readonly rows: IndexRow[] = [];
 	private readonly warn: (message: string) => void;
-	private readonly onCommand: (commandId: string, command: Command) => void;
+	private readonly onCommand: (link: StateLink, commandId: string, command: Command) => void;
 
-	constructor(hello: Hello, warn: (message: string) => void, onCommand: (commandId: string, command: Command) => void) {
+	constructor(
+		hello: Hello,
+		warn: (message: string) => void,
+		onCommand: (link: StateLink, commandId: string, command: Command) => void,
+	) {
 		this.hello = hello;
 		this.warn = warn;
 		this.onCommand = onCommand;
@@ -123,8 +125,8 @@ class StateLink {
 				} catch {
 					return;
 				}
-				if (message.type === "command" && message.commandId && message.command)
-					this.onCommand(message.commandId, message.command);
+				if (!this.closed && message.type === "command" && message.commandId && message.command)
+					this.onCommand(this, message.commandId, message.command);
 			}),
 		);
 		socket.on("error", () => {});
@@ -383,7 +385,14 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	const questionnaires = new Map<string, OpenQuestionnaire>();
 	pi.events.on(QUESTIONNAIRE_CHANNEL, (data) => {
 		const open = data as OpenQuestionnaire;
-		if (link && open.sessionId === link.hello.session.id) questionnaires.set(open.toolCallId, open);
+		const target = link;
+		if (!target || open.sessionId !== target.hello.session.id) return;
+		questionnaires.set(open.toolCallId, open);
+		target.facts({ prompt: { kind: "questionnaire", id: open.toolCallId, questions: open.questions } });
+		void open.closed.then(() => {
+			questionnaires.delete(open.toolCallId);
+			if (target.hello.facts.prompt?.id === open.toolCallId) target.facts({ prompt: null });
+		});
 	});
 	// The ledger extension announces every touch of a task; only this session's touches count here.
 	pi.events.on(LEDGER_LINK_CHANNEL, (data) => {
@@ -427,12 +436,16 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	const settled = (ctx: ExtensionContext) =>
 		ctx.isIdle() ? Promise.resolve() : new Promise<void>((resolve) => settledWaiters.push(resolve));
 	/** Carry out a command from the runtime with Pi's own calls, reporting each stage back. */
-	const apply = async (commandId: string, command: Command) => {
+	const apply = async (from: StateLink, commandId: string, command: Command) => {
 		const target = link;
 		const ctx = current;
-		if (!target || !ctx) return;
+		// A command that reached a link this session already replaced was meant for the session before it.
+		if (!target || !ctx || from !== target) return;
 		target.progress(commandId, "delivered");
 		const fail = (reason: string) => target.progress(commandId, "failed", reason);
+		// Pi reports a missing model only asynchronously, after the message was taken.
+		if ((command.kind === "talk" || command.kind === "steer" || command.kind === "follow_up") && !ctx.model)
+			return fail("no model selected");
 		try {
 			switch (command.kind) {
 				case "talk":
@@ -505,8 +518,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		};
 		// A switch, resume, or fork in this process names the session file that ran here before.
 		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
-		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (commandId, command) => {
-			void apply(commandId, command);
+		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (from, commandId, command) => {
+			void apply(from, commandId, command);
 		});
 		refreshGit(ctx);
 		indexNew(ctx);
@@ -516,6 +529,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 	pi.on("session_shutdown", async (event) => {
 		stop();
+		for (const resolve of settledWaiters.splice(0)) resolve();
 		const reportsTo = link?.hello.facts.reportsTo;
 		if (link && current && reportsTo && event.reason !== "reload") {
 			const name = current.sessionManager.getSessionName();
@@ -593,14 +607,6 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		tools.set(tool.id, tool);
 		link.run("running_tool");
 		link.toolStart(tool);
-		if (event.toolName === QUESTIONNAIRE_TOOL)
-			link.facts({
-				prompt: {
-					kind: "questionnaire",
-					id: event.toolCallId,
-					questions: (event.args as { questions?: unknown })?.questions,
-				},
-			});
 	});
 	pi.on("tool_execution_end", (event) => {
 		if (event.parentToolCallId || !link) return;
@@ -611,10 +617,6 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		if (!still) link.run("thinking");
 		// A command can switch branches or worktrees.
 		if (event.toolName === "bash") refreshGit(current ?? ({ cwd: process.cwd() } as ExtensionContext));
-		if (event.toolName === QUESTIONNAIRE_TOOL) {
-			questionnaires.delete(event.toolCallId);
-			link.facts({ prompt: null });
-		}
 	});
 	// Other extensions' dialogs report only kind and title; a questionnaire already carries its questions.
 	pi.on("ui_prompt_start", (event) => {
@@ -626,11 +628,16 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_before_compact", () => link?.run("compacting"));
-	pi.on("session_compact", (_event, ctx) => {
+	// An abort during a compaction outside a run ends when the compaction does.
+	const compactionEnded = (ctx: ExtensionContext) => {
 		link?.run(ctx.isIdle() ? "idle" : "thinking");
+		if (ctx.isIdle()) for (const resolve of settledWaiters.splice(0)) resolve();
+	};
+	pi.on("session_compact", (_event, ctx) => {
+		compactionEnded(ctx);
 		link?.facts(contextUsage(ctx));
 	});
-	pi.on("session_compact_failed", (_event, ctx) => link?.run(ctx.isIdle() ? "idle" : "thinking"));
+	pi.on("session_compact_failed", (_event, ctx) => compactionEnded(ctx));
 	pi.on("agent_settled", (event, ctx) => {
 		// A completed run has recorded every steer it was given; an aborted one may have dropped its queue or kept it.
 		if (!event.aborted) handedOver(ctx.sessionManager.getSessionId()).clear();

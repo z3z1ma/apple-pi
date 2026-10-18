@@ -92,11 +92,16 @@ async function askingSession() {
 		[toolTurn("ask_user_question", { questions }), fauxAssistantMessage("thanks")],
 		["ask_user_question"],
 	);
-	await run.session.bindExtensions({ mode: "tui", uiContext: screen.ui as never });
 	const id = run.session.sessionManager.getSessionId();
-	const turn = run.session.prompt("ask me");
-	const open = await openPrompt(id);
-	return { run, id, turn, screen, questionnaire: open.id as string };
+	try {
+		await run.session.bindExtensions({ mode: "tui", uiContext: screen.ui as never });
+		const turn = run.session.prompt("ask me");
+		const open = await openPrompt(id);
+		return { run, id, turn, screen, questionnaire: open.id as string };
+	} catch (error) {
+		await close(run); // a session left open would start a new runtime after the test stops this one
+		throw error;
+	}
 }
 
 const toolResultText = (run: Awaited<ReturnType<typeof askingSession>>["run"]) =>
@@ -104,7 +109,10 @@ const toolResultText = (run: Awaited<ReturnType<typeof askingSession>>["run"]) =
 
 test("an answer command answers an open questionnaire like the terminal would, and closes the dialog", async () => {
 	const fromTerminal = await askingSession();
-	const fromCommand = await askingSession();
+	const fromCommand = await askingSession().catch(async (error) => {
+		await close(fromTerminal.run);
+		throw error;
+	});
 	try {
 		fromTerminal.screen.type(...typedReplies);
 		await fromTerminal.turn;

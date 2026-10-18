@@ -136,13 +136,18 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 			// An answer from outside the terminal closes the dialog and replaces its result.
 			let closed = false;
 			let replied: QuestionAnswer[] | undefined;
+			let markClosed: () => void = () => {};
+			const whenClosed = new Promise<void>((resolve) => (markClosed = resolve));
 			const replyArrived = new AbortController();
 			const dialogSignal = signal ? AbortSignal.any([signal, replyArrived.signal]) : replyArrived.signal;
 			pi.events.emit(QUESTIONNAIRE_CHANNEL, {
 				sessionId: ctx.sessionManager.getSessionId(),
 				toolCallId,
+				questions: typed.questions,
+				closed: whenClosed,
 				answer: (replies) => {
-					if (closed) return "the questionnaire is already closed";
+					// An abort may have ended the dialog already, before its result arrived here.
+					if (closed || signal?.aborted) return "the questionnaire is already closed";
 					const answers = answersFromReplies(typed, replies);
 					if (typeof answers === "string") return answers;
 					closed = true;
@@ -173,6 +178,7 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 							);
 			} finally {
 				closed = true;
+				markClosed();
 			}
 			if (replied) return buildQuestionnaireToolResult({ answers: replied, cancelled: false });
 			return buildQuestionnaireToolResult(result ?? { answers: [], cancelled: true, error: "no_custom_ui" });

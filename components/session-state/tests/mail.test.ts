@@ -121,10 +121,13 @@ test("mail to a stopped session waits and arrives in its next turn after it open
 		sessionManager: SessionManager.create(tmpdir(), sessionDir),
 	});
 	const id = first.session.sessionManager.getSessionId();
-	await seen(id);
-	await first.session.prompt("hi");
 	const file = first.session.sessionManager.getSessionFile() as string;
-	await close(first);
+	try {
+		await seen(id);
+		await first.session.prompt("hi");
+	} finally {
+		await close(first);
+	}
 
 	const receipts = await sendCommand(state.socketPath, id, {
 		kind: "mail",
