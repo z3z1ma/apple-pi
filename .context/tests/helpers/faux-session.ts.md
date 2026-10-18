@@ -9,4 +9,7 @@ The session starts in `print` mode. For an extension that acts only in the TUI, 
 
 An invalid image payload (such as base64 `aGk=`) is stored as the text placeholder `[Image omitted: could not be resized…]`, so an "images only" prompt gains text. Use a real 1x1 PNG to test a prompt without text.
 
+`options.streamText` adds start, text, and end stream events so `message_update` fires; without it a faux reply arrives only as `done`. Inside the stream function, its own `options` parameter shadows `fauxSession`'s, so read session options into locals before it.
+Why: the first `streamText` attempt read the stream's `options` and never streamed, so a writing-a-reply run state was unobservable.
+
 Verify: components/browser-pages/tests/ask-agent.test.ts, components/session-title/tests/session-title.test.ts

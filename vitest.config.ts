@@ -9,6 +9,8 @@ export default defineConfig({
 		env: {
 			PI_MAILBOX_DIR: join(tmpdir(), "apple-pi-test-mailbox"),
 			PI_TMUX_STATE_DIR: join(tmpdir(), "apple-pi-test-tmux-sessions"),
+			// Only the session-state suites start a runtime daemon, each in its own temporary directory.
+			PI_SESSION_STATE_DISABLED: "1",
 		},
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
@@ -24,6 +26,7 @@ export default defineConfig({
 			"components/subagents/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
+			"components/session-state/tests/**/*.test.ts",
 			"components/session-title/tests/**/*.test.ts",
 			"components/input-editor/tests/**/*.test.ts",
 			"components/wiki/tests/**/*.test.ts",

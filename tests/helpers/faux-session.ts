@@ -31,13 +31,14 @@ const model = {
  * `replies` is a queue, or a function of the request (and its abort signal) for runs whose order is not fixed. A function may
  * return `"until-aborted"` to hold the request open until its signal aborts, or a promise to hold it until
  * the test releases a reply. With `options.cwd`, the
- * session runs in that existing directory instead, which `dispose` leaves in place.
+ * session runs in that existing directory instead, which `dispose` leaves in place. With `options.streamText`,
+ * each reply's text blocks also arrive as start, delta, and end events, as a streaming provider sends them.
  */
 export async function fauxSession(
 	extensionFactories: ExtensionFactory[],
 	replies: Reply[] | ((context: Context, signal?: AbortSignal) => Reply | "until-aborted" | Promise<Reply>),
 	tools: string[],
-	options: { cwd?: string; sessionManager?: SessionManager } = {},
+	options: { cwd?: string; sessionManager?: SessionManager; streamText?: boolean } = {},
 ) {
 	const owned = options.cwd === undefined;
 	const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
@@ -48,6 +49,7 @@ export async function fauxSession(
 		writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
 	}
 	const requests: Context[] = [];
+	const streamText = options.streamText === true;
 	const stream = (_model: Model<string>, context: Context, options?: { signal?: AbortSignal }) => {
 		requests.push(structuredClone(context));
 		const message =
@@ -59,6 +61,15 @@ export async function fauxSession(
 		const settle = (reply: Reply) => {
 			if (settled) return;
 			settled = true;
+			if (streamText && reply.stopReason !== "aborted") {
+				events.push({ type: "start", partial: reply });
+				reply.content.forEach((block, contentIndex) => {
+					if (block.type !== "text") return;
+					events.push({ type: "text_start", contentIndex, partial: reply });
+					events.push({ type: "text_delta", contentIndex, delta: block.text, partial: reply });
+					events.push({ type: "text_end", contentIndex, content: block.text, partial: reply });
+				});
+			}
 			if (reply.stopReason === "aborted") events.push({ type: "error", reason: "aborted", error: reply });
 			else events.push({ type: "done", reason: reply.stopReason === "toolUse" ? "toolUse" : "stop", message: reply });
 			events.end(reply);
