@@ -1,0 +1,72 @@
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { statePaths } from "./paths.js";
+
+export interface Peer {
+	id: string;
+	name: string | null;
+	cwd: string;
+	status: "busy" | "idle" | "waiting";
+	reportsTo: string | null;
+	currentTask: string | null;
+}
+
+/** Live top-level sessions other than `self`, read from the state database. */
+export function livePeers(self: string): Peer[] {
+	const path = statePaths().db;
+	if (!existsSync(path)) return [];
+	const db = new DatabaseSync(path, { readOnly: true });
+	try {
+		const rows = db
+			.prepare(
+				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, json_extract(s.current_task, '$.taskId') as task
+				from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
+				where s.kind = 'root' and s.id != ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
+				order by s.updated_at desc`,
+			)
+			.all(self) as {
+			id: string;
+			name: string | null;
+			cwd: string;
+			run_state: string;
+			prompt: string | null;
+			reports_to: string | null;
+			task: string | null;
+		}[];
+		return rows.map((row) => ({
+			id: row.id,
+			name: row.name,
+			cwd: row.cwd,
+			status: row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
+			reportsTo: row.reports_to,
+			currentTask: row.task,
+		}));
+	} finally {
+		db.close();
+	}
+}
+
+/** `list_peer_sessions`, for root sessions. */
+export function installPeers(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "list_peer_sessions",
+			label: "list_peer_sessions",
+			description:
+				"List the other live top-level Pi sessions on this machine: peer sessions, which are separate and long-lived, often in their own tmux windows, and which you reach with mailbox_send. Each has an id, name, directory, status (busy, idle, or waiting for the user), the session it reports to, and its current ledger task. Your subagents are not peers: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
+			promptSnippet: "List live peer Pi sessions (not your subagents) to mail them.",
+			parameters: Type.Object({}, { additionalProperties: false }),
+			async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+				const peers = livePeers(ctx.sessionManager.getSessionId());
+				return {
+					content: [
+						{ type: "text", text: peers.length > 0 ? JSON.stringify(peers, null, 2) : "No other live Pi sessions." },
+					],
+					details: { peers },
+				};
+			},
+		}),
+	);
+}

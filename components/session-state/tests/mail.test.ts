@@ -96,7 +96,8 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 		const turn = receiver.session.prompt("work long");
 		await vi.waitFor(() => expect(receiver.session.isStreaming).toBe(true));
 		await sender.session.prompt("redirect it");
-		await vi.waitFor(() => expect(mail(to)[1]).toMatchObject({ body: "switch to docs" }));
+		// Handed to the receiver while its run still waits on the model.
+		await vi.waitFor(() => expect(mail(to)[1]).toMatchObject({ body: "switch to docs", stage: "delivered" }));
 		const before = receiver.requests.length;
 		release(fauxAssistantMessage("working"));
 		await turn; // the steer joined this run: its model saw the mail without a new prompt

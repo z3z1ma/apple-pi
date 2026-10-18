@@ -57,7 +57,7 @@ function createMailboxSendTool() {
 		name: "mailbox_send",
 		label: "mailbox_send",
 		description:
-			"Send a message to another Pi session by its session id. The target receives it as a <mailbox-message> steer: at its next safe boundary while running, as a new turn while idle, or when it next opens. Delivery is at least once; the message id identifies a repeat.",
+			"Send a message to a peer session (another top-level Pi session; list_peer_sessions finds the live ones) by its session id. The target receives it as a <mailbox-message> steer: at its next safe boundary while running, as a new turn while idle, or when it next opens. Delivery is at least once; the message id identifies a repeat. To redirect your own subagents, use steer_subagent instead.",
 		promptSnippet: "Send a message to another Pi session by session id.",
 		promptGuidelines: [
 			"Messages from other sessions arrive as <mailbox-message> with the sender's session id in from; answer one with mailbox_send to that id.",
@@ -69,7 +69,7 @@ function createMailboxSendTool() {
 			const receipt = await sendCommand(
 				params.session_id,
 				{ kind: "mail", from, body: params.message, sentAt: new Date().toISOString() },
-				{ signal },
+				{ signal, stored: true },
 			);
 			if (receipt.stage === "failed") throw new Error(`Mail to ${params.session_id} failed: ${receipt.reason}`);
 			const sent = `Sent ${receipt.commandId} to ${params.session_id}.`;

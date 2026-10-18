@@ -69,16 +69,22 @@ export function standInProcess(): { child: ChildProcess; pid: number; startedAt:
 }
 
 /** A bridge speaking the socket protocol directly, so a test can drop it or silence it at will. */
-export async function fakeBridge(socketPath: string, sessionId: string, pid: number, startedAt: number) {
+export async function fakeBridge(
+	socketPath: string,
+	sessionId: string,
+	pid: number,
+	startedAt: number,
+	hello: { session?: Record<string, unknown>; facts?: Record<string, unknown>; run?: string } = {},
+) {
 	const socket: Socket = createConnection(socketPath);
 	await new Promise((resolve) => socket.once("connect", resolve));
 	const send = (message: unknown) => socket.write(`${JSON.stringify(message)}\n`);
 	send({
 		type: "hello",
-		session: { id: sessionId, kind: "root", cwd: "/tmp" },
+		session: { id: sessionId, kind: "root", cwd: "/tmp", ...hello.session },
 		process: { pid, startedAt },
-		run: "idle",
-		facts: {},
+		run: hello.run ?? "idle",
+		facts: hello.facts ?? {},
 	});
 	return { socket, send };
 }

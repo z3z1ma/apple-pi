@@ -67,7 +67,7 @@ Any session can mail another by its session id, and the receiver gets the messag
 }
 ```
 
-`from` is the sender's session id, so the receiver can answer with `mailbox_send` to that id. Anything outside Pi uses the packaged script; its path is in the `mailbox_send` tool guidance:
+`list_peer_sessions` lists the other live top-level sessions (peer sessions) with their id, name, directory, status (`busy`, `idle`, or `waiting`), the session each reports to, and its current ledger task; subagents are not peers, and the tool descriptions say so. `from` is the sender's session id, so the receiver can answer with `mailbox_send` to that id. `mailbox_send` returns once the runtime has the mail and says when it waits. Anything outside Pi uses the packaged script; its path is in the `mailbox_send` tool guidance:
 
 ```bash
 node components/session-state/scripts/pi-send.mjs coordinator --from launchd "Tick."

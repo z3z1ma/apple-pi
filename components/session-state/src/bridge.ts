@@ -8,6 +8,7 @@ import { childSessionParent, inChildSessionContext } from "../../subagents/src/c
 import { RETRY_MS, sendCommand, spawnRuntime } from "./client.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
+import { installPeers } from "./peers.js";
 import {
 	type BridgeMessage,
 	type Command,
@@ -365,6 +366,7 @@ function handedOver(sessionId: string): Set<string> {
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi, !inChildSessionContext());
+	if (!inChildSessionContext()) installPeers(pi);
 	// The tmux-sessions extension registers this flag too; Pi lets each extension read only flags it registered.
 	pi.registerFlag("reports-to", {
 		type: "string",

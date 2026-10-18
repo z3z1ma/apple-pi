@@ -264,9 +264,12 @@ try {
 	);
 	assert(
 		result.extensions.some(
-			(extension) => extension.path.endsWith("session-state.ts") && extension.tools.has("mailbox_send"),
+			(extension) =>
+				extension.path.endsWith("session-state.ts") &&
+				extension.tools.has("mailbox_send") &&
+				extension.tools.has("list_peer_sessions"),
 		),
-		"session-state extension must own mailbox_send",
+		"session-state extension must own mailbox_send and list_peer_sessions",
 	);
 
 	const searchBranchesTool = result.extensions

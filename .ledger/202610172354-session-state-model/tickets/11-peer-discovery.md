@@ -4,9 +4,9 @@
 
 **Blocked by:** 05 Relations and work links; 10 Mail on the model
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In a faux root session, the discovery tool lists the other live sessions with id, name, directory, status, supervisor, and current ledger task, and excludes the caller's own subagents.
-- [ ] Ended sessions are not listed.
-- [ ] The tool descriptions name peer sessions and subagents as different things and say which tool reaches each.
-- [ ] A session can discover a peer and mail it using only these tools.
+- [x] In a faux root session, the discovery tool lists the other live sessions with id, name, directory, status, supervisor, and current ledger task, and excludes the caller's own subagents.
+- [x] Ended sessions are not listed.
+- [x] The tool descriptions name peer sessions and subagents as different things and say which tool reaches each.
+- [x] A session can discover a peer and mail it using only these tools.

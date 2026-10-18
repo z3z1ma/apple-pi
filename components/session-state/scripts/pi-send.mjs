@@ -25,7 +25,11 @@ if (!body) {
 	process.exit(2);
 }
 
-const receipt = await sendCommand(sessionId, { kind: "mail", from, body, sentAt: new Date().toISOString() });
+const receipt = await sendCommand(
+	sessionId,
+	{ kind: "mail", from, body, sentAt: new Date().toISOString() },
+	{ stored: true },
+);
 if (receipt.stage === "failed") {
 	console.error(`pi-send: ${receipt.reason}`);
 	process.exit(1);
