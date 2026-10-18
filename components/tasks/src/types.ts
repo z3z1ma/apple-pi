@@ -67,14 +67,6 @@ export interface MonitorEventDetails {
 	reachedLimit: boolean;
 }
 
-/** One line of a session mailbox; also the `details` of the steer that delivers it. */
-export interface MailboxMessage {
-	id: string;
-	from: string;
-	ts: string;
-	body: string;
-}
-
 export interface TaskNotificationDetails {
 	taskId: string;
 	kind: ManagedTask["kind"];
@@ -111,7 +103,6 @@ export interface MonitorToolDetails {
 export const TASK_NOTIFICATION_CUSTOM_TYPE = "apple-pi.task-notification";
 export const MONITOR_EVENT_CUSTOM_TYPE = "apple-pi.monitor-event";
 export const SCHEDULED_PROMPT_CUSTOM_TYPE = "apple-pi.scheduled-prompt";
-export const MAILBOX_MESSAGE_CUSTOM_TYPE = "apple-pi.mailbox-message";
 
 export const bashParameters = Type.Object({
 	command: Type.String({ description: "Shell command to execute" }),
@@ -184,16 +175,6 @@ export const monitorParameters = Type.Object(
 );
 
 export type MonitorParameters = Static<typeof monitorParameters>;
-
-export const mailboxSendParameters = Type.Object(
-	{
-		session_id: Type.String({ minLength: 1, description: "Session id of the receiving Pi session." }),
-		message: Type.String({ minLength: 1, description: "Message text the receiving session reads." }),
-	},
-	{ additionalProperties: false },
-);
-
-export type MailboxSendParameters = Static<typeof mailboxSendParameters>;
 
 export const taskParameters = Type.Object({
 	action: Type.Union([Type.Literal("list"), Type.Literal("status"), Type.Literal("cancel")], {

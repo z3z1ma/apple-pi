@@ -133,7 +133,7 @@ export async function sendCommand(
 				const receipt = JSON.parse(buffer.slice(0, end));
 				buffer = buffer.slice(end + 1);
 				receipts.push({ stage: receipt.stage, ...(receipt.reason ? { reason: receipt.reason } : {}) });
-				if (receipt.stage === "applied" || receipt.stage === "failed") resolve();
+				if (receipt.stage === "applied" || receipt.stage === "failed" || receipt.reason) resolve();
 			}
 		});
 	});

@@ -317,11 +317,9 @@ test("a session rename updates the record's name without counting as a status ch
 	else process.env.TMUX_PANE = previousPane;
 });
 
-test("a session started with --reports-to publishes its supervisor, mails it when it closes, not on reload, and removes its record before shutdown resolves", async () => {
+test("a session started with --reports-to publishes its supervisor and removes its record before shutdown resolves", async () => {
 	const previousPane = process.env.TMUX_PANE;
 	process.env.TMUX_PANE = "%81";
-	const mailbox = join(process.env.PI_MAILBOX_DIR as string, "coordinator-test.jsonl");
-	rmSync(mailbox, { force: true });
 	const handlers = new Map<string, (...args: unknown[]) => unknown>();
 	const flags = new Map<string, unknown>();
 	const pi = {
@@ -347,7 +345,6 @@ test("a session started with --reports-to publishes its supervisor, mails it whe
 	expect((await find())?.reportsTo).toBe("coordinator-test");
 
 	handlers.get("session_shutdown")?.({ reason: "reload" });
-	expect(existsSync(mailbox)).toBe(false);
 
 	handlers.get("session_start")?.(
 		{ reason: "reload" },
@@ -359,15 +356,6 @@ test("a session started with --reports-to publishes its supervisor, mails it whe
 	// Pi awaits the handler before a SIGHUP exit, so the record must be gone when it resolves.
 	await handlers.get("session_shutdown")?.({ reason: "quit" });
 	expect(existsSync(join(stateDir, "session-worker.json"))).toBe(false);
-
-	const [message] = readFileSync(mailbox, "utf8")
-		.trim()
-		.split("\n")
-		.map((line) => JSON.parse(line));
-	expect(message).toMatchObject({
-		from: "session-worker",
-		body: 'Session "Worker" closed (quit) while busy. Directory: /tmp/worker',
-	});
 
 	if (previousPane === undefined) delete process.env.TMUX_PANE;
 	else process.env.TMUX_PANE = previousPane;

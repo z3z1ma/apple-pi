@@ -5,9 +5,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	test: {
 		environment: "node",
-		// Root test sessions open a session mailbox and read tmux state records; keep both out of the real ~/.pi/agent.
+		// Root test sessions read tmux state records; keep them out of the real ~/.pi/agent.
 		env: {
-			PI_MAILBOX_DIR: join(tmpdir(), "apple-pi-test-mailbox"),
 			PI_TMUX_STATE_DIR: join(tmpdir(), "apple-pi-test-tmux-sessions"),
 			// Only the session-state suites start a runtime daemon, each in its own temporary directory.
 			PI_SESSION_STATE_DISABLED: "1",

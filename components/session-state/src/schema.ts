@@ -140,6 +140,12 @@ const MIGRATIONS = [
 		created_at integer not null,
 		updated_at integer not null
 	) strict;`,
+	// Mail is a command; this view names its edges. A mail is delivered once applied (its transcript holds it).
+	`create view mail as
+		select command_id as id, json_extract(command, '$.from') as sender, session_id as receiver,
+			json_extract(command, '$.body') as body, created_at as sent_at,
+			case stage when 'applied' then updated_at end as delivered_at, stage, reason
+		from commands where kind = 'mail';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

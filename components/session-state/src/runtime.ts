@@ -359,11 +359,22 @@ export class Runtime {
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
+		// Mail not yet in the session's transcript goes to every new bridge; the bridge skips what it already has.
+		const mail = db
+			.prepare(
+				"select command_id, command from commands where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered') order by created_at",
+			)
+			.all(session.id) as { command_id: string; command: string }[];
+		for (const { command_id, command } of mail)
+			connection.socket.write(
+				`${JSON.stringify({ type: "command", commandId: command_id, command: JSON.parse(command) })}\n`,
+			);
 	}
 
 	/**
 	 * Record a client's command and hand it to the target incarnation's bridge. A repeated `commandId` only reports
-	 * how far the first one got. Without a live incarnation (or a bound one that is no longer current) it fails at once.
+	 * how far the first one got. Without a live incarnation (or a bound one that is no longer current) it fails at once,
+	 * except unbound mail, which waits for the session's next bridge.
 	 */
 	private command(client: Connection, request: CommandRequest): void {
 		const db = this.db!;
@@ -383,13 +394,6 @@ export class Runtime {
 			receipt(existing.stage, existing.reason ?? undefined);
 			return;
 		}
-		const now = Date.now();
-		db.prepare(
-			`insert into commands (command_id, session_id, generation, kind, command, stage, created_at, updated_at)
-			values (?, ?, ?, ?, ?, 'accepted', ?, ?)`,
-		).run(commandId, sessionId, generation ?? null, command.kind, JSON.stringify(command), now, now);
-		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
-		receipt("accepted");
 		const current = db.prepare("select generation from sessions where id = ?").get(sessionId) as
 			| { generation: number }
 			| undefined;
@@ -400,12 +404,28 @@ export class Runtime {
 				connection.generation === current?.generation &&
 				(generation === undefined || generation === current?.generation),
 		);
+		const waits = !target && command.kind === "mail" && generation === undefined;
+		const now = Date.now();
+		db.prepare(
+			`insert into commands (command_id, session_id, generation, kind, command, stage, created_at, updated_at)
+			values (?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+		).run(commandId, sessionId, generation ?? null, command.kind, JSON.stringify(command), now, now);
+		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
+		this.commandClients.set(commandId, client);
+		if (waits) {
+			receipt(
+				"accepted",
+				current
+					? "not running; the mail waits until it opens"
+					: "unknown; the mail waits until a session with this id opens",
+			);
+			return;
+		}
+		receipt("accepted");
 		if (!target) {
-			this.commandClients.set(commandId, client);
 			this.setCommandStage(commandId, "failed", "not running");
 			return;
 		}
-		this.commandClients.set(commandId, client);
 		target.socket.write(`${JSON.stringify({ type: "command", commandId, command })}\n`);
 	}
 

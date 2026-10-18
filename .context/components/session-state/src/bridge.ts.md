@@ -7,3 +7,9 @@ Verify: components/session-state/tests/runtime.test.ts
 A link whose connection drops starts a runtime once and keeps reconnecting. Tests must end faux sessions with `session_shutdown` (the `close` helper), not `dispose` alone.
 Why: a disposed session's link stays connected; when the test stops the runtime, the link starts a new one into a directory the test is deleting, leaving a stray daemon.
 Coupled: components/session-state/tests/helpers.ts
+
+## symbol:handedOver
+
+Mail ids handed to Pi but not yet in the transcript live on `globalThis` per session id. They are cleared on every `session_start` except `reload`, and on every `agent_settled` that was not aborted.
+Why: Pi's agent queue survives an extension reload, and the reloaded bridge receives the same unapplied mail again; an empty set would queue it twice. A completed run has recorded every queued steer; an aborted run may have discarded its queue (Escape) or kept it (RPC abort), so its ids wait for the next completed run.
+Verify: components/session-state/tests/mail.test.ts

@@ -46,7 +46,7 @@
     "components/session-state/src/",
     "components/input-editor/src/",
     "components/tasks/src/",
-    "components/tasks/scripts/",
+    "components/session-state/scripts/",
     "components/prompt-stash/src/",
     "components/terse-tools/src/",
     "components/rtk/src/",

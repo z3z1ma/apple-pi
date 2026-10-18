@@ -34,7 +34,7 @@ A worker is a top-level Pi session in its own tmux window, so the operator can o
 
 Worker reports arrive as `<mailbox-message>` with the worker's id in `from`. Summarize them for the operator and act on them. To redirect a worker, `mailbox_send` to its id. When the result says the receiver is not running, the message waits until the session opens; reopen the worker if it must act now.
 
-To see how a worker is doing, read the live list, its repository ledger task, and its mailbox (`$PI_MAILBOX_DIR`, by default `~/.pi/agent/state/mailbox/<id>.jsonl`).
+To see how a worker is doing, read the live list and its repository ledger task.
 
 ## Know what runs
 

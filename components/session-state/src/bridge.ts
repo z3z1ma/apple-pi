@@ -1,12 +1,12 @@
-import { execFile, spawn } from "node:child_process";
-import { closeSync, mkdirSync, openSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { createConnection, type Socket } from "node:net";
 import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
+import { RETRY_MS, sendCommand, spawnRuntime } from "./client.js";
+import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
 import {
 	type BridgeMessage,
@@ -20,37 +20,7 @@ import {
 	type Tool,
 } from "./protocol.js";
 
-const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.ts", import.meta.url));
-const REGISTER = new URL("./register.mjs", import.meta.url).href;
-const RETRY_MS = 250;
 const QUESTIONNAIRE_TOOL = "ask_user_question";
-
-/**
- * Start a runtime detached from this session; it keeps running after the session ends. Its output goes to
- * the runtime log, and a failed start is reported through `warn` (exit 0 only means another runtime runs).
- */
-function spawnRuntime(warn: (message: string) => void): void {
-	const paths = statePaths();
-	let log: number;
-	try {
-		mkdirSync(paths.dir, { recursive: true, mode: 0o700 });
-		log = openSync(paths.log, "a", 0o600);
-	} catch (error) {
-		warn(`Session state: cannot use ${paths.dir}: ${(error as Error).message}`);
-		return;
-	}
-	const child = spawn(process.execPath, ["--import", REGISTER, RUNTIME_MAIN], {
-		detached: true,
-		stdio: ["ignore", log, log],
-		env: process.env,
-	});
-	closeSync(log);
-	child.on("error", (error) => warn(`Session state: cannot start the runtime: ${error.message}`));
-	child.on("exit", (code) => {
-		if (code) warn(`Session state: the runtime exited with code ${code}; see ${paths.log}`);
-	});
-	child.unref();
-}
 
 /**
  * One session's link to the runtime. It keeps the session's current state and sends it whole on every
@@ -373,8 +343,26 @@ function gitContext(cwd: string): Promise<Facts["git"] | undefined> {
 	});
 }
 
+/**
+ * Mail ids handed to Pi that its transcript does not hold yet, per session id. They live on `globalThis` because Pi's
+ * queue survives an extension reload, and the next bridge must not hand over again what that queue still holds.
+ */
+const HANDED_OVER = Symbol.for("apple-pi.session-state.mail-handed-over");
+function handedOver(sessionId: string): Set<string> {
+	const global = globalThis as Record<symbol, Map<string, Set<string>> | undefined>;
+	const all = global[HANDED_OVER] ?? new Map<string, Set<string>>();
+	global[HANDED_OVER] = all;
+	let ids = all.get(sessionId);
+	if (!ids) {
+		ids = new Set();
+		all.set(sessionId, ids);
+	}
+	return ids;
+}
+
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
+	installMail(pi, !inChildSessionContext());
 	// The tmux-sessions extension registers this flag too; Pi lets each extension read only flags it registered.
 	pi.registerFlag("reports-to", {
 		type: "string",
@@ -391,13 +379,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			if (git !== undefined && link === target) target?.facts({ git });
 		});
 	};
-	// The ledger extension announces every touch of a task; only this session's touches count here.
 	// Questionnaires the tool shows now, by tool call id, which an `answer` command can answer.
 	const questionnaires = new Map<string, OpenQuestionnaire>();
 	pi.events.on(QUESTIONNAIRE_CHANNEL, (data) => {
 		const open = data as OpenQuestionnaire;
 		if (link && open.sessionId === link.hello.session.id) questionnaires.set(open.toolCallId, open);
 	});
+	// The ledger extension announces every touch of a task; only this session's touches count here.
 	pi.events.on(LEDGER_LINK_CHANNEL, (data) => {
 		const touch = data as LedgerLink;
 		if (!link || touch.sessionId !== link.hello.session.id) return;
@@ -417,10 +405,18 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		const entries = ctx.sessionManager.getEntries();
 		if (entries.length <= indexed) return;
 		const rows: IndexRow[] = [];
-		for (const entry of entries.slice(indexed)) rows.push(...indexRows(entry as never));
+		const fresh = entries.slice(indexed);
+		for (const entry of fresh) rows.push(...indexRows(entry as never));
 		indexed = entries.length;
 		link.index(rows);
+		// Mail is applied once the transcript holds it; until then a lost process means it is sent again.
+		for (const id of mailRecordedIn(fresh)) {
+			handedOver(link.hello.session.id).delete(id);
+			link.progress(id, "applied");
+		}
 	};
+	// Until its first run, a process that just started takes mail with the next turn (see `deliverMail`).
+	let startingUp = false;
 	const stop = () => {
 		clearInterval(watcher);
 		watcher = undefined;
@@ -466,6 +462,15 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					if (refused) return fail(refused);
 					break;
 				}
+				case "mail": {
+					if (mailRecordedIn(ctx.sessionManager.getEntries()).has(commandId)) break;
+					const pending = handedOver(target.hello.session.id);
+					if (!pending.has(commandId)) {
+						pending.add(commandId);
+						deliverMail(pi, { id: commandId, from: command.from, ts: command.sentAt, body: command.body }, startingUp);
+					}
+					return; // applied once the transcript records it
+				}
 				case "set_model": {
 					const model = ctx.modelRegistry.find(command.provider, command.id);
 					if (!model) return fail(`unknown model ${command.provider}/${command.id}`);
@@ -485,6 +490,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		link?.close();
 		stop();
 		current = ctx;
+		startingUp = event.reason === "startup";
+		// Any start but a reload is a new agent session, whose queue holds none of the mail handed over before.
+		if (event.reason !== "reload") handedOver(ctx.sessionManager.getSessionId()).clear();
 		queued = { steers: 0, followUps: 0 };
 		tools = new Map();
 		indexed = 0;
@@ -506,8 +514,23 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher = setInterval(() => current && indexNew(current), 1000);
 		watcher.unref();
 	});
-	pi.on("session_shutdown", (event) => {
+	pi.on("session_shutdown", async (event) => {
 		stop();
+		const reportsTo = link?.hello.facts.reportsTo;
+		if (link && current && reportsTo && event.reason !== "reload") {
+			const name = current.sessionManager.getSessionName();
+			const status = link.hello.facts.prompt ? "waiting" : link.hello.run === "idle" ? "idle" : "busy";
+			const body = `Session${name ? ` "${name}"` : ""} closed (${event.reason}) while ${status}. Directory: ${current.cwd}`;
+			// Its own connection, which starts the runtime if needed: the supervisor relies on this notice.
+			const from = link.hello.session.id;
+			await sendCommand(
+				reportsTo,
+				{ kind: "mail", from, body, sentAt: new Date().toISOString() },
+				{ stored: true },
+			).catch((error) =>
+				process.stderr.write(`Session state: the close notice to ${reportsTo} failed: ${error.message}\n`),
+			);
+		}
 		link?.close(event.reason === "reload" ? undefined : event.reason);
 		link = undefined;
 		current = undefined;
@@ -533,7 +556,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		return { action: "continue" };
 	});
 
-	pi.on("agent_start", () => link?.run("thinking"));
+	pi.on("agent_start", () => {
+		startingUp = false;
+		link?.run("thinking");
+	});
 	pi.on("message_start", (event, ctx) => {
 		if (event.message.role === "assistant") link?.run("thinking");
 		if (event.message.role === "user" && queued.steers + queued.followUps > 0) {
@@ -606,6 +632,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 	pi.on("session_compact_failed", (_event, ctx) => link?.run(ctx.isIdle() ? "idle" : "thinking"));
 	pi.on("agent_settled", (event, ctx) => {
+		// A completed run has recorded every steer it was given; an aborted one may have dropped its queue or kept it.
+		if (!event.aborted) handedOver(ctx.sessionManager.getSessionId()).clear();
 		link?.run("idle");
 		for (const resolve of settledWaiters.splice(0)) resolve();
 		refreshGit(ctx);

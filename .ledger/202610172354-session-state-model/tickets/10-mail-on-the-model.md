@@ -4,10 +4,10 @@
 
 **Blocked by:** 08 Command channel
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Mail from one faux session to another arrives as a steer during a run and as a new turn when idle, and the database records sender, receiver, sent time, and delivery.
-- [ ] Mail sent to a stopped session is delivered in its next turn after it opens, and the database shows it waiting until then.
-- [ ] `pi-send.mjs` with no runtime running starts one and delivers the mail.
-- [ ] A worker closing (not reloading) mails its supervisor the same close notice as today.
-- [ ] No mailbox JSONL file is written or read anymore.
+- [x] Mail from one faux session to another arrives as a steer during a run and as a new turn when idle, and the database records sender, receiver, sent time, and delivery.
+- [x] Mail sent to a stopped session is delivered in its next turn after it opens, and the database shows it waiting until then.
+- [x] `pi-send.mjs` with no runtime running starts one and delivers the mail.
+- [x] A worker closing (not reloading) mails its supervisor the same close notice as today.
+- [x] No mailbox JSONL file is written or read anymore.

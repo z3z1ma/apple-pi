@@ -258,10 +258,15 @@ try {
 				extension.path.endsWith("tasks.ts") &&
 				extension.tools.has("schedule") &&
 				extension.tools.has("monitor") &&
-				extension.tools.has("task") &&
-				extension.tools.has("mailbox_send"),
+				extension.tools.has("task"),
 		),
-		"tasks extension must own schedule, monitor, task, and mailbox_send",
+		"tasks extension must own schedule, monitor, and task",
+	);
+	assert(
+		result.extensions.some(
+			(extension) => extension.path.endsWith("session-state.ts") && extension.tools.has("mailbox_send"),
+		),
+		"session-state extension must own mailbox_send",
 	);
 
 	const searchBranchesTool = result.extensions

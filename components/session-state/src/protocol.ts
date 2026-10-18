@@ -91,7 +91,12 @@ export type Command =
 	| { kind: "set_model"; provider: string; id: string }
 	| { kind: "set_thinking"; level: string }
 	/** Answers the open questionnaire `questionnaire` (its prompt id), one reply per question, unless the terminal answered first. */
-	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] };
+	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] }
+	/**
+	 * Mail from `from` (a session id, or a name such as "shell"). Unlike every other command it waits while the session
+	 * is not running and is delivered when it next opens; it is applied once the session's transcript records it.
+	 */
+	| { kind: "mail"; from: string; body: string; sentAt: string };
 
 /**
  * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command
