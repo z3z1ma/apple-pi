@@ -10,9 +10,9 @@ import {
 import { runRpcQuestionnaire } from "../src/rpc.js";
 import {
 	ASK_USER_QUESTION_TOOL_NAME,
-	validateQuestionnaire,
 	type AskUserQuestionParams,
 	type QuestionnaireResult,
+	validateQuestionnaire,
 } from "../src/types.js";
 
 const DOWN = "\x1b[B";
@@ -59,6 +59,7 @@ function captureTool() {
 	let active = ["read", ASK_USER_QUESTION_TOOL_NAME];
 	const pi = {
 		registerTool: (tool: any) => tools.set(tool.name, tool),
+		events: { emit: () => {} },
 		on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, handler),
 		getActiveTools: () => active,
 		setActiveTools: (tools: string[]) => {
@@ -84,6 +85,7 @@ async function executeWithTui(input: AskUserQuestionParams, drive: (component: a
 		hasUI: true,
 		mode: "tui",
 		ui: { custom },
+		sessionManager: { getSessionId: () => "session-1" },
 	} as any);
 }
 

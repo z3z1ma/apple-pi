@@ -1,25 +1,61 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import {
+	type OpenQuestionnaire,
+	QUESTIONNAIRE_CHANNEL,
+	type QuestionnaireReply,
+} from "../../shared/src/questionnaire-events.js";
 
 import { QuestionnaireDialog, renderAskUserQuestionCall, renderAskUserQuestionResult } from "./dialog.js";
 import { hasQuestionnaireDialogUI, runRpcQuestionnaire } from "./rpc.js";
 import {
 	ASK_USER_QUESTION_TOOL_NAME,
+	type AskUserQuestionParams,
 	AskUserQuestionParamsSchema,
 	MAX_OPTIONS,
 	MAX_QUESTIONS,
 	MIN_OPTIONS,
-	RESERVED_OPTION_LABELS,
-	validateQuestionnaire,
-	type AskUserQuestionParams,
 	type QuestionAnswer,
 	type QuestionnaireResult,
+	questionHeader,
+	RESERVED_OPTION_LABELS,
+	validateQuestionnaire,
 } from "./types.js";
 
 const NO_UI_MESSAGE =
 	"The questionnaire was not shown because this run has no interactive UI. Ask the questions as ordinary chat text instead.";
 const NO_CUSTOM_UI_MESSAGE =
 	"The questionnaire was not shown because this client cannot render it. Ask the questions as ordinary chat text instead.";
+
+/** Answers sent from outside the terminal, in the shape the dialog produces, or why they do not fit the questions. */
+function answersFromReplies(params: AskUserQuestionParams, replies: QuestionnaireReply[]): QuestionAnswer[] | string {
+	if (replies.length !== params.questions.length)
+		return `expected ${params.questions.length} answers, got ${replies.length}`;
+	const answers: QuestionAnswer[] = [];
+	for (const [questionIndex, question] of params.questions.entries()) {
+		const reply = replies[questionIndex];
+		const base = { questionIndex, question: question.question, header: questionHeader(question, questionIndex) };
+		if ("custom" in reply) {
+			if (!reply.custom.trim()) return `answer ${questionIndex + 1} is empty`;
+			answers.push({ ...base, kind: "custom", answer: reply.custom.trim() });
+			continue;
+		}
+		const labels = question.options.map((option) => option.label);
+		const unknown = reply.selected.find((label) => !labels.includes(label));
+		if (unknown !== undefined) return `answer ${questionIndex + 1}: ${JSON.stringify(unknown)} is not an option`;
+		if (question.multiSelect) {
+			answers.push({
+				...base,
+				kind: "multi",
+				answer: null,
+				selected: labels.filter((label) => reply.selected.includes(label)),
+			});
+		} else if (reply.selected.length === 1) {
+			answers.push({ ...base, kind: "option", answer: reply.selected[0] });
+		} else return `answer ${questionIndex + 1} needs exactly one option`;
+	}
+	return answers;
+}
 
 function answerValue(answer: QuestionAnswer): string | string[] | null {
 	return answer.kind === "multi" ? (answer.selected ?? []) : answer.answer;
@@ -75,7 +111,7 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 		parameters: AskUserQuestionParamsSchema,
 		executionMode: "sequential",
 
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
 			const typed = params as AskUserQuestionParams;
 			if (!ctx.hasUI) {
 				return buildQuestionnaireToolResult({ answers: [], cancelled: true, error: "no_ui" });
@@ -89,21 +125,56 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 				};
 			}
 
-			let result: QuestionnaireResult | undefined;
-			if (ctx.mode === "rpc") {
-				if (!hasQuestionnaireDialogUI(ctx.ui)) {
-					return buildQuestionnaireToolResult({ answers: [], cancelled: true, error: "no_custom_ui" });
-				}
-				result = await runRpcQuestionnaire(ctx.ui, typed, signal);
-			} else if (ctx.mode === "tui") {
-				if (signal?.aborted) return buildQuestionnaireToolResult({ answers: [], cancelled: true });
-				result = await ctx.ui.custom<QuestionnaireResult>(
-					(tui, theme, keybindings, done) => new QuestionnaireDialog(tui, theme, keybindings, typed, done, signal),
-				);
-			} else {
+			if (ctx.mode === "rpc" && !hasQuestionnaireDialogUI(ctx.ui)) {
+				return buildQuestionnaireToolResult({ answers: [], cancelled: true, error: "no_custom_ui" });
+			}
+			if (ctx.mode !== "rpc" && ctx.mode !== "tui") {
 				return buildQuestionnaireToolResult({ answers: [], cancelled: true, error: "no_ui" });
 			}
+			if (signal?.aborted) return buildQuestionnaireToolResult({ answers: [], cancelled: true });
 
+			// An answer from outside the terminal closes the dialog and replaces its result.
+			let closed = false;
+			let replied: QuestionAnswer[] | undefined;
+			const replyArrived = new AbortController();
+			const dialogSignal = signal ? AbortSignal.any([signal, replyArrived.signal]) : replyArrived.signal;
+			pi.events.emit(QUESTIONNAIRE_CHANNEL, {
+				sessionId: ctx.sessionManager.getSessionId(),
+				toolCallId,
+				answer: (replies) => {
+					if (closed) return "the questionnaire is already closed";
+					const answers = answersFromReplies(typed, replies);
+					if (typeof answers === "string") return answers;
+					closed = true;
+					replied = answers;
+					replyArrived.abort();
+					return undefined;
+				},
+			} satisfies OpenQuestionnaire);
+
+			let result: QuestionnaireResult | undefined;
+			try {
+				result =
+					ctx.mode === "rpc" && hasQuestionnaireDialogUI(ctx.ui)
+						? await runRpcQuestionnaire(ctx.ui, typed, dialogSignal)
+						: await ctx.ui.custom<QuestionnaireResult>(
+								(tui, theme, keybindings, done) =>
+									new QuestionnaireDialog(
+										tui,
+										theme,
+										keybindings,
+										typed,
+										(answered) => {
+											closed = true;
+											done(answered);
+										},
+										dialogSignal,
+									),
+							);
+			} finally {
+				closed = true;
+			}
+			if (replied) return buildQuestionnaireToolResult({ answers: replied, cancelled: false });
 			return buildQuestionnaireToolResult(result ?? { answers: [], cancelled: true, error: "no_custom_ui" });
 		},
 

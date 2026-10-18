@@ -107,7 +107,11 @@ test("an open questionnaire shows its questions until it closes, each change an 
 		const id = run.session.sessionManager.getSessionId();
 		const turn = run.session.prompt("ask me");
 		await vi.waitFor(() => expect(session(id).prompt).not.toBeNull(), { timeout: 15000 });
-		expect(JSON.parse(session(id).prompt as string)).toEqual({ kind: "questionnaire", questions });
+		expect(JSON.parse(session(id).prompt as string)).toEqual({
+			kind: "questionnaire",
+			id: expect.any(String),
+			questions,
+		});
 		answer({ answers: [], cancelled: true });
 		await turn;
 		await vi.waitFor(() => expect(session(id).prompt).toBeNull());

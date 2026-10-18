@@ -14,7 +14,7 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
 
 - `sessions`: one row per Pi session id, with its kind (`root`, or `child` for a subagent, with `spawned_by` naming the session that started it, recorded as a `spawned_by` event; a child runs in its parent's process, so its incarnation has the parent's pid and no pane of its own; a stopped subagent stays live and resumable in its parent, so it shows idle with its abort, and its incarnation ends when the session is disposed), session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation, plus everything else its bridge observes:
   - the top-level tool running now (`current_tool`, its id, its main argument such as the command or path, and since when). Pi can run several tools at once: each start and end is an event with its duration, and while any still runs, the session shows the most recently started one;
-  - an open `prompt` (JSON): a questionnaire with its questions while `ask_user_question` runs, or another dialog's kind and title;
+  - an open `prompt` (JSON): a questionnaire with its `id` and questions while `ask_user_question` runs, or another dialog's kind and title;
   - the `queue` (JSON): steers and follow-ups typed during a run and not yet delivered (Pi delivers steers first), and `pending`, Pi's own flag that something waits, which also covers messages other extensions queued;
   - `last_error` (a failed reply's message) and `last_abort_at`;
   - `model`, `thinking_level`, `context_tokens`, `context_window`, and `cost` so far;
@@ -51,6 +51,7 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | `rename` | `name` | Renames the session |
 | `set_model` | `provider`, `id` | Switches model; fails for an unknown or unavailable model |
 | `set_thinking` | `level` | Sets the thinking level |
+| `answer` | `questionnaire`, `replies` | Answers the open questionnaire with that prompt `id`: one reply per question, in order, either `{"selected": [labels]}` or `{"custom": text}`. The dialog in the terminal closes, and the tool returns what the terminal would for the same choices. Fails when the terminal answered first or the replies do not fit; other dialogs are answered only in the terminal |
 
 The runtime stores each command in `commands` and answers the sender with one `{"type": "receipt", "commandId": ..., "stage": ..., "reason"?: ...}` line per stage: `accepted` (stored), `delivered` (the session's bridge has it), `applied` (Pi took it), or `failed` with a reason. Each stage is also an event (`command_accepted`, ...). No receipt says the work is done; its effects appear as ordinary observed facts and events. A command for a session with no live incarnation, or bound to one that is no longer current, fails at once with `not running`. Sending the same `commandId` again applies nothing and answers with the stage the first one reached. Anyone who can open the socket, which is only your user, can send commands; confirmations belong to the view that sends them.
 

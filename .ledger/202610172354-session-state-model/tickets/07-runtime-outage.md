@@ -4,9 +4,9 @@
 
 **Blocked by:** 03 Rich activity
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Killing the runtime while a faux session works does not disturb the session.
-- [ ] Starting the runtime again (or letting a bridge start it) brings the session's current state, including activity, back into the database within a few seconds of reconnect.
-- [ ] The event history shows a gap event covering the outage for that session and no fabricated events from inside it.
-- [ ] History written before the outage is intact after restart.
+- [x] Killing the runtime while a faux session works does not disturb the session.
+- [x] Starting the runtime again (or letting a bridge start it) brings the session's current state, including activity, back into the database within a few seconds of reconnect.
+- [x] The event history shows a gap event covering the outage for that session and no fabricated events from inside it.
+- [x] History written before the outage is intact after restart.

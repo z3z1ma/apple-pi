@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 Runtime and bridge tracer; 03 Rich activity
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] When a faux root session starts a subagent, the database shows a child session linked to the parent session, with the parent's pid as its incarnation's process.
-- [ ] The child's run state, current tool, and usage update while it works, with events.
-- [ ] Stopping the subagent ends the child's incarnation; ending the parent ends both.
-- [ ] `pi_exec` workers and forked continuations do not appear as sessions.
+- [x] When a faux root session starts a subagent, the database shows a child session linked to the parent session, with the parent's pid as its incarnation's process.
+- [x] The child's run state, current tool, and usage update while it works, with events.
+- [x] Stopping the subagent ends the child's incarnation; ending the parent ends both.
+- [x] `pi_exec` workers and forked continuations do not appear as sessions.

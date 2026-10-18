@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, vi } from "vitest";
+import type { Command } from "../src/protocol.js";
 
 /**
  * A temporary agent directory for one test file, with session state enabled and pointed at it. tmux is
@@ -108,4 +109,38 @@ export async function stopRuntime(state: { agentDir: string; pidPath: string }) 
 		);
 	}
 	rmSync(state.agentDir, { recursive: true, force: true });
+}
+
+type Receipt = { stage: string; reason?: string };
+let commandCounter = 0;
+
+/** Send one command as a client would, and collect its receipts until it is applied or failed. */
+export async function sendCommand(
+	socketPath: string,
+	sessionId: string,
+	command: Command,
+	options: { commandId?: string; generation?: number } = {},
+) {
+	const commandId = options.commandId ?? `cmd-${++commandCounter}`;
+	const socket = createConnection(socketPath);
+	await new Promise((resolve) => socket.once("connect", resolve));
+	const receipts: Receipt[] = [];
+	const done = new Promise<void>((resolve) => {
+		let buffer = "";
+		socket.on("data", (chunk) => {
+			buffer += chunk.toString();
+			for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
+				const receipt = JSON.parse(buffer.slice(0, end));
+				buffer = buffer.slice(end + 1);
+				receipts.push({ stage: receipt.stage, ...(receipt.reason ? { reason: receipt.reason } : {}) });
+				if (receipt.stage === "applied" || receipt.stage === "failed") resolve();
+			}
+		});
+	});
+	socket.write(
+		`${JSON.stringify({ type: "command", commandId, sessionId, command, ...(options.generation ? { generation: options.generation } : {}) })}\n`,
+	);
+	await Promise.race([done, new Promise((resolve) => setTimeout(resolve, 5000))]);
+	socket.destroy();
+	return receipts;
 }

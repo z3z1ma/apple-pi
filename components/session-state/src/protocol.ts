@@ -1,5 +1,7 @@
 // The runtime's socket protocol: bridges send one JSON object per line.
 
+import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
+
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
 export type ProcessState = "starting" | "alive" | "alive_bridge_lost" | "exited" | "lost";
 
@@ -12,10 +14,14 @@ export interface Tool {
 	since: number;
 }
 
-/** A prompt waiting on the operator: a questionnaire carries its questions; other dialogs only kind and title. */
+/**
+ * A prompt waiting on the operator: a questionnaire carries its questions and the id an `answer` command names;
+ * other dialogs only kind and title, and only the terminal answers them.
+ */
 export interface Prompt {
 	kind: string;
 	title?: string;
+	id?: string;
 	questions?: unknown;
 }
 
@@ -83,7 +89,9 @@ export type Command =
 	| { kind: "abort" }
 	| { kind: "rename"; name: string }
 	| { kind: "set_model"; provider: string; id: string }
-	| { kind: "set_thinking"; level: string };
+	| { kind: "set_thinking"; level: string }
+	/** Answers the open questionnaire `questionnaire` (its prompt id), one reply per question, unless the terminal answered first. */
+	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] };
 
 /**
  * A client's request. `commandId` is the client's own id, so a repeat applies once. With `generation`, the command

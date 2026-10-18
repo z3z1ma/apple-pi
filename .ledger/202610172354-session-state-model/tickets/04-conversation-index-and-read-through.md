@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 Runtime and bridge tracer
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] After a faux session completes a user turn with one tool call, the database has index rows for the user message, the assistant message, the tool call, and its result, each with entry id, role, time, size, and a short preview.
-- [ ] Asking the runtime over the socket for one of those entry ids returns the same full text that is in the session's JSONL file.
-- [ ] No full message text is stored in the database beyond the preview.
-- [ ] Asking for an unknown entry id returns a clear not-found answer.
+- [x] After a faux session completes a user turn with one tool call, the database has index rows for the user message, the assistant message, the tool call, and its result, each with entry id, role, time, size, and a short preview.
+- [x] Asking the runtime over the socket for one of those entry ids returns the same full text that is in the session's JSONL file.
+- [x] No full message text is stored in the database beyond the preview.
+- [x] Asking for an unknown entry id returns a clear not-found answer.

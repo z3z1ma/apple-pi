@@ -4,9 +4,9 @@
 
 **Blocked by:** 08 Command channel
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] With a questionnaire open in a faux session, an answer command returns those answers to the tool, the tool result matches answers given in the terminal for the same choices, and the receipt reaches applied.
-- [ ] When the terminal answers first, a later answer command fails with a reason, and the prompt is cleared in the database.
-- [ ] When the answer command arrives first, the terminal dialog closes.
-- [ ] Other extensions' select, confirm, and input dialogs still work only in the terminal.
+- [x] With a questionnaire open in a faux session, an answer command returns those answers to the tool, the tool result matches answers given in the terminal for the same choices, and the receipt reaches applied.
+- [x] When the terminal answers first, a later answer command fails with a reason, and the prompt is cleared in the database.
+- [x] When the answer command arrives first, the terminal dialog closes.
+- [x] Other extensions' select, confirm, and input dialogs still work only in the terminal.

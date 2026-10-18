@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
+import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { statePaths } from "./paths.js";
 import {
@@ -391,6 +392,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		});
 	};
 	// The ledger extension announces every touch of a task; only this session's touches count here.
+	// Questionnaires the tool shows now, by tool call id, which an `answer` command can answer.
+	const questionnaires = new Map<string, OpenQuestionnaire>();
+	pi.events.on(QUESTIONNAIRE_CHANNEL, (data) => {
+		const open = data as OpenQuestionnaire;
+		if (link && open.sessionId === link.hello.session.id) questionnaires.set(open.toolCallId, open);
+	});
 	pi.events.on(LEDGER_LINK_CHANNEL, (data) => {
 		const touch = data as LedgerLink;
 		if (!link || touch.sessionId !== link.hello.session.id) return;
@@ -452,6 +459,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 				case "set_thinking":
 					pi.setThinkingLevel(command.level as never);
 					break;
+				case "answer": {
+					const open = questionnaires.get(command.questionnaire);
+					if (!open) return fail(`questionnaire ${command.questionnaire} is not open`);
+					const refused = open.answer(command.replies);
+					if (refused) return fail(refused);
+					break;
+				}
 				case "set_model": {
 					const model = ctx.modelRegistry.find(command.provider, command.id);
 					if (!model) return fail(`unknown model ${command.provider}/${command.id}`);
@@ -554,7 +568,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		link.run("running_tool");
 		link.toolStart(tool);
 		if (event.toolName === QUESTIONNAIRE_TOOL)
-			link.facts({ prompt: { kind: "questionnaire", questions: (event.args as { questions?: unknown })?.questions } });
+			link.facts({
+				prompt: {
+					kind: "questionnaire",
+					id: event.toolCallId,
+					questions: (event.args as { questions?: unknown })?.questions,
+				},
+			});
 	});
 	pi.on("tool_execution_end", (event) => {
 		if (event.parentToolCallId || !link) return;
@@ -565,7 +585,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		if (!still) link.run("thinking");
 		// A command can switch branches or worktrees.
 		if (event.toolName === "bash") refreshGit(current ?? ({ cwd: process.cwd() } as ExtensionContext));
-		if (event.toolName === QUESTIONNAIRE_TOOL) link.facts({ prompt: null });
+		if (event.toolName === QUESTIONNAIRE_TOOL) {
+			questionnaires.delete(event.toolCallId);
+			link.facts({ prompt: null });
+		}
 	});
 	// Other extensions' dialogs report only kind and title; a questionnaire already carries its questions.
 	pi.on("ui_prompt_start", (event) => {

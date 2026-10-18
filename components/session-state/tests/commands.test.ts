@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
@@ -7,8 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
-import type { Command } from "../src/protocol.js";
-import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 const state = tempStateDir();
 const dirs: string[] = [];
@@ -17,35 +15,6 @@ afterAll(async () => {
 	await stopRuntime(state);
 	for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
-
-type Receipt = { stage: string; reason?: string };
-let counter = 0;
-
-/** Send one command as a client would, and collect its receipts until it is applied or failed. */
-async function send(sessionId: string, command: Command, options: { commandId?: string; generation?: number } = {}) {
-	const commandId = options.commandId ?? `cmd-${++counter}`;
-	const socket = createConnection(state.socketPath);
-	await new Promise((resolve) => socket.once("connect", resolve));
-	const receipts: Receipt[] = [];
-	const done = new Promise<void>((resolve) => {
-		let buffer = "";
-		socket.on("data", (chunk) => {
-			buffer += chunk.toString();
-			for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
-				const receipt = JSON.parse(buffer.slice(0, end));
-				buffer = buffer.slice(end + 1);
-				receipts.push({ stage: receipt.stage, ...(receipt.reason ? { reason: receipt.reason } : {}) });
-				if (receipt.stage === "applied" || receipt.stage === "failed") resolve();
-			}
-		});
-	});
-	socket.write(
-		`${JSON.stringify({ type: "command", commandId, sessionId, command, ...(options.generation ? { generation: options.generation } : {}) })}\n`,
-	);
-	await Promise.race([done, new Promise((resolve) => setTimeout(resolve, 5000))]);
-	socket.destroy();
-	return receipts;
-}
 
 const seen = (id: string) =>
 	vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
@@ -58,7 +27,7 @@ test("talking to an idle session starts a turn, with accepted, delivered, and ap
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
-		expect(await send(id, { kind: "talk", text: "hello from a view" })).toEqual([
+		expect(await sendCommand(state.socketPath, id, { kind: "talk", text: "hello from a view" })).toEqual([
 			{ stage: "accepted" },
 			{ stage: "delivered" },
 			{ stage: "applied" },
@@ -90,15 +59,19 @@ test("talk to a busy session fails; steer, follow-up, and abort reach it", async
 		await seen(id);
 		const turn = run.session.prompt("work");
 		await vi.waitFor(() => expect(holds).toHaveLength(1));
-		expect((await send(id, { kind: "talk", text: "hi" })).at(-1)).toMatchObject({
+		expect((await sendCommand(state.socketPath, id, { kind: "talk", text: "hi" })).at(-1)).toMatchObject({
 			stage: "failed",
 			reason: expect.stringContaining("busy"),
 		});
-		expect((await send(id, { kind: "steer", text: "go left" })).at(-1)).toEqual({ stage: "applied" });
-		expect((await send(id, { kind: "follow_up", text: "then tidy" })).at(-1)).toEqual({ stage: "applied" });
+		expect((await sendCommand(state.socketPath, id, { kind: "steer", text: "go left" })).at(-1)).toEqual({
+			stage: "applied",
+		});
+		expect((await sendCommand(state.socketPath, id, { kind: "follow_up", text: "then tidy" })).at(-1)).toEqual({
+			stage: "applied",
+		});
 		await vi.waitFor(() => expect(JSON.parse(row(id).queue as string)).toMatchObject({ steers: 1, followUps: 1 }));
 		// abort is applied only once the run has stopped
-		const aborting = send(id, { kind: "abort" });
+		const aborting = sendCommand(state.socketPath, id, { kind: "abort" });
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(true));
 		await run.session.abort(); // the faux model holds its reply; the command's abort and this one end the run alike
 		expect((await aborting).at(-1)).toEqual({ stage: "applied" });
@@ -113,12 +86,22 @@ test("rename and thinking-level commands change the session", async () => {
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
-		expect((await send(id, { kind: "rename", name: "From a view" })).at(-1)).toEqual({ stage: "applied" });
+		expect((await sendCommand(state.socketPath, id, { kind: "rename", name: "From a view" })).at(-1)).toEqual({
+			stage: "applied",
+		});
 		await vi.waitFor(() => expect(JSON.parse(row(id).config as string)).toMatchObject({ name: "From a view" }));
-		expect((await send(id, { kind: "set_thinking", level: "off" })).at(-1)).toEqual({ stage: "applied" });
+		expect((await sendCommand(state.socketPath, id, { kind: "set_thinking", level: "off" })).at(-1)).toEqual({
+			stage: "applied",
+		});
 		// The faux registry knows one model, which it returns for any name.
 		expect(
-			(await send(id, { kind: "set_model", provider: "faux-session-provider", id: "faux-session-model" })).at(-1),
+			(
+				await sendCommand(state.socketPath, id, {
+					kind: "set_model",
+					provider: "faux-session-provider",
+					id: "faux-session-model",
+				})
+			).at(-1),
 		).toEqual({ stage: "applied" });
 	} finally {
 		await close(run);
@@ -130,11 +113,11 @@ test("a repeated command id applies once", async () => {
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
-		await send(id, { kind: "talk", text: "only once" }, { commandId: "same-id" });
+		await sendCommand(state.socketPath, id, { kind: "talk", text: "only once" }, { commandId: "same-id" });
 		await vi.waitFor(() => expect(run.session.messages.filter((m) => m.role === "assistant")).toHaveLength(1));
-		expect(await send(id, { kind: "talk", text: "only once" }, { commandId: "same-id" })).toEqual([
-			{ stage: "applied" },
-		]);
+		expect(
+			await sendCommand(state.socketPath, id, { kind: "talk", text: "only once" }, { commandId: "same-id" }),
+		).toEqual([{ stage: "applied" }]);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 		expect(run.session.messages.filter((m) => m.role === "user")).toHaveLength(1);
 	} finally {
@@ -152,7 +135,7 @@ test("a session that is not running fails at once, and a command bound to an old
 	await seen(id);
 	await first.session.prompt("hi");
 	await close(first);
-	expect(await send(id, { kind: "talk", text: "anyone?" })).toEqual([
+	expect(await sendCommand(state.socketPath, id, { kind: "talk", text: "anyone?" })).toEqual([
 		{ stage: "accepted" },
 		{ stage: "failed", reason: "not running" },
 	]);
@@ -162,7 +145,9 @@ test("a session that is not running fails at once, and a command bound to an old
 	});
 	try {
 		await vi.waitFor(() => expect(row(id).generation).toBe(2));
-		expect((await send(id, { kind: "rename", name: "stale" }, { generation: 1 })).at(-1)).toEqual({
+		expect(
+			(await sendCommand(state.socketPath, id, { kind: "rename", name: "stale" }, { generation: 1 })).at(-1),
+		).toEqual({
 			stage: "failed",
 			reason: "not running",
 		});
