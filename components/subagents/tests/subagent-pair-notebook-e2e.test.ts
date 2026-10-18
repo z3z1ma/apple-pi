@@ -220,7 +220,7 @@ describe("coding-child pair shared notebook through real interactive sessions", 
 		for (const moment of ["while the child works", "after stopping the child"]) {
 			if (moment !== "while the child works") {
 				await root.session.prompt(`${ROOT_DIRECTION}: stop the child.`);
-				expect(root.session.getLastAssistantText()).toContain(`Stopped subagent ${agentId}`);
+				expect(root.session.getLastAssistantText()).toContain(`Stopped and released subagent ${agentId}`);
 			}
 			await root.session.prompt(`${ROOT_DIRECTION}: recall the pair's learning ${moment}.`);
 			const recalled = root.session.getLastAssistantText() ?? "";

@@ -2,15 +2,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
-import { resumeAgent } from "../src/agent-runner.js";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import compactionSafety from "../../../extensions/compaction-safety.js";
+import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import installPair from "../../pair-programmer/src/extension.js";
+import { startFork } from "../../shared/src/forked-continuation.js";
+import { resumeAgent } from "../src/agent-runner.js";
 import { registerCompletionReflection } from "../src/completion-reflection.js";
 import installSubagents from "../src/index.js";
-import { startFork } from "../../shared/src/forked-continuation.js";
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-reflection-agent-"));
@@ -508,22 +508,20 @@ describe("coding-child completion reflection through real interactive sessions",
 						return fauxAssistantMessage("Launched.");
 					case 2:
 						return call("stop_subagent", { agent_id: agentId });
-					case 4:
-						return call("get_subagent_result", { agent_id: agentId, verbose: false });
 					default:
 						return fauxAssistantMessage(textOf(context.messages.at(-1)));
 				}
 			},
-			["agent", "stop_subagent", "get_subagent_result"],
+			["agent", "stop_subagent"],
 		);
 		roots.push(root);
 		await root.session.prompt("Delegate.");
 		await vi.waitFor(() => expect(reviewSignal).toBeDefined(), { timeout: 10_000 });
 		await root.session.prompt("Stop the child.");
-		expect(root.session.getLastAssistantText()).toContain("Stopped subagent");
-		await vi.waitFor(() => expect(reviewSignal?.aborted).toBe(true));
-		await root.session.prompt("Collect what the child left.");
+		expect(reviewSignal?.aborted).toBe(true);
+		// The stop releases the child, so its result returns what the child left.
 		const handoff = root.session.getLastAssistantText() ?? "";
+		expect(handoff).toContain("Stopped and released subagent");
 		expect(handoff).toContain("STOPPED BY THE USER");
 		expect(handoff).toContain("Preliminary report: answer is 1.");
 		expect(handoff).toContain("automatic completion review did not finish");

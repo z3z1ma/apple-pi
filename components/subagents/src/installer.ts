@@ -1,12 +1,13 @@
 import { defineTool, type ExtensionAPI, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { getSharedNotebook } from "../../notebook/src/shared-notebook.js";
-import { getActiveWorkSurface } from "../../shared/src/active-work.js";
+import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { abortable } from "../../shared/src/abortable.js";
+import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
 import { createActivityTracker } from "./activity.js";
@@ -54,7 +55,6 @@ import { resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
-import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import {
 	buildInferenceProfilesSection,
 	buildTeamSection,
@@ -64,6 +64,7 @@ import {
 	toTeamMember,
 } from "./team-system-prompt.js";
 import type { AgentInvocation, AgentRecord, JoinMode, NotificationDetails, SubagentConfigScope } from "./types.js";
+import { AgentPanel, type AgentTypeSummary } from "./ui/agent-panel.js";
 import {
 	type AgentActivity,
 	type AgentDetails,
@@ -76,7 +77,6 @@ import {
 	renderRunningAgentStatus,
 	SPINNER,
 } from "./ui/agent-widget.js";
-import { AgentPanel, type AgentTypeSummary } from "./ui/agent-panel.js";
 import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
@@ -1053,27 +1053,24 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		defineTool({
 			name: SUBAGENT_TOOL_NAMES.STOP,
 			label: "Stop Subagent",
-			description: "Stop a running or queued teammate by ID.",
+			description:
+				"Stop a teammate by ID and release it: running or queued work stops, and a finished teammate is let go. Either way it can no longer be resumed or read. A finished teammate you do not stop stays resumable until this session ends.",
 			parameters: Type.Object({ agent_id: Type.String() }),
 			async execute(_toolCallId, params) {
 				const record = manager.getRecord(params.agent_id);
-				if (
-					!record ||
-					record.parentAgentId ||
-					record.internalOwner ||
-					(record.status !== "running" && record.status !== "queued")
-				) {
-					return textResult(`Running or queued agent not found: ${params.agent_id}`, undefined, true);
+				if (!record || record.parentAgentId || record.internalOwner) {
+					return textResult(`Agent not found: ${params.agent_id}`, undefined, true);
 				}
 				// A queued abort completes synchronously, so suppress its completion nudge
-				// before manager.abort() runs the shared lifecycle callback.
+				// before manager.release() runs the shared lifecycle callback.
 				record.resultConsumed = true;
-				if (!manager.abort(params.agent_id)) {
-					record.resultConsumed = false;
-					return textResult(`Running or queued agent not found: ${params.agent_id}`, undefined, true);
-				}
+				await manager.release(params.agent_id);
 				cancelNotification(record.id);
-				return textResult(`Stopped subagent ${record.id}.`);
+				// Its report goes with the stop, since nothing can read it afterwards.
+				return textResult(
+					`Stopped and released subagent ${record.id}. Its final report:\n\n${withFileChanges(record, frameOutcome(record, "retrieved").text)}`,
+					detailsFor(record, activityById.get(record.id)),
+				);
 			},
 		}),
 	);

@@ -13,8 +13,8 @@ import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { installWorkManager } from "../../shared/src/work-manager.js";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
+import { installWorkManager } from "../../shared/src/work-manager.js";
 import { AgentManager } from "../src/agent-manager.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
 import { registerAgents } from "../src/agent-types.js";
@@ -1133,7 +1133,16 @@ RELOADED ROLE MUST NOT RUN.
 			expect(sentMessages.some((message) => String(message.content).includes(`<task-id>${agentId}</task-id>`))).toBe(
 				false,
 			);
-			const stoppedAgain = await stopTool.execute("public-agent-stop-again", { agent_id: stoppableAgentId });
+			// Stopping it again releases it: it can no longer be read, and a third stop finds nothing.
+			const released = await stopTool.execute("public-agent-stop-again", { agent_id: stoppableAgentId });
+			expect(released.isError).toBe(false);
+			const releasedRead = await checkResult.execute(
+				"public-agent-released-check",
+				{ agent_id: stoppableAgentId, yield_seconds: 0 },
+				undefined,
+			);
+			expect(releasedRead.isError).toBe(true);
+			const stoppedAgain = await stopTool.execute("public-agent-stop-released", { agent_id: stoppableAgentId });
 			expect(stoppedAgain.isError).toBe(true);
 
 			let releaseInlineStop: (() => void) | undefined;

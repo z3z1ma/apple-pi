@@ -85,7 +85,7 @@ export interface NestedAgentManager {
 		options?: { isBackground?: boolean },
 	): Promise<AgentRecord | undefined>;
 	steer(id: string, message: string): boolean;
-	abort(id: string): boolean;
+	release(id: string): Promise<boolean>;
 }
 
 export interface NestedToolContext {
@@ -357,14 +357,17 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
 	const stopTool = defineTool({
 		name: SUBAGENT_TOOL_NAMES.STOP,
 		label: "Stop Nested Agent",
-		description: "Stop a running or queued teammate you brought in.",
+		description:
+			"Stop a teammate you brought in and release it: running or queued work stops, and a finished teammate is let go. Either way it can no longer be resumed or read.",
 		parameters: Type.Object({ agent_id: Type.String() }),
 		execute: async (_toolCallId, params) => {
 			const record = context.manager.getRecord(params.agent_id);
-			if (!ownsRecord(record, context.parentAgentId) || !context.manager.abort(params.agent_id)) {
-				return textResult("Running or queued teammate not found or not owned by this session.", true);
+			if (!ownsRecord(record, context.parentAgentId) || !(await context.manager.release(params.agent_id))) {
+				return textResult("Teammate not found or not owned by this session.", true);
 			}
-			return textResult(`Stopped teammate ${params.agent_id}.`);
+			// Its report goes with the stop, since nothing can read it afterwards.
+			const report = frameOutcome(record, "nested-retrieved").text;
+			return textResult(`Stopped and released teammate ${params.agent_id}. Its final report:\n\n${report}`);
 		},
 	});
 

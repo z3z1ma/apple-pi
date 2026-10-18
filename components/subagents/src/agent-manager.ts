@@ -872,6 +872,19 @@ export class AgentManager {
 		return true;
 	}
 
+	/**
+	 * End an agent for good: stop it if it runs or waits, let its run settle, then release its session and roster
+	 * entry. It can no longer be resumed or read.
+	 */
+	async release(id: string, cause: AgentTerminationCause = "operator_stop"): Promise<boolean> {
+		const record = this.agents.get(id);
+		if (!record) return false;
+		this.abort(id, cause);
+		await record.promise?.catch(() => {});
+		if (this.agents.get(id) === record) this.removeRecord(id, record);
+		return true;
+	}
+
 	/** Dispose a record's in-process session and remove it from the roster. */
 	private removeRecord(id: string, record: AgentRecord): void {
 		const session = record.session;

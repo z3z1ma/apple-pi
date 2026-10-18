@@ -1284,7 +1284,7 @@ describe("owned subagent surface", () => {
 		expect(fullResult.content[0].text).toContain(fullOutput);
 	});
 
-	it("lets a nested orchestrator stop only a running child it owns", async () => {
+	it("lets a nested orchestrator stop and release only children it owns", async () => {
 		const owned = {
 			id: "owned-child",
 			parentAgentId: "parent-1",
@@ -1301,12 +1301,7 @@ describe("owned subagent surface", () => {
 		]);
 		const manager = {
 			getRecord: vi.fn((id: string) => records.get(id)),
-			abort: vi.fn((id: string) => {
-				const record = records.get(id);
-				if (!record || (record.status !== "running" && record.status !== "queued")) return false;
-				record.status = "stopped";
-				return true;
-			}),
+			release: vi.fn(async (id: string) => records.delete(id)),
 		};
 		const tools = createNestedSubagentTools({
 			manager: manager as any,
@@ -1322,15 +1317,15 @@ describe("owned subagent surface", () => {
 
 		const stopped = await stopTool.execute("stop-owned", { agent_id: owned.id });
 		expect(stopped.isError).toBe(false);
-		expect(stopped.content[0].text).toBe(`Stopped teammate ${owned.id}.`);
-		expect(owned.status).toBe("stopped");
+		expect(stopped.content[0].text).toContain(`Stopped and released teammate ${owned.id}. Its final report:`);
+		expect(records.has(owned.id)).toBe(false);
 
-		const stoppedAgain = await stopTool.execute("stop-settled", { agent_id: owned.id });
+		const stoppedAgain = await stopTool.execute("stop-released", { agent_id: owned.id });
 		expect(stoppedAgain.isError).toBe(true);
 		const foreignStop = await stopTool.execute("stop-foreign", { agent_id: foreign.id });
 		expect(foreignStop.isError).toBe(true);
-		expect(manager.abort).toHaveBeenCalledTimes(2);
-		expect(manager.abort).not.toHaveBeenCalledWith(foreign.id);
+		expect(manager.release).toHaveBeenCalledTimes(1);
+		expect(manager.release).not.toHaveBeenCalledWith(foreign.id);
 	});
 
 	it("applies and persists the child-session authority setting", () => {
