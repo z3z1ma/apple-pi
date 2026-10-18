@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
@@ -136,6 +136,8 @@ class StateLink {
 		this.socket = socket;
 		socket.on("connect", () => {
 			this.connected = true;
+			// A runtime that dies later may be restarted by this bridge again.
+			this.spawned = false;
 			this.send(this.hello);
 			if (this.rows.length > 0) this.send({ type: "index", rows: this.rows });
 			this.heartbeat = setInterval(() => this.send({ type: "heartbeat" }), HEARTBEAT_MS);
@@ -271,7 +273,6 @@ function helloFor(
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,
 			previousSession,
 			git: null,
-			currentTask: null,
 			config: config(pi, ctx, skills, mcpServers),
 		},
 	};
@@ -349,19 +350,23 @@ function textOf(content: unknown): string {
 	return content.map((part) => (part?.type === "text" ? part.text : "")).join("");
 }
 
-/** The repository, worktree, and branch of `cwd`, or null outside git. One `git rev-parse` call. */
-function gitContext(cwd: string): Promise<Facts["git"]> {
+/**
+ * The repository, worktree, and branch of `cwd`: null when git says it is not a repository, undefined when the
+ * read failed (a timeout, no git), which proves nothing and keeps the last known context.
+ */
+function gitContext(cwd: string): Promise<Facts["git"] | undefined> {
 	return new Promise((done) => {
 		execFile(
 			"git",
-			["rev-parse", "--show-toplevel", "--abbrev-ref", "HEAD", "--git-common-dir"],
+			["rev-parse", "--show-toplevel", "--abbrev-ref", "HEAD", "--path-format=absolute", "--git-common-dir"],
 			{ cwd, timeout: 5000, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } },
-			(error, stdout) => {
-				if (error) return done(null);
+			(error, stdout, stderr) => {
+				if (error) return done(/not a git repository/i.test(String(stderr)) ? null : undefined);
 				const [worktree, branch, commonDir] = stdout.trim().split("\n");
-				if (!worktree || !branch || !commonDir) return done(null);
+				if (!worktree || !branch || !commonDir) return done(undefined);
 				// The common git directory is <repository>/.git for the main checkout and every linked worktree.
-				done({ repository: dirname(resolve(worktree, commonDir)), worktree, branch });
+				// Absolute, in git's own spelling of the path, like --show-toplevel (a relative one is relative to cwd).
+				done({ repository: dirname(commonDir), worktree, branch });
 			},
 		);
 	});
@@ -382,7 +387,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	const refreshGit = (ctx: ExtensionContext) => {
 		const target = link;
 		void gitContext(ctx.cwd).then((git) => {
-			if (link === target) target?.facts({ git });
+			if (git !== undefined && link === target) target?.facts({ git });
 		});
 	};
 	// The ledger extension announces every touch of a task; only this session's touches count here.

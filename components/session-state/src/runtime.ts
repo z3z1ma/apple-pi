@@ -331,6 +331,11 @@ export class Runtime {
 			this.bindPaneTtys();
 			if (hello.tmux) void this.pollTmux();
 		}
+		const before = db.prepare("select spawned_by from sessions where id = ?").get(session.id) as
+			| { spawned_by: string | null }
+			| undefined;
+		if (session.spawnedBy && before?.spawned_by !== session.spawnedBy)
+			this.event("bridge", session.id, generation, "spawned_by", { spawnedBy: session.spawnedBy });
 		db.prepare(
 			`insert into sessions (id, kind, spawned_by, session_file, cwd, name, run_state, generation, source, updated_at)
 			values (?, ?, ?, ?, ?, ?, 'idle', ?, 'bridge', ?)
@@ -445,8 +450,10 @@ export class Runtime {
 		for (const other of this.connections)
 			if (other !== connection && !other.shutdown && other.sessionId === sessionId && other.generation === generation)
 				return;
+		// From the last thing the bridge itself reported: the runtime's own liveness checks after a restart are not
+		// observations of the session, and starting there would hide the outage.
 		const { since } = this.db!.prepare(
-			"select max(at) as since from events where session_id = ? and generation = ?",
+			"select max(at) as since from events where session_id = ? and generation = ? and source = 'bridge'",
 		).get(sessionId, generation) as { since: number | null };
 		this.event("runtime", sessionId, generation, "gap", { since, until: Date.now() });
 	}
@@ -548,6 +555,11 @@ export class Runtime {
 			);
 			const before =
 				JSON_FACTS.has(key) && typeof row[column] === "string" ? JSON.parse(row[column] as string) : row[column];
+			// A changed parent or predecessor file needs resolving to a session id again.
+			if (key === "parentSessionFile")
+				db.prepare("update sessions set parent_session_id = null where id = ?").run(sessionId);
+			if (key === "previousSession")
+				db.prepare("update sessions set previous_session_id = null where id = ?").run(sessionId);
 			const type = key === "prompt" ? (value ? "prompt_opened" : "prompt_closed") : `${column}_changed`;
 			this.event("bridge", sessionId, generation, type, { from: before, to: value });
 		}

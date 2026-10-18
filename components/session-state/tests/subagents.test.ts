@@ -25,6 +25,7 @@ type Row = Record<string, unknown>;
 
 test("a subagent appears as a child of the session that started it, with its own activity, and ends when stopped", async () => {
 	const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-child", contextWindow: 200_000 }] });
+	let child: unknown;
 	try {
 		faux.setResponses([
 			() => fauxAssistantMessage([fauxToolCall("read", { path: "app.ts" })], { stopReason: "toolUse" }),
@@ -59,9 +60,19 @@ test("a subagent appears as a child of the session that started it, with its own
 		const result = await runAgent(parent as never, "reader", "read app.ts", {
 			pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as never,
 			model,
+			onSessionCreated: (session) => {
+				child = session;
+			},
 		});
 		expect(result.responseText).toBe("CHILD-OK");
 		const childId = result.session.sessionManager.getSessionId();
+		expect(
+			query(
+				state.dbPath,
+				"select json_extract(data, '$.spawnedBy') as by from events where session_id = ? and type = 'spawned_by'",
+				childId,
+			),
+		).toEqual([{ by: "parent-session-1" }]);
 		await vi.waitFor(
 			() =>
 				expect(query<Row>(state.dbPath, "select kind, spawned_by from sessions where id = ?", childId)).toEqual([
@@ -85,12 +96,15 @@ test("a subagent appears as a child of the session that started it, with its own
 			).toEqual([{ name: "read" }]),
 		);
 		await disposeAgentSession(result.session);
+		child = undefined;
 		await vi.waitFor(() =>
 			expect(
 				query<Row>(state.dbPath, "select process_state, end_reason from incarnations where session_id = ?", childId),
 			).toEqual([{ process_state: "exited", end_reason: "quit" }]),
 		);
 	} finally {
+		// Always end the child before the runtime stops, or its bridge would start another runtime.
+		await disposeAgentSession(child as never);
 		faux.unregister();
 	}
 }, 30000);

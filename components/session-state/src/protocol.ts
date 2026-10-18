@@ -38,8 +38,11 @@ export interface Facts {
 	/** The session file that ran before this one in the same process (and pane), and why it gave way. */
 	previousSession: { file: string; reason: string } | null;
 	git: { repository: string; worktree: string; branch: string } | null;
-	/** The ledger task this session touched last. */
-	currentTask: { bundle: string; taskId: string } | null;
+	/**
+	 * The ledger task this session touched last. A bridge reports it only once it sees a touch, so a reload or reopen
+	 * keeps the task the runtime already recorded.
+	 */
+	currentTask?: { bundle: string; taskId: string } | null;
 	config: {
 		name: string | null;
 		flags: string[];

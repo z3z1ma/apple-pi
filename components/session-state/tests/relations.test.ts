@@ -81,6 +81,23 @@ test("a forked session names its parent, and a session that followed another in 
 			file: parentManager.getSessionFile(),
 			reason: "resume",
 		});
+		// Navigating again from another known session points at that one instead.
+		const otherManager = SessionManager.create(cwd, sessionDir);
+		const other = await fauxSession([bridge], [fauxAssistantMessage("other")], [], {
+			cwd,
+			sessionManager: otherManager,
+		});
+		runs.push(other);
+		await other.session.prompt("hi");
+		await seen(otherManager.getSessionId());
+		await child.session.extensionRunner.emit({
+			type: "session_start",
+			reason: "new",
+			previousSessionFile: otherManager.getSessionFile(),
+		});
+		await vi.waitFor(() =>
+			expect(session(childManager.getSessionId())).toMatchObject({ previous_session_id: otherManager.getSessionId() }),
+		);
 	} finally {
 		for (const run of runs) await close(run);
 	}
@@ -92,6 +109,7 @@ test("a session in a git repository shows its repository, worktree, and branch, 
 	git("init", "-q", "-b", "main");
 	git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "start");
 	const top = git("rev-parse", "--show-toplevel");
+	mkdirSync(join(repo, "src", "deep"), { recursive: true });
 	const run = await fauxSession(
 		[bridge],
 		[
@@ -101,7 +119,7 @@ test("a session in a git repository shows its repository, worktree, and branch, 
 			fauxAssistantMessage("switched"),
 		],
 		["bash"],
-		{ cwd: repo },
+		{ cwd: join(repo, "src", "deep") }, // below the checkout root: the repository is still the root
 	);
 	try {
 		const id = run.session.sessionManager.getSessionId();
@@ -147,6 +165,34 @@ test("each touch of a ledger task is a time-stamped link, and the latest is the 
 		expect(json(session(id).current_task)).toMatchObject({ taskId: "202610180002-beta" });
 		expect(query(state.dbPath, "select 1 from events where session_id = ? and type = 'task_linked'", id)).toHaveLength(
 			2,
+		);
+		// A reload's new bridge does not know the task yet; the recorded one stays current.
+		await run.session.bindExtensions({});
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		expect(json(session(id).current_task)).toMatchObject({ taskId: "202610180002-beta" });
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("a session without a transcript file still records its ledger touches", async () => {
+	const cwd = tempDir("aps-ledger-mem-");
+	mkdirSync(join(cwd, ".ledger", "202610180003-gamma"), { recursive: true });
+	writeFileSync(join(cwd, ".ledger", "202610180003-gamma", "task.md"), "# gamma\n");
+	const run = await fauxSession(
+		[bridge, installLedger],
+		[write(".ledger/202610180003-gamma/notes.md", "note"), fauxAssistantMessage("done")],
+		["write"],
+		{ cwd },
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		await run.session.prompt("note it");
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select task_id from session_tasks where session_id = ?", id)).toEqual([
+				{ task_id: "202610180003-gamma" },
+			]),
 		);
 	} finally {
 		await close(run);

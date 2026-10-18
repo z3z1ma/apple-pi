@@ -300,13 +300,21 @@ function owningBundle(file: string): { root: string; taskId: string } | undefine
 	return undefined;
 }
 
-/** Link a session to a task it changed; returns the bundle it linked, if the task still exists. */
+/**
+ * Link a session to a task it changed and return the bundle, if the task still exists. Without a `sessionId` (a
+ * session with no transcript file) nothing is written to history.json; the bundle is only found.
+ */
 async function linkSession(
 	root: string,
 	taskId: string,
-	sessionId: string,
+	sessionId: string | undefined,
 	signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
+	if (sessionId === undefined) {
+		const live = join(root, ".ledger", taskId);
+		const archived = join(root, ".ledger", "history", taskId);
+		return pathExists(live) ? live : pathExists(archived) ? archived : undefined;
+	}
 	const release = await acquireLedgerLeaseWhenFree(root, signal);
 	if (!release) return undefined;
 	try {
@@ -327,7 +335,7 @@ async function linkSession(
 async function linkChangedFile(
 	cwd: string,
 	path: string,
-	sessionId: string,
+	sessionId: string | undefined,
 	signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
 	let file: string;
@@ -754,17 +762,18 @@ export default function installLedger(pi: ExtensionAPI): void {
 	// Bundle signatures seen before each bash or pi_exec call, per session; their changes are found by comparison.
 	const observed = new Map<string, Map<string, string>>();
 	pi.on("tool_call", (event, ctx) => {
-		const sessionId = linkableSession(ctx);
-		if (sessionId && OPAQUE_CHANGE_TOOLS.has(event.toolName)) observed.set(sessionId, observeBundles(ctx.cwd));
+		if (OPAQUE_CHANGE_TOOLS.has(event.toolName))
+			observed.set(ctx.sessionManager.getSessionId(), observeBundles(ctx.cwd));
 	});
 	const announce = (sessionId: string, bundle: string | undefined, via: LedgerLink["via"]) => {
 		if (bundle)
 			pi.events.emit(LEDGER_LINK_CHANNEL, { sessionId, bundle, taskId: basename(bundle), via } satisfies LedgerLink);
 	};
-	// No trust gate: the session already changed the bundle, and workers may run untrusted.
+	// No trust gate: the session already changed the bundle, and workers may run untrusted. Every session announces
+	// its touches; only one with a transcript file is written to history.json, whose ids must point at a transcript.
 	pi.on("tool_result", async (event, ctx) => {
-		const sessionId = linkableSession(ctx);
-		if (!sessionId) return;
+		const sessionId = ctx.sessionManager.getSessionId();
+		const historySession = linkableSession(ctx);
 		if ((event.toolName === "ledger_add" || event.toolName === "ledger_status") && !event.isError) {
 			const details = event.details as { bundlePath?: string } | undefined;
 			if (details?.bundlePath) announce(sessionId, resolve(ctx.cwd, details.bundlePath), event.toolName);
@@ -772,7 +781,7 @@ export default function installLedger(pi: ExtensionAPI): void {
 		}
 		if (event.toolName === "write" || event.toolName === "edit") {
 			if (!event.isError && typeof event.input.path === "string") {
-				announce(sessionId, await linkChangedFile(ctx.cwd, event.input.path, sessionId, ctx.signal), "edit");
+				announce(sessionId, await linkChangedFile(ctx.cwd, event.input.path, historySession, ctx.signal), "edit");
 			}
 			return;
 		}
@@ -783,7 +792,11 @@ export default function installLedger(pi: ExtensionAPI): void {
 		for (const [bundle, signature] of after) {
 			const previous = before.get(bundle);
 			if (previous === undefined || previous === signature) continue;
-			announce(sessionId, await linkSession(dirname(dirname(bundle)), basename(bundle), sessionId, ctx.signal), "edit");
+			announce(
+				sessionId,
+				await linkSession(dirname(dirname(bundle)), basename(bundle), historySession, ctx.signal),
+				"edit",
+			);
 		}
 	});
 }
