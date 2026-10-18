@@ -96,10 +96,10 @@ class StateLink {
 		this.send({ type: "tool_start", tool });
 	}
 
-	toolEnd(id: string, name: string, isError: boolean): void {
-		const since = this.hello.tool?.id === id ? this.hello.tool.since : Date.now();
-		if (this.hello.tool?.id === id) this.hello.tool = undefined;
-		this.send({ type: "tool_end", id, name, durationMs: Date.now() - since, isError });
+	/** A tool ended; `current` is the tool still running, if any, which the session now shows instead. */
+	toolEnd(id: string, name: string, durationMs: number, isError: boolean, current: Tool | undefined): void {
+		this.hello.tool = current;
+		this.send({ type: "tool_end", id, name, durationMs, isError, current: current ?? null });
 	}
 
 	/**
@@ -176,12 +176,30 @@ function sessionCost(ctx: ExtensionContext): number {
 	return total;
 }
 
+/** Option names on Pi's command line; values are left out, since a positional prompt can follow a boolean flag. */
+function flagNames(): string[] {
+	return process.argv
+		.slice(2)
+		.filter((arg) => arg.startsWith("--"))
+		.map((arg) => arg.slice(2).split("=")[0])
+		.sort();
+}
+
+/**
+ * Extensions are the files that registered tools or extension commands; built-in tools, skills, and prompt
+ * templates are not extensions. An extension that registers only hooks is invisible here: Pi lists no extensions.
+ */
 function config(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcpServers: string[]): Facts["config"] {
 	const sources = new Set<string>();
-	for (const tool of pi.getAllTools()) if (tool.sourceInfo?.path) sources.add(tool.sourceInfo.path);
-	for (const command of pi.getCommands()) if (command.sourceInfo?.path) sources.add(command.sourceInfo.path);
+	for (const tool of pi.getAllTools()) {
+		const path = tool.sourceInfo?.path;
+		if (path && !path.startsWith("builtin:") && !path.startsWith("<")) sources.add(path);
+	}
+	for (const command of pi.getCommands())
+		if (command.source === "extension" && command.sourceInfo?.path) sources.add(command.sourceInfo.path);
 	return {
 		name: ctx.sessionManager.getSessionName() ?? null,
+		flags: flagNames(),
 		activeTools: [...pi.getActiveTools()].sort(),
 		extensions: [...sources].sort(),
 		skills,
@@ -209,7 +227,7 @@ function helloFor(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcp
 			...contextUsage(ctx),
 			cost: sessionCost(ctx),
 			prompt: null,
-			queue: { steers: 0, followUps: 0 },
+			queue: { steers: 0, followUps: 0, pending: false },
 			lastError: null,
 			lastAbortAt: null,
 			config: config(pi, ctx, skills, mcpServers),
@@ -292,32 +310,39 @@ function textOf(content: unknown): string {
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	let link: StateLink | undefined;
+	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
 	let mcpServers: string[] = [];
-	// Messages typed while a run is busy wait in Pi's queue until delivered as a user message.
-	let queued: { kind: "steers" | "followUps"; text: string }[] = [];
-	let indexedEntries = new Set<string>();
+	let watcher: NodeJS.Timeout | undefined;
+	// Steers and follow-ups the operator typed during a run. Pi delivers steers before follow-ups, one user message each.
+	let queued = { steers: 0, followUps: 0 };
+	const reportQueue = (ctx: ExtensionContext) =>
+		link?.facts({ queue: { ...queued, pending: ctx.hasPendingMessages() } });
+	// Top-level tools now running, in start order; Pi may run several at once.
+	let tools = new Map<string, Tool>();
+	// Transcript entries are append-only, so the count of entries already indexed is enough to find new ones.
+	let indexed = 0;
 	const indexNew = (ctx: ExtensionContext) => {
 		if (!link) return;
+		const entries = ctx.sessionManager.getEntries();
+		if (entries.length <= indexed) return;
 		const rows: IndexRow[] = [];
-		for (const entry of ctx.sessionManager.getEntries()) {
-			if (indexedEntries.has(entry.id)) continue;
-			indexedEntries.add(entry.id);
-			rows.push(...indexRows(entry as never));
-		}
+		for (const entry of entries.slice(indexed)) rows.push(...indexRows(entry as never));
+		indexed = entries.length;
 		link.index(rows);
 	};
-	const reportQueue = () =>
-		link?.facts({
-			queue: {
-				steers: queued.filter((item) => item.kind === "steers").length,
-				followUps: queued.filter((item) => item.kind === "followUps").length,
-			},
-		});
+	const stop = () => {
+		clearInterval(watcher);
+		watcher = undefined;
+	};
 
 	pi.on("session_start", (_event, ctx) => {
 		link?.close();
-		queued = [];
+		stop();
+		current = ctx;
+		queued = { steers: 0, followUps: 0 };
+		tools = new Map();
+		indexed = 0;
 		let warned = false;
 		const warn = (message: string) => {
 			if (warned) return;
@@ -326,13 +351,16 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			else process.stderr.write(`${message}\n`);
 		};
 		link = new StateLink(helloFor(pi, ctx, skills, mcpServers), warn);
-		indexedEntries = new Set();
 		indexNew(ctx);
+		// Messages can be appended while the session is idle (passive forks, extensions); look for them each second.
+		watcher = setInterval(() => current && indexNew(current), 1000);
+		watcher.unref();
 	});
-	pi.on("turn_end", (_event, ctx) => indexNew(ctx));
 	pi.on("session_shutdown", (event) => {
+		stop();
 		link?.close(event.reason === "reload" ? undefined : event.reason);
 		link = undefined;
+		current = undefined;
 	});
 
 	pi.on("before_agent_start", (event, ctx) => {
@@ -347,52 +375,58 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.on("model_select", (_event, ctx) => link?.facts({ model: modelName(ctx), ...contextUsage(ctx) }));
 	pi.on("thinking_level_select", (event) => link?.facts({ thinkingLevel: event.level }));
 
-	pi.on("input", (event) => {
-		if (event.streamingBehavior === "steer" || event.streamingBehavior === "followUp") {
-			queued.push({ kind: event.streamingBehavior === "steer" ? "steers" : "followUps", text: event.text });
-			reportQueue();
-		}
+	pi.on("input", (event, ctx) => {
+		if (event.streamingBehavior === "steer") queued.steers++;
+		else if (event.streamingBehavior === "followUp") queued.followUps++;
+		else return { action: "continue" };
+		reportQueue(ctx);
 		return { action: "continue" };
 	});
 
 	pi.on("agent_start", () => link?.run("thinking"));
-	pi.on("message_start", (event) => {
+	pi.on("message_start", (event, ctx) => {
 		if (event.message.role === "assistant") link?.run("thinking");
-		if (event.message.role === "user") {
-			const text = textOf(event.message.content);
-			const index = queued.findIndex((item) => item.text === text);
-			if (index >= 0) {
-				queued.splice(index, 1);
-				reportQueue();
-			}
+		if (event.message.role === "user" && queued.steers + queued.followUps > 0) {
+			if (queued.steers > 0) queued.steers--;
+			else queued.followUps--;
+			reportQueue(ctx);
 		}
 	});
 	pi.on("message_update", (event) => {
 		const type = event.assistantMessageEvent?.type;
 		if (type === "text_start" || type === "text_delta") link?.run("writing_reply");
 	});
-	pi.on("message_end", (event, ctx) => {
+	pi.on("message_end", (event) => {
 		const message = event.message;
 		if (message.role !== "assistant" || !link) return;
-		const cost = link.hello.facts.cost + (message.usage?.cost?.total ?? 0);
 		link.facts({
-			cost,
-			...contextUsage(ctx),
+			cost: link.hello.facts.cost + (message.usage?.cost?.total ?? 0),
 			...(message.stopReason === "error" ? { lastError: message.errorMessage ?? "error" } : {}),
 		});
+	});
+	// Context use is read after Pi has saved the turn; at message_end the reply is not in the session yet.
+	pi.on("turn_end", (_event, ctx) => {
+		link?.facts(contextUsage(ctx));
+		reportQueue(ctx);
+		indexNew(ctx);
 	});
 
 	pi.on("tool_execution_start", (event) => {
 		if (event.parentToolCallId || !link) return;
+		const tool: Tool = { id: event.toolCallId, name: event.toolName, arg: mainArg(event.args), since: Date.now() };
+		tools.set(tool.id, tool);
 		link.run("running_tool");
-		link.toolStart({ id: event.toolCallId, name: event.toolName, arg: mainArg(event.args), since: Date.now() });
+		link.toolStart(tool);
 		if (event.toolName === QUESTIONNAIRE_TOOL)
 			link.facts({ prompt: { kind: "questionnaire", questions: (event.args as { questions?: unknown })?.questions } });
 	});
 	pi.on("tool_execution_end", (event) => {
 		if (event.parentToolCallId || !link) return;
-		link.run("thinking");
-		link.toolEnd(event.toolCallId, event.toolName, event.isError);
+		const started = tools.get(event.toolCallId);
+		tools.delete(event.toolCallId);
+		const still = [...tools.values()].at(-1);
+		link.toolEnd(event.toolCallId, event.toolName, Date.now() - (started?.since ?? Date.now()), event.isError, still);
+		if (!still) link.run("thinking");
 		if (event.toolName === QUESTIONNAIRE_TOOL) link.facts({ prompt: null });
 	});
 	// Other extensions' dialogs report only kind and title; a questionnaire already carries its questions.
@@ -413,11 +447,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.on("agent_settled", (event, ctx) => {
 		link?.run("idle");
 		indexNew(ctx);
-		if (!ctx.hasPendingMessages() && queued.length > 0) {
-			queued = [];
-			reportQueue();
-		}
-		if (event.aborted) link?.facts({ lastAbortAt: Date.now() });
-		link?.facts({ config: config(pi, ctx, skills, mcpServers) });
+		if (!ctx.hasPendingMessages()) queued = { steers: 0, followUps: 0 };
+		reportQueue(ctx);
+		link?.facts({
+			...contextUsage(ctx),
+			...(event.aborted ? { lastAbortAt: Date.now() } : {}),
+			config: config(pi, ctx, skills, mcpServers),
+		});
 	});
 }

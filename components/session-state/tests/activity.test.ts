@@ -40,7 +40,7 @@ function heldTool() {
 			},
 		});
 	};
-	return { factory, release };
+	return { factory, release, done };
 }
 
 const toolTurn = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
@@ -129,12 +129,17 @@ test("steers and follow-ups typed during a run sit in the queue until delivered"
 		await vi.waitFor(() => expect(session(id)?.run_state).toBe("thinking"), { timeout: 15000 });
 		await run.session.prompt("go left instead", { streamingBehavior: "steer" });
 		await run.session.prompt("then tidy up", { streamingBehavior: "followUp" });
-		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toEqual({ steers: 1, followUps: 1 }));
+		await vi.waitFor(() =>
+			expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 1, followUps: 1, pending: true }),
+		);
 		finish(fauxAssistantMessage("first"));
 		await turn;
-		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toEqual({ steers: 0, followUps: 0 }), {
-			timeout: 5000,
-		});
+		await vi.waitFor(
+			() => expect(JSON.parse(session(id).queue as string)).toEqual({ steers: 0, followUps: 0, pending: false }),
+			{
+				timeout: 5000,
+			},
+		);
 	} finally {
 		await close(run);
 	}
@@ -181,11 +186,95 @@ test("model, thinking level, context use, cost, and configuration are recorded a
 		await run.session.prompt("hello");
 		await vi.waitFor(() => expect(session(id).cost).toBe(0.25));
 		expect(JSON.parse(session(id).config as string)).toMatchObject({ activeTools: ["read"] }); // refreshed when the run starts
-		expect(session(id).context_tokens).toEqual(expect.any(Number));
+		// read after the turn was saved, so it matches what the session itself reports now
+		expect(session(id).context_tokens).toBe(run.session.getContextUsage()?.tokens ?? null);
+		expect(JSON.parse(session(id).config as string).flags).toEqual(expect.any(Array));
 		expect(events(id, "cost_changed").at(-1)).toMatchObject({ from: 0, to: 0.25 });
 		run.session.setSessionName("Docs pass");
 		await vi.waitFor(() => expect(JSON.parse(session(id).config as string)).toMatchObject({ name: "Docs pass" }));
 		expect(events(id, "config_changed").at(-1)).toMatchObject({ to: { name: "Docs pass" } });
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("tools running at the same time each get an end event, and the one still running stays shown", async () => {
+	const first = heldTool();
+	const second = heldTool();
+	const twoTools: ExtensionFactory = (pi) => {
+		first.factory(pi);
+	};
+	// The second held tool is registered under another name.
+	const secondNamed: ExtensionFactory = (pi) => {
+		pi.registerTool({
+			name: "slow_test",
+			label: "Test",
+			description: "Test something slowly",
+			parameters: Type.Object({ path: Type.String() }),
+			async execute() {
+				await second.done;
+				return { content: [{ type: "text" as const, text: "tested" }], details: {} };
+			},
+		});
+	};
+	const run = await fauxSession(
+		[bridge, twoTools, secondNamed],
+		[
+			fauxAssistantMessage(
+				[
+					fauxToolCall("slow_build", { path: "a.ts" }, { id: "call-build" }),
+					fauxToolCall("slow_test", { path: "b.ts" }, { id: "call-test" }),
+				],
+				{
+					stopReason: "toolUse",
+				},
+			),
+			fauxAssistantMessage("both done"),
+		],
+		["slow_build", "slow_test"],
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await vi.waitFor(() => expect(session(id)).toBeDefined(), { timeout: 15000 });
+		const turn = run.session.prompt("build and test");
+		await vi.waitFor(() => expect(events(id, "tool_started")).toHaveLength(2), { timeout: 15000 });
+		first.release();
+		await vi.waitFor(() => expect(events(id, "tool_ended")).toHaveLength(1));
+		expect(events(id, "tool_ended")[0]).toMatchObject({ name: "slow_build", durationMs: expect.any(Number) });
+		expect(session(id)).toMatchObject({
+			current_tool: "slow_test",
+			current_tool_arg: "b.ts",
+			run_state: "running_tool",
+		});
+		second.release();
+		await turn;
+		await vi.waitFor(() =>
+			expect(events(id, "tool_ended").map((ended) => ended.name)).toEqual(["slow_build", "slow_test"]),
+		);
+		expect(session(id).current_tool).toBeNull();
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("steers are delivered before follow-ups, so the queue drops a steer first even when the texts match", async () => {
+	const holds: ((reply: Reply) => void)[] = [];
+	const run = await fauxSession([bridge], () => new Promise<Reply>((resolve) => holds.push(resolve)), []);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		const turn = run.session.prompt("start");
+		await vi.waitFor(() => expect(holds).toHaveLength(1), { timeout: 15000 });
+		await run.session.prompt("same words", { streamingBehavior: "followUp" });
+		await run.session.prompt("same words", { streamingBehavior: "steer" });
+		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 1, followUps: 1 }));
+		holds[0](fauxAssistantMessage("first"));
+		await vi.waitFor(() => expect(holds).toHaveLength(2)); // the steer went out with the next request
+		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 0, followUps: 1 }));
+		holds[1](fauxAssistantMessage("second"));
+		await vi.waitFor(() => expect(holds).toHaveLength(3));
+		holds[2](fauxAssistantMessage("third"));
+		await turn;
+		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 0, followUps: 0 }));
 	} finally {
 		await close(run);
 	}

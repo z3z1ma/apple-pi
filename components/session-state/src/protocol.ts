@@ -27,10 +27,18 @@ export interface Facts {
 	contextWindow: number | null;
 	cost: number;
 	prompt: Prompt | null;
-	queue: { steers: number; followUps: number };
+	/** Typed steers and follow-ups not yet delivered; `pending` is Pi's own word that anything (an extension's message too) waits. */
+	queue: { steers: number; followUps: number; pending: boolean };
 	lastError: string | null;
 	lastAbortAt: number | null;
-	config: { name: string | null; activeTools: string[]; extensions: string[]; skills: string[]; mcpServers: string[] };
+	config: {
+		name: string | null;
+		flags: string[];
+		activeTools: string[];
+		extensions: string[];
+		skills: string[];
+		mcpServers: string[];
+	};
 }
 
 /**
@@ -76,7 +84,7 @@ export type BridgeMessage =
 	| { type: "run"; run: RunState }
 	| { type: "facts"; facts: Partial<Facts> }
 	| { type: "tool_start"; tool: Tool }
-	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean }
+	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean; current: Tool | null }
 	| { type: "index"; rows: IndexRow[] }
 	| ReadEntry
 	| { type: "shutdown"; reason: string };

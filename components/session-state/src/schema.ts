@@ -109,6 +109,8 @@ const MIGRATIONS = [
 		source text not null,
 		primary key (session_id, entry_id, part)
 	) strict;`,
+	// `at` is when the transcript entry was written; `observed_at` is when the runtime first indexed it.
+	`alter table messages add column observed_at integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

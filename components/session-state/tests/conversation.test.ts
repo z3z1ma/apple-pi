@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
@@ -70,6 +70,7 @@ test("completed messages, tool calls, and tool results are indexed, and an entry
 		for (const row of rows) {
 			expect(row.entry_id).toEqual(expect.any(String));
 			expect(row.at).toBeGreaterThan(0);
+			expect(row.observed_at).toBeGreaterThanOrEqual(row.at as number);
 			expect(row.size).toEqual(expect.any(Number));
 		}
 		expect(rows.find((row) => row.role === "tool_call")).toMatchObject({ tool: "read", preview: "app.ts" });
@@ -103,3 +104,27 @@ test("reading an unknown entry answers that it was not found", async () => {
 	});
 	expect(await readEntry("no-such-session", "x")).toEqual({ type: "entry", requestId: "r1", error: "unknown session" });
 });
+
+test("a message an extension appends while the session is idle is indexed without another turn", async () => {
+	let api: ExtensionAPI | undefined;
+	const capture = (pi: ExtensionAPI) => {
+		api = pi;
+	};
+	const run = await fauxSession([bridge, capture], [], []);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
+			timeout: 15000,
+		});
+		api!.sendMessage({ customType: "note", content: "left a note while idle", display: true }, { triggerTurn: false });
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select role, tool, preview from messages where session_id = ?", id)).toEqual([
+					{ role: "custom", tool: "note", preview: "left a note while idle" },
+				]),
+			{ timeout: 5000 },
+		);
+	} finally {
+		await close(run);
+	}
+}, 20000);

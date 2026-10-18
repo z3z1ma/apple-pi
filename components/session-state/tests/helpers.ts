@@ -6,11 +6,18 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, vi } from "vitest";
 
-/** A temporary agent directory for one test file, with session state enabled and pointed at it. */
+/**
+ * A temporary agent directory for one test file, with session state enabled and pointed at it. tmux is
+ * isolated too: an empty socket directory and no inherited pane, so the runtime never reads the operator's
+ * servers. A test that needs tmux starts scratch servers and points `TMUX_TMPDIR` at its own directory.
+ */
 export function tempStateDir() {
 	const agentDir = mkdtempSync(join(tmpdir(), "aps-"));
 	vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
 	vi.stubEnv("PI_SESSION_STATE_DISABLED", "");
+	vi.stubEnv("TMUX_TMPDIR", join(agentDir, "tmux"));
+	vi.stubEnv("TMUX", "");
+	vi.stubEnv("TMUX_PANE", "");
 	const stateDir = join(agentDir, "state");
 	return {
 		agentDir,

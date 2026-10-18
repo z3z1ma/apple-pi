@@ -238,7 +238,9 @@ export class Runtime {
 			return;
 		}
 		if (message.type === "read_entry") {
-			void this.readEntry(connection, message);
+			this.readEntry(connection, message).catch((error) =>
+				console.error(`read_entry failed: ${(error as Error).stack ?? error}`),
+			);
 			return;
 		}
 		const { sessionId, generation } = connection;
@@ -248,9 +250,13 @@ export class Runtime {
 		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
-			const { id, name, durationMs, isError } = message;
-			if (this.clearTool(sessionId, generation, id))
+			// Every end is recorded, even of a tool that was not the one shown; the session then shows the tool still running.
+			const { id, name, durationMs, isError, current } = message;
+			if (this.isCurrent(sessionId, generation)) {
 				this.event("bridge", sessionId, generation, "tool_ended", { id, name, durationMs, isError });
+				if (current) this.showTool(sessionId, current);
+				else this.clearTool(sessionId, generation);
+			}
 		} else if (message.type === "shutdown") {
 			connection.shutdown = true;
 			this.endIncarnation(sessionId, generation, "exited", "bridge", message.reason);
@@ -319,9 +325,10 @@ export class Runtime {
 	private index(sessionId: string, generation: number, rows: IndexRow[]): void {
 		const db = this.db!;
 		const insert = db.prepare(
-			`insert or ignore into messages (session_id, entry_id, part, at, role, tool, size, preview, source)
-			values (?, ?, ?, ?, ?, ?, ?, ?, 'bridge')`,
+			`insert or ignore into messages (session_id, entry_id, part, at, role, tool, size, preview, source, observed_at)
+			values (?, ?, ?, ?, ?, ?, ?, ?, 'bridge', ?)`,
 		);
+		const now = Date.now();
 		db.exec("begin");
 		try {
 			for (const row of rows) {
@@ -334,6 +341,7 @@ export class Runtime {
 					row.tool ?? null,
 					row.size,
 					row.preview,
+					now,
 				);
 				if (added.changes)
 					this.event("bridge", sessionId, generation, "message", {
@@ -355,6 +363,8 @@ export class Runtime {
 			connection.socket.write(
 				`${JSON.stringify({ type: "entry", requestId: request.requestId, ...body } as EntryReply)}\n`,
 			);
+		if (typeof request.sessionId !== "string" || typeof request.entryId !== "string")
+			return void reply({ error: "sessionId and entryId must be strings" });
 		const row = this.db?.prepare("select session_file from sessions where id = ?").get(request.sessionId) as
 			| { session_file: string | null }
 			| undefined;
@@ -398,16 +408,27 @@ export class Runtime {
 		}
 	}
 
-	private startTool(sessionId: string, generation: number, tool: Tool): void {
-		const db = this.db!;
-		const row = db.prepare("select generation, current_tool_id from sessions where id = ?").get(sessionId) as
-			| { generation: number; current_tool_id: string | null }
+	private isCurrent(sessionId: string, generation: number): boolean {
+		const row = this.db!.prepare("select generation from sessions where id = ?").get(sessionId) as
+			| { generation: number }
 			| undefined;
-		if (!row || row.generation !== generation || row.current_tool_id === tool.id) return;
-		db.prepare(
+		return row?.generation === generation;
+	}
+
+	/** Show `tool` as the session's current tool, without an event: it already started. */
+	private showTool(sessionId: string, tool: Tool): void {
+		this.db!.prepare(
 			`update sessions set current_tool = ?, current_tool_id = ?, current_tool_arg = ?, current_tool_since = ?,
 			source = 'bridge', updated_at = ? where id = ?`,
 		).run(tool.name, tool.id, tool.arg ?? null, tool.since, Date.now(), sessionId);
+	}
+
+	private startTool(sessionId: string, generation: number, tool: Tool): void {
+		const row = this.db!.prepare("select generation, current_tool_id from sessions where id = ?").get(sessionId) as
+			| { generation: number; current_tool_id: string | null }
+			| undefined;
+		if (!row || row.generation !== generation || row.current_tool_id === tool.id) return;
+		this.showTool(sessionId, tool);
 		this.event("bridge", sessionId, generation, "tool_started", {
 			id: tool.id,
 			name: tool.name,
