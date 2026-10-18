@@ -4,7 +4,6 @@ import asyncio
 import time
 
 import dashboard
-from conftest import record
 from textual.widgets import DataTable
 
 
@@ -12,20 +11,17 @@ def run(app_test):
     return asyncio.run(app_test())
 
 
-def setup_agents(env):
-    fake, state, _, _ = env
-    now = int(time.time())
-    for pane in ("%1", "%2", "%3"):
-        fake.add_pane(pane, seen_at=str(now - 600))
-    record(state, "asking", "%1", "waiting", now - 300, name="Needs an answer")
-    record(state, "busy", "%2", "busy", now - 30, name="Still going")
-    record(state, "quiet", "%3", "idle", now - 900, name="Long done")
-    fake.screens = {"%1": "\x1b[1mWhich option?\x1b[0m\n> ", "%3": "all finished\n"}
-    return fake
+def setup_agents(world):
+    now = time.time()
+    world.add("asking", "%1", "running_tool", name="Needs an answer", prompt={"id": "q1"}, needs_you_since=now - 300)
+    world.add("busy", "%2", "thinking", name="Still going", updated_at=now - 30)
+    world.add("quiet", "%3", name="Long done", updated_at=now - 900)
+    world.tmux.screens = {"%1": "\x1b[1mWhich option?\x1b[0m\n> ", "%3": "all finished\n"}
+    return world.tmux
 
 
-def test_table_lists_agents_in_attention_order_and_previews_the_selected_pane(env):
-    setup_agents(env)
+def test_table_lists_agents_in_attention_order_and_previews_the_selected_pane(world):
+    setup_agents(world)
 
     async def scenario():
         app = dashboard.Dashboard()
@@ -43,8 +39,8 @@ def test_table_lists_agents_in_attention_order_and_previews_the_selected_pane(en
     assert selected == "busy"
 
 
-def test_enter_jumps_to_the_selected_agent(env):
-    fake = setup_agents(env)
+def test_enter_jumps_to_the_selected_agent(world):
+    fake = setup_agents(world)
 
     async def scenario():
         app = dashboard.Dashboard()
@@ -58,8 +54,8 @@ def test_enter_jumps_to_the_selected_agent(env):
     assert ("select-pane", "-t", "%1") in fake.commands
 
 
-def test_reply_types_into_an_idle_agent_and_refuses_a_busy_one(env):
-    fake = setup_agents(env)
+def test_reply_sends_talk_to_an_idle_agent_and_offers_none_to_a_busy_one(world):
+    fake = setup_agents(world)
 
     async def scenario():
         app = dashboard.Dashboard()
@@ -75,15 +71,12 @@ def test_reply_types_into_an_idle_agent_and_refuses_a_busy_one(env):
             return busy_reply_open
 
     assert run(scenario) is False
-    sent = [command for command in fake.commands if command[0] == "send-keys"]
-    assert sent == [("send-keys", "-t", "%3", "-l", "--", "go on"), ("send-keys", "-t", "%3", "Enter")]
+    assert world.runtime.commands() == [("quiet", {"kind": "talk", "text": "go on"})]
+    assert not [command for command in fake.commands if command[0] == "send-keys"]
 
 
-def test_reading_a_finished_agent_in_the_live_view_marks_it_seen(env, monkeypatch):
-    fake, state, _, _ = env
-    now = int(time.time())
-    fake.add_pane("%1", seen_at=str(now - 600))
-    record(state, "done", "%1", "idle", now - 60, name="Finished")
+def test_reading_a_finished_agent_in_the_live_view_marks_it_seen(world, monkeypatch):
+    world.add("done", "%1", name="Finished", needs_you_since=time.time() - 60)
     monkeypatch.setattr(dashboard, "SEEN_AFTER_SECONDS", 0.3)
 
     async def scenario():
@@ -92,12 +85,11 @@ def test_reading_a_finished_agent_in_the_live_view_marks_it_seen(env, monkeypatc
             await pilot.pause(1.5)
 
     run(scenario)
-    assert int(fake.panes["%1"]["seen"]) >= now
+    assert ("done", {"kind": "mark_seen"}) in world.runtime.commands()
 
 
-def test_a_reply_is_not_sent_when_the_agent_starts_working_while_you_type(env):
-    fake = setup_agents(env)
-    _, state, _, _ = env
+def test_a_reply_is_not_sent_when_the_agent_starts_working_while_you_type(world):
+    fake = setup_agents(world)
 
     async def scenario():
         app = dashboard.Dashboard()
@@ -106,18 +98,19 @@ def test_a_reply_is_not_sent_when_the_agent_starts_working_while_you_type(env):
             await pilot.press("j", "j", "r")
             await pilot.pause(0.2)
             await pilot.press(*"hello")
-            record(state, "quiet", "%3", "busy", int(time.time()), name="Long done")
+            world.execute("update sessions set run_state = 'thinking' where id = 'quiet'")
             await pilot.press("enter")
             await pilot.pause(0.3)
             return [notice.message for notice in app._notifications]
 
     notices = run(scenario)
     assert not [command for command in fake.commands if command[0] == "send-keys"]
+    assert world.runtime.commands() == []
     assert any("Not sent" in message for message in notices)
 
 
-def test_wide_windows_put_the_live_view_beside_the_table_narrow_ones_below_and_p_gives_it_the_width(env):
-    setup_agents(env)
+def test_wide_windows_put_the_live_view_beside_the_table_narrow_ones_below_and_p_gives_it_the_width(world):
+    setup_agents(world)
 
     async def layout(width: int, height: int, keys: tuple[str, ...] = ()):
         app = dashboard.Dashboard()
@@ -136,12 +129,9 @@ def test_wide_windows_put_the_live_view_beside_the_table_narrow_ones_below_and_p
     assert not shown and preview.width >= 196
 
 
-def test_a_dashboard_no_client_is_showing_marks_nothing_seen(env, monkeypatch):
-    fake, state, _, _ = env
-    now = int(time.time())
-    fake.add_pane("%1", seen_at=str(now - 600))
-    fake.watched = False
-    record(state, "done", "%1", "idle", now - 60, name="Finished")
+def test_a_dashboard_no_client_is_showing_marks_nothing_seen(world, monkeypatch):
+    world.tmux.watched = False
+    world.add("done", "%1", name="Finished", needs_you_since=time.time() - 60)
     monkeypatch.setattr(dashboard, "SEEN_AFTER_SECONDS", 0.3)
 
     async def scenario():
@@ -150,4 +140,4 @@ def test_a_dashboard_no_client_is_showing_marks_nothing_seen(env, monkeypatch):
             await pilot.pause(1.5)
 
     run(scenario)
-    assert int(fake.panes["%1"]["seen"]) == now - 600
+    assert world.runtime.commands() == []

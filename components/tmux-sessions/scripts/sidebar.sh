@@ -19,7 +19,7 @@ keep_running() {
 }
 
 py() {
-  PI_TMUX_STATE_DIR="$(tmux show-option -gqv @pi_state_dir)" uv run -q --no-project python "$ROOT/sidebar/$@"
+  uv run -q --no-project python "$ROOT/sidebar/$@"
 }
 
 # The live sidebar pane, or nothing. Pane ids are never reused within a tmux server.
@@ -66,7 +66,7 @@ open() {
   local before pane
   before="$(layout_of "$1")"
   pane="$(tmux split-window -h -f -d -l "$WIDTH" -t "$(last_pane "$1")" -P -F '#{pane_id}' \
-    -e "PI_TMUX_STATE_DIR=$(tmux show-option -gqv @pi_state_dir)" \
+    -e "PI_CODING_AGENT_DIR=$(tmux show-option -gqv @pi_agent_dir)" \
     "$(keep_running sidebar.py)")"
   if [ -z "$pane" ]; then
     tmux display-message "No room for the Pi sidebar in this window"
@@ -136,7 +136,7 @@ dashboard)
   if [ -z "$window" ]; then
     # Created detached and marked before it is shown, so the sidebar's follow hook already sees the mark.
     window="$(tmux new-window -d -t "$4:" -n "π agents" -P -F '#{window_id}' \
-      -e "PI_TMUX_STATE_DIR=$(tmux show-option -gqv @pi_state_dir)" \
+      -e "PI_CODING_AGENT_DIR=$(tmux show-option -gqv @pi_agent_dir)" \
       "$(keep_running dashboard.py)")"
     tmux set-option -w -t "$window" @pi_dashboard 1
     tmux set-option -w -t "$window" automatic-rename off

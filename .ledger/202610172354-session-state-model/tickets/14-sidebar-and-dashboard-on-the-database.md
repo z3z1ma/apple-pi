@@ -4,10 +4,10 @@
 
 **Blocked by:** 05 Relations and work links; 13 Attention and tmux glue
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Against a database fixture created by the runtime's own migrations, the sidebar shows each session's name, status, current tool, ledger task, cost, context, and needs-you lane as recorded.
-- [ ] The dashboard's reply to an idle session sends a talk command, and to a busy session offers no reply, as today.
-- [ ] Marking seen from the sidebar sends a mark-seen command.
-- [ ] The views no longer import `agents.py` or read tmux state records.
-- [ ] The sidebar pytest suite passes against the migrated fixture.
+- [x] Against a database fixture created by the runtime's own migrations, the sidebar shows each session's name, status, current tool, ledger task, cost, context, and needs-you lane as recorded.
+- [x] The dashboard's reply to an idle session sends a talk command, and to a busy session offers no reply, as today.
+- [x] Marking seen from the sidebar sends a mark-seen command.
+- [x] The views no longer import `agents.py` or read tmux state records.
+- [x] The sidebar pytest suite passes against the migrated fixture.

@@ -15,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agents import STATUS_STYLE, Agent, AgentStore, live, mark_seen, tmux  # noqa: E402
-from presentation import STATE_LABEL, ago, count_of, details, glyph, show, state, tokens, use_theme  # noqa: E402
+from model import Agent, Store, live, mark_seen, talk, tmux  # noqa: E402
+from presentation import STATE_LABEL, STATUS_STYLE, ago, count_of, details, glyph, show, state, tokens, use_theme  # noqa: E402
 from rich.text import Text  # noqa: E402
 from textual import on, work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
@@ -100,10 +100,10 @@ class Dashboard(App):
         Binding("q", "quit", "close", show=False),
     ]
 
-    def __init__(self, store: AgentStore | None = None) -> None:
+    def __init__(self) -> None:
         # Keep the terminal's own (possibly translucent) background; see the sidebar for why ansi_color is needed.
         super().__init__(ansi_color=True)
-        self.store = store or AgentStore()
+        self.store = Store()
         self.lock = threading.Lock()
         self.agents: list[Agent] = []
         self.order: list[str] = []
@@ -295,7 +295,7 @@ class Dashboard(App):
             preview.border_title = f"Live view · {agent.name}"
             preview.border_subtitle = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index}"
         if agent.unseen and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
-            mark_seen(agent.pane_id)
+            mark_seen(agent)
             self.poll()
 
     def action_cursor(self, step: int) -> None:
@@ -306,12 +306,12 @@ class Dashboard(App):
     def action_seen(self) -> None:
         agent = self.selected_agent()
         if agent:
-            mark_seen(agent.pane_id)
+            mark_seen(agent)
             self.poll()
 
     def action_seen_all(self) -> None:
         for agent in self.agents:
-            mark_seen(agent.pane_id)
+            mark_seen(agent)
         self.poll()
 
     def action_preview_only(self) -> None:
@@ -342,8 +342,9 @@ class Dashboard(App):
         if current is None or current.status != "idle":
             self.notify(f"Not sent: {agent.name} is no longer waiting for input.", severity="warning")
             return
-        tmux("send-keys", "-t", agent.pane_id, "-l", "--", text)
-        tmux("send-keys", "-t", agent.pane_id, "Enter")
+        if not talk(current, text):
+            self.notify("Not sent: the session-state runtime is not running.", severity="warning")
+            return
         self.notify(f"Sent to {agent.name}", timeout=3)
         self.poll()
 

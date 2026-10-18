@@ -6,8 +6,8 @@ Verify: components/tmux-sessions/sidebar/tests/test_dashboard.py
 
 ## symbol:Dashboard.send
 
-A reply is typed into the agent's pane only when the agent is idle, re-read from tmux at send time.
-Why: `send-keys` into a busy agent or an open questionnaire would land in the wrong prompt; the status can change while you type.
+A reply is sent as a `talk` command only when the session is idle, re-read from the database at send time.
+Why: the status can change while you type; the runtime would refuse `talk` to a busy session, but the dashboard says so up front instead of sending a command that fails.
 
 ## symbol:Dashboard.highlighted
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agents import Agent, AgentStore, mark_seen, tmux  # noqa: E402
+from model import Agent, Store, mark_seen, tmux  # noqa: E402
 from presentation import (  # noqa: E402
     STATES,
     activity,
@@ -152,11 +152,11 @@ class Sidebar(App):
         Binding("q", "close", "close", show=False),
     ]
 
-    def __init__(self, store: AgentStore | None = None) -> None:
+    def __init__(self) -> None:
         # Paint the terminal's own default background: a theme colour would show as an opaque slab on a
         # translucent terminal, and Textual only keeps `ansi_default` when ANSI colours are allowed.
         super().__init__(ansi_color=True)
-        self.store = store or AgentStore()
+        self.store = Store()
         self.lock = threading.Lock()
         self.agents: list[Agent] = []
         self.selected: str | None = None
@@ -298,7 +298,7 @@ class Sidebar(App):
         agent = self.selected_agent()
         if agent is None:
             return
-        mark_seen(agent.pane_id)
+        mark_seen(agent)
         # Inbox behaviour: the cursor stays in place and lands on the next agent, not on the one that sank.
         ids = [each.session_id for each in self.agents]
         index = ids.index(agent.session_id)
@@ -308,7 +308,7 @@ class Sidebar(App):
 
     def action_seen_all(self) -> None:
         for agent in self.agents:
-            mark_seen(agent.pane_id)
+            mark_seen(agent)
         self.poll()
 
     def action_leave(self) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-from agents import Agent
+from model import Agent
 from textual.app import App
 from textual.content import Content
 from textual.theme import BUILTIN_THEMES
@@ -14,6 +14,8 @@ from textual.widgets import Static
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 STATES = ("waiting", "done", "working", "quiet")
 STATE_LABEL = {"waiting": "asking you", "done": "done", "working": "working", "quiet": "idle"}
+# The theme's warning, success, primary, and muted text colours, for Rich text outside the theme.
+STATUS_STYLE = {"waiting": "#FAE3B0", "done": "#ABE9B3", "working": "#F5C2E7", "quiet": "#7f849c"}
 
 
 def state(agent: Agent) -> str:
