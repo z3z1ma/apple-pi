@@ -70,6 +70,7 @@ export async function fakeBridge(socketPath: string, sessionId: string, pid: num
 		session: { id: sessionId, kind: "root", cwd: "/tmp" },
 		process: { pid, startedAt },
 		run: "idle",
+		facts: {},
 	});
 	return { socket, send };
 }

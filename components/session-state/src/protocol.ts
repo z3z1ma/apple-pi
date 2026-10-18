@@ -3,6 +3,36 @@
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
 export type ProcessState = "starting" | "alive" | "alive_bridge_lost" | "exited" | "lost";
 
+/** The top-level tool a session is running now. */
+export interface Tool {
+	id: string;
+	name: string;
+	/** The call's main argument (command, path, pattern, ...), first line only. */
+	arg?: string;
+	since: number;
+}
+
+/** A prompt waiting on the operator: a questionnaire carries its questions; other dialogs only kind and title. */
+export interface Prompt {
+	kind: string;
+	title?: string;
+	questions?: unknown;
+}
+
+/** Everything else a bridge knows about its session. Each field is replaced whole when it changes. */
+export interface Facts {
+	model: string | null;
+	thinkingLevel: string | null;
+	contextTokens: number | null;
+	contextWindow: number | null;
+	cost: number;
+	prompt: Prompt | null;
+	queue: { steers: number; followUps: number };
+	lastError: string | null;
+	lastAbortAt: number | null;
+	config: { name: string | null; activeTools: string[]; extensions: string[]; skills: string[]; mcpServers: string[] };
+}
+
 export interface Hello {
 	type: "hello";
 	session: { id: string; kind: "root"; file?: string; cwd: string; name?: string };
@@ -10,12 +40,17 @@ export interface Hello {
 	/** The tmux server socket and pane this session runs in, from its `TMUX` and `TMUX_PANE`; absent outside tmux. */
 	tmux?: { socket: string; pane: string };
 	run: RunState;
+	facts: Facts;
+	tool?: Tool;
 }
 
 export type BridgeMessage =
 	| Hello
 	| { type: "heartbeat" }
 	| { type: "run"; run: RunState }
+	| { type: "facts"; facts: Partial<Facts> }
+	| { type: "tool_start"; tool: Tool }
+	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean }
 	| { type: "shutdown"; reason: string };
 
 /** A bridge sends a heartbeat this often; the runtime treats a bridge silent for SILENCE_MS as lost. */

@@ -5,12 +5,30 @@ import { DatabaseSync } from "node:sqlite";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
+	type Facts,
 	type Hello,
 	lineReader,
 	type ProcessState,
 	type RunState,
 	SILENCE_MS,
+	type Tool,
 } from "./protocol.js";
+
+/** Where each fact lives in `sessions`; object-valued facts are stored as JSON. */
+const FACT_COLUMNS: Record<keyof Facts, string> = {
+	model: "model",
+	thinkingLevel: "thinking_level",
+	contextTokens: "context_tokens",
+	contextWindow: "context_window",
+	cost: "cost",
+	prompt: "prompt",
+	queue: "queue",
+	lastError: "last_error",
+	lastAbortAt: "last_abort_at",
+	config: "config",
+};
+const JSON_FACTS = new Set<string>(["prompt", "queue", "config"]);
+
 import { migrate } from "./schema.js";
 import { canonicalSocket, listPanes, type PaneRow, socketFiles } from "./tmux.js";
 
@@ -195,7 +213,12 @@ export class Runtime {
 				} catch {
 					return;
 				}
-				this.handle(connection, message);
+				try {
+					this.handle(connection, message);
+				} catch (error) {
+					// One bad message must not take the runtime down with every other session.
+					console.error(`message from a bridge failed: ${(error as Error).stack ?? error}`);
+				}
 			}),
 		);
 		socket.on("error", () => {});
@@ -213,7 +236,13 @@ export class Runtime {
 		const { sessionId, generation } = connection;
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
-		else if (message.type === "shutdown") {
+		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
+		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
+		else if (message.type === "tool_end") {
+			const { id, name, durationMs, isError } = message;
+			if (this.clearTool(sessionId, generation, id))
+				this.event("bridge", sessionId, generation, "tool_ended", { id, name, durationMs, isError });
+		} else if (message.type === "shutdown") {
 			connection.shutdown = true;
 			this.endIncarnation(sessionId, generation, "exited", "bridge", message.reason);
 			this.setRunState(sessionId, generation, "idle");
@@ -271,6 +300,64 @@ export class Runtime {
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
+		this.applyFacts(session.id, generation, hello.facts);
+		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
+		if (hello.tool) this.startTool(session.id, generation, hello.tool);
+		else this.clearTool(session.id, generation);
+	}
+
+	/** The current generation's facts, each change an event of its own. */
+	private applyFacts(sessionId: string, generation: number, facts: Partial<Facts>): void {
+		const db = this.db!;
+		const row = db.prepare("select * from sessions where id = ?").get(sessionId) as Record<string, unknown> | undefined;
+		if (!row || row.generation !== generation) return;
+		for (const [key, value] of Object.entries(facts)) {
+			const column = FACT_COLUMNS[key as keyof Facts];
+			if (!column) continue;
+			const stored = JSON_FACTS.has(key) && value !== null ? JSON.stringify(value) : (value as string | number | null);
+			if (row[column] === stored) continue;
+			db.prepare(`update sessions set ${column} = ?, source = 'bridge', updated_at = ? where id = ?`).run(
+				stored,
+				Date.now(),
+				sessionId,
+			);
+			const before =
+				JSON_FACTS.has(key) && typeof row[column] === "string" ? JSON.parse(row[column] as string) : row[column];
+			const type = key === "prompt" ? (value ? "prompt_opened" : "prompt_closed") : `${column}_changed`;
+			this.event("bridge", sessionId, generation, type, { from: before, to: value });
+		}
+	}
+
+	private startTool(sessionId: string, generation: number, tool: Tool): void {
+		const db = this.db!;
+		const row = db.prepare("select generation, current_tool_id from sessions where id = ?").get(sessionId) as
+			| { generation: number; current_tool_id: string | null }
+			| undefined;
+		if (!row || row.generation !== generation || row.current_tool_id === tool.id) return;
+		db.prepare(
+			`update sessions set current_tool = ?, current_tool_id = ?, current_tool_arg = ?, current_tool_since = ?,
+			source = 'bridge', updated_at = ? where id = ?`,
+		).run(tool.name, tool.id, tool.arg ?? null, tool.since, Date.now(), sessionId);
+		this.event("bridge", sessionId, generation, "tool_started", {
+			id: tool.id,
+			name: tool.name,
+			arg: tool.arg ?? null,
+		});
+	}
+
+	/** Clear the current tool (only `id`, when given); true when a tool was cleared. */
+	private clearTool(sessionId: string, generation: number, id?: string): boolean {
+		const db = this.db!;
+		const row = db.prepare("select generation, current_tool_id from sessions where id = ?").get(sessionId) as
+			| { generation: number; current_tool_id: string | null }
+			| undefined;
+		if (!row || row.generation !== generation || row.current_tool_id === null) return false;
+		if (id !== undefined && row.current_tool_id !== id) return false;
+		db.prepare(
+			`update sessions set current_tool = null, current_tool_id = null, current_tool_arg = null, current_tool_since = null,
+			source = 'bridge', updated_at = ? where id = ?`,
+		).run(Date.now(), sessionId);
+		return true;
 	}
 
 	/** Only the session's current generation reports its activity; a superseded process's messages are ignored. */

@@ -12,10 +12,18 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
 
 ## What it records
 
-- `sessions`: one row per Pi session id, with its kind, session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation.
+- `sessions`: one row per Pi session id, with its kind, session file, directory, name, current run state (`idle`, `thinking`, `writing_reply`, `running_tool`, `compacting`), and current generation, plus everything else its bridge observes:
+  - the top-level tool running now (`current_tool`, its id, its main argument such as the command or path, and since when);
+  - an open `prompt` (JSON): a questionnaire with its questions while `ask_user_question` runs, or another dialog's kind and title;
+  - the `queue` (JSON) of steers and follow-ups typed during a run and not yet delivered;
+  - `last_error` (a failed reply's message) and `last_abort_at`;
+  - `model`, `thinking_level`, `context_tokens`, `context_window`, and `cost` so far;
+  - `config` (JSON): name, active tools, the extensions that registered tools or commands, loaded skills, and MCP servers.
+
+  Only the session's current generation changes these. Streamed text and tool progress update nothing, so they write no events.
 - `incarnations`: one row per process lifetime of a session (generation 1, 2, ... on each reopen), with pid, process start time, process state, start and end, and why it ended. An incarnation running in tmux is bound to its pane: the server socket and pane id the bridge reads from `TMUX` and `TMUX_PANE`, and the pane's tty once the runtime has seen the pane (recorded with `tmux` as its source).
 - `tmux_servers`, `tmux_sessions`, `tmux_windows`, `tmux_window_links`, `tmux_panes`: every live tmux server (keyed by its resolved socket path, so `/tmp` and `/private/tmp` are one server) and its sessions, windows, and panes, including panes that run no Pi. A window can be linked into several sessions, so each link (session, window, index in that session) is its own row. tmux ids such as `%3` are only unique within a server, so every row also carries the socket. A pane row holds its window, tty, first process, current command and path, and whether it is active or dead.
-- `events`: an append-only history of run-state changes, process-state changes, incarnations starting and ending, failed process checks, every tmux server, session, window, window link, and pane added, changed, or removed, and failed tmux reads. Every row names its source (`bridge`, `runtime`, or `tmux`) and time.
+- `events`: an append-only history of run-state changes, tools starting and ending (with duration), prompts opening and closing, every other change to a session's facts (`<column>_changed`), process-state changes, incarnations starting and ending, failed process checks, every tmux server, session, window, window link, and pane added, changed, or removed, and failed tmux reads. Every row names its source (`bridge`, `runtime`, or `tmux`) and time.
 
 ## tmux
 

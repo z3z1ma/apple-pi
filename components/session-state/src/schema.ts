@@ -83,6 +83,20 @@ const MIGRATIONS = [
 	alter table incarnations add column tmux_socket text;
 	alter table incarnations add column pane_id text;
 	alter table incarnations add column pane_tty text;`,
+	`alter table sessions add column current_tool text;
+	alter table sessions add column current_tool_id text;
+	alter table sessions add column current_tool_arg text;
+	alter table sessions add column current_tool_since integer;
+	alter table sessions add column model text;
+	alter table sessions add column thinking_level text;
+	alter table sessions add column context_tokens integer;
+	alter table sessions add column context_window integer;
+	alter table sessions add column cost real not null default 0;
+	alter table sessions add column prompt text;
+	alter table sessions add column queue text;
+	alter table sessions add column last_error text;
+	alter table sessions add column last_abort_at integer;
+	alter table sessions add column config text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
