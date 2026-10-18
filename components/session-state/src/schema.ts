@@ -111,6 +111,23 @@ const MIGRATIONS = [
 	) strict;`,
 	// `at` is when the transcript entry was written; `observed_at` is when the runtime first indexed it.
 	`alter table messages add column observed_at integer;`,
+	`alter table sessions add column reports_to text;
+	alter table sessions add column parent_session_file text;
+	alter table sessions add column parent_session_id text;
+	alter table sessions add column previous_session text;
+	alter table sessions add column previous_session_id text;
+	alter table sessions add column git text;
+	alter table sessions add column current_task text;
+	create table session_tasks (
+		id integer primary key autoincrement,
+		session_id text not null,
+		generation integer not null,
+		bundle text not null,
+		task_id text not null,
+		via text not null,
+		at integer not null,
+		source text not null
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

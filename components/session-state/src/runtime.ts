@@ -29,9 +29,14 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	queue: "queue",
 	lastError: "last_error",
 	lastAbortAt: "last_abort_at",
+	reportsTo: "reports_to",
+	parentSessionFile: "parent_session_file",
+	previousSession: "previous_session",
+	git: "git",
+	currentTask: "current_task",
 	config: "config",
 };
-const JSON_FACTS = new Set<string>(["prompt", "queue", "config"]);
+const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);
 
 import { migrate } from "./schema.js";
 import { canonicalSocket, listPanes, type PaneRow, socketFiles } from "./tmux.js";
@@ -247,7 +252,13 @@ export class Runtime {
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
 		else if (message.type === "index") this.index(sessionId, generation, message.rows);
-		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
+		else if (message.type === "task_link" && this.isCurrent(sessionId, generation)) {
+			const { bundle, taskId, via, at } = message;
+			this.db!.prepare(
+				"insert into session_tasks (session_id, generation, bundle, task_id, via, at, source) values (?, ?, ?, ?, ?, ?, 'bridge')",
+			).run(sessionId, generation, bundle, taskId, via, at);
+			this.event("bridge", sessionId, generation, "task_linked", { bundle, taskId, via });
+		} else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
 			// Every end is recorded, even of a tool that was not the one shown; the session then shows the tool still running.
@@ -316,6 +327,7 @@ export class Runtime {
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
 		this.applyFacts(session.id, generation, hello.facts);
+		this.resolveParents();
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
@@ -384,6 +396,21 @@ export class Runtime {
 			} catch {}
 		}
 		reply({ error: "entry not found" });
+	}
+
+	/**
+	 * A forked or cloned session names its parent by file, and a session that followed another in the same process
+	 * names that one by file; resolve each to a session id once that session is known.
+	 */
+	private resolveParents(): void {
+		this.db!.exec(
+			`update sessions set parent_session_id = (
+				select parent.id from sessions parent where parent.session_file = sessions.parent_session_file
+			) where parent_session_file is not null and parent_session_id is null;
+			update sessions set previous_session_id = (
+				select previous.id from sessions previous where previous.session_file = json_extract(sessions.previous_session, '$.file')
+			) where previous_session is not null and previous_session_id is null`,
+		);
 	}
 
 	/** The current generation's facts, each change an event of its own. */

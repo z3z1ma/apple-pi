@@ -36,6 +36,7 @@ function ledger() {
 	installLedger({
 		on: (event: string, handler: (event: any, ctx: any) => unknown) => handlers.set(event, handler),
 		registerTool: (tool: any) => tools.set(tool.name, tool),
+		events: { emit: () => {}, on: () => () => {} },
 	} as any);
 	// A string is a persisted session with that ID; an in-memory SessionManager has no session file.
 	const ctx = (cwd: string, session: Session, trusted = true, signal?: AbortSignal) => ({

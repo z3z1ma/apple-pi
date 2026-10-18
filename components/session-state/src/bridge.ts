@@ -1,8 +1,10 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { statePaths } from "./paths.js";
 import {
 	type BridgeMessage,
@@ -83,6 +85,10 @@ class StateLink {
 			(changed as Record<string, unknown>)[key] = value;
 		}
 		if (Object.keys(changed).length > 0) this.send({ type: "facts", facts: changed });
+	}
+
+	taskLink(bundle: string, taskId: string, via: string): void {
+		this.send({ type: "task_link", bundle, taskId, via, at: Date.now() });
 	}
 
 	index(rows: IndexRow[]): void {
@@ -207,7 +213,13 @@ function config(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcpSe
 	};
 }
 
-function helloFor(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcpServers: string[]): Hello {
+function helloFor(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	skills: string[],
+	mcpServers: string[],
+	previousSession: Facts["previousSession"],
+): Hello {
 	const sessions = ctx.sessionManager;
 	return {
 		type: "hello",
@@ -230,6 +242,11 @@ function helloFor(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcp
 			queue: { steers: 0, followUps: 0, pending: false },
 			lastError: null,
 			lastAbortAt: null,
+			reportsTo: (pi.getFlag("reports-to") as string | undefined) || null,
+			parentSessionFile: sessions.getHeader()?.parentSession ?? null,
+			previousSession,
+			git: null,
+			currentTask: null,
 			config: config(pi, ctx, skills, mcpServers),
 		},
 	};
@@ -307,13 +324,49 @@ function textOf(content: unknown): string {
 	return content.map((part) => (part?.type === "text" ? part.text : "")).join("");
 }
 
+/** The repository, worktree, and branch of `cwd`, or null outside git. One `git rev-parse` call. */
+function gitContext(cwd: string): Promise<Facts["git"]> {
+	return new Promise((done) => {
+		execFile(
+			"git",
+			["rev-parse", "--show-toplevel", "--abbrev-ref", "HEAD", "--git-common-dir"],
+			{ cwd, timeout: 5000, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } },
+			(error, stdout) => {
+				if (error) return done(null);
+				const [worktree, branch, commonDir] = stdout.trim().split("\n");
+				if (!worktree || !branch || !commonDir) return done(null);
+				// The common git directory is <repository>/.git for the main checkout and every linked worktree.
+				done({ repository: dirname(resolve(worktree, commonDir)), worktree, branch });
+			},
+		);
+	});
+}
+
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
+	// The tmux-sessions extension registers this flag too; Pi lets each extension read only flags it registered.
+	pi.registerFlag("reports-to", {
+		type: "string",
+		description: "Session id of the coordinator this session reports to",
+	});
 	let link: StateLink | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
 	let mcpServers: string[] = [];
 	let watcher: NodeJS.Timeout | undefined;
+	const refreshGit = (ctx: ExtensionContext) => {
+		const target = link;
+		void gitContext(ctx.cwd).then((git) => {
+			if (link === target) target?.facts({ git });
+		});
+	};
+	// The ledger extension announces every touch of a task; only this session's touches count here.
+	pi.events.on(LEDGER_LINK_CHANNEL, (data) => {
+		const touch = data as LedgerLink;
+		if (!link || touch.sessionId !== link.hello.session.id) return;
+		link.facts({ currentTask: { bundle: touch.bundle, taskId: touch.taskId } });
+		link.taskLink(touch.bundle, touch.taskId, touch.via);
+	});
 	// Steers and follow-ups the operator typed during a run. Pi delivers steers before follow-ups, one user message each.
 	let queued = { steers: 0, followUps: 0 };
 	const reportQueue = (ctx: ExtensionContext) =>
@@ -336,7 +389,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher = undefined;
 	};
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		link?.close();
 		stop();
 		current = ctx;
@@ -350,7 +403,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			if (ctx.hasUI) ctx.ui.notify(message, "warning");
 			else process.stderr.write(`${message}\n`);
 		};
-		link = new StateLink(helloFor(pi, ctx, skills, mcpServers), warn);
+		// A switch, resume, or fork in this process names the session file that ran here before.
+		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
+		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn);
+		refreshGit(ctx);
 		indexNew(ctx);
 		// Messages can be appended while the session is idle (passive forks, extensions); look for them each second.
 		watcher = setInterval(() => current && indexNew(current), 1000);
@@ -427,6 +483,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		const still = [...tools.values()].at(-1);
 		link.toolEnd(event.toolCallId, event.toolName, Date.now() - (started?.since ?? Date.now()), event.isError, still);
 		if (!still) link.run("thinking");
+		// A command can switch branches or worktrees.
+		if (event.toolName === "bash") refreshGit(current ?? ({ cwd: process.cwd() } as ExtensionContext));
 		if (event.toolName === QUESTIONNAIRE_TOOL) link.facts({ prompt: null });
 	});
 	// Other extensions' dialogs report only kind and title; a questionnaire already carries its questions.
@@ -446,6 +504,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.on("session_compact_failed", (_event, ctx) => link?.run(ctx.isIdle() ? "idle" : "thinking"));
 	pi.on("agent_settled", (event, ctx) => {
 		link?.run("idle");
+		refreshGit(ctx);
 		indexNew(ctx);
 		if (!ctx.hasPendingMessages()) queued = { steers: 0, followUps: 0 };
 		reportQueue(ctx);

@@ -31,6 +31,15 @@ export interface Facts {
 	queue: { steers: number; followUps: number; pending: boolean };
 	lastError: string | null;
 	lastAbortAt: number | null;
+	/** The coordinator session this one reports to (`--reports-to`). */
+	reportsTo: string | null;
+	/** The session file this one was forked or cloned from (Pi's `parentSession`). */
+	parentSessionFile: string | null;
+	/** The session file that ran before this one in the same process (and pane), and why it gave way. */
+	previousSession: { file: string; reason: string } | null;
+	git: { repository: string; worktree: string; branch: string } | null;
+	/** The ledger task this session touched last. */
+	currentTask: { bundle: string; taskId: string } | null;
 	config: {
 		name: string | null;
 		flags: string[];
@@ -86,6 +95,7 @@ export type BridgeMessage =
 	| { type: "tool_start"; tool: Tool }
 	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean; current: Tool | null }
 	| { type: "index"; rows: IndexRow[] }
+	| { type: "task_link"; bundle: string; taskId: string; via: string; at: number }
 	| ReadEntry
 	| { type: "shutdown"; reason: string };
 

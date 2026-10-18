@@ -17,6 +17,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { acquireExclusiveLease } from "../components/shared/src/exclusive-lease.js";
+import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../components/shared/src/ledger-events.js";
 import { LEDGER_SYSTEM_PROMPT, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
 import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
 
@@ -299,22 +300,24 @@ function owningBundle(file: string): { root: string; taskId: string } | undefine
 	return undefined;
 }
 
+/** Link a session to a task it changed; returns the bundle it linked, if the task still exists. */
 async function linkSession(
 	root: string,
 	taskId: string,
 	sessionId: string,
 	signal: AbortSignal | undefined,
-): Promise<void> {
+): Promise<string | undefined> {
 	const release = await acquireLedgerLeaseWhenFree(root, signal);
-	if (!release) return;
+	if (!release) return undefined;
 	try {
 		const live = join(root, ".ledger", taskId);
 		const archived = join(root, ".ledger", "history", taskId);
 		// A close that won the lease moved the bundle; the link follows it into history.
 		const bundle = pathExists(live) ? live : pathExists(archived) ? archived : undefined;
-		if (!bundle) return;
+		if (!bundle) return undefined;
 		assertDirectory(bundle, `.ledger bundle ${taskId}`);
 		recordHistory(bundle, { sessionId, via: "edit" });
+		return bundle;
 	} finally {
 		release();
 	}
@@ -326,16 +329,16 @@ async function linkChangedFile(
 	path: string,
 	sessionId: string,
 	signal: AbortSignal | undefined,
-): Promise<void> {
+): Promise<string | undefined> {
 	let file: string;
 	try {
 		file = realpathSync(resolveToolPath(path, cwd));
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
 		throw error;
 	}
 	const owner = owningBundle(file);
-	if (owner) await linkSession(owner.root, owner.taskId, sessionId, signal);
+	return owner ? await linkSession(owner.root, owner.taskId, sessionId, signal) : undefined;
 }
 
 /** Live bundles under the session's directory and every ancestor that holds a `.ledger/`. */
@@ -754,13 +757,22 @@ export default function installLedger(pi: ExtensionAPI): void {
 		const sessionId = linkableSession(ctx);
 		if (sessionId && OPAQUE_CHANGE_TOOLS.has(event.toolName)) observed.set(sessionId, observeBundles(ctx.cwd));
 	});
+	const announce = (sessionId: string, bundle: string | undefined, via: LedgerLink["via"]) => {
+		if (bundle)
+			pi.events.emit(LEDGER_LINK_CHANNEL, { sessionId, bundle, taskId: basename(bundle), via } satisfies LedgerLink);
+	};
 	// No trust gate: the session already changed the bundle, and workers may run untrusted.
 	pi.on("tool_result", async (event, ctx) => {
 		const sessionId = linkableSession(ctx);
 		if (!sessionId) return;
+		if ((event.toolName === "ledger_add" || event.toolName === "ledger_status") && !event.isError) {
+			const details = event.details as { bundlePath?: string } | undefined;
+			if (details?.bundlePath) announce(sessionId, resolve(ctx.cwd, details.bundlePath), event.toolName);
+			return;
+		}
 		if (event.toolName === "write" || event.toolName === "edit") {
 			if (!event.isError && typeof event.input.path === "string") {
-				await linkChangedFile(ctx.cwd, event.input.path, sessionId, ctx.signal);
+				announce(sessionId, await linkChangedFile(ctx.cwd, event.input.path, sessionId, ctx.signal), "edit");
 			}
 			return;
 		}
@@ -771,7 +783,7 @@ export default function installLedger(pi: ExtensionAPI): void {
 		for (const [bundle, signature] of after) {
 			const previous = before.get(bundle);
 			if (previous === undefined || previous === signature) continue;
-			await linkSession(dirname(dirname(bundle)), basename(bundle), sessionId, ctx.signal);
+			announce(sessionId, await linkSession(dirname(dirname(bundle)), basename(bundle), sessionId, ctx.signal), "edit");
 		}
 	});
 }
