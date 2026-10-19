@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { chmodSync, createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
+import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import type { StatePaths } from "./paths.js";
 import {
@@ -703,19 +703,13 @@ export class Runtime {
 			| undefined;
 		if (!row) return void reply({ error: "unknown session" });
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
-		let text: string;
+		let found: Map<string, unknown>;
 		try {
-			text = await readFile(row.session_file, "utf8");
+			found = await scanTranscript(row.session_file, new Set([request.entryId]));
 		} catch (error) {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
 		}
-		for (const line of text.split("\n")) {
-			if (!line.includes(request.entryId)) continue;
-			try {
-				const entry = JSON.parse(line);
-				if (entry.id === request.entryId) return void reply({ entry });
-			} catch {}
-		}
+		if (found.has(request.entryId)) return void reply({ entry: found.get(request.entryId) });
 		reply({ error: "entry not found" });
 	}
 
@@ -790,20 +784,11 @@ export class Runtime {
 		const start = Math.max(0, end - limit);
 		const page = ids.slice(start, end);
 		// One read of the transcript per page, however many entries it holds.
-		let text: string;
+		let found: Map<string, unknown>;
 		try {
-			text = await readFile(row.session_file, "utf8");
+			found = await scanTranscript(row.session_file, new Set(page));
 		} catch (error) {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
-		}
-		const wanted = new Set(page);
-		const found = new Map<string, unknown>();
-		for (const line of text.split("\n")) {
-			if (!line) continue;
-			try {
-				const entry = JSON.parse(line);
-				if (wanted.has(entry?.id) && !found.has(entry.id)) found.set(entry.id, entry);
-			} catch {}
 		}
 		const missing = page.filter((id) => !found.has(id));
 		reply({
@@ -1212,4 +1197,23 @@ export class Runtime {
 			"insert into events (at, source, session_id, generation, type, data) values (?, ?, ?, ?, ?, ?)",
 		).run(Date.now(), source, sessionId, generation, type, JSON.stringify(data));
 	}
+}
+
+/**
+ * The wanted entries of a transcript, read line by line in one pass. A transcript can be larger than the longest
+ * string V8 allows, so it is never read whole; a line is parsed only when the first id on it is wanted.
+ */
+async function scanTranscript(file: string, wanted: Set<string>): Promise<Map<string, unknown>> {
+	const found = new Map<string, unknown>();
+	const lines = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Infinity });
+	for await (const line of lines) {
+		const at = line.indexOf('"id":"');
+		if (at < 0) continue;
+		const id = line.slice(at + 6, line.indexOf('"', at + 6));
+		if (!wanted.has(id) || found.has(id)) continue;
+		try {
+			found.set(id, JSON.parse(line));
+		} catch {}
+	}
+	return found;
 }
