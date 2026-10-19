@@ -36,6 +36,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Shared state model spec lands](decisions/18-shared-state-model-spec-lands.md): the shared state model spec and its 16 tickets were approved on 2026-10-18; Agent World reads its database and sends commands over its socket. All 16 tickets were built and closed the same day.
 - [Live reply streaming](decisions/20-live-reply-streaming.md): Pi's `message_update` already carries text deltas; add a transient bridge message the runtime relays only to subscribed clients (no events), reconcile with the transcript entry at `turn_end`; page and batch history reads from the `messages` index.
 - [Purpose and form of the world](decisions/19-purpose-and-form-of-the-world.md): a home base beside the operator's work; every function has its own hand-designed place (mostly interiors) drawn per theme, joined by cozy exteriors; the operator starts in the headquarters with the coordinator and its agents; places follow functions and reporting, not tmux.
+- [Local API access control](decisions/11-local-api-access-control.md): the backend runs in Electron's main process, holds all secrets and external writes, and the renderer reaches it only over typed IPC; no network listener until browser mode, which reuses the browser-pages loopback, per-launch token, and Host/Origin pattern.
 
 ## Not yet specified
 
@@ -47,6 +48,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - Layout of the connective tissue: how the function places are arranged and joined per theme; sharpens with [How places are built](decisions/15-how-places-are-built.md).
 - PR review flow in the Forge: how a review page opens from Agent World and what the Forge shows; follows the command and SaaS-source decisions.
 - Several tmux servers in one world (each coordinator already gets its own headquarters).
+- Browser mode: whether a browser client may control agents or only view them; decided with the browser-mode milestone.
 - Accessibility, reduced motion, audio, and the performance budget.
 - Rewards and celebration policy, and the serious-mode override for incidents.
 - First run without Pi, Jira, or GitHub: the demo world and onboarding.
