@@ -1,6 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ViewStore } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
+import { Interface } from "./interface/interface.js";
+import { PointerLayer } from "./pointer/pointer-layer.js";
 
 const NOTICE_MS = 2600;
 
@@ -16,6 +18,8 @@ export function Overlay({ store, view }: { store: WorldStore; view: ViewStore })
 					{state.subtitle && <span>{state.subtitle}</span>}
 				</header>
 			)}
+			<Interface store={store} view={view} />
+			<PointerLayer />
 			{state.notice && <Notice key={state.notice.id} text={state.notice.text} />}
 			{state.chooser && (
 				<div className="chooser" role="dialog" aria-label={state.chooser.title}>

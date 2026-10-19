@@ -6,19 +6,34 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import type { WorldSnapshot } from "../world.js";
+import type { FeedLine, TerminalResult, WorldSnapshot } from "../world.js";
+import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, taskReader } from "./facts.js";
+import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
+import { switchToPane } from "./terminal.js";
 
 export interface WorldBackend {
 	snapshot(): WorldSnapshot;
 	/** Calls `listener` with the new snapshot after each change; returns a function that stops the calls. */
 	subscribe(listener: (snapshot: WorldSnapshot) => void): () => void;
+	/** The latest feed lines, oldest first: a backlog from before the world opened, then everything since. */
+	feed(): FeedLine[];
+	/** Calls `listener` with each batch of new feed lines, in order; returns a function that stops the calls. */
+	subscribeFeed(listener: (lines: FeedLine[]) => void): () => void;
+	/** Switch the operator's tmux client to an awake character's pane. */
+	goToTerminal(characterId: string): Promise<TerminalResult>;
 	close(): void;
 }
 
 /** How often new `events` rows are looked for; updates must reach the world within a second. */
 const POLL_MS = 200;
 const RECONNECT_MS = 1000;
+/** Polls between rereads of the world while no event arrives, so edited `task.md` files show. */
+const TASK_REREAD_POLLS = 10;
+/** Feed lines kept for a newly opened window, and how far back the first read looks for them. */
+const FEED_KEPT = 200;
+const FEED_BACKLOG = 60;
+const FEED_BACKLOG_EVENTS = 5000;
 /** After a failed preference write, wait this long before sending it again. */
 const RETRY_MS = 5000;
 /** The `preferences` key Agent World keeps its choices under: `{ wings: { [coordinator id]: repository[] } }`. */
@@ -28,17 +43,15 @@ export const PREFERENCE_KEY = "agent-world";
 const SESSIONS = `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
-	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake
+	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
+	${FACTS_COLUMNS}
 from sessions s
-left join incarnations i on i.session_id = s.id and i.generation = s.generation
+${FACTS_JOINS}
 where s.kind = 'root'`;
 
-interface Row {
+interface Row extends FactsRow {
 	id: string;
 	name: string | null;
-	cwd: string;
-	reportsTo: string | null;
-	git: string | null;
 	config: string | null;
 	firstStartedAt: number | null;
 	awake: number;
@@ -90,6 +103,11 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	// The wings last sent and not yet stored or failed, so one change is sent once.
 	let sending: { commandId: string; wings: string } | undefined;
 	let retryAt = 0;
+	const readTask = taskReader();
+	let polls = 0;
+	const feedListeners = new Set<(lines: FeedLine[]) => void>();
+	let recent: FeedLine[] = [];
+	let feedSeq: number | undefined;
 
 	const publish = (next: WorldSnapshot) => {
 		if (JSON.stringify(next) === JSON.stringify(current)) return;
@@ -141,10 +159,18 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			const { seq } = db.prepare("select coalesce(max(seq), 0) as seq from events").get() as { seq: number };
 			if (seq === lastSeq && world) return world;
 			lastSeq = seq;
-			const sessions = (db.prepare(SESSIONS).all() as unknown as Row[]).map(sessionRow);
+			const rows = db.prepare(SESSIONS).all() as unknown as Row[];
 			const stored = storedPreference(db);
 			const storedWings = (stored.wings && typeof stored.wings === "object" ? stored.wings : {}) as RememberedWings;
-			world = projectWorld(sessions, mergeWings(storedWings, seen));
+			const projected = projectWorld(rows.map(sessionRow), mergeWings(storedWings, seen));
+			const byId = new Map(rows.map((row) => [row.id, row]));
+			world = {
+				...projected,
+				characters: projected.characters.map((character) => ({
+					...character,
+					facts: factsOf(byId.get(character.id)!, readTask),
+				})),
+			};
 			seen = mergeWings(seen, world.wings);
 			remember(stored, storedWings, world.wings);
 			return world;
@@ -154,9 +180,56 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		}
 	};
 
+	/** New feed lines since the last read; the first read starts with a short backlog. */
+	const readFeed = () => {
+		if (!db) return;
+		const database = db;
+		try {
+			const { seq } = database.prepare("select coalesce(max(seq), 0) as seq from events").get() as { seq: number };
+			// A new database (its sequence behind ours) starts its feed again from a backlog.
+			if (feedSeq === undefined || seq < feedSeq) feedSeq = Math.max(0, seq - FEED_BACKLOG_EVENTS);
+			if (seq === feedSeq) return;
+			const lookup: FeedLookup = {
+				command(commandId) {
+					const row = database.prepare("select kind, command from commands where command_id = ?").get(commandId) as
+						| { kind: string; command: string }
+						| undefined;
+					return row ? { kind: row.kind, command: parse<Record<string, unknown>>(row.command) ?? {} } : undefined;
+				},
+				name(sessionId) {
+					const row = database.prepare("select name, cwd from sessions where id = ?").get(sessionId) as
+						| { name: string | null; cwd: string }
+						| undefined;
+					return row ? row.name || row.cwd.split("/").pop() || sessionId : undefined;
+				},
+			};
+			const backlog = recent.length === 0;
+			const lines: FeedLine[] = [];
+			for (;;) {
+				const rows = database.prepare(FEED_SINCE).all(feedSeq) as unknown as FeedRow[];
+				for (const row of rows) {
+					const line = feedLine(row, lookup);
+					if (line) lines.push(line);
+				}
+				feedSeq = rows.at(-1)?.seq ?? seq;
+				if (rows.length < 500) break;
+			}
+			feedSeq = Math.max(feedSeq, seq);
+			const fresh = backlog ? lines.slice(-FEED_BACKLOG) : lines;
+			if (!fresh.length) return;
+			recent = [...recent, ...fresh].slice(-FEED_KEPT);
+			for (const listener of feedListeners) listener(fresh);
+		} catch {
+			dropDb();
+		}
+	};
+
 	const poll = () => {
 		if (closed) return;
+		// A ledger task's title or status can change with no runtime event; read the world again now and then.
+		if (++polls % TASK_REREAD_POLLS === 0) lastSeq = -1;
 		const next = read();
+		readFeed();
 		publish({
 			connected: socketOpen && next !== undefined,
 			headquarters: next?.headquarters ?? current.headquarters,
@@ -214,6 +287,18 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
+		feed: () => recent,
+		async goToTerminal(characterId) {
+			const character = current.characters.find((c) => c.id === characterId);
+			if (!character) return { ok: false, reason: "No such character is awake." };
+			const pane = character.facts?.tmux;
+			if (!pane) return { ok: false, reason: `${character.name} is not running in tmux.` };
+			return switchToPane(pane.socket, pane.pane, character.name);
+		},
+		subscribeFeed(listener) {
+			feedListeners.add(listener);
+			return () => feedListeners.delete(listener);
+		},
 		close() {
 			closed = true;
 			clearInterval(timer);
@@ -222,6 +307,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			socket?.destroy();
 			dropDb();
 			listeners.clear();
+			feedListeners.clear();
 		},
 	};
 }

@@ -42,6 +42,10 @@ async function openWorld(first: WorldSnapshot) {
 				listeners.add(listener);
 				return () => listeners.delete(listener);
 			},
+			// The interface's feed and terminal (tested in world-interface.test.ts).
+			feed: async () => [],
+			onFeed: () => () => {},
+			goToTerminal: async () => ({ ok: true }),
 		};
 		(window as any).pushSnapshot = (next: unknown) => {
 			current = next as typeof snapshot;
@@ -69,14 +73,19 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-02-${name}.png`), animations: "disabled" });
 }
 
-/** Click a door as the operator would, looking at it first when it is off screen; wait to arrive at `arrive`. */
+/**
+ * Click a door as the operator would, looking at it first when it is off screen; the avatar walks up to it and goes
+ * through. Wait to arrive at `arrive`.
+ */
 async function enter(page: Page, door: string, arrive?: string) {
+	// Click the world itself, even where the interface's panels cover a door.
+	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	await page.evaluate((name) => (window as any).agentWorldView.lookAt(name), door);
 	await page.waitForTimeout(80);
 	const target = (await view<{ name: string; x: number; y: number }[]>(page, "doors()")).find((d) => d.name === door);
 	expect(target, `door ${door}`).toBeDefined();
 	await page.mouse.click(target!.x, target!.y);
-	if (arrive) await vi.waitFor(async () => expect(await place(page)).toBe(arrive), { timeout: 3000 });
+	if (arrive) await vi.waitFor(async () => expect(await place(page)).toBe(arrive), { timeout: 10000 });
 	await page.waitForTimeout(250);
 }
 
@@ -128,7 +137,7 @@ test("the world opens in the headquarters with its coordinator, and follows upda
 	try {
 		expect(await place(page)).toBe(`headquarters:${HQ}`);
 		await vi.waitFor(async () => expect(await characters(page)).toEqual(["Orla"]), { timeout: 5000 });
-		await page.getByText("Guild hall").waitFor({ timeout: 2000 });
+		await page.locator(".place-title").getByText("Guild hall").waitFor({ timeout: 2000 });
 		await shot(page, "headquarters");
 		await push(world([coordinator(HQ, "Orla the Wise"), ...cast.slice(1)], ["/r/apple-pi"]));
 		await vi.waitFor(async () => expect(await characters(page)).toEqual(["Orla the Wise"]), { timeout: 2000 });
@@ -176,7 +185,7 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 		expect(await characters(page)).toEqual(["solo"]);
 		await shot(page, "square");
 		await enter(page, "Forge");
-		await page.getByText("The forge is not open yet.").waitFor({ timeout: 2000 });
+		await page.getByText("The forge is not open yet.").waitFor({ timeout: 8000 });
 		expect(await place(page)).toBe("square");
 		await enter(page, "Guild hall", `headquarters:${HQ}`);
 		expect(errors).toEqual([]);
@@ -258,10 +267,10 @@ test("two coordinators each have a headquarters; the square's guild hall asks wh
 		await enter(page, "Guild hall");
 		await page.getByRole("dialog", { name: "Whose headquarters?" }).waitFor({ timeout: 2000 });
 		await shot(page, "square-chooser");
-		await page.getByRole("button", { name: /Brann/ }).click();
+		await page.getByRole("dialog", { name: "Whose headquarters?" }).getByRole("button", { name: /Brann/ }).click();
 		await vi.waitFor(async () => expect(await place(page)).toBe("headquarters:brann"), { timeout: 3000 });
 		expect(await characters(page)).toEqual(["Brann"]);
-		await page.getByText("Brann's headquarters").waitFor({ timeout: 2000 });
+		await page.locator(".place-title").getByText("Brann's headquarters").waitFor({ timeout: 2000 });
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

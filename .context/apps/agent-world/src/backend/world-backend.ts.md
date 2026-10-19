@@ -13,3 +13,12 @@ Wings outlive their workers: the `agent-world` preference (`{wings: {coordinator
 Why: the agent world must not write the runtime's database (query_only above); the runtime owns writes and answers with a receipt. A failed receipt is retried after a pause, and the run's memory resets on reconnect so a restart reads the stored order.
 Coupled: apps/agent-world/src/backend/projection.ts, components/session-state/src/runtime.ts
 Verify: apps/agent-world/tests/backend.test.ts
+
+The world is reread when `max(seq)` of `events` changes, and also every `TASK_REREAD_POLLS` polls without one.
+Why: every fact a character shows changes with an event, except a ledger task's title and status, which live in its `task.md` and can be edited with no runtime event.
+Verify: apps/agent-world/tests/backend.test.ts
+
+The feed keeps its own sequence cursor, apart from the world's: the first read starts from a short backlog (the last `FEED_BACKLOG` lines within the last `FEED_BACKLOG_EVENTS` events), and a database whose sequence is behind the cursor (a new database) starts again from a backlog.
+Why: the world's read skips when nothing changed, but every line must reach the chatbox once and in order, within a second.
+Coupled: apps/agent-world/src/backend/feed.ts
+Verify: apps/agent-world/tests/backend.test.ts

@@ -1,5 +1,6 @@
-// Agent World's Electron main process: one window over the world UI, wired to the backend through IPC. It only
-// reads; closing the window quits the app and changes nothing in tmux or Pi. Built with the preload into
+// Agent World's Electron main process: one window over the world UI, wired to the backend through IPC. It reads, and
+// acts only when asked (Go to its terminal switches the operator's tmux client); closing the window quits the app and
+// changes nothing in tmux or Pi. Built with the preload into
 // dist/electron/ (`npm run build:world`), since Electron runs no TypeScript.
 //
 // AGENT_WORLD_CAPTURE=<file.png> writes a screenshot of the window once the world has drawn, then quits.
@@ -30,8 +31,17 @@ function start() {
 	let window: BrowserWindow | undefined;
 
 	ipcMain.handle("world:snapshot", () => world.snapshot());
+	ipcMain.handle("world:feed", () => world.feed());
+	ipcMain.handle("world:terminal", (_event, characterId: unknown) =>
+		typeof characterId === "string"
+			? world.goToTerminal(characterId)
+			: { ok: false, reason: "No character was named." },
+	);
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
+	});
+	world.subscribeFeed((lines) => {
+		if (window && !window.isDestroyed()) window.webContents.send("world:feed", lines);
 	});
 	app.on("second-instance", () => {
 		if (!window) return;

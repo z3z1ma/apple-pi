@@ -1,0 +1,84 @@
+/* RuneScape's pointer chrome in the fantasy palette: hover text and the right-click menu. */
+
+.pointer-hover {
+	position: absolute;
+	top: 10px;
+	left: 12px;
+	max-width: calc(50vw - 140px);
+	padding: 3px 10px 4px 8px;
+	border-radius: 6px;
+	background: linear-gradient(90deg, rgb(20 12 8 / 62%), rgb(20 12 8 / 38%) 80%, rgb(20 12 8 / 0%));
+	color: #f6ead0;
+	font-size: 16px;
+	font-weight: bold;
+	letter-spacing: 0.01em;
+	text-shadow:
+		1px 1px 0 #000,
+		0 0 3px rgb(0 0 0 / 70%);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pointer-character {
+	color: #ffd95a;
+}
+
+.pointer-object {
+	color: #7fdcf0;
+}
+
+.pointer-more {
+	color: #d8c9a8;
+	font-weight: normal;
+	font-size: 14px;
+}
+
+.pointer-menu {
+	position: absolute;
+	display: grid;
+	min-width: 150px;
+	padding: 0 0 4px;
+	border: 2px solid #6b4a2a;
+	border-radius: 6px;
+	background: #2b1d12f2;
+	box-shadow: 0 8px 22px rgb(0 0 0 / 55%);
+	pointer-events: auto;
+	animation: pointer-menu-in 90ms ease-out;
+	user-select: none;
+}
+
+@keyframes pointer-menu-in {
+	from {
+		opacity: 0;
+		transform: translateY(-3px);
+	}
+}
+
+.pointer-menu-title {
+	margin-bottom: 3px;
+	padding: 3px 10px 4px;
+	border-radius: 3px 3px 0 0;
+	background: linear-gradient(#e9d29f, #d7bb7e);
+	color: #2b1d12;
+	font-size: 13px;
+	font-weight: bold;
+}
+
+.pointer-menu button {
+	padding: 3px 12px;
+	border: 0;
+	background: transparent;
+	color: #f6ead0;
+	font: inherit;
+	font-size: 15px;
+	font-weight: bold;
+	text-align: left;
+	text-shadow: 1px 1px 0 #000;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.pointer-menu button:hover {
+	background: #6b4a2a;
+}
