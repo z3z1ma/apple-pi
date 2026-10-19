@@ -4,9 +4,9 @@
 
 **Blocked by:** 21 The forge shows pull requests
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The diff renders in the review page with file and line context.
-- [ ] A comment, approval, or change request is sent through `gh` only after confirmation, and declining sends nothing (shown with a fake `gh`).
-- [ ] Each sent write appears in the chatbox and as an appended line in the local record.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] The diff renders in the review page with file and line context.
+- [x] A comment, approval, or change request is sent through `gh` only after confirmation, and declining sends nothing (shown with a fake `gh`).
+- [x] Each sent write appears in the chatbox and as an appended line in the local record.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

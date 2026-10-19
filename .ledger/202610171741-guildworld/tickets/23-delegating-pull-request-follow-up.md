@@ -4,8 +4,8 @@
 
 **Blocked by:** 13 Instructing an agent from the panel; 21 The forge shows pull requests
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Ask the builder sends a `talk` or `follow_up` to the agent linked by branch, naming the pull request.
-- [ ] When no agent is linked, only Ask the coordinator is offered.
-- [ ] A delegated request never writes to GitHub.
+- [x] Ask the builder sends a `talk` or `follow_up` to the agent linked by branch, naming the pull request.
+- [x] When no agent is linked, only Ask the coordinator is offered.
+- [x] A delegated request never writes to GitHub.

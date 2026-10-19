@@ -4,9 +4,9 @@
 
 **Blocked by:** 13 Instructing an agent from the panel; 22 Reviewing a pull request; 27 Slack sign-in and the town square
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The crier finds a channel with no unread messages and opens it.
-- [ ] A reply is posted to the fake Slack server only after confirmation and is logged like other outside writes.
-- [ ] Asking an agent sends an instruction naming the thread and posts nothing to Slack.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] The crier finds a channel with no unread messages and opens it.
+- [x] A reply is posted to the fake Slack server only after confirmation and is logged like other outside writes.
+- [x] Asking an agent sends an instruction naming the thread and posts nothing to Slack.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

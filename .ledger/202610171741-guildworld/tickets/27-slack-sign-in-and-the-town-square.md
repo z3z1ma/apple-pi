@@ -4,12 +4,12 @@
 
 **Blocked by:** 08 The interface; 20 Anime school pack
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The credential decision is recorded in the task before any Slack code lands, and credentials live only in the backend's private file.
-- [ ] In the backend API test against a fake Slack server, channels with unread messages become townsfolk, and the bound holds when there are many.
-- [ ] The unread orb and the Slack tab match the fake server's unread counts.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] The credential decision is recorded in the task before any Slack code lands, and credentials live only in the backend's private file.
+- [x] In the backend API test against a fake Slack server, channels with unread messages become townsfolk, and the bound holds when there are many.
+- [x] The unread orb and the Slack tab match the fake server's unread counts.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
 
 ## Credential decision (recorded 2026-10-19, before any Slack code)
 

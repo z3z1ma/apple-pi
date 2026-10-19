@@ -4,8 +4,8 @@
 
 **Blocked by:** 13 Instructing an agent from the panel; 22 Reviewing a pull request; 24 Atlassian sign-in and the quest office
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A comment or transition is sent to the fake Jira server only after confirmation and is logged like other outside writes.
-- [ ] Moving an issue offers only the transitions Jira allows for it.
-- [ ] Hand to the coordinator sends the issue to the coordinator as an instruction and writes nothing to Jira.
+- [x] A comment or transition is sent to the fake Jira server only after confirmation and is logged like other outside writes.
+- [x] Moving an issue offers only the transitions Jira allows for it.
+- [x] Hand to the coordinator sends the issue to the coordinator as an instruction and writes nothing to Jira.

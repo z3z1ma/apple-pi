@@ -4,9 +4,9 @@
 
 **Blocked by:** 20 Anime school pack
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In the backend API test against a fake Jira server, the quest office lists the assigned issues and search returns matching issues from any project.
-- [ ] The credential file is mode `0600`, and no credential appears in the renderer, the logs, or the theme files.
-- [ ] The quest office is required in the pack check and present in all three packs.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] In the backend API test against a fake Jira server, the quest office lists the assigned issues and search returns matching issues from any project.
+- [x] The credential file is mode `0600`, and no credential appears in the renderer, the logs, or the theme files.
+- [x] The quest office is required in the pack check and present in all three packs.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

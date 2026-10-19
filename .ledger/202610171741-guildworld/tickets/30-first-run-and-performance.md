@@ -4,8 +4,8 @@
 
 **Blocked by:** 11 Headquarters polish pass
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] On a machine without the Electron install, `/world` shows install progress and then opens the world; with the network off it fails with a retry message.
-- [ ] The start-up check opens the packaged app and finds the world rendered.
-- [ ] Each slowdown the operator reports is profiled, and the fix is shown by a before-and-after measurement.
+- [x] On a machine without the Electron install, `/world` shows install progress and then opens the world; with the network off it fails with a retry message.
+- [x] The start-up check opens the packaged app and finds the world rendered.
+- [x] Each slowdown the operator reports is profiled, and the fix is shown by a before-and-after measurement.
