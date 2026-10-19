@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { type Character, type PlaceRef, placeKey } from "../../src/world.js";
+import { lookFor } from "../looks.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
 import { type Door, type Point, type Theme, TILE } from "../theme.js";
 import type { ViewStore, WorldIntent } from "../view-state.js";
@@ -78,12 +79,6 @@ export interface DoorView {
 
 export interface AvatarView extends WalkerView {
 	look: string;
-}
-
-function hash(text: string): number {
-	let h = 0;
-	for (const char of text) h = (h * 31 + char.charCodeAt(0)) >>> 0;
-	return h;
 }
 
 // Which spot each character holds, per place, for as long as the app runs; and view choices that outlive a scene.
@@ -529,18 +524,8 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	private lookFor(character: Character): string {
-		const looks = Object.entries(this.theme.looks);
-		const role = character.role === "coordinator" ? "coordinator" : "agent";
-		const choices = looks
-			.filter(([, look]) => look.role === role)
-			.map(([name]) => name)
-			.sort();
-		return choices[hash(character.id) % choices.length];
-	}
-
 	private addFigure(character: Character): Figure {
-		const look = this.lookFor(character);
+		const look = lookFor(this.theme, character);
 		const { frame, baseline } = this.theme.looks[look];
 		const shadow = this.add.ellipse(0, 0, TILE * 0.62, TILE * 0.2, 0x000000, 0.28);
 		const sprite = this.add
