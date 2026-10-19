@@ -70,6 +70,8 @@ The tiled lane was rejected, so the hall doors now open onto **the village squar
 
 ## Known gaps
 
+- Round 4 verdict (operator, 2026-10-18): the painted square is directionally right; the fountain water overlay is janky and the unread badges need a better design (numbers sit off centre).
+
 - The sitting frames draw their own stool over the painted one; no occlusion of the avatar by furniture.
 - Walk cycles are four frames from one image, so steps are approximate; there is no diagonal facing.
 - Banner text can overflow a cream banner in the large wing.
