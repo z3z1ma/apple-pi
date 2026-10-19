@@ -1,4 +1,4 @@
-Status: planning
+Status: ready
 Created: 2026-10-17
 Updated: 2026-10-18
 
@@ -10,7 +10,7 @@ Find the way to a whole-product spec for Agent World: a cozy, themeable pixel-ar
 
 ## Current State
 
-The map is clear (2026-10-18): every ticket is resolved or out of scope and nothing is left unspecified. The headquarters prototype (`prototypes/headquarters/`) carries the settled art, movement, dialogue, and interface decisions. Next: `/skill:to-spec` writes the whole-product spec from this map.
+Specified and ticketed (2026-10-19): `spec.md` holds the whole-product specification, and `tickets/` holds 31 approved tickets in seven slices, with polish passes that only the operator closes. The frontier is 01 (Agent World opens over the real runtime), 09 (batched history reads), and 12 (live reply streaming). Next: `/skill:implement` from the frontier.
 
 ## Outcome
 
