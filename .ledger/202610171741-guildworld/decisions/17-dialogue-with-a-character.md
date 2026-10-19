@@ -1,6 +1,6 @@
 Type: interrogation
 Status: open
-Blocked by: 16, 18
+Blocked by: 16, 18, 20
 
 # Dialogue with a character
 

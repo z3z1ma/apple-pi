@@ -7,8 +7,12 @@ Agent World is a themeable world that shows the operator's live Pi sessions in t
 ### Inhabitants
 
 **Character**:
-One live root Pi session running in tmux, shown in the world. Its look is cosmetic and carries no meaning.
+One top-level Pi session shown in the world, awake while its session runs and dormant while it is stopped; reopening the session wakes the same character. Its look is cosmetic and carries no meaning.
 _Avoid_: Hero, agent sprite, persona
+
+**Dormant**:
+A character whose Pi session is stopped. It keeps its identity and history and wakes when the session reopens.
+_Avoid_: dead, ghost, offline
 
 **Coordinator**:
 A character whose session keeps the operator's threads and supervises workers; the operator names which sessions these are [Guildmaster].
@@ -23,18 +27,21 @@ A character that reports to no coordinator.
 
 ### Places
 
+**Place**:
+A hand-designed location, mostly an interior, that serves one function of the world and is drawn differently by each theme. Places follow functions and reporting, not tmux topology.
+
 **Headquarters**:
-A coordinator's own themed place, one per coordinator [Guild Hall].
+The coordinator's place, where the operator starts and where the coordinator and the workers that report to it are [Guild Hall; office floor; classroom].
 _Avoid_: Coordination hub
 
 **Wing**:
-The part of a headquarters that holds that coordinator's workers from one tmux session.
-
-**Building**:
-The place that holds the independent sessions of one tmux session; one open space with no rooms.
+A part of the headquarters that holds some of the coordinator's workers; what groups them is still open.
 
 **Hub**:
-The place for one external system of engineering work: Jira, GitHub, Confluence, or Slack [Quest Board, Forge, Library, Town Square].
+The place for one external system of engineering work: Jira, GitHub, Confluence, or Slack [Quest board room, Forge, Library, Town square]. Slack channels appear as characters in an exterior.
+
+**Connective tissue**:
+The exteriors between places: lanes, paths, and grounds where the world is cozy and ambient life reflects real events, such as couriers carrying real mail.
 
 ### Work and state
 

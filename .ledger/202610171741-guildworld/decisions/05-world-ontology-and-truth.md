@@ -33,3 +33,7 @@ Decided with the operator, 2026-10-18. Glossary: `.wiki/pages/agent-world-langua
 Update 2026-10-18 from [Source of SaaS work data](07-source-of-saas-work-data.md): Slack is a fourth hub [Town Square].
 
 Update 2026-10-18: the status projection (`busy`/`idle`/`waiting`, needs you) will be replaced by the richer, orthogonal activity dimensions decided in the shared state model task (`.ledger/202610172354-session-state-model/`). The places, relations, and truth classes here stand.
+
+Update 2026-10-18 (operator, after the state model landed): a character outlives its process. A stopped session is a dormant character; reopening wakes the same character, so "leaves the world, with no ghost states" no longer holds. The places above (headquarters, wings, buildings per tmux session) are reopened in [Purpose and form of the world](19-purpose-and-form-of-the-world.md). The work item and the observed relations stand; Agent World stays projection first.
+
+Update 2026-10-18: [Purpose and form of the world](19-purpose-and-form-of-the-world.md) replaced the places above. Places follow functions (headquarters, incoming work, code, knowledge, Slack, mail, dormant agents, independent agents) and reporting, not tmux sessions; what a wing is moved to [What a wing is](21-what-a-wing-is.md).

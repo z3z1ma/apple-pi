@@ -1,6 +1,6 @@
 Type: prototype
 Status: open
-Blocked by: 05, 18
+Blocked by: 05, 18, 19
 
 # How places are built
 
@@ -25,3 +25,5 @@ Operator, 2026-10-18:
 ## Interim verdict (operator, 2026-10-18)
 
 Prototype: [prototypes/town/](../prototypes/town/README.md). The asset pipeline is strong, but the town was "not even a fraction" of the vision: an isometric-looking layout with no personality. Before any further world prototype, the shared state model comes first, then the purpose and form of the world are revisited (separate areas? is the guild indoors? how do indoor and outdoor areas differ?). The ticket stays open behind [Shared state model spec lands](18-shared-state-model-spec-lands.md).
+
+Update 2026-10-18: [Purpose and form of the world](19-purpose-and-form-of-the-world.md) made every place hand-designed and tied places to functions and reporting, not tmux sessions. The "settled before the build" points about districts per coordinator, lots seeded from tmux session names, and empty buildings per tmux session no longer hold. The question becomes how a hand-designed place is authored and drawn per theme (tile kit, painted, or both), how the headquarters makes room as its agents and wings grow, and the production art pipeline.

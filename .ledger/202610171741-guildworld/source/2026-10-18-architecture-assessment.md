@@ -1,0 +1,12 @@
+# Architecture assessment (operator-supplied brief, 2026-10-18)
+
+Not authoritative: an outside assessment the operator shared to inform the map after the shared state model landed (apple-pi commit `96ec893`). Decisions live in the map's tickets. Main claims:
+
+- The session-state runtime (`components/session-state/`) is the agent substrate Agent World needs: sessions and incarnations, tmux topology, activity, conversation index with read-through, commands with receipts (talk, steer, follow-up, abort, answer, mail), peers, coordinator lifecycle tools, attention, events with gaps. Agent World should consume it, not rebuild it.
+- Boundary: apple-pi owns the operational reality of agents; Agent World owns the world (characters, places, social structure, interactions with engineering systems); themes own presentation; external systems own facts about external work. Keep the four apart but linked.
+- A character's identity outlives its Pi session and process: a stopped session is a dormant character, reopening wakes the same character. Suggests separate namespaces for character id and session id even if 1:1 at first; later `soul.md` and memories.
+- Parties are many-to-many, time-bounded collaborations, not supervision trees; suggests a world-owned store (quests, parties, memberships, assignments, interactions, world events) and `world.*` tools agents call to propose parties and claim work, with the coordinator still the orchestrator.
+- Gaps in the runtime for Agent World: no live streaming of reply text (only run state `writing_reply`); `read_entry` scans the whole JSONL; no frontend subscription API (event `seq` is a basis); attention is per session, not per message or decision; only `ask_user_question` is answerable remotely.
+- External systems should be world capabilities (the Forge does real PR review), with distinct paths for the operator acting directly and for delegating to a character; a private talk with a character must never publish to Slack. Flags the captured Slack browser session as a security and policy risk.
+- Presentation should be a semantic projection: themes map activity to scenes; tmux topology is one possible mapping, not the geography.
+- Suggested first milestone: a vertical slice with two or three live characters and a coordinator, real dialogue, a quest from real work, and one external interaction; build a thin second theme early to keep concepts theme-neutral.
