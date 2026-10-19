@@ -22,11 +22,21 @@ Done when every ticket in `tickets/` is done and the aliveness pass (ticket 11) 
 
 ## Current State
 
-Planning: eleven tickets drafted in `tickets/`, awaiting the operator's review.
+All thirteen tickets are done and committed (2026-10-19).
 
 ## Outcome
 
-Pending.
+Agent World now feels lived in:
+- **Feel:** a hand cursor with RuneScape-style click marks.
+- **Correctness:**
+  - no figure floats or clips in any of the 36 places;
+  - five distinct, correctly scaled pets per theme;
+  - notices sized to their boards, and named building signs.
+- **Characters:** every character has idle animations and wanders a little, and a cast of four ambient NPCs per theme has its own lines and reactions.
+- **Places:** a second exterior per theme (Harbour lane, Main street, Shopping street), with ambient motion in every place and outdoor light that follows the local time of day.
+- **Agents:** recruit them in the theme's words, and rename them from the world.
+- **Slack:** a channel opens at its first new message, and Mark read is an explicit button.
+- **Sessions:** they carry human names, and say what they are doing as a stated intent when no ledger task covers it.
 
 ## Judgment calls
 

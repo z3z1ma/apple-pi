@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 Cursor and click markers; 02 Depth and grounding in every place; 03 Pets varied and to scale; 04 Notices and building signs; 05 Slack reading; 08 Ambient NPCs; 09 A second exterior; 10 Recruiting agents
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Every place in every pack has at least one ambient motion that is not a character.
-- [ ] The outdoor tint changes with the local time of day, and a test drives it with a fixed clock.
-- [ ] A final walkthrough list of what was found and fixed is recorded in the task.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] Every place in every pack has at least one ambient motion that is not a character.
+- [x] The outdoor tint changes with the local time of day, and a test drives it with a fixed clock.
+- [x] A final walkthrough list of what was found and fixed is recorded in the task.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
