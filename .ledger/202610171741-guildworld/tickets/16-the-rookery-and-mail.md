@@ -4,9 +4,9 @@
 
 **Blocked by:** 03 Art bible and art pipeline; 08 The interface
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Mail sent between two faux sessions appears in the rookery and the Mail tab, and as visible traffic between their characters.
-- [ ] Mail to a dormant agent shows as waiting until it wakes.
-- [ ] Mail written as the operator reaches the agent through the `mail` command and shows its receipt.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] Mail sent between two faux sessions appears in the rookery and the Mail tab, and as visible traffic between their characters.
+- [x] Mail to a dormant agent shows as waiting until it wakes.
+- [x] Mail written as the operator reaches the agent through the `mail` command and shows its receipt.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

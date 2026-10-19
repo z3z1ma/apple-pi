@@ -4,9 +4,9 @@
 
 **Blocked by:** 10 The conversation panel reads real transcripts
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A real `ask_user_question` from a faux session is answered from the form, the tool receives the same answers as from the terminal, and the terminal dialog closes.
-- [ ] When the terminal answers first, the form closes and says it was answered there.
-- [ ] A terminal-only dialog shows the go-to-terminal notice instead of a form.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] A real `ask_user_question` from a faux session is answered from the form, the tool receives the same answers as from the terminal, and the terminal dialog closes.
+- [x] When the terminal answers first, the form closes and says it was answered there.
+- [x] A terminal-only dialog shows the go-to-terminal notice instead of a form.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
