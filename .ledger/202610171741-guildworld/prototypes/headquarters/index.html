@@ -18,7 +18,7 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 	#menu .title { color: #5d5447; background: #000; padding: 4px 6px; } #menu .title { color: #c6b896; }
 	#menu .item { padding: 4px 8px; color: #fff; cursor: pointer; } #menu .item:hover { background: #7a6f5c; }
 	#menu .npc { color: #ffff3a; } #menu .object { color: #2ef2f2; }
-	#chat { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(620px, 92vw); padding: 12px 16px 10px; background: linear-gradient(#3b2c22, #2a1f18); border: 2px solid #c8a46a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6), inset 0 0 0 1px #5e4632; font: 15px/1.4 Georgia, serif; z-index: 9; }
+	#chat { position: fixed; left: 50%; bottom: 196px; transform: translateX(-50%); width: min(620px, 92vw); padding: 12px 16px 10px; background: linear-gradient(#3b2c22, #2a1f18); border: 2px solid #c8a46a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6), inset 0 0 0 1px #5e4632; font: 15px/1.4 Georgia, serif; z-index: 9; }
 	#chat .who { color: #ffd76b; font-weight: 700; margin-bottom: 4px; } #chat .line { color: #f3e9d2; }
 	#chat.with-portrait { width: min(780px, 94vw); box-sizing: border-box; padding-left: 230px; min-height: 120px; }
 	#chat .portrait { position: absolute; left: -24px; bottom: -6px; height: 250px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.55)); transform-origin: 50% 100%; }
@@ -59,6 +59,30 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 	#talk fieldset { border: 1px solid #c9ab76; border-radius: 10px; margin: 0 0 10px; padding: 8px 12px; background: rgba(255,250,235,.55); } #talk legend { padding: 0 6px; font-weight: 700; }
 	#talk .opt { display: flex; gap: 10px; align-items: flex-start; padding: 5px 4px; cursor: pointer; border-radius: 6px; } #talk .opt:hover { background: rgba(160,122,66,.12); }
 	#talk .opt span { display: flex; flex-direction: column; } #talk .opt small { color: #6b5a3e; font-size: 13px; } #talk .opt input[type=text] { margin-top: 4px; font: 14px Georgia, serif; padding: 4px 8px; border: 1px solid #b89a66; border-radius: 6px; background: #fffaf0; }
+	/* The RuneScape-style interface, fantasy theme: carved wood and stone around parchment. */
+	#minimap { position: fixed; top: 10px; right: 10px; width: 208px; height: 208px; box-sizing: border-box; border-radius: 12px; pointer-events: none; box-shadow: inset 0 0 0 6px #3d2516, inset 0 0 0 8px #a07a42, 0 6px 18px rgba(0,0,0,.55); z-index: 6; }
+	#orbs { position: fixed; top: 22px; right: 228px; display: grid; gap: 8px; z-index: 6; }
+	.orb { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; font: 700 15px Georgia, serif; color: #fff; text-shadow: 1px 1px 0 #000; box-shadow: inset 0 0 0 3px #3d2516, inset 0 0 0 4px #a07a42, 0 3px 8px rgba(0,0,0,.5); }
+	.orb.need { background: radial-gradient(circle at 35% 30%, #ffe08a, #c99a1c 70%); } .orb.busy { background: radial-gradient(circle at 35% 30%, #f3b9e3, #a0558a 70%); } .orb.slack { background: radial-gradient(circle at 35% 30%, #a9d2ff, #3c6fb0 70%); }
+	#side { position: fixed; right: 10px; bottom: 10px; width: 262px; height: min(420px, calc(100vh - 250px)); display: flex; flex-direction: column; box-sizing: border-box; border-radius: 12px; background: linear-gradient(135deg, #5b3a24, #3d2516); box-shadow: inset 0 0 0 2px #a07a42, 0 8px 22px rgba(0,0,0,.6); padding: 8px; z-index: 6; }
+	#tab-title { font: 600 14px Georgia, serif; color: #ffe2a0; padding: 2px 6px 6px; }
+	#tab-body { flex: 1; overflow: auto; border-radius: 6px; background: radial-gradient(ellipse at 30% 20%, #fbf1d8, #e9d6ad); color: #2b1d12; font: 13px/1.35 Georgia, serif; padding: 6px; }
+	#tabs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
+	#tabs button { height: 32px; border-radius: 6px; border: 1px solid #2b1a10; background: linear-gradient(#6b4528, #4a2e1b); color: #f3e2b8; font: 16px Georgia, serif; cursor: pointer; }
+	#tabs button.on { background: linear-gradient(#a8733f, #7a4a24); box-shadow: inset 0 0 0 1px #ffd98a; }
+	.ui-group { margin: 8px 2px 3px; font-weight: 700; color: #6b3e1c; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; } .ui-group:first-child { margin-top: 2px; }
+	.ui-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 5px; cursor: pointer; } .ui-row:hover { background: rgba(160,122,66,.18); }
+	.ui-row .wh { color: #8a6a3a; font-size: 11px; } .ui-row.muted { opacity: .55; cursor: default; }
+	.st { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 12px Georgia, serif; color: #2b2238; background: #d8cfc0; }
+	.st.waiting { background: #f2c14e; } .st.done { background: #9fd88a; color: #1f3a1a; } .st.busy { background: #2b2238; color: #f3e9d2; } .st.dormant { background: #b7aa94; color: #5d5447; } .st.channel { background: #4a90d9; color: #fff; }
+	.unread { background: #4a90d9; color: #fff; border-radius: 9px; padding: 0 6px; font-size: 11px; }
+	.ui-mail { padding: 4px; border-bottom: 1px solid rgba(107,74,42,.2); } .ui-mail div { color: #4a3a2a; } .ui-empty { color: #8a6a3a; font-style: italic; padding: 8px; }
+	.settings .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; } .settings button { font: 11px Georgia, serif; cursor: pointer; border: 1px solid #b89a66; background: #fffaf0; border-radius: 6px; padding: 2px 6px; } .settings #state div { margin: 2px 0; font-size: 12px; } .settings .help { color: #6f6555; margin-top: 6px; font-size: 12px; }
+	#chatbox { position: fixed; left: 10px; bottom: 10px; width: min(560px, calc(100vw - 300px)); height: 168px; display: flex; flex-direction: column; box-sizing: border-box; border-radius: 12px; background: linear-gradient(135deg, #5b3a24, #3d2516); box-shadow: inset 0 0 0 2px #a07a42, 0 8px 22px rgba(0,0,0,.6); padding: 8px; z-index: 6; }
+	#chat-log { flex: 1; overflow: auto; border-radius: 6px; background: radial-gradient(ellipse at 30% 20%, #fbf1d8, #e9d6ad); padding: 5px 8px; font: 13px/1.35 Georgia, serif; color: #2b1d12; }
+	.cl .t { color: #9a8462; font-size: 11px; } .cl.agents { color: #5a3a8a; } .cl.mail { color: #7a4a14; } .cl.slack { color: #1f4f8a; } .cl.game { color: #2b1d12; }
+	#chat-tabs { display: flex; gap: 4px; margin-top: 6px; } #chat-tabs button { flex: 1; height: 24px; border-radius: 6px; border: 1px solid #2b1a10; background: linear-gradient(#6b4528, #4a2e1b); color: #f3e2b8; font: 12px Georgia, serif; cursor: pointer; } #chat-tabs button.on { background: linear-gradient(#a8733f, #7a4a24); }
+	#where { top: 224px !important; right: 14px !important; }
 	#controls { position: fixed; left: 10px; bottom: 10px; width: 330px; border-radius: 8px; background: rgba(246,243,238,.95); color: #222; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 8; }
 	#controls.closed #body { display: none; }
 	#toggle { width: 100%; text-align: left; border: 0; background: #e6dfd3; padding: 6px 10px; font-weight: 700; cursor: pointer; border-radius: 8px 8px 0 0; }
@@ -74,9 +98,26 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 <div id="menu" hidden></div>
 <div id="chat" hidden></div>
 <div id="talk" hidden></div>
-<div id="controls" class="closed">
-	<button id="toggle">Prototype controls (not part of the design)</button>
-	<div id="body">
+<div id="minimap"></div>
+<div id="orbs">
+	<div class="orb need" title="Needs you"><span id="orb-need">0</span></div>
+	<div class="orb busy" title="Working"><span id="orb-busy">0</span></div>
+	<div class="orb slack" title="Unread in Slack"><span id="orb-unread">0</span></div>
+</div>
+<div id="side">
+	<div id="tab-title"></div>
+	<div id="tab-body"></div>
+	<div id="tabs"></div>
+</div>
+<div id="chatbox">
+	<div id="chat-log"></div>
+	<div id="chat-tabs">
+		<button data-filter="all" class="on">All</button><button data-filter="game">Game</button><button data-filter="agents">Agents</button><button data-filter="mail">Mail</button><button data-filter="slack">Slack</button>
+	</div>
+</div>
+<template id="settings-template">
+	<div class="settings">
+		<div class="ui-group">Prototype controls</div>
 		<div class="row">
 			<button data-act="seed">Seed world</button>
 			<button data-act="live">Load live.json</button>
@@ -87,9 +128,9 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 			<button data-act="grid">Show walk grid</button>
 		</div>
 		<div id="state"></div>
-		<div id="help">Left click: walk or the default action. Right click: all actions. Wheel: zoom.</div>
+		<div class="help">Left click: walk or the default action. Right click: all actions. Wheel: zoom.</div>
 	</div>
-</div>
+</template>
 <script src="vendor/phaser.min.js"></script>
 <script type="module" src="src/main.js"></script>
 </body>

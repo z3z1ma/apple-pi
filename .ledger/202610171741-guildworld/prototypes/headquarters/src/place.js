@@ -3,12 +3,15 @@
 // Movement has two modes to compare: "smooth" (a fine grid, string-pulled paths, continuous motion) and "tiles"
 // (RuneScape's tile-by-tile steps on the place's tile grid).
 import { Grid } from "./grid.js";
+import { log, refreshInterface } from "./interface.js";
+import { look as lookFor } from "./places.js";
 import { closeTalk, openTalk, talkOpen } from "./talk.js";
 import { closeChat, menuOpen, openMenu, say, showHover } from "./ui.js";
 import { lineFor } from "./world.js";
 
 const FINE = 2; // walk cells per tile in smooth mode
 const PERSON_TILES = 1.8;
+const MINIMAP = 196; // screen px
 const STANDING = 120; // sprite pixels from head to feet in a standing frame (clean_characters.py HEIGHT)
 const SPEED = { smooth: 175, tiles: 120 }; // world px per second
 const FRAMES = { down: [0, 3], up: [4, 7], side: [8, 11], work: [12, 13] };
@@ -60,8 +63,49 @@ export class PlaceScene extends Phaser.Scene {
 			app.zoom = Phaser.Math.Clamp(app.zoom * (dy > 0 ? 0.9 : 1.1), 0.5, 3);
 			this.applyZoom();
 		});
-		this.scale.on("resize", () => this.applyZoom());
+		this.scale.on("resize", () => {
+			this.applyZoom();
+			this.placeMinimap();
+		});
 		document.getElementById("where").textContent = place.title;
+		this.makeMinimap();
+		log("game", `You are in ${place.title.replace(/^The /, "the ")}.`);
+		refreshInterface();
+		const seek = this.enterData.seek && this.people.find((p) => p.session.id === this.enterData.seek);
+		if (seek) this.time.delayedCall(300, () => this.walkToPerson(seek.session));
+	}
+
+	/** The minimap: a second camera over the whole place, with dots only it shows, framed by HTML. */
+	makeMinimap() {
+		this.minimap = this.cameras.add(0, 0, MINIMAP, MINIMAP).setBackgroundColor(0x1a1410).setName("minimap");
+		this.dots = [];
+		const dot = (color, r) => {
+			const d = this.add.circle(0, 0, r, color).setStrokeStyle(r * 0.4, 0x000000).setDepth(200000);
+			this.cameras.main.ignore(d);
+			this.dots.push(d);
+			return d;
+		};
+		const scale = Math.max(this.place.cols, this.place.rows) * this.T / MINIMAP;
+		for (const p of this.people) dot(p.session.channel ? 0x4a90d9 : 0xf2d24e, 3.2 * scale).setPosition(p.sprite.pos.x, p.sprite.pos.y);
+		this.avatarDot = dot(0xffffff, 3.6 * scale);
+		this.placeMinimap();
+	}
+
+	placeMinimap() {
+		const w = this.place.cols * this.T;
+		const h = this.place.rows * this.T;
+		this.minimap.setPosition(this.scale.width - MINIMAP - 16, 16).setSize(MINIMAP, MINIMAP);
+		this.minimap.setZoom(Math.min(MINIMAP / w, MINIMAP / h)).centerOn(w / 2, h / 2);
+	}
+
+	overMinimap(pointer) {
+		const m = this.minimap;
+		return pointer.x >= m.x && pointer.x < m.x + m.width && pointer.y >= m.y && pointer.y < m.y + m.height;
+	}
+
+	walkToPerson(session) {
+		const person = this.people.find((p) => p.session === session || p.session.id === session.id);
+		if (person) this.approach(person.sprite.pos, () => {}, true);
 	}
 
 	applyZoom() {
@@ -144,6 +188,7 @@ export class PlaceScene extends Phaser.Scene {
 		const person = candidates[Math.floor(Math.random() * candidates.length)];
 		const s = person.session;
 		const line = s.status === "waiting" ? "I have a question!" : s.needsYou ? "Done! Come and see." : `${s.unread} new in ${s.name}`;
+		log(s.channel ? "slack" : "agents", `${s.name}: ${line}`);
 		const text = this.add.text(0, 0, line, { fontFamily: "Georgia, serif", fontSize: "14px", color: "#2b1d12" }).setOrigin(0.5);
 		const w = text.width + 18;
 		const g = this.add.graphics();
@@ -207,6 +252,10 @@ export class PlaceScene extends Phaser.Scene {
 	/** Every action under the pointer, the default first, as RuneScape lists them. */
 	actionsAt(pointer) {
 		if (menuOpen() || talkOpen()) return [];
+		if (this.overMinimap(pointer)) {
+			const p = this.minimap.getWorldPoint(pointer.x, pointer.y);
+			return [{ verb: "Walk here", run: () => this.walkTo(p) }];
+		}
 		const world = this.pointerWorld(pointer);
 		const tx = world.x / this.T;
 		const ty = world.y / this.T;
@@ -319,6 +368,7 @@ export class PlaceScene extends Phaser.Scene {
 			}
 		}
 		this.settle(a);
+		this.avatarDot?.setPosition(a.pos.x, a.pos.y);
 		if (!walk.points.length) {
 			this.walk = null;
 			a.anims.stop();
@@ -347,6 +397,7 @@ export class PlaceScene extends Phaser.Scene {
 		}
 		openTalk(s, this.portraitFor(s), {
 			changed: (changed) => {
+				refreshInterface();
 				const person = this.people.find((p) => p.session === changed);
 				if (!person) return;
 				this.redrawBadge(person);
@@ -372,8 +423,7 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	portraitFor(s) {
-		const person = this.people.find((p) => p.session === s);
-		const look = person?.sprite.look;
+		const look = this.people.find((p) => p.session === s)?.sprite.look ?? lookFor(s);
 		if (!look || !this.app.chars[look]?.portraits) return null;
 		const mood = s.status === "waiting" ? 3 : s.needsYou ? 1 : s.status === "busy" ? 2 : 0;
 		return `assets/chars/${look}-portrait-${mood}.png`;

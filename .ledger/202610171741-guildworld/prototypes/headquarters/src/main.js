@@ -1,4 +1,5 @@
 // PROTOTYPE: boot the headquarters prototype: load art, build the world from seed or live.json, start in the hall.
+import { initInterface, refreshInterface } from "./interface.js";
 import { makeCharacterAnims, PlaceScene } from "./place.js";
 import { gallery, hall, square, T, wing } from "./places.js";
 import { derive, loadRemembered, saveRemembered, SEED, SEED_REMEMBERED } from "./world.js";
@@ -38,6 +39,7 @@ function recompute() {
 	app.remembered = app.world.remembered;
 	saveRemembered(app.remembered);
 	renderControls();
+	refreshInterface();
 }
 
 function restart() {
@@ -48,7 +50,8 @@ function restart() {
 
 function renderControls() {
 	const w = app.world;
-	document.getElementById("state").innerHTML = `
+	const target = document.getElementById("settings-template").content.querySelector("#state");
+	target.innerHTML = `
 		<div><b>source</b> ${app.source} · <b>coordinator</b> ${w.coordinator?.name ?? "none"}</div>
 		<div><b>wings</b> ${w.wings.map((x) => `${x.repo} (${x.agents.length})`).join(", ") || "none"}</div>
 		<div><b>common room</b> ${w.common.map((s) => s.name).join(", ") || "nobody"}</div>
@@ -82,7 +85,7 @@ const actions = {
 	},
 	movement: () => {
 		app.movement = app.movement === "smooth" ? "tiles" : "smooth";
-		document.getElementById("movement").textContent = `Movement: ${app.movement}`;
+		for (const el of [document.getElementById("settings-template").content.querySelector("#movement"), document.querySelector("#tab-body #movement")]) if (el) el.textContent = `Movement: ${app.movement}`;
 	},
 	grid: () => {
 		app.showGrid = !app.showGrid;
@@ -93,11 +96,10 @@ const actions = {
 		restart();
 	},
 };
-document.getElementById("controls").addEventListener("click", (event) => {
+document.getElementById("side").addEventListener("click", (event) => {
 	const name = event.target.dataset?.act;
 	if (name) actions[name]();
 });
-document.getElementById("toggle").onclick = () => document.getElementById("controls").classList.toggle("closed");
 
 // The game menu replaces the browser's everywhere, including over the HTML chrome drawn on the canvas.
 document.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -115,3 +117,4 @@ const game = new Phaser.Game({
 });
 game.registry.set("app", app);
 window.__hq = { game, app }; // for headless checks
+initInterface(app, { scene: () => game.scene.getScenes(true).find((s) => s instanceof PlaceScene) });

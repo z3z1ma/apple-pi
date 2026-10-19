@@ -1,6 +1,6 @@
 # PROTOTYPE: the Agent World headquarters
 
-Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), and [How exteriors are built](../../decisions/24-how-exteriors-are-built.md) (round 4), and [Dialogue with a character](../../decisions/17-dialogue-with-a-character.md) (round 5), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch, the rejected Guild Hall room, or the town.
+Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), and [How exteriors are built](../../decisions/24-how-exteriors-are-built.md) (round 4), and [Dialogue with a character](../../decisions/17-dialogue-with-a-character.md) (round 5), and [The interface panel](../../decisions/26-the-interface-panel.md) (round 6), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch, the rejected Guild Hall room, or the town.
 
 ## Question
 
@@ -51,6 +51,15 @@ Talking to an agent now opens the conversation panel decided in [Dialogue with a
 - Opening the panel marks the agent seen; **Esc** or the cross closes it.
 - **Barks:** now and then a character that needs you says so in a speech bubble ("I have a question!", "Done! Come and see.", "3 new in #incidents").
 - Townsfolk (Slack channels) still answer in the small dialogue box.
+
+## Round 6: the RuneScape-style interface
+
+Around the world now sits an interface in Old School RuneScape's layout, styled as carved wood and parchment (`src/interface.js`), so everything is a click away and walking is optional:
+
+- **Minimap** (top right): a second camera over the whole place, with yellow dots for agents, blue for Slack townsfolk, white for you; click it to walk there.
+- **Orbs** beside it: how many need you, how many are working, and unread Slack messages; each opens its tab.
+- **Side panel** (bottom right) with seven tabs: **Agents** (everyone, grouped by where they are, dormant ones at the inn), **Needs you** (questions first, then finished work), **Work** (agents grouped by ledger task), **Mail** (recent traffic, seed), **Slack** (channels with unread counts), **Places** (travel to any built place at once), **Settings** (the prototype controls). Left click on a person talks to them from anywhere; right click offers Talk-to, Go-to (travel and walk up), Examine, and Terminal.
+- **Chatbox** (bottom left): world events as they happen, filterable (All, Game, Agents, Mail, Slack): where you are, what you did, barks, and seed events in place of the runtime's event stream.
 
 ## What to try
 
